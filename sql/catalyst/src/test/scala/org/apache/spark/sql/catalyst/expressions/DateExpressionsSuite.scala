@@ -777,14 +777,24 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-57819: months_between over nanosecond-precision timestamps") {
     import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
 
-    // Reuse the microsecond `months_between` expectations from the test above: for the pair
-    //   (1997-02-28 10:30:00, 1996-10-30 00:00:00)
-    // months_between is 3.94959677 (roundOff) / 3.9495967741935485 (no roundOff). Carry the same
-    // instants at nanosecond precision, adding non-zero *sub-microsecond* digits (nanosWithinMicro
-    // in (0, 1000)). months_between returns a DOUBLE month count measured on the microsecond grid,
-    // so those digits are dropped and the nanosecond result equals the microsecond expectation, at
-    // every nanosecond precision. checkEvaluation exercises both the interpreted and codegen paths.
+    // The microsecond `months_between` test above establishes, for the pair
+    //   (1997-02-28 10:30:00, 1996-10-30 00:00:00),
+    // the results 3.94959677 (roundOff) / 3.9495967741935485 (no roundOff). months_between returns
+    // a DOUBLE month count measured on the microsecond grid, so a nanosecond operand contributes
+    // only its epochMicros -- the sub-microsecond remainder is dropped. Every case below carries
+    // those two instants at nanosecond precision and asserts the same results. checkEvaluation
+    // exercises both the interpreted and codegen paths.
+    val roundExp = 3.94959677
+    val exactExp = 3.9495967741935485
+
     foreachNanosPrecision { p =>
+      // Non-zero sub-microsecond remainders representable at precision p (a multiple of the
+      // precision step: 100ns at p=7, 10ns at p=8, 1ns at p=9), so the literals are valid for the
+      // declared type rather than relying on months_between to discard an unrepresentable tail.
+      val step = Seq.fill(9 - p)(10).product
+      val endSub = 789 - 789 % step // 700 / 780 / 789
+      val startSub = 123 - 123 % step // 100 / 120 / 123
+
       for (zid <- outstandingZoneIds) {
         val tz = Option(zid.getId)
 
@@ -792,27 +802,43 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         // wall clock equals the fields below in that zone, mirroring the microsecond test, so the
         // result matches the microsecond expectation for every zone.
         val ltzEnd = Literal.create(
-          instantToNanosVal(timestampLTZ(1997, 2, 28, 10, 30, 0, nanoOfSec = 789, zid)),
+          instantToNanosVal(timestampLTZ(1997, 2, 28, 10, 30, 0, endSub, zid)),
           TimestampLTZNanosType(p))
         val ltzStart = Literal.create(
-          instantToNanosVal(timestampLTZ(1996, 10, 30, 0, 0, 0, nanoOfSec = 123, zid)),
+          instantToNanosVal(timestampLTZ(1996, 10, 30, 0, 0, 0, startSub, zid)),
           TimestampLTZNanosType(p))
-        checkEvaluation(MonthsBetween(ltzEnd, ltzStart, Literal.TrueLiteral, tz), 3.94959677)
-        checkEvaluation(
-          MonthsBetween(ltzEnd, ltzStart, Literal.FalseLiteral, tz), 3.9495967741935485)
+        checkEvaluation(MonthsBetween(ltzEnd, ltzStart, Literal.TrueLiteral, tz), roundExp)
+        checkEvaluation(MonthsBetween(ltzEnd, ltzStart, Literal.FalseLiteral, tz), exactExp)
 
         // TIMESTAMP_NTZ(p): evaluated in UTC regardless of the session zone. The wall-clock fields
-        // are read back unchanged, so passing a non-UTC `tz` (which is ignored for NTZ) still
-        // yields the microsecond expectation -- this guards the zoneIdForType(NTZ) = UTC path.
+        // are read back unchanged, so passing a non-UTC `tz` (ignored for NTZ) still yields the
+        // microsecond expectation -- this guards the zoneIdForType(NTZ) = UTC path.
         val ntzEnd = Literal.create(
-          localDateTimeToNanosVal(timestampNTZ(1997, 2, 28, 10, 30, 0, nanoOfSec = 789)),
+          localDateTimeToNanosVal(timestampNTZ(1997, 2, 28, 10, 30, 0, endSub)),
           TimestampNTZNanosType(p))
         val ntzStart = Literal.create(
-          localDateTimeToNanosVal(timestampNTZ(1996, 10, 30, 0, 0, 0, nanoOfSec = 123)),
+          localDateTimeToNanosVal(timestampNTZ(1996, 10, 30, 0, 0, 0, startSub)),
           TimestampNTZNanosType(p))
-        checkEvaluation(MonthsBetween(ntzEnd, ntzStart, Literal.TrueLiteral, tz), 3.94959677)
-        checkEvaluation(
-          MonthsBetween(ntzEnd, ntzStart, Literal.FalseLiteral, tz), 3.9495967741935485)
+        checkEvaluation(MonthsBetween(ntzEnd, ntzStart, Literal.TrueLiteral, tz), roundExp)
+        checkEvaluation(MonthsBetween(ntzEnd, ntzStart, Literal.FalseLiteral, tz), exactExp)
+
+        // Microsecond carriers of the same two instants, one per family.
+        val ltzMicrosEnd =
+          Literal.create(timestampLTZ(1997, 2, 28, 10, 30, 0, zoneId = zid), TimestampType)
+        val ltzMicrosStart =
+          Literal.create(timestampLTZ(1996, 10, 30, 0, 0, 0, zoneId = zid), TimestampType)
+        val ntzMicrosEnd = Literal.create(timestampNTZ(1997, 2, 28, 10, 30, 0), TimestampNTZType)
+        val ntzMicrosStart = Literal.create(timestampNTZ(1996, 10, 30, 0, 0, 0), TimestampNTZType)
+
+        // Mixing a micros and a nanos operand within the SAME family must match the all-micros
+        // result. This is the regression item #1 guards against: because inputTypes uses
+        // AnyTimestampType, a TIMESTAMP_NTZ operand stays in the NTZ family (evaluated in UTC)
+        // whether it is micros or nanos, instead of the micros operand casting to LTZ (session
+        // zone) and disagreeing with the nanos operand under a non-UTC session.
+        checkEvaluation(MonthsBetween(ntzMicrosEnd, ntzStart, Literal.TrueLiteral, tz), roundExp)
+        checkEvaluation(MonthsBetween(ntzEnd, ntzMicrosStart, Literal.TrueLiteral, tz), roundExp)
+        checkEvaluation(MonthsBetween(ltzMicrosEnd, ltzStart, Literal.TrueLiteral, tz), roundExp)
+        checkEvaluation(MonthsBetween(ltzEnd, ltzMicrosStart, Literal.TrueLiteral, tz), roundExp)
 
         // A null nanosecond operand yields null for either family.
         checkEvaluation(
@@ -824,7 +850,32 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             Literal.TrueLiteral, tz),
           null)
       }
+
+      // Mixed precision within the NTZ family (p paired with precision 9) is likewise consistent.
+      val ntzEndP = Literal.create(
+        localDateTimeToNanosVal(timestampNTZ(1997, 2, 28, 10, 30, 0, endSub)),
+        TimestampNTZNanosType(p))
+      val ntzStart9 = Literal.create(
+        localDateTimeToNanosVal(timestampNTZ(1996, 10, 30, 0, 0, 0, 123)),
+        TimestampNTZNanosType(9))
+      checkEvaluation(MonthsBetween(ntzEndP, ntzStart9, Literal.TrueLiteral, UTC_OPT), roundExp)
     }
+
+    // Cross-family (TIMESTAMP_NTZ, TIMESTAMP_LTZ): both operands are evaluated in date1's zone
+    // (UTC here, from the NTZ date1), matching SubtractTimestamps -- the non-UTC `tz` below is
+    // therefore ignored. Pin that documented convention by comparing against DateTimeUtils on the
+    // two epochMicros at UTC.
+    val ntzArg = localDateTimeToNanosVal(timestampNTZ(1997, 2, 28, 10, 30, 0, 789))
+    val ltzArg = instantToNanosVal(timestampLTZ(1996, 10, 30, 0, 0, 0, 123, LA))
+    val crossExpected = DateTimeUtils.monthsBetween(
+      ntzArg.epochMicros, ltzArg.epochMicros, roundOff = true, java.time.ZoneOffset.UTC)
+    checkEvaluation(
+      MonthsBetween(
+        Literal.create(ntzArg, TimestampNTZNanosType(9)),
+        Literal.create(ltzArg, TimestampLTZNanosType(9)),
+        Literal.TrueLiteral,
+        Option(LA.getId)),
+      crossExpected)
   }
 
   test("last_day") {

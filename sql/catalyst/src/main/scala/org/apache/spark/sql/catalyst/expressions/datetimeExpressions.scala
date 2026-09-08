@@ -2998,10 +2998,11 @@ case class TimestampAddYMInterval(
   """,
   arguments = """
     Arguments:
-      * timestamp1 - The first timestamp to compare.
-        An expression that evaluates to a timestamp.
-      * timestamp2 - The second timestamp to compare.
-        An expression that evaluates to a timestamp.
+      * timestamp1 - The first timestamp to compare. An expression that evaluates to a
+        timestamp, including nanosecond-precision TIMESTAMP_LTZ / TIMESTAMP_NTZ (each operand is
+        reduced to microseconds, since the result is a whole/fractional month count).
+      * timestamp2 - The second timestamp to compare. An expression that evaluates to a
+        timestamp, with the same precision options as timestamp1.
       * roundOff - Whether to round off the result to 8 decimal places.
         An expression that evaluates to a boolean.
   """,
@@ -3032,15 +3033,18 @@ case class MonthsBetween(
   override def second: Expression = date2
   override def third: Expression = roundOff
 
-  // Nanosecond-precision timestamps are accepted alongside the microsecond types. The result is a
-  // DOUBLE month count measured on the microsecond grid, so each nanosecond operand contributes
-  // only its epochMicros; the sub-microsecond remainder does not affect the answer. TimestampType
-  // (not AnyTimestampType) is kept so the microsecond behavior is unchanged -- NTZ micros still
-  // implicit-casts to LTZ as before -- and only the nanosecond types are newly accepted.
+  // Accept both the microsecond and nanosecond timestamp families, mirroring SubtractTimestamps.
+  // AnyTimestampType (rather than only TimestampType) keeps a TIMESTAMP_NTZ operand in its own
+  // family instead of implicit-casting it to LTZ, so a TIMESTAMP_NTZ pair is evaluated
+  // consistently in UTC (via zoneIdInEval) whether its operands are micros or nanos -- otherwise a
+  // micros operand would cast to LTZ (session zone) while a nanos operand stayed NTZ (UTC),
+  // silently disagreeing under a non-UTC session. The result is a DOUBLE month count on the
+  // microsecond grid, so a nanosecond operand contributes only its epochMicros; the
+  // sub-microsecond remainder does not affect the answer.
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      TypeCollection(TimestampType, AnyTimestampNanoType),
-      TypeCollection(TimestampType, AnyTimestampNanoType),
+      TypeCollection(AnyTimestampType, AnyTimestampNanoType),
+      TypeCollection(AnyTimestampType, AnyTimestampNanoType),
       BooleanType)
 
   override def dataType: DataType = DoubleType
@@ -3048,9 +3052,9 @@ case class MonthsBetween(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  // The TIMESTAMP_NTZ family is evaluated in UTC; every other accepted type uses the session zone.
-  // For the existing microsecond LTZ operands this resolves to the session zone, so the result is
-  // unchanged from before.
+  // The TIMESTAMP_NTZ family (micros and nanos) is evaluated in UTC; the LTZ family (micros and
+  // nanos) uses the session zone -- the LTZ-micros path is the session zone, unchanged from
+  // before. As in SubtractTimestamps, a mixed LTZ/NTZ pair uses date1's zone for both operands.
   @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(date1.dataType)
 
   // For the nanosecond carrier the child value is a boxed TimestampNanosVal, so read its
