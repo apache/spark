@@ -632,35 +632,42 @@ case class KeyedPartitioning(
   @transient lazy val expressionDataTypes: Seq[DataType] = expressions.map(_.dataType)
 
   /**
-   * The types the `partitionKeys` rows were built with. Anything reading those rows should take its
-   * types from here. It is a driver-side value, since `partitionKeys` is `@transient`.
+   * The types the `partitionKeys` rows are compared at, which is what anything reading those rows
+   * should take its types from. It is a driver-side value, since `partitionKeys` is `@transient`.
    *
-   * They differ from the `expressionDataTypes` in two cases. A join that reduced both sides' keys
-   * onto a key space no transform names leaves a marked expression whose type can be anything, see
-   * `expressionsDescribeKeys`. A one-side reduce keeps them equal, because the expression the
-   * partitioning then reports is the target transform and `EnsureRequirements` refuses a reducer
-   * whose result type disagrees with it. `KeyedShuffleSpec.createPartitioning` is the other case.
-   * It puts the other child's expressions over these keys with no reducer in sight, so a struct
-   * field can be named differently on the two sides. With no key at all the expressions are all
-   * there is, and there is no row to read or to place.
+   * These are `InternalRowComparableWrapper.comparableTypes`, so the naming is erased: two
+   * partitionings whose keys describe one space have one answer here, whatever the columns those
+   * keys came from were called. With no key row to read, the expressions answer, erased the same
+   * way.
    *
-   * The two cases can meet, and then the fallback is not truthful. A marked partitioning can end up
-   * with no key, for instance when `v2BucketingPartitionFilterEnabled` intersects two sides that
-   * hold disjoint keys, and this then reports the un-reduced transform's type. What it reports is a
-   * fact about the key rows, so with no key row there is no fact, and a caller must not hold the
-   * fallback against a real answer. The reduced-types comparison in `EnsureRequirements` leaves out
-   * a marked side that has no key for that reason (SPARK-59176). An unmarked one still answers,
-   * since its expressions describe the keys it would have had, and stays in the comparison.
+   * They differ from the `expressionDataTypes` in two ways. The naming is one, since those are not
+   * erased. The other is a join that reduced both sides' keys onto a key space no transform names.
+   * It leaves a marked expression whose type can be anything, see `expressionsDescribeKeys`. A
+   * one-side reduce keeps the two equal up to the naming, because the expression the partitioning
+   * then reports is the target transform and `EnsureRequirements` refuses a reducer whose result
+   * type disagrees with it.
+   *
+   * A marked partitioning can end up with no key, and then the fallback is not truthful. That
+   * happens when `v2BucketingPartitionFilterEnabled` intersects two sides that hold disjoint keys,
+   * and this then reports the un-reduced transform's type. What it reports is a fact about the key
+   * rows, so with no key row there is no fact, and a caller must not hold the fallback against a
+   * real answer. The reduced-types comparison in `EnsureRequirements` leaves out a marked side that
+   * has no key for that reason (SPARK-59176). An unmarked one still answers, since its expressions
+   * describe the keys it would have had, and stays in the comparison.
    *
    * `ShuffleExchangeExec` is the one reader that stays on `expressionDataTypes`. It evaluates the
    * expressions to place the other child's rows, and it runs on executors, where this value is not
    * available. `expressionsDescribeKeys` is what keeps that site sound.
    *
-   * Only the first key's types are read, and nothing enforces that the rest match. SPARK-59187 is
-   * to carry the types on the partitioning instead of sampling a key row.
+   * Only the first key's types are read, and nothing enforces that the rest match. The fallback is
+   * also the one erasure outside `InternalRowComparableWrapper`, since there is no factory here to
+   * read the types off and building one just to ask would be two cache lookups for no row.
+   * SPARK-59285 carries the types on the partitioning instead, and both go with it.
    */
   @transient lazy val keyDataTypes: Seq[DataType] =
-    partitionKeys.headOption.map(_.dataTypes).getOrElse(expressionDataTypes)
+    partitionKeys.headOption
+      .map(_.dataTypes)
+      .getOrElse(InternalRowComparableWrapper.comparableTypes(expressionDataTypes))
 
   /** Driver-side, like the `keyDataTypes` it comes from. */
   @transient lazy val keyRowOrdering =
@@ -940,9 +947,10 @@ object KeyedPartitioning {
       keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
       positions: Seq[Int]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
-    val projectedDataTypes = positions.map(dataTypes)
     val comparableKeyWrapperFactory =
-      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedDataTypes)
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(positions.map(dataTypes))
+    // The factory is what reports the types, so they are the ones its keys compare at.
+    val projectedDataTypes = comparableKeyWrapperFactory.dataTypes
     // Indexed arrays rather than `Seq`s, because the loop below runs once per key and a key list is
     // as long as the number of splits the scan reported.
     val positionArray = positions.toArray
@@ -971,11 +979,13 @@ object KeyedPartitioning {
     // position keeps it out of the key loop below, and gives the result types with it.
     val reducerArray =
       reducers.map(_.map(_.reducer.asInstanceOf[Reducer[Any, Any]]).orNull).toArray
-    val reducedDataTypes = dataTypes.zip(reducerArray).map {
-      case (t, reducer) => if (reducer == null) t else reducer.resultType()
-    }
+    // A reducer's result type comes from the connector, so it goes through the same erasure the
+    // keys below are built at, and the factory is what reports it.
     val comparableKeyWrapperFactory =
-      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(reducedDataTypes)
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+        dataTypes.zip(reducerArray).map {
+          case (t, reducer) => if (reducer == null) t else reducer.resultType()
+        })
     val typeArray = dataTypes.toArray
     // `InternalRow.toSeq(dataTypes)`, which the loop below replaces, asserted the row's arity once
     // per key. All the keys of a partitioning share an arity, so asserting on the first one keeps
@@ -995,7 +1005,7 @@ object KeyedPartitioning {
       comparableKeyWrapperFactory(new GenericInternalRow(reducedKey))
     }
 
-    (reducedDataTypes, reducedKeys)
+    (comparableKeyWrapperFactory.dataTypes, reducedKeys)
   }
 }
 
