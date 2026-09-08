@@ -351,6 +351,22 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       "a dictionary with an unreferenced key is not canonical")
   }
 
+  test("isCanonical rejects an object with duplicate field ids") {
+    val a = parse("1").getValue // INT1(1)
+    val b = parse("2").getValue // INT1(2)
+    val header = VariantUtil.objectHeader(false, 1, 1) // 1-byte size, idSize 1, offsetSize 1
+    val value = java.nio.ByteBuffer.allocate(1 + 1 + 2 + 3 + a.length + b.length)
+      .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+      .put(header)
+      .put(2.toByte)                           // size = 2 fields
+      .put(0.toByte).put(0.toByte)             // id list [0, 0] -- both key "a" (duplicate)
+      .put(0.toByte).put(a.length.toByte).put((a.length + b.length).toByte) // offsets [0, 2, 4]
+      .put(a).put(b)
+      .array()
+    val dup = new Variant(value, parse("""{"a":1}""").getMetadata)
+    assert(!isCanon(dup), "an object with duplicate field ids is not canonical")
+  }
+
   test("isCanonical accepts already-canonical nested objects and arrays") {
     assert(isCanon(parse("""{"a":{"b":1}}""")), "a canonical nested object is accepted")
     assert(isCanon(parse("""{"a":[1,2,3]}""")), "a canonical object-of-array is accepted")
