@@ -31,7 +31,6 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{COUNT, RANGE}
 import org.apache.spark.ml.feature._
-import org.apache.spark.ml.functions.{array_to_vector, vector_dot_product}
 import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator._
@@ -1130,26 +1129,16 @@ class LogisticRegressionModel private[spark] (
   @Since("1.5.0")
   override def getThresholds: Array[Double] = super.getThresholds
 
-  private def binaryMargin(features: Column): Column =
-    vector_dot_product(features, coefficients) + interceptVector(0)
-
-  private def binaryRawPrediction(features: Column): Column = {
-    val margin = binaryMargin(features)
-    array_to_vector(array(-margin, margin))
-  }
-
-  private def binaryProbability(features: Column): Column = {
-    val probability0 = lit(1.0) / (lit(1.0) + exp(binaryMargin(features)))
-    array_to_vector(array(probability0, lit(1.0) - probability0))
-  }
-
   override protected def predictRawColumn(features: Column): Column = if (isMultinomial) {
     val localCoefficientMatrix = coefficientMatrix
     val localInterceptVector = interceptVector.toDense
     udf((features: Vector) => LogisticRegressionModel.predictRaw(
       features, localCoefficientMatrix, localInterceptVector)).apply(features)
   } else {
-    binaryRawPrediction(features)
+    val localCoefficients = coefficients
+    val localIntercept = interceptVector(0)
+    udf((features: Vector) => LogisticRegressionModel.predictRaw(
+      features, localCoefficients, localIntercept)).apply(features)
   }
 
   override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
@@ -1158,9 +1147,9 @@ class LogisticRegressionModel private[spark] (
         LogisticRegressionModel.raw2probabilityInPlaceMultinomial(rawPrediction)
       ).apply(rawPrediction)
     } else {
-      val raw0 = fget(unwrap_udt(rawPrediction).getField("values"), lit(0))
-      val probability0 = lit(1.0) / (lit(1.0) + exp(-raw0))
-      array_to_vector(array(probability0, lit(1.0) - probability0))
+      udf((rawPrediction: Vector) =>
+        LogisticRegressionModel.raw2probabilityInPlaceBinary(rawPrediction)
+      ).apply(rawPrediction)
     }
   }
 
@@ -1174,7 +1163,13 @@ class LogisticRegressionModel private[spark] (
         LogisticRegressionModel.raw2probabilityInPlaceMultinomial(rawPrediction)
       }).apply(features)
     } else {
-      binaryProbability(features)
+      val localCoefficients = coefficients
+      val localIntercept = interceptVector(0)
+      udf((features: Vector) => {
+        val rawPrediction = LogisticRegressionModel.predictRaw(
+          features, localCoefficients, localIntercept)
+        LogisticRegressionModel.raw2probabilityInPlaceBinary(rawPrediction)
+      }).apply(features)
     }
   }
 
@@ -1238,9 +1233,13 @@ class LogisticRegressionModel private[spark] (
       }).apply(features)
     }
   } else {
+    val localCoefficients = coefficients
+    val localIntercept = interceptVector(0)
     val localRawThreshold = LogisticRegressionModel.rawThreshold(getThreshold)
-    val margin = binaryMargin(features)
-    when(margin > localRawThreshold && !isnan(margin), 1.0).otherwise(0.0)
+    udf((features: Vector) => {
+      val margin = BLAS.dot(features, localCoefficients) + localIntercept
+      if (margin > localRawThreshold) 1.0 else 0.0
+    }).apply(features)
   }
 
   @Since("1.6.0")

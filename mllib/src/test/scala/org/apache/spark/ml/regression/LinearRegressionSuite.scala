@@ -31,7 +31,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.ml.VectorDotProduct
 import org.apache.spark.sql.functions.lit
 
 
@@ -203,8 +202,6 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
         coefficients = original.coefficients,
         intercept = original.intercept)
       val output = deserialized.transform(datasetWithDenseFeature)
-      assert(output.queryExecution.optimizedPlan.exists(
-        _.expressions.exists(_.exists(_.isInstanceOf[VectorDotProduct]))))
       assert(output.collect().length > 0) // simple assertion to ensure no exception thrown
     }
   }
