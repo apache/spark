@@ -680,7 +680,11 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       VarcharType(6, "UNICODE_CI"),
       StructType(
         StructField("c", CharType(4, "UTF8_LCASE")) ::
-          StructField("v", ArrayType(VarcharType(6, "UNICODE_CI"))) :: Nil))
+          StructField("v", ArrayType(VarcharType(6, "UNICODE_CI"))) :: Nil),
+      StructType(
+        StructField(
+          "mixed",
+          MapType(CharType(4, "UTF8_BINARY"), VarcharType(6, "UNICODE_CI"))) :: Nil))
 
     dataTypes.foreach { dataType =>
       assert(DataType.fromJson(dataType.json) === dataType)

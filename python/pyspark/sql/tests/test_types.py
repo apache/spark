@@ -682,6 +682,17 @@ class TypesTestsMixin:
                     StructField("v", ArrayType(VarcharType(6, "UNICODE_CI"))),
                 ]
             ),
+            StructType(
+                [
+                    StructField(
+                        "mixed",
+                        MapType(
+                            CharType(4, "UTF8_BINARY"),
+                            VarcharType(6, "UNICODE_CI"),
+                        ),
+                    )
+                ]
+            ),
         ]
         for data_type in data_types:
             self.assertEqual(data_type, _parse_datatype_json_string(data_type.json()))

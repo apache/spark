@@ -1538,8 +1538,8 @@ class StructField(DataType):
 
     def _isCollatedString(self, dt: DataType) -> bool:
         if isinstance(dt, StringType):
-            return not dt.isUTF8BinaryCollation()
-        if isinstance(dt, (CharType, VarcharType)):
+            if isinstance(dt, (CharType, VarcharType)):
+                return dt.collation is not None
             return not dt.isUTF8BinaryCollation()
         return False
 
