@@ -157,9 +157,8 @@ object ImageSchema {
         (3, ocvTypes("CV_8UC3"))
       }
 
-      // Compute in Long so that an image with very large dimensions cannot overflow the Int
-      // multiplication and slip past the size assertion below (which would then allocate a
-      // wrongly-sized or negative array). Legitimate images (< 1e9 bytes) are unaffected.
+      // Compute in Long so a large image cannot overflow the multiplication and slip past the
+      // size assertion below.
       val imageSize = height.toLong * width * nChannels
       assert(imageSize < 1e9, "image is too large")
       val decoded = Array.ofDim[Byte](imageSize.toInt)
