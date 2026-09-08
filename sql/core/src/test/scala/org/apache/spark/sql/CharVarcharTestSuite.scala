@@ -692,6 +692,11 @@ trait CharVarcharTestSuite extends QueryTest {
       checkAnswer(sql("SELECT c NOT IN (NULL, 'a') FROM t"), Row(false))
       checkAnswer(sql("SELECT c NOT IN (NULL, 'x') FROM t"), Row(null))
 
+      withSQLConf(SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "1") {
+        checkAnswer(sql("SELECT c IN (NULL, 'a', 'b') FROM t"), Row(true))
+        checkAnswer(sql("SELECT c IN (NULL, 'x', 'y') FROM t"), Row(null))
+      }
+
       // A user-specified cast deliberately opts into STRING comparison and must not trigger the
       // implicit CHAR padding rewrite.
       checkAnswer(sql("SELECT CAST(c AS STRING) IN ('a') FROM t"), Row(false))
