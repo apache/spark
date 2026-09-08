@@ -73,6 +73,21 @@ class VectorDotProductSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(VectorDotProduct(emptySparse, emptySparse), 0.0)
   }
 
+  test("vector dot product with infinite and NaN values") {
+    val denseOne = dense(1.0)
+    val sparseOne = sparse(1, Array(0), Array(1.0))
+
+    Seq(Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN).foreach { value =>
+      val denseValue = dense(value)
+      val sparseValue = sparse(1, Array(0), Array(value))
+
+      checkEvaluation(VectorDotProduct(denseValue, denseOne), value)
+      checkEvaluation(VectorDotProduct(denseValue, sparseOne), value)
+      checkEvaluation(VectorDotProduct(sparseValue, denseOne), value)
+      checkEvaluation(VectorDotProduct(sparseValue, sparseOne), value)
+    }
+  }
+
   test("vector dot product rejects vectors with different sizes") {
     checkExceptionInExpression[IllegalArgumentException](
       VectorDotProduct(dense(1.0), dense(1.0, 2.0)),
