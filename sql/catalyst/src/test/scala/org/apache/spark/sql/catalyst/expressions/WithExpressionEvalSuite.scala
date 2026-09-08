@@ -346,7 +346,10 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
     // `CodegenFallback`'s `eval` cannot use them: the whole `With` falls back to `eval`, which
     // binds and clears the cells itself. Generating part of it would be worse than either -- a
     // definition reached from both sides would hold one value in the slots and another in the cell.
-    val w = With(counter()) { case Seq(ref) => Add(Fallback(ref), Fallback(ref)) }
+    // The definition is left uninitialized on purpose, so `proj.initialize(0)` has to reach it:
+    // falling back registers every `Nondeterministic` in the subtree for partition initialization,
+    // and `Nondeterministic.eval` raises if that did not happen.
+    val w = With(Counter()) { case Seq(ref) => Add(Fallback(ref), Fallback(ref)) }
     val proj = GenerateMutableProjection.generate(Seq(w))
     proj.initialize(0)
     // Both references read one value per row, so the sum is 2n rather than n + (n + 1).
@@ -358,10 +361,8 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
     // `Fallback`. The outer one holds no `CodegenFallback` of its own, so it can only notice by
     // asking the inner `With` whether it fell back -- and it has to, since its reference `o` sits
     // inside the inner subtree and would be reached interpretively with no cell bound.
-    val outer = counter()
-    val inner = counter()
-    val w = With(outer) { case Seq(o) =>
-      Add(o, With(inner) { case Seq(i) => Add(Fallback(i), o) })
+    val w = With(Counter()) { case Seq(o) =>
+      Add(o, With(Counter()) { case Seq(i) => Add(Fallback(i), o) })
     }
     val proj = GenerateMutableProjection.generate(Seq(w))
     proj.initialize(0)

@@ -211,11 +211,11 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
 
   /**
    * Whether substituting this definition into its references is as good as evaluating it once: it
-   * is referenced once anyway, or it is cheap to evaluate twice and deterministic.
+   * is referenced at most once anyway, or it is cheap to evaluate twice and deterministic.
    *
    * `CollapseProject.isCheap` answers what one evaluation costs, not whether a second is allowed --
    * it admits a `PythonUDF`, which may be nondeterministic and is still in the tree here, since
-   * `SparkOptimizer` extracts them in a later batch. So determinism is asked separately.
+   * `SparkOptimizer` extracts it in a later batch. So determinism is asked separately.
    *
    * It is asked of the expression, which is weaker than `isSafeToDuplicate` above: `isCheap` admits
    * anything foldable and `InvokeLike.foldable` implies `deterministic`, so an impure foldable such
@@ -255,7 +255,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
 
   /**
    * `w` with every definition that gains nothing from being memoized inlined into its references:
-   * one cheap enough to evaluate twice, and one that is referenced once anyway. This is the test
+   * one cheap enough to evaluate twice, and one referenced at most once anyway. This is the test
    * the main rewrite already applies before it hoists a definition into a project.
    *
    * Inlining matters beyond the per-entry bookkeeping it saves. A `With` is not foldable, so it
