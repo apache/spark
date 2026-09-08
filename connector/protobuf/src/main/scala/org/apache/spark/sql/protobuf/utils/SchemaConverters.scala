@@ -197,11 +197,18 @@ object SchemaConverters extends Logging {
         val recordName = fd.getMessageType.getFullName
         val recursiveDepth = existingRecordNames.getOrElse(recordName, 0)
         val recursiveFieldMaxDepth = protobufOptions.recursiveFieldMaxDepth
+        // The values of `existingRecordNames` are the per-record nesting counts along the current
+        // path, so their sum is the total nesting depth reached so far, across all record types.
+        // When `recursiveFieldMaxDepth` is enabled, bound that total as well, so the configured
+        // limit cannot be exceeded by nesting through a series of different record types (the
+        // per-record count alone does not catch that). The default (<= 0) is unaffected.
+        val totalDepth = existingRecordNames.values.sum
         if (existingRecordNames.contains(recordName) && (recursiveFieldMaxDepth <= 0 ||
           recursiveFieldMaxDepth > 10)) {
           throw QueryCompilationErrors.foundRecursionInProtobufSchema(fd.toString())
-        } else if (existingRecordNames.contains(recordName) &&
-          recursiveDepth >= recursiveFieldMaxDepth) {
+        } else if ((existingRecordNames.contains(recordName) &&
+          recursiveDepth >= recursiveFieldMaxDepth) ||
+          (recursiveFieldMaxDepth > 0 && totalDepth >= recursiveFieldMaxDepth)) {
           // Recursive depth limit is reached. This field is dropped.
           // If it is inside a container like map or array, the containing field is dropped.
           log.info(
