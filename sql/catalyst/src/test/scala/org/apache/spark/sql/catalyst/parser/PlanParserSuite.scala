@@ -1059,7 +1059,7 @@ class PlanParserSuite extends AnalysisTest {
     }
   }
 
-  test("asof join - left asof with on condition") {
+  test("asof join - explicit left join type with on condition") {
     withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t left asof join u match_condition (t.a >= u.a) on t.b = u.b",
@@ -1074,7 +1074,7 @@ class PlanParserSuite extends AnalysisTest {
     }
   }
 
-  test("asof join - using single join column") {
+  test("asof join - using with a single join column") {
     withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t asof join u match_condition (t.a >= u.a) using (b)",
@@ -1090,7 +1090,7 @@ class PlanParserSuite extends AnalysisTest {
     }
   }
 
-  test("asof join - using multiple join columns") {
+  test("asof join - using with multiple join columns") {
     withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t asof join u match_condition (t.a >= u.a) using (a, b)",
