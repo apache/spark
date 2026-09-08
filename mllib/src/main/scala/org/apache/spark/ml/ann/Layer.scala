@@ -417,9 +417,9 @@ private[ann] trait TopologyModel extends Serializable {
  * @param layers Array of layers
  */
 private[ann] class FeedForwardTopology private(val layers: Array[Layer]) extends Topology {
-  override def model(weights: Vector): FeedForwardModel = FeedForwardModel(this, weights)
+  override def model(weights: Vector): TopologyModel = FeedForwardModel(this, weights)
 
-  override def model(seed: Long): FeedForwardModel = FeedForwardModel(this, seed)
+  override def model(seed: Long): TopologyModel = FeedForwardModel(this, seed)
 }
 
 /**
