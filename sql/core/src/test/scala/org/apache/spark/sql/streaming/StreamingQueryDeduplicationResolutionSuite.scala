@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 
 class StreamingQueryDeduplicationResolutionSuite extends StreamTest {
