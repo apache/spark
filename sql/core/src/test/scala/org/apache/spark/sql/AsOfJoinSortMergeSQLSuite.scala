@@ -159,6 +159,37 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         Timestamp.valueOf("2026-06-29 12:00:00")) :: Nil)
   }
 
+  test("MATCH_CONDITION with the right operand written first (<=) is a backward match") {
+    setupTradeQuoteViews()
+    // q.quote_time <= t.trade_time normalizes to t.trade_time >= q.quote_time.
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT t.trade_time, t.symbol, q.bid_price
+          |FROM trades t ASOF JOIN quotes q
+          |  MATCH_CONDITION (q.quote_time <= t.trade_time)
+          |  ON t.symbol = q.symbol
+          |""".stripMargin),
+      Seq(
+        Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 180.10),
+        Row(Timestamp.valueOf("2026-06-29 10:00:11"), "AAPL", 180.20),
+        Row(Timestamp.valueOf("2026-06-29 10:00:12"), "MSFT", 420.50)))
+  }
+
+  test("MATCH_CONDITION with the right operand written first (>=) is a forward match") {
+    setupTradeQuoteViews()
+    // q.quote_time >= t.trade_time normalizes to t.trade_time <= q.quote_time.
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT t.trade_time, t.symbol, q.bid_price
+          |FROM trades t ASOF JOIN quotes q
+          |  MATCH_CONDITION (q.quote_time >= t.trade_time)
+          |  ON t.symbol = q.symbol
+          |""".stripMargin),
+      Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 180.15) :: Nil)
+  }
+
   test("DATE scalar MATCH_CONDITION") {
     checkSortMergeAsOf(
       sql(
@@ -373,6 +404,23 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         Row(Timestamp.valueOf("2026-06-29 10:03:00"), 1, "v1.1")))
   }
 
+  test("whole STRUCT column with an ARRAY field MATCH_CONDITION") {
+    // The array field is compared as a whole; field 'a' ties, so the array field decides.
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT r.k
+          |FROM VALUES (named_struct('a', 5, 'arr', ARRAY(2, 2))) AS t(k)
+          |ASOF JOIN (
+          |  SELECT * FROM VALUES
+          |    (named_struct('a', 5, 'arr', ARRAY(1, 1))),
+          |    (named_struct('a', 5, 'arr', ARRAY(9, 9))) AS r(k)
+          |) r
+          |  MATCH_CONDITION (t.k >= r.k)
+          |""".stripMargin),
+      Row(Row(5, Seq(1, 1))) :: Nil)
+  }
+
   test("ARRAY<INT> MATCH_CONDITION") {
     checkSortMergeAsOf(
       sql(
@@ -383,6 +431,20 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |MATCH_CONDITION (t.a >= r.a)
           |""".stripMargin),
       Row(Seq(1, 2)) :: Nil)
+  }
+
+  test("ARRAY<INT> operands of different lengths MATCH_CONDITION") {
+    // Rows have different lengths (2, 1, 3). The backward match takes the largest right array
+    // that is <= [5, 5] by Spark array ordering; the first element decides, so [4] is nearest.
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT r.a
+          |FROM VALUES (ARRAY(5, 5)) AS t(a)
+          |ASOF JOIN VALUES (ARRAY(4)), (ARRAY(2, 9, 9)) AS r(a)
+          |  MATCH_CONDITION (t.a >= r.a)
+          |""".stripMargin),
+      Row(Seq(4)) :: Nil)
   }
 
   test("ARRAY<STRUCT> whole column MATCH_CONDITION") {
@@ -399,6 +461,26 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |  MATCH_CONDITION (t.a >= r.a)
           |""".stripMargin),
       Row(Seq(Row(1, 2))) :: Nil)
+  }
+
+  test("ARRAY<STRUCT> MATCH_CONDITION with compatible but not identical element types") {
+    // Left element fields are BIGINT, right element fields are INT. Per-field coercion lets the
+    // element-wise comparison type-check; the backward match returns the nearest qualifying row.
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT r.a
+          |FROM VALUES
+          |  (ARRAY(named_struct('seq', CAST(1 AS BIGINT), 'val', CAST(5 AS BIGINT)))) AS t(a)
+          |ASOF JOIN (
+          |  SELECT * FROM VALUES
+          |    (ARRAY(named_struct('seq', 1, 'val', 2))),
+          |    (ARRAY(named_struct('seq', 1, 'val', 4))),
+          |    (ARRAY(named_struct('seq', 1, 'val', 7))) AS r(a)
+          |) r
+          |  MATCH_CONDITION (t.a >= r.a)
+          |""".stripMargin),
+      Row(Seq(Row(1, 4))) :: Nil)
   }
 
   test("STRUCT tuple from scalar columns MATCH_CONDITION") {
