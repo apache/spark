@@ -33,11 +33,18 @@ import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructField, StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.Utils
+
+private[python] object ColumnarArrowEvalPythonEvaluatorFactory {
+  def toPhysicalType(dataType: DataType): DataType = {
+    CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(dataType.transformRecursively {
+      case udt: UserDefinedType[_] => udt.sqlType
+    })
+  }
+}
 
 /**
  * Evaluator factory for Arrow Python UDFs: ColumnarBatch in, ColumnarBatch out.
@@ -81,20 +88,20 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     sessionUUID: Option[String])
   extends PartitionEvaluatorFactory[ColumnarBatch, ColumnarBatch] {
 
-  private val applyCharVarcharChecks =
-    CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get)
-  private val checkedOutput = if (applyCharVarcharChecks) {
-    childOutput ++ output.drop(childOutput.length).map { attr =>
+  private val udfOutput = output.drop(childOutput.length)
+  private val checkedOutput = childOutput ++ udfOutput.zip(udfs).map { case (attr, udf) =>
+    if (udf.applyCharVarcharChecks) {
       CharVarcharUtils.stringLengthCheck(attr, attr.dataType)
+    } else {
+      attr
     }
-  } else {
-    output
   }
   private val hasCharVarcharOutput =
-    applyCharVarcharChecks &&
-      output.drop(childOutput.length).exists(attr => CharVarcharUtils.hasCharVarchar(attr.dataType))
-  private val physicalOutputSchema = CharVarcharUtils
-    .replaceCharVarcharWithStringForPhysicalType(outputSchema)
+    udfOutput.zip(udfs).exists { case (attr, udf) =>
+      udf.applyCharVarcharChecks && CharVarcharUtils.hasCharVarchar(attr.dataType)
+    }
+  private val physicalOutputSchema = ColumnarArrowEvalPythonEvaluatorFactory
+    .toPhysicalType(outputSchema)
     .asInstanceOf[StructType]
 
   override def createEvaluator()
@@ -156,10 +163,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         }.toArray)
 
       val outputTypes = output.drop(childOutput.length).map { attr =>
-        CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(
-          attr.dataType.transformRecursively {
-            case udt: UserDefinedType[_] => udt.sqlType
-          })
+        ColumnarArrowEvalPythonEvaluatorFactory.toPhysicalType(attr.dataType)
       }
 
       val inputColumnIndices = resolveColumnIndices(allInputs.toSeq)

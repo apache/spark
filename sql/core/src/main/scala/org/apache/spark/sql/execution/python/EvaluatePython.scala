@@ -153,9 +153,37 @@ object EvaluatePython {
     makeFromJava(dataType, applyCharVarcharChecks)
   }
 
-  private def makeFromJava(dataType: DataType, applyCharVarcharChecks: Boolean): Any => Any =
-    TypeApiOps(dataType).flatMap(_.makeFromJava)
+  private[sql] def makeFromJava(dataType: DataType, applyCharVarcharChecks: Boolean): Any => Any =
+    TypeApiOps(dataType)
+      .flatMap(_.makeFromJava)
       .getOrElse(makeFromJavaDefault(dataType, applyCharVarcharChecks))
+
+  private[python] def makeFromJava(
+      dataType: StructType,
+      applyCharVarcharChecks: Seq[Boolean]): Any => Any = {
+    require(dataType.length == applyCharVarcharChecks.length)
+    val fieldsFromJava = dataType.fields.zip(applyCharVarcharChecks).map {
+      case (field, applyChecks) => makeFromJava(field.dataType, applyChecks)
+    }
+    (obj: Any) =>
+      nullSafeConvert(obj) {
+        case values if values.getClass.isArray =>
+          val array = values.asInstanceOf[Array[_]]
+          if (array.length != dataType.length) {
+            throw new SparkIllegalArgumentException(
+              errorClass = "STRUCT_ARRAY_LENGTH_MISMATCH",
+              messageParameters =
+                Map("expected" -> dataType.length.toString, "actual" -> array.length.toString))
+          }
+          val row = new GenericInternalRow(dataType.length)
+          var index = 0
+          while (index < dataType.length) {
+            row(index) = fieldsFromJava(index)(array(index))
+            index += 1
+          }
+          row
+      }
+  }
 
   private def makeFromJavaDefault(
       dataType: DataType,

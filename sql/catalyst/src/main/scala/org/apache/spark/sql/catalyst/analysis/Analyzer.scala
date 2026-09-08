@@ -2539,7 +2539,8 @@ class Analyzer(
             }
             PythonUDTF(
               u.name, u.func, analyzeResult.schema, Some(analyzeResult.pickledAnalyzeResult),
-              newChildren, u.evalType, u.udfDeterministic, u.resultId, None, u.tableArguments)
+              newChildren, u.evalType, u.udfDeterministic, u.resultId, None, u.tableArguments,
+              u.applyCharVarcharChecks)
           }
         }
     }

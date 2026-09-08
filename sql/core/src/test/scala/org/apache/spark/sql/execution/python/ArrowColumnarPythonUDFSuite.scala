@@ -21,8 +21,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{CharType, StringType, VarcharType}
+import org.apache.spark.sql.test.{ExamplePointUDT, SharedSparkSession}
+import org.apache.spark.sql.types._
 
 /**
  * End-to-end tests for the Arrow columnar Python UDF input path.
@@ -51,6 +51,18 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     plan.collect {
       case p if tag.runtimeClass.isInstance(p) => p.asInstanceOf[T]
     }
+  }
+
+  test("CHAR/VARCHAR output normalization also unwraps UDT siblings") {
+    val logicalSchema =
+      StructType(Seq(StructField("c", CharType(3)), StructField("point", new ExamplePointUDT())))
+    val expectedSchema = StructType(
+      Seq(
+        StructField("c", StringType),
+        StructField("point", ArrayType(DoubleType, containsNull = false))))
+
+    assert(
+      ColumnarArrowEvalPythonEvaluatorFactory.toPhysicalType(logicalSchema) === expectedSchema)
   }
 
   test("Arrow-backed source: no ColumnarToRowExec before ArrowEvalPythonExec") {

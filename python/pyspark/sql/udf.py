@@ -317,7 +317,11 @@ class UserDefinedFunction:
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
+        class _InvalidCharVarcharArrowTypeError(TypeError):
+            pass
+
         char_varchar_supported_eval_types = (
+            PythonEvalType.SQL_BATCHED_UDF,
             PythonEvalType.SQL_ARROW_BATCHED_UDF,
             PythonEvalType.SQL_SCALAR_PANDAS_UDF,
             PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
@@ -329,7 +333,7 @@ class UserDefinedFunction:
             if evalType not in char_varchar_supported_eval_types and _has_type(
                 returnType, (CharType, VarcharType)
             ):
-                raise TypeError
+                raise _InvalidCharVarcharArrowTypeError
             to_arrow_type(returnType, timezone="UTC")
 
         if evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
@@ -516,6 +520,16 @@ class UserDefinedFunction:
                         f"{returnType}"
                     },
                 )
+        elif evalType not in char_varchar_supported_eval_types and _has_type(
+            returnType, (CharType, VarcharType)
+        ):
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={
+                    "feature": f"Invalid return type with Python UDF eval type {evalType}: "
+                    f"{returnType}"
+                },
+            )
 
     @property
     def returnType(self) -> DataType:

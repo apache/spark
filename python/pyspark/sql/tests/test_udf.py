@@ -137,6 +137,28 @@ class BaseUDFTestsMixin:
             )
             self.assertEqual(result.first(), Row(c="a", v="abcd"))
 
+    def test_char_varchar_view_keeps_resolved_semantics(self):
+        with self.temp_view("char_varchar_udf_view"):
+            with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+                self.spark.range(1).select(
+                    udf(lambda _: "a", CharType(3), useArrow=False)("id").alias("c"),
+                    udf(lambda _: "abcd", VarcharType(3), useArrow=False)("id").alias("v"),
+                ).createOrReplaceTempView("char_varchar_udf_view")
+
+            with self.sql_conf(
+                {
+                    "spark.sql.legacy.charVarcharAsString": "true",
+                    "spark.sql.preserveCharVarcharTypeInfo": "false",
+                    "spark.sql.charVarchar.standardSemantics.enabled": "false",
+                }
+            ):
+                self.assertEqual(
+                    self.spark.sql("SELECT c FROM char_varchar_udf_view").first().c,
+                    "a  ",
+                )
+                with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                    self.spark.sql("SELECT v FROM char_varchar_udf_view").collect()
+
     def test_char_varchar_non_scalar_return_types_unsupported(self):
         nested_return_type = StructType(
             [StructField("nested", ArrayType(CharType(3)))]
@@ -155,6 +177,15 @@ class BaseUDFTestsMixin:
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
         ]
+        stateful_and_incremental_eval_types = [
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
+        ]
 
         for eval_type in struct_eval_types:
             with self.assertRaisesRegex(PySparkNotImplementedError, "Invalid return type"):
@@ -162,6 +193,9 @@ class BaseUDFTestsMixin:
         for eval_type in aggregate_eval_types:
             with self.assertRaisesRegex(PySparkNotImplementedError, "Invalid return type"):
                 UserDefinedFunction._check_return_type(VarcharType(3), eval_type)
+        for eval_type in stateful_and_incremental_eval_types:
+            with self.assertRaisesRegex(PySparkNotImplementedError, "Invalid return type"):
+                UserDefinedFunction._check_return_type(nested_return_type, eval_type)
 
     def test_udf_with_callable(self):
         data = self.spark.createDataFrame([(i, i**2) for i in range(10)], ["number", "squared"])

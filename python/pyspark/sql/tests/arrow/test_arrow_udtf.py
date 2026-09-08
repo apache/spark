@@ -19,8 +19,9 @@ import unittest
 from typing import Iterator, Optional
 
 from pyspark.errors import PySparkAttributeError, PySparkNotImplementedError, PythonException
-from pyspark.sql.functions import arrow_udtf, lit
+from pyspark.sql.functions import arrow_udtf, lit, udtf
 from pyspark.sql.types import ArrayType, CharType, IntegerType, Row, StructField, StructType
+from pyspark.sql.udtf import AnalyzeResult
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
@@ -51,6 +52,23 @@ class ArrowUDTFTestsMixin:
                 PySparkNotImplementedError, "Invalid return type with Arrow UDTFs"
             ):
                 function()
+
+    def test_analyze_char_varchar_return_types_unsupported(self):
+        @udtf(returnType=None, useArrow=True)
+        class DynamicNestedCharUDTF:
+            @staticmethod
+            def analyze() -> AnalyzeResult:
+                return AnalyzeResult(
+                    StructType([StructField("nested", ArrayType(CharType(3)))])
+                )
+
+            def eval(self):
+                yield (["a"],)
+
+        with self.assertRaisesRegex(
+            Exception, "Arrow-optimized Python UDTFs do not support CHAR/VARCHAR"
+        ):
+            DynamicNestedCharUDTF().collect()
 
     def test_arrow_udtf_data_conversion_error(self):
         from pyspark.sql.functions import udtf
