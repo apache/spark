@@ -17,18 +17,32 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.{EnumSet, OptionalLong}
+
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
-import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, CombineFilters, ConstantFolding}
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, JoinHint, Limit, LogicalPlan, Offset, OneRowRelation, Project, Sort}
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, VariantGet => V2VariantGet}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
+import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
+import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, LocalScan, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, Statistics, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTopN, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
+import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, VariantType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2StrategySuite extends SharedSparkSession {
@@ -1051,6 +1065,658 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       // Translating such an expression used to recurse forever. Note that a regression hangs
       // this test instead of failing it, as the recursion is in tail position.
       assert(new V2ExpressionBuilder(folded, isPredicate = true).build().isEmpty)
+    }
+  }
+
+  test("inferred filters use dotted names for nested columns") {
+    val tableSchema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("s", StructType(Seq(
+        StructField("tz", StringType, nullable = true))), nullable = true)))
+    val inferredFilter =
+      EqualTo(AttributeReference("s.tz", StringType)(), Literal("UTC"))
+    val relation = DataSourceV2Relation.create(
+      new InMemoryCatalystFilterTable(tableSchema, inferredFilter),
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val id = relation.output.find(_.name == "id").get
+    val struct = relation.output.find(_.name == "s").get
+    val expected = EqualTo(GetStructField(struct, 0, Some("tz")), Literal("UTC"))
+
+    val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
+    assert(pushedPlan.exists {
+      case Filter(condition, _) => condition.exists(_.semanticEquals(expected))
+      case _ => false
+    }, s"expected rebound nested inferred filter in:\n$pushedPlan")
+  }
+
+  test("inferred filters support quoted dotted name parts") {
+    val tableSchema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("a.b", StructType(Seq(
+        StructField("c.d", StringType, nullable = true))), nullable = true)))
+    val inferredFilter =
+      EqualTo(AttributeReference("`a.b`.`c.d`", StringType)(), Literal("PST"))
+    val relation = DataSourceV2Relation.create(
+      new InMemoryCatalystFilterTable(tableSchema, inferredFilter),
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val id = relation.output.find(_.name == "id").get
+    val struct = relation.output.find(_.name == "a.b").get
+    val expected = EqualTo(GetStructField(struct, 0, Some("c.d")), Literal("PST"))
+
+    val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
+    assert(pushedPlan.exists {
+      case Filter(condition, _) => condition.exists(_.semanticEquals(expected))
+      case _ => false
+    }, s"expected rebound quoted inferred filter in:\n$pushedPlan")
+  }
+
+  test("inferred filters exclude user-defined expressions") {
+    val schema = StructType(Seq(StructField("id", LongType, nullable = false)))
+    val inferredUDF = ScalaUDF(
+      function = (() => true),
+      dataType = BooleanType,
+      children = Nil,
+      udfName = Some("inferred_udf"))
+    val externalInferredUDF = ExternalUserDefinedFunction(
+      name = Some("external_inferred_udf"),
+      payload = Array.emptyByteArray,
+      dataType = BooleanType,
+      children = Nil,
+      udfDeterministic = true,
+      udfNullable = false)
+
+    Seq(inferredUDF, externalInferredUDF).foreach { udf =>
+      val relation = DataSourceV2Relation.create(
+        new InMemoryCatalystFilterTable(schema, udf),
+        None,
+        None,
+        CaseInsensitiveStringMap.empty)
+      val id = relation.output.head
+
+      val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
+      val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+      assert(scan.inferredFilters.isEmpty)
+      assert(!pushedPlan.exists {
+        case Filter(condition, _) => condition.exists(_ eq udf)
+        case _ => false
+      }, s"user-defined inferred filter $udf must be discarded:\n$pushedPlan")
+    }
+  }
+
+  test("inferred filters exclude non-deterministic and subquery expressions") {
+    val scalarSubquery = ScalarSubquery(
+      Project(Seq(Alias(Literal(1L), "value")()), OneRowRelation()))
+    val invalidInferredFilters = Seq(
+      GreaterThan(Rand(0), Literal(0.5)),
+      GreaterThan(scalarSubquery, Literal(0L)))
+
+    invalidInferredFilters.foreach { inferred =>
+      val schema = StructType(Seq(StructField("id", LongType, nullable = false)))
+      val relation = DataSourceV2Relation.create(
+        new InMemoryCatalystFilterTable(schema, inferred),
+        None,
+        None,
+        CaseInsensitiveStringMap.empty)
+      val pushedPlan = V2ScanRelationPushDown(
+        Filter(EqualTo(relation.output.head, Literal(1L)), relation))
+      val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+
+      assert(scan.inferredFilters.isEmpty)
+      assert(!pushedPlan.exists {
+        case Filter(condition, _) => condition.exists(_.semanticEquals(inferred))
+        case _ => false
+      }, s"invalid inferred filter $inferred must be discarded:\n$pushedPlan")
+    }
+  }
+
+  test("inferred filters ignore unresolvable and ill-typed expressions") {
+    val schema = StructType(Seq(StructField("id", LongType, nullable = false)))
+    val invalidInferredFilters = Seq(
+      GreaterThan(AttributeReference("missing", LongType)(), Literal(0L)),
+      GreaterThan(AttributeReference("id", StringType)(), Literal("zero")),
+      AttributeReference("id", LongType)())
+
+    invalidInferredFilters.foreach { inferred =>
+      val relation = DataSourceV2Relation.create(
+        new InMemoryCatalystFilterTable(schema, inferred),
+        None,
+        None,
+        CaseInsensitiveStringMap.empty)
+      val pushedPlan = V2ScanRelationPushDown(
+        Filter(EqualTo(relation.output.head, Literal(1L)), relation))
+      val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+      assert(scan.inferredFilters.isEmpty,
+        s"invalid inferred filter $inferred must be ignored:\n$pushedPlan")
+    }
+
+    val ambiguousSchema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("ID", LongType, nullable = false)))
+    val ambiguousInferred =
+      GreaterThan(AttributeReference("Id", LongType)(), Literal(0L))
+    val ambiguousRelation = DataSourceV2Relation.create(
+      new InMemoryCatalystFilterTable(ambiguousSchema, ambiguousInferred),
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val ambiguousPlan = V2ScanRelationPushDown(
+      Filter(EqualTo(ambiguousRelation.output.head, Literal(1L)), ambiguousRelation))
+    val ambiguousScan =
+      ambiguousPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    assert(ambiguousScan.inferredFilters.isEmpty,
+      s"ambiguous inferred filter must be ignored:\n$ambiguousPlan")
+  }
+
+  test("inferred filters reject bound column references after pruning") {
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("value", LongType, nullable = false)))
+    val inferred = EqualTo(BoundReference(99, LongType, nullable = false), Literal(0L))
+    val relation = DataSourceV2Relation.create(
+      new InMemoryCatalystFilterTable(schema, inferred),
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val id = relation.output.find(_.name == "id").get
+    val pushedPlan = V2ScanRelationPushDown(
+      Project(Seq(id), Filter(EqualTo(id, Literal(1L)), relation)))
+    val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+
+    assert(scan.output.map(_.name) == Seq("id"), s"expected value to be pruned:\n$pushedPlan")
+    assert(scan.inferredFilters.isEmpty,
+      s"bound inferred filter must be ignored after pruning:\n$pushedPlan")
+  }
+
+  test("inferred filters exclude expressions unsupported in Filter") {
+    val schema = StructType(Seq(StructField("id", LongType, nullable = false)))
+    val id = AttributeReference("id", LongType, nullable = false)()
+    val windowSpec = WindowSpecDefinition(
+      Nil,
+      Seq(id.asc),
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))
+    val invalidInferredFilters = Seq(
+      GreaterThan(Count(id).toAggregateExpression(), Literal(0L)),
+      GreaterThan(WindowExpression(RowNumber(), windowSpec), Literal(0)),
+      IsNotNull(Explode(CreateArray(Seq(id)))))
+
+    invalidInferredFilters.foreach { inferred =>
+      val relation = DataSourceV2Relation.create(
+        new InMemoryCatalystFilterTable(schema, inferred),
+        None,
+        None,
+        CaseInsensitiveStringMap.empty)
+      val pushedPlan = V2ScanRelationPushDown(
+        Filter(EqualTo(relation.output.head, Literal(1L)), relation))
+      val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+
+      assert(scan.inferredFilters.isEmpty,
+        s"inferred filter unsupported in Filter must be ignored: $inferred\n$pushedPlan")
+    }
+  }
+
+  test("Boolean simplification preserves executable inferred filters") {
+    val schema = StructType(Seq(
+      StructField("a", BooleanType, nullable = false),
+      StructField("b", BooleanType, nullable = false),
+      StructField("c", BooleanType, nullable = false)))
+    val inferred = Or(
+      EqualTo(AttributeReference("a", BooleanType)(), Literal(true)),
+      EqualTo(AttributeReference("b", BooleanType)(), Literal(true)))
+    val relation = DataSourceV2Relation.create(
+      new InMemoryCatalystFilterTable(schema, inferred),
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val a = relation.output.find(_.name == "a").get
+    val c = relation.output.find(_.name == "c").get
+    val residual = Or(EqualTo(a, Literal(true)), EqualTo(c, Literal(true)))
+
+    val optimized = BooleanSimplification(CombineFilters(
+      V2ScanRelationPushDown(Filter(residual, relation))))
+    val logicalFilters = optimized.collect { case filter: Filter => filter.condition }
+    assert(logicalFilters.exists(_.references.exists(_.name == "b")),
+      s"the inferred filter must remain executable after Boolean simplification:\n$optimized")
+    val scan = optimized.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    assert(scan.inferredFilters.exists(_.references.exists(_.name == "b")))
+    val physicalPlans = new DataSourceV2Strategy(spark).apply(optimized)
+    assert(physicalPlans.exists(_.exists {
+      case filter: org.apache.spark.sql.execution.FilterExec =>
+        filter.condition.references.exists(_.name == "b")
+      case _ => false
+    }), s"the simplified inferred filter must remain in FilterExec:\n" +
+      physicalPlans.mkString("\n"))
+  }
+
+  test("inferred filters are evaluated for V1 scans") {
+    checkInferredEvaluatedForScan { tableSchema =>
+      new V1Scan with SupportsSparkFilterEstimation {
+        override def readSchema(): StructType = tableSchema
+
+        override def toV1TableScan[T <: BaseRelation with TableScan](
+            context: SQLContext): T = {
+          new BaseRelation with TableScan {
+            override def sqlContext: SQLContext = context
+
+            override def schema: StructType = tableSchema
+
+            override def buildScan() = context.sparkContext.emptyRDD[Row]
+          }.asInstanceOf[T]
+        }
+      }
+    }
+  }
+
+  test("inferred filters are evaluated for local scans") {
+    checkInferredEvaluatedForScan { tableSchema =>
+      new LocalScan with SupportsSparkFilterEstimation {
+        override def readSchema(): StructType = tableSchema
+
+        override def rows(): Array[InternalRow] = Array.empty
+      }
+    }
+  }
+
+  test("inferred filters do not block limit pushdown") {
+    val (table, relation) = newPushdownRelation()
+    val id = relation.output.find(_.name == "id").get
+    val plan = Limit(Literal(5), Filter(EqualTo(id, Literal(1L)), relation))
+
+    val pushedPlan = V2ScanRelationPushDown(plan)
+    assert(table.builder.pushedLimit.contains(5))
+    assertInferredFilter(pushedPlan)
+  }
+
+  test("inferred filters do not block offset pushdown") {
+    val (table, relation) = newPushdownRelation()
+    val id = relation.output.find(_.name == "id").get
+    val plan = Offset(Literal(3), Filter(EqualTo(id, Literal(1L)), relation))
+
+    val pushedPlan = V2ScanRelationPushDown(plan)
+    assert(table.builder.pushedOffset.contains(3))
+    assertInferredFilter(pushedPlan)
+  }
+
+  test("inferred filters do not block top-N pushdown") {
+    val (table, relation) = newPushdownRelation()
+    val id = relation.output.find(_.name == "id").get
+    val filtered = Filter(EqualTo(id, Literal(1L)), relation)
+    val plan = Limit(Literal(5), Sort(Seq(id.asc), global = true, filtered))
+
+    val pushedPlan = V2ScanRelationPushDown(plan)
+    assert(table.builder.pushedTopN.exists(_._2 == 5))
+    assertInferredFilter(pushedPlan)
+  }
+
+  test("inferred filters do not block aggregate pushdown") {
+    val (table, relation) = newPushdownRelation()
+    val id = relation.output.find(_.name == "id").get
+    val filtered = Filter(EqualTo(id, Literal(1L)), relation)
+    val inferredFilter = GreaterThanOrEqual(id, Literal(0L))
+    val count = Alias(Count(id).toAggregateExpression(), "count")()
+    val plan = Aggregate(Nil, Seq(count), filtered)
+
+    val pushedPlan = V2ScanRelationPushDown(plan)
+    assert(table.builder.pushedAggregation.nonEmpty)
+    val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    assert(scan.inferredFilters.isEmpty,
+      s"aggregate output replacement must discard inferred metadata:\n$pushedPlan")
+    assert(!pushedPlan.exists {
+      case filter: Filter => filter.condition.exists(_.semanticEquals(inferredFilter))
+      case _ => false
+    }, s"the original inferred filter must not survive aggregate pushdown:\n$pushedPlan")
+    val physicalPlans = new DataSourceV2Strategy(spark).apply(pushedPlan)
+    assert(physicalPlans.nonEmpty, s"expected DataSourceV2Strategy to plan:\n$pushedPlan")
+    assert(!physicalPlans.exists(_.exists {
+      case filter: org.apache.spark.sql.execution.FilterExec =>
+        filter.condition.exists(_.semanticEquals(inferredFilter))
+      case _ => false
+    }), s"the original inferred filter must not reach FilterExec:\n${physicalPlans.mkString("\n")}")
+  }
+
+  test("inferred filters do not block join pushdown") {
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val (leftTable, left) = newPushdownRelation()
+      val (rightTable, right) = newPushdownRelation()
+      val leftId = left.output.find(_.name == "id").get
+      val rightId = right.output.find(_.name == "id").get
+      val leftFiltered = Filter(EqualTo(leftId, Literal(1L)), left)
+      val rightFiltered = Filter(EqualTo(rightId, Literal(1L)), right)
+      val plan = Join(
+        leftFiltered,
+        rightFiltered,
+        Inner,
+        Some(EqualTo(leftId, rightId)),
+        JoinHint.NONE)
+
+      val pushedPlan = V2ScanRelationPushDown(plan)
+      assert(leftTable.builder.joinPushed)
+      assert(!rightTable.builder.joinPushed)
+      val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+      assert(scan.inferredFilters.isEmpty)
+      assert(!pushedPlan.exists {
+        case filter: Filter => filter.condition.exists(_.isInstanceOf[GreaterThanOrEqual])
+        case _ => false
+      }, s"inferred filters must not survive join pushdown:\n$pushedPlan")
+    }
+  }
+
+  test("inferred filters do not block variant pushdown") {
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("v", VariantType, nullable = true)))
+    val inferredFilter = GreaterThan(
+      VariantGet(
+        AttributeReference("v", VariantType)(),
+        Literal("$.b"),
+        IntegerType,
+        failOnError = true,
+        timeZoneId = Some("UTC")),
+      Literal(0))
+    val table = new VariantPushdownTable(schema, inferredFilter)
+    val relation = DataSourceV2Relation.create(
+      table,
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val id = relation.output.find(_.name == "id").get
+    val variant = relation.output.find(_.name == "v").get
+    val extracted = VariantGet(
+      variant,
+      Literal("$.a"),
+      IntegerType,
+      failOnError = true,
+      timeZoneId = Some("UTC"))
+    val plan = Project(
+      Seq(Alias(extracted, "a")()),
+      Filter(EqualTo(id, Literal(1L)), relation))
+
+    val pushedPlan = V2ScanRelationPushDown(plan)
+    assert(table.builder.variantPushed)
+    val scan = pushedPlan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    assert(scan.inferredFilters.isEmpty)
+    assert(!pushedPlan.exists {
+      case filter: Filter => filter.condition.exists(_.semanticEquals(inferredFilter))
+      case _ => false
+    }, s"inferred filters must not survive variant pushdown:\n$pushedPlan")
+  }
+
+  private def newPushdownRelation(
+      inferredColumn: String = "id"): (PushdownTable, DataSourceV2Relation) = {
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("value", LongType, nullable = false)))
+    val inferredFilter =
+      GreaterThanOrEqual(AttributeReference(inferredColumn, LongType)(), Literal(0L))
+    val table = new PushdownTable(schema, inferredFilter)
+    val relation = DataSourceV2Relation.create(
+      table,
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    (table, relation)
+  }
+
+  private def assertInferredFilter(plan: LogicalPlan): Unit = {
+    val scan = plan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    assert(scan.inferredFilters.nonEmpty)
+    assert(plan.exists {
+      case filter: Filter =>
+        scan.inferredFilters.forall(inferred => filter.condition.exists(_.semanticEquals(inferred)))
+      case _ => false
+    }, s"expected inferred filter above the scan:\n$plan")
+    assertInferredEvaluated(plan)
+  }
+
+  private def assertInferredEvaluated(plan: LogicalPlan): Unit = {
+    val scan = plan.collectFirst { case scan: DataSourceV2ScanRelation => scan }.get
+    val physicalPlans = new DataSourceV2Strategy(spark).apply(plan)
+    assert(physicalPlans.nonEmpty, s"expected DataSourceV2Strategy to plan:\n$plan")
+    val physicalFilters = physicalPlans.flatMap(_.collect {
+      case filter: org.apache.spark.sql.execution.FilterExec => filter.condition
+    })
+    assert(scan.inferredFilters.forall { inferred =>
+      physicalFilters.exists(_.exists(_.semanticEquals(inferred)))
+    }, s"inferred filters must remain in FilterExec:\n${physicalPlans.mkString("\n")}")
+  }
+
+  private def checkInferredEvaluatedForScan(scanFactory: StructType => Scan): Unit = {
+    val schema = StructType(Seq(
+      StructField("id", LongType, nullable = false),
+      StructField("value", LongType, nullable = false)))
+    val inferredFilter =
+      GreaterThanOrEqual(AttributeReference("value", LongType)(), Literal(0L))
+    val relation = DataSourceV2Relation.create(
+      new InMemoryCatalystFilterTable(schema, inferredFilter, Some(scanFactory)),
+      None,
+      None,
+      CaseInsensitiveStringMap.empty)
+    val id = relation.output.find(_.name == "id").get
+    val pushedPlan = V2ScanRelationPushDown(Filter(EqualTo(id, Literal(1L)), relation))
+
+    assertInferredFilter(pushedPlan)
+  }
+
+  private def emptyBatch: Batch = new Batch {
+    override def planInputPartitions() = Array.empty
+
+    override def createReaderFactory(): PartitionReaderFactory = new PartitionReaderFactory {
+      override def createReader(partition: InputPartition): PartitionReader[InternalRow] =
+        throw new UnsupportedOperationException("reader is not needed")
+    }
+  }
+
+  private trait SupportsSparkFilterEstimation extends SupportsReportStatistics {
+    override def estimateStatistics(): Statistics = new Statistics {
+      override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+      override def numRows(): OptionalLong = OptionalLong.empty()
+    }
+
+    override def reflectsFullyPushedDownFilters(): Boolean = false
+  }
+
+  private class InMemoryCatalystFilterTable(
+      tableSchema: StructType,
+      inferredFilter: Expression,
+      scanFactory: Option[StructType => Scan] = None) extends Table with SupportsRead {
+
+    override def name(): String = "in-memory-catalyst-filter-table"
+
+    override def schema(): StructType = tableSchema
+
+    override def capabilities(): java.util.Set[TableCapability] =
+      EnumSet.of(TableCapability.BATCH_READ)
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+      new InMemoryCatalystFilterScanBuilder(tableSchema, inferredFilter, scanFactory)
+  }
+
+  private class InMemoryCatalystFilterScanBuilder(
+      tableSchema: StructType,
+      inferredFilter: Expression,
+      scanFactory: Option[StructType => Scan])
+    extends ScanBuilder
+    with SupportsPushDownCatalystFilters
+    with SupportsPushDownRequiredColumns {
+
+    private var requiredSchema = tableSchema
+
+    override def build(): Scan = scanFactory.map(_(requiredSchema)).getOrElse {
+      new Scan with SupportsSparkFilterEstimation {
+        override def readSchema(): StructType = requiredSchema
+
+        override def toBatch: Batch = emptyBatch
+      }
+    }
+
+    override def pruneColumns(requiredSchema: StructType): Unit = {
+      this.requiredSchema = requiredSchema
+    }
+
+    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = filters
+
+    override def pushedFilters: Array[Predicate] = Array.empty
+
+    override def inferredFilters: Seq[Expression] = Seq(inferredFilter)
+  }
+
+  private class PushdownTable(
+      tableSchema: StructType,
+      inferredFilter: Expression) extends Table with SupportsRead {
+
+    var builder: PushdownScanBuilder = _
+
+    override def name(): String = "pushdown-catalyst-filter-table"
+
+    override def schema(): StructType = tableSchema
+
+    override def capabilities(): java.util.Set[TableCapability] =
+      EnumSet.of(TableCapability.BATCH_READ)
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      builder = new PushdownScanBuilder(tableSchema, inferredFilter)
+      builder
+    }
+  }
+
+  private class PushdownScanBuilder(
+      tableSchema: StructType,
+      inferredFilter: Expression)
+    extends ScanBuilder
+    with SupportsPushDownCatalystFilters
+    with SupportsPushDownAggregates
+    with SupportsPushDownJoin
+    with SupportsPushDownLimit
+    with SupportsPushDownOffset
+    with SupportsPushDownTopN {
+
+    var pushedAggregation: Option[Aggregation] = None
+    var pushedLimit: Option[Int] = None
+    var pushedOffset: Option[Int] = None
+    var pushedTopN: Option[(Array[V2SortOrder], Int)] = None
+    var joinPushed: Boolean = false
+    private var scanSchema: StructType = tableSchema
+
+    override def build(): Scan = new Scan with SupportsSparkFilterEstimation {
+      override def readSchema(): StructType = scanSchema
+
+      override def toBatch: Batch = emptyBatch
+    }
+
+    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = Nil
+
+    override def pushedFilters: Array[Predicate] = Array.empty
+
+    override def inferredFilters: Seq[Expression] = Seq(inferredFilter)
+
+    override def supportCompletePushDown(aggregation: Aggregation): Boolean = true
+
+    override def pushAggregation(aggregation: Aggregation): Boolean = {
+      pushedAggregation = Some(aggregation)
+      val fields =
+        aggregation.groupByExpressions().indices.map(i => StructField(s"group_$i", LongType)) ++
+          aggregation.aggregateExpressions().indices.map(i => StructField(s"agg_$i", LongType))
+      scanSchema = StructType(fields)
+      true
+    }
+
+    override def isOtherSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean =
+      other.isInstanceOf[PushdownScanBuilder]
+
+    override def pushDownJoin(
+        other: SupportsPushDownJoin,
+        joinType: V2JoinType,
+        leftColumns: Array[SupportsPushDownJoin.ColumnWithAlias],
+        rightColumns: Array[SupportsPushDownJoin.ColumnWithAlias],
+        condition: Predicate): Boolean = {
+      joinPushed = true
+      scanSchema = StructType((leftColumns ++ rightColumns).map { column =>
+        StructField(Option(column.alias()).getOrElse(column.colName()), LongType)
+      })
+      true
+    }
+
+    override def pushLimit(limit: Int): Boolean = {
+      pushedLimit = Some(limit)
+      true
+    }
+
+    override def pushOffset(offset: Int): Boolean = {
+      pushedOffset = Some(offset)
+      true
+    }
+
+    override def pushTopN(orders: Array[V2SortOrder], limit: Int): Boolean = {
+      pushedTopN = Some((orders, limit))
+      true
+    }
+
+    override def isPartiallyPushed(): Boolean = false
+  }
+
+  private class VariantPushdownTable(
+      tableSchema: StructType,
+      inferredFilter: Expression) extends Table with SupportsRead {
+
+    var builder: VariantPushdownScanBuilder = _
+
+    override def name(): String = "variant-pushdown-catalyst-filter-table"
+
+    override def schema(): StructType = tableSchema
+
+    override def capabilities(): java.util.Set[TableCapability] =
+      EnumSet.of(TableCapability.BATCH_READ)
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      builder = new VariantPushdownScanBuilder(tableSchema, inferredFilter)
+      builder
+    }
+  }
+
+  private class VariantPushdownScanBuilder(
+      tableSchema: StructType,
+      inferredFilter: Expression)
+    extends ScanBuilder
+    with SupportsPushDownCatalystFilters
+    with SupportsPushDownVariantExtractions {
+
+    var variantPushed: Boolean = false
+    private var scanSchema: StructType = tableSchema
+
+    override def build(): Scan = new Scan {
+      override def readSchema(): StructType = scanSchema
+
+      override def toBatch: Batch = emptyBatch
+    }
+
+    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = Nil
+
+    override def pushedFilters: Array[Predicate] = Array.empty
+
+    override def inferredFilters: Seq[Expression] = Seq(inferredFilter)
+
+    override def pushVariantExtractions(extractions: Array[VariantExtraction]): Array[Boolean] = {
+      variantPushed = true
+      val extractionsByColumn = extractions.groupBy(_.columnName().head)
+      scanSchema = StructType(tableSchema.fields.map { field =>
+        extractionsByColumn.get(field.name) match {
+          case Some(columnExtractions) =>
+            val extractedFields = columnExtractions.zipWithIndex.map { case (extraction, index) =>
+              StructField(
+                index.toString,
+                extraction.expectedDataType(),
+                nullable = true,
+                extraction.metadata())
+            }
+            field.copy(dataType = StructType(extractedFields))
+          case None =>
+            field
+        }
+      })
+      Array.fill(extractions.length)(true)
     }
   }
 

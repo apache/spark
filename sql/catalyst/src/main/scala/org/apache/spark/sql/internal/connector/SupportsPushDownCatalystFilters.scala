@@ -35,6 +35,30 @@ trait SupportsPushDownCatalystFilters extends ScanBuilder {
   def pushFilters(filters: Seq[Expression]): Seq[Expression]
 
   /**
+   * Returns additional filters inferred from eligible query filters passed to [[pushFilters]].
+   * Each inferred filter must be implied by those query filters and satisfied by every row
+   * returned by the scan.
+   *
+   * When `SupportsReportStatistics.reflectsFullyPushedDownFilters` returns `false`, Spark adds
+   * inferred filters whose columns remain in the scan output to the logical Filter for optimizer
+   * statistics. As with fully pushed filters, columns are not retained solely for this adjustment,
+   * and filters that reference pruned columns are dropped.
+   *
+   * Spark discards inferred filters if a join, aggregate, or variant extraction replaces the scan
+   * output.
+   *
+   * Inferred filters must be deterministic, contain no subqueries, user-defined expressions,
+   * aggregate expressions, window expressions, or generators, resolve to well-typed Boolean
+   * expressions, and not duplicate fully pushed filters. Spark ignores invalid inferred filters.
+   *
+   * Column references must be represented by `AttributeReference`. A nested column is represented
+   * by a dotted name, with path parts containing dots quoted using Spark SQL identifier syntax.
+   * For example, nested column `tz` in `location` is `location.tz`, while nested column `c.d` in
+   * top-level column `a.b` is represented as `` `a.b`.`c.d` ``.
+   */
+  def inferredFilters: Seq[Expression] = Nil
+
+  /**
    * Returns the data filters that are pushed to the data source via
    * {@link #pushFilters(Seq[Expression])}.
    */
