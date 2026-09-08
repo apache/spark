@@ -29,9 +29,14 @@ import org.apache.spark.sql.catalyst.trees.MultiTransform
  */
 trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   with AliasAwareOutputExpression {
-  final override def outputPartitioning: Partitioning = {
+  // A `lazy val` because the planner asks a node for its partitioning many times, and this body
+  // projects every partitioning expression through the output aliases, and for a
+  // `KeyedPartitioning` child also builds an `ExpressionSet` per key position and cross-products
+  // the per-position alternatives. Read no live config here, or memoizing would freeze it.
+  @transient final override lazy val outputPartitioning: Partitioning = {
+    val childPartitioning = child.outputPartitioning
     val (keyedPartitionings, otherPartitionings) =
-      PartitioningCollection.flatten(child.outputPartitioning)
+      PartitioningCollection.flatten(childPartitioning)
         .partition(_.isInstanceOf[KeyedPartitioning])
 
     val projectedKPs =
@@ -44,7 +49,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
     // deep projection chain that nesting overflows the stack when the partitioning is later
     // serialized or deeply traversed.
     (projectedKPs ++ projectedOthers).take(aliasCandidateLimit).toList match {
-      case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
+      case Seq() => UnknownPartitioning(childPartitioning.numPartitions)
       case Seq(p) => p
       case ps => PartitioningCollection.fromPartitionings(ps)
     }
@@ -131,9 +136,20 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
 
     if (projectablePositions.isEmpty) return LazyList.empty
 
-    // All input KPs share the same partitionKeys and isCollapsed flag by invariant, so the first
-    // one projects the keys and both flags for every combination below. Only the expressions
-    // differ.
+    // `PartitioningCollection` requires its members to agree on the marker, so the head
+    // represents them all.
+    val mayContainUnknownPartitionKeys = kps.head.mayContainUnknownPartitionKeys
+
+    // Dropping a key position coarsens the declared set, which an unknown-keyed claim cannot
+    // survive.
+    if (projectablePositions.length < numPositions && mayContainUnknownPartitionKeys) {
+      return LazyList.empty
+    }
+
+    // All input KPs share the same partitionKeys and flags by invariant, so the first one
+    // projects the keys for every combination below; only the expressions differ. The marker
+    // rides the copies unchanged: the guard above turned away the one shape that could not, a
+    // narrowing projection of a marked collection.
     val projected = kps.head.project(projectablePositions)
 
     // Cross-product the per-position alternatives to produce all concrete KPs.

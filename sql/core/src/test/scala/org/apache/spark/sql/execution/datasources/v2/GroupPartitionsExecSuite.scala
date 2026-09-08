@@ -22,11 +22,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyedShuffleSpec, KeyReducer, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
-import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer}
+import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, Reducer}
 import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 class GroupPartitionsExecSuite extends SharedSparkSession {
 
@@ -221,6 +221,157 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
 
     assert(!gpe.groupedPartitions.forall(_._2.size <= 1), "expected coalescing")
     assert(gpe.outputOrdering === Nil)
+  }
+
+  test("SPARK-59050: identity grouping without reducers keeps the child's marker") {
+    // An identity grouping (output partition i holds exactly input partition i) keeps the
+    // unknown-key hash-routing relationship intact, so the marker rides the transform.
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2)))
+        .copy(mayContainUnknownPartitionKeys = true))
+    val out = GroupPartitionsExec(child)
+      .outputPartitioning.asInstanceOf[KeyedPartitioning]
+    assert(out.mayContainUnknownPartitionKeys, "the marker must survive identity grouping")
+  }
+
+  test("SPARK-59050: non-identity grouping without reducers drops the unknown-keyed claim") {
+    // A regrouping that reorders or coalesces the partitions moves the rows an unknown-key claim
+    // pins to hash(key) % numPartitions, so the claim cannot survive; clearing only the marker
+    // would misreport the undeclared rows that remain.
+    // Coalesce: keys [1, 2, 1] merge the two key-1 partitions.
+    val coalesced = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(1)))
+        .copy(mayContainUnknownPartitionKeys = true))
+    GroupPartitionsExec(coalesced).outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail(s"expected the unknown-keyed claim to be dropped on coalesce, got $other")
+    }
+    // Reorder: keys [2, 1] sort to [1, 2], swapping partitions 0 and 1.
+    val reordered = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(2), row(1)))
+        .copy(mayContainUnknownPartitionKeys = true))
+    GroupPartitionsExec(reordered).outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail(s"expected the unknown-keyed claim to be dropped on reorder, got $other")
+    }
+  }
+
+  test("SPARK-59050: an identity grouping that shrinks the partition count drops the claim") {
+    // `alignToExpectedKeys` emits only the expected keys, so a declared key the merged set
+    // does not carry is never emitted. When the dropped key is trailing, every kept group
+    // still reads as the identity, but the partition count shrank and the hash modulus with
+    // it: the child's undeclared rows sit at hash(key) % 3 while the retained claim would
+    // promise hash(key) % 2. The count check catches what the per-group check cannot.
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(3)))
+        .copy(mayContainUnknownPartitionKeys = true))
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val gpe = GroupPartitionsExec(child,
+      expectedPartitionKeys = Some(Seq(keyOf(1) -> 1, keyOf(2) -> 1)))
+    assert(gpe.groupedPartitions.size === 2, "the trailing key 3 is dropped")
+    gpe.outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail(s"expected the unknown-keyed claim to be dropped on a shrink, got $other")
+    }
+  }
+
+  test("SPARK-59050: unknown-keyed child with reducers gives up the keyed claim at the real " +
+    "count") {
+    // The reducer instance of the give-up: a reduction regroups by the reduced keys, a
+    // non-identity grouping, so the unknown-keyed claim is dropped at the physical grouped
+    // count. The node must report `UnknownPartitioning` with its physical grouped count;
+    // reporting zero partitions is what threw once a parent join built a
+    // `PartitioningCollection` over both sides. (`areKeysCompatible` pairs a marked layout
+    // only with same-function partners that need no reducer, so no planner path applies a
+    // reducer to a marked layout; this pins the contract directly.)
+    // The reducer must be real: it is the collapse of [1, 2, 3] to two groups that exercises
+    // the regrouping the give-up answers. A reducer slot that rewrites no key is pinned by the
+    // next test, where it is the slot itself, not a merge, that drops the claim.
+    // Keys [1, 2, 3] reduced mod 2 give [1, 0, 1]: the node emits 2 grouped partitions where
+    // the child had 3, and the give-up count has to be that physical 2.
+    val mod2 = new Reducer[Int, Int] {
+      override def reduce(v: Int): Int = v % 2
+      override def resultType(): DataType = IntegerType
+      override def displayName(): String = "mod2"
+    }
+    val reducer = KeyReducer(mod2, TransformExpression(BucketFunction, Seq(exprA), Some(2)))
+    val partitionKeys = Seq(row(1), row(2), row(3))
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys)
+        .copy(mayContainUnknownPartitionKeys = true))
+    val gpe = GroupPartitionsExec(child, reducers = Some(Seq(Some(reducer))))
+
+    assert(gpe.groupedPartitions.size === 2, "mod 2 collapses keys 1 and 3")
+    gpe.outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail(s"expected the unknown-keyed claim to be dropped on reduction, got $other")
+    }
+    // A parent join merges the two sides' partitionings into a collection: a count of 0 fails
+    // the uniform-numPartitions requirement, the planning throw reproduced; this call
+    // throwing fails the test.
+    val partner = KeyedPartitioning(Seq(exprB), Seq(row(1), row(2)))
+    PartitioningCollection.fromPartitionings(Seq(gpe.outputPartitioning, partner))
+  }
+
+  test("SPARK-59050: a grouping that rewrites the declared keys drops the claim") {
+    // `identityGrouping` also asks whether the grouping rewrote the keys: the claim the node
+    // goes on to declare lives in the projected or reduced key space, while the child's
+    // undeclared rows still sit at hash(originalKey) % numPartitions. A reducer slot, a
+    // narrowing projection, or a reordering projection therefore gives up the claim even when
+    // every group keeps its index and the count is unchanged. A conforming self-reducer cannot
+    // rewrite a reachable key (its contract is r(f(x)) = f(x)), so the give-up there loses at
+    // most an optimization; no planner path applies a reducer or a non-identity projection to
+    // a marked layout, so these shapes are pinned here directly.
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA, exprB), Seq(row(1, 10), row(2, 20)))
+        .copy(mayContainUnknownPartitionKeys = true))
+
+    // Reducer slots: `Some(Seq(None, None))` leaves every key and every index unchanged.
+    val reduced = GroupPartitionsExec(child, reducers = Some(Seq(None, None)))
+    assert(reduced.groupedPartitions.size === 2)
+    reduced.outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail(s"expected the unknown-keyed claim to be dropped with reducer slots, got $other")
+    }
+
+    // Narrowing projection: position 0 of keys [(1, 10), (2, 20)] keeps both groups in order.
+    val projected = GroupPartitionsExec(child, joinKeyPositions = Some(Seq(0)))
+    assert(projected.groupedPartitions.size === 2)
+    projected.outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail("expected the unknown-keyed claim to be dropped on a narrowing projection, " +
+          s"got $other")
+    }
+
+    // Reordering projection: positions Seq(1, 0) re-label every group into the swapped key
+    // space while each group keeps its index and the count, so only the rewrite clause can
+    // catch it. No producer of joinKeyPositions emits anything but ascending positions today;
+    // this pins the predicate directly.
+    val reordered = GroupPartitionsExec(child, joinKeyPositions = Some(Seq(1, 0)))
+    assert(reordered.groupedPartitions.size === 2)
+    assert(reordered.groupedPartitions.zipWithIndex.forall {
+      case ((_, inputIndices), outputIndex) => inputIndices == Seq(outputIndex)
+    }, "the reordering keeps every group at its index")
+    reordered.outputPartitioning match {
+      case u: UnknownPartitioning =>
+        assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
+      case other =>
+        fail("expected the unknown-keyed claim to be dropped on a reordering projection, " +
+          s"got $other")
+    }
   }
 
   test("SPARK-55715: sorted merge config enabled but child not SafeForKWayMerge falls back " +
