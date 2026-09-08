@@ -32,6 +32,8 @@ case class VectorDotProduct(left: Expression, right: Expression)
 
   override def nullIntolerant: Boolean = true
 
+  override def prettyName: String = "ml_vector_dot_product"
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(VectorDotProduct.vectorSqlType, VectorDotProduct.vectorSqlType)
 

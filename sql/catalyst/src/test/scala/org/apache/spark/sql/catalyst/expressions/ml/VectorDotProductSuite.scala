@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.ml
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal, UnsafeArrayData}
 
-class VectorExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class VectorDotProductSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val vectorSqlType = VectorDotProduct.vectorSqlType
 
   private def dense(values: Double*): Literal = {
@@ -47,7 +47,9 @@ class VectorExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val denseWeights = dense(4.0, 5.0, 6.0)
     val sparseWeights = sparse(3, Array(0, 2), Array(4.0, 6.0))
 
-    checkEvaluation(VectorDotProduct(denseVector, denseWeights), 32.0)
+    val expression = VectorDotProduct(denseVector, denseWeights)
+    assert(expression.prettyName === "ml_vector_dot_product")
+    checkEvaluation(expression, 32.0)
     checkEvaluation(VectorDotProduct(denseVector, sparseWeights), 22.0)
     checkEvaluation(VectorDotProduct(sparseVector, denseWeights), 22.0)
     checkEvaluation(VectorDotProduct(sparseVector, sparseWeights), 22.0)
