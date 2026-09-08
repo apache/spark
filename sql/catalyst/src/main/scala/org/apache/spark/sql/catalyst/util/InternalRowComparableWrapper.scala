@@ -152,15 +152,16 @@ object InternalRowComparableWrapper {
    * Builds wrappers over one row schema, holding the cache lookups that schema needs so a caller
    * does not repeat them per row.
    *
-   * `dataTypes` is what the rows it builds compare at, which is `comparableTypes` of what it was
-   * given. A caller reporting a type list beside those rows takes it from here rather than erasing
-   * on its own, so the two cannot answer differently.
+   * It also answers for the schema it settled on. `dataTypes` is what the rows it builds compare
+   * at, which is `comparableTypes` of what it was given, and `ordering` sorts them. A caller
+   * reporting a type list beside those rows, or sorting them, takes it from here rather than
+   * deriving it again, so the two cannot answer differently.
    */
   final class Factory private[InternalRowComparableWrapper] (val dataTypes: Seq[DataType])
     extends (InternalRow => InternalRowComparableWrapper) {
 
+    val ordering: BaseOrdering = orderingCache.get(dataTypes)
     private[this] val structType = structTypeCache.get(dataTypes)
-    private[this] val ordering = orderingCache.get(dataTypes)
 
     override def apply(row: InternalRow): InternalRowComparableWrapper =
       new InternalRowComparableWrapper(row, dataTypes, structType, ordering)
