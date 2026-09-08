@@ -915,13 +915,14 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     // Upsert rows always get a populated version map. The third row is a delete (null
     // version map) only when deleteCondition is set; otherwise it is an upsert too.
+    val valueVersionMapKey = Scd2VersionMap.encodePath(Seq("value"))
     val expectedDeleteRowMap: Any =
-      if (deleteCondition.isDefined) null else Map("value" -> false)
+      if (deleteCondition.isDefined) null else Map(valueVersionMapKey -> false)
 
     checkAnswer(
       df = versionMaps,
       expectedAnswer = Seq(
-        Row(10L, Map("value" -> false)),
+        Row(10L, Map(valueVersionMapKey -> false)),
         Row(20L, Map.empty[String, Boolean]),
         Row(30L, expectedDeleteRowMap)
       )
