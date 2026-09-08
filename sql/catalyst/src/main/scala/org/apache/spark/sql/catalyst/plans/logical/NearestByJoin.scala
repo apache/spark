@@ -18,12 +18,36 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.PythonUDF.isScalarPythonUDF
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, NearestByDirection, NearestByJoinValidation}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 
 object NearestByJoin {
   /** @see [[NearestByJoinValidation.MaxNumResults]] */
   val MaxNumResults: Int = NearestByJoinValidation.MaxNumResults
+
+  /**
+   * Returns true when the ranking expression of a [[NearestByJoin]] contains a scalar
+   * Python UDF whose attribute references span both the left and right children.
+   *
+   * `ExtractPythonUDFs` cannot evaluate a Python UDF that requires attributes from more
+   * than one child of its parent operator. On the rewrite path (flag OFF) this is not a
+   * problem because the rewrite produces a `Join` node that merges both sides into a single
+   * child before any UDF extraction runs. On the operator path (flag ON) the `NearestByJoin`
+   * node is left as a binary operator; if a scalar Python UDF in the ranking expression
+   * references both children, `ExtractPythonUDFs` will throw. Detecting this case here
+   * allows both `CheckAnalysis` and `RewriteNearestByJoin` to share one source of truth.
+   */
+  def hasCrossChildPythonUDF(j: NearestByJoin): Boolean = {
+    val leftSet = j.left.outputSet
+    val rightSet = j.right.outputSet
+    j.rankingExpression.exists { e =>
+      isScalarPythonUDF(e) && {
+        val refs = e.references
+        refs.intersect(leftSet).nonEmpty && refs.intersect(rightSet).nonEmpty
+      }
+    }
+  }
 }
 
 /**

@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, CreateStruct, Inline, Literal, Rand, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, CreateStruct, Inline, Literal, PythonUDF, Rand, Uuid}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, First, MaxMinByK}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, NearestByDistance, NearestBySimilarity, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Generate, Join, JoinHint, LocalRelation, NearestByJoin, Project}
@@ -389,5 +390,57 @@ class RewriteNearestByJoinSuite extends PlanTest {
     assert(query.output.forall(_.nullable),
       "NearestByJoin.output should declare every attribute nullable, regardless of the " +
         "nullability of the underlying inputs")
+  }
+
+  test("cross-child Python UDF in ranking forces rewrite even when broadcast flag is ON") {
+    // When the broadcast flag is ON, the rule normally leaves the NearestByJoin node intact.
+    // However, if the ranking expression contains a scalar Python UDF whose references span
+    // both children, ExtractPythonUDFs would throw "Invalid PythonUDF ... requires attributes
+    // from more than one child." The rule detects this and falls back to the rewrite path.
+    val left = LocalRelation($"a".int, $"b".int)
+    val right = LocalRelation($"x".int, $"y".int)
+    val crossChildUDF = PythonUDF(
+      "cross_child_udf", null, IntegerType,
+      Seq(left.output(0), right.output(0)),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val query = NearestByJoin(
+      left, right, Inner, approx = true, numResults = 3,
+      rankingExpression = crossChildUDF,
+      direction = NearestByDistance)
+
+    // Simulate flag ON by overriding the conf within the rule's application
+    val rewritten = withSQLConf("spark.sql.join.nearestBy.broadcast.enabled" -> "true") {
+      RewriteNearestByJoin(query.analyze)
+    }
+    // The NearestByJoin should be rewritten (not left intact) because the Python UDF
+    // references both children.
+    assert(!rewritten.exists(_.isInstanceOf[NearestByJoin]),
+      "NearestByJoin should have been rewritten due to cross-child Python UDF, " +
+        "but it was left intact")
+    assert(rewritten.collect { case j: Join => j }.nonEmpty,
+      "Expected a Join node in the rewritten plan (rewrite path)")
+  }
+
+  test("single-child Python UDF in ranking does NOT force rewrite when broadcast flag is ON") {
+    // A Python UDF that references only one child (e.g., only right-side columns) is not
+    // problematic for ExtractPythonUDFs, so the rule should leave the NearestByJoin intact.
+    val left = LocalRelation($"a".int, $"b".int)
+    val right = LocalRelation($"x".int, $"y".int)
+    val singleChildUDF = PythonUDF(
+      "single_child_udf", null, IntegerType,
+      Seq(right.output(0), right.output(1)),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val query = NearestByJoin(
+      left, right, Inner, approx = true, numResults = 3,
+      rankingExpression = singleChildUDF,
+      direction = NearestByDistance)
+
+    val rewritten = withSQLConf("spark.sql.join.nearestBy.broadcast.enabled" -> "true") {
+      RewriteNearestByJoin(query.analyze)
+    }
+    // The NearestByJoin should be left intact -- UDF references only one child.
+    assert(rewritten.exists(_.isInstanceOf[NearestByJoin]),
+      "NearestByJoin should have been left intact for the planner since the Python UDF " +
+        "only references one child")
   }
 }

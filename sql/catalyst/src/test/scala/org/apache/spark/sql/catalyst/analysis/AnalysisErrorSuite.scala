@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -946,6 +947,34 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       rankingExpression = left.output.head + right.output.head,
       direction = NearestBySimilarity)
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      assertAnalysisErrorCondition(
+        nearestBy,
+        expectedErrorCondition = "NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",
+        expectedMessageParameters = Map.empty)
+    }
+  }
+
+  test("NearestByJoin with cross-child Python UDF is rejected when crossJoin disabled " +
+      "even with broadcast flag ON") {
+    // When the broadcast flag is ON but the ranking contains a cross-child scalar Python UDF,
+    // the rewrite path is forced (creating a Join node). CheckAnalysis must emit the dedicated
+    // NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED error rather than letting the generic
+    // CheckCartesianProducts "Detected implicit cartesian product" message surface.
+    // This test FAILS before the CheckAnalysis fix (would get the cartesian-product error)
+    // and PASSES after.
+    val left = LocalRelation(AttributeReference("a", IntegerType)())
+    val right = LocalRelation(AttributeReference("b", IntegerType)())
+    val crossChildUDF = PythonUDF(
+      "cross_child_udf", null, IntegerType,
+      Seq(left.output.head, right.output.head),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val nearestBy = NearestByJoin(
+      left, right, Inner, approx = true, numResults = 1,
+      rankingExpression = crossChildUDF,
+      direction = NearestBySimilarity)
+    withSQLConf(
+        SQLConf.CROSS_JOINS_ENABLED.key -> "false",
+        SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> "true") {
       assertAnalysisErrorCondition(
         nearestBy,
         expectedErrorCondition = "NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",

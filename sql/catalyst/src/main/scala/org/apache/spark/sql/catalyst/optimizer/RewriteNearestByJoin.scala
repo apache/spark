@@ -71,8 +71,30 @@ import org.apache.spark.sql.catalyst.rules._
 object RewriteNearestByJoin extends Rule[LogicalPlan] {
   private lazy val random = new scala.util.Random()
 
+  /**
+   * Returns true when the ranking expression of a [[NearestByJoin]] contains a scalar
+   * Python UDF whose attribute references span both the left and right children.
+   *
+   * Delegates to [[NearestByJoin.hasCrossChildPythonUDF]] -- a single source of truth shared
+   * with `CheckAnalysis` (which needs the same predicate to decide whether to waive the
+   * cross-join error).
+   */
+  private def containsCrossChildPythonUDF(j: NearestByJoin): Boolean =
+    NearestByJoin.hasCrossChildPythonUDF(j)
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
-    case j @ NearestByJoin(left, right, joinType, _, numResults, rankingExpression, direction) =>
+    case j @ NearestByJoin(left, right, joinType, _, numResults, rankingExpression, direction)
+      // When the broadcast flag is ON the NearestByJoin node is left intact for the
+      // planner's NearestByJoinSelection strategy, which unconditionally plans
+      // BroadcastNearestByJoinExec. There is no size decision; the right side is
+      // broadcast unconditionally regardless of spark.sql.autoBroadcastJoinThreshold.
+      //
+      // Exception: when the ranking expression contains a scalar Python UDF that
+      // references both children, the operator path would crash in ExtractPythonUDFs
+      // ("Invalid PythonUDF ... requires attributes from more than one child"). In
+      // that case we fall back to the rewrite which merges both sides into a Join
+      // before UDF extraction runs.
+      if !conf.nearestByBroadcastEnabled || containsCrossChildPythonUDF(j) =>
       // 1. Tag each left row with a unique id so that rows from the same left row can later be
       //    grouped together after the cross-join with `right`.
       val qidAlias = Alias(Uuid(Some(random.nextLong())), "__qid")()
@@ -85,11 +107,15 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
       //    are dropped. When `right` is non-empty every left row already has right-row
       //    pairings, so `LEFT OUTER` and `INNER` are equivalent in that case.
       //
-      //    This synthetic join is an unconditioned cross-product, so `NEAREST BY` queries
-      //    are subject to `CheckCartesianProducts` and will be rejected when the user has
-      //    set `spark.sql.crossJoin.enabled = false`. That is intentional: if the user has
-      //    opted out of cross-products, the NEAREST BY rewrite -- which is itself a bounded
-      //    cross-product today -- should not silently bypass that choice.
+      //    This synthetic join is an unconditioned cross-product, so on the REWRITE path
+      //    (flag OFF, or flag ON with a cross-child scalar Python UDF that forces fallback)
+      //    `NEAREST BY` queries are subject to `CheckCartesianProducts` and will be rejected
+      //    when the user has set `spark.sql.crossJoin.enabled = false`. That is intentional:
+      //    if the user has opted out of cross-products, the rewrite -- which is itself a
+      //    bounded cross-product today -- should not silently bypass that choice.
+      //    (On the OPERATOR path -- flag ON, for NearestByJoin nodes that this rule does
+      //    NOT rewrite because they have no cross-child Python UDF -- no Join node is built,
+      //    so CheckCartesianProducts does not apply and crossJoin.enabled is irrelevant.)
       val join = Join(taggedLeft, right, joinType, None, JoinHint.NONE)
 
       // A LEFT OUTER join widens the right-side columns to nullable. The synthesized Aggregate
