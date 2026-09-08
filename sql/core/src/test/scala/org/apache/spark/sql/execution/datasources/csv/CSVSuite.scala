@@ -3104,7 +3104,7 @@ abstract class CSVSuite
           },
           condition = "INVALID_PARAMETER_VALUE.EXTENSION",
           parameters = Map(
-            "functionName" -> "`extension`",
+            "functionName" -> "`csv`",
             "parameter" -> "`extension`",
             "invalidValue" -> s"`$ext`"))
       }
@@ -3121,7 +3121,7 @@ abstract class CSVSuite
         },
         condition = "INVALID_PARAMETER_VALUE.EXTENSION",
         parameters = Map(
-          "functionName" -> "`extension`",
+          "functionName" -> "`csv`",
           "parameter" -> "`extension`",
           "invalidValue" -> s"`$ext`"))
     }
