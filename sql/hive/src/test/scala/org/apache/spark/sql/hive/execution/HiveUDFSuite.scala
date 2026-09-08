@@ -46,7 +46,7 @@ import org.apache.spark.sql.hive.HiveGenericUDF
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CharType, TimestampType, TimeType, VarcharType}
+import org.apache.spark.sql.types.{CharType, StringType, TimestampType, TimeType, VarcharType}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
@@ -894,9 +894,21 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
 
   test("SPARK-59277: Hive UDF and UDTF support first-class CHAR/VARCHAR") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      withUserDefinedFunction("hive_upper" -> true, "hive_explode" -> true) {
+      withUserDefinedFunction(
+          "hive_simple_concat" -> true,
+          "hive_upper" -> true,
+          "hive_explode" -> true) {
+        sql(s"CREATE TEMPORARY FUNCTION hive_simple_concat AS " +
+          s"'${classOf[UDFStringString].getName}'")
         sql(s"CREATE TEMPORARY FUNCTION hive_upper AS '${classOf[GenericUDFUpper].getName}'")
         sql(s"CREATE TEMPORARY FUNCTION hive_explode AS '${classOf[GenericUDTFExplode].getName}'")
+
+        val simple = sql(
+          """SELECT hive_simple_concat(
+            |  CAST('A' AS CHAR(3)),
+            |  CAST('b' AS VARCHAR(2))) AS value""".stripMargin)
+        assert(simple.schema.head.dataType === StringType)
+        checkAnswer(simple, Row("A b"))
 
         val scalar = sql(
           "SELECT hive_upper(CAST('Ab' AS CHAR(5) COLLATE UTF8_LCASE)) AS value")

@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.typeinfo.{CharTypeInfo, DecimalTypeInfo, VarcharTypeInfo}
 import org.apache.hadoop.io.LongWritable
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row, TestUserClassUDT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -322,15 +322,19 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
         VarcharType(7, "UNICODE_CI")).foreach { dataType =>
         val inspector = toInspector(dataType)
         val value = UTF8String.fromString(dataType match {
-          case _: CharType => "ab   "
+          case _: CharType => "ab"
           case _: VarcharType => "abc"
         })
+        val expectedValue = dataType match {
+          case _: CharType => UTF8String.fromString("ab   ")
+          case _: VarcharType => value
+        }
         val expectedType = dataType match {
           case c: CharType => CharType(c.length)
           case v: VarcharType => VarcharType(v.length)
         }
         assert(inspectorToDataType(inspector) === expectedType)
-        assert(unwrap(wrap(value, inspector, dataType), inspector) === value)
+        assert(unwrap(wrap(value, inspector, dataType), inspector) === expectedValue)
       }
     }
   }
@@ -340,7 +344,18 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
       val dataType = StructType(Seq(
         StructField("chars", ArrayType(CharType(4))),
         StructField("varchars", MapType(IntegerType, VarcharType(8)))))
-      assert(inspectorToDataType(toInspector(dataType)) === dataType)
+      val inspector = toInspector(dataType)
+      assert(inspectorToDataType(inspector) === dataType)
+
+      val input = InternalRow(
+        new GenericArrayData(Array[Any](UTF8String.fromString("a"))),
+        ArrayBasedMapData(
+          Array[Any](1),
+          Array[Any](UTF8String.fromString("value"))))
+      val result = unwrapperFor(inspector, dataType)(
+        wrap(input, inspector, dataType)).asInstanceOf[InternalRow]
+      assert(result.getArray(0).getUTF8String(0) === UTF8String.fromString("a   "))
+      assert(result.getMap(1).valueArray().getUTF8String(0) === UTF8String.fromString("value"))
     }
   }
 
@@ -351,6 +366,12 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
         val inspector = toInspector(Literal.create(value, dataType))
         assert(inspector.isInstanceOf[ConstantObjectInspector])
         assert(inspectorToDataType(inspector) === dataType)
+        val expected = dataType match {
+          case _: CharType => UTF8String.fromString("abc  ")
+          case _: VarcharType => value
+        }
+        assert(unwrapperFor(inspector, dataType)(
+          inspector.asInstanceOf[ConstantObjectInspector].getWritableConstantValue) === expected)
       }
     }
   }
@@ -359,6 +380,46 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     withFirstClassCharVarchar(enabled = false) {
       Seq[DataType](CharType(5), VarcharType(7)).foreach { dataType =>
         assert(inspectorToDataType(toInspector(dataType)) === StringType)
+      }
+    }
+  }
+
+  test("SPARK-59277: Hive CHAR/VARCHAR boundaries enforce Spark length semantics") {
+    withFirstClassCharVarchar(enabled = true) {
+      val varchar = VarcharType(3)
+      val varcharInspector = toInspector(varchar)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          wrap(UTF8String.fromString("abcd"), varcharInspector, varchar)
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+
+      val char = CharType(5)
+      val charUnwrapper =
+        unwrapperFor(PrimitiveObjectInspectorFactory.javaStringObjectInspector, char)
+      assert(charUnwrapper("ab") === UTF8String.fromString("ab   "))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          charUnwrapper("abcdef")
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5"))
+    }
+  }
+
+  test("SPARK-59277: Hive object inspectors reject unsupported CHAR/VARCHAR lengths") {
+    withFirstClassCharVarchar(enabled = true) {
+      Seq[DataType](CharType(0), CharType(256), VarcharType(65536)).foreach { dataType =>
+        val expectedParams = Map("typeName" -> s"\"${dataType.sql}\"")
+        checkError(
+          exception = intercept[AnalysisException](toInspector(dataType)),
+          condition = "UNSUPPORTED_DATATYPE",
+          parameters = expectedParams)
+        checkError(
+          exception = intercept[AnalysisException](dataType.toTypeInfo),
+          condition = "UNSUPPORTED_DATATYPE",
+          parameters = expectedParams)
       }
     }
   }

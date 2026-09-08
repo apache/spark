@@ -311,25 +311,57 @@ private[hive] trait HiveInspectors {
         withNullSafe(o => o.asInstanceOf[java.lang.Byte])
       case hvoi: HiveVarcharObjectInspector if x.preferWritable() =>
         val length = hvoi.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength
-        withNullSafe { o =>
-          val varchar = new HiveVarchar(o.asInstanceOf[UTF8String].toString, length)
-          new hiveIo.HiveVarcharWritable(varchar)
+        dataType match {
+          case v: VarcharType if SQLConf.get.charVarcharFirstClassTypes =>
+            withNullSafe { o =>
+              val checked = CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
+                o.asInstanceOf[UTF8String], v.length)
+              new hiveIo.HiveVarcharWritable(new HiveVarchar(checked.toString, length))
+            }
+          case _ =>
+            withNullSafe(o => getStringWritable(o))
         }
       case hvoi: HiveVarcharObjectInspector =>
         val length = hvoi.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength
-        withNullSafe { o =>
-          new HiveVarchar(o.asInstanceOf[UTF8String].toString, length)
+        dataType match {
+          case v: VarcharType if SQLConf.get.charVarcharFirstClassTypes =>
+            withNullSafe { o =>
+              val checked = CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
+                o.asInstanceOf[UTF8String], v.length)
+              new HiveVarchar(checked.toString, length)
+            }
+          case _ =>
+            withNullSafe { o =>
+              val value = o.asInstanceOf[UTF8String].toString
+              new HiveVarchar(value, value.length)
+            }
         }
       case hcoi: HiveCharObjectInspector if x.preferWritable() =>
         val length = hcoi.getTypeInfo.asInstanceOf[CharTypeInfo].getLength
-        withNullSafe { o =>
-          val char = new HiveChar(o.asInstanceOf[UTF8String].toString, length)
-          new hiveIo.HiveCharWritable(char)
+        dataType match {
+          case c: CharType if SQLConf.get.charVarcharFirstClassTypes =>
+            withNullSafe { o =>
+              val checked = CharVarcharCodegenUtils.charTypeWriteSideCheck(
+                o.asInstanceOf[UTF8String], c.length)
+              new hiveIo.HiveCharWritable(new HiveChar(checked.toString, length))
+            }
+          case _ =>
+            withNullSafe(o => getStringWritable(o))
         }
       case hcoi: HiveCharObjectInspector =>
         val length = hcoi.getTypeInfo.asInstanceOf[CharTypeInfo].getLength
-        withNullSafe { o =>
-          new HiveChar(o.asInstanceOf[UTF8String].toString, length)
+        dataType match {
+          case c: CharType if SQLConf.get.charVarcharFirstClassTypes =>
+            withNullSafe { o =>
+              val checked = CharVarcharCodegenUtils.charTypeWriteSideCheck(
+                o.asInstanceOf[UTF8String], c.length)
+              new HiveChar(checked.toString, length)
+            }
+          case _ =>
+            withNullSafe { o =>
+              val value = o.asInstanceOf[UTF8String].toString
+              new HiveChar(value, value.length)
+            }
         }
       case _: JavaHiveDecimalObjectInspector =>
         withNullSafe(o =>
@@ -832,6 +864,26 @@ private[hive] trait HiveInspectors {
             null
           }
         }
+      case (_, c: CharType) =>
+        val unwrapper = unwrapperFor(objectInspector)
+        data: Any => {
+          val value = unwrapper(data).asInstanceOf[UTF8String]
+          if (value == null) {
+            null
+          } else {
+            CharVarcharCodegenUtils.charTypeReadSideCheck(value, c.length)
+          }
+        }
+      case (_, v: VarcharType) =>
+        val unwrapper = unwrapperFor(objectInspector)
+        data: Any => {
+          val value = unwrapper(data).asInstanceOf[UTF8String]
+          if (value == null) {
+            null
+          } else {
+            CharVarcharCodegenUtils.varcharTypeReadSideCheck(value, v.length)
+          }
+        }
       case (li: ListObjectInspector, ArrayType(elementType, _)) =>
         val unwrapper = unwrapperFor(li.getListElementObjectInspector, elementType)
         data: Any => {
@@ -945,10 +997,10 @@ private[hive] trait HiveInspectors {
     // Hive object inspectors preserve the CHAR/VARCHAR length but have no collation metadata.
     case c: CharType =>
       PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(
-        TypeInfoFactory.getCharTypeInfo(c.length))
+        toHiveCharTypeInfo(c))
     case v: VarcharType =>
       PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(
-        TypeInfoFactory.getVarcharTypeInfo(v.length))
+        toHiveVarcharTypeInfo(v))
     case _: StringType => PrimitiveObjectInspectorFactory.javaStringObjectInspector
     case IntegerType => PrimitiveObjectInspectorFactory.javaIntObjectInspector
     case DoubleType => PrimitiveObjectInspectorFactory.javaDoubleObjectInspector
@@ -988,6 +1040,20 @@ private[hive] trait HiveInspectors {
       messageParameters = Map("typeName" -> toSQLType(dataType)))
   }
 
+  private def toHiveCharTypeInfo(dataType: CharType): CharTypeInfo = {
+    if (dataType.length < 1 || dataType.length > HiveChar.MAX_CHAR_LENGTH) {
+      throw unsupportedHiveType(dataType)
+    }
+    TypeInfoFactory.getCharTypeInfo(dataType.length)
+  }
+
+  private def toHiveVarcharTypeInfo(dataType: VarcharType): VarcharTypeInfo = {
+    if (dataType.length < 1 || dataType.length > HiveVarchar.MAX_VARCHAR_LENGTH) {
+      throw unsupportedHiveType(dataType)
+    }
+    TypeInfoFactory.getVarcharTypeInfo(dataType.length)
+  }
+
   /**
    * Map the catalyst expression to ObjectInspector, however,
    * if the expression is `Literal` or foldable, a constant writable object inspector returns;
@@ -997,9 +1063,9 @@ private[hive] trait HiveInspectors {
    */
   def toInspector(expr: Expression): ObjectInspector = expr match {
     case Literal(value, c: CharType) =>
-      getHiveCharWritableConstantObjectInspector(value, c.length)
+      getHiveCharWritableConstantObjectInspector(value, c)
     case Literal(value, v: VarcharType) =>
-      getHiveVarcharWritableConstantObjectInspector(value, v.length)
+      getHiveVarcharWritableConstantObjectInspector(value, v)
     case Literal(value, _: StringType) =>
       getStringWritableConstantObjectInspector(value)
     case Literal(value, IntegerType) =>
@@ -1151,28 +1217,32 @@ private[hive] trait HiveInspectors {
 
   private def getHiveCharWritableConstantObjectInspector(
       value: Any,
-      length: Int): ObjectInspector = {
+      dataType: CharType): ObjectInspector = {
     val writable = if (value == null) {
       null
     } else {
+      val checked = CharVarcharCodegenUtils.charTypeWriteSideCheck(
+        value.asInstanceOf[UTF8String], dataType.length)
       new hiveIo.HiveCharWritable(
-        new HiveChar(value.asInstanceOf[UTF8String].toString, length))
+        new HiveChar(checked.toString, dataType.length))
     }
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.getCharTypeInfo(length), writable)
+      toHiveCharTypeInfo(dataType), writable)
   }
 
   private def getHiveVarcharWritableConstantObjectInspector(
       value: Any,
-      length: Int): ObjectInspector = {
+      dataType: VarcharType): ObjectInspector = {
     val writable = if (value == null) {
       null
     } else {
+      val checked = CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
+        value.asInstanceOf[UTF8String], dataType.length)
       new hiveIo.HiveVarcharWritable(
-        new HiveVarchar(value.asInstanceOf[UTF8String].toString, length))
+        new HiveVarchar(checked.toString, dataType.length))
     }
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.getVarcharTypeInfo(length), writable)
+      toHiveVarcharTypeInfo(dataType), writable)
   }
 
   private def getIntWritableConstantObjectInspector(value: Any): ObjectInspector =
@@ -1340,8 +1410,8 @@ private[hive] trait HiveInspectors {
       case IntegerType => intTypeInfo
       case LongType => longTypeInfo
       case ShortType => shortTypeInfo
-      case c: CharType => getCharTypeInfo(c.length)
-      case v: VarcharType => getVarcharTypeInfo(v.length)
+      case c: CharType => toHiveCharTypeInfo(c)
+      case v: VarcharType => toHiveVarcharTypeInfo(v)
       case _: StringType => stringTypeInfo
       case d: DecimalType => decimalTypeInfo(d)
       case DateType => dateTypeInfo

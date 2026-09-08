@@ -245,7 +245,7 @@ private[hive] case class HiveGenericUDTF(
   private lazy val wrappers = children.map(x => wrapperFor(toInspector(x), x.dataType)).toArray
 
   @transient
-  private lazy val unwrapper = unwrapperFor(outputInspector)
+  private lazy val unwrapper = unwrapperFor(outputInspector, elementSchema)
 
   @transient
   private lazy val inputProjection = new InterpretedProjection(children)
@@ -399,7 +399,7 @@ private[hive] case class HiveUDAFFunction(
   // Unwrapper function used to unwrap final aggregation result objects returned by Hive UDAFs into
   // Spark SQL specific format.
   @transient
-  private lazy val resultUnwrapper = unwrapperFor(finalHiveEvaluator.objectInspector)
+  private lazy val resultUnwrapper = unwrapperFor(finalHiveEvaluator.objectInspector, dataType)
 
   @transient
   private lazy val cached: Array[AnyRef] = new Array[AnyRef](children.length)
@@ -507,7 +507,8 @@ private[hive] case class HiveUDAFFunction(
 
   // Helper class used to de/serialize Hive UDAF `AggregationBuffer` objects
   private class AggregationBufferSerDe {
-    private val partialResultUnwrapper = unwrapperFor(partial1HiveEvaluator.objectInspector)
+    private val partialResultUnwrapper =
+      unwrapperFor(partial1HiveEvaluator.objectInspector, partialResultDataType)
 
     private val partialResultWrapper =
       wrapperFor(partial1HiveEvaluator.objectInspector, partialResultDataType)

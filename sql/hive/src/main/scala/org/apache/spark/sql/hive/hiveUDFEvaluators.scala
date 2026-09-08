@@ -162,9 +162,12 @@ class HiveGenericUDFEvaluator(
   }
 
   @transient
-  private lazy val unwrapper: Any => Any = unwrapperFor(returnInspector)
+  private lazy val catalystReturnType = inspectorToDataType(returnInspector)
 
-  override def returnType: DataType = inspectorToDataType(returnInspector)
+  @transient
+  private lazy val unwrapper: Any => Any = unwrapperFor(returnInspector, catalystReturnType)
+
+  override def returnType: DataType = catalystReturnType
 
   def setArg(index: Int, arg: Any): Unit =
     deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(() => arg)
