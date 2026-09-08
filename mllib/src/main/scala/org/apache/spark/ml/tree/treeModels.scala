@@ -169,7 +169,7 @@ private[spark] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
 private[ml] object TreeEnsembleModel {
 
-  private[ml] def weightedPrediction(
+  private[ml] def predict(
       features: Vector,
       rootNodes: Array[Node],
       treeWeights: Array[Double]): Double = {

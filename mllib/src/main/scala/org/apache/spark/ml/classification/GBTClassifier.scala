@@ -369,7 +369,7 @@ class GBTClassificationModel private[ml](
       }).apply(features)
     } else {
       udf((features: Vector) => {
-        val margin = GBTClassificationModel.margin(features, localRootNodes, localTreeWeights)
+        val margin = TreeEnsembleModel.predict(features, localRootNodes, localTreeWeights)
         if (margin > 0.0) 1.0 else 0.0
       }).apply(features)
     }
@@ -466,18 +466,11 @@ class GBTClassificationModel private[ml](
 @Since("2.0.0")
 object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
 
-  private def margin(
-      features: Vector,
-      rootNodes: Array[Node],
-      treeWeights: Array[Double]): Double = {
-    TreeEnsembleModel.weightedPrediction(features, rootNodes, treeWeights)
-  }
-
   private def predictRaw(
       features: Vector,
       rootNodes: Array[Node],
       treeWeights: Array[Double]): Vector = {
-    val prediction = margin(features, rootNodes, treeWeights)
+    val prediction = TreeEnsembleModel.predict(features, rootNodes, treeWeights)
     Vectors.dense(-prediction, prediction)
   }
 
