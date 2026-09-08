@@ -137,34 +137,62 @@ class ResolveDeduplicateSuite extends AnalysisTest {
 
   test("recomputation excludes metadata added after the deduplication boundary") {
     val metadataAddedAfterDeduplication = MetadataAttribute("_metadata", StringType)
-    val relation = RelationWithMetadata(rel.output, Seq(metadataAddedAfterDeduplication))
+    val metadataRelation = RelationWithMetadata(rel.output, Seq(metadataAddedAfterDeduplication))
     // Model AddMetadataColumns promoting a downstream metadata reference after keys were resolved.
     val childAfterMetadataPropagation = Project(
-      relation.output :+ metadataAddedAfterDeduplication, relation)
-    val originalKeys = rel.output
+      metadataRelation.output :+ metadataAddedAfterDeduplication, metadataRelation)
+    val originalKeys = metadataRelation.output
     val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
 
-    val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
-      originalKeys, childAfterMetadataPropagation, spec, orderDeterministically = true,
-      SQLConf.get.resolver)
+    Seq(false, true).foreach { orderDeterministically =>
+      val expectedKeys = ResolveDeduplicate.computeKeys(
+        metadataRelation, spec, orderDeterministically, SQLConf.get.resolver)
+      val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
+        originalKeys, childAfterMetadataPropagation, spec, orderDeterministically,
+        SQLConf.get.resolver)
 
-    assert(recomputedKeys === originalKeys)
+      assert(recomputedKeys === expectedKeys)
+    }
   }
 
   test("recomputation retains metadata visible at the deduplication boundary") {
     val metadataSelectedBeforeDeduplication = MetadataAttribute("_metadata", StringType)
-    val relation = RelationWithMetadata(rel.output, Seq(metadataSelectedBeforeDeduplication))
+    val metadataRelation = RelationWithMetadata(
+      rel.output, Seq(metadataSelectedBeforeDeduplication))
     // Model an explicit metadata projection before deduplication keys were resolved.
     val childWithSelectedMetadata = Project(
-      relation.output :+ metadataSelectedBeforeDeduplication, relation)
+      metadataRelation.output :+ metadataSelectedBeforeDeduplication, metadataRelation)
     val originalKeys = childWithSelectedMetadata.output
     val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
 
-    val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
-      originalKeys, childWithSelectedMetadata, spec, orderDeterministically = true,
-      SQLConf.get.resolver)
+    Seq(false, true).foreach { orderDeterministically =>
+      val expectedKeys = ResolveDeduplicate.computeKeys(
+        childWithSelectedMetadata, spec, orderDeterministically, SQLConf.get.resolver)
+      val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
+        originalKeys, childWithSelectedMetadata, spec, orderDeterministically,
+        SQLConf.get.resolver)
 
-    assert(recomputedKeys === originalKeys)
+      assert(recomputedKeys === expectedKeys)
+    }
+  }
+
+  test("metadata boundary preservation does not change legacy recomputation without metadata") {
+    val specs = Seq(
+      DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true),
+      DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = false),
+      DeduplicateSpec(DeduplicateKeyColumns(Seq("c", "a", "c", "b")),
+        viaSparkClassic = true),
+      DeduplicateSpec(DeduplicateKeyColumns(Seq("c", "a", "c", "b")),
+        viaSparkClassic = false))
+
+    specs.foreach { spec =>
+      val legacyKeys = ResolveDeduplicate.computeKeys(
+        rel, spec, orderDeterministically = false, SQLConf.get.resolver)
+      val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
+        legacyKeys, rel, spec, orderDeterministically = false, SQLConf.get.resolver)
+
+      assert(recomputedKeys === legacyKeys)
+    }
   }
 
   test("SPARK-57489: duplicate-named columns produce multiple keys (filter, not find)") {
