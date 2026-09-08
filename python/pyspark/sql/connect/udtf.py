@@ -19,7 +19,7 @@ User-defined table function related classes and functions
 """
 
 import warnings
-from typing import TYPE_CHECKING, Any, List, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, List, Optional, Set, Type, Union
 
 from pyspark.errors import PySparkAttributeError, PySparkRuntimeError, PySparkTypeError
 from pyspark.sql.connect.column import Column
@@ -32,7 +32,7 @@ from pyspark.sql.connect.table_arg import TableArg
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.sql.types import DataType, StructType, _parse_datatype_string
+from pyspark.sql.types import DataType, StructType
 from pyspark.sql.udtf import (  # noqa: F401
     AnalyzeArgument,
     AnalyzeResult,
@@ -171,21 +171,31 @@ class UserDefinedTableFunction:
         self._name = name or func.__name__
         self.evalType = evalType
         self.deterministic = deterministic
+        self._validated_return_type_session_ids: Set[str] = set()
 
-    def _check_return_type(self) -> None:
-        if self.returnType is None:
+    def _check_return_type(self, session: "SparkSession") -> None:
+        if self.returnType is None or self.evalType not in (
+            PythonEvalType.SQL_ARROW_TABLE_UDF,
+            PythonEvalType.SQL_ARROW_UDTF,
+        ):
+            return
+        if session._session_id in self._validated_return_type_session_ids:
             return
         return_type = (
-            _parse_datatype_string(self.returnType.data_type_string)
+            session._parse_ddl(self.returnType.data_type_string)
             if isinstance(self.returnType, UnparsedDataType)
             else self.returnType
         )
         _check_arrow_udtf_return_type(return_type, self.evalType)
+        self._validated_return_type_session_ids.add(session._session_id)
 
     def _build_common_inline_user_defined_table_function(
-        self, *args: "ColumnOrName", **kwargs: "ColumnOrName"
+        self,
+        session: "SparkSession",
+        *args: "ColumnOrName",
+        **kwargs: "ColumnOrName",
     ) -> CommonInlineUserDefinedTableFunction:
-        self._check_return_type()
+        self._check_return_type(session)
 
         def to_expr(col: "ColumnOrName") -> Expression:
             if isinstance(col, Column):
@@ -218,7 +228,7 @@ class UserDefinedTableFunction:
 
         session = SparkSession.active()
 
-        plan = self._build_common_inline_user_defined_table_function(*args, **kwargs)
+        plan = self._build_common_inline_user_defined_table_function(session, *args, **kwargs)
         return DataFrame(plan, session)
 
     def asDeterministic(self) -> "UserDefinedTableFunction":
@@ -262,7 +272,7 @@ class UDTFRegistration:
                 },
             )
 
-        f._check_return_type()
+        f._check_return_type(self.sparkSession)
         self.sparkSession._client.register_udtf(
             f.func, f.returnType, name, f.evalType, f.deterministic
         )

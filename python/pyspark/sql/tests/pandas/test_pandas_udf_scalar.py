@@ -44,6 +44,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     ByteType,
+    CharType,
     DateType,
     DecimalType,
     DoubleType,
@@ -56,6 +57,7 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     TimestampType,
+    VarcharType,
     VariantType,
     VariantVal,
     YearMonthIntervalType,
@@ -86,6 +88,23 @@ if have_pyarrow:
     pandas_requirement_message or pyarrow_requirement_message,
 )
 class ScalarPandasUDFTestsMixin:
+    def test_char_varchar_scalar_iterator_results(self):
+        @pandas_udf(CharType(3), PandasUDFType.SCALAR_ITER)
+        def char_udf(iterator):
+            for series in iterator:
+                yield pd.Series(["a"] * len(series))
+
+        @pandas_udf(VarcharType(3), PandasUDFType.SCALAR_ITER)
+        def varchar_udf(iterator):
+            for series in iterator:
+                yield pd.Series(["abcd"] * len(series))
+
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            rows = self.spark.range(2).select(char_udf("id")).collect()
+            self.assertEqual([row[0] for row in rows], ["a  ", "a  "])
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                self.spark.range(1).select(varchar_udf("id")).collect()
+
     @property
     def nondeterministic_vectorized_udf(self):
         import numpy as np

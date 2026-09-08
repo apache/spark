@@ -192,7 +192,7 @@ class ArrowEvalPythonEvaluatorFactory(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+    extends EvalPythonEvaluatorFactory(childOutput, udfs, output, outputAlreadyChecked = false) {
 
   override def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
