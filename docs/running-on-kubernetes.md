@@ -524,7 +524,8 @@ single task at a time, while its pod still requests the configured executor core
 memory-hungry task gets the whole executor memory to itself instead of sharing it with other tasks,
 which lets the remaining tasks and stages finish instead of failing repeatedly with the same OOM.
 
-Recovery mode is enabled automatically and stays on for the rest of the driver's lifetime. Executors
+The property is unset by default, so recovery mode is off until the driver detects the first OOM.
+At that point the driver turns it on and it stays on for the rest of the driver's lifetime. Executors
 that were already running are not changed. Recovery-mode executors always derive their announced cores
 from `spark.task.cpus`, not from the resource profile of the stage. To disable the automatic switch:
 
