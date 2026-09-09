@@ -382,28 +382,39 @@ class StaxXmlParser(
       valueType: DataType,
       attributes: Array[Attribute]): MapData = {
     val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
+    var mapKeyException: Option[Throwable] = None
     def mapKey(raw: String): UTF8String = {
       CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(raw), keyType)
     }
+    def appendPair(rawKey: String, value: Any): Unit = {
+      try {
+        kvPairs += (mapKey(rawKey) -> value)
+      } catch {
+        case NonFatal(e) => mapKeyException = mapKeyException.orElse(Some(e))
+      }
+    }
     attributes.foreach { attr =>
-      kvPairs += (mapKey(options.attributePrefix + attr.getName.getLocalPart) ->
-        convertTo(attr.getValue, valueType))
+      val value = convertTo(attr.getValue, valueType)
+      appendPair(options.attributePrefix + attr.getName.getLocalPart, value)
     }
     var shouldStop = false
     while (!shouldStop) {
       parser.nextEvent match {
         case e: StartElement =>
-          val key = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          kvPairs += (mapKey(key) -> convertField(parser, valueType, key))
+          val rawKey = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
+          val value = convertField(parser, valueType, rawKey)
+          appendPair(rawKey, value)
         case c: Characters if !c.isWhiteSpace =>
           // Create a value tag field for it
           // TODO: We don't support an array value tags in map yet.
-          kvPairs += (mapKey(options.valueTag) -> convertTo(c.getData, valueType))
+          val value = convertTo(c.getData, valueType)
+          appendPair(options.valueTag, value)
         case _: EndElement | _: EndDocument =>
           shouldStop = true
         case _ => // do nothing
       }
     }
+    mapKeyException.foreach(throw _)
     keyType match {
       case _: CharType | _: VarcharType =>
         val mapBuilder = new ArrayBasedMapBuilder(keyType, valueType)

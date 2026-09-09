@@ -2290,6 +2290,13 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(
         sql("SELECT from_xml('<ROW><a>str</a></ROW>', 'a CHAR(5)')"),
         Row(Row("str  ")))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><a></a></ROW>',
+            |  'a CHAR(5)',
+            |  map('nullValue', 'NULL'))""".stripMargin),
+        Row(Row("     ")))
       Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
         checkAnswer(
           sql(s"SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a $dataType')"),
@@ -2332,6 +2339,10 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         """SELECT from_json(
           |  '{"m":{"abc":1},"tail":2}',
           |  'm MAP<CHAR(2), INT>, tail INT').tail""".stripMargin
+      val badXmlKeyThenSiblingQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><abc>1</abc></m><tail>2</tail></ROW>',
+          |  'm MAP<CHAR(2), INT>, tail INT').tail""".stripMargin
       val badValueBeforeDuplicateQuery =
         """SELECT from_json('{"bad":"not-an-int","a":1,"a ":2}', 'MAP<CHAR(2), INT>')"""
       val xmlQuery =
@@ -2346,6 +2357,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assertDuplicateMapKey(badValueBeforeDuplicateQuery)
       assertDuplicateMapKey(xmlQuery)
       checkAnswer(sql(badKeyThenSiblingQuery), Row(2))
+      checkAnswer(sql(badXmlKeyThenSiblingQuery), Row(2))
 
       withSQLConf(
           SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
