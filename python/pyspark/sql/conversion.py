@@ -2045,4 +2045,6 @@ class ArrowArrayToPandasConversion:
         else:  # pragma: no cover
             assert False, f"Need converter for {spark_type} but failed to find one."
 
-        return series.rename(ser_name)
+        # `series` is created in this method, so naming it in place is safe; rename() copies it.
+        series.name = ser_name
+        return series

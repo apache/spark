@@ -17,14 +17,25 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{AttributeMap, EqualTo, IsNull, Or}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, NO_BROADCAST_HASH, SHUFFLE_HASH}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, EqualTo, IsNull, Or}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LeafNode, NO_BROADCAST_HASH, SHUFFLE_HASH, Statistics}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
 
 class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
+
+  private case class TrackingStatsTestPlan(
+      override val output: Seq[Attribute],
+      statsAccessed: AtomicBoolean) extends LeafNode {
+    override def computeStats(): Statistics = {
+      statsAccessed.set(true)
+      Statistics(sizeInBytes = 20000000)
+    }
+  }
 
   private val left = StatsTestPlan(
     outputList = Seq($"a".int, $"b".int, $"c".int),
@@ -149,6 +160,22 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     assert(getSmallerSide(left, right) === BuildRight)
   }
 
+  test("getBroadcastNestedLoopJoinBuildSide checks the fixed desired side first") {
+    val leftStatsAccessed = new AtomicBoolean(false)
+    val uncachedLeft = TrackingStatsTestPlan(Seq($"uncachedLeft".int), leftStatsAccessed)
+    val leftAntiJoin = Join(uncachedLeft, right, LeftAnti, None, JoinHint.NONE)
+    val rightStatsAccessed = new AtomicBoolean(false)
+    val uncachedRight = TrackingStatsTestPlan(Seq($"uncachedRight".int), rightStatsAccessed)
+    val rightOuterJoin = Join(right, uncachedRight, RightOuter, None, JoinHint.NONE)
+
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      assert(getBroadcastNestedLoopJoinBuildSide(leftAntiJoin, SQLConf.get) === BuildRight)
+      assert(!leftStatsAccessed.get())
+      assert(getBroadcastNestedLoopJoinBuildSide(rightOuterJoin, SQLConf.get) === BuildLeft)
+      assert(!rightStatsAccessed.get())
+    }
+  }
+
   test("canBroadcastBySize should return true if the plan size is less than 10MB") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       assert(canBroadcastBySize(left, SQLConf.get) === false)
@@ -156,18 +183,48 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     }
   }
 
-  test("canPlanAsBroadcastHashJoin should respect size for single-column null-aware anti join") {
+  test("canPlanAsBroadcastHashJoin should respect NAAJ size and nested-loop build side") {
     val leftKey = left.output.head
     val rightKey = right.output.head
     val condition = Or(EqualTo(leftKey, rightKey), IsNull(EqualTo(leftKey, rightKey)))
     val nullAwareAntiJoin = Join(left, right, LeftAnti, Some(condition), JoinHint.NONE)
+    val smallLeft = left.copy(rowCount = 1000, size = Some(1000))
     val largeRight = right.copy(rowCount = 20000000, size = Some(20000000))
 
     withSQLConf(
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       assert(canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
-      assert(!canPlanAsBroadcastHashJoin(nullAwareAntiJoin.copy(right = largeRight), SQLConf.get))
+      assert(!canPlanAsBroadcastHashJoin(
+        nullAwareAntiJoin.copy(right = largeRight.copy(rowCount = 1)), SQLConf.get))
+      assert(!canPlanAsBroadcastHashJoin(
+        nullAwareAntiJoin.copy(left = smallLeft, right = largeRight), SQLConf.get))
+      assert(!canPlanAsBroadcastHashJoin(
+        nullAwareAntiJoin.copy(hint = JoinHint(hintBroadcast, None)), SQLConf.get))
+    }
+
+    withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      assert(!canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
+    }
+  }
+
+  test("canPlanAsBroadcastHashJoin checks the NAAJ right-size short circuit") {
+    val leftStatsAccessed = new AtomicBoolean(false)
+    val uncachedLeft = TrackingStatsTestPlan(Seq($"uncachedLeft".int), leftStatsAccessed)
+    val largeRight = right.copy(rowCount = 20000000, size = Some(20000000))
+    val leftKey = uncachedLeft.output.head
+    val rightKey = largeRight.output.head
+    val condition = Or(EqualTo(leftKey, rightKey), IsNull(EqualTo(leftKey, rightKey)))
+    val nullAwareAntiJoin = Join(
+      uncachedLeft, largeRight, LeftAnti, Some(condition), JoinHint.NONE)
+
+    withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      assert(!canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
+      assert(!leftStatsAccessed.get())
     }
   }
 

@@ -1838,7 +1838,7 @@
   },
   "CURSOR_OUTSIDE_SCRIPT" : {
     "message" : [
-      "Cursor operations can only be used within SQL scripts."
+      "Cursor <cursorName> can only be used within SQL scripts."
     ],
     "sqlState" : "0A000"
   },
@@ -2290,6 +2290,11 @@
       "CANNOT_RESOLVE" : {
         "message" : [
           "The attribute cannot be resolved."
+        ]
+      },
+      "NOT_IN_FILTER_ATTRIBUTES" : {
+        "message" : [
+          "The attribute must also be returned by `filterAttributes()`."
         ]
       },
       "NOT_TOP_LEVEL" : {
@@ -6767,6 +6772,14 @@
     ],
     "sqlState" : "0A000"
   },
+  "PIPELINE_NESTED_COMPLEX_TYPE_SCHEMA_EVOLUTION_UNSUPPORTED" : {
+    "message" : [
+      "Schema evolution within a complex type (array or map) whose element is itself a complex type is not supported.",
+      "Column path <columnPath> has element type <currentType> but the target element type is <targetType>.",
+      "Flatten the nesting or apply the change manually."
+    ],
+    "sqlState" : "0A000"
+  },
   "PIPELINE_RUN_FAILED" : {
     "message" : [
       "<message>"
@@ -8331,6 +8344,12 @@
     ],
     "sqlState" : "42K0G"
   },
+  "UNABLE_TO_CREATE_DATABASE_DIRECTORY" : {
+    "message" : [
+      "Unable to create database <name> as failed to create its directory <locationUri>."
+    ],
+    "sqlState" : "58030"
+  },
   "UNABLE_TO_FETCH_HIVE_TABLES" : {
     "message" : [
       "Unable to fetch tables of Hive database: <dbName>."
@@ -9215,6 +9234,11 @@
       "SQL_CURSOR" : {
         "message" : [
           "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."
+        ]
+      },
+      "SQL_RESTRICTED_MODE" : {
+        "message" : [
+          "<feature> is not allowed because <config> is enabled."
         ]
       },
       "SQL_SCRIPTING" : {
@@ -10916,11 +10940,6 @@
       "<fieldCannotBeNullMsg>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2033" : {
-    "message" : [
-      "Unable to create database <name> as failed to create its directory <locationUri>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2034" : {
     "message" : [
       "Unable to drop database <name> as failed to delete its directory <locationUri>."
@@ -11813,7 +11832,7 @@
   },
   "_LEGACY_ERROR_TEMP_3070" : {
     "message" : [
-      "<internalName> is a reserved column name that cannot be read in combination with <colName> column."
+      "Unrecognized file metadata field: <field>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3071" : {

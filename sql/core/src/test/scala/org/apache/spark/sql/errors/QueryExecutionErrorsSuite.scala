@@ -229,6 +229,31 @@ class QueryExecutionErrorsSuite
       "CBC", "NoPadding")
   }
 
+  test("SPARK-58945: invalid file extension reports invalidValue") {
+    withTempDir { dir =>
+      val path = new File(dir, "data").getCanonicalPath
+      // Use a value that is unambiguously invalid so this test focuses on the
+      // rendered error message rather than the full extension validation matrix.
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          spark.range(1).write.option("extension", "12").csv(path)
+        },
+        condition = "INVALID_PARAMETER_VALUE.EXTENSION",
+        parameters = Map(
+          "functionName" -> "`csv`",
+          "parameter" -> "`extension`",
+          "invalidValue" -> "`12`"))
+    }
+  }
+
+  test("SPARK-58945: invalid writer commit message reports detail") {
+    checkError(
+      exception = QueryExecutionErrors.invalidWriterCommitMessageError("zero")
+        .asInstanceOf[SparkRuntimeException],
+      condition = "INVALID_WRITER_COMMIT_MESSAGE",
+      parameters = Map("detail" -> "zero"))
+  }
+
   test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
     def checkUnsupportedTypeInLiteral(v: Any, literal: String, dataType: String): Unit = {
       checkError(

@@ -328,6 +328,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     }
     preemptedError.clear()
     try {
+      if (SQLConf.get.restrictedModeEnabled) {
+        checkRestrictedMode(inlinedPlan)
+      }
       checkAnalysis0(inlinedPlan)
       preemptedError.getErrorOpt().foreach(throw _) // throw preempted error if any
     } catch {
@@ -337,6 +340,45 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       preemptedError.clear()
     }
     plan.setAnalyzed()
+  }
+
+  /**
+   * Rejects SQL features that load or execute externally provided code or scripts when the
+   * restricted execution mode is enabled. Unlike `checkAnalysis0`, which skips already-analyzed
+   * sub-plans (`case p if p.analyzed`), this walks the whole plan -- including analyzed sub-plans
+   * reused from a temporary view or a cached Dataset, and the bodies of analysis-only commands
+   * (CTAS, `CACHE TABLE ... AS SELECT`, `CREATE`/`ALTER VIEW`) which move into `innerChildren`
+   * once analyzed -- and descends into subquery plans, so these features cannot slip through.
+   */
+  private def checkRestrictedMode(plan: LogicalPlan): Unit = {
+    def checkExpression(expr: Expression): Unit = expr.foreach {
+      // A try_reflect call stays a RuntimeReplaceable wrapper until optimization, so match it
+      // before its CallMethodViaReflection replacement to report the right function name.
+      case t: TryReflect =>
+        throw QueryCompilationErrors.restrictedModeFeatureError(
+          s"The ${toSQLId(t.prettyName)} function")
+      case c: CallMethodViaReflection =>
+        throw QueryCompilationErrors.restrictedModeFeatureError(
+          s"The ${toSQLId(c.prettyName)} function")
+      case s: SubqueryExpression =>
+        checkPlan(s.plan)
+      case _ =>
+    }
+    def checkPlan(p: LogicalPlan): Unit = p.foreach {
+      case _: ScriptTransformation =>
+        throw QueryCompilationErrors.restrictedModeFeatureError(
+          "The TRANSFORM ... USING clause")
+      case node =>
+        node.expressions.foreach(checkExpression)
+        // The body of an analysis-only command (CTAS, `CACHE TABLE ... AS SELECT`,
+        // `CREATE`/`ALTER VIEW`) moves from `children` into `innerChildren` once the command is
+        // analyzed, so `foreach` (which follows `children`) would not otherwise reach it.
+        node.innerChildren.foreach {
+          case inner: LogicalPlan => checkPlan(inner)
+          case _ =>
+        }
+    }
+    checkPlan(plan)
   }
 
   def checkAnalysis0(plan: LogicalPlan): Unit = {
