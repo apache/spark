@@ -155,6 +155,16 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(statements.map(_ \ "parse_success") === Seq(JBool(false), JBool(true)))
   }
 
+  test("nested compound END does not end the outer malformed SQL script") {
+    val block = "BEGIN IFF TRUE THEN SELECT 1; END IF; BEGIN SELECT 2; END; END"
+    val statements = objs(s"$block; SELECT 3")
+
+    assert(statements.size === 2)
+    assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(block.length + 3)))
+    assert(statements.map(_ \ "length") === Seq(JInt(block.length), JInt(8)))
+    assert(statements.map(_ \ "parse_success") === Seq(JBool(false), JBool(true)))
+  }
+
   test("SQL scripts remain one statement in a batch") {
     val statements = objs("BEGIN SELECT 1; SELECT 2; END; SELECT 3")
     assert(statements.size === 2)

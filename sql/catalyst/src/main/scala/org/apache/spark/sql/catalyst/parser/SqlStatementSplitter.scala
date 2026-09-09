@@ -433,23 +433,34 @@ object SqlStatementSplitter {
     None
   }
 
-  /**
-   * Returns true only when a real recovered END is the candidate's trailing
-   * END, or when recovery bound that node to an earlier control terminator
-   * (`END IF`, `END WHILE`, ...) and a later statement-level END is the
-   * actual suffix. A statement such as `SELECT END` can end in an END token
-   * that is not the outer compound terminator.
-   */
+  /** Returns true only when a real recovered END closes the candidate's outer BEGIN. */
   private def isOuterCompoundEnd(tokens: CommonTokenStream, recoveredEnd: Token): Boolean = {
     if (recoveredEnd.getTokenIndex < 0) return false
     val suffixEnd = trailingEndToken(tokens)
-    if (suffixEnd == null) return false
-    val recoveredIndex = recoveredEnd.getTokenIndex
-    val suffixIndex = suffixEnd.getTokenIndex
-    recoveredIndex == suffixIndex ||
-      (recoveredIndex < suffixIndex &&
-        isControlTerminatorEnd(tokens, recoveredEnd) &&
-        isStatementLevelEnd(tokens, suffixEnd))
+    suffixEnd != null && closesOuterBegin(tokens, suffixEnd)
+  }
+
+  private def closesOuterBegin(tokens: CommonTokenStream, suffixEnd: Token): Boolean = {
+    var depth = 0
+    var index = 0
+    val limit = suffixEnd.getTokenIndex
+    while (index <= limit) {
+      val token = tokens.get(index)
+      if (token.getChannel != Token.HIDDEN_CHANNEL) {
+        token.getType match {
+          case SqlBaseLexer.BEGIN =>
+            depth += 1
+          case SqlBaseLexer.END
+              if isStatementLevelEnd(tokens, token) &&
+                !isControlTerminatorEnd(tokens, token) =>
+            depth -= 1
+            if (depth < 0) return false
+          case _ =>
+        }
+      }
+      index += 1
+    }
+    depth == 0
   }
 
   /**
