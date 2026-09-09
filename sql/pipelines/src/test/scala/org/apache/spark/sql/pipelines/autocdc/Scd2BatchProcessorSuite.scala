@@ -768,16 +768,76 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("preprocessMicrobatch aligns selected rows to the persisted target schema") {
+  gridTest("preprocessMicrobatch uses target spelling under case-insensitive analysis")(
+    Seq(
+      ("id", "Value", "ID", "value"),
+      ("ID", "value", "id", "Value")
+    )
+  ) { case (sourceKey, sourceValue, targetKey, targetValue) =>
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val batchSchema = new StructType()
+        .add(sourceKey, IntegerType)
+        .add(sourceValue, StringType)
+        .add("seq", LongType)
+      val targetUserSchema = new StructType()
+        .add(targetKey, IntegerType)
+        .add(targetValue, StringType)
+      val batch = microbatchOf(batchSchema)(Row(1, "a", 10L))
+      val processor = Scd2BatchProcessor(
+        changeArgs = ChangeArgs(
+          keys = Seq(UnqualifiedColumnName(sourceKey)),
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type2,
+          columnSelection = Some(ColumnSelection.ExcludeColumns(
+            Seq(UnqualifiedColumnName("seq"))))
+        ),
+        resolvedSequencingType = LongType
+      )
+
+      val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+      assert(result.schema.fieldNames.take(2).toSeq == Seq(targetKey, targetValue))
+      checkAnswer(result.select(F.col(targetKey), F.col(targetValue)), Row(1, "a"))
+    }
+  }
+
+  test("preprocessMicrobatch keeps distinct case-sensitive columns") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val batchSchema = new StructType()
         .add("id", IntegerType)
-        .add("Value", new StructType().add("a", IntegerType))
+        .add("Value", StringType)
+        .add("seq", LongType)
+      val targetUserSchema = new StructType()
+        .add("id", IntegerType)
+        .add("value", StringType)
+        .add("Value", StringType)
+      val batch = microbatchOf(batchSchema)(Row(1, "a", 10L))
+      val processor = Scd2BatchProcessor(
+        changeArgs = ChangeArgs(
+          keys = Seq(UnqualifiedColumnName("id")),
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type2,
+          columnSelection = Some(ColumnSelection.ExcludeColumns(
+            Seq(UnqualifiedColumnName("seq"))))
+        ),
+        resolvedSequencingType = LongType
+      )
+
+      val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+      assert(result.schema.fieldNames.take(3).toSeq == Seq("id", "value", "Value"))
+      checkAnswer(result.select(F.col("value"), F.col("Value")), Row(null, "a"))
+    }
+  }
+
+  test("preprocessMicrobatch uses target spelling recursively under case-insensitive analysis") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val batchSchema = new StructType()
+        .add("ID", IntegerType)
+        .add("Value", new StructType().add("City", IntegerType))
         .add("seq", LongType)
       val targetUserSchema = new StructType()
         .add("id", IntegerType)
         .add("value", new StructType()
-          .add("a", IntegerType)
+          .add("city", IntegerType)
           .add("removedNested", StringType))
         .add("removedTopLevel", StringType)
       val batch = microbatchOf(batchSchema)(Row(1, Row(2), 10L))
@@ -801,6 +861,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
         Scd2BatchProcessor.endAtColName,
         AutoCdcReservedNames.cdcMetadataColName
       ))
+      assert(result.schema("value").dataType.asInstanceOf[StructType].fieldNames.toSeq ==
+        Seq("city", "removedNested"))
       checkAnswer(
         df = result,
         expectedAnswer = Row(1, Row(2, null), null, 10L, null, Row(10L, null))
