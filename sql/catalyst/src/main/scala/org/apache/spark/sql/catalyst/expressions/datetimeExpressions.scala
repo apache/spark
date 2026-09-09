@@ -5177,8 +5177,8 @@ case class TimeBucket(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
     TypeCollection(DayTimeIntervalType, YearMonthIntervalType),
-    AnyTimestampType,
-    AnyTimestampType)
+    TypeCollection(AnyTimestampType, AnyTimestampNanoType),
+    TypeCollection(AnyTimestampType, AnyTimestampNanoType))
 
   override def dataType: DataType = ts.dataType
 
@@ -5235,31 +5235,48 @@ case class TimeBucket(
     TypeCheckSuccess
   }
 
+  private def isTsNanos: Boolean = ts.dataType.isInstanceOf[AnyTimestampNanoType]
+
+  // The nanosecond carrier boxes as a TimestampNanosVal; the microsecond timestamp types box as
+  // a Long. Bucket boundaries are microsecond-granular (the bucket size is a microsecond or month
+  // interval), so a nanos operand contributes only its epochMicros and the bucket start is
+  // re-wrapped on a micro boundary (nanosWithinMicro = 0).
+  private def toMicros(value: Any): Long = value match {
+    case v: TimestampNanosVal => v.epochMicros
+    case l => l.asInstanceOf[Long]
+  }
+
   override def nullSafeEval(bucketSizeVal: Any, tsVal: Any, originVal: Any): Any = {
-    first.dataType match {
+    val startMicros = first.dataType match {
       case _: DayTimeIntervalType =>
         DateTimeUtils.timeBucketDTInterval(
-          bucketSizeVal.asInstanceOf[Long], tsVal.asInstanceOf[Long],
-          originVal.asInstanceOf[Long], zoneIdInEval)
+          bucketSizeVal.asInstanceOf[Long], toMicros(tsVal), toMicros(originVal), zoneIdInEval)
       case _: YearMonthIntervalType =>
         DateTimeUtils.timeBucketYMInterval(
-          bucketSizeVal.asInstanceOf[Int], tsVal.asInstanceOf[Long],
-          originVal.asInstanceOf[Long], zoneIdInEval)
+          bucketSizeVal.asInstanceOf[Int], toMicros(tsVal), toMicros(originVal), zoneIdInEval)
       case other => throw SparkException.internalError(
         s"Unexpected bucketSize type: $other")
     }
+    if (isTsNanos) TimestampNanosVal.fromParts(startMicros, 0) else startMicros
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
+    // Nanosecond operands read epochMicros; the bucket start is re-wrapped on a micro boundary.
+    def micros(code: String): String = if (isTsNanos) s"$code.epochMicros" else code
+    def result(startMicros: String): String = if (isTsNanos) {
+      s"org.apache.spark.unsafe.types.TimestampNanosVal.fromParts($startMicros, (short) 0)"
+    } else startMicros
     first.dataType match {
       case _: DayTimeIntervalType =>
         defineCodeGen(ctx, ev, (bucketSizeCode, tsCode, originCode) =>
-          s"$dtu.timeBucketDTInterval($bucketSizeCode, $tsCode, $originCode, $zid)")
+          result(s"$dtu.timeBucketDTInterval(" +
+            s"$bucketSizeCode, ${micros(tsCode)}, ${micros(originCode)}, $zid)"))
       case _: YearMonthIntervalType =>
         defineCodeGen(ctx, ev, (bucketSizeCode, tsCode, originCode) =>
-          s"$dtu.timeBucketYMInterval($bucketSizeCode, $tsCode, $originCode, $zid)")
+          result(s"$dtu.timeBucketYMInterval(" +
+            s"$bucketSizeCode, ${micros(tsCode)}, ${micros(originCode)}, $zid)"))
       case other => throw SparkException.internalError(
         s"Unexpected bucketSize type: $other")
     }
@@ -5311,6 +5328,11 @@ object TimeBucketExpressionBuilder extends ExpressionBuilder {
     case TimestampType =>
       val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
       Literal(DateTimeUtils.daysToMicros(0, zoneId), TimestampType)
+    case _: TimestampLTZNanosType =>
+      val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+      Literal(TimestampNanosVal.fromParts(DateTimeUtils.daysToMicros(0, zoneId), 0), tsType)
+    case _: TimestampNTZNanosType =>
+      Literal(TimestampNanosVal.fromParts(0L, 0), tsType)
     case _ => Literal(0L, tsType)
   }
 
@@ -5320,7 +5342,7 @@ object TimeBucketExpressionBuilder extends ExpressionBuilder {
         val bucketSize = retypeNull(rawBucketSize, DayTimeIntervalType())
         // Fall back to TimestampType for bad ts types; ExpectsInputTypes will report it.
         val tsType = rawTs.dataType match {
-          case t if AnyTimestampType.acceptsType(t) => t
+          case t if AnyTimestampType.acceptsType(t) || t.isInstanceOf[AnyTimestampNanoType] => t
           case _ => TimestampType
         }
         val ts = retypeNull(rawTs, tsType)
@@ -5328,7 +5350,8 @@ object TimeBucketExpressionBuilder extends ExpressionBuilder {
       case Seq(rawBucketSize, rawTs, rawOrigin) =>
         val bucketSize = retypeNull(rawBucketSize, DayTimeIntervalType())
         val tsType = (rawTs.dataType, rawOrigin.dataType) match {
-          case (NullType, t) if AnyTimestampType.acceptsType(t) => t
+          case (NullType, t) if AnyTimestampType.acceptsType(t) ||
+              t.isInstanceOf[AnyTimestampNanoType] => t
           case (NullType, _) => TimestampType
           case (t, _) => t
         }

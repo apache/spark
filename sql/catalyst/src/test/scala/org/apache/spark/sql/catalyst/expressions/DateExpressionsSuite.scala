@@ -3487,6 +3487,63 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(r5.errorSubClass == "UNEXPECTED_INPUT_TYPE")
   }
 
+  test("time_bucket: nanosecond-precision timestamps") {
+    // Pin session zone to UTC so LTZ and NTZ share the same epochMicros for a given wall clock.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+      sdf.setTimeZone(TimeZone.getTimeZone(UTC))
+      val tsMicros =
+        timestampAnswer("2024-01-01 11:27:00.000", sdf, TimestampType).asInstanceOf[Long]
+      val hourBucketMicros =
+        timestampAnswer("2024-01-01 11:00:00.000", sdf, TimestampType).asInstanceOf[Long]
+      val monthBucketMicros =
+        timestampAnswer("2024-01-01 00:00:00.000", sdf, TimestampType).asInstanceOf[Long]
+
+      Seq[Int => DataType](TimestampLTZNanosType(_), TimestampNTZNanosType(_)).foreach { mk =>
+        Seq(7, 8, 9).foreach { p =>
+          val dt = mk(p)
+          val origin = Literal(TimestampNanosVal.fromParts(0L, 0), dt)
+          // A non-zero sub-microsecond component (100ns is valid at every supported precision)
+          // must not affect which bucket ts falls into, and the bucket start is cleared to a
+          // micro boundary (nanosWithinMicro = 0).
+          val tsNanos = Literal(TimestampNanosVal.fromParts(tsMicros, 100.toShort), dt)
+
+          // day-time interval: 1-hour bucket.
+          checkEvaluation(
+            TimeBucket(Literal(Duration.ofHours(1)), tsNanos, origin),
+            TimestampNanosVal.fromParts(hourBucketMicros, 0))
+          // year-month interval: 1-month bucket.
+          checkEvaluation(
+            TimeBucket(Literal(Period.ofMonths(1)), tsNanos, origin),
+            TimestampNanosVal.fromParts(monthBucketMicros, 0))
+          // The result keeps the ts's exact nanos type/precision.
+          assert(TimeBucket(Literal(Duration.ofHours(1)), tsNanos, origin).dataType === dt)
+          // NULL ts -> NULL.
+          checkEvaluation(
+            TimeBucket(Literal(Duration.ofHours(1)), Literal.create(null, dt), origin), null)
+        }
+      }
+    }
+  }
+
+  test("time_bucket: ExpressionBuilder with nanosecond timestamps") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val hour = Literal(Duration.ofHours(1))
+      Seq(7, 8, 9).foreach { p =>
+        Seq(TimestampLTZNanosType(p), TimestampNTZNanosType(p)).foreach { dt =>
+          val tsN = Literal(TimestampNanosVal.fromParts(0L, 0), dt)
+          // 2-arg form supplies an epoch default origin with the ts's exact nanos type, so the
+          // ts/origin type check passes and the result keeps the nanos type.
+          val built = TimeBucketExpressionBuilder.build("time_bucket", Seq(hour, tsN))
+            .asInstanceOf[TimeBucket]
+          assert(built.dataType === dt)
+          assert(built.originTs.dataType === dt)
+          assert(built.checkInputDataTypes().isSuccess)
+        }
+      }
+    }
+  }
+
   test("SPARK-57837: CurrentTimestampExpressionBuilder") {
     // No argument keeps the historical micro TIMESTAMP expressions.
     assert(CurrentTimestampExpressionBuilder.build("current_timestamp", Seq.empty) ===
