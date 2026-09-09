@@ -689,6 +689,50 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     dataTypes.foreach { dataType =>
       assert(DataType.fromJson(dataType.json) === dataType)
     }
+
+    val compatibilitySchema = StructType(
+      StructField("plain", CharType(3)) ::
+        StructField("binary", CharType(4, "UTF8_BINARY")) ::
+        StructField("nested", ArrayType(VarcharType(6, "UNICODE_CI"))) :: Nil)
+    val expectedJson =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "plain",
+         |      "type": "char(3)",
+         |      "nullable": true,
+         |      "metadata": {}
+         |    },
+         |    {
+         |      "name": "binary",
+         |      "type": "char(4)",
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "binary": "spark.UTF8_BINARY"
+         |        }
+         |      }
+         |    },
+         |    {
+         |      "name": "nested",
+         |      "type": {
+         |        "type": "array",
+         |        "elementType": "varchar(6)",
+         |        "containsNull": true
+         |      },
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "nested.element": "icu.UNICODE_CI"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+    assert(mapper.readTree(compatibilitySchema.json) == mapper.readTree(expectedJson))
   }
 
   test("simple struct with collations to json") {
