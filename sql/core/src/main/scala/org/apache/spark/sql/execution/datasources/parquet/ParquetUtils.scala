@@ -527,6 +527,7 @@ object ParquetUtils extends Logging {
     DataSourceUtils.setConfIfAbsent(conf,
       SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key,
       sqlConf.parquetAnnotateVariantLogicalType.toString)
+
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 

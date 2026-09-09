@@ -349,7 +349,8 @@ class ParquetToSparkSchemaConverter(
               (!time.isAdjustedToUTC || timeIsAdjustedToUTC) =>
             TimeType(TimeType.MICROS_PRECISION)
           case time: TimeLogicalTypeAnnotation
-            if time.getUnit == TimeUnit.NANOS && !time.isAdjustedToUTC =>
+            if time.getUnit == TimeUnit.NANOS &&
+              (!time.isAdjustedToUTC || timeIsAdjustedToUTC) =>
             TimeType(TimeType.NANOS_PRECISION)
           case _ => illegalType()
         }

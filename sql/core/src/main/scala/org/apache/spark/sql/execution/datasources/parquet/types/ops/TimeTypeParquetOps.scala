@@ -90,18 +90,12 @@ case class TimeTypeParquetOps(t: TimeType) extends ParquetTypeOps {
 
   override def newConverter(
       parquetType: Type,
-      updater: ParentContainerUpdater): Converter with HasParentContainerUpdater =
-    newConverterInternal(parquetType, updater)
-
-  private def newConverterInternal(
-      parquetType: Type,
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
     // Framework-first dispatch in ParquetRowConverter routes here whenever the
     // requested Spark type is TimeType, regardless of the actual Parquet encoding.
     // Without this guard, files whose column is raw INT64, INT64 TIMESTAMP(MICROS),
     // INT32 TIME(MILLIS), etc. would silently decode as microsToNanos(value) and
-    // produce wrong results. Mirrors the inline guard
-    // that existed in ParquetRowConverter before the framework dispatch.
+    // produce wrong results.
     TimeTypeParquetOps.requireCompatibleParquetType(t, parquetType)
     val fileStoresNanos = TimeTypeParquetOps.isNanosTime(parquetType)
     val precision = t.precision
@@ -144,24 +138,34 @@ private[ops] object TimeTypeParquetOps {
 
   /**
    * Parquet filter-pushdown ops for TimeType, registered in [[ParquetTypeOps.filterOpsList]].
-   * Filter dispatch is keyed on the file's on-disk encoding (not the Spark precision), so this
-   * single instance targets only the MICROS encoding: TimeType is stored as INT64
-   * TIME(MICROS, isAdjustedToUTC=false) for precision 0..6 and TIME(NANOS) for precision 7..9,
-   * and only MICROS is pushed down here (filter values are java.time.LocalTime converted to
-   * micros-of-day Longs). A TIME(NANOS) column resolves to no framework ops and falls through
-   * to no pushdown. This matches the inline TimeType handling in ParquetFilters before filter
-   * pushdown was routed through the framework, so pushdown behavior is unchanged.
+   * Filter dispatch is keyed on the file's on-disk encoding (not the Spark precision), so these
+   * instances target only the MICROS encoding: TimeType is stored as INT64 TIME(MICROS) for
+   * precision 0..6 and TIME(NANOS) for precision 7..9, and only MICROS is pushed down here (filter
+   * values are java.time.LocalTime converted to micros-of-day Longs). A TIME(NANOS) column
+   * resolves to no framework ops and falls through to no pushdown.
+   *
+   * Both isAdjustedToUTC encodings are registered: `false` is what Spark writes, and `true`
+   * (SPARK-53368) is what writers such as Apache Arrow emit. Spark's TimeType is zone-less, so the
+   * raw micros-of-day is pushed identically for either flag; registering both here keeps
+   * ParquetFilters free of any TIME-specific case (it dispatches through the framework extractor).
    */
-  private[ops] val filterOps: ParquetFilterOps = new LongParquetFilterOps {
-    override val logicalTypeAnnotation: LogicalTypeAnnotation =
-      LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS)
+  private[ops] val filterOps: ParquetFilterOps = microsFilterOps(isAdjustedToUTC = false)
 
-    override def acceptsValue(value: Any): Boolean =
-      value.isInstanceOf[LocalTime] && isMicrosResolution(value.asInstanceOf[LocalTime])
+  /** The isAdjustedToUTC=true counterpart of [[filterOps]] (SPARK-53368). See [[filterOps]]. */
+  private[ops] val filterOpsAdjustedToUtc: ParquetFilterOps =
+    microsFilterOps(isAdjustedToUTC = true)
 
-    override protected def toLong(value: Any): JLong =
-      value.asInstanceOf[LocalTime].getLong(MICRO_OF_DAY)
-  }
+  private def microsFilterOps(isAdjustedToUTC: Boolean): ParquetFilterOps =
+    new LongParquetFilterOps {
+      override val logicalTypeAnnotation: LogicalTypeAnnotation =
+        LogicalTypeAnnotation.timeType(isAdjustedToUTC, TimeUnit.MICROS)
+
+      override def acceptsValue(value: Any): Boolean =
+        value.isInstanceOf[LocalTime] && isMicrosResolution(value.asInstanceOf[LocalTime])
+
+      override protected def toLong(value: Any): JLong =
+        value.asInstanceOf[LocalTime].getLong(MICRO_OF_DAY)
+    }
 
   /**
    * Whether a LocalTime filter literal is exactly representable in the on-disk MICROS unit, i.e.

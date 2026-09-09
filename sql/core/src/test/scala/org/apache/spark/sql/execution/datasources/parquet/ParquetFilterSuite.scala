@@ -2923,7 +2923,8 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
     // TIME(MICROS, false), routed through TimeTypeParquetOps.filterOps.
     check(new SparkToParquetSchemaConverter(conf)
       .convert(new StructType().add("t", TimeType(TimeType.MICROS_PRECISION))))
-    // isAdjustedToUTC = true: matched explicitly by ParquetTimeMicrosTypeAdjToUTC.
+    // isAdjustedToUTC = true (SPARK-53368): routed through
+    // TimeTypeParquetOps.filterOpsAdjustedToUtc via the same framework dispatch.
     check(MessageTypeParser.parseMessageType(
       """message root {
         |  optional int64 t(TIME(MICROS,true));

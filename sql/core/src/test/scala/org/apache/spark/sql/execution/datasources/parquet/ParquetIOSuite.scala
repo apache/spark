@@ -2115,6 +2115,43 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-53368: infer TIME(NANOS, isAdjustedToUTC=true) as TimeType only with the config on") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_nanos(TIME(NANOS,true));
+        |}""".stripMargin)
+
+    withTempDir { dir =>
+      val tablePath = new Path(s"${dir.getCanonicalPath}/times_nanos_utc.parquet")
+      val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = false)
+      val record = new SimpleGroup(schema)
+      // Internal storage is nanoseconds since midnight; TIME(NANOS) writes it unchanged.
+      record.add(0, localTime(23, 59, 59, 123456, 789))
+      writer.write(record)
+      writer.close
+
+      // By default, schema inference rejects isAdjustedToUTC=true.
+      checkError(
+        exception = intercept[org.apache.spark.sql.AnalysisException] {
+          spark.read.parquet(tablePath.toString).collect()
+        },
+        condition = "PARQUET_TYPE_ILLEGAL",
+        parameters = Map("parquetType" -> "INT64 (TIME(NANOS,true))")
+      )
+
+      // With the config on, it infers as TimeType(NANOS) and decodes the raw nanos-of-day.
+      withSQLConf(SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.key -> "true") {
+        withAllParquetReaders {
+          val df = spark.read.parquet(tablePath.toString)
+          assertResult(df.schema) {
+            new StructType().add("time_nanos", TimeType(TimeType.NANOS_PRECISION))
+          }
+          checkAnswer(df, Row(LocalTime.of(23, 59, 59, 123456789)))
+        }
+      }
+    }
+  }
+
   // Deterministic INT32 sample shared by the INT32 widening tests below. Mixes sign,
   // zero, and MIN/MAX boundaries to catch sign-extension and precision regressions.
   private def widenSampleAt(i: Int): Int = i % 5 match {
