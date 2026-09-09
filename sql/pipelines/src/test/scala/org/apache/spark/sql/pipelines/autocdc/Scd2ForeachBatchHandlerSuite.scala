@@ -52,7 +52,7 @@ class Scd2ForeachBatchHandlerSuite
     .add("seq", LongType)
     .add("is_delete", BooleanType)
 
-  /** The SCD2 cdc-metadata struct carries a single `recordStartAt` field (unlike SCD1's two). */
+  /** SCD2 cdc-metadata struct: `recordStartAt` + `versionMap` (unlike SCD1's two sequences). */
   private val scd2MetadataSchema: StructType = Scd2BatchProcessor.cdcMetadataColSchema(LongType)
 
   /** Canonical SCD2 row schema: persisted user columns + framework start/end + cdc metadata. */
@@ -111,7 +111,8 @@ class Scd2ForeachBatchHandlerSuite
   private def del(id: Int, seq: Long): Row = Row(id, null, seq, true)
 
   /** The cdc-metadata struct value for a given `recordStartAt`. */
-  private def meta(recordStartAt: Long): Row = Row(recordStartAt)
+  private def meta(recordStartAt: Long, versionMap: Any = null): Row =
+    Row(recordStartAt, versionMap)
 
   /** A canonical target row `(id, value, startAt, endAt, meta(recordStartAt))`. */
   private def targetRow(
