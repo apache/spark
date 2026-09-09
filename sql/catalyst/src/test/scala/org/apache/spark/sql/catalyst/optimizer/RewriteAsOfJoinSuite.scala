@@ -225,6 +225,92 @@ class RewriteAsOfJoinSuite extends PlanTest {
     comparePlans(rewritten, correctAnswer, checkAnalysis = false)
   }
 
+  test("direction = forward & allowExactMatches = false") {
+    val left = LocalRelation($"a".int, $"b".int, $"c".int)
+    val right = LocalRelation($"a".int, $"b".int, $"d".int)
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+      tolerance = None, allowExactMatches = false, direction = AsOfJoinDirection("forward"))
+
+    val rewritten = RewriteAsOfJoin(query.analyze)
+
+    val filter = OuterReference(left.output(0)) < right.output(0)
+    val rightStruct = CreateStruct(right.output)
+    val orderExpression = right.output(0) - OuterReference(left.output(0))
+    val nearestRight = MinBy(rightStruct, orderExpression)
+      .toAggregateExpression().as("__nearest_right__")
+
+    val scalarSubquery = left.select(
+      left.output :+ ScalarSubquery(
+        right.where(filter).groupBy()(nearestRight),
+        left.output).as("__right__"): _*)
+    val correctAnswer = scalarSubquery
+      .where(scalarSubquery.output.last.isNotNull)
+      .select(left.output :+
+        GetStructField(scalarSubquery.output.last, 0).as("a") :+
+        GetStructField(scalarSubquery.output.last, 1).as("b") :+
+        GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
+
+    comparePlans(rewritten, correctAnswer, checkAnalysis = false)
+  }
+
+  test("tolerance & direction = forward") {
+    val left = LocalRelation($"a".int, $"b".int, $"c".int)
+    val right = LocalRelation($"a".int, $"b".int, $"d".int)
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+      tolerance = Some(1), allowExactMatches = true, direction = AsOfJoinDirection("forward"))
+
+    val rewritten = RewriteAsOfJoin(query.analyze)
+
+    val filter = OuterReference(left.output(0)) <= right.output(0) &&
+      right.output(0) <= OuterReference(left.output(0)) + 1
+    val rightStruct = CreateStruct(right.output)
+    val orderExpression = right.output(0) - OuterReference(left.output(0))
+    val nearestRight = MinBy(rightStruct, orderExpression)
+      .toAggregateExpression().as("__nearest_right__")
+
+    val scalarSubquery = left.select(
+      left.output :+ ScalarSubquery(
+        right.where(filter).groupBy()(nearestRight),
+        left.output).as("__right__"): _*)
+    val correctAnswer = scalarSubquery
+      .where(scalarSubquery.output.last.isNotNull)
+      .select(left.output :+
+        GetStructField(scalarSubquery.output.last, 0).as("a") :+
+        GetStructField(scalarSubquery.output.last, 1).as("b") :+
+        GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
+
+    comparePlans(rewritten, correctAnswer, checkAnalysis = false)
+  }
+
+  test("tolerance & allowExactMatches = false & direction = forward") {
+    val left = LocalRelation($"a".int, $"b".int, $"c".int)
+    val right = LocalRelation($"a".int, $"b".int, $"d".int)
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+      tolerance = Some(1), allowExactMatches = false, direction = AsOfJoinDirection("forward"))
+
+    val rewritten = RewriteAsOfJoin(query.analyze)
+
+    val filter = OuterReference(left.output(0)) < right.output(0) &&
+      right.output(0) < OuterReference(left.output(0)) + 1
+    val rightStruct = CreateStruct(right.output)
+    val orderExpression = right.output(0) - OuterReference(left.output(0))
+    val nearestRight = MinBy(rightStruct, orderExpression)
+      .toAggregateExpression().as("__nearest_right__")
+
+    val scalarSubquery = left.select(
+      left.output :+ ScalarSubquery(
+        right.where(filter).groupBy()(nearestRight),
+        left.output).as("__right__"): _*)
+    val correctAnswer = scalarSubquery
+      .where(scalarSubquery.output.last.isNotNull)
+      .select(left.output :+
+        GetStructField(scalarSubquery.output.last, 0).as("a") :+
+        GetStructField(scalarSubquery.output.last, 1).as("b") :+
+        GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
+
+    comparePlans(rewritten, correctAnswer, checkAnalysis = false)
+  }
+
   test("direction = nearest") {
     val left = LocalRelation($"a".int, $"b".int, $"c".int)
     val right = LocalRelation($"a".int, $"b".int, $"d".int)
@@ -266,6 +352,37 @@ class RewriteAsOfJoinSuite extends PlanTest {
     val filter = (!(OuterReference(left.output(0)) === right.output(0))) &&
       ((right.output(0) > OuterReference(left.output(0)) - 1) &&
         (right.output(0) < OuterReference(left.output(0)) + 1))
+    val rightStruct = CreateStruct(right.output)
+    val orderExpression = If(OuterReference(left.output(0)) > right.output(0),
+      OuterReference(left.output(0)) - right.output(0),
+      right.output(0) - OuterReference(left.output(0)))
+    val nearestRight = MinBy(rightStruct, orderExpression)
+      .toAggregateExpression().as("__nearest_right__")
+
+    val scalarSubquery = left.select(
+      left.output :+ ScalarSubquery(
+        right.where(filter).groupBy()(nearestRight),
+        left.output).as("__right__"): _*)
+    val correctAnswer = scalarSubquery
+      .where(scalarSubquery.output.last.isNotNull)
+      .select(left.output :+
+        GetStructField(scalarSubquery.output.last, 0).as("a") :+
+        GetStructField(scalarSubquery.output.last, 1).as("b") :+
+        GetStructField(scalarSubquery.output.last, 2).as("d"): _*)
+
+    comparePlans(rewritten, correctAnswer, checkAnalysis = false)
+  }
+
+  test("tolerance & direction = nearest") {
+    val left = LocalRelation($"a".int, $"b".int, $"c".int)
+    val right = LocalRelation($"a".int, $"b".int, $"d".int)
+    val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
+      tolerance = Some(1), allowExactMatches = true, direction = AsOfJoinDirection("nearest"))
+
+    val rewritten = RewriteAsOfJoin(query.analyze)
+
+    val filter = right.output(0) >= OuterReference(left.output(0)) - 1 &&
+      right.output(0) <= OuterReference(left.output(0)) + 1
     val rightStruct = CreateStruct(right.output)
     val orderExpression = If(OuterReference(left.output(0)) > right.output(0),
       OuterReference(left.output(0)) - right.output(0),
