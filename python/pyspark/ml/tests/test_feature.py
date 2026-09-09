@@ -1564,10 +1564,16 @@ class FeatureTestsMixin:
             [4.0, 5.0],
         )
 
-        # unseen categories were observed zero times
+        # unseen categories were observed zero times. Fitted separately rather than by mutating
+        # the model above: setHandleInvalid returns the same instance, and mutating it before the
+        # round-trip below makes that assertion depend on mutation order.
+        keeper = FrequencyEncoder(
+            inputCols=["input1", "input2", "input3"],
+            outputCols=["output", "output2", "output3"],
+            handleInvalid="keep",
+        ).fit(df)
         unseen = self.spark.createDataFrame([(9, 99, 99.0)], schema=df.schema)
-        kept = model.setHandleInvalid("keep").transform(unseen).head()
-        self.assertEqual(kept.output2, 0.0)
+        self.assertEqual(keeper.transform(unseen).head().output2, 0.0)
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="frequency_encoder") as d:

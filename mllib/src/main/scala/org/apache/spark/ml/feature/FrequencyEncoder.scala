@@ -46,7 +46,7 @@ private[ml] trait FrequencyEncoderBase extends Params
    * Default: "error"
    * @group param
    */
-  @Since("5.0.0")
+  @Since("4.4.0")
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
     "How to handle invalid data during transform(). " +
       "Options are 'keep' (unseen categories are encoded as zero) " +
@@ -64,7 +64,7 @@ private[ml] trait FrequencyEncoderBase extends Params
    * Default: true
    * @group param
    */
-  @Since("5.0.0")
+  @Since("4.4.0")
   val normalize: BooleanParam = new BooleanParam(this, "normalize",
     "Whether to encode categories as a proportion of the training rows (true) or as a raw " +
       "count (false). Note that this Param is only used during fitting.")
@@ -72,7 +72,7 @@ private[ml] trait FrequencyEncoderBase extends Params
   setDefault(normalize -> true)
 
   /** @group getParam */
-  @Since("5.0.0")
+  @Since("4.4.0")
   final def getNormalize: Boolean = $(normalize)
 
   private[feature] def inputFeatures: Array[String] =
@@ -84,14 +84,32 @@ private[ml] trait FrequencyEncoderBase extends Params
       Array.empty[String]
     }
 
+  // No derived default such as `input_encoded`. Deriving one from the input name leaves
+  // `getOutputCol` reporting HasOutputCol's default while `transform` produces something else,
+  // so a caller passing the getter's answer downstream gets a column that does not exist.
+  // Falling through to `$(outputCol)` keeps the getters truthful.
   private[feature] def outputFeatures: Array[String] =
     if (isSet(outputCol)) {
       Array($(outputCol))
     } else if (isSet(outputCols)) {
       $(outputCols)
+    } else if (isSet(inputCol)) {
+      Array($(outputCol))
     } else {
-      inputFeatures.map { field: String => s"${field}_encoded" }
+      Array.empty[String]
     }
+
+  // One definition of the output schema, shared by the estimator and the model so they cannot
+  // disagree. SchemaUtils.appendColumn rejects a name that already exists, which gives output
+  // collisions a single consistent answer instead of a schema that claims a duplicate field
+  // while the transformed frame quietly replaces one.
+  private[feature] def outputSchema(schema: StructType): StructType = {
+    validateSchema(schema)
+    outputFeatures.foldLeft(schema) { (acc, name) =>
+      SchemaUtils.appendColumn(acc, StructField(name, DoubleType, nullable = false,
+        NumericAttribute.defaultAttr.withName(name).toMetadata()))
+    }
+  }
 
   private[feature] def validateSchema(schema: StructType): StructType = {
 
@@ -139,58 +157,70 @@ private[ml] trait FrequencyEncoderBase extends Params
  * @see `StringIndexer` for converting categorical values into category indices
  * @see `TargetEncoder` for encoding categories against a label
  */
-@Since("5.0.0")
-class FrequencyEncoder @Since("5.0.0") (@Since("5.0.0") override val uid: String)
+@Since("4.4.0")
+class FrequencyEncoder @Since("4.4.0") (@Since("4.4.0") override val uid: String)
   extends Estimator[FrequencyEncoderModel] with FrequencyEncoderBase with DefaultParamsWritable {
 
-  @Since("5.0.0")
+  @Since("4.4.0")
   def this() = this(Identifiable.randomUID("frequencyEncoder"))
 
   /** @group setParam */
-  @Since("5.0.0")
+  @Since("4.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
-  @Since("5.0.0")
+  @Since("4.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
-  @Since("5.0.0")
+  @Since("4.4.0")
   def setInputCols(values: Array[String]): this.type = set(inputCols, values)
 
   /** @group setParam */
-  @Since("5.0.0")
+  @Since("4.4.0")
   def setOutputCols(values: Array[String]): this.type = set(outputCols, values)
 
   /** @group setParam */
-  @Since("5.0.0")
+  @Since("4.4.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
   /** @group setParam */
-  @Since("5.0.0")
+  @Since("4.4.0")
   def setNormalize(value: Boolean): this.type = set(normalize, value)
 
-  @Since("5.0.0")
-  override def transformSchema(schema: StructType): StructType = {
-    validateSchema(schema)
-  }
+  @Since("4.4.0")
+  override def transformSchema(schema: StructType): StructType = outputSchema(schema)
 
   private def extractValue(name: String): Column = {
     val c = col(name).cast(DoubleType)
-    // Integrality is tested with a remainder rather than by casting to Int. Casting raises
-    // CAST_OVERFLOW for an id beyond Int range, which is a confusing way to reject a perfectly
-    // good category and points the user at a `try_cast` they never wrote. A Double represents
-    // integers exactly up to 2^53, so anything accepted here is still a safe map key.
-    when(c >= 0 && c % 1 === 0, c)
-      .when(c.isNull, lit(FrequencyEncoder.NULL_CATEGORY))
-      .when(c.isNaN, raise_error(lit("Values MUST NOT be NaN")))
-      .otherwise(raise_error(
-        concat(lit("Values MUST be non-negative integers, but got "), c)))
+    val notAnIndex = raise_error(
+      concat(lit(s"Values from column $name MUST be non-negative integers, but got "), c))
+    val outOfRange = raise_error(
+      concat(lit(s"FrequencyEncoder only supports up to ${FrequencyEncoder.MAX_INDEX} " +
+        "indices, but got "), c))
+    // The order of these branches is load bearing. Categories are carried as Double map keys,
+    // and a Double represents integers exactly only up to 2^53, so a value above that would
+    // alias a different one and merge two distinct categories without saying so. The range is
+    // therefore checked before anything narrows, which also makes the integrality test below
+    // safe: by the time it runs the value is known to fit. `OneHotEncoder` caps category
+    // indices the same way, and `StringIndexer` is the documented way to produce them.
+    when(c.isNull, lit(FrequencyEncoder.NULL_CATEGORY))
+      .when(c.isNaN, raise_error(lit(s"Values from column $name MUST NOT be NaN")))
+      .when(c < 0, notAnIndex)
+      .when(c > FrequencyEncoder.MAX_INDEX, outOfRange)
+      // Integrality is tested on the source column, not on `c`. Casting to double first would
+      // hide a fractional decimal: decimal(38,18) 1.000000000000000001 becomes exactly 1.0 and
+      // would then pass as category 1, quietly merging with real 1s. By this branch the
+      // magnitude is known to be within range, so casting to long here cannot overflow.
+      .when(col(name) =!= col(name).cast(LongType), notAnIndex)
+      .otherwise(c)
   }
 
-  @Since("5.0.0")
+  @Since("4.4.0")
   override def fit(dataset: Dataset[_]): FrequencyEncoderModel = {
-    validateSchema(dataset.schema)
+    // transformSchema rather than validateSchema, so an output column that collides with an
+    // existing one is refused here rather than after the work of fitting is already done.
+    transformSchema(dataset.schema, logging = true)
     val numFeatures = inputFeatures.length
 
     // One array plus one posexplode, so a single groupBy aggregates every input column rather
@@ -224,11 +254,11 @@ class FrequencyEncoder @Since("5.0.0") (@Since("5.0.0") override val uid: String
     copyValues(model)
   }
 
-  @Since("5.0.0")
+  @Since("4.4.0")
   override def copy(extra: ParamMap): FrequencyEncoder = defaultCopy(extra)
 }
 
-@Since("5.0.0")
+@Since("4.4.0")
 object FrequencyEncoder extends DefaultParamsReadable[FrequencyEncoder] {
 
   // handleInvalid parameter values
@@ -238,7 +268,12 @@ object FrequencyEncoder extends DefaultParamsReadable[FrequencyEncoder] {
 
   private[feature] val NULL_CATEGORY: Double = -1
 
-  @Since("5.0.0")
+  // Category indices are carried as Double map keys, which are exact only to 2^53. Capping at
+  // Int.MaxValue keeps every accepted index exactly representable, so two distinct inputs can
+  // never collapse onto one key. This is the same ceiling OneHotEncoder applies to indices.
+  private[feature] val MAX_INDEX: Int = Int.MaxValue
+
+  @Since("4.4.0")
   override def load(path: String): FrequencyEncoder = super.load(path)
 }
 
@@ -251,11 +286,14 @@ object FrequencyEncoder extends DefaultParamsReadable[FrequencyEncoder] {
  * @param encodings  Array of encodings for each input feature.
  *                   Array( Map( category, frequency ) )
  */
-@Since("5.0.0")
+@Since("4.4.0")
 class FrequencyEncoderModel private[ml] (
-    @Since("5.0.0") override val uid: String,
-    @Since("5.0.0") private[ml] val encodings: Array[Map[Double, Double]])
+    @Since("4.4.0") override val uid: String,
+    @Since("4.4.0") private[ml] val encodings: Array[Map[Double, Double]])
   extends Model[FrequencyEncoderModel] with FrequencyEncoderBase with MLWritable {
+
+  // For ml connect only
+  private[ml] def this() = this("", Array.empty)
 
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize
@@ -265,39 +303,36 @@ class FrequencyEncoderModel private[ml] (
   }
 
   /** @group setParam */
-  @Since("5.0.0")
+  @Since("4.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
-  @Since("5.0.0")
+  @Since("4.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
-  @Since("5.0.0")
+  @Since("4.4.0")
   def setInputCols(values: Array[String]): this.type = set(inputCols, values)
 
   /** @group setParam */
-  @Since("5.0.0")
+  @Since("4.4.0")
   def setOutputCols(values: Array[String]): this.type = set(outputCols, values)
 
   /** @group setParam */
-  @Since("5.0.0")
+  @Since("4.4.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
-  @Since("5.0.0")
+  @Since("4.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    if (outputFeatures.length == encodings.length) {
-      outputFeatures.filter(_ != null)
-        .foldLeft(validateSchema(schema)) {
-          case (newSchema, outputField) =>
-            newSchema.add(StructField(outputField, DoubleType, nullable = false))
-        }
-    } else throw new SparkException("The number of features does not match the number of " +
-      s"encodings in the model (${encodings.length}). " +
-      s"found ${outputFeatures.length} output columns.")
+    if (outputFeatures.length != encodings.length) {
+      throw new SparkException("The number of features does not match the number of " +
+        s"encodings in the model (${encodings.length}). " +
+        s"found ${outputFeatures.length} output columns.")
+    }
+    outputSchema(schema)
   }
 
-  @Since("5.0.0")
+  @Since("4.4.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
 
@@ -339,16 +374,16 @@ class FrequencyEncoderModel private[ml] (
     dataset.withColumns(outputFeatures.toIndexedSeq, newCols.toIndexedSeq)
   }
 
-  @Since("5.0.0")
+  @Since("4.4.0")
   override def copy(extra: ParamMap): FrequencyEncoderModel = {
     val copied = new FrequencyEncoderModel(uid, encodings)
     copyValues(copied, extra).setParent(parent)
   }
 
-  @Since("5.0.0")
+  @Since("4.4.0")
   override def write: MLWriter = new FrequencyEncoderModel.FrequencyEncoderModelWriter(this)
 
-  @Since("5.0.0")
+  @Since("4.4.0")
   override def toString: String = {
     s"FrequencyEncoderModel: uid=$uid, " +
       s"handleInvalid=${$(handleInvalid)}, normalize=${$(normalize)}, " +
@@ -356,7 +391,7 @@ class FrequencyEncoderModel private[ml] (
   }
 }
 
-@Since("5.0.0")
+@Since("4.4.0")
 object FrequencyEncoderModel extends MLReadable[FrequencyEncoderModel] {
   private[ml] case class Data(index: Int, categories: Array[Double], frequencies: Array[Double])
 
@@ -410,9 +445,9 @@ object FrequencyEncoderModel extends MLReadable[FrequencyEncoderModel] {
     }
   }
 
-  @Since("5.0.0")
+  @Since("4.4.0")
   override def read: MLReader[FrequencyEncoderModel] = new FrequencyEncoderModelReader
 
-  @Since("5.0.0")
+  @Since("4.4.0")
   override def load(path: String): FrequencyEncoderModel = super.load(path)
 }

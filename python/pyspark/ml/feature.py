@@ -1642,7 +1642,7 @@ class _FrequencyEncoderParams(
     """
     Params for :py:class:`FrequencyEncoder` and :py:class:`FrequencyEncoderModel`.
 
-    .. versionadded:: 5.0.0
+    .. versionadded:: 4.4.0
     """
 
     handleInvalid: Param[str] = Param(
@@ -1666,7 +1666,7 @@ class _FrequencyEncoderParams(
         super().__init__(*args)
         self._setDefault(handleInvalid="error", normalize=True)
 
-    @since("5.0.0")
+    @since("4.4.0")
     def getNormalize(self) -> bool:
         """
         Gets the value of normalize or its default value.
@@ -1703,7 +1703,7 @@ class FrequencyEncoder(
         cols come in pairs, specified by the order in the arrays, and each pair is treated
         independently.
 
-    .. versionadded:: 5.0.0
+    .. versionadded:: 4.4.0
 
     See Also
     --------
@@ -1797,7 +1797,7 @@ class FrequencyEncoder(
     ) -> "FrequencyEncoder": ...
 
     @keyword_only
-    @since("5.0.0")
+    @since("4.4.0")
     def setParams(
         self,
         *,
@@ -1816,42 +1816,42 @@ class FrequencyEncoder(
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
-    @since("5.0.0")
+    @since("4.4.0")
     def setInputCols(self, value: List[str]) -> "FrequencyEncoder":
         """
         Sets the value of :py:attr:`inputCols`.
         """
         return self._set(inputCols=value)
 
-    @since("5.0.0")
+    @since("4.4.0")
     def setOutputCols(self, value: List[str]) -> "FrequencyEncoder":
         """
         Sets the value of :py:attr:`outputCols`.
         """
         return self._set(outputCols=value)
 
-    @since("5.0.0")
+    @since("4.4.0")
     def setInputCol(self, value: str) -> "FrequencyEncoder":
         """
         Sets the value of :py:attr:`inputCol`.
         """
         return self._set(inputCol=value)
 
-    @since("5.0.0")
+    @since("4.4.0")
     def setOutputCol(self, value: str) -> "FrequencyEncoder":
         """
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
 
-    @since("5.0.0")
+    @since("4.4.0")
     def setHandleInvalid(self, value: str) -> "FrequencyEncoder":
         """
         Sets the value of :py:attr:`handleInvalid`.
         """
         return self._set(handleInvalid=value)
 
-    @since("5.0.0")
+    @since("4.4.0")
     def setNormalize(self, value: bool) -> "FrequencyEncoder":
         """
         Sets the value of :py:attr:`normalize`.
@@ -1871,38 +1871,38 @@ class FrequencyEncoderModel(
     Note that :py:attr:`normalize` is only used while fitting, so this model has no setter
     for it; the encodings it carries were already computed one way or the other.
 
-    .. versionadded:: 5.0.0
+    .. versionadded:: 4.4.0
     """
 
-    @since("5.0.0")
+    @since("4.4.0")
     def setInputCols(self, value: List[str]) -> "FrequencyEncoderModel":
         """
         Sets the value of :py:attr:`inputCols`.
         """
         return self._set(inputCols=value)
 
-    @since("5.0.0")
+    @since("4.4.0")
     def setOutputCols(self, value: List[str]) -> "FrequencyEncoderModel":
         """
         Sets the value of :py:attr:`outputCols`.
         """
         return self._set(outputCols=value)
 
-    @since("5.0.0")
+    @since("4.4.0")
     def setInputCol(self, value: str) -> "FrequencyEncoderModel":
         """
         Sets the value of :py:attr:`inputCol`.
         """
         return self._set(inputCol=value)
 
-    @since("5.0.0")
+    @since("4.4.0")
     def setOutputCol(self, value: str) -> "FrequencyEncoderModel":
         """
         Sets the value of :py:attr:`outputCol`.
         """
         return self._set(outputCol=value)
 
-    @since("5.0.0")
+    @since("4.4.0")
     def setHandleInvalid(self, value: str) -> "FrequencyEncoderModel":
         """
         Sets the value of :py:attr:`handleInvalid`.

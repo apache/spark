@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.Row
@@ -281,20 +282,63 @@ class FrequencyEncoderSuite extends MLTest with DefaultReadWriteTest {
       .setOutputCol("output")
 
     val ex = intercept[SparkRuntimeException] { encoder.fit(df) }
-    assert(ex.getMessage.contains("Values MUST be non-negative integers"))
+    assert(ex.getMessage.contains("MUST be non-negative integers"))
   }
 
-  test("FrequencyEncoder - default output column names") {
+  test("FrequencyEncoder - the default output name is the one the getter reports") {
+
+    // Deriving a friendlier default from the input name broke the getter contract: getOutputCol
+    // still returned HasOutputCol's default while transform produced `input_encoded`, so a
+    // caller feeding the getter's answer to the next stage named a column that did not exist.
+    val df = spark.createDataFrame(sc.parallelize(data), schema)
+
+    val model = new FrequencyEncoder().setInputCol("input1").fit(df)
+    val produced = model.transform(df).columns.toSet
+
+    assert(produced.contains(model.getOutputCol),
+      s"transform produced $produced, but getOutputCol says ${model.getOutputCol}")
+  }
+
+  test("FrequencyEncoder - multiple inputs need explicit output names") {
 
     val df = spark.createDataFrame(sc.parallelize(data), schema)
 
-    val model = new FrequencyEncoder()
-      .setInputCols(Array("input1", "input2"))
-      .fit(df)
+    val ex = intercept[IllegalArgumentException] {
+      new FrequencyEncoder().setInputCols(Array("input1", "input2")).fit(df)
+    }
+    assert(ex.getMessage.contains("must be the same as the number of"))
+  }
 
-    val transformed = model.transform(df)
-    assert(transformed.columns.contains("input1_encoded"))
-    assert(transformed.columns.contains("input2_encoded"))
+  test("FrequencyEncoder - composes in a Pipeline") {
+
+    // The defect this guards: the estimator's transformSchema returned the input schema
+    // unchanged, and Pipeline.fit folds transformSchema across its stages, so VectorAssembler
+    // was handed a schema with no `freq` in it and failed with FIELD_NOT_FOUND before any
+    // fitting happened. Direct estimator and model calls could never surface that.
+    val df = spark.createDataFrame(sc.parallelize(data), schema)
+
+    val pipeline = new Pipeline().setStages(Array(
+      new FrequencyEncoder().setInputCol("input3").setOutputCol("freq"),
+      new VectorAssembler().setInputCols(Array("freq")).setOutputCol("features")))
+
+    val out = pipeline.fit(df).transform(df)
+
+    assert(out.columns.contains("freq"))
+    assert(out.columns.contains("features"))
+    assert(out.count() === data.length)
+  }
+
+  test("FrequencyEncoder - an output name that collides with an existing column is rejected") {
+
+    // transformSchema used to append a duplicate field while withColumns replaced the existing
+    // column, so the declared schema and the delivered frame disagreed. Rejecting the collision
+    // at fit time gives validation, schema inference and execution one answer.
+    val df = spark.createDataFrame(sc.parallelize(data), schema)
+
+    val ex = intercept[IllegalArgumentException] {
+      new FrequencyEncoder().setInputCol("input3").setOutputCol("input1").fit(df)
+    }
+    assert(ex.getMessage.contains("already exists"))
   }
 
   test("FrequencyEncoder - wrong number of features") {
@@ -336,23 +380,54 @@ class FrequencyEncoderSuite extends MLTest with DefaultReadWriteTest {
     assert(distinct.head.getDouble(0) === 2.0 / 20000.0)
   }
 
-  test("FrequencyEncoder - category ids beyond Int range") {
+  test("FrequencyEncoder - ids above the supported range are rejected, not merged") {
 
-    // A bigint id is a legitimate category and high cardinality columns are exactly where such
-    // ids turn up. Checking integrality by casting to Int used to reject these with a
-    // CAST_OVERFLOW naming a cast the caller never wrote.
-    val wide = StructType(Array(StructField("cat", DoubleType, nullable = true)))
-    val df = spark.createDataFrame(
-      sc.parallelize(Seq(Row(3.0e9), Row(3.0e9), Row(1.0))), wide)
+    // Categories are carried as Double map keys, exact only to 2^53. 9007199254740992 and
+    // 9007199254740993 both become the same double, so accepting them would merge two distinct
+    // categories and report one count of 3 where the truth is 1 and 2. Rejecting on range
+    // before anything narrows is what makes that unreachable.
+    val df = spark.sql(
+      "SELECT * FROM VALUES (9007199254740992L), (9007199254740993L), " +
+        "(9007199254740993L) AS t(cat)")
 
-    val model = new FrequencyEncoder().setInputCol("cat").setOutputCol("freq").fit(df)
+    val encoder = new FrequencyEncoder().setInputCol("cat").setOutputCol("freq")
 
-    assert(model.encodings.head === Map(3.0e9 -> 2.0/3.0, 1.0 -> 1.0/3.0))
+    val ex = intercept[SparkRuntimeException] { encoder.fit(df) }
+    assert(ex.getMessage.contains("only supports up to"))
+    assert(ex.getMessage.contains(Int.MaxValue.toString))
+  }
 
-    model.transform(df).select("cat", "freq").collect().foreach { row =>
-      val expected = if (row.getDouble(0) == 1.0) 1.0/3.0 else 2.0/3.0
-      assert(row.getDouble(1) === expected)
-    }
+  test("FrequencyEncoder - a fractional decimal is rejected rather than truncated") {
+
+    // decimal(38,18) 1.000000000000000001 becomes exactly 1.0 once cast to double, so an
+    // integrality check performed after that cast would accept it as category 1 and merge it
+    // with genuine 1s. The check runs on the source column for this reason.
+    val df = spark.sql(
+      "SELECT CAST('1.000000000000000001' AS DECIMAL(38,18)) AS cat " +
+        "UNION ALL SELECT CAST('1' AS DECIMAL(38,18))")
+
+    val encoder = new FrequencyEncoder().setInputCol("cat").setOutputCol("freq")
+
+    val ex = intercept[SparkRuntimeException] { encoder.fit(df) }
+    assert(ex.getMessage.contains("MUST be non-negative integers"))
+  }
+
+  test("FrequencyEncoder - an out of range value at transform time is unseen, not aliased") {
+
+    // The failure this guards: a value that no longer fits must not round down onto a category
+    // the model did learn and borrow its frequency. With keep it is unseen, so zero.
+    val df = spark.createDataFrame(sc.parallelize(data), schema)
+    val model = multiColumnEncoder
+      .setHandleInvalid(FrequencyEncoder.KEEP_INVALID)
+      .fit(df)
+
+    val far = spark.sql(
+      "SELECT CAST(0 AS SHORT) AS input1, 3 AS input2, 9007199254740993D AS input3, " +
+        "0D AS expected1, 0D AS expected2, 0D AS expected3, 0D AS count1, 0D AS count2, " +
+        "0D AS count3")
+
+    val row = model.transform(far).select("output3").head()
+    assert(row.getDouble(0) === 0.0, "an out of range value must not inherit a learned frequency")
   }
 
   test("FrequencyEncoder - R/W single-column") {
