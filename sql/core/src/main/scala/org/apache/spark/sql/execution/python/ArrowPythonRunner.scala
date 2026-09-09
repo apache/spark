@@ -177,25 +177,28 @@ object ArrowPythonRunner {
     }
   }
 
+  private val pythonRunnerConfEntries: Seq[ConfigEntry[_]] = Seq(
+    SQLConf.SESSION_LOCAL_TIMEZONE,
+    SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME,
+    SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION,
+    SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES,
+    SQLConf.PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED,
+    SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED,
+    SQLConf.PYTHON_UDF_MAP_IN_BATCH_LEGACY_ACCEPT_ANY_ITERABLE_ENABLED,
+    SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED,
+    SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE,
+    SQLConf.PYSPARK_BINARY_AS_BYTES,
+    // Optional
+    SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL,
+    SQLConf.PYTHON_UDF_PROFILER,
+    SQLConf.PYTHON_DATA_SOURCE_PROFILER)
+
+  private[sql] def getPythonRunnerConfEntries: Seq[ConfigEntry[_]] = pythonRunnerConfEntries
+
   /** Return Map with conf settings to be used in ArrowPythonRunner */
   def getPythonRunnerConfMap(conf: SQLConf): Map[String, String] = {
     val confMap = collection.mutable.Map.empty[String, String]
-    Seq(
-      SQLConf.SESSION_LOCAL_TIMEZONE,
-      SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME,
-      SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION,
-      SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES,
-      SQLConf.PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED,
-      SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED,
-      SQLConf.PYTHON_UDF_MAP_IN_BATCH_LEGACY_ACCEPT_ANY_ITERABLE_ENABLED,
-      SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED,
-      SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE,
-      SQLConf.PYSPARK_BINARY_AS_BYTES,
-      // Optional
-      SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL,
-      SQLConf.PYTHON_UDF_PROFILER,
-      SQLConf.PYTHON_DATA_SOURCE_PROFILER
-    ).foreach {
+    pythonRunnerConfEntries.foreach {
       case c: OptionalConfigEntry[_] =>
         conf.getConf(c).foreach(v => confMap.update(c.key, v.toString))
       case c: ConfigEntry[_] =>
