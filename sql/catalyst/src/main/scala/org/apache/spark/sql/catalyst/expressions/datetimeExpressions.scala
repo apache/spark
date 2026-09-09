@@ -5153,6 +5153,12 @@ case class TimestampDiff(
  * For TIMESTAMP_NTZ, bucketing is performed in UTC. For TIMESTAMP, year-month
  * interval buckets and calendar-day components of day-time interval buckets align
  * to the session time zone.
+ *
+ * Nanosecond-precision timestamps (TIMESTAMP(p)/TIMESTAMP_NTZ(p)) are also supported. Because the
+ * bucket size is a microsecond or month interval, bucketing runs on the microsecond grid: ts's
+ * sub-microsecond fraction does not affect which bucket it falls into, and the returned bucket
+ * start carries a zero sub-microsecond fraction. `origin` must therefore be microsecond-aligned;
+ * a sub-microsecond origin is rejected at analysis.
  */
 case class TimeBucket(
     bucketSize: Expression,
@@ -5232,6 +5238,25 @@ case class TimeBucket(
           "inputType" -> toSQLType(originTs.dataType)))
     }
 
+    // Bucketing runs on the microsecond grid, so a sub-microsecond origin fraction would shift
+    // the bucket boundaries off the microsecond grid and yield a start that is not
+    // `origin + k * bucketSize`. Reject such an origin instead of silently truncating it. Here
+    // `origin` is a foldable literal of the same nanos type as `ts` (guaranteed by the checks
+    // above), so its fraction can be inspected at analysis time.
+    if (isTsNanos) {
+      val originValue = originTs.eval()
+      if (originValue != null &&
+          originValue.asInstanceOf[TimestampNanosVal].nanosWithinMicro != 0) {
+        return DataTypeMismatch(
+          errorSubClass = "INVALID_ARG_VALUE",
+          messageParameters = Map(
+            "inputName" -> toSQLId("origin"),
+            "requireType" -> toSQLType(originTs.dataType),
+            "validValues" -> "a microsecond-aligned value (no sub-microsecond fraction)",
+            "inputValue" -> toSQLExpr(originTs)))
+      }
+    }
+
     TypeCheckSuccess
   }
 
@@ -5257,7 +5282,7 @@ case class TimeBucket(
       case other => throw SparkException.internalError(
         s"Unexpected bucketSize type: $other")
     }
-    if (isTsNanos) TimestampNanosVal.fromParts(startMicros, 0) else startMicros
+    if (isTsNanos) TimestampNanosVal.fromParts(startMicros, 0.toShort) else startMicros
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -5301,8 +5326,8 @@ case class TimeBucket(
   arguments = """
     Arguments:
       * bucketSize - A day-time or year-month interval defining the bucket size. Must be positive and foldable.
-      * ts - A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
-      * origin - Optional TIMESTAMP or TIMESTAMP_NTZ alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as ts and must be foldable.
+      * ts - A TIMESTAMP, TIMESTAMP_NTZ, or nanosecond-precision (TIMESTAMP(p)/TIMESTAMP_NTZ(p), p in [7, 9]) value to bucket. For a nanosecond input the sub-microsecond fraction is ignored (bucketing is on the microsecond grid) and the result's sub-microsecond fraction is zero.
+      * origin - Optional alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as ts and must be foldable; a nanosecond origin must be microsecond-aligned (no sub-microsecond fraction).
   """,
   examples = """
     Examples:
@@ -5330,9 +5355,10 @@ object TimeBucketExpressionBuilder extends ExpressionBuilder {
       Literal(DateTimeUtils.daysToMicros(0, zoneId), TimestampType)
     case _: TimestampLTZNanosType =>
       val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
-      Literal(TimestampNanosVal.fromParts(DateTimeUtils.daysToMicros(0, zoneId), 0), tsType)
+      val originMicros = DateTimeUtils.daysToMicros(0, zoneId)
+      Literal(TimestampNanosVal.fromParts(originMicros, 0.toShort), tsType)
     case _: TimestampNTZNanosType =>
-      Literal(TimestampNanosVal.fromParts(0L, 0), tsType)
+      Literal(TimestampNanosVal.fromParts(0L, 0.toShort), tsType)
     case _ => Literal(0L, tsType)
   }
 

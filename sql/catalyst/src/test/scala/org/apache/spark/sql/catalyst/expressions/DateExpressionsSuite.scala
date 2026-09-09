@@ -3539,7 +3539,49 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           assert(built.dataType === dt)
           assert(built.originTs.dataType === dt)
           assert(built.checkInputDataTypes().isSuccess)
+
+          // 3-arg NULL ts + nanos origin: ts is retyped to the origin's nanos type.
+          val built3 = TimeBucketExpressionBuilder.build(
+            "time_bucket", Seq(hour, Literal(null, NullType), tsN)).asInstanceOf[TimeBucket]
+          assert(built3.ts.dataType === dt)
+          assert(built3.checkInputDataTypes().isSuccess)
         }
+      }
+    }
+  }
+
+  test("time_bucket: a sub-microsecond nanos origin is rejected") {
+    val hour = Literal(Duration.ofHours(1))
+    Seq(TimestampLTZNanosType(9), TimestampNTZNanosType(9)).foreach { dt =>
+      val ts = Literal(TimestampNanosVal.fromParts(0L, 0.toShort), dt)
+      // A non-zero sub-microsecond origin fraction would shift the grid off the micro boundary.
+      val subMicroOrigin = Literal(TimestampNanosVal.fromParts(0L, 500.toShort), dt)
+      val mismatch =
+        TimeBucket(hour, ts, subMicroOrigin).checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+      assert(mismatch.errorSubClass == "INVALID_ARG_VALUE")
+      // A microsecond-aligned origin is accepted.
+      val goodOrigin = Literal(TimestampNanosVal.fromParts(123L, 0.toShort), dt)
+      assert(TimeBucket(hour, ts, goodOrigin).checkInputDataTypes().isSuccess)
+    }
+  }
+
+  test("time_bucket: LTZ nanos honors the session time zone") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+      sdf.setTimeZone(TimeZone.getTimeZone("America/Los_Angeles"))
+      val tsMicros =
+        timestampAnswer("2024-07-15 10:00:00.000", sdf, TimestampType).asInstanceOf[Long]
+      val originMicros = DateTimeUtils.daysToMicros(0, getZoneId("America/Los_Angeles"))
+      // Summer ts in LA (PDT); the 1-month bucket aligns to the local calendar month start.
+      val expectedMicros =
+        timestampAnswer("2024-07-01 00:00:00.000", sdf, TimestampType).asInstanceOf[Long]
+      Seq(7, 8, 9).foreach { p =>
+        val dt = TimestampLTZNanosType(p)
+        val tsN = Literal(TimestampNanosVal.fromParts(tsMicros, 100.toShort), dt)
+        val origin = Literal(TimestampNanosVal.fromParts(originMicros, 0.toShort), dt)
+        checkEvaluation(
+          TimeBucket(Literal(Period.ofMonths(1)), tsN, origin),
+          TimestampNanosVal.fromParts(expectedMicros, 0.toShort))
       }
     }
   }
