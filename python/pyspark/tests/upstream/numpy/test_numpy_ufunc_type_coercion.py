@@ -56,8 +56,11 @@ The golden is generated on the newest NumPy, which is what an unpinned
 differ on older ones.  Swept 2.0.0 through 2.4.6: only 2.0.x differs, in 19 cells, because
 2.1 gave ``ceil``/``floor``/``trunc`` integer loops where 2.0 promoted to float.
 
-These tests skip below 2.0 as ``test_pyarrow_array_cast.py`` does: 2.0 reworked promotion
-(NEP 50), and 33 cells differ on the ``numpy==1.23.2`` minimum-dependency pin.
+These tests skip below 2.0, the release that reworked promotion (NEP 50).  Measured on 1.23.2
+through 1.26.4, that range differs only in output dtypes and one exception class, and its sole
+accept/reject difference is ``gcd`` on an all-null object array, which
+``_np_spark_accepted_types`` does not gate -- so covering it would add no signal about the table
+this test protects.
 
 ## Regenerating Golden Files
 
