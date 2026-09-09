@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.internal.SQLConf
 
 class SqlStatementSplitterSuite extends SparkFunSuite {
 
@@ -518,34 +519,22 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
 
   test("malformed balanced BEGIN block remains one statement") {
     val block = "BEGIN SELECT 1; SELEC 2; END"
-    val result = SqlStatementSplitter
-      .splitWithPositions(
-        s"$block; SELECT 3;",
-        identity,
-        preserveMalformedCompoundBoundaries = true)
+    val result = SqlStatementSplitter.splitForParseSql(s"$block; SELECT 3;")
       .withoutPositions
     assert(result.completeStatements == Seq(
       statement(block),
       statement("SELECT 3")))
     assert(result.partialStatement.isEmpty)
 
-    val withoutTerminator = SqlStatementSplitter
-      .splitWithPositions(
-        block,
-        identity,
-        preserveMalformedCompoundBoundaries = true)
+    val withoutTerminator = SqlStatementSplitter.splitForParseSql(block)
       .withoutPositions
-    assert(withoutTerminator.completeStatements == Seq(SqlStatement(block, "")))
-    assert(withoutTerminator.partialStatement.isEmpty)
+    assert(withoutTerminator.completeStatements.isEmpty)
+    assert(withoutTerminator.partialStatement == block)
   }
 
   test("malformed nested control END does not end the outer block") {
     val block = "BEGIN IFF TRUE THEN SELECT 1; END IF; SELECT 2; END"
-    val result = SqlStatementSplitter
-      .splitWithPositions(
-        s"$block; SELECT 3",
-        identity,
-        preserveMalformedCompoundBoundaries = true)
+    val result = SqlStatementSplitter.splitForParseSql(s"$block; SELECT 3")
       .withoutPositions
 
     assert(result.completeStatements == Seq(statement(block)))
@@ -554,11 +543,7 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
 
   test("statement-final END before the outer END does not end the block") {
     val block = "BEGIN IFF TRUE THEN SELECT 1; END IF; SELECT END; END"
-    val result = SqlStatementSplitter
-      .splitWithPositions(
-        s"$block; SELECT 3",
-        identity,
-        preserveMalformedCompoundBoundaries = true)
+    val result = SqlStatementSplitter.splitForParseSql(s"$block; SELECT 3")
       .withoutPositions
 
     assert(result.completeStatements == Seq(statement(block)))
@@ -567,15 +552,102 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
 
   test("nested compound END does not end the outer malformed block") {
     val block = "BEGIN IFF TRUE THEN SELECT 1; END IF; BEGIN SELECT 2; END; END"
-    val result = SqlStatementSplitter
-      .splitWithPositions(
-        s"$block; SELECT 3",
-        identity,
-        preserveMalformedCompoundBoundaries = true)
+    val result = SqlStatementSplitter.splitForParseSql(s"$block; SELECT 3")
       .withoutPositions
 
     assert(result.completeStatements == Seq(statement(block)))
     assert(result.partialStatement == "SELECT 3")
+  }
+
+  test("parse_sql batch boundary leaves an unclosed compound as partial") {
+    val partial = "BEGIN SELECT 1; SELECT 2;"
+    val result = SqlStatementSplitter
+      .splitForParseSql(s"SELECT 0; $partial")
+      .withoutPositions
+
+    assert(result.completeStatements == Seq(statement("SELECT 0")))
+    assert(result.partialStatement == partial)
+  }
+
+  test("parse_sql batch boundary preserves unclosed comments") {
+    val result = SqlStatementSplitter
+      .splitForParseSql("SELECT 1; /* unclosed")
+      .withoutPositions
+    assert(result.completeStatements == Seq(statement("SELECT 1")))
+    assert(result.partialStatement == "/* unclosed")
+    assert(result.hasUnclosedComment)
+
+    val commentOnly = SqlStatementSplitter
+      .splitForParseSql("/* unclosed")
+      .withoutPositions
+    assert(commentOnly.completeStatements.isEmpty)
+    assert(commentOnly.partialStatement == "/* unclosed")
+    assert(commentOnly.hasUnclosedComment)
+  }
+
+  test("parse_sql batch boundary follows scripting grammar contexts") {
+    val blocks = Seq(
+      "BEGIN IF TRUE THEN SELEC 1; END IF; END",
+      "BEGIN CASE WHEN TRUE THEN SELEC 1; END CASE; END",
+      "BEGIN WHILE TRUE DO SELEC 1; END WHILE; END",
+      "BEGIN REPEAT SELEC 1; UNTIL TRUE END REPEAT; END",
+      "BEGIN LOOP SELEC 1; END LOOP; END",
+      "BEGIN FOR x AS SELECT 1 DO SELEC 1; END FOR; END",
+      "BEGIN lbl: BEGIN SELEC 1; END lbl; END",
+      "BEGIN IF ${flag} THEN BEGIN SELEC 1; END; SELECT 1; END IF; END",
+      "BEGIN DECLARE CONTINUE HANDLER FOR SQLEXCEPTION BEGIN SELEC 1; END; END",
+      "BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN SELEC 1; END; SELECT 1; END")
+
+    blocks.foreach { block =>
+      val result = SqlStatementSplitter
+        .splitForParseSql(s"$block; SELECT 9")
+        .withoutPositions
+      assert(result.completeStatements == Seq(statement(block)), block)
+      assert(result.partialStatement == "SELECT 9", block)
+
+      val trailing = SqlStatementSplitter.splitForParseSql(block).withoutPositions
+      assert(trailing.completeStatements.isEmpty, block)
+      assert(trailing.partialStatement == block, block)
+    }
+  }
+
+  test("parse_sql batch boundary tolerates malformed control headers") {
+    val blocks = Seq(
+      "BEGIN IF TRUE THEN SELECT 1; END; END",
+      "BEGIN FOR x AS SELEC 1 DO SELECT 1; END FOR; END")
+
+    blocks.foreach { block =>
+      val result = SqlStatementSplitter
+        .splitForParseSql(s"$block; SELECT 9")
+        .withoutPositions
+      assert(result.completeStatements == Seq(statement(block)), block)
+      assert(result.partialStatement == "SELECT 9", block)
+    }
+  }
+
+  test("parse_sql batch boundary handles SET, RESET, and non-reserved identifiers") {
+    Seq(false, true).foreach { ansi =>
+      SQLConf.withExistingConf(new SQLConf) {
+        SQLConf.get.setConf(SQLConf.ANSI_ENABLED, ansi)
+        SQLConf.get.setConf(SQLConf.ENFORCE_RESERVED_KEYWORDS, ansi)
+        val result = SqlStatementSplitter
+          .splitForParseSql(
+            "SET spark.sql.ansi.enabled=true; RESET spark.sql.ansi.enabled; " +
+              "SELECT begin, end FROM t")
+          .withoutPositions
+
+        assert(result.completeStatements == Seq(
+          statement("SET spark.sql.ansi.enabled=true"),
+          statement("RESET spark.sql.ansi.enabled")))
+        assert(result.partialStatement == "SELECT begin, end FROM t")
+      }
+    }
+
+    val malformed = SqlStatementSplitter
+      .splitForParseSql("SELECT FROM; SELECT 2")
+      .withoutPositions
+    assert(malformed.completeStatements == Seq(statement("SELECT FROM")))
+    assert(malformed.partialStatement == "SELECT 2")
   }
 
   test("Valid BEGIN..END block is never split at internal ;") {

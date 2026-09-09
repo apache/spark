@@ -18,6 +18,8 @@ parser grammar SqlBaseParser;
 
 options { tokenVocab = SqlBaseLexer; }
 
+tokens { PARSE_SQL_BATCH_DELIMITER }
+
 @members {
   /**
    * When false, INTERSECT is given the greater precedence over the other set
@@ -85,6 +87,97 @@ options { tokenVocab = SqlBaseLexer; }
 compoundOrSingleStatement
     : singleStatement
     | singleCompoundStatement
+    ;
+
+// Boundary-only grammar for parse_sql batches. Leaf statements deliberately accept arbitrary
+// tokens: ParseSqlResult parses each emitted segment with the full grammar and records any error.
+// BEGIN is excluded from the terminated fallback, so only a grammar context can own the
+// semicolons inside a compound statement. BEGIN and END remain unrestricted inside leaf
+// statements. The caller appends PARSE_SQL_BATCH_DELIMITER; the trailing BEGIN fallback consumes
+// a structurally unclosed compound through that token without synthesizing an END token.
+parseSqlBatch
+    : SEMICOLON* (items+=parseSqlBatchItem SEMICOLON*)*
+      PARSE_SQL_BATCH_DELIMITER? EOF
+    ;
+
+parseSqlBatchItem
+    : batchStatement=parseSqlBatchStatement
+      terminator=(SEMICOLON | PARSE_SQL_BATCH_DELIMITER)
+    | partialStatement=parseSqlBatchPartialCompoundStatement
+      terminator=PARSE_SQL_BATCH_DELIMITER
+    ;
+
+parseSqlBatchStatement
+    : parseSqlBatchCompoundStatement
+    | parseSqlBatchLeafStatement
+    ;
+
+parseSqlBatchPartialCompoundStatement
+    : BEGIN .*?
+    ;
+
+parseSqlBatchCompoundStatement
+    : BEGIN (NOT ATOMIC)? parseSqlBatchCompoundBody? END
+    ;
+
+parseSqlBatchBeginEndCompoundBlock
+    : beginLabel? BEGIN (NOT ATOMIC)? parseSqlBatchCompoundBody? END endLabel?
+    ;
+
+parseSqlBatchCompoundBody
+    : (parseSqlBatchCompoundBodyStatement SEMICOLON)+
+    ;
+
+parseSqlBatchCompoundBodyStatement
+    : parseSqlBatchBeginEndCompoundBlock
+    | parseSqlBatchDeclareHandlerStatement
+    | parseSqlBatchIfElseStatement
+    | parseSqlBatchCaseStatement
+    | parseSqlBatchWhileStatement
+    | parseSqlBatchRepeatStatement
+    | parseSqlBatchLoopStatement
+    | parseSqlBatchForStatement
+    | parseSqlBatchLeafStatement
+    ;
+
+parseSqlBatchDeclareHandlerStatement
+    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues
+      (parseSqlBatchBeginEndCompoundBlock | parseSqlBatchLeafStatement)
+    ;
+
+parseSqlBatchWhileStatement
+    : beginLabel? WHILE booleanExpression DO parseSqlBatchCompoundBody END WHILE endLabel?
+    ;
+
+parseSqlBatchIfElseStatement
+    : IF booleanExpression THEN parseSqlBatchCompoundBody
+      (ELSEIF booleanExpression THEN parseSqlBatchCompoundBody)*
+      (ELSE parseSqlBatchCompoundBody)? END IF
+    ;
+
+parseSqlBatchRepeatStatement
+    : beginLabel? REPEAT parseSqlBatchCompoundBody UNTIL booleanExpression END REPEAT endLabel?
+    ;
+
+parseSqlBatchCaseStatement
+    : CASE (WHEN booleanExpression THEN parseSqlBatchCompoundBody)+
+      (ELSE parseSqlBatchCompoundBody)? END CASE
+    | CASE expression (WHEN expression THEN parseSqlBatchCompoundBody)+
+      (ELSE parseSqlBatchCompoundBody)? END CASE
+    ;
+
+parseSqlBatchLoopStatement
+    : beginLabel? LOOP parseSqlBatchCompoundBody END LOOP endLabel?
+    ;
+
+parseSqlBatchForStatement
+    : beginLabel? FOR (strictIdentifier AS)? query DO
+      parseSqlBatchCompoundBody END FOR endLabel?
+    ;
+
+parseSqlBatchLeafStatement
+    : {_input.LA(1) != BEGIN}?
+      (~(SEMICOLON | PARSE_SQL_BATCH_DELIMITER))+
     ;
 
 singleCompoundStatement

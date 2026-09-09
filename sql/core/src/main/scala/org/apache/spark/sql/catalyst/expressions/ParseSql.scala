@@ -29,8 +29,8 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Parses a SQL batch string and returns a compact JSON array describing its
  * unresolved statements (source position, identifier/code, lineage references,
- * select-list names, parameters). A statement that does not parse is represented
- * by a STANDARD-format error object at its position in the array.
+ * select-list names, parameters). A statement that does not parse produces a
+ * result object containing a nested STANDARD-format error object.
  *
  * Behind [[SQLConf.PARSE_SQL_ENABLED]] while the JSON contract is still
  * evolving. Designed for batch evaluation over DataFrames of SQL text.
