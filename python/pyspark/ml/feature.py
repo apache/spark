@@ -1698,9 +1698,10 @@ class FrequencyEncoder(
     When :py:attr:`handleInvalid` is configured to 'keep', categories not seen during
     fitting are encoded as zero, which is the frequency actually observed for them.
 
-    @note When encoding multi-column by using `inputCols` and `outputCols` params,
-    input/output cols come in pairs, specified by the order in the arrays, and each pair
-    is treated independently.
+    .. note::
+        When encoding multi-column by using `inputCols` and `outputCols` params, input/output
+        cols come in pairs, specified by the order in the arrays, and each pair is treated
+        independently.
 
     .. versionadded:: 5.0.0
 

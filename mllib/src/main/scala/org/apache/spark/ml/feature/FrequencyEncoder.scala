@@ -93,7 +93,7 @@ private[ml] trait FrequencyEncoderBase extends Params
       inputFeatures.map { field: String => s"${field}_encoded" }
     }
 
-  private[feature] def validateSchema(schema: StructType, fitting: Boolean): StructType = {
+  private[feature] def validateSchema(schema: StructType): StructType = {
 
     require(inputFeatures.length > 0,
       s"At least one input column must be specified.")
@@ -110,7 +110,7 @@ private[ml] trait FrequencyEncoderBase extends Params
             s", but a subclass of ${NumericType} is required.")
         }
       } catch {
-        case e: IllegalArgumentException =>
+        case _: IllegalArgumentException =>
           throw new SparkException(s"No column named ${feature} found on dataset.")
       }
     }
@@ -172,7 +172,7 @@ class FrequencyEncoder @Since("5.0.0") (@Since("5.0.0") override val uid: String
 
   @Since("5.0.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateSchema(schema, fitting = true)
+    validateSchema(schema)
   }
 
   private def extractValue(name: String): Column = {
@@ -186,7 +186,7 @@ class FrequencyEncoder @Since("5.0.0") (@Since("5.0.0") override val uid: String
 
   @Since("5.0.0")
   override def fit(dataset: Dataset[_]): FrequencyEncoderModel = {
-    validateSchema(dataset.schema, fitting = true)
+    validateSchema(dataset.schema)
     val numFeatures = inputFeatures.length
 
     // One array plus one posexplode, so a single groupBy aggregates every input column rather
@@ -201,8 +201,8 @@ class FrequencyEncoder @Since("5.0.0") (@Since("5.0.0") override val uid: String
     // counts: Array[Map[category, count]]
     val counts = Array.fill(numFeatures)(collection.mutable.Map.empty[Double, Double])
     aggregated.select("index", "value", "count").collect()
-      .foreach { case Row(index: Int, value: Double, count: Double) =>
-        counts(index).update(value, count)
+      .foreach { case Row(index: Int, value: Double, occurrences: Double) =>
+        counts(index).update(value, occurrences)
       }
 
     // Every row contributes exactly one value per feature, so the per-feature totals are already
@@ -210,7 +210,7 @@ class FrequencyEncoder @Since("5.0.0") (@Since("5.0.0") override val uid: String
     val encodings = counts.map { featureCounts =>
       val total = featureCounts.values.sum
       if ($(normalize) && total > 0) {
-        featureCounts.map { case (category, count) => category -> count / total }.toMap
+        featureCounts.map { case (category, n) => category -> n / total }.toMap
       } else {
         featureCounts.toMap
       }
@@ -239,6 +239,11 @@ object FrequencyEncoder extends DefaultParamsReadable[FrequencyEncoder] {
 }
 
 /**
+ * The `normalize` param is carried but not acted on here: it decides how `fit` computed these
+ * encodings, and the model keeps it so that save and load round-trip it and `toString` can report
+ * how the values were derived. Changing it on a fitted model does not recompute anything, which is
+ * why no setter is offered for it.
+ *
  * @param encodings  Array of encodings for each input feature.
  *                   Array( Map( category, frequency ) )
  */
@@ -279,13 +284,13 @@ class FrequencyEncoderModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     if (outputFeatures.length == encodings.length) {
       outputFeatures.filter(_ != null)
-        .foldLeft(validateSchema(schema, fitting = false)) {
+        .foldLeft(validateSchema(schema)) {
           case (newSchema, outputField) =>
             newSchema.add(StructField(outputField, DoubleType, nullable = false))
         }
     } else throw new SparkException("The number of features does not match the number of " +
       s"encodings in the model (${encodings.length}). " +
-      s"Found ${outputFeatures.length} features)")
+      s"found ${outputFeatures.length} output columns.")
   }
 
   @Since("5.0.0")

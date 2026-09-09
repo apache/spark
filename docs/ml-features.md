@@ -967,15 +967,15 @@ for more details on the API.
 
 ## FrequencyEncoder
 
-Frequency encoding maps a column of categorical indices to how often each category occurs in the training data.
+`FrequencyEncoder` maps a column of categorical indices to how often each category occurs in the training data.
 
-`FrequencyEncoder` needs no label, which is what separates it from `TargetEncoder`, so it is available in unsupervised pipelines such as clustering or anomaly detection. It also adds one output column per input column rather than one per category, unlike `OneHotEncoder`, which keeps it practical when a feature has many thousands of distinct values.
+Unlike `TargetEncoder`, it requires no label column, so it can be used in unsupervised pipelines. Unlike `OneHotEncoder`, it produces one output column per input column rather than one column per category, so it stays practical for features with many distinct values.
 
-`FrequencyEncoder` supports the `normalize` parameter to choose what the encoding measures. When 'true', the default, each category is encoded as the proportion of the training rows it accounts for, so the encodings for a feature sum to one and stay comparable across datasets of different sizes. When 'false', each category is encoded as its raw count.
+`FrequencyEncoder` supports the `normalize` parameter to choose what the encoding measures. Available options include 'true' (the default, where each category is encoded as its proportion of the training rows) and 'false' (where each category is encoded as its raw count).
 
-`FrequencyEncoder` supports the `handleInvalid` parameter to choose how to handle invalid input, meaning categories not seen at training, when encoding new data. Available options include 'keep' (unseen categories are encoded as zero, which is the frequency actually observed for them) and 'error' (throw an exception).
+`FrequencyEncoder` supports the `handleInvalid` parameter to choose how to handle invalid input, meaning categories not seen at training, when encoding new data. Available options include 'keep' (unseen categories are encoded as zero) and 'error' (throw an exception).
 
-Note that categories occurring equally often in the training data receive the same encoding. That is inherent to the technique rather than a limitation of this implementation: the encoding carries how common a category is and nothing that distinguishes one equally common category from another. Where that distinction matters, `OneHotEncoder` or `TargetEncoder` are the better fit.
+Note that categories occurring equally often in the training data receive the same encoding.
 
 **Examples**
 
@@ -998,9 +998,9 @@ In `categoryIndex1`, category 0.0 occurs three times out of six, 2.0 twice and 1
 categoryIndex1 | categoryIndex2 | categoryIndex1Freq | categoryIndex2Freq
 ---------------|----------------|--------------------|-------------------
            0.0 |            1.0 |            0.5     |            0.5
-           1.0 |            0.0 |            0.16666 |            0.33333
+           1.0 |            0.0 |            0.16667 |            0.33333
            2.0 |            1.0 |            0.33333 |            0.5
-           0.0 |            2.0 |            0.5     |            0.16666
+           0.0 |            2.0 |            0.5     |            0.16667
            0.0 |            1.0 |            0.5     |            0.5
            2.0 |            0.0 |            0.33333 |            0.33333
 ~~~~
