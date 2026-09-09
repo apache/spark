@@ -177,7 +177,11 @@ class FrequencyEncoder @Since("5.0.0") (@Since("5.0.0") override val uid: String
 
   private def extractValue(name: String): Column = {
     val c = col(name).cast(DoubleType)
-    when(c >= 0 && c === c.cast(IntegerType), c)
+    // Integrality is tested with a remainder rather than by casting to Int. Casting raises
+    // CAST_OVERFLOW for an id beyond Int range, which is a confusing way to reject a perfectly
+    // good category and points the user at a `try_cast` they never wrote. A Double represents
+    // integers exactly up to 2^53, so anything accepted here is still a safe map key.
+    when(c >= 0 && c % 1 === 0, c)
       .when(c.isNull, lit(FrequencyEncoder.NULL_CATEGORY))
       .when(c.isNaN, raise_error(lit("Values MUST NOT be NaN")))
       .otherwise(raise_error(

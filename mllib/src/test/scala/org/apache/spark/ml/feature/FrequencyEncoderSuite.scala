@@ -314,6 +314,47 @@ class FrequencyEncoderSuite extends MLTest with DefaultReadWriteTest {
     assert(ex.getMessage.contains("does not match the number of"))
   }
 
+  test("FrequencyEncoder - a feature with many distinct categories") {
+
+    // This encoder exists for high cardinality features, so the case it is built for is worth
+    // exercising rather than assuming. fit collects one entry per category to the driver and
+    // transform ships that map into the plan as a literal, and neither of those is free.
+    //
+    // 10,000 categories over 20,000 rows, each category appearing exactly twice, so every
+    // encoding is the same 2/20000 and a single distinct output value proves the whole mapping
+    // was applied rather than spot-checking one row.
+    val rows = (0 until 20000).map(i => Row((i / 2).toDouble))
+    val wideSchema = StructType(Array(StructField("cat", DoubleType, nullable = true)))
+    val df = spark.createDataFrame(sc.parallelize(rows), wideSchema)
+
+    val model = new FrequencyEncoder().setInputCol("cat").setOutputCol("freq").fit(df)
+
+    assert(model.encodings.head.size === 10000)
+
+    val distinct = model.transform(df).select("freq").distinct().collect()
+    assert(distinct.length === 1, s"expected one distinct encoding, got ${distinct.length}")
+    assert(distinct.head.getDouble(0) === 2.0 / 20000.0)
+  }
+
+  test("FrequencyEncoder - category ids beyond Int range") {
+
+    // A bigint id is a legitimate category and high cardinality columns are exactly where such
+    // ids turn up. Checking integrality by casting to Int used to reject these with a
+    // CAST_OVERFLOW naming a cast the caller never wrote.
+    val wide = StructType(Array(StructField("cat", DoubleType, nullable = true)))
+    val df = spark.createDataFrame(
+      sc.parallelize(Seq(Row(3.0e9), Row(3.0e9), Row(1.0))), wide)
+
+    val model = new FrequencyEncoder().setInputCol("cat").setOutputCol("freq").fit(df)
+
+    assert(model.encodings.head === Map(3.0e9 -> 2.0/3.0, 1.0 -> 1.0/3.0))
+
+    model.transform(df).select("cat", "freq").collect().foreach { row =>
+      val expected = if (row.getDouble(0) == 1.0) 1.0/3.0 else 2.0/3.0
+      assert(row.getDouble(1) === expected)
+    }
+  }
+
   test("FrequencyEncoder - R/W single-column") {
     val encoder = new FrequencyEncoder()
       .setInputCol("input1")
