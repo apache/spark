@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
@@ -525,6 +526,93 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       assert(gpe.tryEnableSortedMerge().isEmpty)
     }
   }
+
+  test("SPARK-59310: basic counts without alignment") {
+    // Keys [1, 2, 1]: 3 input splits, key 1 coalesces partitions 0 and 2, 2 output partitions.
+    val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(1))))
+    val gpe = GroupPartitionsExec(child)
+    gpe.execute()
+
+    assert(gpe.metrics("numInputPartitions").value === 3)
+    assert(gpe.metrics("numPartitions").value === 2)
+    assert(gpe.metrics("numEmptyPartitions").value === 0)
+    assert(gpe.metrics("numCoalescedPartitions").value === 1)
+    assert(gpe.metrics("maxPartitionsPerGroup").value === 2)
+    // Without expectedPartitionKeys there is no alignment, so its metrics stay unregistered.
+    assert(!gpe.metrics.contains("numPrunedPartitions"))
+    assert(!gpe.metrics.contains("numReplicatedPartitionReads"))
+  }
+
+  test("SPARK-59310: zero coalesced without duplicate keys") {
+    val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(3))))
+    val gpe = GroupPartitionsExec(child)
+    gpe.execute()
+
+    assert(gpe.metrics("numCoalescedPartitions").value === 0)
+    assert(gpe.metrics("numPartitions").value === 3)
+    assert(gpe.metrics("maxPartitionsPerGroup").value === 1)
+  }
+
+  test("SPARK-59310: distribute alignment pads and never replicates") {
+    // Child splits: key 1 -> [0], key 2 -> [1, 2]. Expected: key 1 x1, key 2 x3, key 3 x1.
+    // Key 2 spreads its 2 splits over 3 expected partitions (one empty pad) and key 3 has no
+    // split (one more empty), so 5 output partitions with 2 empty and nothing coalesced.
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(2))))
+    val gpe = GroupPartitionsExec(child,
+      expectedPartitionKeys = Some(Seq(keyOf(1) -> 1, keyOf(2) -> 3, keyOf(3) -> 1)),
+      distributePartitions = true)
+    gpe.execute()
+
+    assert(gpe.metrics("numInputPartitions").value === 3)
+    assert(gpe.metrics("numPartitions").value === 5)
+    assert(gpe.metrics("numEmptyPartitions").value === 2)
+    assert(gpe.metrics("numPrunedPartitions").value === 0)
+    assert(gpe.metrics("numCoalescedPartitions").value === 0, "distribute never coalesces")
+    assert(!gpe.metrics.contains("numReplicatedPartitionReads"), "distribute never replicates")
+  }
+
+  test("SPARK-59310: alignment prunes unmatched keys, pads missing ones") {
+    // The expected keys carry key 1 and a key-3 slot the child does not hold, as an inner
+    // join's intersection combined with the other side's layout would. The 2 splits of key 2
+    // cannot produce join output and never enter the alignment; the missing key 3 pads two
+    // empty output partitions, and being empty, replicates nothing despite its 2 slots.
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(2))))
+    val gpe = GroupPartitionsExec(child,
+      expectedPartitionKeys = Some(Seq(keyOf(1) -> 1, keyOf(3) -> 2)))
+    gpe.execute()
+
+    assert(gpe.metrics("numInputPartitions").value === 3)
+    assert(gpe.metrics("numPartitions").value === 3)
+    assert(gpe.metrics("numPrunedPartitions").value === 2)
+    assert(gpe.metrics("numEmptyPartitions").value === 2)
+    assert(gpe.metrics("numCoalescedPartitions").value === 0)
+    assert(gpe.metrics("maxPartitionsPerGroup").value === 1)
+    assert(gpe.metrics("numReplicatedPartitionReads").value === 0,
+      "empty groups replicate nothing, and the single-split key 1 has no copy")
+  }
+
+  test("SPARK-59310: replicate alignment counts the reads beyond the first") {
+    // The other join side expects 2 partitions for key 1, so this side's splits for the key are
+    // replicated to both: the slot beyond the first re-reads both splits, 2 extra input
+    // partition reads. Each output partition also coalesces the 2 splits of the key.
+    def keyOf(a: Int): InternalRowComparableWrapper =
+      InternalRowComparableWrapper(row(a), Seq(exprA))
+    val child = ExecutableKeyedLeaf(KeyedPartitioning(Seq(exprA), Seq(row(1), row(1))))
+    val gpe = GroupPartitionsExec(child, expectedPartitionKeys = Some(Seq(keyOf(1) -> 2)))
+    gpe.execute()
+
+    assert(gpe.metrics("numInputPartitions").value === 2)
+    assert(gpe.metrics("numPartitions").value === 2)
+    assert(gpe.metrics("numReplicatedPartitionReads").value === 2)
+    assert(gpe.metrics("numCoalescedPartitions").value === 2, "both copies merge the 2 splits")
+    assert(gpe.metrics("maxPartitionsPerGroup").value === 2)
+    assert(gpe.metrics("numEmptyPartitions").value === 0)
+    assert(gpe.metrics("numPrunedPartitions").value === 0)
+  }
 }
 
 private case class DummyLeafSparkPlan(
@@ -534,4 +622,15 @@ private case class DummyLeafSparkPlan(
   override protected def doExecute(): RDD[InternalRow] =
     throw new UnsupportedOperationException
   override def output: Seq[Attribute] = Seq.empty
+}
+
+/** An executable leaf reporting one partition per partition key, for metric value tests. */
+private case class ExecutableKeyedLeaf(kp: KeyedPartitioning)
+  extends LeafExecNode with SafeForKWayMerge {
+  override def outputPartitioning: Partitioning = kp
+  override def output: Seq[Attribute] = Seq(AttributeReference("a", IntegerType)())
+  override protected def doExecute(): RDD[InternalRow] = {
+    val n = kp.numPartitions
+    SparkContext.getActive.get.parallelize(0 until n, n).map(i => InternalRow(i))
+  }
 }
