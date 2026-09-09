@@ -220,6 +220,42 @@ class FunctionsSuite extends MLTest {
     assert(generators.map(_.prettyName).distinct === Seq("ml_vector_posexplode"))
   }
 
+  test("test vector_dot_product") {
+    val df = Seq(
+      (Vectors.dense(1.0, 2.0, 3.0), Vectors.dense(4.0, 5.0, 6.0)),
+      (Vectors.dense(1.0, 2.0, 3.0), Vectors.sparse(3, Seq((0, 4.0), (2, 6.0)))),
+      (Vectors.sparse(3, Seq((0, 1.0), (2, 3.0))), Vectors.dense(4.0, 5.0, 6.0)),
+      (Vectors.sparse(3, Seq((0, 1.0), (2, 3.0))),
+        Vectors.sparse(3, Seq((0, 4.0), (2, 6.0)))),
+      (Vectors.dense(Array.emptyDoubleArray), Vectors.sparse(0, Seq.empty)),
+      (null.asInstanceOf[Vector], Vectors.dense(1.0)))
+      .toDF("left", "right")
+
+    val result = df.select(vector_dot_product($"left", $"right")).collect().map(_.get(0)).toSeq
+    assert(result === Seq(32.0, 22.0, 22.0, 22.0, 0.0, null))
+    assert(df.select(vector_dot_product($"left", $"right")).schema.head.dataType.typeName ===
+      "double")
+
+    val constantResult = df.limit(4)
+      .select(vector_dot_product($"left", Vectors.dense(4.0, 5.0, 6.0)))
+      .as[Double]
+      .collect()
+    assert(constantResult === Array(32.0, 32.0, 22.0, 22.0))
+    val sparseConstantResult = df.limit(4)
+      .select(vector_dot_product($"left", Vectors.sparse(3, Seq((0, 4.0), (2, 6.0)))))
+      .as[Double]
+      .collect()
+    assert(sparseConstantResult === Array.fill(4)(22.0))
+
+    val error = intercept[IllegalArgumentException] {
+      Seq((Vectors.dense(1.0), Vectors.dense(1.0, 2.0)))
+        .toDF("left", "right")
+        .select(vector_dot_product($"left", $"right"))
+        .collect()
+    }
+    assert(error.getMessage.contains("vectors with non-matching sizes"))
+  }
+
   test("test get_vector") {
     val df = Seq(
       (Vectors.dense(1.0, 2.0, 3.0), 0),
