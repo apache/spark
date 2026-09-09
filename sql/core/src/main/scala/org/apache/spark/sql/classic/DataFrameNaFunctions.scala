@@ -250,6 +250,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
       val typeMatches = (targetType, col.dataType) match {
         case (NumericType, dt) => dt.isInstanceOf[NumericType]
         case (StringType, _: StringType) => true
+        case (StringType, _) => false
         case (BooleanType, dt) => dt == BooleanType
         case _ =>
           throw new IllegalArgumentException(s"$targetType is not matched at fillValue")
