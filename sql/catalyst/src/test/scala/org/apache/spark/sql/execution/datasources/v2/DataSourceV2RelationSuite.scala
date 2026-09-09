@@ -163,6 +163,75 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("DataSourceV2ScanRelation.computeStats matches column stats for names needing quoting") {
+    // A top-level column whose name is not a plain identifier ("col-1" contains a dash, so it is
+    // back-tick-quoted by NamedReference.describe()). The connector reports a column statistic
+    // keyed by this exact name; it must still be attached to the output attribute.
+    val colAttr = AttributeReference("col-1", IntegerType)()
+    val output = Seq(colAttr)
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("col-1", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.of(42L)
+        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
+          val stats = new java.util.HashMap[NamedReference, ColumnStatistics]()
+          stats.put(FieldReference.column("col-1"), new ColumnStatistics {
+            override def distinctCount(): OptionalLong = OptionalLong.of(40L)
+          })
+          stats
+        }
+      }
+    }
+
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val stats = scanRel(output, scan).computeStats()
+      assert(stats.rowCount.contains(BigInt(42)))
+      assert(stats.attributeStats.size === 1,
+        "column stat keyed by a name needing quoting must be attached to its attribute")
+      assert(stats.attributeStats(colAttr).distinctCount.contains(BigInt(40)))
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats matches column stats respecting case sensitivity") {
+    // The connector reports the statistic under a differently-cased name ("ID") than the output
+    // attribute ("id"). Matching must honor spark.sql.caseSensitive: attach under the default
+    // (case-insensitive) resolution, and skip when case-sensitive resolution is enabled.
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.of(42L)
+        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
+          val stats = new java.util.HashMap[NamedReference, ColumnStatistics]()
+          stats.put(FieldReference.column("ID"), new ColumnStatistics {
+            override def distinctCount(): OptionalLong = OptionalLong.of(40L)
+          })
+          stats
+        }
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+      assert(stats.attributeStats.size === 1,
+        "case-insensitive resolution should match 'ID' to attribute 'id'")
+      assert(stats.attributeStats(idAttr).distinctCount.contains(BigInt(40)))
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "true") {
+      val stats = scanRel(output, scan).computeStats()
+      assert(stats.attributeStats.isEmpty,
+        "case-sensitive resolution should not match 'ID' to attribute 'id'")
+    }
+  }
+
   test("DataSourceV2ScanRelation.computeStats derives size 1 for a zero-row scan with CBO") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)

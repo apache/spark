@@ -37,6 +37,7 @@ import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, Su
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -573,6 +574,12 @@ object DataSourceV2Relation {
     }
 
     var colStats: Seq[(Attribute, ColumnStat)] = Seq.empty[(Attribute, ColumnStat)]
+    // A column statistic corresponds to a single top-level output column, so match the connector's
+    // field reference to an output attribute by its (unquoted) name, honoring the configured case
+    // sensitivity. Do not compare against NamedReference.describe(): describe() back-tick-quotes
+    // names that are not plain identifiers (e.g. `col-1`) and compares case-sensitively, which
+    // silently drops such statistics from the cost-based optimizer.
+    val resolver = SQLConf.get.resolver
     // columnStats() may be null even when numRows/sizeInBytes are present, so normalize it to an
     // empty map before conversion to avoid an NPE.
     val v2ColumnStats = Option(v2Statistics.columnStats()).getOrElse(EMPTY_V2_COLUMN_STATS)
@@ -602,11 +609,16 @@ object DataSourceV2Relation {
 
         val catalystColStat = ColumnStat(distinct, min, max, nullCount, avgLen, maxLen, histogram)
 
-        output.foreach(attribute => {
-          if (attribute.name.equals(key.describe())) {
-            colStats = colStats :+ (attribute -> catalystColStat)
-          }
-        })
+        // Only single-part references can name a top-level output attribute; nested references
+        // (fieldNames.length > 1) have no place in the attribute-keyed catalyst statistics.
+        val fieldNames = key.fieldNames
+        if (fieldNames.length == 1) {
+          output.foreach(attribute => {
+            if (resolver(attribute.name, fieldNames.head)) {
+              colStats = colStats :+ (attribute -> catalystColStat)
+            }
+          })
+        }
       })
     }
     val attributeStats = AttributeMap(colStats)
