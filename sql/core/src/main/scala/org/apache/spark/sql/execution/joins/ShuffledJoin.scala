@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, LeftAnti, LeftExistence, LeftOuter, LeftSingle, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, JoinType, LeftAnti, LeftExistence, LeftOuter, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -133,5 +133,29 @@ trait ShuffledJoin extends JoinCodegenSupport {
         throw new IllegalArgumentException(
           s"${getClass.getSimpleName} not take $x as the JoinType")
     }
+  }
+}
+
+object ShuffledJoin {
+  /**
+   * Whether replicating the right side over splits of the left cannot change the result. The
+   * right partition then reaches every left split, so no output row may come from a right row
+   * alone. Every join that drops unmatched right rows qualifies: its output is one row per left
+   * row or one per matching pair, and each left row still lands in exactly one split.
+   */
+  def canDuplicateRightSide(joinType: JoinType): Boolean = joinType match {
+    case _: InnerLike | LeftOuter | LeftSingle | LeftExistence(_) => true
+    case _ => false
+  }
+
+  /**
+   * Whether replicating the left side over splits of the right cannot change the result. Every
+   * output row must then be tied to one right row. The left-preserving joins are out for that
+   * reason, and so is LeftSemi: it drops unmatched left rows yet emits one row per left row, so
+   * a left row matching in two right splits would come out twice.
+   */
+  def canDuplicateLeftSide(joinType: JoinType): Boolean = joinType match {
+    case _: InnerLike | RightOuter => true
+    case _ => false
   }
 }
