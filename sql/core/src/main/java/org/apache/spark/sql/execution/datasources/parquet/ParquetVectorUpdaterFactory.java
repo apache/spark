@@ -227,6 +227,17 @@ public class ParquetVectorUpdaterFactory {
                 int96RebaseTz);
             }
           }
+        } else if (sparkType instanceof TimestampNTZNanosType) {
+          // Read side of widening a legacy INT96 TIMESTAMP(6) to NTZ nanos: no rebase / no timezone
+          // conversion (mirrors the TimestampNTZType path), promoting each value to (micros, 0).
+          return new Int96AsTimestampNanosUpdater(false, false, null, null);
+        } else if (sparkType instanceof TimestampLTZNanosType) {
+          // Read side of widening a legacy INT96 TIMESTAMP(6) to LTZ nanos: the same INT96 rebase
+          // and timezone conversion as the TimestampType path, promoting each value to (micros, 0).
+          final boolean failIfRebase = "EXCEPTION".equals(int96RebaseMode);
+          final boolean rebase = !"CORRECTED".equals(int96RebaseMode);
+          final ZoneId tz = shouldConvertTimestamps() ? convertTz : null;
+          return new Int96AsTimestampNanosUpdater(rebase, failIfRebase, int96RebaseTz, tz);
         }
       }
       case BINARY -> {
@@ -1533,6 +1544,72 @@ public class ParquetVectorUpdaterFactory {
       long gregorianMicros = rebaseInt96(julianMicros, failIfRebase, timeZone);
       long adjTime = DateTimeUtils.convertTz(gregorianMicros, convertTz, UTC);
       values.putLong(offset, adjTime);
+    }
+  }
+
+  // Reads a legacy INT96 timestamp column as a nanosecond timestamp, promoting each value to the
+  // two-child (epochMicros, nanosWithinMicro) vector as (micros, 0) -- the vectorized read side of
+  // widening an INT96-encoded TIMESTAMP(6) to nanosecond precision. INT96 decodes to microseconds
+  // (binaryToSQLTimestamp), so there are no sub-microsecond digits. The LTZ family applies the same
+  // INT96 Julian rebase and timezone conversion as the TimestampType path; the NTZ family passes
+  // rebase=false and convertTz=null (mirrors the TimestampNTZType path).
+  private static class Int96AsTimestampNanosUpdater implements ParquetVectorUpdater {
+    private final boolean rebase;
+    private final boolean failIfRebase;
+    private final String timeZone;
+    private final ZoneId convertTz;
+
+    Int96AsTimestampNanosUpdater(
+        boolean rebase, boolean failIfRebase, String timeZone, ZoneId convertTz) {
+      this.rebase = rebase;
+      this.failIfRebase = failIfRebase;
+      this.timeZone = timeZone;
+      this.convertTz = convertTz;
+    }
+
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; i++) {
+        readValue(offset + i, values, valuesReader);
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipFixedLenByteArray(total, 12);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      putInt96AsNanos(offset, values, valuesReader.readBinary(12));
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      putInt96AsNanos(offset, values, dictionary.decodeToBinary(dictionaryIds.getDictId(offset)));
+    }
+
+    private void putInt96AsNanos(int offset, WritableColumnVector values, Binary binary) {
+      long micros = ParquetRowConverter.binaryToSQLTimestamp(binary);
+      if (rebase) {
+        micros = rebaseInt96(micros, failIfRebase, timeZone);
+      }
+      if (convertTz != null) {
+        micros = DateTimeUtils.convertTz(micros, convertTz, UTC);
+      }
+      values.getChild(0).putLong(offset, micros);
+      values.getChild(1).putShort(offset, (short) 0);
     }
   }
 

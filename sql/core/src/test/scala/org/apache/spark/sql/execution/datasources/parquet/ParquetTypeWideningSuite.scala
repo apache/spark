@@ -202,7 +202,8 @@ class ParquetTypeWideningSuite
 
   // Widening TIMESTAMP(6) to nanosecond precision: INT64 TIMESTAMP(MICROS) files are read as nanos
   // by promoting each micros value to (epochMicros, 0). Source must be TIMESTAMP(MICROS) (what
-  // Delta writes), hence the explicit output type; INT96/MILLIS aren't supported (see below).
+  // Delta writes), hence the explicit output type. INT96 has its own loop below; MILLIS stays
+  // unsupported.
   // Values stay on the micros grid and include a pre-1582 date (LTZ Julian rebase, LEGACY mode) and
   // a far-future date past the int64 epoch-nanos range (~2262). Requires the nanos preview flag.
   for {
@@ -225,9 +226,30 @@ class ParquetTypeWideningSuite
     }
   }
 
+  // The same widening from a legacy INT96 timestamp column. INT96 has no logical unit; it decodes
+  // to microseconds and is promoted to (epochMicros, 0). INT96 is only produced for the LTZ family;
+  // the write/read INT96 rebase are pinned to CORRECTED so proleptic-Gregorian values round-trip.
   for {
-    outputTimestampType <-
-      Seq(ParquetOutputTimestampType.INT96, ParquetOutputTimestampType.TIMESTAMP_MILLIS)
+    toType: DataType <- Seq(
+      TimestampLTZNanosType(TimestampLTZNanosType.NANOS_PRECISION),
+      TimestampLTZNanosType(7))
+  }
+  test(s"parquet widening conversion TimestampType (int96) -> $toType") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> ParquetOutputTimestampType.INT96.toString,
+      SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LegacyBehaviorPolicy.CORRECTED.toString,
+      SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key -> LegacyBehaviorPolicy.CORRECTED.toString) {
+      checkAllParquetReaders(
+        values = Seq("2020-01-01 12:34:56.123456", "5138-11-16 09:46:40"),
+        fromType = TimestampType,
+        toType = toType,
+        expectError = false)
+    }
+  }
+
+  for {
+    outputTimestampType <- Seq(ParquetOutputTimestampType.TIMESTAMP_MILLIS)
   }
   test(s"unsupported parquet conversion TimestampType ($outputTimestampType) -> nanos") {
     withSQLConf(
