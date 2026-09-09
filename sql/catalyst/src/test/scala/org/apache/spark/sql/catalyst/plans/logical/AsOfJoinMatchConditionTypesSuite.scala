@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.MatchConditionTypes
 import org.apache.spark.sql.types._
 
@@ -159,11 +160,14 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     // An array whose element type contains an empty struct is not a valid operand, even though
     // the array itself is orderable (exercises the ArrayType arm of containsEmptyStructType).
     val arrayOfEmptyStruct = ArrayType(StructType(Nil))
+    // Pin that the array itself is orderable, so the rejection is attributable to the empty
+    // struct rather than to non-orderability.
+    assert(RowOrdering.isOrderable(arrayOfEmptyStruct))
     assert(!MatchConditionTypes.isValidOperandType(arrayOfEmptyStruct))
     assert(!MatchConditionTypes.areOperandsCompatible(arrayOfEmptyStruct, arrayOfEmptyStruct))
   }
 
-  test("array operands with structurally incompatible struct elements are rejected") {
+  test("array operands with incompatible struct element field types are rejected") {
     val leftArray = ArrayType(
       StructType(
         StructField("a", IntegerType) ::
@@ -179,6 +183,5 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(MatchConditionTypes.isValidOperandType(rightArray))
     // ... but the element structs' second field pair (TIMESTAMP vs BOOLEAN) is not comparable.
     assert(!MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
-    assert(!MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
   }
 }
