@@ -98,19 +98,6 @@ private[pipelines] object Scd2VersionMap {
    */
   def mapType: MapType = MapType(StringType, BooleanType, valueContainsNull = false)
 
-  /**
-   * Enumerates every leaf path in `schema`, in schema order, as its sequence of name parts.
-   * Structs unfold recursively; every other type (including arrays and maps) is an opaque leaf.
-   */
-  private[autocdc] def extractLeafPaths(schema: StructType): Seq[Seq[String]] =
-    schema.fields.toSeq.flatMap { field =>
-      field.dataType match {
-        case nested: StructType =>
-          extractLeafPaths(nested).map(field.name +: _)
-        case _ => Seq(Seq(field.name))
-      }
-    }
-
   /** Encodes a leaf path as the compact JSON string persisted as its version map key. */
   private[autocdc] def encodePath(path: Seq[String]): String =
     compact(JArray(path.map(JString(_)).toList))
@@ -136,13 +123,13 @@ private[pipelines] object Scd2VersionMap {
       columnSelection = Some(ignoreNullSelection),
       resolver = resolver
     )
-    val ignoreNullLeafPaths = extractLeafPaths(ignoreNullColumns).toSet
+    val ignoreNullLeafPaths = AutoCdcSchemaUtils.extractLeafPaths(ignoreNullColumns).toSet
 
     // For each leaf, build a nullable struct (key, value). The struct is non-null only when
     // the leaf column's runtime value is null (meaning the leaf needs a version map entry).
     // The value is a non-nullable BooleanType literal indicating authorship: true if the null
     // is authored, false if declined.
-    val candidateEntries = extractLeafPaths(schema).map { path =>
+    val candidateEntries = AutoCdcSchemaUtils.extractLeafPaths(schema).map { path =>
       val encodedPath = encodePath(path)
       val isIgnoreNullLeaf = ignoreNullLeafPaths.contains(path)
       val leafIsNull = F.col(QuotingUtils.quoteNameParts(path)).isNull

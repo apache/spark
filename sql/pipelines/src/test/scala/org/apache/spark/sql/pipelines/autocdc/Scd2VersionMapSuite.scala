@@ -78,34 +78,6 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
   private def encodedPath(path: String*): String = Scd2VersionMap.encodePath(path)
 
   // =========================================================================
-  // extractLeafPaths
-  // =========================================================================
-
-  test("extractLeafPaths - flat columns produce single-element paths") {
-    assert(Scd2VersionMap.extractLeafPaths(flatSchema) ===
-      Seq(Seq("a"), Seq("b"), Seq("c")))
-  }
-
-  test("extractLeafPaths - nested struct produces only leaf paths, not intermediaries") {
-    assert(Scd2VersionMap.extractLeafPaths(nestedSchema) ===
-      Seq(Seq("x"), Seq("address", "city"), Seq("address", "zip")))
-  }
-
-  test("extractLeafPaths - deeply nested struct produces full multi-part paths") {
-    assert(Scd2VersionMap.extractLeafPaths(deeplyNestedSchema) ===
-      Seq(Seq("top", "mid", "leaf")))
-  }
-
-  test("extractLeafPaths - arrays and maps are opaque leaves") {
-    assert(Scd2VersionMap.extractLeafPaths(arrayAndMapSchema) ===
-      Seq(Seq("tags"), Seq("props"), Seq("plain")))
-  }
-
-  test("extractLeafPaths - empty schema produces empty seq") {
-    assert(Scd2VersionMap.extractLeafPaths(new StructType()) === Seq.empty)
-  }
-
-  // =========================================================================
   // encodePath
   // =========================================================================
 
