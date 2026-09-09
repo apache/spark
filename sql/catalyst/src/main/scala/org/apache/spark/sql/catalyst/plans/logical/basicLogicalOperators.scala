@@ -1896,7 +1896,10 @@ case class BinBy(
 
 object BinBy {
 
-  /** Builds the `stringArgs` for EXPLAIN. */
+  /**
+   * Builds the `stringArgs` for EXPLAIN. LTZ formats `alignTo` in the captured zone and appends
+   * `zone=`; NTZ formats in UTC and omits it.
+   */
   def explainStringArgs(
       rangeStart: Attribute,
       rangeEnd: Attribute,
