@@ -193,6 +193,7 @@ String Functions
     ltrim
     make_valid_utf8
     mask
+    normalize
     octet_length
     overlay
     position
@@ -412,6 +413,7 @@ Array Functions
     shuffle
     slice
     sort_array
+    trim_array
 
 
 Struct Functions
@@ -454,6 +456,7 @@ Aggregate Functions
     bit_xor
     bitmap_construct_agg
     bitmap_or_agg
+    bitmap_xor_agg
     bool_and
     bool_or
     collect_list
@@ -613,6 +616,7 @@ VARIANT Functions
     variant_delete
     variant_from_arrays
     variant_from_entries
+    variant_strip_nulls
     variant_get
     variant_insert
     try_variant_insert
@@ -661,9 +665,13 @@ Misc Functions
     aes_decrypt
     aes_encrypt
     assert_true
+    bitmap_and
+    bitmap_andnot
     bitmap_bit_position
     bitmap_bucket_number
     bitmap_count
+    bitmap_or
+    bitmap_xor
     current_catalog
     current_database
     current_path
@@ -767,9 +775,11 @@ UDF, UDTF and UDT
     arrow_udtf
     call_udf
     pandas_udf
+    udaf
     udf
     udtf
     unwrap_udt
+    wrap_udt
 
 
 Table-Valued Functions

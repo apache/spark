@@ -92,6 +92,12 @@ private[scheduler] abstract class Stage(
    */
   private[scheduler] var maxAttemptIdToIgnore: Option[Int] = None
 
+  /**
+   * The latest failed barrier attempt. Results from this and older attempts must be ignored.
+   * Keep this separate from maxAttemptIdToIgnore, which also deduplicates rollback cleanup.
+   */
+  private[scheduler] var latestFailedBarrierAttemptId: Option[Int] = None
+
   val name: String = callSite.shortForm
   val details: String = callSite.longForm
 

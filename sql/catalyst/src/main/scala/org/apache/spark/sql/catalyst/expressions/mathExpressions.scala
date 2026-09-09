@@ -1282,6 +1282,8 @@ case class Hex(child: Expression)
     Seq(TypeCollection(LongType, BinaryType, StringTypeWithCollation(supportsTrimCollation = true)))
 
   override def dataType: DataType = child.dataType match {
+    // After ImplicitTypeCasts, a CHAR/VARCHAR input is STRING. Keep collation from the
+    // promoted child rather than DefaultStringProducingExpression's UTF8_BINARY StringType.
     case st: StringType => st
     case _ => super.dataType
   }

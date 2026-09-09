@@ -2441,7 +2441,7 @@ Project [typeof(map(a, cast(cast(12:34:56.789 as time(3)) as time(6)), b, cast(0
 -- !query
 SELECT '01:02:03.456789' :: TIME(6) IN ('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6))
 -- !query analysis
-Project [cast(cast(01:02:03.456789 as time(6)) as time(6)) IN (cast(cast(12:34:56.789 as time(3)) as time(6)),cast(cast(01:02:03.456789 as time(6)) as time(6))) AS (CAST(01:02:03.456789 AS TIME(6)) IN (CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6))))#x]
+Project [cast(01:02:03.456789 as time(6)) IN (cast(cast(12:34:56.789 as time(3)) as time(6)),cast(01:02:03.456789 as time(6))) AS (CAST(01:02:03.456789 AS TIME(6)) IN (CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6))))#x]
 +- OneRowRelation
 
 
@@ -2449,7 +2449,7 @@ Project [cast(cast(01:02:03.456789 as time(6)) as time(6)) IN (cast(cast(12:34:5
 SELECT '01:02:03.456789123' :: TIME(9) IN (
   '12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6), '01:02:03.456789123' :: TIME(9))
 -- !query analysis
-Project [cast(cast(01:02:03.456789123 as time(9)) as time(9)) IN (cast(cast(12:34:56.789 as time(3)) as time(9)),cast(cast(01:02:03.456789 as time(6)) as time(9)),cast(cast(01:02:03.456789123 as time(9)) as time(9))) AS (CAST(01:02:03.456789123 AS TIME(9)) IN (CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6)), CAST(01:02:03.456789123 AS TIME(9))))#x]
+Project [cast(01:02:03.456789123 as time(9)) IN (cast(cast(12:34:56.789 as time(3)) as time(9)),cast(cast(01:02:03.456789 as time(6)) as time(9)),cast(01:02:03.456789123 as time(9))) AS (CAST(01:02:03.456789123 AS TIME(9)) IN (CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6)), CAST(01:02:03.456789123 AS TIME(9))))#x]
 +- OneRowRelation
 
 

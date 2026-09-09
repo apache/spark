@@ -1243,8 +1243,11 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         |""".stripMargin)
 
     checkRowLevelOperationOptions(
-      sql(s"UPDATE $tableNameAsString WITH (`write.split-size` = 10) SET salary = -1 WHERE pk = 1"),
-      "write.split-size" -> "10")
+      sql(s"UPDATE $tableNameAsString WITH " +
+        s"(`load-option` = 'load-value', `write-option` = 'write-value') " +
+        s"SET salary = -1 WHERE pk = 1"),
+      "load-option" -> "load-value",
+      "write-option" -> "write-value")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),

@@ -62,23 +62,20 @@ private[jdbc] object JdbcErrorUtils {
 
   // SQLState class 08 is "connection exception"; HYT00 is the conventional
   // (ODBC-derived) state for an elapsed timeout.
-  private val CONNECTION_DOES_NOT_EXIST = "08003"
+  private val CONNECTION_EXCEPTION_ERROR_CLASS = "08"
   private val CONNECTION_FAILURE = "08006"
   private val TIMEOUT_EXPIRED = "HYT00"
-
-  private val SESSION_GONE_CONDITION_PREFIX = "INVALID_HANDLE.SESSION_"
 
   /**
    * Maps the unchecked exceptions raised by the Spark Connect client (a
    * [[SparkThrowable]] once GrpcExceptionConverter has converted the gRPC error) to
    * the [[SQLException]] a JDBC method is required to throw:
    *
-   *  - `INVALID_HANDLE.SESSION_*` means the server-side session is gone (e.g. it
-   *    timed out); the connection is unusable and retrying on it is pointless, so it
-   *    maps to a [[SQLNonTransientConnectionException]] with SQLState 08003
-   *    ("connection does not exist"). The operation-level subconditions
-   *    (`OPERATION_*`, `FORMAT`) concern a single operation on a healthy session
-   *    and are deliberately not treated as connection errors.
+   *  - a server error in SQLState class 08 ("connection exception", e.g. the
+   *    `INVALID_HANDLE.SESSION_*` conditions with 08003) means the session backing
+   *    the connection is gone; the connection is unusable and retrying on it is
+   *    pointless, so it maps to a [[SQLNonTransientConnectionException]] keeping
+   *    the server-provided SQLState.
    *  - a gRPC UNAVAILABLE (e.g. a server restart or a network blip) maps to a
    *    [[SQLTransientConnectionException]] with SQLState 08006 ("connection
    *    failure"), since a fresh connection can succeed.
@@ -98,18 +95,18 @@ private[jdbc] object JdbcErrorUtils {
     case e =>
       val chain = causeChain(e)
       val sparkThrowableOpt = chain.collectFirst { case st: SparkThrowable => st }
-      val condition = sparkThrowableOpt.flatMap(st => Option(st.getCondition))
+      val sqlState = sparkThrowableOpt.flatMap(st => Option(st.getSqlState))
       val grpcCode = chain.collectFirst { case sre: StatusRuntimeException =>
         sre.getStatus.getCode
       }
-      if (condition.exists(_.startsWith(SESSION_GONE_CONDITION_PREFIX))) {
-        new SQLNonTransientConnectionException(e.getMessage, CONNECTION_DOES_NOT_EXIST, e)
+      if (sqlState.exists(_.startsWith(CONNECTION_EXCEPTION_ERROR_CLASS))) {
+        new SQLNonTransientConnectionException(e.getMessage, sqlState.get, e)
       } else if (grpcCode.contains(Status.Code.UNAVAILABLE)) {
         new SQLTransientConnectionException(e.getMessage, CONNECTION_FAILURE, e)
       } else if (grpcCode.contains(Status.Code.DEADLINE_EXCEEDED)) {
         new SQLTimeoutException(e.getMessage, TIMEOUT_EXPIRED, e)
       } else {
-        new SQLException(e.getMessage, sparkThrowableOpt.map(_.getSqlState).orNull, e)
+        new SQLException(e.getMessage, sqlState.orNull, e)
       }
   }
 

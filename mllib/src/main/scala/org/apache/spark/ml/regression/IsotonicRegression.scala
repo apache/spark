@@ -18,6 +18,7 @@
 package org.apache.spark.ml.regression
 
 import java.io.{DataInputStream, DataOutputStream}
+import java.util.Arrays.binarySearch
 
 import org.apache.hadoop.fs.Path
 
@@ -261,19 +262,27 @@ class IsotonicRegressionModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
+    val localBoundaries = oldModel.boundaries
+    val localPredictions = oldModel.predictions
     val predict = dataset.schema($(featuresCol)).dataType match {
       case DoubleType =>
-        udf { feature: Double => oldModel.predict(feature) }
+        udf { feature: Double =>
+          IsotonicRegressionModel.predict(localBoundaries, localPredictions, feature)
+        }
       case _: VectorUDT =>
         val idx = $(featureIndex)
-        udf { features: Vector => oldModel.predict(features(idx)) }
+        udf { features: Vector =>
+          IsotonicRegressionModel.predict(localBoundaries, localPredictions, features(idx))
+        }
     }
     dataset.withColumn($(predictionCol), predict(col($(featuresCol))),
       outputSchema($(predictionCol)).metadata)
   }
 
   @Since("3.0.0")
-  def predict(value: Double): Double = oldModel.predict(value)
+  def predict(value: Double): Double = {
+    IsotonicRegressionModel.predict(oldModel.boundaries, oldModel.predictions, value)
+  }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
@@ -303,6 +312,28 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
     boundaries: Array[Double],
     predictions: Array[Double],
     isotonic: Boolean)
+
+  private[spark] def predict(
+      boundaries: Array[Double],
+      predictions: Array[Double],
+      testData: Double): Double = {
+    val foundIndex = binarySearch(boundaries, testData)
+    val insertIndex = -foundIndex - 1
+
+    if (insertIndex == 0) {
+      predictions.head
+    } else if (insertIndex == boundaries.length) {
+      predictions.last
+    } else if (foundIndex < 0) {
+      val x1 = boundaries(insertIndex - 1)
+      val y1 = predictions(insertIndex - 1)
+      val x2 = boundaries(insertIndex)
+      val y2 = predictions(insertIndex)
+      y1 + (y2 - y1) * (testData - x1) / (x2 - x1)
+    } else {
+      predictions(foundIndex)
+    }
+  }
 
   private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
     import ReadWriteUtils._

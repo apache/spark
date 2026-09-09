@@ -15,55 +15,53 @@
 # limitations under the License.
 #
 
+import datetime
+import logging
 import os
 import random
 import time
 import unittest
-import datetime
-import logging
 from decimal import Decimal
 from typing import Iterator, Tuple
 
-from pyspark.util import PythonEvalType
-
-from pyspark.sql.functions import arrow_udf, ArrowUDFType
+from pyspark.errors import AnalysisException, PythonException
 from pyspark.sql import functions as F
+from pyspark.sql.functions import ArrowUDFType, arrow_udf
 from pyspark.sql.types import (
-    IntegerType,
-    ByteType,
-    StructType,
-    ShortType,
-    BooleanType,
-    LongType,
-    FloatType,
-    DoubleType,
-    DecimalType,
-    StringType,
     ArrayType,
-    StructField,
-    Row,
-    MapType,
     BinaryType,
+    BooleanType,
+    ByteType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    MapType,
+    Row,
+    ShortType,
+    StringType,
+    StructField,
+    StructType,
     YearMonthIntervalType,
 )
-from pyspark.errors import AnalysisException, PythonException
-from pyspark.testing.utils import (
-    have_numpy,
-    numpy_requirement_message,
-    have_pyarrow,
-    pyarrow_requirement_message,
-    assertDataFrameEqual,
-)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.util import is_remote_only
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
+    have_numpy,
+    have_pyarrow,
+    numpy_requirement_message,
+    pyarrow_requirement_message,
+)
+from pyspark.util import PythonEvalType, is_remote_only
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ScalarArrowUDFTestsMixin:
     @property
     def nondeterministic_arrow_udf(self):
-        import pyarrow as pa
         import numpy as np
+        import pyarrow as pa
 
         @arrow_udf("double")
         def random_udf(v):
@@ -73,8 +71,8 @@ class ScalarArrowUDFTestsMixin:
 
     @property
     def nondeterministic_arrow_iter_udf(self):
-        import pyarrow as pa
         import numpy as np
+        import pyarrow as pa
 
         @arrow_udf("double", ArrowUDFType.SCALAR_ITER)
         def random_udf(it):
@@ -343,6 +341,7 @@ class ScalarArrowUDFTestsMixin:
 
     def test_arrow_udf_output_timestamps_ltz(self):
         from zoneinfo import ZoneInfo
+
         import pyarrow as pa
 
         tz = self.spark.conf.get("spark.sql.session.timeZone")

@@ -37,10 +37,9 @@ class AutoCdcScd1FullRefreshSuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
-  test("full refresh wipes target rows and the auxiliary table for the refreshed flow") {
-    val session = spark
-    import session.implicits._
+  import testImplicits._
 
+  test("full refresh wipes target rows and the auxiliary table for the refreshed flow") {
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
@@ -96,9 +95,6 @@ class AutoCdcScd1FullRefreshSuite
 
   test("after a full refresh, an event with a sequence below the previous run's " +
     "watermark now lands") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
@@ -157,9 +153,6 @@ class AutoCdcScd1FullRefreshSuite
   }
 
   test("selective full refresh wipes only the requested target's auxiliary state") {
-    val session = spark
-    import session.implicits._
-
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.t_a " +
       s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"

@@ -55,6 +55,8 @@ private[spark] class SparkUI private (
 
   val killEnabled = sc.map(_.conf.get(UI_KILL_ENABLED)).getOrElse(false)
 
+  val holdEnabled = sc.map(_.conf.get(UI_HOLD_ENABLED)).getOrElse(false)
+
   var appId: String = _
 
   private var streamingJobProgressListener: Option[SparkListener] = None
@@ -94,9 +96,11 @@ private[spark] class SparkUI private (
     }
   }
 
+  private var jobsTab: JobsTab = _
+
   /** Initialize all components of the server. */
   def initialize(): Unit = {
-    val jobsTab = new JobsTab(this, store)
+    jobsTab = new JobsTab(this, store)
     attachTab(jobsTab)
     val stagesTab = new StagesTab(this, store)
     attachTab(stagesTab)
@@ -123,6 +127,10 @@ private[spark] class SparkUI private (
     attachHandler(createRedirectHandler(
       "/stages/stage/kill", "/stages/", stagesTab.handleKillRequest,
       httpMethods = Set("GET", "POST")))
+    attachHandler(createRedirectHandler(
+      "/jobs/hold", "/jobs/", jobsTab.handleHoldRequest, httpMethods = Set("GET", "POST")))
+    attachHandler(createRedirectHandler(
+      "/jobs/resume", "/jobs/", jobsTab.handleResumeRequest, httpMethods = Set("GET", "POST")))
   }
 
   initialize()
@@ -164,6 +172,7 @@ private[spark] class SparkUI private (
   /** Stop the server behind this web interface. Only valid after bind(). */
   override def stop(): Unit = {
     super.stop()
+    Option(jobsTab).foreach(_.stop())
     logInfo(log"Stopped Spark web UI at ${MDC(WEB_URL, webUrl)}")
   }
 

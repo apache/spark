@@ -645,6 +645,29 @@ Project [(2020-01-02 03:04:05.123456789 - cast(null as timestamp_ntz(9))) AS (TI
 
 
 -- !query
+SELECT convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    TIMESTAMP_NTZ '2022-03-27 03:00:00.123456789')
+-- !query analysis
+Project [convert_timezone(Europe/Brussels, Europe/Moscow, 2022-03-27 03:00:00.123456789) AS convert_timezone(Europe/Brussels, Europe/Moscow, TIMESTAMP_NTZ '2022-03-27 03:00:00.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    '2022-03-27 03:00:00.1234567' :: timestamp_ntz(7)))
+-- !query analysis
+Project [typeof(convert_timezone(Europe/Brussels, Europe/Moscow, cast(2022-03-27 03:00:00.1234567 as timestamp_ntz(7)))) AS typeof(convert_timezone(Europe/Brussels, Europe/Moscow, CAST(2022-03-27 03:00:00.1234567 AS TIMESTAMP_NTZ(7))))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT convert_timezone('America/Los_Angeles', 'UTC', CAST(NULL AS timestamp_ntz(9)))
+-- !query analysis
+Project [convert_timezone(America/Los_Angeles, UTC, cast(null as timestamp_ntz(9))) AS convert_timezone(America/Los_Angeles, UTC, CAST(NULL AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
 SELECT max(c), min(c) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
@@ -666,6 +689,55 @@ Sort [c#x ASC NULLS FIRST], true
 +- Aggregate [c#x], [c#x, count(1) AS count(1)#xL]
    +- SubqueryAlias t
       +- LocalRelation [c#x]
+
+
+-- !query
+SELECT k, count(*), sum(v) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 1),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 2),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3),
+  (CAST(NULL AS timestamp_ntz(9)), 4),
+  (CAST(NULL AS timestamp_ntz(9)), 5) AS t(k, v)
+  GROUP BY k ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Aggregate [k#x], [k#x, count(1) AS count(1)#xL, sum(v#x) AS sum(v)#xL]
+   +- SubqueryAlias t
+      +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT mode(c) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
+-- !query analysis
+Aggregate [mode(c#x, 0, 0, None) AS mode(c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT sort_array(collect_set(c)) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
+-- !query analysis
+Aggregate [sort_array(collect_set(c#x, 0, 0, true), true) AS sort_array(collect_set(c), true)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT sort_array(collect_list(c)) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (CAST(NULL AS timestamp_ntz(9))) AS t(c)
+-- !query analysis
+Aggregate [sort_array(collect_list(c#x, 0, 0, true), true) AS sort_array(collect_list(c), true)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
 
 
 -- !query
@@ -720,6 +792,21 @@ SELECT max_by(v, k), min_by(v, k) FROM VALUES
 Aggregate [max_by(v#x, k#x) AS max_by(v, k)#x, min_by(v#x, k#x) AS min_by(v, k)#x]
 +- SubqueryAlias t
    +- LocalRelation [v#x, k#x]
+
+
+-- !query
+SELECT DISTINCT c FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (CAST(NULL AS timestamp_ntz(9))) AS t(c)
+  ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Distinct
+   +- Project [c#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c#x]
 
 
 -- !query
@@ -1303,6 +1390,135 @@ Sort [k#x ASC NULLS FIRST], true
    +- Filter k#x IN (list#x [])
       :  +- Project [2020-01-01 00:00:00.000000999 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'#x]
       :     +- OneRowRelation
+      +- SubqueryAlias t
+         +- LocalRelation [k#x]
+
+
+-- !query
+SELECT (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999')
+-- !query analysis
+Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:  +- Project [2020-01-01 00:00:00.000000999 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'#x]
+:     +- OneRowRelation
++- OneRowRelation
+
+
+-- !query
+SELECT typeof((SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'))
+-- !query analysis
+Project [typeof(scalar-subquery#x []) AS typeof(scalarsubquery())#x]
+:  +- Project [2020-01-01 00:00:00.000000999 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'#x]
+:     +- OneRowRelation
++- OneRowRelation
+
+
+-- !query
+SELECT typeof((SELECT CAST(NULL AS timestamp_ntz(9))))
+-- !query analysis
+Project [typeof(scalar-subquery#x []) AS typeof(scalarsubquery())#x]
+:  +- Project [cast(null as timestamp_ntz(9)) AS CAST(NULL AS TIMESTAMP_NTZ(9))#x]
+:     +- OneRowRelation
++- OneRowRelation
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k = (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x]
+   +- Filter (k#x = scalar-subquery#x [])
+      :  +- Project [2020-01-01 00:00:00.000000999 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'#x]
+      :     +- OneRowRelation
+      +- SubqueryAlias t
+         +- LocalRelation [k#x]
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE EXISTS (SELECT 1 FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS s(v)
+    WHERE s.v = t.k) ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x]
+   +- Filter exists#x [k#x]
+      :  +- Project [1 AS 1#x]
+      :     +- Filter (v#x = outer(k#x))
+      :        +- SubqueryAlias s
+      :           +- LocalRelation [v#x]
+      +- SubqueryAlias t
+         +- LocalRelation [k#x]
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE NOT EXISTS (SELECT 1 FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS s(v)
+    WHERE s.v = t.k) ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x]
+   +- Filter NOT exists#x [k#x]
+      :  +- Project [1 AS 1#x]
+      :     +- Filter (v#x = outer(k#x))
+      :        +- SubqueryAlias s
+      :           +- LocalRelation [v#x]
+      +- SubqueryAlias t
+         +- LocalRelation [k#x]
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k NOT IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x]
+   +- Filter NOT k#x IN (list#x [])
+      :  +- Project [2020-01-01 00:00:00.000000999 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'#x]
+      :     +- OneRowRelation
+      +- SubqueryAlias t
+         +- LocalRelation [k#x]
+
+
+-- !query
+SELECT k FROM VALUES
+    ('2020-01-01 00:00:00.0000009' :: timestamp_ntz(7)) AS t(k)
+  WHERE k NOT IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x]
+   +- Filter NOT cast(k#x as timestamp_ntz(9)) IN (list#x [])
+      :  +- Project [TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'#x]
+      :     +- Project [2020-01-01 00:00:00.000000999 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'#x]
+      :        +- OneRowRelation
+      +- SubqueryAlias t
+         +- LocalRelation [k#x]
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+    (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999') AS t(k)
+  WHERE k NOT IN (SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'
+                  UNION ALL SELECT CAST(NULL AS timestamp_ntz(9))) ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Project [k#x]
+   +- Filter NOT k#x IN (list#x [])
+      :  +- Union false, false
+      :     :- Project [2020-01-01 00:00:00.000000999 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'#x]
+      :     :  +- OneRowRelation
+      :     +- Project [cast(null as timestamp_ntz(9)) AS CAST(NULL AS TIMESTAMP_NTZ(9))#x]
+      :        +- OneRowRelation
       +- SubqueryAlias t
          +- LocalRelation [k#x]
 

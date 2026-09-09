@@ -1133,4 +1133,23 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocator.setRecoveryMode()
     assert(!newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).get)
   }
+
+  test("SPARK-59331: unsetRecoveryMode leaves the recovery mode that setRecoveryMode turned on") {
+    val newConf = conf.clone
+    val podsAllocator = new ExecutorPodsAllocator(newConf, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocator.setRecoveryMode()
+    assert(newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).contains(true))
+    podsAllocator.unsetRecoveryMode()
+    assert(newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).isEmpty)
+  }
+
+  test("SPARK-59331: unsetRecoveryMode keeps a configured recovery mode") {
+    val newConf = conf.clone.set(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
+    val podsAllocator = new ExecutorPodsAllocator(newConf, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocator.setRecoveryMode()
+    podsAllocator.unsetRecoveryMode()
+    assert(newConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).contains(true))
+  }
 }

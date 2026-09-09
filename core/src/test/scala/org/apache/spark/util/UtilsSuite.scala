@@ -1198,7 +1198,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       "spark.hadoop.fs.s3.awsAccessKeyId",
       "spark.hadoop.fs.s3a.access.key",
       "spark.my.password",
-      "spark.my.sECreT")
+      "spark.my.sECreT",
+      "spark.sql.catalog.mycatalog.credential")
     secretKeys.foreach { key => sparkConf.set(key, "sensitive_value") }
     // Set a non-secret key
     sparkConf.set("spark.regular.property", "regular_value")
@@ -1484,6 +1485,15 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(Utils.buildLocationMetadata(paths, 11) == "(5 paths)[path0, ...]")
     // 11 + 5 + 2 = 18 is the minimum threshold to print two paths
     assert(Utils.buildLocationMetadata(paths, 18) == "(5 paths)[path0, path1, ...]")
+  }
+
+  test("SPARK-58748: wildcard IPv4 and IPv6 bind addresses are not advertised driver addresses") {
+    Seq("0.0.0.0", "::", "[::]", "0:0:0:0:0:0:0:0").foreach { address =>
+      assert(Utils.isAnyLocalAddress(address), s"$address should be a wildcard address")
+    }
+    Seq("10.129.36.37", "::1", "[::1]", "2001:db8::1", "localhost").foreach { address =>
+      assert(!Utils.isAnyLocalAddress(address), s"$address should not be a wildcard address")
+    }
   }
 
   test("checkHost supports both IPV4 and IPV6") {

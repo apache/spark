@@ -14,28 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.udf.worker.core
 
-import java.io.File
+package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * :: Experimental ::
- * A [[WorkerConnection]] over a Unix domain socket. Owns the socket
- * path and removes the socket file on [[close]]. Subclasses provide the
- * protocol-specific channel (e.g. gRPC over UDS) and may override
- * [[close]] to add transport-level shutdown -- they should call
- * `super.close()` to ensure the socket file is removed.
+ * Key for the per-query table-state cache in [[AnalysisContext]].
  *
- * [[close]] is idempotent: deleting an already-removed file is a no-op.
+ * Unlike [[RelationCacheKey]], this key contains only options declared to affect table state. This
+ * lets references retain different scan options while sharing one concrete table state.
  */
-@Experimental
-abstract class UnixSocketWorkerConnection(val socketPath: String)
-  extends WorkerConnection {
-
-  override def close(): Unit = {
-    val f = new File(socketPath)
-    if (f.exists()) f.delete()
-  }
-}
+private[sql] case class TableCacheKey(
+    catalog: CatalogPlugin,
+    identifier: Identifier,
+    timeTravelSpec: Option[TimeTravelSpec],
+    stateOptions: CaseInsensitiveStringMap)

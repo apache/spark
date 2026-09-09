@@ -75,16 +75,24 @@ case class Scd2ForeachBatchHandler(
     )
 
     val auxTableDf = batchDf.sparkSession.read.table(auxiliaryTableIdentifier.quotedString)
-    val affectedRowsFromAuxiliaryTable = batchProcessor.findAffectedRowsFromAuxiliaryTable(
+    val targetTableDf = batchDf.sparkSession.read.table(targetTableIdentifier.quotedString)
+
+    val perKeyAffectedSequenceCutoffDf = batchProcessor.computePerKeyAffectedSequenceCutoff(
       rawAuxiliaryTableDf = auxTableDf,
+      targetTableDf = targetTableDf,
       perKeyMinimumSequenceInMicrobatchDf = perKeyMinimumSequenceInMicrobatchDf,
       batchId = batchId
     )
 
-    val targetTableDf = batchDf.sparkSession.read.table(targetTableIdentifier.quotedString)
+    val affectedRowsFromAuxiliaryTable = batchProcessor.findAffectedRowsFromAuxiliaryTable(
+      rawAuxiliaryTableDf = auxTableDf,
+      perKeyAffectedSequenceCutoffDf = perKeyAffectedSequenceCutoffDf,
+      batchId = batchId
+    )
+
     val affectedRowsFromTargetTable = batchProcessor.findAffectedRowsFromTargetTable(
       targetTableDf = targetTableDf,
-      perKeyMinimumSequenceInMicrobatchDf = perKeyMinimumSequenceInMicrobatchDf
+      perKeyAffectedSequenceCutoffDf = perKeyAffectedSequenceCutoffDf
     )
 
     // The three inputs share the canonical SCD2 row schema by name, but not necessarily by column

@@ -215,24 +215,34 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     val arrPairs: RDD[(Array[Int], Int)] =
       sc.parallelize(Array(1, 2, 3, 4).toImmutableArraySeq, 2).map(x => (Array(x), x))
 
-    def verify(testFun: => Unit): Unit = {
-      intercept[SparkException](testFun).getMessage.contains("array")
+    def verify(subCondition: String)(testFun: => Unit): Unit = {
+      checkError(
+        exception = intercept[SparkException](testFun),
+        condition = s"UNSUPPORTED_ARRAY_KEY.$subCondition",
+        sqlState = Some("0A000"))
     }
 
-    verify(arrs.distinct())
+    // combineByKeyWithClassTag checks mapSideCombine before it looks at the partitioner, so the
+    // calls below that leave mapSideCombine at its default report MAP_SIDE_COMBINE even though
+    // they also end up with a HashPartitioner.
+    verify("MAP_SIDE_COMBINE")(arrs.distinct())
     // We can't catch all usages of arrays, since they might occur inside other collections:
     // assert(fails { arrPairs.distinct() })
-    verify(arrPairs.partitionBy(new HashPartitioner(2)))
-    verify(arrPairs.join(arrPairs))
-    verify(arrPairs.leftOuterJoin(arrPairs))
-    verify(arrPairs.rightOuterJoin(arrPairs))
-    verify(arrPairs.fullOuterJoin(arrPairs))
-    verify(arrPairs.groupByKey())
-    verify(arrPairs.countByKey())
-    verify(arrPairs.countByKeyApprox(1))
-    verify(arrPairs.cogroup(arrPairs))
-    verify(arrPairs.reduceByKeyLocally(_ + _))
-    verify(arrPairs.reduceByKey(_ + _))
+    verify("HASH_PARTITIONER")(arrPairs.partitionBy(new HashPartitioner(2)))
+    verify("HASH_PARTITIONER")(arrPairs.join(arrPairs))
+    verify("HASH_PARTITIONER")(arrPairs.leftOuterJoin(arrPairs))
+    verify("HASH_PARTITIONER")(arrPairs.rightOuterJoin(arrPairs))
+    verify("HASH_PARTITIONER")(arrPairs.fullOuterJoin(arrPairs))
+    verify("HASH_PARTITIONER")(arrPairs.groupByKey())
+    verify("MAP_SIDE_COMBINE")(arrPairs.countByKey())
+    // countByKeyApprox() is rejected by RDD.countByValueApprox, whose own array check is a
+    // separate condition that is still legacy.
+    checkError(
+      exception = intercept[SparkException](arrPairs.countByKeyApprox(1)),
+      condition = "_LEGACY_ERROR_TEMP_3015")
+    verify("HASH_PARTITIONER")(arrPairs.cogroup(arrPairs))
+    verify("REDUCE_BY_KEY_LOCALLY")(arrPairs.reduceByKeyLocally(_ + _))
+    verify("MAP_SIDE_COMBINE")(arrPairs.reduceByKey(_ + _))
   }
 
   test("zero-length partitions should be correctly handled") {

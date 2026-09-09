@@ -1658,6 +1658,36 @@ class RocksDB(
     }
   }
 
+  /**
+   * Return an iterator that remains open when exhausted so it can be refreshed and reused.
+   */
+  private[state] def reusableIterator(
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): RocksDBIterator = {
+    updateMemoryUsageIfNeeded()
+    val virtualColumnFamilyId = if (useColumnFamilies) {
+      Some(getColumnFamilyInfo(cfName).cfId)
+    } else {
+      None
+    }
+    val reusableIterator = new RocksDBIterator(
+      db.newIterator(),
+      useColumnFamilies,
+      virtualColumnFamilyId,
+      conf.rowChecksumEnabled,
+      readVerifier,
+      delimiterSize)
+    if (useColumnFamilies) {
+      reusableIterator.seek(Array.emptyByteArray)
+    } else {
+      reusableIterator.seekToFirst()
+    }
+
+    Option(TaskContext.get()).foreach { tc =>
+      tc.addTaskCompletionListener[Unit] { _ => reusableIterator.close() }
+    }
+    reusableIterator
+  }
+
   private def countKeys(): (Long, Long) = {
     val iter = db.newIterator()
 

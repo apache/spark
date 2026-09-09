@@ -829,10 +829,7 @@ object SparkSession extends SparkSessionCompanion {
     }
 
   private[this] def lookupCompanion(name: String): SparkSessionCompanion = {
-    val cls = SparkClassUtils.classForName(name)
-    val mirror = scala.reflect.runtime.currentMirror
-    val module = mirror.classSymbol(cls).companion.asModule
-    mirror.reflectModule(module).instance.asInstanceOf[SparkSessionCompanion]
+    SparkClassUtils.getCompanionObject(name).asInstanceOf[SparkSessionCompanion]
   }
 
   /** @inheritdoc */

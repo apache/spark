@@ -371,5 +371,19 @@
         </dependency>
       </dependencies>
     </profile>
+
+    <!--
+     Pull in spark-credential-aws and its associated JARs,
+    -->
+    <profile>
+      <id>credential-aws</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-credential-aws_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
   </profiles>
 </project>

@@ -17,13 +17,13 @@
 
 import string
 import typing
-from typing import Any, Optional, List, Tuple, Sequence, Mapping
 import uuid
+from typing import Any, List, Mapping, Optional, Sequence, Tuple
 
 if typing.TYPE_CHECKING:
-    from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.utils import get_lit_sql_str
+    from pyspark.sql import DataFrame, SparkSession
 from pyspark.errors import PySparkValueError
+from pyspark.sql.utils import get_lit_sql_str
 
 
 class SQLStringFormatter(string.Formatter):
