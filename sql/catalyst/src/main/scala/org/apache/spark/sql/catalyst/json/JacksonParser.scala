@@ -634,26 +634,33 @@ class JacksonParser(
       valueType: DataType): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
-    var badRecordException: Option[Throwable] = None
+    var partialResultException: Option[Throwable] = None
+    var badMapException: Option[Throwable] = None
 
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       val rawKey = UTF8String.fromString(parser.currentName)
-      try {
-        val value = try {
-          fieldConverter.apply(parser)
-        } catch {
-          case err: PartialValueException if enablePartialResults =>
-            badRecordException = badRecordException.orElse(Some(err.cause))
-            err.partialResult
-        }
-        val key = CharVarcharUtils.applyTextParseSemantics(rawKey, keyType)
-        keys += key
-        values += value
+      val value = try {
+        Some(fieldConverter.apply(parser))
       } catch {
+        case err: PartialValueException if enablePartialResults =>
+          partialResultException = partialResultException.orElse(Some(err.cause))
+          Some(err.partialResult)
         case DuplicateMapKeyException(e) => throw e
         case NonFatal(e) if enablePartialResults =>
-          badRecordException = badRecordException.orElse(Some(e))
+          badMapException = badMapException.orElse(Some(e))
           parser.skipChildren()
+          None
+      }
+      value.foreach { parsedValue =>
+        try {
+          val key = CharVarcharUtils.applyTextParseSemantics(rawKey, keyType)
+          keys += key
+          values += parsedValue
+        } catch {
+          case DuplicateMapKeyException(e) => throw e
+          case NonFatal(e) if enablePartialResults =>
+            badMapException = badMapException.orElse(Some(e))
+        }
       }
     }
 
@@ -666,10 +673,14 @@ class JacksonParser(
         ArrayBasedMapData(keys.toArray, values.toArray)
     }
 
-    if (badRecordException.isEmpty) {
+    // Ordinary value or key conversion failures invalidate the whole map. Delay throwing until
+    // the closing brace has been consumed and constrained-key deduplication has been applied.
+    badMapException.foreach(throw _)
+
+    if (partialResultException.isEmpty) {
       mapData
     } else {
-      throw PartialMapDataResultException(mapData, badRecordException.get)
+      throw PartialMapDataResultException(mapData, partialResultException.get)
     }
   }
 
