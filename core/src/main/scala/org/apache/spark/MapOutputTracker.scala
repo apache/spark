@@ -1060,17 +1060,17 @@ private[spark] class MapOutputTrackerMaster(
    * Removes all shuffle outputs associated with this host. Note that this will also remove
    * outputs which are served by an external shuffle server (if one exists).
    *
-   * When `skipReliablyStored` is true (executor/worker loss rather than a fetch failure),
+   * When `respectReliablyStored` is true (executor/worker loss rather than a fetch failure),
    * shuffles whose output is reliably stored off-executor are left intact, since losing the host
    * does not lose their output.
    */
   def removeOutputsOnHost(host: String): Unit =
-    removeOutputsOnHost(host, skipReliablyStored = false)
+    removeOutputsOnHost(host, respectReliablyStored = false)
 
-  def removeOutputsOnHost(host: String, skipReliablyStored: Boolean): Unit = {
+  def removeOutputsOnHost(host: String, respectReliablyStored: Boolean): Unit = {
     var removedAny = false
     shuffleStatuses.valuesIterator.foreach { status =>
-      if (!(skipReliablyStored && status.isReliablyStored)) {
+      if (!(respectReliablyStored && status.isReliablyStored)) {
         status.removeOutputsOnHost(host)
         removedAny = true
       }
@@ -1085,17 +1085,17 @@ private[spark] class MapOutputTrackerMaster(
    * outputs which are served by an external shuffle server (if one exists), as they are still
    * registered with this execId.
    *
-   * When `skipReliablyStored` is true (executor loss rather than a fetch failure), shuffles whose
-   * output is reliably stored off-executor are left intact: losing the executor does not lose
+   * When `respectReliablyStored` is true (executor loss rather than a fetch failure), shuffles
+   * whose output is reliably stored off-executor are left intact: losing the executor does not lose
    * their output, so unregistering would force a needless map-stage recompute.
    */
   def removeOutputsOnExecutor(execId: String): Unit =
-    removeOutputsOnExecutor(execId, skipReliablyStored = false)
+    removeOutputsOnExecutor(execId, respectReliablyStored = false)
 
-  def removeOutputsOnExecutor(execId: String, skipReliablyStored: Boolean): Unit = {
+  def removeOutputsOnExecutor(execId: String, respectReliablyStored: Boolean): Unit = {
     var removedAny = false
     shuffleStatuses.valuesIterator.foreach { status =>
-      if (!(skipReliablyStored && status.isReliablyStored)) {
+      if (!(respectReliablyStored && status.isReliablyStored)) {
         status.removeOutputsOnExecutor(execId)
         removedAny = true
       }

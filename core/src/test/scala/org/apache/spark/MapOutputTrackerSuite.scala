@@ -154,7 +154,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     assert(tracker.isReliablyStored(1) === true)
 
     // Executor loss: skip reliably-stored shuffles. Shuffle 0 drops, shuffle 1 stays.
-    tracker.removeOutputsOnExecutor("a", skipReliablyStored = true)
+    tracker.removeOutputsOnExecutor("a", respectReliablyStored = true)
     assert(tracker.getNumAvailableOutputs(0) === 0)
     assert(tracker.getNumAvailableOutputs(1) === 1)
 
@@ -162,13 +162,13 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     // epoch must not bump (a bump would needlessly invalidate every executor's cached statuses).
     tracker.unregisterShuffle(0)
     val epochBeforeNoOp = tracker.getEpoch
-    tracker.removeOutputsOnExecutor("a", skipReliablyStored = true)
+    tracker.removeOutputsOnExecutor("a", respectReliablyStored = true)
     assert(tracker.getEpoch === epochBeforeNoOp)
 
     // Fetch failure (skip = false): even the reliably-stored shuffle's output is removed, and
     // because something was removed the epoch bumps.
     val epochBeforeRemoval = tracker.getEpoch
-    tracker.removeOutputsOnExecutor("a", skipReliablyStored = false)
+    tracker.removeOutputsOnExecutor("a", respectReliablyStored = false)
     assert(tracker.getNumAvailableOutputs(1) === 0)
     assert(tracker.getEpoch > epochBeforeRemoval)
 
