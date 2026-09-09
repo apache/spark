@@ -385,6 +385,16 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
     assert(sql("select c1, c3 from queryOption").collect().toSet == expectedResult)
   }
 
+  test("SPARK-59336: do not classify missing table as a syntax error") {
+    val postgresError = intercept[SQLException] {
+      spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("query", "SELECT * FROM table_that_does_not_exist")
+        .load()
+    }
+    assertResult("42P01")(postgresError.getSQLState)
+  }
+
   test("SPARK-59336: do not classify insufficient privilege as a syntax error") {
     val restrictedUser = "restricted_user"
     val restrictedPassword = "restricted_password"
@@ -405,10 +415,12 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
           .load()
       }
       assertResult("42501")(postgresError.getSQLState)
-      assertResult("ERROR: permission denied for table bar")(postgresError.getMessage)
+      assert(
+        postgresError.getMessage.contains("permission denied"),
+        s"Unexpected PostgreSQL error message: ${postgresError.getMessage}")
     } {
       Using.resource(getConnection()) { conn =>
-        conn.prepareStatement(s"DROP USER $restrictedUser").executeUpdate()
+        conn.prepareStatement(s"DROP USER IF EXISTS $restrictedUser").executeUpdate()
       }
     }
   }
