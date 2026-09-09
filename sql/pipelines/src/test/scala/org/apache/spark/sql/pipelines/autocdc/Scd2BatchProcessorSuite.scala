@@ -1010,7 +1010,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("preprocessMicrobatch uses target spelling for version-map keys") {
+  test("version-map key spelling matches the preprocessed microbatch and target") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val batchSchema = new StructType()
         .add("id", IntegerType)
@@ -1034,11 +1034,18 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       )
 
       val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
-      assert(result.schema.fieldNames.take(2).toSeq == Seq("id", "value"))
+      val sourceValueName = batchSchema.fields(1).name
+      val preprocessedValueName = result.schema.fields(1).name
+      val targetValueName = targetUserSchema.fields(1).name
+      assert(sourceValueName == "Value")
+      assert(preprocessedValueName == targetValueName)
+      assert(preprocessedValueName == "value")
+
+      val expectedVersionMapKey = Scd2VersionMap.encodePath(Seq(preprocessedValueName))
       checkAnswer(
         df = result.select(Scd2BatchProcessor.versionMapOf(
           F.col(AutoCdcReservedNames.cdcMetadataColName)).as("vm")),
-        expectedAnswer = Row(Map(Scd2VersionMap.encodePath(Seq("value")) -> false))
+        expectedAnswer = Row(Map(expectedVersionMapKey -> false))
       )
     }
   }
