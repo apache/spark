@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CharVarcharCodegenUtils, CharVarcharUtils, GenericArrayData, MapData, STUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, ArrayData, CharVarcharCodegenUtils, CharVarcharUtils, GenericArrayData, MapData, STUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
@@ -282,10 +282,11 @@ object EvaluatePython {
 
       (obj: Any) => nullSafeConvert(obj) {
         case javaMap: java.util.Map[_, _] =>
-          ArrayBasedMapData(
-            javaMap,
-            (key: Any) => keyFromJava(key),
-            (value: Any) => valueFromJava(value))
+          val builder = new ArrayBasedMapBuilder(keyType, valueType)
+          javaMap.asScala.foreach { case (key, value) =>
+            builder.put(keyFromJava(key), valueFromJava(value))
+          }
+          builder.build()
       }
 
     case StructType(fields) =>

@@ -1478,6 +1478,18 @@ class ArrowTestsMixin:
                     invalid, StructType([StructField("c", VarcharType(3))])
                 ).collect()
 
+            with self.sql_conf({"spark.sql.execution.arrow.localRelationThreshold": "0"}):
+                rdd_df = self.spark.createDataFrame(
+                    pa.table({"c": ["a"]}),
+                    StructType([StructField("c", CharType(3))]),
+                )
+                self.assertEqual(rdd_df.first(), Row(c="a  "))
+                with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                    self.spark.createDataFrame(
+                        pa.table({"v": ["abcd"]}),
+                        StructType([StructField("v", VarcharType(3))]),
+                    ).collect()
+
         legacy_schema = StructType(
             [
                 StructField("c", CharType(3)),
@@ -1496,6 +1508,7 @@ class ArrowTestsMixin:
             df = self.spark.createDataFrame(
                 pa.table({"c": ["a"], "v": ["abcd"]}), legacy_schema
             )
+            self.assertEqual(df.schema, StructType().add("c", "string").add("v", "string"))
             self.assertEqual(df.first(), Row(c="a", v="abcd"))
 
     def test_createDataFrame_pandas_duplicate_field_names(self):

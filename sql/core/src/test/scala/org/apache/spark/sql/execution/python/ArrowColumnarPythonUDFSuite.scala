@@ -137,7 +137,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         padded.queryExecution.executedPlan).head
       assert(arrowExec.child.supportsColumnar,
         "ArrowEvalPythonExec should retain its Arrow-backed columnar child")
-      assert(padded.select("udf_id").collect().map(_.getString(0)).toSeq ===
+      assert(padded.collect().map(_.getString(4)).toSeq ===
         (0 until 10).map(_.toString.padTo(4, ' ').mkString))
 
       val exception = intercept[SparkException] {
@@ -173,10 +173,10 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       assert(arrowExec.child.supportsColumnar,
         "ArrowEvalPythonExec should retain its Arrow-backed columnar child")
 
-      val rows = result.select("udf_id", "udf_name").collect()
+      val rows = result.collect()
       rows.zipWithIndex.foreach { case (row, index) =>
-        assert(row.getString(0) === index.toString)
-        assert(row.getString(1) === s"row_$index")
+        assert(row.getString(4) === index.toString)
+        assert(row.getString(5) === s"row_$index")
       }
     }
   }

@@ -33,7 +33,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Python.{PYTHON_UNIX_DOMAIN_SOCKET_DIR, PYTHON_UNIX_DOMAIN_SOCKET_ENABLED}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.{BasicPythonArrowOutput, PythonArrowInput, PythonUDFRunner}
 import org.apache.spark.sql.execution.python.streaming.TransformWithStateInPySparkPythonRunner.{GroupedInType, InType}
@@ -279,10 +278,8 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
       new TransformWithStateInPySparkStateServer(stateServerSocket, processorHandle,
         groupingKeySchema,
         sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch,
-        batchTimestampMs,
-        eventTimeWatermarkForEviction,
-        authHelper = stateServerAuthHelper,
-        applyCharVarcharChecks = CharVarcharUtils.shouldApplyWriteSideLengthCheck(sqlConf)))
+        batchTimestampMs, eventTimeWatermarkForEviction,
+        authHelper = stateServerAuthHelper))
 
     context.addTaskCompletionListener[Unit] { _ =>
       logInfo(log"completion listener called")
@@ -365,9 +362,7 @@ class TransformWithStateInPySparkPythonPreInitRunner(
           new TransformWithStateInPySparkStateServer(stateServerSocket, processorHandleImpl,
             groupingKeySchema,
             sqlConf.arrowTransformWithStateInPySparkMaxStateRecordsPerBatch,
-            authHelper = stateServerAuthHelper,
-            applyCharVarcharChecks = CharVarcharUtils.shouldApplyWriteSideLengthCheck(sqlConf))
-            .run()
+            authHelper = stateServerAuthHelper).run()
         } catch {
           case e: Exception =>
             throw new SparkException("TransformWithStateInPySpark state server " +

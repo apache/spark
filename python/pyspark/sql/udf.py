@@ -29,10 +29,13 @@ from pyspark.sql.column import Column
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import (
+    ArrayType,
     CharType,
     DataType,
+    MapType,
     StringType,
     StructType,
+    UserDefinedType,
     VarcharType,
     _has_type,
     _parse_datatype_string,
@@ -319,6 +322,27 @@ class UserDefinedFunction:
     def _check_return_type(returnType: DataType, evalType: int) -> None:
         class _InvalidCharVarcharArrowTypeError(TypeError):
             pass
+
+        def has_char_varchar_in_udt(data_type: DataType) -> bool:
+            if isinstance(data_type, UserDefinedType):
+                return _has_type(data_type.sqlType(), (CharType, VarcharType))
+            if isinstance(data_type, StructType):
+                return any(has_char_varchar_in_udt(f.dataType) for f in data_type.fields)
+            if isinstance(data_type, ArrayType):
+                return has_char_varchar_in_udt(data_type.elementType)
+            if isinstance(data_type, MapType):
+                return has_char_varchar_in_udt(
+                    data_type.keyType
+                ) or has_char_varchar_in_udt(data_type.valueType)
+            return False
+
+        if has_char_varchar_in_udt(returnType):
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={
+                    "feature": f"CHAR/VARCHAR inside Python UDF UDT return type: {returnType}"
+                },
+            )
 
         char_varchar_supported_eval_types = (
             PythonEvalType.SQL_BATCHED_UDF,

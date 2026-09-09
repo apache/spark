@@ -21,7 +21,7 @@ from typing import IO, Iterable, Iterator, List, Tuple, Union
 
 import pyarrow as pa
 
-from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
+from pyspark.errors import PySparkAssertionError, PySparkNotImplementedError, PySparkRuntimeError
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
     read_bool,
@@ -40,7 +40,10 @@ from pyspark.sql.datasource_internal import _streamReader
 from pyspark.sql.pandas.types import to_arrow_schema
 from pyspark.sql.types import (
     BinaryType,
+    CharType,
     StructType,
+    VarcharType,
+    _has_type,
     _parse_datatype_json_string,
 )
 from pyspark.sql.worker.utils import check_pushdown_not_disabled, worker_run
@@ -64,6 +67,13 @@ def records_to_arrow_batches(
     of pyarrow record batches.  For each Python tuple, check the types of each field
     and append it to the records batch.
     """
+    if _has_type(return_type, (CharType, VarcharType)):
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={
+                "feature": f"CHAR/VARCHAR return types in Python DataSource: {return_type}"
+            },
+        )
 
     pa_schema = to_arrow_schema(return_type, timezone="UTC")
     column_names = return_type.fieldNames()
