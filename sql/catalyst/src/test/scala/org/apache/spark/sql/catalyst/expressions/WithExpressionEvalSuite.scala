@@ -235,9 +235,10 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-58902: a definition that references its own id fails without recursing") {
-    // Only a caller building the case class directly can produce this, and it is caught rather than
-    // left to recurse: generating the definition re-enters the same slot, and evaluating it would
-    // re-enter the same cell, whose `computed` is set only after the nested evaluation returns.
+    // Only a caller building the case class directly can produce this, and the two paths failed
+    // differently before the check. Generating it re-enters the same slot either way. Evaluating it
+    // depends on the reference objects: here they are distinct, so the scan over `child` binds only
+    // the one in `child` and the one inside `selfDef` fails as unbound.
     val id = new CommonExpressionId()
     val proto = CommonExpressionDef(Literal(1), id)
     val selfDef = CommonExpressionDef(Add(new CommonExpressionRef(proto), Literal(1)), id)
@@ -250,9 +251,9 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
     val interpreted = intercept[SparkException](w.eval(InternalRow.empty))
     assert(interpreted.getMessage.contains("references an id its own With defines"))
 
-    // The same shape with one reference object in both places, which is the variant that recursed:
-    // the scan over `child` binds that object, so the definition's read of it found a cell still
-    // being filled. Measured before the check: StackOverflowError.
+    // One reference object in both places is the variant that recursed: the scan binds that object,
+    // so the definition's read of it found a cell still being filled -- StackOverflowError,
+    // measured before the check.
     val shared = new CommonExpressionRef(proto)
     val sharedSelfDef = CommonExpressionDef(Add(shared, Literal(1)), id)
     val sharedFailure =

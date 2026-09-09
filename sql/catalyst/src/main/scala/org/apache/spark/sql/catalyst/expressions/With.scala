@@ -77,10 +77,13 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
    * which is why the checks below refuse a definition holding a reference of this scope.
    */
   @transient private lazy val refsToBind: IndexedSeq[(CommonExpressionRef, CommonExpressionDef)] = {
-    // Three shapes whose bindings cannot be kept straight, each of which this path used to answer
-    // for with a wrong value or a StackOverflowError, and each of which `withCommonExprs` refuses
-    // while generating. Only a caller building the case class directly reaches them: `With.apply`
-    // mints both the definitions and their ids. The last check keys on the whole
+    // Three shapes whose bindings cannot be kept straight: before these checks this path answered
+    // the first two with a wrong value, and the third either overflowed the stack or failed as an
+    // unbound reference. Generating them is refused for the first two, by an id-keyed rule in
+    // `withCommonExprs`, and for a definition that reaches its own id, by `filling` -- but not for
+    // one that only reads a sibling, which generates correctly, since every sibling slot is
+    // registered before the child. Only a caller building the case class directly reaches any of
+    // this: `With.apply` mints both the definitions and their ids. The last check keys on the whole
     // `CommonExpressionId`, so it also fires on a canonicalized or `NormalizePlan`-normalized tree,
     // where ids are renumbered per scope; those forms are compared, never evaluated.
     if (defs.map(_.id).distinct.length != defs.length) {
@@ -419,10 +422,11 @@ case class CommonExpressionRef(id: CommonExpressionId, dataType: DataType, nulla
    * that code is depends on the definition: a call, where the definition can be put in a method, so
    * that a definition that is or holds another `With` is not pasted once per reference at every
    * level; the body itself otherwise, whose locals are declared inside each guard. No copy of one
-   * body encloses another -- for that, a definition would have to reference its own id, directly or
-   * through a sibling, which recurses in `fill` before any Java exists -- so repeating it declares
-   * nothing twice in one scope. See `CommonExprSlots.fill`, which also says what bounds the code
-   * when a method is not possible.
+   * body encloses another, so repeating it declares nothing twice in one scope: a definition
+   * reading a sibling is generated inside that sibling's guard, not inside its own, and one that
+   * reaches its own id -- directly or around a cycle -- re-enters `fill` and is refused before any
+   * Java exists. See `CommonExprSlots.fill`, which also says what bounds the code when a method is
+   * not possible.
    */
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val slots = ctx.getCommonExpr(id.id)

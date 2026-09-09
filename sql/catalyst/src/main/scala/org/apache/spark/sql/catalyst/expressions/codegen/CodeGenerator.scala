@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.WITH_EXPRESSION
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil, UnsafeRowUtils}
@@ -295,7 +296,7 @@ class CodegenContext extends Logging {
       // generation walks up, capping what one level contributes, so the code stays linear in the
       // depth either way. The length arm just keeps the same body from being split once per
       // reference, which leaves the methods small and the code as large.
-      val worthAMethod = definition.exists(_.isInstanceOf[With]) ||
+      val worthAMethod = definition.containsPattern(WITH_EXPRESSION) ||
         body.length > SQLConf.get.methodSplitThreshold
       if (canPutInMethod && worthAMethod) {
         val funcName = freshName("computeCommonExpr")
