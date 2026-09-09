@@ -1,0 +1,134 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: 'Setup Build Environment'
+description: >-
+  Cache SBT/Maven launcher artifacts, optionally cache or restore Coursier and
+  the Maven local repository, optionally free disk space, and install a Zulu
+  JDK. Callers that use a local composite action must add a bare
+  'actions/checkout' step first so the latest action definition is present
+  (same bootstrap pattern as checkout-and-sync).
+  There is a default cache limit of 10 GB.
+inputs:
+  java-version:
+    description: >-
+      JDK version passed to actions/setup-java (Zulu distribution). Empty skips
+      the install step (rare; used when the caller installs Java conditionally).
+    required: false
+    default: ''
+  coursier:
+    description: >-
+      How to handle the Coursier cache: 'cache' (save+restore), 'restore'
+      (restore only), or 'none'.
+    required: false
+    default: 'restore'
+  cache-maven-local:
+    description: 'Cache ~/.m2/repository'
+    required: false
+    default: 'false'
+  free-disk-space:
+    description: >-
+      Free disk space before installing Java. 'host' runs
+      dev/free_disk_space, 'container' runs dev/free_disk_space_container,
+      'none' skips.
+    required: false
+    default: 'none'
+
+runs:
+  using: 'composite'
+  steps:
+    # Key families are shared across workflows:
+    #   SBT:      build-<os>-<hash(build files)>
+    #   Coursier: coursier-<os>-<hash(**/pom.xml, **/plugins.sbt)>
+    #   Maven:    maven-<os>-java<ver>-<hash(**/pom.xml)>
+    - name: Cache SBT and Maven
+      uses: actions/cache@v5
+      with:
+        path: |
+          build/apache-maven-*
+          build/*.jar
+          ~/.sbt
+        key: >-
+          build-${{ runner.os }}-${{ hashFiles(
+          '**/pom.xml',
+          'project/build.properties',
+          'build/mvn',
+          'build/sbt',
+          'build/sbt-launch-lib.bash',
+          'build/spark-build-info'
+          ) }}
+        restore-keys: |
+          build-${{ runner.os }}-
+
+    - name: Cache Coursier local repository
+      if: inputs.coursier == 'cache'
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/coursier
+        key: >-
+          coursier-${{ runner.os }}-${{ hashFiles(
+          '**/pom.xml',
+          '**/plugins.sbt'
+          ) }}
+        restore-keys: |
+          coursier-${{ runner.os }}-
+
+    - name: Restore Coursier local repository
+      if: inputs.coursier == 'restore'
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/.cache/coursier
+        key: >-
+          coursier-${{ runner.os }}-${{ hashFiles(
+          '**/pom.xml',
+          '**/plugins.sbt'
+          ) }}
+        restore-keys: |
+          coursier-${{ runner.os }}-
+
+    - name: Cache Maven local repository
+      if: inputs.cache-maven-local == 'true'
+      uses: actions/cache@v5
+      with:
+        path: ~/.m2/repository
+        key: >-
+          maven-${{ runner.os }}-java${{ inputs.java-version }}-${{ hashFiles(
+          '**/pom.xml'
+          ) }}
+        restore-keys: |
+          maven-${{ runner.os }}-java${{ inputs.java-version }}-
+
+    - name: Free up disk space
+      if: inputs.free-disk-space == 'host'
+      continue-on-error: true
+      shell: bash
+      run: timeout --kill-after=30s 10m ./dev/free_disk_space
+
+    - name: Free up disk space
+      if: inputs.free-disk-space == 'container'
+      continue-on-error: true
+      shell: bash
+      run: timeout --kill-after=30s 10m ./dev/free_disk_space_container
+
+    - name: Install Java ${{ inputs.java-version }}
+      if: inputs.java-version != ''
+      uses: actions/setup-java@v5
+      with:
+        distribution: zulu
+        java-version: ${{ inputs.java-version }}

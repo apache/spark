@@ -93,23 +93,10 @@ jobs:
         # In order to get diff files
         with:
           fetch-depth: 0
-      - name: Cache SBT and Maven
-        uses: actions/cache@v5
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build-env
         with:
-          path: |
-            build/apache-maven-*
-            build/*.jar
-            ~/.sbt
-          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
-          restore-keys: |
-            build-
-      - name: Cache Coursier local repository
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/coursier
-          key: benchmark-coursier-${{ inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-          restore-keys: |
-            benchmark-coursier-${{ inputs.jdk }}
+          coursier: cache
       - name: Cache TPC-DS generated data
         id: cache-tpcds-sf-1
         uses: actions/cache@v5
@@ -181,28 +168,11 @@ jobs:
             exit 1
           fi
         fi
-    - name: Cache SBT and Maven
-      uses: actions/cache@v5
+    - name: Setup build environment
+      uses: ./.github/actions/setup-build-env
       with:
-        path: |
-          build/apache-maven-*
-          build/*.jar
-          ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
-        restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
-      with:
-        path: ~/.cache/coursier
-        key: benchmark-coursier-${{ inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          benchmark-coursier-${{ inputs.jdk }}
-    - name: Install Java ${{ inputs.jdk }}
-      uses: actions/setup-java@v5
-      with:
-        distribution: zulu
         java-version: ${{ inputs.jdk }}
+        coursier: cache
     - name: Cache TPC-DS generated data
       if: inputs.generate-tpcds
       id: cache-tpcds-sf-1
@@ -254,4 +224,3 @@ jobs:
       with:
         name: benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}-${{ matrix.split }}
         path: target/benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar
-
