@@ -609,7 +609,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
         val df = spark.range(0, 4).repartition(2)
         val qe = new QueryExecution(
           spark.asInstanceOf[classic.SparkSession],
-          df.logicalPlan,
+          df.queryExecution.logical,
           shuffleCleanupModeOpt = Some(SkipMigration))
         val shuffleIds = qe.executedPlan.collect { case e: ShuffleExchangeLike => e.shuffleId }
         assert(qe.shuffleCleanupMode == SkipMigration)
