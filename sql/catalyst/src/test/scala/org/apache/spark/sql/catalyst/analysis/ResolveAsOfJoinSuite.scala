@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, Expression, LessThanOrEqual, Literal, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, EqualTo, Expression, LessThanOrEqual, Literal, Rand}
 import org.apache.spark.sql.catalyst.plans.{GreaterThanOp, GreaterThanOrEqualOp, Inner, JoinType, LeftOuter, LessThanOp, LessThanOrEqualOp, MatchComparisonOperator}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
@@ -46,6 +46,16 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
   private val rmap = AttributeReference("m", MapType(StringType, IntegerType))()
   private val leftMap: LogicalPlan = LocalRelation(lmap)
   private val rightMap: LogicalPlan = LocalRelation(rmap)
+
+  // Two shared key columns on each side (plus a distinct match operand) for multi-column USING.
+  private val lOp = AttributeReference("lop", IntegerType)()
+  private val lKey1 = AttributeReference("k1", IntegerType)()
+  private val lKey2 = AttributeReference("k2", IntegerType)()
+  private val rOp = AttributeReference("rop", IntegerType, nullable = false)()
+  private val rKey1 = AttributeReference("k1", IntegerType, nullable = false)()
+  private val rKey2 = AttributeReference("k2", IntegerType, nullable = false)()
+  private val leftKeys: LogicalPlan = LocalRelation(lOp, lKey1, lKey2)
+  private val rightKeys: LogicalPlan = LocalRelation(rOp, rKey1, rKey2)
 
   /** Build an [[AsOfJoin]] from a `MATCH_CONDITION` whose operands are already resolved. */
   private def asOf(
@@ -94,6 +104,19 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
     assert(join.matchOperator.isEmpty, "the match condition should still be materialized")
     assert(project.getTagValue(Project.hiddenOutputTag).isDefined,
       "USING columns should be tagged as hidden output")
+  }
+
+  test("expands multi-column USING into ANDed equi-join predicates") {
+    val result = ResolveAsOfJoin.apply(
+      asOf(leftExpr = lOp, rightExpr = rOp, usingColumns = Some(Seq("k1", "k2")),
+        l = leftKeys, r = rightKeys))
+    val project = result.asInstanceOf[Project]
+    val join = project.child.asInstanceOf[AsOfJoin]
+    assert(join.usingColumns.isEmpty)
+    // USING (k1, k2) expands to k1 = k1 AND k2 = k2: two equi-predicates.
+    assert(join.condition.get.collect { case e: EqualTo => e }.size == 2,
+      s"expected two equi-predicates, got ${join.condition}")
+    assert(project.getTagValue(Project.hiddenOutputTag).isDefined)
   }
 
   test("keeps an explicit ON condition and does not add a USING projection") {
