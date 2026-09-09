@@ -965,6 +965,74 @@ for more details on the API.
 
 </div>
 
+## FrequencyEncoder
+
+Frequency encoding maps a column of categorical indices to how often each category occurs in the training data.
+
+`FrequencyEncoder` needs no label, which is what separates it from `TargetEncoder`, so it is available in unsupervised pipelines such as clustering or anomaly detection. It also adds one output column per input column rather than one per category, unlike `OneHotEncoder`, which keeps it practical when a feature has many thousands of distinct values.
+
+`FrequencyEncoder` supports the `normalize` parameter to choose what the encoding measures. When 'true', the default, each category is encoded as the proportion of the training rows it accounts for, so the encodings for a feature sum to one and stay comparable across datasets of different sizes. When 'false', each category is encoded as its raw count.
+
+`FrequencyEncoder` supports the `handleInvalid` parameter to choose how to handle invalid input, meaning categories not seen at training, when encoding new data. Available options include 'keep' (unseen categories are encoded as zero, which is the frequency actually observed for them) and 'error' (throw an exception).
+
+Note that categories occurring equally often in the training data receive the same encoding. That is inherent to the technique rather than a limitation of this implementation: the encoding carries how common a category is and nothing that distinguishes one equally common category from another. Where that distinction matters, `OneHotEncoder` or `TargetEncoder` are the better fit.
+
+**Examples**
+
+Assume we have the following DataFrame with columns `categoryIndex1` and `categoryIndex2`, of six rows:
+
+~~~~
+categoryIndex1 | categoryIndex2
+---------------|---------------
+           0.0 |            1.0
+           1.0 |            0.0
+           2.0 |            1.0
+           0.0 |            2.0
+           0.0 |            1.0
+           2.0 |            0.0
+~~~~
+
+In `categoryIndex1`, category 0.0 occurs three times out of six, 2.0 twice and 1.0 once. Applying `FrequencyEncoder` with the default `normalize` of 'true', we get:
+
+~~~~
+categoryIndex1 | categoryIndex2 | categoryIndex1Freq | categoryIndex2Freq
+---------------|----------------|--------------------|-------------------
+           0.0 |            1.0 |            0.5     |            0.5
+           1.0 |            0.0 |            0.16666 |            0.33333
+           2.0 |            1.0 |            0.33333 |            0.5
+           0.0 |            2.0 |            0.5     |            0.16666
+           0.0 |            1.0 |            0.5     |            0.5
+           2.0 |            0.0 |            0.33333 |            0.33333
+~~~~
+
+With `normalize` set to 'false' the same fit produces raw counts instead, so `categoryIndex1Freq` would read 3.0, 1.0, 2.0, 3.0, 3.0, 2.0.
+
+<div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [FrequencyEncoder Python docs](api/python/reference/api/pyspark.ml.feature.FrequencyEncoder.html) for more details on the API.
+
+{% include_example python/ml/frequency_encoder_example.py %}
+</div>
+
+<div data-lang="scala" markdown="1">
+
+Refer to the [FrequencyEncoder Scala docs](api/scala/org/apache/spark/ml/feature/FrequencyEncoder.html) for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/FrequencyEncoderExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [FrequencyEncoder Java docs](api/java/org/apache/spark/ml/feature/FrequencyEncoder.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaFrequencyEncoderExample.java %}
+</div>
+
+</div>
+
 ## VectorIndexer
 
 `VectorIndexer` helps index categorical features in datasets of `Vector`s.

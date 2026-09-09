@@ -86,6 +86,8 @@ __all__ = [
     "DCT",
     "ElementwiseProduct",
     "FeatureHasher",
+    "FrequencyEncoder",
+    "FrequencyEncoderModel",
     "HashingTF",
     "IDF",
     "IDFModel",
@@ -1632,6 +1634,279 @@ class FeatureHasher(
         Sets the value of :py:attr:`numFeatures`.
         """
         return self._set(numFeatures=value)
+
+
+class _FrequencyEncoderParams(
+    HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, HasHandleInvalid
+):
+    """
+    Params for :py:class:`FrequencyEncoder` and :py:class:`FrequencyEncoderModel`.
+
+    .. versionadded:: 5.0.0
+    """
+
+    handleInvalid: Param[str] = Param(
+        Params._dummy(),
+        "handleInvalid",
+        "How to handle invalid data during transform(). "
+        + "Options are 'keep' (unseen categories are encoded as zero) "
+        + "or error (throw an error).",
+        typeConverter=TypeConverters.toString,
+    )
+
+    normalize: Param[bool] = Param(
+        Params._dummy(),
+        "normalize",
+        "whether to encode categories as a proportion of the training rows (True) "
+        + "or as a raw count (False).",
+        typeConverter=TypeConverters.toBoolean,
+    )
+
+    def __init__(self, *args: Any):
+        super().__init__(*args)
+        self._setDefault(handleInvalid="error", normalize=True)
+
+    @since("5.0.0")
+    def getNormalize(self) -> bool:
+        """
+        Gets the value of normalize or its default value.
+        """
+        return self.getOrDefault(self.normalize)
+
+
+@inherit_doc
+class FrequencyEncoder(
+    JavaEstimator["FrequencyEncoderModel"],
+    _FrequencyEncoderParams,
+    JavaMLReadable["FrequencyEncoder"],
+    JavaMLWritable,
+):
+    """
+    Frequency Encoding maps a column of categorical indices to how often each category
+    occurs in the training data, either as a proportion of the training rows or as a raw
+    count.
+
+    Unlike :py:class:`TargetEncoder` it needs no label, so it is available for
+    unsupervised pipelines, and unlike :py:class:`OneHotEncoder` it adds one column per
+    input feature rather than one per category, which keeps it usable when a feature has
+    many thousands of distinct values.
+
+    Categories that occur equally often in the training data receive the same encoding.
+    That is inherent to the technique rather than a limitation of this implementation: the
+    encoding carries how common a category is and nothing else.
+
+    When :py:attr:`handleInvalid` is configured to 'keep', categories not seen during
+    fitting are encoded as zero, which is the frequency actually observed for them.
+
+    @note When encoding multi-column by using `inputCols` and `outputCols` params,
+    input/output cols come in pairs, specified by the order in the arrays, and each pair
+    is treated independently.
+
+    .. versionadded:: 5.0.0
+
+    See Also
+    --------
+    :py:class:`StringIndexer` : for converting categorical values into category indices
+    :py:class:`TargetEncoder` : for encoding categories against a label
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([(0.0,), (1.0,), (1.0,), (1.0,)], ["cat"])
+    >>> model = FrequencyEncoder(inputCol="cat", outputCol="freq").fit(df)
+    >>> sorted({row.freq for row in model.transform(df).collect()})
+    [0.25, 0.75]
+
+    Raw counts instead of proportions:
+
+    >>> counts = FrequencyEncoder(
+    ...     inputCol="cat", outputCol="freq", normalize=False).fit(df)
+    >>> sorted({row.freq for row in counts.transform(df).collect()})
+    [1.0, 3.0]
+
+    Unseen categories were observed zero times:
+
+    >>> unseen = spark.createDataFrame([(7.0,)], ["cat"])
+    >>> keep = model.setHandleInvalid("keep")
+    >>> keep.transform(unseen).head().freq
+    0.0
+    """
+
+    _input_kwargs: Dict[str, Any]
+
+    @overload
+    def __init__(
+        self,
+        *,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
+        handleInvalid: str = ...,
+        normalize: bool = ...,
+    ): ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        handleInvalid: str = ...,
+        normalize: bool = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+    ): ...
+
+    @keyword_only
+    def __init__(
+        self,
+        *,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
+        handleInvalid: str = "error",
+        normalize: bool = True,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+    ):
+        """
+        __init__(self, \\*, inputCols=None, outputCols=None, handleInvalid="error", \
+                 normalize=True, inputCol=None, outputCol=None)
+        """
+        super().__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.feature.FrequencyEncoder", self.uid
+        )
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @overload
+    def setParams(
+        self,
+        *,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
+        handleInvalid: str = ...,
+        normalize: bool = ...,
+    ) -> "FrequencyEncoder": ...
+
+    @overload
+    def setParams(
+        self,
+        *,
+        handleInvalid: str = ...,
+        normalize: bool = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+    ) -> "FrequencyEncoder": ...
+
+    @keyword_only
+    @since("5.0.0")
+    def setParams(
+        self,
+        *,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
+        handleInvalid: str = "error",
+        normalize: bool = True,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+    ) -> "FrequencyEncoder":
+        """
+        setParams(self, \\*, inputCols=None, outputCols=None, handleInvalid="error", \
+                  normalize=True, inputCol=None, outputCol=None)
+        Sets params for this FrequencyEncoder.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("5.0.0")
+    def setInputCols(self, value: List[str]) -> "FrequencyEncoder":
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("5.0.0")
+    def setOutputCols(self, value: List[str]) -> "FrequencyEncoder":
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("5.0.0")
+    def setInputCol(self, value: str) -> "FrequencyEncoder":
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("5.0.0")
+    def setOutputCol(self, value: str) -> "FrequencyEncoder":
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("5.0.0")
+    def setHandleInvalid(self, value: str) -> "FrequencyEncoder":
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+    @since("5.0.0")
+    def setNormalize(self, value: bool) -> "FrequencyEncoder":
+        """
+        Sets the value of :py:attr:`normalize`.
+        """
+        return self._set(normalize=value)
+
+    def _create_model(self, java_model: "JavaObject") -> "FrequencyEncoderModel":
+        return FrequencyEncoderModel(java_model)
+
+
+class FrequencyEncoderModel(
+    JavaModel, _FrequencyEncoderParams, JavaMLReadable["FrequencyEncoderModel"], JavaMLWritable
+):
+    """
+    Model fitted by :py:class:`FrequencyEncoder`.
+
+    Note that :py:attr:`normalize` is only used while fitting, so this model has no setter
+    for it; the encodings it carries were already computed one way or the other.
+
+    .. versionadded:: 5.0.0
+    """
+
+    @since("5.0.0")
+    def setInputCols(self, value: List[str]) -> "FrequencyEncoderModel":
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("5.0.0")
+    def setOutputCols(self, value: List[str]) -> "FrequencyEncoderModel":
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("5.0.0")
+    def setInputCol(self, value: str) -> "FrequencyEncoderModel":
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("5.0.0")
+    def setOutputCol(self, value: str) -> "FrequencyEncoderModel":
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("5.0.0")
+    def setHandleInvalid(self, value: str) -> "FrequencyEncoderModel":
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
 
 @inherit_doc
