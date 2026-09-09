@@ -568,9 +568,10 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
     try {
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key -> "true") {
-        // Two aggregations produce more than one shuffle.
-        val df = spark.range(0, 10).groupBy("id").count().groupBy("count").count()
+        // A broadcast-disabled join shuffles both sides, giving more than one shuffle to clean up.
+        val df = spark.range(0, 10).join(spark.range(0, 20), "id")
         val qe = df.queryExecution
         val shuffleIds = qe.executedPlan.collect { case e: ShuffleExchangeLike => e.shuffleId }
         assert(shuffleIds.size > 1)
@@ -614,6 +615,11 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
         val shuffleIds = qe.executedPlan.collect { case e: ShuffleExchangeLike => e.shuffleId }
         assert(qe.shuffleCleanupMode == SkipMigration)
         assert(shuffleIds.nonEmpty)
+
+        // Initialize the session's ArtifactManager while SparkEnv is still available; in real
+        // teardown it is already initialized. Otherwise nulling SparkEnv below would NPE in
+        // withNewExecutionId0's setup (ArtifactManager.artifactRootURI) before the cleanup runs.
+        assert(qe.sparkSession.artifactManager != null)
 
         val appender = new LogAppender("skip migration cleanup")
         withLogAppender(appender, loggerNames = Seq(sqlExecutionLoggerName)) {
