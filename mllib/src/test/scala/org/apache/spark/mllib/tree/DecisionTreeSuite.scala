@@ -19,6 +19,8 @@ package org.apache.spark.mllib.tree
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.fs.{FileUtil, Path => HadoopPath}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.tree.impl.DecisionTreeMetadata
 import org.apache.spark.mllib.linalg.Vectors
@@ -28,7 +30,8 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.{Loader, MLlibTestSparkContext}
+import org.apache.spark.sql.functions.{col, lit, when}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -429,6 +432,46 @@ class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
       } finally {
         Utils.deleteRecursively(tempDir)
       }
+    }
+  }
+
+  test("load rejects a model whose node ids form a cycle") {
+    val srcDir = Utils.createTempDir()
+    val dstDir = Utils.createTempDir()
+    try {
+      val src = srcDir.toURI.toString
+      val dst = dstDir.toURI.toString
+      val arr = Array(
+        LabeledPoint(0.0, Vectors.dense(0.0)),
+        LabeledPoint(1.0, Vectors.dense(1.0)),
+        LabeledPoint(0.0, Vectors.dense(0.0)),
+        LabeledPoint(1.0, Vectors.dense(1.0)))
+      val strategy =
+        new Strategy(algo = Classification, impurity = Gini, maxDepth = 4, numClasses = 2)
+      val model = DecisionTree.train(sc.parallelize(arr.toImmutableArraySeq), strategy)
+      model.save(sc, src)
+
+      // Copy the metadata verbatim, and write a modified data set where the root (nodeId 1)
+      // points its left child at itself (a cycle). Reading src and writing dst avoids a
+      // self-overwrite.
+      val hadoopConf = sc.hadoopConfiguration
+      val srcMeta = new HadoopPath(Loader.metadataPath(src))
+      val dstMeta = new HadoopPath(Loader.metadataPath(dst))
+      FileUtil.copy(
+        srcMeta.getFileSystem(hadoopConf), srcMeta,
+        dstMeta.getFileSystem(hadoopConf), dstMeta, false, hadoopConf)
+      spark.read.parquet(Loader.dataPath(src))
+        .withColumn("leftNodeId",
+          when(col("nodeId") === 1, lit(1)).otherwise(col("leftNodeId")))
+        .write.parquet(Loader.dataPath(dst))
+
+      val e = intercept[IllegalArgumentException] {
+        DecisionTreeModel.load(sc, dst)
+      }
+      assert(e.getMessage.contains("Cycle detected"))
+    } finally {
+      Utils.deleteRecursively(srcDir)
+      Utils.deleteRecursively(dstDir)
     }
   }
 }

@@ -6772,6 +6772,14 @@
     ],
     "sqlState" : "0A000"
   },
+  "PIPELINE_NESTED_COMPLEX_TYPE_SCHEMA_EVOLUTION_UNSUPPORTED" : {
+    "message" : [
+      "Schema evolution within a complex type (array or map) whose element is itself a complex type is not supported.",
+      "Column path <columnPath> has element type <currentType> but the target element type is <targetType>.",
+      "Flatten the nesting or apply the change manually."
+    ],
+    "sqlState" : "0A000"
+  },
   "PIPELINE_RUN_FAILED" : {
     "message" : [
       "<message>"
@@ -8193,6 +8201,12 @@
     ],
     "sqlState" : "42K0E"
   },
+  "TIMESTAMP_NANOS_PYTHON_MAP_KEY" : {
+    "message" : [
+      "Cannot convert a map with <type> keys to Python. Python `datetime.datetime` is microsecond-resolution and cannot represent the sub-microsecond digits, so two distinct nanosecond keys can collapse to a single entry. Avoid nanosecond-precision timestamp types as map keys on the Python conversion path."
+    ],
+    "sqlState" : "22000"
+  },
   "TRAILING_COMMA_IN_SELECT" : {
     "message" : [
       "Trailing comma detected in SELECT clause. Remove the trailing comma before the FROM clause."
@@ -9226,6 +9240,11 @@
       "SQL_CURSOR" : {
         "message" : [
           "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."
+        ]
+      },
+      "SQL_RESTRICTED_MODE" : {
+        "message" : [
+          "<feature> is not allowed because <config> is enabled."
         ]
       },
       "SQL_SCRIPTING" : {

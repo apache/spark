@@ -1221,7 +1221,8 @@ object FunctionRegistry {
     registerInternalExpression[NullIndex]("null_index")
     registerInternalExpression[CastTimestampNTZToLong]("timestamp_ntz_to_long")
     registerInternalExpression[ArrayBinarySearch]("array_binary_search")
-    registerInternalExpression[VectorPosExplode]("vector_posexplode")
+    registerInternalExpression[VectorPosExplode]("ml_vector_posexplode")
+    registerInternalExpression[VectorDotProduct]("ml_vector_dot_product")
   }
 
   registerInternalExpressions()

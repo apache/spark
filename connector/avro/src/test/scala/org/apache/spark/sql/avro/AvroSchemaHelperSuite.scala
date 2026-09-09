@@ -21,9 +21,44 @@ import org.apache.avro.SchemaBuilder
 import org.apache.spark.sql.avro.AvroUtils.AvroMatchedField
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, StringType, StructField, StructType}
 
 class AvroSchemaHelperSuite extends SharedSparkSession {
+
+  test("Catalyst type carried in the avro property parses normally") {
+    // An INT Avro field carrying a nested Catalyst type in the spark.sql.catalyst.type property.
+    val deepType = "array<" * 8 + "int" + ">" * 8
+    val avroSchema = SchemaBuilder.builder().intType()
+    avroSchema.addProp("spark.sql.catalyst.type", deepType)
+    assert(SchemaConverters.toSqlType(avroSchema).dataType.isInstanceOf[ArrayType])
+  }
+
+  test("a pathologically nested Catalyst type fails as a schema error, not StackOverflowError") {
+    // A backquoted identifier may itself contain '>', so a character scan of the type string
+    // cannot bound the real nesting -- only parsing it can. Parse on a small-stack thread so the
+    // recursive-descent parser overflows deterministically, and assert the overflow surfaces as
+    // an IncompatibleSchemaException instead of escaping as a StackOverflowError.
+    val depth = 6000
+    val deepType = "struct<`>`:" * depth + "int" + ">" * depth
+    val avroSchema = SchemaBuilder.builder().intType()
+    avroSchema.addProp("spark.sql.catalyst.type", deepType)
+
+    @volatile var thrown: Throwable = null
+    val runnable = new Runnable {
+      override def run(): Unit = {
+        try {
+          SchemaConverters.toSqlType(avroSchema)
+        } catch {
+          case t: Throwable => thrown = t
+        }
+      }
+    }
+    val t = new Thread(null, runnable, "avro-deep-catalyst-type", 256 * 1024)
+    t.start()
+    t.join()
+    assert(thrown.isInstanceOf[IncompatibleSchemaException],
+      s"expected IncompatibleSchemaException but got: $thrown")
+  }
 
   test("ensure schema is a record") {
     val avroSchema = SchemaBuilder.builder().intType()

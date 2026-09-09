@@ -9364,6 +9364,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
+  def restrictedModeEnabled: Boolean = getConf(StaticSQLConf.RESTRICTED_MODE_ENABLED)
+
   override def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
   def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)

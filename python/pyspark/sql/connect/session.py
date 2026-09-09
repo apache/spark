@@ -517,6 +517,15 @@ class SparkSession:
                 },
             )
 
+        # SPARK-57462: building a DataFrame over Spark Connect goes through Arrow, whose
+        # nanosecond timestamp value conversion is a pending follow-up. Reject an explicit
+        # nanosecond-typed schema here, right after resolution, so the empty-input and NumPy fast
+        # paths (which never build an Arrow converter) fail deterministically too.
+        if _schema is not None:
+            from pyspark.sql.pandas.types import _reject_timestamp_nanos_conversion
+
+            _reject_timestamp_nanos_conversion(_schema)
+
         if isinstance(data, np.ndarray) and data.ndim not in [1, 2]:
             raise PySparkValueError(
                 errorClass="INVALID_NDARRAY_DIMENSION",

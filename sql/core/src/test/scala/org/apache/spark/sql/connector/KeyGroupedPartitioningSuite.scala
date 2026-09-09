@@ -654,6 +654,66 @@ class KeyGroupedPartitioningSuite
       s"expected $expectedNumGroups key groups, got ${actualNumGroups.mkString(", ")}")
   }
 
+  /** An `items` to `purchases` existence join, planned by the `EXISTS` in a disjunction. */
+  private val existenceJoinQuery =
+    s"""
+       |SELECT id, name FROM testcat.ns.$items i
+       |WHERE EXISTS (SELECT /*+ MERGE(p) */ 1 FROM testcat.ns.$purchases p
+       |              WHERE i.id = p.item_id)
+       |   OR i.name = 'bb'
+       |""".stripMargin
+
+  /**
+   * An `items` to `purchases` left single join, planned by a correlated scalar subquery not proven
+   * to return one row. It cannot sort-merge, hence the shuffled hash join hint.
+   */
+  private val leftSingleJoinQuery =
+    s"""
+       |SELECT id, name,
+       |  (SELECT /*+ SHUFFLE_HASH(p) */ p.price FROM testcat.ns.$purchases p
+       |   WHERE i.id = p.item_id) AS sale_price
+       |FROM testcat.ns.$items i
+       |""".stripMargin
+
+  /**
+   * Runs `query` with partially clustered distribution on and off, asserting `expectedRows`, that
+   * its one shuffled join accepted by `isJoinType` has no shuffle under it, and per setting what
+   * `expected` gives: whether the left grouping distributes its splits (the right never does) and
+   * both sides' partition count.
+   */
+  private def checkPartiallyClusteredJoin(
+      query: String,
+      isJoinType: JoinType => Boolean,
+      expectedRows: Seq[Row],
+      expected: Boolean => (Boolean, Int)): Unit = {
+    Seq(true, false).foreach { partiallyClustered =>
+      val (expectedLeftDistributed, expectedNumPartitions) = expected(partiallyClustered)
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+          partiallyClustered.toString,
+        SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expectedRows)
+
+        val plan = df.queryExecution.executedPlan
+        val joins = collect(plan) { case j: ShuffledJoin if isJoinType(j.joinType) => j }
+        assert(joins.size == 1, s"expected one matching join in\n$plan")
+        assert(collectAllShuffles(joins.head).isEmpty,
+          "should not add shuffle for both sides of the join")
+        val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+        val distributed = sides.map(_.map(_.distributePartitions))
+        assert(distributed == Seq(Seq(expectedLeftDistributed), Seq(false)),
+          s"left/right distributePartitions with partially clustered $partiallyClustered: " +
+            distributed)
+        val numPartitions = sides.flatten.map(_.outputPartitioning.numPartitions)
+        assert(numPartitions == Seq(expectedNumPartitions, expectedNumPartitions),
+          s"left/right partitions with partially clustered $partiallyClustered: $numPartitions")
+      }
+    }
+  }
+
   /**
    * Creates a table partitioned by `bucket(numBuckets, id)` and holding the ids 0 until `numIds`.
    * Joining two such tables reduces both sides onto the greatest common divisor of their bucket
@@ -4380,6 +4440,57 @@ class KeyGroupedPartitioningSuite
         checkPartitionFilteredJoin(df, _ == LeftSingle, expectedNumGroups = 3)
       }
     }
+  }
+
+  test("SPARK-59294: partially clustered distribution with existence join and left single join") {
+    createTable(items, itemsColumns, Array(bucket(8, "id")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 38.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'bb', 39.0, cast('2020-01-02' as timestamp)), " +
+        s"(4, 'cc', 40.0, cast('2020-01-02' as timestamp)), " +
+        s"(4, 'dd', 41.0, cast('2020-01-03' as timestamp)), " +
+        s"(4, 'ee', 42.0, cast('2020-01-04' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array(bucket(8, "item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(4, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(5, 44.0, cast('2020-01-15' as timestamp))")
+
+    // `items` holds three splits for key 4 and is the larger side, so partially clustered
+    // distribution keeps its splits apart and replicates `purchases` to each of them. Each left
+    // row still lands in one task that sees every right row for its key, which is all these join
+    // types need, so the join runs over five partitions instead of three key groups.
+    checkPartiallyClusteredJoin(existenceJoinQuery, _.isInstanceOf[ExistenceJoin],
+      Seq(Row(1, "bb"), Row(4, "cc"), Row(4, "dd"), Row(4, "ee")),
+      expected = on => if (on) (true, 5) else (false, 3))
+    checkPartiallyClusteredJoin(leftSingleJoinQuery, _ == LeftSingle,
+      Seq(Row(0, "aa", null), Row(1, "bb", null), Row(4, "cc", 42.0), Row(4, "dd", 42.0),
+        Row(4, "ee", 42.0)),
+      expected = on => if (on) (true, 5) else (false, 3))
+  }
+
+  test("SPARK-59294: partially clustered distribution is skipped when the smaller side is the " +
+      "left of an existence join or a left single join") {
+    createTable(items, itemsColumns, Array(bucket(8, "id")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 38.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'bb', 39.0, cast('2020-01-02' as timestamp)), " +
+        s"(4, 'cc', 40.0, cast('2020-01-02' as timestamp))")
+
+    // One row per item id, as a left single join errors on a second match. Eight rows outweigh
+    // the three `items` rows, so `items` is the side picked for replication.
+    createTable(purchases, purchasesColumns, Array(bucket(8, "item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        (4 to 11).map(id => s"($id, ${id + 38}.0, cast('2020-01-01' as timestamp))")
+          .mkString(", "))
+
+    // Only the right side may be replicated for these join types, so picking the left leaves
+    // both sides grouped by key whether or not the distribution is enabled.
+    checkPartiallyClusteredJoin(existenceJoinQuery, _.isInstanceOf[ExistenceJoin],
+      Seq(Row(1, "bb"), Row(4, "cc")), expected = _ => (false, 3))
+    checkPartiallyClusteredJoin(leftSingleJoinQuery, _ == LeftSingle,
+      Seq(Row(0, "aa", null), Row(1, "bb", null), Row(4, "cc", 42.0)),
+      expected = _ => (false, 3))
   }
 
   test("SPARK-53322: checkpointed scans avoid shuffles for aggregates") {
