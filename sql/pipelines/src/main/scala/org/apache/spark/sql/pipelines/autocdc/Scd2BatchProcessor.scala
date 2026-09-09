@@ -214,21 +214,22 @@ case class Scd2BatchProcessor(
    * map: their data-column values are not part of the SCD2 contract, so authorship tracking
    * is not applicable.
    *
-   * Must run after [[projectTargetColumnsOntoMicrobatch]], because the eligible schema is
-   * computed from the post-selection schema.
+   * Must run after [[projectTargetColumnsOntoMicrobatch]] and
+   * [[alignMicrobatchToTargetSchema]], because the eligible schema is computed from the selected,
+   * target-aligned schema.
    *
    * TODO(SPARK-59343): decide how to handle the ignore-null selection changing between
    * partial-retry attempts of the same microbatch.
    */
-  private def extendMicrobatchRowsWithVersionMap(projectedDf: DataFrame): DataFrame =
+  private def extendMicrobatchRowsWithVersionMap(alignedDf: DataFrame): DataFrame =
     changeArgs.ignoreNullSelection match {
-      case None => projectedDf
+      case None => alignedDf
       case Some(ignoreNullSelection) =>
         val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)
-        val resolver = projectedDf.sparkSession.sessionState.conf.resolver
+        val resolver = alignedDf.sparkSession.sessionState.conf.resolver
         val schemaEligibleForNullAuthorshipTracking =
           Scd2BatchProcessor.computeUserDataSchema(
-            schema = projectedDf.schema,
+            schema = alignedDf.schema,
             changeArgs = changeArgs,
             resolver = resolver
           )
@@ -244,7 +245,7 @@ case class Scd2BatchProcessor(
           resolver = resolver
         ))
 
-        projectedDf.withColumn(
+        alignedDf.withColumn(
           colName = AutoCdcReservedNames.cdcMetadataColName,
           col = cdcMetadataCol
             .withField(Scd2BatchProcessor.versionMapFieldName, versionMap)
@@ -1526,9 +1527,8 @@ object Scd2BatchProcessor {
    * against this, so an exclude-list in either cannot pick up a key or a framework column, and
    * an include-list naming one fails as not found.
    *
-   * `schema` is expected to have already been narrowed by [[ChangeArgs.columnSelection]], which
-   * happens once per microbatch in [[Scd2BatchProcessor.projectTargetColumnsOntoMicrobatch]];
-   * this method does not re-apply it.
+   * `schema` is expected to have already been narrowed by [[ChangeArgs.columnSelection]] and then
+   * aligned to the persisted target schema. This method does not re-apply the selection.
    */
   private[pipelines] def computeUserDataSchema(
       schema: StructType,
