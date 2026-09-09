@@ -556,15 +556,20 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean): DataFrame = {
-    val attrs = toAttributes(schema)
+    val physicalSchema =
+      CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(schema).asInstanceOf[StructType]
+    val attrs = toAttributes(physicalSchema)
     val applyCharVarcharChecks =
       CharVarcharUtils.hasCharVarchar(schema) &&
         CharVarcharUtils.shouldApplyWriteSideLengthCheck(session.sessionState.conf)
     val checkedAttrs = if (applyCharVarcharChecks) {
-      attrs.map(attr => CharVarcharUtils.stringLengthCheck(attr, attr.dataType))
+      attrs.zip(schema.fields).map { case (attr, field) =>
+        CharVarcharUtils.stringLengthCheck(attr, field.dataType)
+      }
     } else {
       attrs
     }
+    val outputSchema = if (applyCharVarcharChecks) schema else physicalSchema
     val batchesInDriver = arrowBatches.toArray
     val shouldUseRDD = session.sessionState.conf
       .arrowLocalRelationThreshold < batchesInDriver.map(_.length.toLong).sum
@@ -576,7 +581,7 @@ private[sql] object ArrowConverters extends Logging {
         .mapPartitions { batchesInExecutors =>
           val rows = ArrowConverters.fromBatchIterator(
             batchesInExecutors,
-            schema,
+            physicalSchema,
             timeZoneId,
             errorOnDuplicatedFieldNames,
             largeVarTypes,
@@ -588,12 +593,12 @@ private[sql] object ArrowConverters extends Logging {
             rows
           }
         }
-      session.internalCreateDataFrame(rdd.setName("arrow"), schema)
+      session.internalCreateDataFrame(rdd.setName("arrow"), outputSchema)
     } else {
       logDebug("Using LocalRelation in createDataFrame with Arrow optimization.")
       val data = ArrowConverters.fromBatchIterator(
         batchesInDriver.iterator,
-        schema,
+        physicalSchema,
         timeZoneId,
         errorOnDuplicatedFieldNames,
         largeVarTypes,
@@ -607,7 +612,7 @@ private[sql] object ArrowConverters extends Logging {
         } finally {
           data.close()
         }
-      Dataset.ofRows(session, LocalRelation(attrs, rows))
+      Dataset.ofRows(session, LocalRelation(toAttributes(outputSchema), rows))
     }
   }
 

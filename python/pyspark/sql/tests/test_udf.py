@@ -50,6 +50,7 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     TimestampNTZType,
+    UserDefinedType,
     VarcharType,
     VariantType,
     VariantVal,
@@ -159,6 +160,25 @@ class BaseUDFTestsMixin:
                 with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
                     self.spark.sql("SELECT v FROM char_varchar_udf_view").collect()
 
+    def test_char_varchar_mixed_captured_policies_in_one_batch(self):
+        char_udf = udf(lambda _: "a", CharType(3), useArrow=False)
+        varchar_udf = udf(lambda _: "abcd", VarcharType(3), useArrow=False)
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            checked_char = char_udf("id").alias("c")
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            unchecked_varchar = varchar_udf("id").alias("v")
+
+        self.assertEqual(
+            self.spark.range(1).select(checked_char, unchecked_varchar).first(),
+            Row(c="a  ", v="abcd"),
+        )
+
     def test_char_varchar_non_scalar_return_types_unsupported(self):
         nested_return_type = StructType(
             [StructField("nested", ArrayType(CharType(3)))]
@@ -196,6 +216,35 @@ class BaseUDFTestsMixin:
         for eval_type in stateful_and_incremental_eval_types:
             with self.assertRaisesRegex(PySparkNotImplementedError, "Invalid return type"):
                 UserDefinedFunction._check_return_type(nested_return_type, eval_type)
+
+    def test_char_varchar_inside_udt_return_type_is_unsupported(self):
+        class CharVarcharUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return StructType([StructField("value", ArrayType(CharType(2)))])
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+            def serialize(self, obj):
+                return obj
+
+            def deserialize(self, datum):
+                return datum
+
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR inside Python UDF UDT return type",
+        ):
+            UserDefinedFunction._check_return_type(
+                CharVarcharUDT(),
+                PythonEvalType.SQL_ARROW_BATCHED_UDF,
+            )
 
     def test_udf_with_callable(self):
         data = self.spark.createDataFrame([(i, i**2) for i in range(10)], ["number", "squared"])

@@ -28,10 +28,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
@@ -39,22 +35,8 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
  * A helper class to deserialize state Arrow batches from the state socket in
  * TransformWithStateInPySpark.
  */
-class TransformWithStateInPySparkDeserializer(
-    schema: StructType,
-    deserializer: ExpressionEncoder.Deserializer[Row],
-    applyCharVarcharChecks: Boolean)
-    extends Logging {
-  private val attrs = toAttributes(schema)
-  private val checkedProjection =
-    if (applyCharVarcharChecks && CharVarcharUtils.hasCharVarchar(schema)) {
-      val checkedAttrs = attrs.map { attr =>
-        CharVarcharUtils.stringLengthCheck(attr, attr.dataType)
-      }
-      Some(UnsafeProjection.create(checkedAttrs, attrs))
-    } else {
-      None
-    }
-
+class TransformWithStateInPySparkDeserializer(deserializer: ExpressionEncoder.Deserializer[Row])
+  extends Logging {
   private lazy val allocator = ArrowUtils.rootAllocator.newChildAllocator(
         s"stdin reader for transformWithStateInPySpark state socket", 0, Long.MaxValue)
 
@@ -63,26 +45,18 @@ class TransformWithStateInPySparkDeserializer(
    */
   def readArrowBatches(stream: DataInputStream): Seq[Row] = {
     val reader = new ArrowStreamReader(stream, allocator)
-    try {
-      val root = reader.getVectorSchemaRoot
-      val vectors = root.getFieldVectors.asScala
-        .map { vector =>
-          new ArrowColumnVector(vector)
-        }
-        .toArray[ColumnVector]
-      val rows = ArrayBuffer[Row]()
-      while (reader.loadNextBatch()) {
-        val batch = new ColumnarBatch(vectors)
-        batch.setNumRows(root.getRowCount)
-        rows.appendAll(batch.rowIterator().asScala.map { row =>
-          val copied = row.copy()
-          deserializer(checkedProjection.map(_(copied)).getOrElse(copied))
-        })
-      }
-      rows.toSeq
-    } finally {
-      reader.close(false)
+    val root = reader.getVectorSchemaRoot
+    val vectors = root.getFieldVectors.asScala.map { vector =>
+      new ArrowColumnVector(vector)
+    }.toArray[ColumnVector]
+    val rows = ArrayBuffer[Row]()
+    while (reader.loadNextBatch()) {
+      val batch = new ColumnarBatch(vectors)
+      batch.setNumRows(root.getRowCount)
+      rows.appendAll(batch.rowIterator().asScala.map(r => deserializer(r.copy())))
     }
+    reader.close(false)
+    rows.toSeq
   }
 
   def readListElements(stream: DataInputStream, listStateInfo: ListStateInfo): Seq[Row] = {
@@ -96,11 +70,8 @@ class TransformWithStateInPySparkDeserializer(
       } else {
         val bytes = new Array[Byte](size)
         stream.read(bytes, 0, size)
-        val newRow = PythonSQLUtils.toJVMRow(
-          bytes,
-          listStateInfo.schema,
-          listStateInfo.deserializer,
-          applyCharVarcharChecks)
+        val newRow = PythonSQLUtils.toJVMRow(bytes, listStateInfo.schema,
+          listStateInfo.deserializer)
         rows.append(newRow)
       }
     }

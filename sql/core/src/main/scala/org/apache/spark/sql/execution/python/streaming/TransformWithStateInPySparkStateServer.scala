@@ -36,11 +36,12 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.security.SocketAuthHelper
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateVariableType
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleImplBase, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateResponseWithMapIterator, StateResponseWithMapKeysOrValues, StateResponseWithStringTypeVal, StateResponseWithTimer, StateVariableRequest, TimerInfo, TimerRequest, TimerStateCallCommand, TimerValueRequest, UtilsRequest, ValueStateCall}
@@ -76,38 +77,21 @@ class TransformWithStateInPySparkStateServer(
     keyValueIteratorMapForTest: mutable.HashMap[String, Iterator[(Row, Row)]] = null,
     expiryTimerIterForTest: mutable.HashMap[String, Iterator[(Row, Long)]] = null,
     listTimerMapForTest: mutable.HashMap[String, Iterator[Long]] = null,
-    authHelper: SocketAuthHelper = null,
-    applyCharVarcharChecks: Boolean = false)
-    extends Runnable
-    with Logging {
+    authHelper: SocketAuthHelper = null)
+  extends Runnable with Logging {
 
   import PythonResponseWriterUtils._
 
-  private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
-    ExpressionEncoder(physicalSchema(groupingKeySchema)).resolveAndBind().createDeserializer()
-
-  private def deserializeRow(
-      bytes: Array[Byte],
-      schema: StructType,
-      deserializer: ExpressionEncoder.Deserializer[Row]): Row = {
-    PythonSQLUtils.toJVMRow(bytes, schema, deserializer, applyCharVarcharChecks)
-  }
-
-  private def conversionSchema(schema: StructType): StructType = {
-    if (applyCharVarcharChecks) {
-      schema
-    } else {
-      physicalSchema(schema)
+  private def validateStateSchema(schema: StructType, schemaKind: String): Unit = {
+    if (CharVarcharUtils.hasCharVarchar(schema)) {
+      throw QueryCompilationErrors.invalidPythonStateSchema(schema, schemaKind)
     }
   }
 
-  private def physicalSchema(schema: StructType): StructType = {
-    CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(schema).asInstanceOf[StructType]
-  }
+  validateStateSchema(groupingKeySchema, "grouping key")
 
-  private def stateEncoder(schema: StructType): ExpressionEncoder[Row] = {
-    ExpressionEncoder(physicalSchema(schema)).resolveAndBind()
-  }
+  private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
+    ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
   private var inputStream: DataInputStream = _
   private var outputStream: DataOutputStream = outputStreamForTest
 
@@ -357,8 +341,7 @@ class TransformWithStateInPySparkStateServer(
       case ImplicitGroupingKeyRequest.MethodCase.SETIMPLICITKEY =>
         val keyBytes = message.getSetImplicitKey.getKey.toByteArray
         // The key row is serialized as a byte array, we need to convert it back to a Row
-        val keyRow =
-          deserializeRow(keyBytes, conversionSchema(groupingKeySchema), keyRowDeserializer)
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, groupingKeySchema, keyRowDeserializer)
         ImplicitGroupingKeyTracker.setImplicitKey(keyRow)
         // Reset the list/map state iterators for a new grouping key.
         iterators = new mutable.HashMap[String, Iterator[Row]]()
@@ -516,8 +499,8 @@ class TransformWithStateInPySparkStateServer(
       case ValueStateCall.MethodCase.VALUESTATEUPDATE =>
         val byteArray = message.getValueStateUpdate.getValue.toByteArray
         // The value row is serialized as a byte array, we need to convert it back to a Row
-        val valueRow =
-          deserializeRow(byteArray, valueStateInfo.schema, valueStateInfo.deserializer)
+        val valueRow = PythonSQLUtils.toJVMRow(byteArray, valueStateInfo.schema,
+          valueStateInfo.deserializer)
         valueStateInfo.valueState.update(valueRow)
         sendResponse(0)
       case ValueStateCall.MethodCase.CLEAR =>
@@ -541,10 +524,7 @@ class TransformWithStateInPySparkStateServer(
       deserializer = if (deserializerForTest != null) {
         deserializerForTest
       } else {
-        new TransformWithStateInPySparkDeserializer(
-          listStateInfo.schema,
-          listStateInfo.deserializer,
-          applyCharVarcharChecks)
+        new TransformWithStateInPySparkDeserializer(listStateInfo.deserializer)
       }
       message.getMethodCase match {
         case ListStateCall.MethodCase.EXISTS =>
@@ -564,7 +544,10 @@ class TransformWithStateInPySparkStateServer(
           } else {
             val elements = message.getListStatePut.getValueList.asScala
             elements.map { e =>
-              deserializeRow(e.toByteArray, listStateInfo.schema, listStateInfo.deserializer)
+              PythonSQLUtils.toJVMRow(
+                e.toByteArray,
+                listStateInfo.schema,
+                listStateInfo.deserializer)
             }
           }
           listStateInfo.listState.put(rows.toArray)
@@ -583,7 +566,8 @@ class TransformWithStateInPySparkStateServer(
           }
         case ListStateCall.MethodCase.APPENDVALUE =>
           val byteArray = message.getAppendValue.getValue.toByteArray
-          val newRow = deserializeRow(byteArray, listStateInfo.schema, listStateInfo.deserializer)
+          val newRow =
+            PythonSQLUtils.toJVMRow(byteArray, listStateInfo.schema, listStateInfo.deserializer)
           listStateInfo.listState.appendValue(newRow)
           sendResponse(0)
         case ListStateCall.MethodCase.APPENDLIST =>
@@ -596,7 +580,10 @@ class TransformWithStateInPySparkStateServer(
           } else {
             val elements = message.getAppendList.getValueList.asScala
             elements.map { e =>
-              deserializeRow(e.toByteArray, listStateInfo.schema, listStateInfo.deserializer)
+              PythonSQLUtils.toJVMRow(
+                e.toByteArray,
+                listStateInfo.schema,
+                listStateInfo.deserializer)
             }
           }
           listStateInfo.listState.appendList(rows.toArray)
@@ -633,8 +620,8 @@ class TransformWithStateInPySparkStateServer(
         }
       case MapStateCall.MethodCase.GETVALUE =>
         val keyBytes = message.getGetValue.getUserKey.toByteArray
-        val keyRow =
-          deserializeRow(keyBytes, mapStateInfo.keySchema, mapStateInfo.keyDeserializer)
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
+          mapStateInfo.keyDeserializer)
         val value = mapStateInfo.mapState.getValue(keyRow)
         if (value != null) {
           val valueBytes = PythonSQLUtils.toPyRow(value)
@@ -647,8 +634,8 @@ class TransformWithStateInPySparkStateServer(
         }
       case MapStateCall.MethodCase.CONTAINSKEY =>
         val keyBytes = message.getContainsKey.getUserKey.toByteArray
-        val keyRow =
-          deserializeRow(keyBytes, mapStateInfo.keySchema, mapStateInfo.keyDeserializer)
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
+          mapStateInfo.keyDeserializer)
         if (mapStateInfo.mapState.containsKey(keyRow)) {
           sendResponse(0)
         } else {
@@ -656,11 +643,11 @@ class TransformWithStateInPySparkStateServer(
         }
       case MapStateCall.MethodCase.UPDATEVALUE =>
         val keyBytes = message.getUpdateValue.getUserKey.toByteArray
-        val keyRow =
-          deserializeRow(keyBytes, mapStateInfo.keySchema, mapStateInfo.keyDeserializer)
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
+          mapStateInfo.keyDeserializer)
         val valueBytes = message.getUpdateValue.getValue.toByteArray
-        val valueRow =
-          deserializeRow(valueBytes, mapStateInfo.valueSchema, mapStateInfo.valueDeserializer)
+        val valueRow = PythonSQLUtils.toJVMRow(valueBytes, mapStateInfo.valueSchema,
+          mapStateInfo.valueDeserializer)
         mapStateInfo.mapState.updateValue(keyRow, valueRow)
         sendResponse(0)
       case MapStateCall.MethodCase.ITERATOR =>
@@ -701,8 +688,8 @@ class TransformWithStateInPySparkStateServer(
         }
       case MapStateCall.MethodCase.REMOVEKEY =>
         val keyBytes = message.getRemoveKey.getUserKey.toByteArray
-        val keyRow =
-          deserializeRow(keyBytes, mapStateInfo.keySchema, mapStateInfo.keyDeserializer)
+        val keyRow = PythonSQLUtils.toJVMRow(keyBytes, mapStateInfo.keySchema,
+          mapStateInfo.keyDeserializer)
         mapStateInfo.mapState.removeKey(keyRow)
         sendResponse(0)
       case MapStateCall.MethodCase.CLEAR =>
@@ -719,20 +706,17 @@ class TransformWithStateInPySparkStateServer(
       stateType: StateVariableType.StateVariableType,
       ttlDurationMs: Option[Long],
       mapStateValueSchemaString: String = null): Unit = {
-    val logicalSchema = StructType.fromString(schemaString)
-    val schema = conversionSchema(logicalSchema)
-    val expressionEncoder = stateEncoder(logicalSchema)
+    val schema = StructType.fromString(schemaString)
+    validateStateSchema(schema, s"$stateType state")
+    val expressionEncoder = ExpressionEncoder(schema).resolveAndBind()
     stateType match {
-      case StateVariableType.ValueState =>
-        if (!valueStates.contains(stateName)) {
-          val state = if (ttlDurationMs.isEmpty) {
-            statefulProcessorHandle
-              .getValueState[Row](stateName, expressionEncoder, TTLConfig.NONE)
+      case StateVariableType.ValueState => if (!valueStates.contains(stateName)) {
+        val state = if (ttlDurationMs.isEmpty) {
+          statefulProcessorHandle.getValueState[Row](stateName, Encoders.row(schema),
+            TTLConfig.NONE)
           } else {
             statefulProcessorHandle.getValueState(
-              stateName,
-              expressionEncoder,
-              TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
+              stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
           }
           valueStates.put(stateName,
             ValueStateInfo(state, schema, expressionEncoder.createDeserializer()))
@@ -741,61 +725,41 @@ class TransformWithStateInPySparkStateServer(
           sendResponse(1, s"Value state $stateName already exists")
         }
 
-      case StateVariableType.ListState =>
-        if (!listStates.contains(stateName)) {
-          val state = if (ttlDurationMs.isEmpty) {
-            statefulProcessorHandle
-              .getListState[Row](stateName, expressionEncoder, TTLConfig.NONE)
-          } else {
-            statefulProcessorHandle.getListState(
-              stateName,
-              expressionEncoder,
-              TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
-          }
-          listStates.put(
-            stateName,
-            ListStateInfo(
-              state,
-              schema,
-              expressionEncoder.createDeserializer(),
-              expressionEncoder.createSerializer()))
-          sendResponse(0)
+      case StateVariableType.ListState => if (!listStates.contains(stateName)) {
+        val state = if (ttlDurationMs.isEmpty) {
+          statefulProcessorHandle.getListState[Row](stateName, Encoders.row(schema),
+            TTLConfig.NONE)
         } else {
-          sendResponse(1, s"List state $stateName already exists")
+          statefulProcessorHandle.getListState(
+            stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
         }
+        listStates.put(stateName,
+          ListStateInfo(state, schema, expressionEncoder.createDeserializer(),
+            expressionEncoder.createSerializer()))
+        sendResponse(0)
+      } else {
+        sendResponse(1, s"List state $stateName already exists")
+      }
 
-      case StateVariableType.MapState =>
-        if (!mapStates.contains(stateName)) {
-          val logicalValueSchema = StructType.fromString(mapStateValueSchemaString)
-          val valueSchema = conversionSchema(logicalValueSchema)
-          val valueExpressionEncoder = stateEncoder(logicalValueSchema)
-          val state = if (ttlDurationMs.isEmpty) {
-            statefulProcessorHandle.getMapState[Row, Row](
-              stateName,
-              expressionEncoder,
-              valueExpressionEncoder,
-              TTLConfig.NONE)
-          } else {
-            statefulProcessorHandle.getMapState[Row, Row](
-              stateName,
-              expressionEncoder,
-              valueExpressionEncoder,
-              TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
-          }
-          mapStates.put(
-            stateName,
-            MapStateInfo(
-              state,
-              schema,
-              valueSchema,
-              expressionEncoder.createDeserializer(),
-              expressionEncoder.createSerializer(),
-              valueExpressionEncoder.createDeserializer(),
-              valueExpressionEncoder.createSerializer()))
-          sendResponse(0)
+      case StateVariableType.MapState => if (!mapStates.contains(stateName)) {
+        val valueSchema = StructType.fromString(mapStateValueSchemaString)
+        validateStateSchema(valueSchema, "map state value")
+        val valueExpressionEncoder = ExpressionEncoder(valueSchema).resolveAndBind()
+        val state = if (ttlDurationMs.isEmpty) {
+          statefulProcessorHandle.getMapState[Row, Row](stateName,
+            Encoders.row(schema), Encoders.row(valueSchema), TTLConfig.NONE)
         } else {
-          sendResponse(1, s"Map state $stateName already exists")
+          statefulProcessorHandle.getMapState[Row, Row](stateName, Encoders.row(schema),
+            Encoders.row(valueSchema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
         }
+        mapStates.put(stateName,
+          MapStateInfo(state, schema, valueSchema, expressionEncoder.createDeserializer(),
+            expressionEncoder.createSerializer(), valueExpressionEncoder.createDeserializer(),
+            valueExpressionEncoder.createSerializer()))
+        sendResponse(0)
+      } else {
+        sendResponse(1, s"Map state $stateName already exists")
+      }
     }
   }
 
