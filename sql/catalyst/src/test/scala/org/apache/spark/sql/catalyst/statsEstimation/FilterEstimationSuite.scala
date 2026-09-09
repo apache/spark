@@ -579,6 +579,54 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 10)
   }
 
+  test("cstring startsWith 'A' - bounded by the non-null fraction") {
+    // Only non-null rows can match, so selectivity <= 1 - nullPercent = 0.5.
+    val colStatNullableString = colStatString.copy(nullCount = Some(5))
+    validateEstimatedStats(
+      Filter(StartsWith(attrString, Literal("A")),
+        childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+          attributeMap = AttributeMap(Seq(attrString -> colStatNullableString)))),
+      Seq(attrString -> colStatString.copy(distinctCount = Some(5))),
+      expectedRowCount = 5)
+  }
+
+  test("cstring endsWith / contains 'A' - bounded by the non-null fraction") {
+    val colStatNullableString = colStatString.copy(nullCount = Some(5))
+    Seq(EndsWith(attrString, Literal("A")), Contains(attrString, Literal("A"))).foreach { cond =>
+      validateEstimatedStats(
+        Filter(cond,
+          childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+            attributeMap = AttributeMap(Seq(attrString -> colStatNullableString)))),
+        Seq(attrString -> colStatString.copy(distinctCount = Some(5))),
+        expectedRowCount = 5)
+    }
+  }
+
+  test("cstring startsWith operand longer than maxLen matches nothing") {
+    // colStatString.maxLen is 2, so a 3-character prefix cannot match any value.
+    validateEstimatedStats(
+      Filter(StartsWith(attrString, Literal("abc")), childStatsTestPlan(Seq(attrString), 10L)),
+      Seq(attrString -> colStatString),
+      expectedRowCount = 0)
+  }
+
+  test("cstring startsWith on an all-null column matches nothing") {
+    val colStatAllNull = colStatString.copy(nullCount = Some(10))
+    validateEstimatedStats(
+      Filter(StartsWith(attrString, Literal("A")),
+        childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+          attributeMap = AttributeMap(Seq(attrString -> colStatAllNull)))),
+      Seq(attrString -> colStatAllNull),
+      expectedRowCount = 0)
+  }
+
+  test("cstring startsWith on a non-null column is unchanged (selectivity 1.0)") {
+    validateEstimatedStats(
+      Filter(StartsWith(attrString, Literal("A")), childStatsTestPlan(Seq(attrString), 10L)),
+      Seq(attrString -> colStatString),
+      expectedRowCount = 10)
+  }
+
   test("SPARK-59273: CHAR/VARCHAR equality, IN, and range fall back like STRING") {
     Seq(attrChar -> colStatChar, attrVarchar -> colStatVarchar).foreach {
       case (attr, colStat) =>
