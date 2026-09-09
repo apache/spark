@@ -1157,9 +1157,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-59138: per-shuffle reliablyStored=false overrides a global supportsReliableStorage") {
-    // Mixed/fallback case: the manager reports the app-global capability as true, but a specific
-    // shuffle fell back to local disk and reports Some(false) on its handle. The per-shuffle value
-    // must win, so that shuffle's outputs are dropped on executor loss.
+    // Global flag true, but one shuffle reports Some(false); the per-shuffle value must win.
     conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
     conf.set(config.SHUFFLE_IO_PLUGIN_CLASS.key,
       classOf[TestShuffleDataIOWithMockedComponents].getName)
@@ -1187,9 +1185,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-59138: same-epoch FetchFailed after selective executor-loss cleanup is not skipped") {
-    // Selective cleanup on executor loss preserves a reliably-stored shuffle's outputs but must not
-    // record shuffleFileLostEpoch as a full cleanup: a later same-epoch FetchFailed for one of the
-    // preserved-but-actually-gone outputs must still trigger the real removal.
+    // A selective cleanup preserves reliable outputs, so it must not stamp shuffleFileLostEpoch;
+    // a same-epoch FetchFailed for a preserved-but-gone output must still trigger real removal.
     conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
 
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
@@ -1204,9 +1201,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
       HashSet("hostA", "hostB"))
 
-    // A reducer running at the same epoch reports FetchFailed for hostA's output, which is really
-    // gone. The selective cleanup didn't stamp shuffleFileLostEpoch, so the epoch-gated bulk
-    // cleanup proceeds instead of being skipped.
+    // Same-epoch FetchFailed for hostA's (really gone) output: no epoch was stamped, so the
+    // epoch-gated cleanup proceeds instead of being skipped.
     complete(taskSets(1), Seq(
       (Success, 42),
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 1, "ignored"), null)))

@@ -27,16 +27,10 @@ import org.apache.spark.annotation.DeveloperApi
 @DeveloperApi
 abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {
   /**
-   * Whether this shuffle's output is stored reliably, independent of the lifecycle of the executor
-   * host that produced it (e.g. a remote shuffle service or a distributed filesystem), matching the
-   * contract of `ShuffleDriverComponents.supportsReliableStorage()`. When true, losing the executor
-   * or its host does not lose this shuffle's output, so its map outputs are not unregistered on
-   * executor/worker loss.
-   *
-   * This is the per-shuffle override of the app-global `supportsReliableStorage()`: `Some(value)`
-   * is authoritative for this shuffle (a ShuffleManager that routes reliability per shuffle sets it
-   * on the handle it returns), while `None` means "no per-shuffle information", in which case the
-   * global flag is used. Defaults to `None` so managers that don't set it keep the global behavior.
+   * Per-shuffle override of the app-global `ShuffleDriverComponents.supportsReliableStorage()`.
+   * `Some(true)`/`Some(false)` is authoritative for this shuffle; `None` (the default) falls back
+   * to the global flag. When reliable, the output survives executor/host loss and is not
+   * unregistered.
    */
   def reliablyStored: Option[Boolean] = None
 }
