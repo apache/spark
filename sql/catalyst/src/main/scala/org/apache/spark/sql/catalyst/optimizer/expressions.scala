@@ -831,7 +831,11 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
           Some(EndsWith(input, Literal.create(postfix, input.dataType)))
         // 'a%a' pattern is basically same with 'a%' && '%a'.
         // However, the additional length condition is required to prevent 'a' match 'a%a'.
-        case startsAndEndsWith(prefix, postfix) =>
+        // This rewrite references `input` three times (length guard, StartsWith, EndsWith), so
+        // gate it on `input` being cheap to duplicate: an expensive child (`sha2(col)`) would be
+        // recomputed per reference and a nondeterministic one (`uuid()`) would yield a different
+        // value each time, so such children stay as `Like`.
+        case startsAndEndsWith(prefix, postfix) if CollapseProject.isCheap(input) =>
           // The length guard only rejects inputs too short to hold both the prefix and the
           // suffix. When the collation matches raw bytes (supportsBinaryEquality),
           // StartsWith/EndsWith pin the literal bytes of the prefix and suffix, so a
