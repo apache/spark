@@ -368,6 +368,9 @@ Here is the list of SQL metrics:
 <tr><td> <code>avg hash probe bucket list iters</code> </td><td> the average bucket list iterations per lookup during aggregation </td><td> HashAggregate </td></tr>
 <tr><td> <code>data size of build side</code> </td><td> the size of built hash map </td><td> ShuffledHashJoin </td></tr>
 <tr><td> <code>time to build hash map</code> </td><td> the time spent on building hash map </td><td> ShuffledHashJoin </td></tr>
+<tr><td> <code>number of pruned input partitions</code> </td><td> the number of input partitions skipped because the join proved their partition key cannot produce output </td><td> GroupPartitions </td></tr>
+<tr><td> <code>number of replicated input partition reads</code> </td><td> the number of extra reads of input partitions caused by replicating a key group across the other side's partitions </td><td> GroupPartitions </td></tr>
+<tr><td> <code>max partitions per group</code> </td><td> the largest number of input partitions one output partition holds; large values indicate a skewed partition key </td><td> GroupPartitions </td></tr>
 <tr><td> <code>task commit time</code> </td><td> the time spent on committing the output of a task after the writes succeed </td><td> any write operation on a file-based table </td></tr>
 <tr><td> <code>job commit time</code> </td><td> the time spent on committing the output of a job after the writes succeed </td><td> any write operation on a file-based table </td></tr>
 <tr><td> <code>data sent to Python workers</code> </td><td> the number of bytes of serialized data sent to the Python workers </td><td> Python UDFs, Pandas UDFs, Pandas Functions API and Python Data Source </td></tr>

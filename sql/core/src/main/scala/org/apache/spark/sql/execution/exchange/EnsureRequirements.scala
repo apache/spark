@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -642,8 +642,8 @@ case class EnsureRequirements(
           // optimization cannot be applied to a left outer join, where the left hand
           // side is chosen as the side to replicate partitions according to stats.
           // Otherwise, query result could be incorrect.
-          val canReplicateLeft = canReplicateLeftSide(joinType)
-          val canReplicateRight = canReplicateRightSide(joinType)
+          val canReplicateLeft = ShuffledJoin.canDuplicateLeftSide(joinType)
+          val canReplicateRight = ShuffledJoin.canDuplicateRightSide(joinType)
 
           if (!canReplicateLeft && !canReplicateRight) {
             logInfo(log"Skipping partially clustered distribution as it cannot be applied for " +
@@ -695,7 +695,7 @@ case class EnsureRequirements(
 
             // Similar to skewed join, we need to check the join type to see whether replication
             // of partitions can be applied. For instance, replication should not be allowed for
-            // the left-hand side of a right outer join.
+            // the left-hand side of a left outer join.
             if (replicateLeftSide && !canReplicateLeft) {
               logInfo(log"Left-hand side is picked but cannot be applied to join type " +
                 log"'${MDC(LogKeys.JOIN_TYPE, joinType)}'. Skipping partially clustered " +
@@ -775,17 +775,6 @@ case class EnsureRequirements(
       case _ =>
         false
     }
-  }
-
-  // Similar to `OptimizeSkewedJoin.canSplitRightSide`
-  private def canReplicateLeftSide(joinType: JoinType): Boolean = {
-    joinType == Inner || joinType == Cross || joinType == RightOuter
-  }
-
-  // Similar to `OptimizeSkewedJoin.canSplitLeftSide`
-  private def canReplicateRightSide(joinType: JoinType): Boolean = {
-    joinType == Inner || joinType == Cross || joinType == LeftSemi ||
-        joinType == LeftAnti || joinType == LeftOuter
   }
 
   /**

@@ -465,6 +465,11 @@
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
     ]
   },
+  "INVALID_TIMESTAMP_PRECISION": {
+    "message": [
+      "The seconds precision <precision> of <type> is invalid. Expected an integer in [7, 9] for nanosecond precision; use precision 6 or parameterless <type> for the standard microsecond type."
+    ]
+  },
   "INVALID_TYPE": {
     "message": [
       "Argument `<arg_name>` should not be a <arg_type>."
@@ -1007,6 +1012,11 @@
   "TEST_CLASS_NOT_COMPILED": {
     "message": [
       "<test_class_path> doesn't exist. Spark sql test classes are not compiled."
+    ]
+  },
+  "TIMESTAMP_NANOS_PYTHON_MAP_KEY": {
+    "message": [
+      "Cannot convert a map with <type> keys to Python. Python `datetime.datetime` is microsecond-resolution and cannot represent the sub-microsecond digits, so two distinct nanosecond keys can collapse to a single entry. Avoid nanosecond-precision timestamp types as map keys on the Python conversion path."
     ]
   },
   "TOO_MANY_VALUES": {
