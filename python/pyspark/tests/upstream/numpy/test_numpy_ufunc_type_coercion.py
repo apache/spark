@@ -70,6 +70,8 @@ If package tabulate (https://pypi.org/project/tabulate/) is installed, it will a
 regenerate the Markdown files.
 """
 
+import inspect
+import os
 import unittest
 import warnings
 from datetime import date
@@ -88,6 +90,8 @@ from pyspark.testing.utils import (
 
 if have_numpy:
     import numpy as np
+
+GOLDEN_FILE_PREFIX = "golden_numpy_ufunc_type_coercion"
 
 
 @unittest.skipIf(
@@ -183,6 +187,26 @@ class NumPyUFuncTypeCoercionTests(GoldenFileTestMixin, unittest.TestCase):
             return "(%s)" % ", ".join(str(np.asarray(out).dtype) for out in result)
         return str(np.asarray(result).dtype)
 
+    # ----- golden row-set guard -----
+
+    def _assert_rows_match_golden(self, rows):
+        """Fail, naming the ufuncs, if the dispatched row set has drifted from the golden."""
+        # Resolve the golden exactly as compare_or_generate_golden_matrix does, from the
+        # concrete class rather than this module, so the two cannot disagree if this class is
+        # ever subclassed from another directory.
+        test_dir = os.path.dirname(inspect.getfile(type(self)))
+        golden_csv = os.path.join(test_dir, f"{GOLDEN_FILE_PREFIX}.csv")
+
+        golden_rows = list(self.load_golden_csv(golden_csv).index)
+        if golden_rows == list(rows):
+            return
+        added = [row for row in rows if row not in golden_rows]
+        removed = [row for row in golden_rows if row not in rows]
+        self.fail(
+            f"the dispatched ufuncs no longer match the golden file (added: {added}, "
+            f"removed: {removed}). Regenerate it with SPARK_GENERATE_GOLDEN_FILES=1."
+        )
+
     # ----- test methods -----
 
     def test_ufunc_coercion_matrix(self):
@@ -207,6 +231,12 @@ class NumPyUFuncTypeCoercionTests(GoldenFileTestMixin, unittest.TestCase):
                     overrides[(ufunc, dtype)] = result
             overrides[("gcd[1]", "object:None")] = "object"
 
+        # The rows come from numpy_compat.py, so editing a mapping changes the row set.  Say
+        # so here: otherwise an added ufunc surfaces as a KeyError from the matrix compare,
+        # and a removed one silently stops being compared at all.
+        if not self.is_generating_golden():
+            self._assert_rows_match_golden(rows)
+
         self.compare_or_generate_golden_matrix(
             row_names=list(rows),
             col_names=list(samples),
@@ -215,7 +245,7 @@ class NumPyUFuncTypeCoercionTests(GoldenFileTestMixin, unittest.TestCase):
             compute_cell=lambda row_name, col_name: self._coerce(
                 rows[row_name], samples[col_name], samples["int64"]
             ),
-            golden_file_prefix="golden_numpy_ufunc_type_coercion",
+            golden_file_prefix=GOLDEN_FILE_PREFIX,
             index_name="ufunc \\ operand dtype",
             overrides=overrides,
         )
