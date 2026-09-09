@@ -251,8 +251,8 @@ object ChangeArgs {
   }
 
   /**
-   * Rejects an empty ignore-null include list; "ignore-null off" is spelled
-   * as None.
+   * Rejects an empty ignore-null include list. "Ignore-null off" should instead be expressed by
+   * `ignoreNullSelection=None`.
    */
   private def validateNonEmptyIgnoreNullIncludeList(
       ignoreNullSelection: Option[ColumnSelection]): Unit = {

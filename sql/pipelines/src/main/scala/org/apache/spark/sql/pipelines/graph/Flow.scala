@@ -491,7 +491,10 @@ class AutoCdcMergeFlow(
       }
   }
 
-  /** Rejects any ignore-null column that is also a key column. */
+  /**
+   * Rejects any explicitly named ignore-null column that is also a key column.
+   * Implicitly selected columns (e.g. an exclude list) are eligible by construction.
+   */
   private def requireKeysAbsentInIgnoreNullSelection(): Unit = {
     val resolver = effectiveResolver
     ColumnSelection.namedColumns(changeArgs.ignoreNullSelection).foreach { column =>
@@ -509,7 +512,10 @@ class AutoCdcMergeFlow(
     }
   }
 
-  /** Rejects any ignore-null column whose name uses the reserved prefix. */
+  /**
+   * Rejects any explicitly named ignore-null column whose name uses the reserved prefix.
+   * Implicitly selected columns (e.g. an exclude list) are eligible by construction.
+   */
   private def requireReservedPrefixAbsentInIgnoreNullSelection(): Unit = {
     ColumnSelection.namedColumns(changeArgs.ignoreNullSelection)
       .find(col => nameHasReservedPrefix(col.name))

@@ -1198,14 +1198,17 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("AutoCdcMergeFlow rejects ignore-null key case-sensitively") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+  test("AutoCdcMergeFlow rejects differently cased ignore-null key case-insensitively") {
+    // This test and it's case-sensitive counterpart below use ignore-null selection validation to
+    // demonstrate the case-sensitivity set in the spark session are indeed respected when
+    // evaluating user specified ignore-null column names.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       checkError(
         exception = intercept[AnalysisException] {
           newAutoCdcMergeFlow(
             sourceDf = threeColumnSourceDf(),
             ignoreNullSelection = Some(
-              ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("id")))
+              ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("ID")))
             )
           )
         },
@@ -1213,11 +1216,25 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         sqlState = "22023",
         parameters = Map(
           "flowName" -> testIdentifier.unquotedString,
-          "caseSensitivity" -> CaseSensitivityLabels.CaseSensitive,
-          "columnName" -> "id",
+          "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
+          "columnName" -> "ID",
           "keyColumnNames" -> "id"
         )
       )
+    }
+  }
+
+  test("AutoCdcMergeFlow accepts differently cased non-key case-sensitively") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val nonKeyColumnName = "ID"
+      val flow = newAutoCdcMergeFlow(
+        sourceDf = sourceDfWithExtraColumns(nonKeyColumnName -> StringType),
+        ignoreNullSelection = Some(
+          ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName(nonKeyColumnName)))
+        )
+      )
+
+      assert(flow.schema.fieldNames.contains(nonKeyColumnName))
     }
   }
 
