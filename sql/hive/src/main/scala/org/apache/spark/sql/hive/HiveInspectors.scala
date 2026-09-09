@@ -312,7 +312,7 @@ private[hive] trait HiveInspectors {
       case hvoi: HiveVarcharObjectInspector if x.preferWritable() =>
         val length = hvoi.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength
         dataType match {
-          case v: VarcharType if SQLConf.get.charVarcharFirstClassTypes =>
+          case v: VarcharType =>
             withNullSafe { o =>
               val checked = CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
                 o.asInstanceOf[UTF8String], v.length)
@@ -324,7 +324,7 @@ private[hive] trait HiveInspectors {
       case hvoi: HiveVarcharObjectInspector =>
         val length = hvoi.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength
         dataType match {
-          case v: VarcharType if SQLConf.get.charVarcharFirstClassTypes =>
+          case v: VarcharType =>
             withNullSafe { o =>
               val checked = CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
                 o.asInstanceOf[UTF8String], v.length)
@@ -339,7 +339,7 @@ private[hive] trait HiveInspectors {
       case hcoi: HiveCharObjectInspector if x.preferWritable() =>
         val length = hcoi.getTypeInfo.asInstanceOf[CharTypeInfo].getLength
         dataType match {
-          case c: CharType if SQLConf.get.charVarcharFirstClassTypes =>
+          case c: CharType =>
             withNullSafe { o =>
               val checked = CharVarcharCodegenUtils.charTypeWriteSideCheck(
                 o.asInstanceOf[UTF8String], c.length)
@@ -351,7 +351,7 @@ private[hive] trait HiveInspectors {
       case hcoi: HiveCharObjectInspector =>
         val length = hcoi.getTypeInfo.asInstanceOf[CharTypeInfo].getLength
         dataType match {
-          case c: CharType if SQLConf.get.charVarcharFirstClassTypes =>
+          case c: CharType =>
             withNullSafe { o =>
               val checked = CharVarcharCodegenUtils.charTypeWriteSideCheck(
                 o.asInstanceOf[UTF8String], c.length)
@@ -841,8 +841,9 @@ private[hive] trait HiveInspectors {
    * Catalyst `dataType` to preserve nanosecond timestamp precision. The plain
    * `unwrapperFor(ObjectInspector)` cannot do this because a Hive `TimestampObjectInspector`
    * maps to micros by default; here the nanos timestamp types are produced as `TimestampNanosVal`,
-   * recursing through array/map/struct so nested nanos timestamps round-trip correctly. Any other
-   * type is delegated to the `ObjectInspector`-only overload.
+   * recursing through array/map/struct so nested nanos timestamps round-trip correctly. CHAR and
+   * VARCHAR targets also apply their read-side length and padding checks. Any other type is
+   * delegated to the `ObjectInspector`-only overload.
    */
   def unwrapperFor(objectInspector: ObjectInspector, dataType: DataType): Any => Any =
     (objectInspector, dataType) match {
@@ -951,6 +952,19 @@ private[hive] trait HiveInspectors {
         val unwrapper = unwrapperFor(oi)
         (value: Any, row: InternalRow, ordinal: Int) => row(ordinal) = unwrapper(value)
     }
+
+  /**
+   * Builds an in-place unwrapper that also honors target-type-specific conversions.
+   */
+  def unwrapperFor(
+      field: HiveStructField,
+      dataType: DataType): (Any, InternalRow, Int) => Unit = dataType match {
+    case _: CharType | _: VarcharType =>
+      val unwrapper = unwrapperFor(field.getFieldObjectInspector, dataType)
+      (value: Any, row: InternalRow, ordinal: Int) => row(ordinal) = unwrapper(value)
+    case _ =>
+      unwrapperFor(field)
+  }
 
   def wrap(a: Any, oi: ObjectInspector, dataType: DataType): AnyRef = {
     wrapperFor(oi, dataType)(a).asInstanceOf[AnyRef]
