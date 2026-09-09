@@ -697,6 +697,51 @@ class TypesTestsMixin:
         for data_type in data_types:
             self.assertEqual(data_type, _parse_datatype_json_string(data_type.json()))
 
+        compatibility_schema = StructType(
+            [
+                StructField("plain", CharType(3)),
+                StructField("binary", CharType(4, "UTF8_BINARY")),
+                StructField(
+                    "nested",
+                    ArrayType(VarcharType(6, "UNICODE_CI")),
+                ),
+            ]
+        )
+        self.assertEqual(
+            compatibility_schema.jsonValue(),
+            {
+                "type": "struct",
+                "fields": [
+                    {
+                        "name": "plain",
+                        "type": "char(3)",
+                        "nullable": True,
+                        "metadata": {},
+                    },
+                    {
+                        "name": "binary",
+                        "type": "char(4)",
+                        "nullable": True,
+                        "metadata": {
+                            "__COLLATIONS": {"binary": "spark.UTF8_BINARY"},
+                        },
+                    },
+                    {
+                        "name": "nested",
+                        "type": {
+                            "type": "array",
+                            "elementType": "varchar(6)",
+                            "containsNull": True,
+                        },
+                        "nullable": True,
+                        "metadata": {
+                            "__COLLATIONS": {"nested.element": "icu.UNICODE_CI"},
+                        },
+                    },
+                ],
+            },
+        )
+
     def test_schema_with_collations_json_ser_de(self):
         from pyspark.sql.types import _parse_datatype_json_string
 

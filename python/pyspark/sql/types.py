@@ -1463,12 +1463,12 @@ class StructField(DataType):
                     removeCollations(dt.valueType),
                     dt.valueContainsNull,
                 )
-            elif isinstance(dt, StringType):
-                return StringType()
             elif isinstance(dt, VarcharType):
                 return VarcharType(dt.length)
             elif isinstance(dt, CharType):
                 return CharType(dt.length)
+            elif isinstance(dt, StringType):
+                return StringType()
             else:
                 return dt
 
@@ -1523,7 +1523,7 @@ class StructField(DataType):
             elif isinstance(dt, MapType):
                 processDataType(dt.keyType, fieldPath + ".key")
                 processDataType(dt.valueType, fieldPath + ".value")
-            elif isinstance(dt, StringType) and self._isCollatedString(dt):
+            elif self._isCollatedString(dt):
                 collationMetadata[fieldPath] = self.schemaCollationValue(dt)
 
         def processDataType(dt: DataType, fieldPath: str) -> None:
@@ -1537,9 +1537,9 @@ class StructField(DataType):
         return collationMetadata
 
     def _isCollatedString(self, dt: DataType) -> bool:
+        if isinstance(dt, (CharType, VarcharType)):
+            return dt.collation is not None
         if isinstance(dt, StringType):
-            if isinstance(dt, (CharType, VarcharType)):
-                return dt.collation is not None
             return not dt.isUTF8BinaryCollation()
         return False
 
