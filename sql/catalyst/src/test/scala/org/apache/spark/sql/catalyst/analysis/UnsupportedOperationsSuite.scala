@@ -774,7 +774,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     streamBatchSupported = false,
     batchStreamSupported = false)
 
-  // Except: streaming input on either side is not supported
+  // Except: by default, streaming input on either side is not supported
   testBinaryOperationInStreamingPlan(
     "except",
     _.except(_, isAll = false),

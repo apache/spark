@@ -3705,7 +3705,8 @@ object SQLConf {
   val ALLOW_EXCEPT_ON_STREAMING_DATAFRAME =
     buildConf("spark.sql.streaming.allowExceptOnStreamingDataFrame")
       .internal()
-      .doc("When true, allow EXCEPT operations with a streaming DataFrame on the left side. " +
+      .doc("When true, allows EXCEPT operations with a streaming DataFrame on the left and a " +
+        "batch DataFrame on the right. " +
         "Such operations may produce incorrect results and are retained only for compatibility " +
         "with existing streaming queries.")
       .version("4.4.0")

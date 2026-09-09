@@ -31,7 +31,7 @@ import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Dataset, Encoders}
+import org.apache.spark.sql.{AnalysisException, Dataset, Encoders}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog,
   OffsetSeqMetadata, OffsetSeqMetadataV2}
@@ -49,15 +49,16 @@ class StreamingQueryManagerSuite extends StreamTest {
 
   override val streamingTimeout = 20.seconds
 
-  private def removeOffsetLogConf(checkpoint: File, confKey: String): Unit = {
+  private def rewriteOffsetLogConf(
+      checkpoint: File)(f: Map[String, String] => Map[String, String]): Unit = {
     val offsetsPath = new File(checkpoint, "offsets").getCanonicalPath
     val offsetLog = new OffsetSeqLog(spark, offsetsPath)
     val (batchId, offsetSeq) = offsetLog.getLatest().getOrElse {
       fail("Missing offset log entry")
     }
     val updatedMetadata = offsetSeq.metadataOpt.map {
-      case m: OffsetSeqMetadata => m.copy(conf = m.conf - confKey)
-      case m: OffsetSeqMetadataV2 => m.copy(conf = m.conf - confKey)
+      case m: OffsetSeqMetadata => m.copy(conf = f(m.conf))
+      case m: OffsetSeqMetadataV2 => m.copy(conf = f(m.conf))
     }
     val updatedOffsetSeq = offsetSeq match {
       case o: OffsetSeq =>
@@ -112,8 +113,8 @@ class StreamingQueryManagerSuite extends StreamTest {
         }
       }
 
-      removeOffsetLogConf(
-        checkpointDir, SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key)
+      rewriteOffsetLogConf(checkpointDir)(
+        _ - SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key)
 
       withSQLConf(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "false") {
         val query = startQuery()
@@ -127,6 +128,43 @@ class StreamingQueryManagerSuite extends StreamTest {
       }
 
       assert(output.sorted === Seq(1, 2))
+    }
+  }
+
+  test("streaming EXCEPT compatibility restores false from the checkpoint") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[Int]
+      val result = input.toDS().except(Seq(100).toDS())
+      val checkpointLocation = checkpointDir.getCanonicalPath
+
+      def startQuery(): StreamingQuery = result.writeStream
+        .outputMode("update")
+        .foreachBatch { (batch: Dataset[Int], _: Long) =>
+          batch.collect()
+          ()
+        }
+        .option("checkpointLocation", checkpointLocation)
+        .start()
+
+      withSQLConf(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true") {
+        val query = startQuery()
+        try {
+          input.addData(1)
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+      }
+
+      rewriteOffsetLogConf(checkpointDir)(_.updated(
+        SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key, "false"))
+
+      withSQLConf(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true") {
+        val error = intercept[AnalysisException](startQuery())
+        assert(error.getMessage.contains(
+          "Except on a streaming DataFrame/Dataset on the left is not supported"))
+        assert(spark.conf.get(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME))
+      }
     }
   }
 
