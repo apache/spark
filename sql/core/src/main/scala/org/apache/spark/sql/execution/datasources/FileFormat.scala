@@ -179,7 +179,7 @@ trait FileFormat {
    * and a call to `super` retains the bound mode. The Hadoop entry is only a transport across the
    * legacy signature; the authoritative state remains the typed plan field and this parameter.
    */
-  def buildReaderWithPartitionValues(
+  private[sql] def buildReaderWithPartitionValues(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -301,7 +301,7 @@ object FileFormat {
    * mode-aware overload and read by formats that honor first-class CHAR/VARCHAR types. This is not
    * a public option; the authoritative state is the typed plan field and overload parameter.
    */
-  val CHAR_VARCHAR_SCAN_MODE = "__spark_sql_char_varchar_scan_mode"
+  private[sql] val CHAR_VARCHAR_SCAN_MODE = "__spark_sql_char_varchar_scan_mode"
 
   /** Writes the CHAR/VARCHAR scan mode into `conf` under [[CHAR_VARCHAR_SCAN_MODE]]. */
   private[sql] def setCharVarcharScanMode(

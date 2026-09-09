@@ -376,6 +376,19 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
+   * Looks up a cache entry for a V2 table mutation while ignoring only its analyzed CHAR/VARCHAR
+   * scan mode. Normal cache substitution remains mode-sensitive.
+   */
+  def lookupCachedDataByV2Relation(relation: DataSourceV2Relation): Option[CachedData] = {
+    val unboundRelation = relation.copy(charVarcharScanMode = None)
+    cachedData.find(_.plan.exists {
+      case cached: DataSourceV2Relation =>
+        cached.copy(charVarcharScanMode = None).sameResult(unboundRelation)
+      case _ => false
+    })
+  }
+
+  /**
    * Re-caches all cache entries that reference the given table name.
    */
   def recacheTableOrView(

@@ -2702,6 +2702,36 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58814: shared V2 relation cache rebinds the CHAR/VARCHAR scan mode") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+        withTable("shared_orc_relation_cache") {
+          sql(
+            s"""CREATE TABLE shared_orc_relation_cache (v VARCHAR(4))
+               |USING orc LOCATION '$path'""".stripMargin)
+          withSQLConf(
+              SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+              SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+            sql("CACHE TABLE shared_orc_relation_cache")
+            checkAnswer(sql("SELECT * FROM shared_orc_relation_cache"), Row("abcd"))
+          }
+
+          val standardSession = spark.newSession()
+          standardSession.conf.set(SQLConf.USE_V1_SOURCE_LIST.key, "")
+          standardSession.conf.set(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key, "true")
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              standardSession.table("shared_orc_relation_cache").collect()
+            },
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "4"))
+        }
+      }
+    }
+  }
+
   test("SPARK-59001: text datasource accepts CHAR/VARCHAR as a string family type") {
     Seq("text", "").foreach { useV1SourceList =>
       withSQLConf(

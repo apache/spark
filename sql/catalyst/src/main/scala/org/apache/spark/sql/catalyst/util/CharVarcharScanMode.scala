@@ -24,9 +24,9 @@ package org.apache.spark.sql.catalyst.util
  * under first-class CHAR/VARCHAR types (native reader behavior), while a `Some` value pins the
  * mode so that `sameResult` / cache reuse keep the two variants distinct.
  */
-sealed trait CharVarcharScanMode
+private[sql] sealed trait CharVarcharScanMode
 
-object CharVarcharScanMode {
+private[sql] object CharVarcharScanMode {
   /**
    * Preserve the native, constrained CHAR/VARCHAR types of the source (e.g. native ORC
    * padding/truncation). Corresponds to preserve-only semantics.
@@ -39,7 +39,9 @@ object CharVarcharScanMode {
    */
   case object SparkStandard extends CharVarcharScanMode
 
-  /** Maps the boolean `spark.sql.charVarcharStandardSemantics` value to the typed mode. */
+  /**
+   * Maps the boolean `spark.sql.charVarchar.standardSemantics.enabled` value to the typed mode.
+   */
   def apply(standardSemantics: Boolean): CharVarcharScanMode =
     if (standardSemantics) SparkStandard else PreserveNative
 
