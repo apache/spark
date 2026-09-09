@@ -358,11 +358,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           "The TRANSFORM ... USING clause")
       case node =>
         node.expressions.foreach(checkExpression)
-        // The body of an analysis-only command (CTAS, `CACHE TABLE ... AS SELECT`,
-        // `CREATE`/`ALTER VIEW`) moves from `children` into `innerChildren` once the command is
-        // analyzed, so `foreach` (which follows `children`) would not otherwise reach it.
+        // `checkExpression` already descends into the node's subquery plans (via
+        // `SubqueryExpression`), which are also part of `innerChildren`. Recurse only into the
+        // inner plans that are not those subqueries -- the analyzed body of an analysis-only
+        // command (CTAS, `CACHE TABLE ... AS SELECT`, `CREATE`/`ALTER VIEW`) that moves from
+        // `children` into `innerChildren` once analyzed, which `foreach` (following `children`)
+        // would not otherwise reach. This keeps each subquery traversed exactly once, so
+        // validation stays linear instead of doubling at every nesting level.
+        val subqueryPlans = node.subqueries
         node.innerChildren.foreach {
-          case inner: LogicalPlan => checkPlan(inner)
+          case inner: LogicalPlan if !subqueryPlans.exists(_ eq inner) => checkPlan(inner)
           case _ =>
         }
     }
