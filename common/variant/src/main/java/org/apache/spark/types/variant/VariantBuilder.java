@@ -618,18 +618,21 @@ public class VariantBuilder {
   }
 
   private void buildCanonicalized(byte[] value, byte[] metadata, int pos) {
-    ArrayList<String> keys = new ArrayList<>();
+    ArrayList<byte[]> keys = new ArrayList<>();
     collectAllObjectKeys(value, metadata, pos, keys);
-    keys.sort((a, b) -> compareKeys(encodeKey(a), encodeKey(b)));
-    keys = new ArrayList<>(new LinkedHashSet<>(keys));
-    for (String key : keys) {
-      addKey(key);
+    keys.sort((a, b) -> compareKeys(a, b));
+    byte[] prevKey = null;
+    for (byte[] key : keys) {
+      if (prevKey == null || compareKeys(prevKey, key) != 0) {
+        addKey(new String(key, StandardCharsets.UTF_8));
+        prevKey = key;
+      }
     }
     appendVariantImpl(value, metadata, pos, /* needNormalization */ true);
   }
 
   private void collectAllObjectKeys(
-      byte[] value, byte[] metadata, int pos, ArrayList<String> keys) {
+      byte[] value, byte[] metadata, int pos, ArrayList<byte[]> keys) {
     checkIndex(pos, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
     switch (basicType) {
@@ -639,7 +642,7 @@ public class VariantBuilder {
             int id = readUnsigned(value, idStart + idSize * i, idSize);
             int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
             int elementPos = dataStart + offset;
-            keys.add(getMetadataKey(metadata, id));
+            keys.add(getMetadataKeyBytes(metadata, id));
             collectAllObjectKeys(value, metadata, elementPos, keys);
           }
           return null;
