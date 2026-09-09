@@ -1876,6 +1876,23 @@ case class BinBy(
   override def producedAttributes: AttributeSet =
     AttributeSet(scaledDistributeColumns ++ appendedAttributes)
 
+  override protected def stringArgs: Iterator[Any] = {
+    val zone = timeZoneId.getOrElse("UTC")
+    val fmt = TimestampFormatter.getFractionFormatter(DateTimeUtils.getZoneId(zone))
+    def ref(a: Attribute): String = s"${a.name}#${a.exprId.id}"
+
+    Iterator(
+      s"range=[${ref(rangeStart)}, ${ref(rangeEnd)}]",
+      "binWidth=" + IntervalUtils.toDayTimeIntervalString(
+        binWidthMicros, IntervalStringStyles.ANSI_STYLE,
+        DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND),
+      s"alignTo=${fmt.format(originMicros)}",
+      s"distribute=[${distributeColumns.map(ref).mkString(", ")}]",
+      s"scaledDistribute=[${scaledDistributeColumns.map(ref).mkString(", ")}]",
+      s"appends=[${appendedAttributes.map(ref).mkString(", ")}]",
+      s"zone=$zone")
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(BIN_BY)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): BinBy =

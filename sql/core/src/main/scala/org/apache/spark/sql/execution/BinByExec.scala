@@ -23,10 +23,10 @@ import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeSet, BindReferences, BoundReference, Cast, Expression, GenericInternalRow, JoinedRow, Literal, Multiply, NamedExpression, UnsafeProjection}
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalStringStyles, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.types.{DayTimeIntervalType, DoubleType}
 
 /**
  * Physical node for the `BIN BY` relation operator. For each input row it emits one output row per
@@ -65,6 +65,23 @@ case class BinByExec(
 
   override def producedAttributes: AttributeSet =
     AttributeSet(scaledDistributeColumns ++ appendedAttributes)
+
+  override protected def stringArgs: Iterator[Any] = {
+    val zone = timeZoneId.getOrElse("UTC")
+    val fmt = TimestampFormatter.getFractionFormatter(DateTimeUtils.getZoneId(zone))
+    def ref(a: Attribute): String = s"${a.name}#${a.exprId.id}"
+
+    Iterator(
+      s"range=[${ref(rangeStart)}, ${ref(rangeEnd)}]",
+      "binWidth=" + IntervalUtils.toDayTimeIntervalString(
+        binWidthMicros, IntervalStringStyles.ANSI_STYLE,
+        DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND),
+      s"alignTo=${fmt.format(originMicros)}",
+      s"distribute=[${distributeColumns.map(ref).mkString(", ")}]",
+      s"scaledDistribute=[${scaledDistributeColumns.map(ref).mkString(", ")}]",
+      s"appends=[${appendedAttributes.map(ref).mkString(", ")}]",
+      s"zone=$zone")
+  }
 
   // The trait keeps a child partitioning only when its keys are in the output: a partitioning keyed
   // on a pass-through column survives; one keyed on a scaled DISTRIBUTE column (fresh ExprId) does
