@@ -724,4 +724,23 @@ public class VariantUtil {
     // explicitly rather than relying on the platform-dependent JVM default charset.
     return new String(metadata, stringStart + offset, nextOffset - offset, StandardCharsets.UTF_8);
   }
+
+  // Like `getMetadataKey`, but returns the key's raw stored bytes instead of decoding to a
+  // `String`.
+  public static byte[] getMetadataKeyBytes(byte[] metadata, int id) {
+    checkIndex(0, metadata.length);
+    // Extracts the highest 2 bits in the metadata header to determine the integer size of the
+    // offset list.
+    int offsetSize = ((metadata[0] >> 6) & 0x3) + 1;
+    int dictSize = readUnsigned(metadata, 1, offsetSize);
+    if (id >= dictSize) throw malformedVariant();
+    // There are a header byte, a `dictSize` with `offsetSize` bytes, and `(dictSize + 1)` offsets
+    // before the string data.
+    int stringStart = 1 + (dictSize + 2) * offsetSize;
+    int offset = readUnsigned(metadata, 1 + (id + 1) * offsetSize, offsetSize);
+    int nextOffset = readUnsigned(metadata, 1 + (id + 2) * offsetSize, offsetSize);
+    if (offset > nextOffset) throw malformedVariant();
+    checkIndex(stringStart + nextOffset - 1, metadata.length);
+    return Arrays.copyOfRange(metadata, stringStart + offset, stringStart + nextOffset);
+  }
 }

@@ -689,9 +689,9 @@ public class VariantBuilder {
     }
 
     if (numKeys > 1) {
-      byte[] prevKey = encodeKey(getMetadataKey(metadata, 0));
+      byte[] prevKey = getMetadataKeyBytes(metadata, 0);
       for (int id = 1; id < numKeys; ++id) {
-        byte[] key = encodeKey(getMetadataKey(metadata, id));
+        byte[] key = getMetadataKeyBytes(metadata, id);
         if (compareKeys(prevKey, key) >= 0) {
           return false;
         }

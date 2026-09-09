@@ -694,4 +694,16 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     assert(!isCanon(parse(s"""{"$k2":2,"$k1":1}""")),
       "dictionary ordered by UTF-16 rather than UTF-8 must be rejected")
   }
+
+  test("getMetadataKeyBytes returns the raw key bytes, matching encodeKey(getMetadataKey)") {
+    val v = parse("""{"zebra":1,"apple":2,"c":3,"a-longer-key-name":4}""")
+    val meta = v.getMetadata
+    Seq(0, 1, 2, 3).foreach { id =>
+      assert(
+        Arrays.equals(
+          VariantUtil.getMetadataKeyBytes(meta, id),
+          VariantUtil.encodeKey(VariantUtil.getMetadataKey(meta, id))),
+        s"getMetadataKeyBytes must equal encodeKey(getMetadataKey) at id $id")
+    }
+  }
 }
