@@ -1103,13 +1103,13 @@ object Overlay {
   private def clamp(value: Long): Int =
     math.max(Int.MinValue.toLong, math.min(Int.MaxValue.toLong, value)).toInt
 
-  // The tail of the result starts at `pos + length`. Every position at or before the start of
-  // the input denotes the same tail, the whole input, so clamp there. `substringSQL` treats an
-  // end offset of exactly `Int.MaxValue` as "the rest of the input", and for positions near
-  // `Int.MinValue` the end offset it computes lands below that and below the input length, so
-  // an unclamped tail position silently drops trailing characters.
-  private def clampTail(value: Long, inputLength: Int): Int =
-    clamp(math.max(value, -inputLength.toLong))
+  // The tail of the result starts at `pos + length`. `substringSQL` derives its end offset from
+  // `start + Int.MaxValue`, which still reaches the end of the input for every position down to
+  // `Int.MinValue + 1` but falls one character short at `Int.MinValue` itself. Both denote the
+  // same tail, the whole input, so raise the floor by one rather than reading the input length,
+  // which would cost an O(n) scan on every call to spare the one extreme position.
+  private def clampTail(value: Long): Int =
+    math.max(Int.MinValue.toLong + 1, math.min(Int.MaxValue.toLong, value)).toInt
 
   def calculate(input: UTF8String, replace: UTF8String, pos: Int, len: Int): UTF8String = {
     val builder = new UTF8StringBuilder
@@ -1123,7 +1123,7 @@ object Overlay {
     } else {
       replace.numChars
     }
-    val tail = clampTail(pos.toLong + length, input.numChars)
+    val tail = clampTail(pos.toLong + length)
     builder.append(input.substringSQL(tail, Int.MaxValue))
     builder.build()
   }
@@ -1137,7 +1137,7 @@ object Overlay {
     } else {
       replace.length
     }
-    val tail = clampTail(pos.toLong + length, input.length)
+    val tail = clampTail(pos.toLong + length)
     ByteArray.concat(ByteArray.subStringSQL(input, 1, clamp(pos.toLong - 1)),
       replace, ByteArray.subStringSQL(input, tail, Int.MaxValue))
   }
