@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal, RestrictedModeInitFixture}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, ScriptInputOutputSchema, ScriptTransformation}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.StringType
@@ -95,6 +95,30 @@ class RestrictedModeSuite extends AnalysisTest {
       // Analysis succeeds (no restricted-mode error) when the profile is off.
       analyzer.checkAnalysis(analyzer.execute(transformPlan))
     }
+  }
+
+  test("restricted mode rejects reflect without initializing the referenced class") {
+    // Resolving a reflect call type-checks it, which loads the referenced class (running its
+    // static initializer -- arbitrary code) via `Utils.classForName`. When the call is going to
+    // be rejected by restricted mode, that must not happen. `RestrictedModeInitFixture`'s static
+    // initializer sets a system property; `classOf` and reading the compile-time constant below
+    // do not initialize the class, so the property stays unset unless the class is initialized.
+    val fixtureClass = classOf[RestrictedModeInitFixture].getName
+    System.clearProperty(RestrictedModeInitFixture.INIT_PROPERTY)
+    withRestrictedMode(true) {
+      val analyzer = getAnalyzer
+      val plan = Project(
+        Seq(UnresolvedAlias(
+          UnresolvedFunction(
+            "reflect",
+            Seq(Literal(fixtureClass), Literal("touch")),
+            isDistinct = false))),
+        TestRelations.testRelation)
+      val e = intercept[AnalysisException](analyzer.checkAnalysis(analyzer.execute(plan)))
+      checkRestrictedError(e, "The `reflect` function")
+    }
+    assert(System.getProperty(RestrictedModeInitFixture.INIT_PROPERTY) == null,
+      "the reflect target class must not be initialized when the call is rejected")
   }
 
   test("restricted mode is enforced for an analyzed sub-plan under a fresh parent") {
