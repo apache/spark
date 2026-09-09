@@ -160,7 +160,8 @@ class KafkaRedactionUtilSuite extends SparkFunSuite with KafkaDelegationTokenTes
     val param = "org.apache.kafka.common.security.plain.PlainLoginModule required " +
       "username=\"u\" password=\"PLAINTEXT_SECRET\";"
     val redacted = KafkaRedactionUtil.redactJaasParam(param)
-    assert(!redacted.contains("PLAINTEXT_SECRET"), s"password leaked despite custom regex: $redacted")
+    assert(!redacted.contains("PLAINTEXT_SECRET"),
+      s"password leaked despite custom regex: $redacted")
     assert(redacted.contains(REDACTION_REPLACEMENT_TEXT), s"no redaction marker in: $redacted")
     assert(redacted.contains("username=\"u\""), s"non-secret context dropped: $redacted")
   }
