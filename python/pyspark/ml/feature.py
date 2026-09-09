@@ -1687,9 +1687,10 @@ class FrequencyEncoder(
     count.
 
     Unlike :py:class:`TargetEncoder` it needs no label, so it is available for
-    unsupervised pipelines, and unlike :py:class:`OneHotEncoder` it adds one column per
-    input feature rather than one per category, which keeps it usable when a feature has
-    many thousands of distinct values.
+    unsupervised pipelines. Where :py:class:`OneHotEncoder` represents a feature as a vector
+    with one dimension per category, this reduces it to a single scalar, trading the identity
+    of a category for how common it is and so keeping the feature space flat however many
+    distinct values there are.
 
     Categories that occur equally often in the training data receive the same encoding.
     That is inherent to the technique rather than a limitation of this implementation: the

@@ -969,7 +969,7 @@ for more details on the API.
 
 `FrequencyEncoder` maps a column of categorical indices to how often each category occurs in the training data.
 
-Unlike `TargetEncoder`, it requires no label column, so it can be used in unsupervised pipelines. Unlike `OneHotEncoder`, it produces one output column per input column rather than one column per category, so it stays practical for features with many distinct values.
+Unlike `TargetEncoder`, it requires no label column, so it can be used in unsupervised pipelines. Where `OneHotEncoder` represents a feature as a vector with one dimension per category, `FrequencyEncoder` reduces it to a single scalar, so the feature space stays flat however many distinct values a column has. The trade is that the encoding carries how common a category is rather than which category it was.
 
 `FrequencyEncoder` supports the `normalize` parameter to choose what the encoding measures. Available options include 'true' (the default, where each category is encoded as its proportion of the training rows) and 'false' (where each category is encoded as its raw count).
 

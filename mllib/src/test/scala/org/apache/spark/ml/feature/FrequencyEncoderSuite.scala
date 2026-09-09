@@ -22,6 +22,7 @@ import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 class FrequencyEncoderSuite extends MLTest with DefaultReadWriteTest {
@@ -40,8 +41,9 @@ class FrequencyEncoderSuite extends MLTest with DefaultReadWriteTest {
     // equal-frequency case observable; input2 is uneven; input3 has a mix of common and
     // singleton categories.
     //
-    // Expectations are written as count/9.0 rather than as reduced fractions on purpose. fit
-    // computes count / total, and 1.0/3.0 is not guaranteed to be the same Double as 3.0/9.0.
+    // Expectations are written as count/9.0 because that is the arithmetic fit performs, which
+    // keeps the fixture readable against the implementation. For these operands it makes no
+    // numerical difference: 1.0/3.0 and 3.0/9.0 are the same Double.
     // scalastyle:off
     data = Seq(
       Row(0.toShort, 3, 5.0, 3.0/9.0, 5.0/9.0, 3.0/9.0, 3.0, 5.0, 3.0),
@@ -360,24 +362,32 @@ class FrequencyEncoderSuite extends MLTest with DefaultReadWriteTest {
 
   test("FrequencyEncoder - a feature with many distinct categories") {
 
-    // This encoder exists for high cardinality features, so the case it is built for is worth
-    // exercising rather than assuming. fit collects one entry per category to the driver and
+    // This encoder exists for high cardinality features, so the case it is built for is
+    // exercised rather than assumed: fit collects one entry per category to the driver and
     // transform ships that map into the plan as a literal, and neither of those is free.
     //
-    // 10,000 categories over 20,000 rows, each category appearing exactly twice, so every
-    // encoding is the same 2/20000 and a single distinct output value proves the whole mapping
-    // was applied rather than spot-checking one row.
-    val rows = (0 until 20000).map(i => Row((i / 2).toDouble))
+    // The frequencies are deliberately unequal. An earlier version of this test gave every
+    // category the same count, which meant a transform that ignored the fitted map entirely and
+    // returned that one constant would still have satisfied it. Here the expected value is
+    // derived independently, from a grouped count joined back on, so the assertion is about the
+    // mapping rather than about a single number.
+    val counts = (0 until 10000).flatMap(i => Seq.fill(1 + (i % 3))(Row(i.toDouble)))
     val wideSchema = StructType(Array(StructField("cat", DoubleType, nullable = true)))
-    val df = spark.createDataFrame(sc.parallelize(rows), wideSchema)
+    val df = spark.createDataFrame(sc.parallelize(counts), wideSchema)
 
     val model = new FrequencyEncoder().setInputCol("cat").setOutputCol("freq").fit(df)
 
     assert(model.encodings.head.size === 10000)
 
-    val distinct = model.transform(df).select("freq").distinct().collect()
-    assert(distinct.length === 1, s"expected one distinct encoding, got ${distinct.length}")
-    assert(distinct.head.getDouble(0) === 2.0 / 20000.0)
+    val total = df.count().toDouble
+    val oracle = df.groupBy("cat").count()
+      .select(col("cat"), (col("count") / lit(total)).alias("want"))
+    val joined = model.transform(df).join(oracle, "cat")
+
+    assert(joined.filter(col("freq") =!= col("want")).count() === 0,
+      "a category was encoded with a frequency that is not its own")
+    // Three distinct counts went in, so no constant could have passed the check above.
+    assert(joined.select("freq").distinct().count() === 3)
   }
 
   test("FrequencyEncoder - ids above the supported range are rejected, not merged") {
