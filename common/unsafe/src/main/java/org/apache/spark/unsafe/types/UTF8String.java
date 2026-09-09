@@ -635,20 +635,28 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
 
-    int i = 0;
-    int c = 0;
-    while (i < numBytes && c < start) {
-      i += numBytesForFirstByte(getByte(i));
-      c += 1;
-    }
-
-    int j = i;
-    if (until == Integer.MAX_VALUE) {
-      i = numBytes;
+    int i;
+    int j;
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII fast-path: code point index == byte index, so locate directly. The scan below
+      // clamps a negative start to 0 and stops at numBytes; replicate that with min/max.
+      j = Math.max(start, 0);
+      i = (until == Integer.MAX_VALUE) ? numBytes : Math.min(until, numBytes);
     } else {
-      while (i < numBytes && c < until) {
+      i = 0;
+      int c = 0;
+      while (i < numBytes && c < start) {
         i += numBytesForFirstByte(getByte(i));
         c += 1;
+      }
+      j = i;
+      if (until == Integer.MAX_VALUE) {
+        i = numBytes;
+      } else {
+        while (i < numBytes && c < until) {
+          i += numBytesForFirstByte(getByte(i));
+          c += 1;
+        }
       }
     }
 
@@ -716,6 +724,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public int getChar(int charIndex) {
     Objects.checkIndex(charIndex, numChars());
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII: byte index == char index, and checkIndex guarantees it is in range.
+      return codePointFrom(charIndex);
+    }
     int charCount = 0, byteCount = 0;
     while (charCount < charIndex) {
       byteCount += numBytesForFirstByte(getByte(byteCount));
@@ -1376,6 +1388,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (charPos < 0) {
       return -1;
     }
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII: byte index == char index, clamped to the end of the string.
+      return Math.min(charPos, numBytes);
+    }
 
     int i = 0;
     int c = 0;
@@ -1387,6 +1403,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public int bytePosToChar(int bytePos) {
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII: char index == byte index, clamped to [0, numBytes].
+      return Math.max(0, Math.min(bytePos, numBytes));
+    }
     int i = 0;
     int c = 0;
     while (i < numBytes && i < bytePos) {
