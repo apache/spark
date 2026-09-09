@@ -973,10 +973,32 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Update
   )
 
+  assertSupportedForRealTime(
+    "real-time with deduplicate within watermark - update mode",
+    DeduplicateWithinWatermark(Seq(attribute), streamRelation),
+    Update
+  )
+
+  assertSupportedForRealTime(
+    "real-time with deduplicate within watermark after union - update mode",
+    DeduplicateWithinWatermark(
+      Seq(attribute),
+      streamRelation.union(new TestStreamingRelation(attribute.newInstance()))),
+    Update
+  )
+
   assertNotSupportedForRealTime(
     "real-time with Scala transformWithState on both sides of union - update mode",
     scalaTransformWithState(streamRelation)
       .union(scalaTransformWithState(new TestStreamingRelation(attribute.newInstance()))),
+    Update,
+    "STREAMING_REAL_TIME_MODE.STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED"
+  )
+
+  assertNotSupportedForRealTime(
+    "real-time with deduplicate within watermark before union - update mode",
+    DeduplicateWithinWatermark(Seq(attribute), streamRelation)
+      .union(new TestStreamingRelation(attribute.newInstance())),
     Update,
     "STREAMING_REAL_TIME_MODE.STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED"
   )

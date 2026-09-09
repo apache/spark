@@ -34,10 +34,11 @@ personalization.
 
 Real-time Mode in Apache Spark supports **stateless queries** -- projections, filters and other
 map-like operations, unions, and stream-static joins -- and, starting in Spark 4.3.0, a first set of
-**stateful queries**: streaming **deduplication** (`dropDuplicates`) and streaming **aggregations**
-(`groupBy(...).agg(...)`), and the JVM (Scala/Java) **`transformWithState`** operator. These stateful
-operations require a shuffle, which Real-time Mode runs as a *pipelined shuffle* so that records
-still stream through without waiting for a batch boundary; see
+**stateful queries**: streaming **deduplication** (`dropDuplicates`, plus
+`dropDuplicatesWithinWatermark` starting in Spark 5.0.0), streaming **aggregations**
+(`groupBy(...).agg(...)`), and the JVM (Scala/Java) **`transformWithState`** operator. These
+stateful operations require a shuffle, which Real-time Mode runs as a *pipelined shuffle* so that
+records still stream through without waiting for a batch boundary; see
 [How Stateful Queries Work](#how-stateful-queries-work). Other stateful operations, including
 stream-stream joins and `flatMapGroupsWithState`, are not yet supported. See
 [Supported Queries](#supported-queries) for the full list.
@@ -73,7 +74,8 @@ query checkpoints progress -- as the next section explains.
 
 Stateless operations are per-record: each long-running task reads a partition, transforms records,
 and ships them without ever needing data from another partition. Stateful operations are different.
-A streaming aggregation, `dropDuplicates`, or `transformWithState` groups records **by key**, so
+A streaming aggregation, `dropDuplicates`, `dropDuplicatesWithinWatermark`, or
+`transformWithState` groups records **by key**, so
 every record for a given key must reach the same task, no matter which partition it arrived on. In
 the micro-batch engine that regrouping is done by a **shuffle**: the batch's producer stage writes
 shuffle files, and only once those files are fully materialized does the consumer stage read them
@@ -350,11 +352,12 @@ The following operations, sources, and sinks are supported:
     side must be broadcast (use the `broadcast(...)` hint), because a stream-static join must not
     introduce a shuffle.
 
-- *Stateful operations* (supported since Spark 4.3.0): these regroup records by key through a
+- *Stateful operations*: support began in Spark 4.3.0. These regroup records by key through a
   pipelined shuffle (see [How Stateful Queries Work](#how-stateful-queries-work)) and keep their
   state in the state store, checkpointed each batch.
-  + **Deduplication**: `dropDuplicates`. (`dropDuplicatesWithinWatermark` is not yet supported in
-    Real-time Mode.)
+  + **Deduplication**: `dropDuplicates`, and `dropDuplicatesWithinWatermark` starting in Spark
+    5.0.0. The latter requires `withWatermark` and bounds state retention according to the
+    event-time watermark.
   + **Streaming aggregation**: `groupBy(...).agg(...)` (and the SQL `GROUP BY` equivalent), including
     windowed aggregations with `window(...)`. Distinct aggregates such as `count(distinct ...)` are
     not supported (see [Not supported](#not-supported)).
@@ -393,7 +396,7 @@ The following are not yet supported in Real-time Mode. Unless noted otherwise, a
 fails to start with `STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST`:
 
 - Stateful operations other than those listed above: **stream-stream joins**,
-  `flatMapGroupsWithState`, session-window aggregation, and `dropDuplicatesWithinWatermark`.
+  `flatMapGroupsWithState`, and session-window aggregation.
 - The PySpark `transformWithState` and `transformWithStateInPandas` APIs. Real-time Mode currently
   supports only the JVM (Scala/Java) `transformWithState` implementation.
 - **Range partitioning**: `repartitionByRange`, or an `ORDER BY` / sort that plans to a range
@@ -542,7 +545,7 @@ spark \
   .option("subscribe", "input-topic") \
   .load() \
   .selectExpr("CAST(key AS STRING) AS id", "CAST(value AS STRING) AS value") \
-  .dropDuplicates("id") \
+  .dropDuplicates(["id"]) \
   .writeStream \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
@@ -602,8 +605,15 @@ spark
 
 </div>
 
-This keeps every distinct key it has seen in the state store. `dropDuplicatesWithinWatermark`, which
-bounds how long keys are retained, is not yet supported in Real-time Mode.
+This example uses `dropDuplicates`, which keeps every distinct key it has seen in the state store.
+To bound state, define an event-time watermark and use `dropDuplicatesWithinWatermark`. For example,
+Scala and Java use
+`withWatermark("eventTime", "10 minutes").dropDuplicatesWithinWatermark("id")`; in PySpark, pass the
+column subset as a list:
+`withWatermark("eventTime", "10 minutes").dropDuplicatesWithinWatermark(["id"])`. Records are still
+emitted as they are processed, while watermark advancement and state eviction take effect at
+Real-time Mode batch boundaries. The trigger duration therefore determines how often cleanup has
+an opportunity to remove state after the event-time watermark advances past its expiry.
 
 ### Streaming aggregation
 

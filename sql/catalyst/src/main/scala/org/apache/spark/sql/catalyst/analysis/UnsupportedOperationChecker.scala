@@ -663,7 +663,8 @@ object UnsupportedOperationChecker extends Logging {
         // Block stateful operators before union
         u.foreachUp {
           case statefulOp @ (_: Aggregate | _: TransformWithState |
-               _: TransformWithStateInPySpark | _: Deduplicate) if statefulOp.isStateful =>
+               _: TransformWithStateInPySpark | _: Deduplicate |
+               _: DeduplicateWithinWatermark) if statefulOp.isStateful =>
             throwRealTimeError("STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED", Map.empty)
           case _ =>
         }
