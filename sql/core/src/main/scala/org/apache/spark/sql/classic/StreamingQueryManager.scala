@@ -292,17 +292,23 @@ class StreamingQueryManager private[sql] (
       case _ => false
     }
 
-    val streamWriteAnalysisSession = trigger match {
-      case _: ContinuousTrigger => sparkSession
+    val hasPersistentCheckpointLocation = userSpecifiedCheckpointLocation.isDefined ||
+      sparkSession.sessionState.conf.checkpointLocation.isDefined
+
+    val (streamWriteAnalysisSession, streamWriteAnalysisPlan) = trigger match {
+      case _: ContinuousTrigger => (sparkSession, dataStreamWritePlan)
       case _ if recoverFromCheckpointLocation &&
-          (!useTempCheckpointLocation || userSpecifiedCheckpointLocation.isDefined) &&
+          hasPersistentCheckpointLocation &&
           hasExceptWithStreamingLeft =>
-        val (resolvedCheckpointRoot, _) =
+        val (resolvedCheckpointRoot, _) = sparkSession.withActive {
           ResolveWriteToStream.resolveCheckpointLocation(dataStreamWritePlan)
+        }
+        val resolvedDataStreamWritePlan = dataStreamWritePlan.copy(
+          userSpecifiedCheckpointLocation = Some(resolvedCheckpointRoot))
         val checkpointMetadata = new StreamingQueryCheckpointMetadata(
           sparkSession, resolvedCheckpointRoot, readOnly = true)
 
-        checkpointMetadata.offsetLog.getLatest()
+        val analysisSession = checkpointMetadata.offsetLog.getLatest()
           .flatMap(_._2.metadataOpt)
           .map { metadata =>
             val allowStreamingExcept = OffsetSeqMetadata.readValue(
@@ -313,11 +319,12 @@ class StreamingQueryManager private[sql] (
             newSession
           }
           .getOrElse(sparkSession)
-      case _ => sparkSession
+        (analysisSession, resolvedDataStreamWritePlan)
+      case _ => (sparkSession, dataStreamWritePlan)
     }
 
     val analyzedStreamWritePlan =
-      streamWriteAnalysisSession.sessionState.executePlan(dataStreamWritePlan).analyzed
+      streamWriteAnalysisSession.sessionState.executePlan(streamWriteAnalysisPlan).analyzed
         .asInstanceOf[WriteToStream]
 
     (sink, trigger) match {
