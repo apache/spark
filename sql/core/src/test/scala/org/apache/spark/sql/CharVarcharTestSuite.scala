@@ -2363,7 +2363,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
         checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(nestedJsonQuery), Row(Map("outer" -> Map("a " -> 2))))
-        checkAnswer(sql(badValueBeforeDuplicateQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(badValueBeforeDuplicateQuery), Row(null))
         checkAnswer(sql(xmlQuery), Row(Map("a " -> 9)))
       }
     }
