@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, EqualTo, Expression, LessThanOrEqual, Literal, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, CreateNamedStruct, EqualTo, Expression, GreaterThan, If, LambdaFunction, LessThanOrEqual, Literal, Rand, Subtract, ZipWith}
 import org.apache.spark.sql.catalyst.plans.{GreaterThanOp, GreaterThanOrEqualOp, Inner, JoinType, LeftOuter, LessThanOp, LessThanOrEqualOp, MatchComparisonOperator}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
@@ -57,6 +57,26 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
   private val leftKeys: LogicalPlan = LocalRelation(lOp, lKey1, lKey2)
   private val rightKeys: LogicalPlan = LocalRelation(rOp, rKey1, rKey2)
 
+  // String operands: not subtractable, so the distance is a signed -1 / 0 / +1 rank.
+  private val lstr = AttributeReference("s", StringType)()
+  private val rstr = AttributeReference("s", StringType, nullable = false)()
+  private val leftStr: LogicalPlan = LocalRelation(lstr)
+  private val rightStr: LogicalPlan = LocalRelation(rstr)
+
+  // Array operands: the distance is computed element-wise via ZipWith.
+  private val larr = AttributeReference("arr", ArrayType(IntegerType))()
+  private val rarr = AttributeReference("arr", ArrayType(IntegerType))()
+  private val leftArr: LogicalPlan = LocalRelation(larr)
+  private val rightArr: LogicalPlan = LocalRelation(rarr)
+
+  // Positional struct operands (different field names): the distance is flattened per field.
+  private val lstruct = AttributeReference(
+    "st", StructType(StructField("f1", IntegerType) :: StructField("f2", IntegerType) :: Nil))()
+  private val rstruct = AttributeReference(
+    "st", StructType(StructField("g1", IntegerType) :: StructField("g2", IntegerType) :: Nil))()
+  private val leftStruct: LogicalPlan = LocalRelation(lstruct)
+  private val rightStruct: LogicalPlan = LocalRelation(rstruct)
+
   /** Build an [[AsOfJoin]] from a `MATCH_CONDITION` whose operands are already resolved. */
   private def asOf(
       leftExpr: Expression = la,
@@ -93,6 +113,65 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
       assert(r.asOfCondition.dataType == BooleanType, s"operator $op")
       assert(r.resolved, s"operator $op")
     }
+  }
+
+  test("materializes a subtractable leaf operand into a Subtract distance") {
+    val ge = ResolveAsOfJoin.apply(asOf(operator = GreaterThanOrEqualOp)).asInstanceOf[AsOfJoin]
+    assert(ge.matchOperator.isEmpty)
+    assert(ge.orderExpression == Subtract(la, rb))
+    // `<` / `<=` flip the operands so the distance stays non-negative on the matching side.
+    val le = ResolveAsOfJoin.apply(asOf(operator = LessThanOrEqualOp)).asInstanceOf[AsOfJoin]
+    assert(le.orderExpression == Subtract(rb, la))
+  }
+
+  test("materializes a non-subtractable String operand into a signed comparison distance") {
+    val resolved = ResolveAsOfJoin.apply(
+      asOf(leftExpr = lstr, rightExpr = rstr, l = leftStr, r = rightStr)).asInstanceOf[AsOfJoin]
+    assert(resolved.matchOperator.isEmpty)
+    // Strings cannot be subtracted, so the distance is a -1 / 0 / +1 rank.
+    val expected = If(
+      EqualTo(lstr, rstr),
+      Literal(0),
+      If(GreaterThan(lstr, rstr), Literal(1), Literal(-1)))
+    assert(resolved.orderExpression == expected)
+  }
+
+  test("flips the signed comparison distance for a less-than match operator") {
+    val resolved = ResolveAsOfJoin.apply(
+      asOf(leftExpr = lstr, operator = LessThanOrEqualOp, rightExpr = rstr,
+        l = leftStr, r = rightStr)).asInstanceOf[AsOfJoin]
+    val expected = If(
+      EqualTo(lstr, rstr),
+      Literal(0),
+      If(GreaterThan(lstr, rstr), Literal(-1), Literal(1)))
+    assert(resolved.orderExpression == expected)
+  }
+
+  test("materializes an array operand into an element-wise ZipWith distance") {
+    val resolved = ResolveAsOfJoin.apply(
+      asOf(leftExpr = larr, rightExpr = rarr, l = leftArr, r = rightArr)).asInstanceOf[AsOfJoin]
+    assert(resolved.matchOperator.isEmpty)
+    val order = resolved.orderExpression
+    assert(order.isInstanceOf[ZipWith], s"expected ZipWith, got ${order.getClass.getSimpleName}")
+    val zip = order.asInstanceOf[ZipWith]
+    assert(zip.left == larr && zip.right == rarr)
+    // Each element pair reuses the subtractable-leaf distance (Subtract) inside the lambda.
+    val body = zip.function.asInstanceOf[LambdaFunction].function
+    assert(body.isInstanceOf[Subtract], s"expected a Subtract element distance, got $body")
+  }
+
+  test("materializes a positional struct operand into a flattened per-field distance") {
+    val resolved = ResolveAsOfJoin.apply(
+      asOf(leftExpr = lstruct, rightExpr = rstruct, l = leftStruct, r = rightStruct))
+      .asInstanceOf[AsOfJoin]
+    assert(resolved.matchOperator.isEmpty)
+    val order = resolved.orderExpression
+    assert(order.isInstanceOf[CreateNamedStruct],
+      s"expected CreateNamedStruct, got ${order.getClass.getSimpleName}")
+    val fields = order.asInstanceOf[CreateNamedStruct].valExprs
+    // One Subtract distance per struct field, kept together in a composite struct.
+    assert(fields.size == 2)
+    assert(fields.forall(_.isInstanceOf[Subtract]), s"expected per-field Subtracts, got $fields")
   }
 
   test("expands USING into an equi-join predicate wrapped in a Project") {
