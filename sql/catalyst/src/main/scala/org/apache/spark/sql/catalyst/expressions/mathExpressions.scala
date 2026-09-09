@@ -357,6 +357,11 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
       > SELECT _FUNC_(3.1411, -3);
        1000
   """,
+  note = """
+    When `scale` is given the result is a decimal, whatever the type of `expr`; without
+    it the result is a long, or a decimal when `expr` is a decimal. `round`, `bround`
+    and `truncate` return the same type as `expr`.
+  """,
   since = "3.3.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
@@ -657,6 +662,11 @@ case class Floor(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabl
        3.141
       > SELECT _FUNC_(3.1411, -3);
        0
+  """,
+  note = """
+    When `scale` is given the result is a decimal, whatever the type of `expr`; without
+    it the result is a long, or a decimal when `expr` is a decimal. `round`, `bround`
+    and `truncate` return the same type as `expr`.
   """,
   since = "3.3.0",
   group = "math_funcs")

@@ -2785,8 +2785,9 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A column for the computed results.
-        Returns a column that evaluates to a long or decimal.
+        The smallest number not less than ``col``. Without ``scale`` the result is a
+        long, or a decimal when ``col`` is a decimal. When ``scale`` is given the result
+        is always a decimal, whatever the type of ``col``.
 
     See Also
     --------
@@ -2852,8 +2853,9 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A column for the computed results.
-        Returns a column that evaluates to a long or decimal.
+        The smallest number not less than ``col``. Without ``scale`` the result is a
+        long, or a decimal when ``col`` is a decimal. When ``scale`` is given the result
+        is always a decimal, whatever the type of ``col``.
 
     See Also
     --------
@@ -3281,8 +3283,9 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        nearest integer that is less than or equal to given value.
-        Returns a column that evaluates to a long or decimal.
+        The largest number not greater than ``col``. Without ``scale`` the result is a
+        long, or a decimal when ``col`` is a decimal. When ``scale`` is given the result
+        is always a decimal, whatever the type of ``col``.
 
     Notes
     -----
