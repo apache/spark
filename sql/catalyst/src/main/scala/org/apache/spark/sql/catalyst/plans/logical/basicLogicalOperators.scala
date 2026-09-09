@@ -1877,26 +1877,54 @@ case class BinBy(
     AttributeSet(scaledDistributeColumns ++ appendedAttributes)
 
   override protected def stringArgs: Iterator[Any] = {
-    val zone = timeZoneId.getOrElse("UTC")
-    val fmt = TimestampFormatter.getFractionFormatter(DateTimeUtils.getZoneId(zone))
-    def ref(a: Attribute): String = s"${a.name}#${a.exprId.id}"
-
-    Iterator(
-      s"range=[${ref(rangeStart)}, ${ref(rangeEnd)}]",
-      "binWidth=" + IntervalUtils.toDayTimeIntervalString(
-        binWidthMicros, IntervalStringStyles.ANSI_STYLE,
-        DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND),
-      s"alignTo=${fmt.format(originMicros)}",
-      s"distribute=[${distributeColumns.map(ref).mkString(", ")}]",
-      s"scaledDistribute=[${scaledDistributeColumns.map(ref).mkString(", ")}]",
-      s"appends=[${appendedAttributes.map(ref).mkString(", ")}]",
-      s"zone=$zone")
+    BinBy.explainStringArgs(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidthMicros = binWidthMicros,
+      originMicros = originMicros,
+      distributeColumns = distributeColumns,
+      scaledDistributeColumns = scaledDistributeColumns,
+      appendedAttributes = appendedAttributes,
+      timeZoneId = timeZoneId)
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BIN_BY)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): BinBy =
     copy(child = newChild)
+}
+
+object BinBy {
+
+  /** Builds the `stringArgs` for EXPLAIN. */
+  def explainStringArgs(
+      rangeStart: Attribute,
+      rangeEnd: Attribute,
+      binWidthMicros: Long,
+      originMicros: Long,
+      distributeColumns: Seq[Attribute],
+      scaledDistributeColumns: Seq[Attribute],
+      appendedAttributes: Seq[Attribute],
+      timeZoneId: Option[String]): Iterator[Any] = {
+    val maxFields = SQLConf.get.maxToStringFields
+    val fmt = TimestampFormatter.getFractionFormatter(
+      DateTimeUtils.getZoneId(timeZoneId.getOrElse("UTC")))
+
+    def refs(attrs: Seq[Attribute]): String = {
+      truncatedString(attrs.map(_.simpleString(maxFields)), "[", ", ", "]", maxFields)
+    }
+
+    Iterator(
+      s"range=[${rangeStart.simpleString(maxFields)}, ${rangeEnd.simpleString(maxFields)}]",
+      "binWidth=" + IntervalUtils.toDayTimeIntervalString(
+        binWidthMicros, IntervalStringStyles.ANSI_STYLE,
+        DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND),
+      s"alignTo=${fmt.format(originMicros)}",
+      s"distribute=${refs(distributeColumns)}",
+      s"scaledDistribute=${refs(scaledDistributeColumns)}",
+      s"appends=${refs(appendedAttributes)}") ++
+      timeZoneId.map(z => s"zone=$z")
+  }
 }
 
 /**
