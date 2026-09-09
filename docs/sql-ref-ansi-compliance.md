@@ -389,6 +389,7 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_make_timestamp_ltz`: identical to the function `make_timestamp_ltz`, except that it returns `NULL` result instead of throwing an exception on error.
   - `try_make_timestamp_ntz`: identical to the function `make_timestamp_ntz`, except that it returns `NULL` result instead of throwing an exception on error.
   - `try_make_interval`: identical to the function `make_interval`, except that it returns `NULL` result instead of throwing an exception on invalid interval.
+  - `try_make_time`: identical to the function `make_time`, except that it returns `NULL` result instead of throwing an exception on error.
   - `try_to_time`: identical to the function `to_time`, except that it returns `NULL` result instead of throwing an exception on string parsing error.
   - `try_to_date`: identical to the function `to_date`, except that it returns `NULL` result instead of throwing an exception on string parsing error.
 

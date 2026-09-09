@@ -654,7 +654,7 @@ case class MakeTime(
         An expression that evaluates to an integer.
       * minute - the minute to represent, from 0 to 59
         An expression that evaluates to an integer.
-      * second - the second to represent, from 0 to 59.999999.
+      * second - the second to represent, from 0 to 59.999999
         An expression that evaluates to a decimal.
   """,
   examples = """

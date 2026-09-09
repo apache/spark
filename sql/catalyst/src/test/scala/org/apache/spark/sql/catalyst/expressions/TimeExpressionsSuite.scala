@@ -269,6 +269,19 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TryEval(MakeTime(Literal(23), Literal(12), Literal(Decimal(100.5, 16, 6)))),
       null)
+
+    // The builder reports a wrong number of arguments.
+    checkError(
+      exception = intercept[AnalysisException] {
+        TryMakeTimeExpressionBuilder.build("try_make_time", Seq(Literal(1), Literal(2)))
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`try_make_time`",
+        "expectedNum" -> "3",
+        "actualNum" -> "2",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
   }
 
   test("SecondExpressionBuilder") {
