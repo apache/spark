@@ -35,6 +35,15 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(!MatchConditionTypes.areOperandsCompatible(DateType, StringType))
   }
 
+  test("orderable scalars with no common type are incompatible") {
+    // Both are individually valid, orderable operands ...
+    assert(MatchConditionTypes.isValidOperandType(TimestampType))
+    assert(MatchConditionTypes.isValidOperandType(BooleanType))
+    // ... but TIMESTAMP and BOOLEAN have no common wider type and are not a
+    // string/temporal pair, so they are not comparable.
+    assert(!MatchConditionTypes.areOperandsCompatible(TimestampType, BooleanType))
+  }
+
   test("positional struct operands with different field names are compatible") {
     val leftStruct = StructType(
       StructField("a", IntegerType) ::
