@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, MetadataAttribute}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeduplicateSpec, DeduplicateWithinWatermark, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeduplicateSpec, DeduplicateWithinWatermark, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_DEDUPLICATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -102,9 +102,10 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
       resolver: Resolver): Seq[Attribute] = {
     val originalMetadataKeys = AttributeSet(
       originalKeys.filter(key => MetadataAttribute.isValid(key.metadata)))
-    computeKeys(child, spec, orderDeterministically, resolver).filter { key =>
-      !MetadataAttribute.isValid(key.metadata) || originalMetadataKeys.contains(key)
+    val outputAtMetadataBoundary = child.output.filter { attribute =>
+      !MetadataAttribute.isValid(attribute.metadata) || originalMetadataKeys.contains(attribute)
     }
+    computeKeys(Project(outputAtMetadataBoundary, child), spec, orderDeterministically, resolver)
   }
 
   /**

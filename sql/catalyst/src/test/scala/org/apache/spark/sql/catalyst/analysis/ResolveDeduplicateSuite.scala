@@ -201,6 +201,28 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     }
   }
 
+  test("metadata propagation does not change legacy key order") {
+    val ordinaryRelation = LocalRelation(
+      Symbol("column_1").int,
+      Symbol("column_2").int,
+      Symbol("column_3").int,
+      Symbol("column_4").int)
+    val metadataAddedAfterDeduplication = MetadataAttribute("_metadata", StringType)
+    val metadataRelation = RelationWithMetadata(
+      ordinaryRelation.output, Seq(metadataAddedAfterDeduplication))
+    val childAfterMetadataPropagation = Project(
+      metadataRelation.output :+ metadataAddedAfterDeduplication, metadataRelation)
+    val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
+    val legacyKeys = ResolveDeduplicate.computeKeys(
+      metadataRelation, spec, orderDeterministically = false, SQLConf.get.resolver)
+
+    val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
+      legacyKeys, childAfterMetadataPropagation, spec, orderDeterministically = false,
+      SQLConf.get.resolver)
+
+    assert(recomputedKeys === legacyKeys)
+  }
+
   test("SPARK-57489: duplicate-named columns produce multiple keys (filter, not find)") {
     val a2 = $"a".int
     val dupRel = LocalRelation(a, a2)

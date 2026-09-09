@@ -18,11 +18,15 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.nio.charset.StandardCharsets.UTF_8
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.functions.{lit, timestamp_seconds}
+import org.apache.spark.sql.functions.{concat, lit, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 class StreamingDeduplicationWithMetadataSuite extends StreamTest {
 
@@ -106,6 +110,51 @@ class StreamingDeduplicationWithMetadataSuite extends StreamTest {
         StartStream(),
         ProcessAllAvailable(),
         CheckAnswer(("same", true), ("same", true)))
+    }
+  }
+
+  test("metadata propagation preserves key order from a Spark 4.2 checkpoint") {
+    withTempDir { src =>
+      withTempDir { checkpoint =>
+        val resource = this.getClass.getResource(
+          "/structured-streaming/" +
+            "checkpoint-version-4.2.0-deduplication-metadata-boundary/").toURI
+        Utils.copyDirectory(new File(resource), checkpoint)
+        val firstFile = stringToFile(new File(src, "first"), "same")
+        stringToFile(new File(src, "second"), "same")
+
+        // File source logs contain absolute paths. Point the copied batch-0 entry at the equivalent
+        // file in this test's temporary source directory while leaving the 4.2 state untouched.
+        val sourceLog = new Path(checkpoint.getCanonicalPath + "/sources/0/0")
+        val fileSystem = sourceLog.getFileSystem(spark.sessionState.newHadoopConf())
+        val output = fileSystem.create(sourceLog, true)
+        try {
+          output.write(
+            s"""v1
+               |{"path":"${firstFile.toURI}","timestamp":0,"batchId":0}""".stripMargin
+              .getBytes(UTF_8))
+        } finally {
+          output.close()
+        }
+
+        // Spark 4.2 wrote the checkpoint after processing another file containing "same" with
+        // four ordinary columns as keys. Its offset log has no deterministic-key-order setting,
+        // so restart must use the legacy key order even though the session default is true.
+        val result = spark.readStream.format("text").load(src.getCanonicalPath)
+          .select(
+            concat($"value", lit("_1")).as("column_1"),
+            concat($"value", lit("_2")).as("column_2"),
+            concat($"value", lit("_3")).as("column_3"),
+            concat($"value", lit("_4")).as("column_4"))
+          .dropDuplicates()
+          .select($"*", $"_metadata.file_path".as("filePath"))
+
+        testStream(result)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          ProcessAllAvailable(),
+          CheckLastBatch(),
+          StopStream)
+      }
     }
   }
 
