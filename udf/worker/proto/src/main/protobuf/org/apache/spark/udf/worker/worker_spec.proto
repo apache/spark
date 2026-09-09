@@ -33,6 +33,14 @@ message UDFWorkerSpecification {
     // (Required)
     WorkerCapabilities capabilities = 2;
 
+    // Describes the context to include in every Init message sent to
+    // this worker. The declaration is part of the worker specification
+    // so the engine can construct Init without knowing the worker's
+    // implementation language.
+    //
+    // (Optional)
+    WorkerSessionSpecification session = 4;
+
     // How to create new workers.
     // At the moment, only direct creation is supported.
     // This can be extended with indirect/provisioned creation in the future.
@@ -41,6 +49,58 @@ message UDFWorkerSpecification {
     oneof worker {
         DirectWorker direct = 3;
     }
+}
+
+// Static values and engine context required to initialize one execution
+// session on a worker. The engine resolves supported, authorized environment,
+// configuration, and resource names when it constructs Init. A declaration
+// selects a value but does not grant access to it.
+message WorkerSessionSpecification {
+    // Static worker-private settings copied to Init.session_conf.
+    //
+    // (Optional)
+    map<string, string> static_config = 1;
+
+    // Non-empty Init output key -> literal engine process environment
+    // variable reference. The engine must authorize the non-empty source
+    // before making its value available; this worker declaration is
+    // selection, not authorization. Derived engine or task state is not an
+    // environment-variable source.
+    //
+    // (Optional)
+    map<string, WorkerContextReference> environment_variable_references = 2;
+
+    // Non-empty logical name -> dynamic configuration requirement. The engine
+    // looks up the same name in its authorized dynamic configuration and, when
+    // available, copies the value to Init.session_conf under that name.
+    //
+    // (Optional)
+    map<string, DynamicConfigRequirement> dynamic_config = 3;
+
+    // Non-empty, unique logical names of local resource directories required
+    // in Init.resource_directories. The engine resolves each name to a fully
+    // qualified path in the worker's filesystem view. A declaration selects an
+    // engine-authorized resource; it does not grant filesystem access.
+    //
+    // (Optional)
+    repeated string required_resource_directories = 4;
+}
+
+message DynamicConfigRequirement {
+    // Whether session initialization must fail when the engine cannot provide
+    // this named value. Missing optional values are omitted from Init.
+    //
+    // (Optional; defaults to false.)
+    bool is_required = 1;
+}
+
+message WorkerContextReference {
+    // (Required, non-empty.) Source environment variable name.
+    string source = 1;
+
+    // Value to use when the source is unavailable. When unset, a missing
+    // source is omitted from Init.
+    optional string default_value = 2;
 }
 
 // Set of callables that can be used to setup, verify,
