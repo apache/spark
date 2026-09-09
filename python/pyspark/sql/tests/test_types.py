@@ -2354,36 +2354,47 @@ class TypesTestsMixin:
             # SparkRuntimeException); assert that condition rather than any failure.
             self.assertIn("TIMESTAMP_NANOS_PYTHON_MAP_KEY", str(pe.exception))
 
-    def test_timestamp_nanos_type_arrow_conversion_unsupported(self):
-        # SPARK-57462: Arrow/pandas value conversion for the nanosecond timestamp types is a pending
-        # follow-up; until then the classic read (toPandas) and write (createDataFrame from a pandas
-        # DataFrame) paths must reject an explicit nanosecond schema deterministically, naming the
-        # offending leaf type, rather than silently mis-handle the value. (The Connect data path is
-        # asserted separately in the parity suite.)
+    def test_timestamp_nanos_type_arrow_conversion(self):
+        # SPARK-57462 follow-up: the Arrow / pandas value path carries the nanosecond timestamp
+        # types as an Arrow timestamp[ns], so -- unlike the microsecond-resolution
+        # datetime.datetime boundary used by collect() / Python UDFs -- DataFrame.toPandas and
+        # createDataFrame from a pandas DataFrame preserve full nanosecond precision (pandas
+        # datetime64[ns]). The session time zone is pinned so the timezone-aware LTZ value is
+        # deterministic.
         import pandas as pd
 
-        with self.sql_conf({"spark.sql.timestampNanosTypes.enabled": True}):
-            schema = StructType([StructField("ts", TimestampNTZNanosType(9))])
-            value = datetime.datetime(2020, 1, 2, 3, 4, 5, 123456)
+        with self.sql_conf(
+            {
+                "spark.sql.timestampNanosTypes.enabled": True,
+                "spark.sql.session.timeZone": "UTC",
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+            }
+        ):
+            # Read path: toPandas keeps the sub-microsecond digits.
+            pdf = self.spark.sql(
+                "SELECT CAST('2020-01-02 03:04:05.123456789' AS TIMESTAMP_NTZ(9)) AS ts"
+            ).toPandas()
+            self.assertEqual("datetime64[ns]", str(pdf["ts"].dtype))
+            self.assertEqual(pd.Timestamp("2020-01-02 03:04:05.123456789"), pdf["ts"][0])
+            # The sub-microsecond digits survive; datetime.datetime could not carry them.
+            self.assertEqual(789, pdf["ts"][0].nanosecond)
 
-            # Read path: DataFrame.toPandas().
-            df = self.spark.createDataFrame([(value,)], schema)
-            with self.assertRaises(PySparkTypeError) as pe:
-                df.toPandas()
-            self.check_error(
-                exception=pe.exception,
-                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                messageParameters={"data_type": "TimestampNTZNanosType(9)"},
-            )
-
-            # Write path: createDataFrame from a pandas DataFrame with an explicit nanos schema.
-            with self.assertRaises(PySparkTypeError) as pe:
-                self.spark.createDataFrame(pd.DataFrame({"ts": [value]}), schema)
-            self.check_error(
-                exception=pe.exception,
-                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                messageParameters={"data_type": "TimestampNTZNanosType(9)"},
-            )
+            # Write path: a datetime64[ns] pandas column round-trips its nanoseconds back to Spark,
+            # for both the NTZ and the timezone-aware LTZ nanosecond types.
+            ns_string = "2020-01-02 03:04:05.123456789"
+            in_pdf = pd.DataFrame({"ts": pd.to_datetime(pd.Series([ns_string]))})
+            self.assertEqual("datetime64[ns]", str(in_pdf["ts"].dtype))
+            for nanos_type in (TimestampNTZNanosType(9), TimestampLTZNanosType(9)):
+                schema = StructType([StructField("ts", nanos_type)])
+                df = self.spark.createDataFrame(in_pdf, schema)
+                self.assertEqual(schema, df.schema)
+                # The stored value keeps all nine fractional digits (checked server-side).
+                self.assertEqual(
+                    ns_string,
+                    df.select(F.col("ts").cast("string")).first()[0],
+                )
+                # ... and a full pandas -> Spark -> pandas round-trip is lossless.
+                self.assertEqual(pd.Timestamp(ns_string), df.toPandas()["ts"][0])
 
     def test_yearmonth_interval_type_constructor(self):
         self.assertEqual(YearMonthIntervalType().simpleString(), "interval year to month")

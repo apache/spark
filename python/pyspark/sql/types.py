@@ -573,10 +573,12 @@ class TimestampNTZNanosType(AnyTimestampNanoType):
     with keys of this type that differ only below a microsecond would collapse to one entry, so
     that conversion raises rather than silently dropping an entry.
 
-    Arrow- and pandas-based conversion for these types -- :meth:`DataFrame.toPandas`,
-    :meth:`SparkSession.createDataFrame` from a pandas ``DataFrame``, Arrow-based UDFs, and the
-    Spark Connect data path -- is not yet supported and raises
-    ``UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION``; it is planned as a follow-up.
+    Arrow- and pandas-based conversion -- :meth:`DataFrame.toPandas`,
+    :meth:`SparkSession.createDataFrame` from a pandas ``DataFrame``, and the Spark Connect data
+    path -- carries the value as an Arrow ``timestamp[ns]`` and preserves full nanosecond
+    precision (pandas ``datetime64[ns]``). Because that Arrow encoding counts nanoseconds since
+    the epoch in a 64-bit integer, values outside the ``datetime64[ns]`` range (roughly the years
+    1677 to 2262) cannot be carried on this path.
 
     .. versionadded:: 4.4.0
     """
@@ -3080,34 +3082,6 @@ def _first_timestamp_nanos_map_key_type(dt: DataType) -> Optional["DataType"]:
         return None
     elif isinstance(dt, UserDefinedType):
         return _first_timestamp_nanos_map_key_type(dt.sqlType())
-    else:
-        return None
-
-
-def _first_timestamp_nanos_type(dt: DataType) -> Optional["DataType"]:
-    """Return the first nanosecond-capable timestamp type (depth-first) that ``dt`` is or contains,
-    or ``None`` if it contains none.
-
-    The Arrow / pandas / Connect value conversion for :class:`TimestampNTZNanosType` /
-    :class:`TimestampLTZNanosType` is not implemented yet (planned follow-up). Callers reject such a
-    schema up front rather than mis-handle the value; the returned leaf type feeds the error
-    message, consistent with :func:`~pyspark.sql.pandas.types.to_arrow_type`, which reports the
-    offending leaf. This is the "find the node" companion to the ``_has_type`` boolean check.
-    """
-    if isinstance(dt, AnyTimestampNanoType):
-        return dt
-    elif isinstance(dt, ArrayType):
-        return _first_timestamp_nanos_type(dt.elementType)
-    elif isinstance(dt, MapType):
-        return _first_timestamp_nanos_type(dt.keyType) or _first_timestamp_nanos_type(dt.valueType)
-    elif isinstance(dt, StructType):
-        for field in dt.fields:
-            found = _first_timestamp_nanos_type(field.dataType)
-            if found is not None:
-                return found
-        return None
-    elif isinstance(dt, UserDefinedType):
-        return _first_timestamp_nanos_type(dt.sqlType())
     else:
         return None
 

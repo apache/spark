@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional,
 from pyspark.errors import PySparkTypeError, PySparkValueError, UnsupportedOperationException
 from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
+    AnyTimestampNanoType,
     ArrayType,
     BinaryType,
     BooleanType,
@@ -53,6 +54,8 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampLTZNanosType,
+    TimestampNTZNanosType,
     TimestampNTZType,
     TimestampType,
     TimeType,
@@ -75,26 +78,6 @@ if TYPE_CHECKING:
 
 # Should keep in line with org.apache.spark.sql.util.ArrowUtils.metadataKey
 metadata_key = b"SPARK::metadata::json"
-
-
-def _reject_timestamp_nanos_conversion(schema: DataType) -> None:
-    """Raise if ``schema`` involves a nanosecond timestamp type, for Arrow/pandas value paths.
-
-    The Arrow / pandas value conversion for :class:`TimestampNTZNanosType` /
-    :class:`TimestampLTZNanosType` is not implemented yet (planned follow-up). Rather than let these
-    paths silently mis-handle the value (wrong time zone for LTZ, or a leaked ``pandas.Timestamp``),
-    fail deterministically here, consistent with :func:`to_arrow_type`, which already rejects these
-    types with the same error condition and reports the offending leaf type.
-    """
-    from pyspark.errors import PySparkTypeError
-    from pyspark.sql.types import _first_timestamp_nanos_type
-
-    offending = _first_timestamp_nanos_type(schema)
-    if offending is not None:
-        raise PySparkTypeError(
-            errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-            messageParameters={"data_type": str(offending)},
-        )
 
 
 def to_arrow_metadata(metadata: Optional[Dict[str, Any]] = None) -> Optional[Dict[bytes, bytes]]:
@@ -164,6 +147,15 @@ def to_arrow_type(
         arrow_type = pa.timestamp("us", tz=timezone)
     elif isinstance(dt, TimestampNTZType):
         arrow_type = pa.timestamp("us", tz=None)
+    elif isinstance(dt, TimestampLTZNanosType):
+        # Nanosecond-precision timestamps interchange as Arrow Timestamp(NANOSECOND), matching the
+        # JVM ArrowUtils mapping. This is the LTZ (timezone-aware) variant, so the session timezone
+        # is attached exactly like TimestampType. The precision (7-9) is carried out of band by the
+        # Spark schema; the Arrow unit is always nanoseconds.
+        assert timezone is not None
+        arrow_type = pa.timestamp("ns", tz=timezone)
+    elif isinstance(dt, TimestampNTZNanosType):
+        arrow_type = pa.timestamp("ns", tz=None)
     elif isinstance(dt, DayTimeIntervalType):
         arrow_type = pa.duration("us")
     elif isinstance(dt, TimeType):
@@ -570,7 +562,14 @@ def _check_arrow_array_timestamps_localize(
             ]
         )
 
-    if types.is_timestamp(a.type) and truncate and a.type.unit == "ns":
+    if (
+        types.is_timestamp(a.type)
+        and truncate
+        and a.type.unit == "ns"
+        and not isinstance(dt, AnyTimestampNanoType)
+    ):
+        # Nanosecond timestamps are floored to microseconds for the microsecond-precision Spark
+        # types, but a nanosecond-precision target type keeps its full resolution.
         a = pc.floor_temporal(a, unit="microsecond")
 
     if types.is_timestamp(a.type) and a.type.tz is None and isinstance(dt, TimestampType):
@@ -919,6 +918,10 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
             return np.dtype("datetime64[ns]")
         else:
             return np.dtype("datetime64[us]")
+    elif isinstance(dt, AnyTimestampNanoType):
+        # Nanosecond-precision timestamps always map to datetime64[ns] regardless of pandas
+        # version -- it is the only pandas resolution that preserves the sub-microsecond digits.
+        return np.dtype("datetime64[ns]")
     elif isinstance(dt, DayTimeIntervalType):
         if LooseVersion(pd.__version__) < "3.0.0":
             return np.dtype("timedelta64[ns]")
@@ -1034,7 +1037,10 @@ def _create_converter_to_pandas(
                 else:
                     return pser.astype(pandas_type, copy=False)
 
-        elif isinstance(data_type, TimestampType):
+        elif isinstance(data_type, (TimestampType, TimestampLTZNanosType)):
+            # TimestampLTZNanosType is the nanosecond-precision, timezone-aware timestamp; it is
+            # localized to the session timezone exactly like TimestampType. Its pandas_type is
+            # datetime64[ns] (see _to_corrected_pandas_type), so full resolution is preserved.
             assert timezone is not None
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
@@ -1220,7 +1226,7 @@ def _create_converter_to_pandas(
                     messageParameters={"var": str(_struct_in_pandas)},
                 )
 
-        elif isinstance(dt, TimestampType):
+        elif isinstance(dt, (TimestampType, TimestampLTZNanosType)):
             assert timezone is not None
 
             local_tz: Union[datetime.tzinfo, str] = (
@@ -1236,7 +1242,7 @@ def _create_converter_to_pandas(
 
             return convert_timestamp
 
-        elif isinstance(dt, TimestampNTZType):
+        elif isinstance(dt, (TimestampNTZType, TimestampNTZNanosType)):
 
             def convert_timestamp_ntz(value: Any) -> Any:
                 return pd.Timestamp(value)
@@ -1367,7 +1373,9 @@ def _create_converter_from_pandas(
     """
     import pandas as pd
 
-    if isinstance(data_type, TimestampType):
+    if isinstance(data_type, (TimestampType, TimestampLTZNanosType)):
+        # TimestampLTZNanosType is timezone-aware like TimestampType; the vectorized internal
+        # conversion preserves the datetime64[ns] resolution, so nanoseconds survive to Arrow.
         assert timezone is not None
 
         def correct_timestamp(pser: pd.Series) -> pd.Series:
@@ -1566,7 +1574,7 @@ def _create_converter_from_pandas(
 
             return convert_struct
 
-        elif isinstance(dt, TimestampType):
+        elif isinstance(dt, (TimestampType, TimestampLTZNanosType)):
             assert timezone is not None
 
             def convert_timestamp(value: Any) -> Any:
