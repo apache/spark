@@ -182,6 +182,36 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         )._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root.join.join_condition)
 
+    def test_as_of_join(self):
+        left = self.connect.readTable(table_name=self.tbl_name)
+        right = self.connect.readTable(table_name=self.tbl_name)
+        plan = left._joinAsOf(
+            right,
+            "left_time",
+            "right_time",
+            on=["key1", "key2"],
+            how="left",
+            tolerance=lit(10),
+            allowExactMatches=False,
+            direction="forward",
+        )._plan.to_proto(self.connect)
+        as_of_join = plan.root.as_of_join
+        self.assertTrue(as_of_join.HasField("left"))
+        self.assertTrue(as_of_join.HasField("right"))
+        self.assertEqual(
+            as_of_join.left_as_of.unresolved_attribute.unparsed_identifier,
+            "left_time",
+        )
+        self.assertEqual(
+            as_of_join.right_as_of.unresolved_attribute.unparsed_identifier,
+            "right_time",
+        )
+        self.assertEqual(as_of_join.using_columns, ["key1", "key2"])
+        self.assertEqual(as_of_join.join_type, "left")
+        self.assertEqual(as_of_join.tolerance.literal.integer, 10)
+        self.assertFalse(as_of_join.allow_exact_matches)
+        self.assertEqual(as_of_join.direction, "forward")
+
     def test_lateral_join(self):
         left = self.connect.readTable(table_name=self.tbl_name)
         right = self.connect.readTable(table_name=self.tbl_name)
