@@ -96,17 +96,14 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     if (conf.readSideCharPadding || standardSemantics) {
       val newPlan = boundPlan.resolveOperatorsUpWithNewOutput {
         case r: LogicalRelation =>
-          bindStandardSemantics(r)
           ApplyCharTypePaddingHelper.readSidePadding(r, () =>
             bindStandardSemantics(
               r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))))
         case r: DataSourceV2Relation =>
-          bindStandardSemantics(r)
           ApplyCharTypePaddingHelper.readSidePadding(r, () =>
             bindStandardSemantics(
               r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))))
         case r: HiveTableRelation =>
-          bindStandardSemantics(r)
           ApplyCharTypePaddingHelper.readSidePadding(r, () => {
             val cleanedDataCols = r.dataCols.map(CharVarcharUtils.cleanAttrMetadata)
             val cleanedPartCols = r.partitionCols.map(CharVarcharUtils.cleanAttrMetadata)

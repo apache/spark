@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableContext, TableWritePrivilege, V1Table}
@@ -3512,6 +3513,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     def cachedRelationWith(opts: java.util.Map[String, String]): DataSourceV2Relation = {
       val r = DataSourceV2Relation.create(
         cachedTable, Some(testCat), Some(ident), new CaseInsensitiveStringMap(opts))
+        .copy(charVarcharScanMode = Some(CharVarcharScanMode.PreserveNative))
       r.setTagValue(LogicalPlan.PLAN_ID_TAG, 4242L)
       r
     }
@@ -3537,6 +3539,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val reused = resolveWith(
       java.util.Map.of("split-size", "5"), java.util.Map.of("split-size", "5"))
     assert(reused.options.get("split-size") === "5")
+    assert(reused.charVarcharScanMode.isEmpty)
     assert(reused.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(4242L),
       "matching options should reuse the cached relation")
 

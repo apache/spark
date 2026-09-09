@@ -399,6 +399,29 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     assertCached(sql("SELECT * FROM jsonTable"), 0)
   }
 
+  test("SPARK-58814: insert recaches both bound CHAR/VARCHAR scan modes") {
+    Seq(
+      Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
+      Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")).foreach { modeConf =>
+      withSQLConf(modeConf: _*) {
+        sql("INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt")
+        spark.catalog.cacheTable("jsonTable")
+        try {
+          checkAnswer(sql("SELECT * FROM jsonTable"), (1 to 10).map(i => Row(i, s"str$i")))
+          sql("INSERT OVERWRITE TABLE jsonTable SELECT a * 2, b FROM jt")
+          assertCached(sql("SELECT * FROM jsonTable"))
+          checkAnswer(
+            sql("SELECT * FROM jsonTable"),
+            (1 to 10).map(i => Row(i * 2, s"str$i")))
+        } finally {
+          spark.catalog.uncacheTable("jsonTable")
+        }
+      }
+    }
+  }
+
   test("it's not allowed to insert into a relation that is not an InsertableRelation") {
     sql(
       """

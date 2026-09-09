@@ -2348,42 +2348,53 @@ class CachedTableSuite extends SharedSparkSession
   }
 
   test("RENAME TABLE manages cache with time travel plans correctly") {
-    val t = "testcat.tbl"
-    val tRenamed = "testcat.tbl_renamed"
-    val ident = Identifier.of(Array(), "tbl")
-    val version1 = "v1"
-    val version2 = "v2"
-    withTable(t, tRenamed, "cached_tt1", "cached_tt2") {
-      sql(s"CREATE TABLE $t (id int, data string) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+    val boundModes = Seq(
+      Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
+      Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"))
+    boundModes.foreach { modeConf =>
+      withSQLConf(modeConf: _*) {
+        val t = "testcat.tbl"
+        val tRenamed = "testcat.tbl_renamed"
+        val ident = Identifier.of(Array(), "tbl")
+        val version1 = "v1"
+        val version2 = "v2"
+        withTable(t, tRenamed, "cached_tt1", "cached_tt2") {
+          sql(s"CREATE TABLE $t (id int, data string) USING foo")
+          sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
 
-      // pin v1
-      pinTable("testcat", ident, version1)
+          // pin v1
+          pinTable("testcat", ident, version1)
 
-      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+          sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
 
-      // pin v2
-      pinTable("testcat", ident, version2)
+          // pin v2
+          pinTable("testcat", ident, version2)
 
-      sql(s"INSERT INTO $t VALUES (4, 'e'), (5, 'f')")
+          sql(s"INSERT INTO $t VALUES (4, 'e'), (5, 'f')")
 
-      // cache base and both versions
-      sql(s"CACHE TABLE $t")
-      assertCached(sql(s"SELECT * FROM $t"))
-      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
-      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
-      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
-      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+          // cache base and both versions
+          sql(s"CACHE TABLE $t")
+          assertCached(sql(s"SELECT * FROM $t"))
+          val storageLevel = spark.table(t).storageLevel
+          sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+          assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+          sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+          assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
 
-      // must have 3 cache entries
-      assert(cacheManager.numCachedEntries == 3)
+          // must have 3 cache entries
+          assert(cacheManager.numCachedEntries == 3)
 
-      // rename base table
-      sql(s"ALTER TABLE $t RENAME TO tbl_renamed")
+          // rename base table
+          sql(s"ALTER TABLE $t RENAME TO tbl_renamed")
 
-      // assert cache was cleared and renamed table (current version) was cached again
-      assert(cacheManager.numCachedEntries == 1)
-      assertCached(sql(s"SELECT * FROM $tRenamed"))
+          // assert cache was cleared and renamed table (current version) was cached again
+          assert(cacheManager.numCachedEntries == 1)
+          assertCached(sql(s"SELECT * FROM $tRenamed"))
+          assert(spark.table(tRenamed).storageLevel === storageLevel)
+        }
+      }
     }
   }
 
