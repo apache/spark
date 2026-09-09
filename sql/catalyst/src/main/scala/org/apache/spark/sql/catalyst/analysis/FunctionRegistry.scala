@@ -1048,7 +1048,8 @@ object FunctionRegistry {
     expressionBuilder("try_variant_set", TryVariantSetExpressionBuilder),
     expressionBuilder("variant_array_append", VariantArrayAppendExpressionBuilder),
     expressionBuilder("try_variant_array_append", TryVariantArrayAppendExpressionBuilder),
-    expressionBuilder("variant_strip_nulls", VariantStripNullsExpressionBuilder)
+    expressionBuilder("variant_strip_nulls", VariantStripNullsExpressionBuilder),
+    expression[VariantPick]("variant_pick")
   )
 
   private def spatialExpressions: Seq[FunctionRegistryEntry] = Seq(
