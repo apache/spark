@@ -359,8 +359,7 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
   """,
   note = """
     When `scale` is given the result is a decimal, whatever the type of `expr`; without
-    it the result is a long, or a decimal when `expr` is a decimal. `round`, `bround`
-    and `truncate` return the same type as `expr`.
+    it the result is a long, or a decimal when `expr` is a decimal.
   """,
   since = "3.3.0",
   group = "math_funcs")
@@ -665,8 +664,7 @@ case class Floor(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabl
   """,
   note = """
     When `scale` is given the result is a decimal, whatever the type of `expr`; without
-    it the result is a long, or a decimal when `expr` is a decimal. `round`, `bround`
-    and `truncate` return the same type as `expr`.
+    it the result is a long, or a decimal when `expr` is a decimal.
   """,
   since = "3.3.0",
   group = "math_funcs")
