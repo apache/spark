@@ -49,7 +49,7 @@ class ArrowUDTFTestsMixin:
 
         for function in (DirectCharUDTF, NestedCharUDTF):
             with self.assertRaisesRegex(
-                PySparkNotImplementedError, "Invalid return type with Arrow UDTFs"
+                PySparkNotImplementedError, "CHAR/VARCHAR return type in Python UDTFs"
             ):
                 function()
 
@@ -65,9 +65,7 @@ class ArrowUDTFTestsMixin:
             def eval(self):
                 yield (["a"],)
 
-        with self.assertRaisesRegex(
-            Exception, "Arrow-optimized Python UDTFs do not support CHAR/VARCHAR"
-        ):
+        with self.assertRaisesRegex(Exception, "Python UDTFs do not support CHAR/VARCHAR"):
             DynamicNestedCharUDTF().collect()
 
     def test_arrow_udtf_data_conversion_error(self):

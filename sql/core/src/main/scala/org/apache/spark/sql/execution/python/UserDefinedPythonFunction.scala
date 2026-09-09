@@ -215,11 +215,9 @@ case class UserDefinedPythonTableFunction(
     pythonEvalType: Int,
     udfDeterministic: Boolean) {
 
-  private def validateArrowReturnType(schema: StructType): Unit = {
-    if ((pythonEvalType == PythonEvalType.SQL_ARROW_TABLE_UDF ||
-        pythonEvalType == PythonEvalType.SQL_ARROW_UDTF) &&
-      CharVarcharUtils.hasCharVarchar(schema)) {
-      throw QueryCompilationErrors.invalidPythonArrowUDTFReturnType(schema)
+  private def validateReturnType(schema: StructType): Unit = {
+    if (CharVarcharUtils.hasCharVarchar(schema)) {
+      throw QueryCompilationErrors.invalidPythonUDTFReturnType(schema)
     }
   }
 
@@ -262,7 +260,7 @@ case class UserDefinedPythonTableFunction(
       CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get)
     val udtf = returnType match {
       case Some(rt) =>
-        validateArrowReturnType(rt)
+        validateReturnType(rt)
         PythonUDTF(
           name = name,
           func = func,
@@ -278,7 +276,7 @@ case class UserDefinedPythonTableFunction(
           val runner =
             new UserDefinedPythonTableFunctionAnalyzeRunner(name, func, exprs, tableArgs, parser)
           val analyzeResult = runner.runInPython()
-          validateArrowReturnType(analyzeResult.schema)
+          validateReturnType(analyzeResult.schema)
           analyzeResult
         }
         UnresolvedPolymorphicPythonUDTF(
