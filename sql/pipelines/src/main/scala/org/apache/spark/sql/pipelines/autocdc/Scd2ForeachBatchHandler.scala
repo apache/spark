@@ -68,14 +68,17 @@ case class Scd2ForeachBatchHandler(
       batchId = batchId
     ).validateMicrobatch()
 
-    val preprocessedBatchDf = batchProcessor.preprocessMicrobatch(batchDf)
+    val targetTableDf = batchDf.sparkSession.read.table(targetTableIdentifier.quotedString)
+    val preprocessedBatchDf = batchProcessor.preprocessMicrobatch(
+      microbatchDf = batchDf,
+      targetTableDf = targetTableDf
+    )
 
     val perKeyMinimumSequenceInMicrobatchDf = batchProcessor.computeMinimumSequencePerKey(
       preprocessedBatchDf
     )
 
     val auxTableDf = batchDf.sparkSession.read.table(auxiliaryTableIdentifier.quotedString)
-    val targetTableDf = batchDf.sparkSession.read.table(targetTableIdentifier.quotedString)
 
     val perKeyAffectedSequenceCutoffDf = batchProcessor.computePerKeyAffectedSequenceCutoff(
       rawAuxiliaryTableDf = auxTableDf,
@@ -95,12 +98,10 @@ case class Scd2ForeachBatchHandler(
       perKeyAffectedSequenceCutoffDf = perKeyAffectedSequenceCutoffDf
     )
 
-    // The three inputs share the canonical SCD2 row schema by name, but not necessarily by column
-    // set: after cross-run schema evolution the target (and the aux table, which mirrors it) can
-    // carry user columns that the current microbatch no longer emits. `allowMissingColumns` pads
-    // such columns with null on the side that lacks them (recursing into structs and arrays; map
-    // types are not supported) instead of failing the union. (findAffectedRowsFromAuxiliaryTable
-    // drops the aux-only deletedByBatchId column.)
+    // Preprocessing has already aligned the microbatch to the target schema. Keep
+    // allowMissingColumns here as a safeguard for nested differences between persisted target and
+    // auxiliary rows; findAffectedRowsFromAuxiliaryTable also drops the aux-only
+    // deletedByBatchId column.
     val microbatchAndAffectedRows = preprocessedBatchDf
       .unionByName(affectedRowsFromAuxiliaryTable, allowMissingColumns = true)
       .unionByName(affectedRowsFromTargetTable, allowMissingColumns = true)

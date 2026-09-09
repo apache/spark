@@ -31,6 +31,28 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
 
   /**
+   * Preprocess a microbatch against either an explicit persisted user schema or, by default, the
+   * microbatch's user-selected schema. The latter keeps tests unrelated to cross-run evolution
+   * focused on their existing axis.
+   */
+  private def preprocessMicrobatch(
+      processor: Scd2BatchProcessor,
+      microbatch: DataFrame,
+      targetUserSchema: Option[StructType] = None): DataFrame = {
+    val selectedMicrobatchSchema = ColumnSelection.applyToSchema(
+      schemaName = "microbatch",
+      schema = microbatch.schema,
+      columnSelection = processor.changeArgs.columnSelection,
+      resolver = spark.sessionState.conf.resolver
+    )
+    val targetTableDf = targetTableOf(
+      targetUserSchema.getOrElse(selectedMicrobatchSchema),
+      processor.resolvedSequencingType
+    )()
+    processor.preprocessMicrobatch(microbatch, targetTableDf)
+  }
+
+  /**
    * Build an mock aux-table [[DataFrame]] from explicit user rows + framework column values.
    */
   private def auxTableOf(
@@ -270,7 +292,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.schema.fieldNames.toSeq == Seq(
       "id", "seq", "value",
@@ -309,7 +331,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.collect().isEmpty)
     assert(result.schema.fieldNames.toSeq == Seq(
@@ -353,7 +375,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     //   - __RECORD_START_AT = sequencing for every row, regardless of delete vs upsert
     //                        (lineage preserved into the merge step)
     checkAnswer(
-      df = processor.preprocessMicrobatch(batch),
+      df = preprocessMicrobatch(processor, batch),
       expectedAnswer = Seq(
         Row(1, 10L, "first-upsert", false, 10L, null, Row(10L, null)),
         Row(1, 20L, "second-upsert", false, 20L, null, Row(20L, null)),
@@ -391,7 +413,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     // Both rows must survive verbatim.
     checkAnswer(
-      df = processor.preprocessMicrobatch(batch),
+      df = preprocessMicrobatch(processor, batch),
       expectedAnswer = Seq(
         Row(1, 10L, "alice", false, 10L, null, Row(10L, null)),
         Row(1, 10L, "alice", false, 10L, null, Row(10L, null))
@@ -421,7 +443,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
 
     checkAnswer(
-      df = processor.preprocessMicrobatch(batch).select(
+      df = preprocessMicrobatch(processor, batch).select(
         F.col(Scd2BatchProcessor.endAtColName)
       ),
       expectedAnswer = Seq(Row(null), Row(null))
@@ -452,7 +474,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
 
     checkAnswer(
-      df = processor.preprocessMicrobatch(batch).select(
+      df = preprocessMicrobatch(processor, batch).select(
         F.col(Scd2BatchProcessor.endAtColName)
       ),
       expectedAnswer = Row(null)
@@ -485,7 +507,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     checkAnswer(
       df = result.select(
@@ -522,7 +544,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.schema.fieldNames.toSeq == Seq(
       "id", "name", "age", "seq",
@@ -549,7 +571,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.schema.fieldNames.toSeq == Seq(
       "id", "age",
@@ -581,7 +603,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.schema.fieldNames.toSeq == Seq(
       "id", "age", "seq",
@@ -614,7 +636,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     // Output column order follows the microbatch schema (id before age), not the user's listing
     // order in IncludeColumns. Framework columns are always appended last.
@@ -646,7 +668,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
         resolvedSequencingType = LongType
       )
 
-      val result = processor.preprocessMicrobatch(batch)
+      val result = preprocessMicrobatch(processor, batch)
 
       // Output column names follow the microbatch schema's casing, not the user's casing.
       assert(result.schema.fieldNames.toSeq == Seq(
@@ -685,7 +707,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.schema.fieldNames.toSeq == Seq(
       "id", "user.id",
@@ -729,7 +751,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     // The orchestrator runs row-extension steps before column selection, so the framework
     // columns reference seq / is_delete fully even though the final projection drops them.
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.schema.fieldNames.toSeq == Seq(
       "id", "value",
@@ -744,6 +766,46 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
         Row(1, null, 20L, 20L, Row(20L, null))
       )
     )
+  }
+
+  test("preprocessMicrobatch aligns selected rows to the persisted target schema") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val batchSchema = new StructType()
+        .add("id", IntegerType)
+        .add("Value", new StructType().add("a", IntegerType))
+        .add("seq", LongType)
+      val targetUserSchema = new StructType()
+        .add("id", IntegerType)
+        .add("value", new StructType()
+          .add("a", IntegerType)
+          .add("removedNested", StringType))
+        .add("removedTopLevel", StringType)
+      val batch = microbatchOf(batchSchema)(Row(1, Row(2), 10L))
+      val processor = Scd2BatchProcessor(
+        changeArgs = ChangeArgs(
+          keys = Seq(UnqualifiedColumnName("id")),
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type2,
+          columnSelection = Some(ColumnSelection.ExcludeColumns(
+            Seq(UnqualifiedColumnName("seq"))))
+        ),
+        resolvedSequencingType = LongType
+      )
+
+      val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+      assert(result.schema.fieldNames.toSeq == Seq(
+        "id",
+        "value",
+        "removedTopLevel",
+        Scd2BatchProcessor.startAtColName,
+        Scd2BatchProcessor.endAtColName,
+        AutoCdcReservedNames.cdcMetadataColName
+      ))
+      checkAnswer(
+        df = result,
+        expectedAnswer = Row(1, Row(2, null), null, 10L, null, Row(10L, null))
+      )
+    }
   }
 
   // =============== computeMinimumSequencePerKey tests ===============
@@ -774,7 +836,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(2, 40L, true)    // delete - smallest sequence for key=2
     )
 
-    val preprocessed = processor.preprocessMicrobatch(raw)
+    val preprocessed = preprocessMicrobatch(processor, raw)
     val result = processor.computeMinimumSequencePerKey(preprocessed)
 
     assert(result.schema.fieldNames.toSeq == Seq(
@@ -808,7 +870,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row("EU", 1, 30L)
     )
 
-    val preprocessed = processor.preprocessMicrobatch(raw)
+    val preprocessed = preprocessMicrobatch(processor, raw)
     val result = processor.computeMinimumSequencePerKey(preprocessed)
 
     assert(result.schema.fieldNames.toSeq == Seq(
@@ -832,7 +894,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val processor = processorWithKeys(keys = Seq("id"))
 
     val raw = microbatchOf(schema)()
-    val preprocessed = processor.preprocessMicrobatch(raw)
+    val preprocessed = preprocessMicrobatch(processor, raw)
     val result = processor.computeMinimumSequencePerKey(preprocessed)
 
     assert(result.collect().isEmpty)
@@ -853,7 +915,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 30L),
       Row(1, 10L)
     )
-    val preprocessed = processor.preprocessMicrobatch(raw)
+    val preprocessed = preprocessMicrobatch(processor, raw)
     val result = processor.computeMinimumSequencePerKey(preprocessed)
 
     assert(result.schema.fieldNames.toSeq == Seq(
@@ -2175,7 +2237,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 10L, "alice", "inactive")
     )
 
-    val result = processor.reconcileStartAndEndAt(processor.preprocessMicrobatch(df))
+    val result = processor.reconcileStartAndEndAt(preprocessMicrobatch(processor, df))
 
     checkAnswer(
       df = result,
@@ -2209,7 +2271,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
 
     val ex = intercept[AnalysisException] {
-      processor.reconcileStartAndEndAt(processor.preprocessMicrobatch(df))
+      processor.reconcileStartAndEndAt(preprocessMicrobatch(processor, df))
     }
     assert(ex.getCondition == "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA")
   }
