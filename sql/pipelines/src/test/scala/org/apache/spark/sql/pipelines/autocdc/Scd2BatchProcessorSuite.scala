@@ -933,6 +933,116 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  gridTest("preprocessMicrobatch applies ignore-null selection to reductively removed columns")(
+    Seq(
+      // Include only value: removed is outside ignore-null and its padded null is authored.
+      (ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value"))), true),
+      // Exclude value: removed is inside ignore-null and its padded null is declined.
+      (ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("value"))), false)
+    )
+  ) { case (ignoreNullSelection, expectedAuthorship) =>
+    val batchSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("seq", LongType)
+    val targetUserSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("removed", StringType)
+    val batch = microbatchOf(batchSchema)(Row(1, "a", 10L))
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        columnSelection = Some(ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName("seq")))),
+        ignoreNullSelection = Some(ignoreNullSelection)
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+    checkAnswer(
+      df = result.select(
+        F.col("removed"),
+        Scd2BatchProcessor.versionMapOf(
+          F.col(AutoCdcReservedNames.cdcMetadataColName)).as("vm")),
+      expectedAnswer = Row(
+        null,
+        Map(Scd2VersionMap.encodePath(Seq("removed")) -> expectedAuthorship))
+    )
+  }
+
+  test("preprocessMicrobatch applies ignore-null to a reductively removed nested field") {
+    val batchSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", new StructType().add("a", IntegerType))
+      .add("seq", LongType)
+    val targetUserSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", new StructType()
+        .add("a", IntegerType)
+        .add("removed", StringType))
+    val batch = microbatchOf(batchSchema)(Row(1, Row(1), 10L))
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        columnSelection = Some(ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName("seq")))),
+        ignoreNullSelection =
+          Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value"))))
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+    checkAnswer(
+      df = result.select(
+        F.col("value"),
+        Scd2BatchProcessor.versionMapOf(
+          F.col(AutoCdcReservedNames.cdcMetadataColName)).as("vm")),
+      expectedAnswer = Row(
+        Row(1, null),
+        Map(Scd2VersionMap.encodePath(Seq("value", "removed")) -> false))
+    )
+  }
+
+  test("preprocessMicrobatch uses target spelling for version-map keys") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val batchSchema = new StructType()
+        .add("id", IntegerType)
+        .add("Value", StringType)
+        .add("seq", LongType)
+      val targetUserSchema = new StructType()
+        .add("id", IntegerType)
+        .add("value", StringType)
+      val batch = microbatchOf(batchSchema)(Row(1, null, 10L))
+      val processor = Scd2BatchProcessor(
+        changeArgs = ChangeArgs(
+          keys = Seq(UnqualifiedColumnName("id")),
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type2,
+          columnSelection = Some(ColumnSelection.ExcludeColumns(
+            Seq(UnqualifiedColumnName("seq")))),
+          ignoreNullSelection =
+            Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("Value"))))
+        ),
+        resolvedSequencingType = LongType
+      )
+
+      val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+      assert(result.schema.fieldNames.take(2).toSeq == Seq("id", "value"))
+      checkAnswer(
+        df = result.select(Scd2BatchProcessor.versionMapOf(
+          F.col(AutoCdcReservedNames.cdcMetadataColName)).as("vm")),
+        expectedAnswer = Row(Map(Scd2VersionMap.encodePath(Seq("value")) -> false))
+      )
+    }
+  }
+
   test("preprocessMicrobatch leaves version map null for all rows when ignore null is off") {
     val schema = new StructType()
       .add("id", IntegerType)

@@ -86,9 +86,8 @@ private[pipelines] object Scd2VersionMap {
    * Keys are compact JSON arrays of the name parts of *leaf* columns that received a null
    * value in their upsert event (e.g. `["address","city"]`). Keeping
    * name parts separate distinguishes a nested path from a column whose name contains dots
-   * and keeps persisted keys independent of SQL identifier quoting rules. Note: until
-   * SPARK-59347, these are microbatch-schema spellings, not necessarily canonical target
-   * spellings.
+   * and keeps persisted keys independent of SQL identifier quoting rules. Name parts use the
+   * persisted target schema's canonical spelling.
    *
    * Values indicate authorship: `true` means authored-null, `false` means unauthored-null.
    * Null values never appear in the map.
