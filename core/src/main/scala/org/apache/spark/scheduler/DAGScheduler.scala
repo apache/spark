@@ -763,8 +763,7 @@ private[spark] class DAGScheduler(
         log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
       outputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length,
         shuffleDep.partitioner.numPartitions, jobId,
-        // Resolve the per-shuffle reliability signal against the app-global flag once, here: a
-        // handle that sets it is authoritative; None falls back to supportsReliableStorage().
+        // Per-shuffle handle wins; None falls back to the app-global flag.
         isReliablyStored = shuffleDep.shuffleHandle.reliablyStored.getOrElse(
           sc.shuffleDriverComponents.supportsReliableStorage()))
     }
@@ -4194,10 +4193,9 @@ private[spark] class DAGScheduler(
   private[scheduler] def handleExecutorLost(
       execId: String,
       workerHost: Option[String]): Unit = {
-    // "worker" specifically refers to the process from a Standalone cluster, where the shuffle
-    // service lives in the Worker. Reliability is decided per shuffle by skipReliablyStored below
-    // (the tracker's per-shuffle value already folds in supportsReliableStorage()), so this only
-    // decides whether outputs on this executor/host are candidates for removal at all.
+    // Whether these outputs are candidates for removal at all; reliability is then decided per
+    // shuffle by skipReliablyStored below. workerHost.isDefined means the whole Standalone worker
+    // (which hosts the shuffle service) is gone.
     val fileLost = workerHost.isDefined || !env.blockManager.externalShuffleServiceEnabled
     removeExecutorAndUnregisterOutputs(
       execId = execId,
@@ -4305,10 +4303,8 @@ private[spark] class DAGScheduler(
         true
       } else if (!shuffleFileLostEpoch.contains(execId) ||
         shuffleFileLostEpoch(execId) < currentEpoch) {
-        // A selective cleanup (skipReliablyStored) leaves reliably-stored outputs registered, so
-        // it is not a full cleanup of this executor. Don't stamp shuffleFileLostEpoch in that case:
-        // otherwise a later same-epoch FetchFailed for one of those preserved-but-actually-gone
-        // outputs would be rejected by the strict epoch check here and never cleaned up.
+        // A selective cleanup keeps reliably-stored outputs, so it isn't a full cleanup: don't
+        // stamp the epoch, or a same-epoch FetchFailed for a preserved-but-gone output is skipped.
         if (!skipReliablyStored) {
           shuffleFileLostEpoch(execId) = currentEpoch
         }

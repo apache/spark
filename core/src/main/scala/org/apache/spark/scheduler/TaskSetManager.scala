@@ -1229,10 +1229,8 @@ private[spark] class TaskSetManager(
     // producer's set; this guard also covers a PARTIALLY-complete producer losing an executor on
     // decommission.
 
-    // Per-shuffle reliability is authoritative. The tracker's stored value already folds in the
-    // app-global supportsReliableStorage() at registerShuffle time (a handle that sets
-    // reliablyStored wins, else the global flag), so use it for a registered shuffle and fall back
-    // to the global flag only when the shuffle isn't registered here.
+    // Per-shuffle reliability wins: the tracker's stored value already folds in the app-global
+    // flag at registration. Use it for a registered shuffle, else fall back to the global flag.
     val reliablyStored = taskSet.shuffleId match {
       case Some(shuffleId) =>
         sched.mapOutputTracker match {
