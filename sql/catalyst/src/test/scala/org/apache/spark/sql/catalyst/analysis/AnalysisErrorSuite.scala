@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -1095,10 +1096,10 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     "it refers to non-existent table with same name") {
     val plan = UnresolvedWith(
       UnresolvedRelation(TableIdentifier("t")),
-      Seq(("t", SubqueryAlias("t",
+      Seq(CTERelation("t", SubqueryAlias("t",
         Project(
           Alias(Literal(1), "x")() :: Nil,
-          UnresolvedRelation(TableIdentifier("t", Option("nonexist"))))), None)))
+          UnresolvedRelation(TableIdentifier("t", Option("nonexist"))))))))
     assertAnalysisErrorCondition(plan,
       expectedErrorCondition = "TABLE_OR_VIEW_NOT_FOUND",
       Map("relationName" -> "`nonexist`.`t`"))
@@ -1329,6 +1330,35 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     messageParameters = Map(
       "expr" -> "\"_w0\"",
       "exprType" -> "\"MAP<STRING, STRING>\""))
+
+  test("MATERIALIZED CTE cannot reference the outer query") {
+    val relation = LocalRelation($"a".int)
+    def cteRef(cteDef: CTERelationDef): CTERelationRef = {
+      CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    }
+    def assertMaterializedCTEError(
+        cteChild: LogicalPlan,
+        colName: String,
+        referencedCTEDefs: Seq[CTERelationDef] = Nil): Unit = {
+      val cteDef = CTERelationDef(cteChild, materialized = Some(true))
+      val plan = WithCTE(cteRef(cteDef).select(colName), referencedCTEDefs :+ cteDef)
+      checkError(
+        exception = intercept[AnalysisException](getAnalyzer.checkAnalysis(plan)),
+        condition = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+        parameters = Map("colName" -> "`a`"))
+    }
+    val correlated = relation.where(OuterReference($"a".int) === 1)
+    // A direct outer reference in the CTE definition.
+    assertMaterializedCTEError(correlated, "a")
+    // An outer-scope reference of a subquery in the CTE definition (nested correlation).
+    val subquery = ScalarSubquery(
+      LocalRelation($"c".int).select($"c"),
+      outerAttrs = Seq(OuterScopeReference($"a".int)))
+    assertMaterializedCTEError(relation.select(subquery.as("s")), "s")
+    // An outer reference in another CTE that the MATERIALIZED CTE definition references.
+    val correlatedCTEDef = CTERelationDef(correlated)
+    assertMaterializedCTEError(cteRef(correlatedCTEDef).select("a"), "a", Seq(correlatedCTEDef))
+  }
 
   test("SPARK-48871: SupportsNonDeterministicExpression allows non-deterministic expressions") {
     val nonDeterministicExpressions = Seq(new Rand())

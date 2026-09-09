@@ -248,7 +248,7 @@ class ResolverGuard(
       Some("Recursive CTE")
     } else {
       unresolvedWith.cteRelations
-        .map(cteDefinition => cteDefinition._2)
+        .map(_.plan)
         .collectFirst { case CheckOperator(reason) => reason }
         .orElse(checkOperator(unresolvedWith.child))
     }

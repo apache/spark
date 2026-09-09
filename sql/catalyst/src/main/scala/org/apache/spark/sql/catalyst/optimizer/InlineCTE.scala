@@ -34,6 +34,10 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
  *    has non-deterministic expressions, it is still OK to inline the current CTE definition.
  * 2. The CTE definition is only referenced once throughout the main query and all the subqueries.
  *
+ * A user-specified `MATERIALIZED` or `NOT MATERIALIZED` option on a CTE definition overrides the
+ * conditions above: a `MATERIALIZED` CTE is never inlined, and a `NOT MATERIALIZED` CTE is always
+ * inlined, regardless of determinism or reference count.
+ *
  * CTE definitions that appear in subqueries and are not inlined will be pulled up to the main
  * query level.
  *
@@ -77,15 +81,18 @@ case class InlineCTE(
   private def shouldInline(cteDef: CTERelationDef, refCount: Int): Boolean = {
     // A CTE definition that requests to skip inlining is never inlined, even in `alwaysInline`
     // mode, so that a producer can guarantee the CTE is materialized rather than duplicated.
-    !cteDef.forceSkipInline && (alwaysInline || {
-      // We do not need to check enclosed `CTERelationRef`s for `deterministic` or
-      // `OuterReference`, because:
-      // 1) It is fine to inline a CTE if it references another CTE that is non-deterministic;
-      // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
-      refCount == 1 ||
-        cteDef.deterministic ||
-        cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
-    })
+    !cteDef.forceSkipInline && (alwaysInline || (cteDef.materialized match {
+      // The user-specified MATERIALIZED / NOT MATERIALIZED option overrides the default decision.
+      case Some(materialized) => !materialized
+      case None =>
+        // We do not need to check enclosed `CTERelationRef`s for `deterministic` or
+        // `OuterReference`, because:
+        // 1) It is fine to inline a CTE if it references another CTE that is non-deterministic;
+        // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
+        refCount == 1 ||
+          cteDef.deterministic ||
+          cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
+    }))
   }
 
   private def validateNoOuterReferencesAcrossCTEBoundary(cteDef: CTERelationDef): Unit = {

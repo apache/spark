@@ -1191,6 +1191,148 @@ WithCTE
 
 
 -- !query
+WITH t AS MATERIALIZED (SELECT 1 AS x)
+SELECT * FROM t, t AS t2
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false, true
+:  +- SubqueryAlias t
+:     +- Project [1 AS x#x]
+:        +- OneRowRelation
++- Project [x#x, x#x]
+   +- Join Inner
+      :- SubqueryAlias t
+      :  +- CTERelationRef xxxx, true, [x#x], false, false, 1
+      +- SubqueryAlias t2
+         +- SubqueryAlias t
+            +- CTERelationRef xxxx, true, [x#x], false, false, 1
+
+
+-- !query
+WITH t AS NOT MATERIALIZED (SELECT 1 AS x)
+SELECT * FROM t, t AS t2
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false, false
+:  +- SubqueryAlias t
+:     +- Project [1 AS x#x]
+:        +- OneRowRelation
++- Project [x#x, x#x]
+   +- Join Inner
+      :- SubqueryAlias t
+      :  +- CTERelationRef xxxx, true, [x#x], false, false, 1
+      +- SubqueryAlias t2
+         +- SubqueryAlias t
+            +- CTERelationRef xxxx, true, [x#x], false, false, 1
+
+
+-- !query
+WITH t(x) MATERIALIZED (SELECT 1)
+SELECT * FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false, true
+:  +- SubqueryAlias t
+:     +- Project [1#x AS x#x]
+:        +- Project [1 AS 1#x]
+:           +- OneRowRelation
++- Project [x#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [x#x], false, false, 1
+
+
+-- !query
+WITH materialized AS (SELECT 1 AS x)
+SELECT * FROM materialized
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias materialized
+:     +- Project [1 AS x#x]
+:        +- OneRowRelation
++- Project [x#x]
+   +- SubqueryAlias materialized
+      +- CTERelationRef xxxx, true, [x#x], false, false, 1
+
+
+-- !query
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS NOT MATERIALIZED (SELECT 1 FROM t2 WHERE t2.id = t.id)
+  SELECT * FROM s
+)
+-- !query analysis
+Project [id#x]
++- Filter exists#x [id#x]
+   :  +- WithCTE
+   :     :- CTERelationDef xxxx, false, false
+   :     :  +- SubqueryAlias s
+   :     :     +- Project [1 AS 1#x]
+   :     :        +- Filter (id#x = outer(id#x))
+   :     :           +- SubqueryAlias t2
+   :     :              +- View (`t2`, [id#x])
+   :     :                 +- Project [cast(id#x as int) AS id#x]
+   :     :                    +- Project [id#x]
+   :     :                       +- SubqueryAlias t
+   :     :                          +- LocalRelation [id#x]
+   :     +- Project [1#x]
+   :        +- SubqueryAlias s
+   :           +- CTERelationRef xxxx, true, [1#x], false, false
+   +- SubqueryAlias t
+      +- View (`t`, [id#x])
+         +- Project [cast(id#x as int) AS id#x]
+            +- Project [id#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x]
+
+
+-- !query
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS MATERIALIZED (SELECT 1 FROM t2 WHERE t2.id = t.id)
+  SELECT * FROM s
+)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 89,
+    "stopIndex" : 92,
+    "fragment" : "t.id"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS (SELECT 1 FROM t2 WHERE t2.id = t.id),
+       s2 AS MATERIALIZED (SELECT * FROM s)
+  SELECT * FROM s2
+)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 76,
+    "stopIndex" : 79,
+    "fragment" : "t.id"
+  } ]
+}
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query analysis
 DropTempViewCommand t, true

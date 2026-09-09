@@ -71,7 +71,7 @@ class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
         planAfterSubstitution
           .asInstanceOf[UnresolvedWith]
           .cteRelations(0)
-          ._2
+          .plan
           .children(0)
           .children(0)
           .children(0)
@@ -113,7 +113,7 @@ class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
           .children(0)
           .asInstanceOf[UnresolvedWith]
           .cteRelations(0)
-          ._2
+          .plan
           .children(0)
           .children(0)
           .children(0)
@@ -147,7 +147,7 @@ class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
           .children(0)
           .asInstanceOf[UnresolvedWith]
           .cteRelations(0)
-          ._2
+          .plan
           .children(0)
           .children(0)
           .isInstanceOf[UnresolvedRelation]
@@ -158,7 +158,7 @@ class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
           .children(0)
           .asInstanceOf[UnresolvedWith]
           .cteRelations(1)
-          ._2
+          .plan
           .children(0)
           .children(0)
           .isInstanceOf[UnresolvedCteRelationRef]

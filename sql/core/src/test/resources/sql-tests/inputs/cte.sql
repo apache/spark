@@ -297,6 +297,40 @@ WITH cte AS (SELECT 1 AS id, 'test' AS COLNAME),
      cte3 AS (SELECT id, COLNAME, colname FROM cte2)
 SELECT * FROM cte2 a JOIN cte2 b ON (a.id = b.id);
 
+-- CTE materialization options
+WITH t AS MATERIALIZED (SELECT 1 AS x)
+SELECT * FROM t, t AS t2;
+
+WITH t AS NOT MATERIALIZED (SELECT 1 AS x)
+SELECT * FROM t, t AS t2;
+
+-- AS may be omitted before MATERIALIZED
+WITH t(x) MATERIALIZED (SELECT 1)
+SELECT * FROM t;
+
+-- MATERIALIZED is a non-reserved keyword
+WITH materialized AS (SELECT 1 AS x)
+SELECT * FROM materialized;
+
+-- CTE referencing the outer query is inlined
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS NOT MATERIALIZED (SELECT 1 FROM t2 WHERE t2.id = t.id)
+  SELECT * FROM s
+);
+
+-- MATERIALIZED CTE referencing the outer query, should fail
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS MATERIALIZED (SELECT 1 FROM t2 WHERE t2.id = t.id)
+  SELECT * FROM s
+);
+
+-- MATERIALIZED CTE referencing the outer query through another CTE, should fail
+SELECT * FROM t WHERE EXISTS (
+  WITH s AS (SELECT 1 FROM t2 WHERE t2.id = t.id),
+       s2 AS MATERIALIZED (SELECT * FROM s)
+  SELECT * FROM s2
+);
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;

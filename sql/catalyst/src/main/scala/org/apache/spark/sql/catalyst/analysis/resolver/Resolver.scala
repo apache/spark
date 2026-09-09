@@ -362,21 +362,21 @@ class Resolver(
    */
   private def resolveWith(unresolvedWith: UnresolvedWith): LogicalPlan = {
     for (cteRelation <- unresolvedWith.cteRelations) {
-      val (cteName, ctePlan, _) = cteRelation
-
       expressionIdAssigner.pushMapping()
       scopes.pushScope()
       cteRegistry.pushScope()
 
       val resolvedCtePlan = try {
-        resolve(ctePlan)
+        resolve(cteRelation.plan)
       } finally {
         cteRegistry.popScope()
         scopes.popScope()
         expressionIdAssigner.popMapping()
       }
 
-      cteRegistry.currentScope.registerCte(cteName, CTERelationDef(resolvedCtePlan))
+      cteRegistry.currentScope.registerCte(
+        cteRelation.name,
+        CTERelationDef(resolvedCtePlan, materialized = cteRelation.materialized))
     }
 
     cteRegistry.pushScope()
