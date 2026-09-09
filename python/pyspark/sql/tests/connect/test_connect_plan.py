@@ -85,6 +85,67 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertIsNotNone(plan.root, "Root relation must be set")
         self.assertIsNotNone(plan.root.read)
 
+    def test_select_expr(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.selectExpr("col_a + 1", "col_b AS renamed")._plan.to_proto(self.connect)
+        self.assertEqual(
+            [
+                expression.expression_string.expression
+                for expression in plan.root.project.expressions
+            ],
+            ["col_a + 1", "col_b AS renamed"],
+        )
+
+    def test_aggregate(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = df.agg({"value": "sum"})._plan.to_proto(self.connect)
+        aggregate = plan.root.aggregate
+        self.assertEqual(
+            aggregate.group_type, proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY
+        )
+        self.assertEqual(len(aggregate.grouping_expressions), 0)
+        self.assertEqual(
+            aggregate.aggregate_expressions[0].unresolved_function.function_name, "sum"
+        )
+
+        plan = df.groupBy("key").agg(sum("value"))._plan.to_proto(self.connect)
+        aggregate = plan.root.aggregate
+        self.assertEqual(
+            aggregate.group_type, proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY
+        )
+        self.assertEqual(
+            aggregate.grouping_expressions[0].unresolved_attribute.unparsed_identifier, "key"
+        )
+
+        plan = df.rollup("key").agg(sum("value"))._plan.to_proto(self.connect)
+        self.assertEqual(
+            plan.root.aggregate.group_type, proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP
+        )
+
+        plan = df.cube("key").agg(sum("value"))._plan.to_proto(self.connect)
+        self.assertEqual(
+            plan.root.aggregate.group_type, proto.Aggregate.GroupType.GROUP_TYPE_CUBE
+        )
+
+        plan = (
+            df.groupingSets([["key"], ["category"]], "key", "category")
+            .agg(sum("value"))
+            ._plan.to_proto(self.connect)
+        )
+        aggregate = plan.root.aggregate
+        self.assertEqual(
+            aggregate.group_type, proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS
+        )
+        self.assertEqual(
+            [
+                expression.unresolved_attribute.unparsed_identifier
+                for grouping_set in aggregate.grouping_sets
+                for expression in grouping_set.grouping_set
+            ],
+            ["key", "category"],
+        )
+
     def test_bitmap_scalar_functions(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.select(
@@ -121,6 +182,40 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         )._plan.to_proto(self.connect)
         self.assertIsNotNone(plan.root.join.join_condition)
 
+    def test_lateral_join(self):
+        left = self.connect.readTable(table_name=self.tbl_name)
+        right = self.connect.readTable(table_name=self.tbl_name)
+        plan = left.lateralJoin(right, left.key == right.key, "left")._plan.to_proto(self.connect)
+        lateral_join = plan.root.lateral_join
+        self.assertTrue(lateral_join.HasField("left"))
+        self.assertTrue(lateral_join.HasField("right"))
+        self.assertTrue(lateral_join.HasField("join_condition"))
+        self.assertEqual(
+            lateral_join.join_type, proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER
+        )
+
+    def test_nearest_by_join(self):
+        left = self.connect.readTable(table_name=self.tbl_name)
+        right = self.connect.readTable(table_name=self.tbl_name)
+        plan = left.nearestByJoin(
+            right,
+            left.score - right.score,
+            3,
+            "exact",
+            "distance",
+            joinType="left",
+        )._plan.to_proto(self.connect)
+        nearest_by_join = plan.root.nearest_by_join
+        self.assertTrue(nearest_by_join.HasField("left"))
+        self.assertTrue(nearest_by_join.HasField("right"))
+        self.assertEqual(
+            nearest_by_join.ranking_expression.unresolved_function.function_name, "-"
+        )
+        self.assertEqual(nearest_by_join.num_results, 3)
+        self.assertEqual(nearest_by_join.join_type, "left")
+        self.assertEqual(nearest_by_join.mode, "exact")
+        self.assertEqual(nearest_by_join.direction, "distance")
+
     def test_crossjoin(self):
         # SPARK-41227: Test CrossJoin
         left_input = self.connect.readTable(table_name=self.tbl_name)
@@ -152,6 +247,17 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(
             plan.root.zip.right.read.named_table.unparsed_identifier,
             self.tbl_name,
+        )
+
+    def test_zip_with_index(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.zipWithIndex("row_id")._plan.to_proto(self.connect)
+        expressions = plan.root.project.expressions
+        self.assertTrue(expressions[0].HasField("unresolved_star"))
+        self.assertEqual(expressions[1].alias.name, ["row_id"])
+        self.assertEqual(
+            expressions[1].alias.expr.unresolved_function.function_name,
+            "distributed_sequence_id",
         )
 
     def test_filter(self):
@@ -608,6 +714,12 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         )
         self.assertEqual(len(deduplicate_on_subset_columns_plan.root.deduplicate.column_names), 2)
 
+        within_watermark_plan = df.dropDuplicatesWithinWatermark(["name"])._plan.to_proto(
+            self.connect
+        )
+        self.assertTrue(within_watermark_plan.root.deduplicate.within_watermark)
+        self.assertEqual(within_watermark_plan.root.deduplicate.column_names, ["name"])
+
     def test_relation_alias(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         plan = df.alias("table_alias")._plan.to_proto(self.connect)
@@ -721,7 +833,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         plan1 = df1.union(df2)._plan.to_proto(self.connect)
         self.assertTrue(plan1.root.set_op.is_all)
         self.assertEqual(proto.SetOperation.SET_OP_TYPE_UNION, plan1.root.set_op.set_op_type)
-        plan2 = df1.union(df2)._plan.to_proto(self.connect)
+        plan2 = df1.unionAll(df2)._plan.to_proto(self.connect)
         self.assertTrue(plan2.root.set_op.is_all)
         self.assertEqual(proto.SetOperation.SET_OP_TYPE_UNION, plan2.root.set_op.set_op_type)
         plan3 = df1.unionByName(df2, True)._plan.to_proto(self.connect)
@@ -808,6 +920,19 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             ["col_a", "col_b"],
         )
 
+    def test_repartition_by_id(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.repartitionById(8, "partition_id")._plan.to_proto(self.connect)
+        repartition = plan.root.repartition_by_expression
+        self.assertEqual(repartition.num_partitions, 8)
+        self.assertEqual(len(repartition.partition_exprs), 1)
+        self.assertEqual(
+            repartition.partition_exprs[
+                0
+            ].direct_shuffle_partition_id.child.unresolved_attribute.unparsed_identifier,
+            "partition_id",
+        )
+
     def test_to(self):
         # SPARK-41464: test `to` API in Python client.
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -866,6 +991,73 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
                 proto.DataType(timestamp_ltz_nanos=proto.DataType.TimestampLTZNanos())
             ),
         )
+
+    def test_with_columns(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = df.withColumn("constant", lit(1))._plan.to_proto(self.connect)
+        alias = plan.root.with_columns.aliases[0]
+        self.assertEqual(alias.name, ["constant"])
+        self.assertEqual(alias.expr.literal.integer, 1)
+
+        plan = df.withColumns(
+            {"constant": lit(1), "copied": df.source}
+        )._plan.to_proto(self.connect)
+        aliases = plan.root.with_columns.aliases
+        self.assertEqual([alias.name[0] for alias in aliases], ["constant", "copied"])
+        self.assertEqual(aliases[0].expr.literal.integer, 1)
+        self.assertEqual(
+            aliases[1].expr.unresolved_attribute.unparsed_identifier,
+            "source",
+        )
+
+        plan = df.withMetadata("source", {"origin": "test"})._plan.to_proto(self.connect)
+        alias = plan.root.with_columns.aliases[0]
+        self.assertEqual(alias.name, ["source"])
+        self.assertEqual(alias.metadata, '{"origin": "test"}')
+
+    def test_with_columns_renamed(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.withColumnRenamed("old", "new")._plan.to_proto(self.connect)
+        renames = plan.root.with_columns_renamed.renames
+        self.assertEqual(
+            [(rename.col_name, rename.new_col_name) for rename in renames],
+            [("old", "new")],
+        )
+
+        plan = df.withColumnsRenamed({"a": "x", "b": "y"})._plan.to_proto(self.connect)
+        renames = plan.root.with_columns_renamed.renames
+        self.assertEqual(
+            [(rename.col_name, rename.new_col_name) for rename in renames],
+            [("a", "x"), ("b", "y")],
+        )
+
+    def test_with_watermark(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.withWatermark("event_time", "10 minutes")._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.with_watermark.event_time, "event_time")
+        self.assertEqual(plan.root.with_watermark.delay_threshold, "10 minutes")
+
+    def test_hint(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.hint("REPARTITION", 8, "key")._plan.to_proto(self.connect)
+        hint = plan.root.hint
+        self.assertEqual(hint.name, "REPARTITION")
+        self.assertEqual(hint.parameters[0].literal.integer, 8)
+        self.assertEqual(hint.parameters[1].literal.string, "key")
+
+    def test_transpose(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.transpose("key")._plan.to_proto(self.connect)
+        self.assertEqual(
+            plan.root.transpose.index_columns[0].unresolved_attribute.unparsed_identifier,
+            "key",
+        )
+
+    def test_to_df(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        plan = df.toDF("first", "second")._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.to_df.column_names, ["first", "second"])
 
     def test_write_operation(self):
         wo = WriteOperation(self.connect.readTable("name")._plan)
