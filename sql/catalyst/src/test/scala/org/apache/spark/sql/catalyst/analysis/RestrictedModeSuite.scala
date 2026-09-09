@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal, RestrictedModeInitFixture}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, ScriptInputOutputSchema, ScriptTransformation}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Exists, Literal,
+  RestrictedModeInitFixture}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project,
+  ScriptInputOutputSchema, ScriptTransformation}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.StringType
 
@@ -135,6 +137,24 @@ class RestrictedModeSuite extends AnalysisTest {
     withRestrictedMode(true) {
       val e = intercept[AnalysisException](getAnalyzer.checkAnalysis(parent))
       checkRestrictedError(e, "The TRANSFORM ... USING clause")
+    }
+  }
+
+  test("restricted mode rejects banned functions nested in subqueries") {
+    Seq("reflect", "java_method", "try_reflect").foreach { fn =>
+      withRestrictedMode(true) {
+        val analyzer = getAnalyzer
+        val e = intercept[AnalysisException] {
+          analyzer.checkAnalysis(analyzer.execute(
+            Filter(Exists(functionProject(fn)), TestRelations.testRelation)))
+        }
+        checkRestrictedError(e, s"The `$fn` function")
+      }
+    }
+    withRestrictedMode(false) {
+      val analyzer = getAnalyzer
+      analyzer.checkAnalysis(analyzer.execute(
+        Filter(Exists(functionProject("reflect")), TestRelations.testRelation)))
     }
   }
 }
