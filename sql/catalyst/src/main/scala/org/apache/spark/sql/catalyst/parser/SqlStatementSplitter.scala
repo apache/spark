@@ -434,27 +434,80 @@ object SqlStatementSplitter {
   }
 
   /**
-   * Returns true only when recovery found a real END and the candidate itself
-   * ends in a real END, the optional outer semicolon, and EOF. Error recovery
-   * can bind the context's END node to an inner control terminator and skip its
-   * suffix, so the candidate suffix is checked independently.
+   * Returns true only when a real recovered END is the candidate's trailing
+   * END, or when recovery bound that node to an earlier control terminator
+   * (`END IF`, `END WHILE`, ...) and a later statement-level END is the
+   * actual suffix. A statement such as `SELECT END` can end in an END token
+   * that is not the outer compound terminator.
    */
   private def isOuterCompoundEnd(tokens: CommonTokenStream, recoveredEnd: Token): Boolean = {
     if (recoveredEnd.getTokenIndex < 0) return false
+    val suffixEnd = trailingEndToken(tokens)
+    if (suffixEnd == null) return false
+    val recoveredIndex = recoveredEnd.getTokenIndex
+    val suffixIndex = suffixEnd.getTokenIndex
+    recoveredIndex == suffixIndex ||
+      (recoveredIndex < suffixIndex &&
+        isControlTerminatorEnd(tokens, recoveredEnd) &&
+        isStatementLevelEnd(tokens, suffixEnd))
+  }
 
-    var index = tokens.size() - 1
-    if (index < 0 || tokens.get(index).getType != Token.EOF) return false
-    index -= 1
+  /**
+   * Returns the candidate's trailing END when the default-channel suffix is
+   * END, an optional semicolon, and EOF. Otherwise null.
+   */
+  private def trailingEndToken(tokens: CommonTokenStream): Token = {
+    var index = skipHiddenLeft(tokens, tokens.size() - 1)
+    if (index < 0 || tokens.get(index).getType != Token.EOF) return null
+    index = skipHiddenLeft(tokens, index - 1)
+    if (index >= 0 && tokens.get(index).getType == SqlBaseLexer.SEMICOLON) {
+      index = skipHiddenLeft(tokens, index - 1)
+    }
+    if (index >= 0 && tokens.get(index).getType == SqlBaseLexer.END) {
+      tokens.get(index)
+    } else {
+      null
+    }
+  }
+
+  /** True when `end` is the END of END IF / WHILE / LOOP / REPEAT / FOR / CASE. */
+  private def isControlTerminatorEnd(tokens: CommonTokenStream, end: Token): Boolean = {
+    val next = skipHiddenRight(tokens, end.getTokenIndex + 1)
+    next >= 0 && (tokens.get(next).getType match {
+      case SqlBaseLexer.IF | SqlBaseLexer.WHILE | SqlBaseLexer.LOOP |
+           SqlBaseLexer.REPEAT | SqlBaseLexer.FOR | SqlBaseLexer.CASE => true
+      case _ => false
+    })
+  }
+
+  /**
+   * True when `end` starts a compound closer rather than an identifier in a
+   * statement such as `SELECT END`. The previous default-channel token must be
+   * BEGIN, ATOMIC, or a semicolon.
+   */
+  private def isStatementLevelEnd(tokens: CommonTokenStream, end: Token): Boolean = {
+    val prev = skipHiddenLeft(tokens, end.getTokenIndex - 1)
+    prev >= 0 && (tokens.get(prev).getType match {
+      case SqlBaseLexer.BEGIN | SqlBaseLexer.ATOMIC | SqlBaseLexer.SEMICOLON => true
+      case _ => false
+    })
+  }
+
+  private def skipHiddenLeft(tokens: CommonTokenStream, from: Int): Int = {
+    var index = from
     while (index >= 0 && tokens.get(index).getChannel == Token.HIDDEN_CHANNEL) {
       index -= 1
     }
-    if (index >= 0 && tokens.get(index).getType == SqlBaseLexer.SEMICOLON) {
-      index -= 1
-      while (index >= 0 && tokens.get(index).getChannel == Token.HIDDEN_CHANNEL) {
-        index -= 1
-      }
+    index
+  }
+
+  private def skipHiddenRight(tokens: CommonTokenStream, from: Int): Int = {
+    var index = from
+    while (index < tokens.size() &&
+        tokens.get(index).getChannel == Token.HIDDEN_CHANNEL) {
+      index += 1
     }
-    index >= 0 && tokens.get(index).getType == SqlBaseLexer.END
+    if (index < tokens.size()) index else -1
   }
 
   /** Outcome of attempting to parse one statement candidate. */
