@@ -425,8 +425,7 @@ case class CommonExpressionRef(id: CommonExpressionId, dataType: DataType, nulla
    * body encloses another, so repeating it declares nothing twice in one scope: a definition
    * reading a sibling is generated inside that sibling's guard, not inside its own, and one that
    * reaches its own id -- directly or around a cycle -- re-enters `fill` and is refused before any
-   * Java exists. See `CommonExprSlots.fill`, which also says what bounds the code when a method is
-   * not possible.
+   * Java exists. See `CommonExprSlots.fill`.
    */
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val slots = ctx.getCommonExpr(id.id)

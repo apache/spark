@@ -23,7 +23,7 @@ import java.time.Duration
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{Dataset, Row, SaveMode}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, With}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -1732,5 +1732,62 @@ class WholeStageCodegenSuite extends SharedSparkSession
       "switch/case bodies should stay inline with a large methodSplitThreshold")
     assert(sinhPattern.findAllIn(inlineCode).length == 1,
       "sinh(v) should be evaluated only once per input row without function splitting")
+  }
+
+  test("SPARK-59295: a nested With in a branch is emitted once per scope under whole-stage") {
+    // A whole-stage `Project` passes its input as local variables, which is where
+    // `CommonExprSlots.fill` could not put a definition in a method before. Both `nullif`s survive
+    // the rewrite inside the branch and each reads its definition twice, so pasting the bodies
+    // would leave the innermost one 4 times over. The project list mentions `a` and `b` more than
+    // once, which is what has `ProjectExec` evaluate them before generating this expression -- the
+    // case below covers the other one.
+    val marker = 1234567
+    val df = spark.range(0, 10, 1, 1).selectExpr("cast(id as int) as a", "cast(id as int) + 1 as b")
+    val query = df.selectExpr(
+      s"CASE WHEN a < 0 THEN NULL ELSE nullif(nullif(a + b + $marker, b), a) END AS r")
+    assert(query.queryExecution.executedPlan.exists(_.expressions.exists(_.exists {
+      case _: With => true
+      case _ => false
+    })), "the rewrite left no With to generate")
+    // Pin the threshold: below the innermost body's length that body would go into a method of its
+    // own and the count would be 1, for a reason unrelated to nesting.
+    val source = withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024") {
+      genCode(query).map(_.body).mkString("\n")
+    }
+    val emitted = marker.toString.r.findAllMatchIn(source).size
+    assert(emitted == 2, s"the innermost definition was emitted $emitted times")
+    // One method for the outer definition, called at both of its references. The name carries the
+    // operator's fresh-name prefix, as in `project_computeCommonExpr_0`.
+    val declared = "private void \\w*computeCommonExpr_[0-9]+\\(".r.findAllMatchIn(source).size
+    assert(declared == 1, source)
+    // Runs it too, so the generated source above is known to compile.
+    checkAnswer(query, (0 until 10).map(i => Row(2 * i + marker + 1)))
+  }
+
+  test("SPARK-59295: a definition reading an input variable the operator has not evaluated") {
+    // Such a variable's code is written against the scope of the operator producing the row and
+    // names a local of it -- here the column batch's row index, and after an exchange the input
+    // adapter's row -- so it cannot go into a method along with the body that reads it. `b` is read
+    // once and only inside a definition, which is what leaves it unevaluated: `ProjectExec`
+    // evaluates an attribute up front only where the project list mentions it more than once.
+    val marker = 1234567
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 10).selectExpr("cast(id as int) as a", "cast(id as int) + 1 as b")
+        .write.mode(SaveMode.Overwrite).parquet(path)
+      val query = spark.read.parquet(path).selectExpr(
+        s"CASE WHEN a < 0 THEN NULL ELSE nullif(nullif(a + $marker, b), a) END AS r")
+      assert(query.queryExecution.executedPlan.exists(_.expressions.exists(_.exists {
+        case _: With => true
+        case _ => false
+      })), "the rewrite left no With to generate")
+      val code = genCode(query)
+      // Compiling it is the check: before this was refused, the method named the row index of the
+      // column batch and janino rejected it, which drops the whole stage.
+      code.foreach(CodeGenerator.compile)
+      assert(!code.map(_.body).mkString("\n").contains("computeCommonExpr"),
+        "the definition reads an unevaluated variable, so it cannot go in a method")
+      checkAnswer(query, (0 until 10).map(i => Row(i + marker)))
+    }
   }
 }
