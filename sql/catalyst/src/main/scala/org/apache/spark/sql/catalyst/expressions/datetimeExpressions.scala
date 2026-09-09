@@ -5262,10 +5262,7 @@ case class TimeBucket(
 
   private def isTsNanos: Boolean = ts.dataType.isInstanceOf[AnyTimestampNanoType]
 
-  // The nanosecond carrier boxes as a TimestampNanosVal; the microsecond timestamp types box as
-  // a Long. Bucket boundaries are microsecond-granular (the bucket size is a microsecond or month
-  // interval), so a nanos operand contributes only its epochMicros and the bucket start is
-  // re-wrapped on a micro boundary (nanosWithinMicro = 0).
+  // A nanos operand boxes as a TimestampNanosVal, a micros one as a Long; take epochMicros.
   private def toMicros(value: Any): Long = value match {
     case v: TimestampNanosVal => v.epochMicros
     case l => l.asInstanceOf[Long]

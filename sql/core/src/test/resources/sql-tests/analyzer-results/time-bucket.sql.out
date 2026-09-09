@@ -318,7 +318,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"DATE '2024-01-15'\"",
     "inputType" : "\"DATE\"",
     "paramIndex" : "second",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, DATE '2024-01-15', TIMESTAMP '1970-01-01 00:00:00')\""
   },
   "queryContext" : [ {
@@ -342,7 +342,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"2024-01-15 10:23:00\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "second",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, 2024-01-15 10:23:00, TIMESTAMP '1970-01-01 00:00:00')\""
   },
   "queryContext" : [ {
@@ -366,7 +366,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"DATE '2024-01-01'\"",
     "inputType" : "\"DATE\"",
     "paramIndex" : "third",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', DATE '2024-01-01')\""
   },
   "queryContext" : [ {
@@ -390,7 +390,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"2024-01-01 00:00:00\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "third",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', 2024-01-01 00:00:00)\""
   },
   "queryContext" : [ {
