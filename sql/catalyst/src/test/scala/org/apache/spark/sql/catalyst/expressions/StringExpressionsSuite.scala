@@ -859,8 +859,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(Int.MinValue + 1, IntegerType), Literal.create(0, IntegerType)), "_Spark SQL")
     // The tail position is clamped in characters, so a multi-byte input keeps every character,
     // and an empty input has no tail to keep.
+    // scalastyle:off nonascii
     checkEvaluation(Overlay(Literal("caf\u00e9 SQL"), Literal("_"),
       Literal.create(Int.MinValue, IntegerType), Literal.create(0, IntegerType)), "_caf\u00e9 SQL")
+    // scalastyle:on nonascii
     checkEvaluation(Overlay(Literal(""), Literal("_"),
       Literal.create(Int.MinValue, IntegerType), Literal.create(0, IntegerType)), "_")
   }
