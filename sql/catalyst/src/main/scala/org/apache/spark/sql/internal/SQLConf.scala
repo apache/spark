@@ -5384,8 +5384,8 @@ object SQLConf {
         "variable-width batch may still exceed the target. It is distinct from " +
         "spark.sql.execution.arrow.maxBytesPerOutputBatch, which slices JVM-side with a " +
         "byte-accurate measure but only after a batch has been read back from the worker, " +
-        "so it cannot help a batch too large to transfer; the two compose, worker split " +
-        "first. Currently only applyInPandas (SQL_GROUPED_MAP_PANDAS_UDF) honors this; " +
+        "so it cannot help a batch too large to transfer in the first place. Currently " +
+        "only applyInPandas (SQL_GROUPED_MAP_PANDAS_UDF) honors this; " +
         "other Arrow-based Python UDFs ship the value but ignore it. -1 (the default) " +
         "means no limit.")
       .version("4.4.0")
