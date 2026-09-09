@@ -703,6 +703,13 @@ public class VariantUtil {
     return Arrays.compareUnsigned(left, right);
   }
 
+  // Number of keys in the variant metadata dictionary.
+  public static int getMetadataNumKeys(byte[] metadata) {
+    checkIndex(0, metadata.length);
+    int offsetSize = ((metadata[0] >> 6) & 0x3) + 1;
+    return readUnsigned(metadata, 1, offsetSize);
+  }
+
   // Get a key at `id` in the variant metadata.
   // Throw `MALFORMED_VARIANT` if the variant is malformed. An out-of-bound `id` is also considered
   // a malformed variant because it is read from the corresponding variant value.
