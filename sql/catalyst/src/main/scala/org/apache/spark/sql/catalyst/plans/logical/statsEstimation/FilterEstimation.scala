@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 case class FilterEstimation(plan: Filter) extends Logging {
 
@@ -119,6 +120,13 @@ case class FilterEstimation(plan: Filter) extends Logging {
       // This is a top-down traversal. The Not could be pushed down by the above two cases.
       case Not(l @ Literal(null, _)) =>
         calculateSingleCondition(l, update = false).map(boundProbability(_))
+
+      // StartsWith / EndsWith / Contains are estimated only as an upper bound (see
+      // evaluateStringPredicate), whose complement is not a valid estimate, so a negated string
+      // predicate falls back to the default. Not(And/Or/Not) are pushed down above, so every
+      // negated string predicate reaches this case.
+      case Not(_: StartsWith | _: EndsWith | _: Contains) =>
+        None
 
       case Not(cond) =>
         calculateFilterSelectivity(cond, update = false) match {
@@ -214,10 +222,20 @@ case class FilterEstimation(plan: Filter) extends Logging {
       case op @ GreaterThanOrEqual(attrLeft: Attribute, attrRight: Attribute) =>
         evaluateBinaryForTwoColumns(op, attrLeft, attrRight, update)
 
+      // StartsWith/EndsWith/Contains can be bounded from `maxLen` and `nullCount` even without
+      // distribution statistics; see evaluateStringPredicate for when each bound applies. `Like`
+      // still falls through (its common prefix/suffix/infix forms are already rewritten to the
+      // operators below).
+      case StartsWith(ar: Attribute, l: Literal) =>
+        evaluateStringPredicate(ar, l, update)
+      case EndsWith(ar: Attribute, l: Literal) =>
+        evaluateStringPredicate(ar, l, update)
+      case Contains(ar: Attribute, l: Literal) =>
+        evaluateStringPredicate(ar, l, update)
+
       case _ =>
         // TODO: it's difficult to support string operators without advanced statistics.
-        // Hence, these string operators Like(_, _) | Contains(_, _) | StartsWith(_, _)
-        // | EndsWith(_, _) are not supported yet
+        // Hence, the string operator Like(_, _) is not supported yet.
         logDebug("[CBO] Unsupported filter condition: " + condition)
         None
     }
@@ -242,14 +260,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
       return None
     }
     val colStat = colStatsMap(attr)
-    val rowCountValue = childStats.rowCount.get
-    val nullPercent: Double = if (rowCountValue == 0) {
-      0
-    } else if (colStat.nullCount.get > rowCountValue) {
-      1
-    } else {
-      (BigDecimal(colStat.nullCount.get) / BigDecimal(rowCountValue)).toDouble
-    }
+    val nullPercent = nullPercentOf(colStat)
 
     if (update) {
       val newStats = if (isNull) {
@@ -264,6 +275,85 @@ case class FilterEstimation(plan: Filter) extends Logging {
       nullPercent
     } else {
       1.0 - nullPercent
+    }
+
+    Some(percent)
+  }
+
+  /**
+   * Returns the fraction of the child's rows in which the column of `colStat` is null.
+   * `colStat.nullCount` must be defined.
+   */
+  private def nullPercentOf(colStat: ColumnStat): Double = {
+    val rowCountValue = childStats.rowCount.get
+    if (rowCountValue == 0) {
+      0
+    } else if (colStat.nullCount.get > rowCountValue) {
+      1
+    } else {
+      (BigDecimal(colStat.nullCount.get) / BigDecimal(rowCountValue)).toDouble
+    }
+  }
+
+  /**
+   * Returns an upper bound of the percentage of rows meeting a null-intolerant string predicate
+   * (StartsWith / EndsWith / Contains) with a literal operand. As it is only an upper bound, it
+   * must not be complemented, so a negated string predicate is not estimated.
+   *
+   * Two bounds are derived from statistics already collected:
+   *  - A value must have at least as many characters as the operand to start with / end with /
+   *    contain it, so if the operand is longer than the column's `maxLen` no row can match. This
+   *    requires binary equality: under other collations (e.g. case-insensitive or RTRIM) a value
+   *    can match a longer operand, so they are not estimated. `maxLen` remains an upper bound of
+   *    the value length above any child, so this bound applies to a non-leaf child too.
+   *  - A null input never matches, so at most the non-null rows can match: `1 - nullPercent`, or
+   *    0 if an earlier `IsNull` conjunct left no non-null value. As for IsNull / IsNotNull, this
+   *    is only used when the child is a leaf node, whose `nullCount` is accurate.
+   *
+   * @param attr an Attribute (or a column)
+   * @param literal the literal operand
+   * @param update a boolean flag to specify if we need to update ColumnStat of a given column
+   *               for subsequent conditions
+   * @return an optional double value to show an upper bound of the percentage of rows meeting a
+   *         given condition. It returns None if the condition or the statistics are not supported.
+   */
+  def evaluateStringPredicate(
+      attr: Attribute,
+      literal: Literal,
+      update: Boolean): Option[Double] = {
+    val operandLength = (attr.dataType, literal.value) match {
+      case (st: StringType, v: UTF8String) if st.supportsBinaryEquality => v.numChars()
+      case _ =>
+        logDebug("[CBO] Unsupported string predicate on " + attr)
+        return None
+    }
+    if (!colStatsMap.contains(attr)) {
+      logDebug("[CBO] No statistics for " + attr)
+      return None
+    }
+    val colStat = colStatsMap(attr)
+
+    // `maxLen` is the maximum code-point length of the values.
+    if (colStat.maxLen.exists(_ < operandLength)) {
+      return Some(0.0)
+    }
+
+    // Some operators can't estimate `nullCount` accurately, e.g. Aggregate keeps the child's
+    // `nullCount` while reducing the row count to the number of groups. See IsNull / IsNotNull.
+    if (!plan.child.isInstanceOf[LeafNode] || colStat.nullCount.isEmpty) {
+      logDebug("[CBO] No accurate null count for " + attr)
+      return None
+    }
+    // IsNull sets distinctCount to 0 (no non-null value is left) but keeps `nullCount`.
+    val percent = if (colStat.distinctCount.contains(0)) {
+      0.0
+    } else {
+      1.0 - nullPercentOf(colStat)
+    }
+
+    if (update && percent > 0) {
+      // Surviving rows are non-null (the predicate is null-intolerant).
+      colStatsMap.update(attr, colStat.copy(nullCount = Some(0)))
     }
 
     Some(percent)
