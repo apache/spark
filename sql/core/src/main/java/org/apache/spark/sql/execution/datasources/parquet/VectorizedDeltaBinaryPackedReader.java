@@ -47,6 +47,12 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
  */
 public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
 
+  // Upper bound accepted for the block size declared in the page header. Parquet writers use
+  // small blocks (parquet-java defaults to 128 values per block), so this generous ceiling only
+  // exists to keep a corrupt header from blowing up the scratch-buffer allocations in
+  // initFromPage: 2^20 values caps those buffers at ~12 MiB.
+  private static final int MAX_BLOCK_SIZE_IN_VALUES = 1 << 20;
+
   // header data
   private int blockSizeInValues;
   private int miniBlockNumInABlock;
@@ -89,12 +95,25 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
     // Read the header
     this.blockSizeInValues = BytesUtils.readUnsignedVarInt(in);
     this.miniBlockNumInABlock = BytesUtils.readUnsignedVarInt(in);
+    // Validate the block layout from the page header before sizing any buffers from it.
+    if (blockSizeInValues <= 0 || blockSizeInValues > MAX_BLOCK_SIZE_IN_VALUES) {
+      throw new ParquetDecodingException("Invalid DELTA_BINARY_PACKED block size in values: "
+          + blockSizeInValues + " (must be in [1, " + MAX_BLOCK_SIZE_IN_VALUES + "])");
+    }
+    if (miniBlockNumInABlock <= 0 || miniBlockNumInABlock > blockSizeInValues) {
+      throw new ParquetDecodingException("Invalid DELTA_BINARY_PACKED mini block count: "
+          + miniBlockNumInABlock + " (block size in values: " + blockSizeInValues + ")");
+    }
     double miniSize = (double) blockSizeInValues / miniBlockNumInABlock;
     JavaUtils.checkArgument(miniSize % 8 == 0,
         "miniBlockSize must be multiple of 8, but it's " + miniSize);
     this.miniBlockSizeInValues = (int) miniSize;
     // True value count. May be less than valueCount because of nulls
     this.totalValueCount = BytesUtils.readUnsignedVarInt(in);
+    if (totalValueCount < 0) {
+      throw new ParquetDecodingException(
+          "Invalid DELTA_BINARY_PACKED total value count: " + totalValueCount);
+    }
     this.bitWidths = new int[miniBlockNumInABlock];
     this.unpackedValuesBuffer = new long[miniBlockSizeInValues];
     this.intScratchBuffer = new int[miniBlockSizeInValues];

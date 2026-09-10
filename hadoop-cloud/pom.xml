@@ -34,8 +34,6 @@
   </description>
   <properties>
     <sbt.project.name>hadoop-cloud</sbt.project.name>
-    <okhttp.version>3.12.12</okhttp.version>
-    <okio.version>1.17.6</okio.version>
     <wildfly-openssl.version>2.3.0.Final</wildfly-openssl.version>
   </properties>
 
@@ -158,12 +156,6 @@
       <version>${hadoop.version}</version>
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-huaweicloud</artifactId>
-      <version>${hadoop.version}</version>
-      <scope>${huaweicloud.deps.scope}</scope>
-    </dependency>
     <!--
     There's now a hadoop-cloud-storage which transitively pulls in the store JARs,
     but it still needs some selective exclusion across versions, especially 3.0.x.
@@ -197,23 +189,15 @@
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-tos</artifactId>
         </exclusion>
+        <!--
+          SPARK-58671: Exclude `hadoop-huaweicloud` to keep the vulnerable okhttp 3.x
+          dependency off the classpath.
+        -->
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-huaweicloud</artifactId>
         </exclusion>
       </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>com.squareup.okhttp3</groupId>
-      <artifactId>okhttp</artifactId>
-      <version>${okhttp.version}</version>
-      <scope>${huaweicloud.deps.scope}</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.squareup.okio</groupId>
-      <artifactId>okio</artifactId>
-      <version>${okio.version}</version>
-      <scope>${huaweicloud.deps.scope}</scope>
     </dependency>
   </dependencies>
 
@@ -242,12 +226,6 @@
   </build>
 
   <profiles>
-    <profile>
-      <id>huaweicloud-provided</id>
-      <properties>
-        <huaweicloud.deps.scope>provided</huaweicloud.deps.scope>
-      </properties>
-    </profile>
     <profile>
       <id>integration-test</id>
       <build>

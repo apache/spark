@@ -16,22 +16,21 @@
 #
 
 from typing import (
-    Iterable,
     TYPE_CHECKING,
-    Union,
-    Sequence,
+    Iterable,
     List,
+    Sequence,
     Tuple,
+    Union,
     cast,
 )
 
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.column import Column
-from pyspark.sql.table_arg import TableArg as ParentTableArg
-from pyspark.sql.connect.expressions import Expression, SubqueryExpression, SortOrder
-from pyspark.sql.connect.functions import builtin as F
-
 from pyspark.errors import IllegalArgumentException
+from pyspark.sql.column import Column
+from pyspark.sql.connect.expressions import Expression, SortOrder, SubqueryExpression
+from pyspark.sql.connect.functions import builtin as F
+from pyspark.sql.table_arg import TableArg as ParentTableArg
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName

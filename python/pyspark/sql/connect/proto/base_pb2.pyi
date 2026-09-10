@@ -1015,6 +1015,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
     JSON_TO_DDL_FIELD_NUMBER: builtins.int
+    EXTENSIONS_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     server_side_session_id: builtins.str
     """Server-side generated idempotency key that the client can use to assert that the server side
@@ -1048,6 +1049,13 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def get_storage_level(self) -> global___AnalyzePlanResponse.GetStorageLevel: ...
     @property
     def json_to_ddl(self) -> global___AnalyzePlanResponse.JsonToDDL: ...
+    @property
+    def extensions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        google.protobuf.any_pb2.Any
+    ]:
+        """Support arbitrary result objects."""
     def __init__(
         self,
         *,
@@ -1067,6 +1075,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         unpersist: global___AnalyzePlanResponse.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanResponse.GetStorageLevel | None = ...,
         json_to_ddl: global___AnalyzePlanResponse.JsonToDDL | None = ...,
+        extensions: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1110,6 +1119,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "extensions",
+            b"extensions",
             "get_storage_level",
             b"get_storage_level",
             "input_files",

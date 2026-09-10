@@ -21,8 +21,9 @@ Run with:
   bin/spark-submit examples/src/main/python/ml/aft_survival_regression.py
 """
 # $example on$
-from pyspark.ml.regression import AFTSurvivalRegression
 from pyspark.ml.linalg import Vectors
+from pyspark.ml.regression import AFTSurvivalRegression
+
 # $example off$
 from pyspark.sql import SparkSession
 

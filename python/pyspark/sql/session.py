@@ -14,36 +14,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import filecmp
 import os
 import sys
 import warnings
-import filecmp
 from collections.abc import Sized
-from functools import reduce, cached_property
+from functools import cached_property, reduce
 from threading import RLock
 from types import TracebackType
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
     Dict,
-    Iterable,
     Generic,
+    Iterable,
     List,
     Optional,
+    Set,
     Tuple,
     Type,
     TypeVar,
     Union,
-    Set,
     cast,
     no_type_check,
     overload,
-    TYPE_CHECKING,
 )
 
 from pyspark.conf import SparkConf
-from pyspark.util import default_api_mode, is_remote_only
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
@@ -57,40 +58,41 @@ from pyspark.sql.types import (
     DataType,
     StructType,
     VariantVal,
-    _make_type_verifier,
-    _infer_schema,
-    _has_nulltype,
-    _merge_type,
     _create_converter,
+    _has_nulltype,
+    _infer_schema,
+    _make_type_verifier,
+    _merge_type,
 )
-from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.utils import (
+    remote_only,
     to_str,
     try_remote_session_classmethod,
-    remote_only,
 )
-from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
+from pyspark.util import default_api_mode, is_remote_only
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaClass, JavaObject, JVMView
     import pyarrow as pa
+    from py4j.java_gateway import JavaClass, JavaObject, JVMView
+
     from pyspark.core.context import SparkContext
     from pyspark.core.rdd import RDD
-    from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
+    from pyspark.sql._typing import AtomicValue, OptionalPrimitiveType, RowLike
     from pyspark.sql.catalog import Catalog
-    from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
-    from pyspark.sql.streaming import StreamingQueryManager
-    from pyspark.sql.streaming.query import StreamingCheckpointManager
-    from pyspark.sql.tvf import TableValuedFunction
-    from pyspark.sql.udf import UDFRegistration
-    from pyspark.sql.udtf import UDTFRegistration
-    from pyspark.sql.datasource import DataSourceRegistration
-    from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 
     # Running MyPy type checks will always require pandas and
     # other dependencies so importing here is fine.
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.shell.progress import ProgressHandler
+    from pyspark.sql.dataframe import DataFrame as ParentDataFrame
+    from pyspark.sql.datasource import DataSourceRegistration
+    from pyspark.sql.pandas._typing import ArrayLike
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
+    from pyspark.sql.streaming import StreamingQueryManager
+    from pyspark.sql.streaming.query import StreamingCheckpointManager
+    from pyspark.sql.tvf import TableValuedFunction
+    from pyspark.sql.udf import UDFRegistration
+    from pyspark.sql.udtf import UDTFRegistration
 
 
 __all__ = ["SparkSession"]
@@ -1308,6 +1310,7 @@ class SparkSession(SparkConversionMixin):
         that script, which would expose those to users.
         """
         import py4j
+
         from pyspark.core.context import SparkContext
 
         try:
@@ -2574,8 +2577,9 @@ class SparkSession(SparkConversionMixin):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
+
     import pyspark.sql.session
 
     os.chdir(os.environ["SPARK_HOME"])

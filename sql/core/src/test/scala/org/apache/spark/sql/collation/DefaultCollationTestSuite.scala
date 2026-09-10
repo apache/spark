@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
+import org.apache.spark.tags.ExtendedSQLTest
 
 abstract class DefaultCollationTestSuite extends SharedSparkSession {
 
@@ -1935,6 +1936,7 @@ abstract class DefaultCollationTestSuiteV2
   }
 }
 
+@ExtendedSQLTest
 class DefaultCollationStringTestSuiteV1 extends DefaultCollationTestSuiteV1 {
   override protected def testDataType(testName: String)(testFn: String => Unit): Unit = {
     test(s"$testName [STRING]") {
@@ -1943,6 +1945,7 @@ class DefaultCollationStringTestSuiteV1 extends DefaultCollationTestSuiteV1 {
   }
 }
 
+@ExtendedSQLTest
 class DefaultCollationStringTestSuiteV2 extends DefaultCollationTestSuiteV2 {
   override protected def testDataType(testName: String)(testFn: String => Unit): Unit = {
     test(s"$testName [STRING]") {
@@ -1974,6 +1977,7 @@ class DefaultCollationStringTestSuiteV2 extends DefaultCollationTestSuiteV2 {
   }
 }
 
+@ExtendedSQLTest
 class DefaultCollationCharVarcharTestSuiteV1 extends DefaultCollationTestSuiteV1 {
   override protected def excluded: Seq[String] =
     super.excluded ++ stringTestNames ++ stringTestNamesV1
@@ -1988,6 +1992,7 @@ class DefaultCollationCharVarcharTestSuiteV1 extends DefaultCollationTestSuiteV1
   }
 }
 
+@ExtendedSQLTest
 class DefaultCollationCharVarcharTestSuiteV2 extends DefaultCollationTestSuiteV2 {
   override protected def excluded: Seq[String] =
     super.excluded ++ stringTestNames

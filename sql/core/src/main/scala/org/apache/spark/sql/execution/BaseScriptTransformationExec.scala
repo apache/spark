@@ -85,7 +85,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       SparkFiles.getRootDirectory()
     builder.environment().put("PATH", path)
     // if OMP_NUM_THREADS is not explicitly set, override it with the value of "spark.task.cpus"
-    // which may be fractional, so round up to an integer (at least 1) of threads.
+    // which may be fractional, so round up to an integer number of threads (at least 1).
     if (System.getenv("OMP_NUM_THREADS") == null) {
       val taskCpus = conf.getConfString("spark.task.cpus", "1.0").toDouble
       builder.environment().put("OMP_NUM_THREADS", math.max(1, taskCpus.ceil.toInt).toString)

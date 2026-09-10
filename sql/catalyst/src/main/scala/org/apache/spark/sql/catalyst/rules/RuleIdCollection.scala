@@ -73,6 +73,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTempViews" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTranspose" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUnpivot" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUnresolvedInsert" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUpCast" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowFrame" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowOrder" ::
@@ -127,6 +128,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.CollapseRepartition" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.ColumnPruning" ::
+      "org.apache.spark.sql.catalyst.optimizer.CombineApproximatePercentiles" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineConcats" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineTypedFilters" ::

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, InvalidFormat}
@@ -329,6 +329,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Substring(bytes, -4, 2), Array[Byte](1, 2))
     checkEvaluation(Substring(bytes, -5, 2), Array[Byte](1))
     checkEvaluation(Substring(bytes, -8, 2), Array.empty[Byte])
+
+    // SPARK-58708: the end offset must be computed without overflowing, so that a binary
+    // input behaves like the string input tested above. Before the fix these returned a
+    // byte array much longer than the input, zero-padded by `Arrays.copyOfRange`.
+    checkEvaluation(Substring(bytes, -1207959552, -1207959552), Array.empty[Byte])
+    checkEvaluation(Substring(bytes, -2147483647, Int.MinValue), Array.empty[Byte])
+    checkEvaluation(Substring(bytes, Int.MinValue, 2), Array.empty[Byte])
+    checkEvaluation(Substring(bytes, 1, Int.MaxValue), Array[Byte](1, 2, 3, 4))
+    checkEvaluation(Substring(bytes, Int.MinValue, Int.MaxValue), Array[Byte](1, 2, 3))
   }
 
   test("string substring_index function") {
@@ -346,6 +355,14 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(-2)), "apache.org")
     checkEvaluation(
       SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(-1)), "org")
+    // SPARK-58443: negating a count of Integer.MIN_VALUE overflows back to Integer.MIN_VALUE;
+    // such a count is always out of range, so the whole string is returned.
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(Int.MinValue)),
+      "www.apache.org")
+    checkEvaluation(
+      SubstringIndex(Literal("www.apache.org"), Literal("."), Literal(Int.MinValue + 1)),
+      "www.apache.org")
     checkEvaluation(
       SubstringIndex(Literal(""), Literal("."), Literal(-2)), "")
     checkEvaluation(
@@ -449,6 +466,33 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             .checkInputDataTypes()
             .isFailure)
     }
+  }
+
+  test("SPARK-48973: Mask with supplementary characters") {
+    def cp(codePoint: Int): String = new String(Character.toChars(codePoint))
+    val smile = cp(0x1F642)
+    val boldA = cp(0x1D400)
+    val boldSmallA = cp(0x1D41A)
+    val boldZero = cp(0x1D7CE)
+
+    checkEvaluation(
+      new Mask(Literal(smile), Literal('Y'), Literal('y'), Literal('n'), Literal('*')), "*")
+    checkEvaluation(new Mask(Literal("ABC"), Literal(smile)), smile * 3)
+    checkEvaluation(new Mask(Literal(s"A$boldA 1$boldZero")), "XX nn")
+    // Supplementary upper-case, lower-case and digit characters are each classified and
+    // replaced like their BMP counterparts.
+    checkEvaluation(new Mask(Literal(s"$boldA$boldSmallA$boldZero")), "Xxn")
+    // A supplementary replacement applied to a supplementary input.
+    checkEvaluation(new Mask(Literal(boldSmallA), Literal('Y'), Literal(smile)), smile)
+
+    // A supplementary character must round-trip intact through the retain path, both when it
+    // falls into the otherChar category and when its own category is set to retain.
+    checkEvaluation(new Mask(Literal(smile)), smile)
+    checkEvaluation(new Mask(Literal(s"a${smile}1")), s"x${smile}n")
+    checkEvaluation(new Mask(Literal(boldA), Literal(null, StringType)), boldA)
+    checkEvaluation(
+      new Mask(Literal(boldZero), Literal('Y'), Literal('y'), Literal(null, StringType)),
+      boldZero)
   }
 
   test("SPARK-42384: Mask with null input") {
@@ -1088,6 +1132,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal("abcabc"), Literal("ab"), Literal(-2), Literal(3)), 0)
     checkEvaluation(StringInstrWithOccurrence(
       Literal("abcabc"), Literal("ab"), Literal(-3), Literal(3)), 0)
+    // SPARK-58443: negating a start of Integer.MIN_VALUE overflows back to Integer.MIN_VALUE;
+    // such a start is always out of range, so no match is reported.
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("abc"), Literal(Int.MinValue), Literal(1)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("abc"), Literal(Int.MinValue + 1), Literal(1)), 0)
     checkEvaluation(StringInstrWithOccurrence(
       Literal("abc"), Literal("b"), Literal(0), Literal(1)), 0)
     checkEvaluation(StringInstrWithOccurrence(
@@ -1200,6 +1250,44 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(StringRPad(Literal("\"quote"), s2, Literal("\"quote")) :: Nil)
     checkEvaluation(StringRPad(Literal("hi"), Literal(5)), "hi   ")
     checkEvaluation(StringRPad(Literal("hi"), Literal(1)), "h")
+
+    // SPARK-58708: a non-positive length returns the empty value rather than reaching the
+    // allocation. The string overloads already did; the binary ones threw
+    // NegativeArraySizeException, which is not a SparkThrowable.
+    val bin = Literal(Array[Byte](1, 2))
+    val binPad = Literal(Array[Byte](3, 4))
+    val emptyBinPad = Literal(Array[Byte]())
+    Seq(0, -1, -100, Int.MinValue).foreach { len =>
+      checkEvaluation(StringLPad(Literal("hi"), Literal(len), Literal("??")), "")
+      checkEvaluation(StringRPad(Literal("hi"), Literal(len), Literal("??")), "")
+      checkEvaluation(BinaryPad("lpad", bin, Literal(len), binPad), Array.empty[Byte])
+      checkEvaluation(BinaryPad("rpad", bin, Literal(len), binPad), Array.empty[Byte])
+      checkEvaluation(BinaryPad("lpad", bin, Literal(len), emptyBinPad), Array.empty[Byte])
+      checkEvaluation(BinaryPad("rpad", bin, Literal(len), emptyBinPad), Array.empty[Byte])
+    }
+  }
+
+  test("SPARK-58708: LPAD/RPAD length handling is collation-independent") {
+    // `StringLPad` and `StringRPad` call `UTF8String.lpad` and `UTF8String.rpad` directly.
+    // Neither dispatches on collation, and `CollationSupport` defines no collation-aware
+    // pad, so the collation only reaches the result type. The non-positive lengths fixed
+    // above therefore behave identically under every collation.
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach { collation =>
+      val st = StringType(collation)
+      val str = Literal.create("hi", st)
+      val pad = Literal.create("??", st)
+      Seq(0, -1, -100, Int.MinValue).foreach { len =>
+        checkEvaluation(StringLPad(str, Literal(len), pad), "")
+        checkEvaluation(StringRPad(str, Literal(len), pad), "")
+      }
+      // Positive lengths are unaffected too, and the case of the input is preserved even
+      // under the case-insensitive collations.
+      checkEvaluation(StringLPad(str, Literal(5), pad), "???hi")
+      checkEvaluation(StringRPad(str, Literal(5), pad), "hi???")
+      val mixed = Literal.create("Hi", st)
+      checkEvaluation(StringLPad(mixed, Literal(2), pad), "Hi")
+      checkEvaluation(StringRPad(mixed, Literal(1), pad), "H")
+    }
   }
 
   test("PadExpressionBuilderBase") {
@@ -2310,5 +2398,26 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val formatNumberCopy = formatNumber.freshCopyIfContainsStatefulExpression()
     assert(formatNumberCopy ne formatNumber,
       "freshCopyIfContainsStatefulExpression should return a new instance for FormatNumber")
+  }
+
+  test("Normalize") {
+    // scalastyle:off nonascii
+    checkEvaluation(new Normalize(Literal("A\u030A")), "\u00C5")
+    checkEvaluation(Normalize(Literal("A\u030A"), Literal("NFC")), "\u00C5")
+    checkEvaluation(Normalize(Literal("\u00C5"), Literal("NFD")), "A\u030A")
+    checkEvaluation(Normalize(Literal("\uFB01"), Literal("NFKC")), "fi")
+    // scalastyle:on nonascii
+    checkEvaluation(Normalize(Literal.create(null, StringType), Literal("NFC")), null)
+    checkEvaluation(Normalize(Literal("abc"), Literal.create(null, StringType)), null)
+  }
+
+  test("Normalize invalid form") {
+    checkErrorInExpression[SparkRuntimeException](
+      Normalize(Literal("abc"), Literal("NFE")),
+      "INVALID_PARAMETER_VALUE.NORMALIZE_FORM",
+      Map(
+        "parameter" -> "`form`",
+        "functionName" -> "`normalize`",
+        "form" -> "'NFE'"))
   }
 }

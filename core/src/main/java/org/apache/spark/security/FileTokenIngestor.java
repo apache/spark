@@ -50,7 +50,7 @@ import org.apache.spark.internal.SparkLoggerFactory;
  *       returns empty rather than throwing</li>
  * </ul>
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
 @Private
 public class FileTokenIngestor implements TokenIngestor {

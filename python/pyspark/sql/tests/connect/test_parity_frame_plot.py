@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.sql.tests.plot.test_frame_plot import DataFramePlotTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class FramePlotParityTests(DataFramePlotTestsMixin, ReusedConnectTestCase):

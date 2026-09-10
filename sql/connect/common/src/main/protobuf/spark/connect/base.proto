@@ -253,6 +253,9 @@ message AnalyzePlanResponse {
     JsonToDDL json_to_ddl = 16;
   }
 
+  // Support arbitrary result objects.
+  repeated google.protobuf.Any extensions = 999;
+
   message Schema {
     DataType schema = 1;
   }

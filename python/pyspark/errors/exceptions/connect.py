@@ -14,38 +14,76 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import grpc
 import json
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+import grpc
 from grpc import StatusCode
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from pyspark.errors.exceptions.base import (
     AnalysisException as BaseAnalysisException,
-    IllegalArgumentException as BaseIllegalArgumentException,
+)
+from pyspark.errors.exceptions.base import (
     ArithmeticException as BaseArithmeticException,
-    UnsupportedOperationException as BaseUnsupportedOperationException,
+)
+from pyspark.errors.exceptions.base import (
     ArrayIndexOutOfBoundsException as BaseArrayIndexOutOfBoundsException,
+)
+from pyspark.errors.exceptions.base import (
     DateTimeException as BaseDateTimeException,
+)
+from pyspark.errors.exceptions.base import (
+    IllegalArgumentException as BaseIllegalArgumentException,
+)
+from pyspark.errors.exceptions.base import (
     NumberFormatException as BaseNumberFormatException,
+)
+from pyspark.errors.exceptions.base import (
     ParseException as BaseParseException,
-    PySparkException,
-    PythonException as BasePythonException,
-    StreamingQueryException as BaseStreamingQueryException,
-    QueryExecutionException as BaseQueryExecutionException,
-    SparkRuntimeException as BaseSparkRuntimeException,
-    SparkNoSuchElementException as BaseNoSuchElementException,
-    SparkUpgradeException as BaseSparkUpgradeException,
-    QueryContext as BaseQueryContext,
-    QueryContextType,
-    StreamingPythonRunnerInitializationException as BaseStreamingPythonRunnerInitException,
+)
+from pyspark.errors.exceptions.base import (
     PickleException as BasePickleException,
-    UnknownException as BaseUnknownException,
+)
+from pyspark.errors.exceptions.base import (
+    PySparkException,
+    QueryContextType,
     recover_python_exception,
+)
+from pyspark.errors.exceptions.base import (
+    PythonException as BasePythonException,
+)
+from pyspark.errors.exceptions.base import (
+    QueryContext as BaseQueryContext,
+)
+from pyspark.errors.exceptions.base import (
+    QueryExecutionException as BaseQueryExecutionException,
+)
+from pyspark.errors.exceptions.base import (
+    SparkNoSuchElementException as BaseNoSuchElementException,
+)
+from pyspark.errors.exceptions.base import (
+    SparkRuntimeException as BaseSparkRuntimeException,
+)
+from pyspark.errors.exceptions.base import (
+    SparkUpgradeException as BaseSparkUpgradeException,
+)
+from pyspark.errors.exceptions.base import (
+    StreamingPythonRunnerInitializationException as BaseStreamingPythonRunnerInitException,
+)
+from pyspark.errors.exceptions.base import (
+    StreamingQueryException as BaseStreamingQueryException,
+)
+from pyspark.errors.exceptions.base import (
+    UnknownException as BaseUnknownException,
+)
+from pyspark.errors.exceptions.base import (
+    UnsupportedOperationException as BaseUnsupportedOperationException,
 )
 
 if TYPE_CHECKING:
-    import pyspark.sql.connect.proto as pb2
     from google.rpc.error_details_pb2 import ErrorInfo
+
+    import pyspark.sql.connect.proto as pb2
 
 
 class SparkConnectException(PySparkException):

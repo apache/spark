@@ -763,7 +763,10 @@ class SparkSession private(
   }
 
   /** @inheritdoc */
-  override def removeTag(tag: String): Unit = managedJobTags.get().remove(tag)
+  override def removeTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
+    managedJobTags.get().remove(tag)
+  }
 
   /** @inheritdoc */
   override def getTags(): Set[String] = managedJobTags.get().keySet.toSet

@@ -18,10 +18,10 @@
 import numpy as np
 import pandas as pd
 
-from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.tests.groupby.test_stat import GroupbyStatTestingFuncMixin, using_pandas3
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class GroupbyStatAdvMixin(GroupbyStatTestingFuncMixin):

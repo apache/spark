@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -436,17 +437,25 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   private[sql] def lookupCachedTable(
-      name: Seq[String],
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      tableId: Option[String],
+      stateOptions: CaseInsensitiveStringMap,
       resolver: Resolver): Option[LogicalPlan] = {
+    val name = ident.toQualifiedNameParts(catalog)
     val cachedRelations = findCachedRelations(name, resolver)
-    cachedRelations match {
-      case cachedRelation +: _ =>
-        CacheManager.logCacheOperation(
-          log"Relation cache hit for table ${MDC(TABLE_NAME, name.quoted)}")
-        Some(cachedRelation)
-      case _ =>
-        None
+    val cachedRelation = cachedRelations.collectFirst {
+      case r: DataSourceV2Relation
+          if r.catalog.contains(catalog) && r.identifier.contains(ident) &&
+            tableId.forall(_ == r.table.id) &&
+            CatalogV2Util.extractTableStateOptions(catalog, r.options) == stateOptions =>
+        r
     }
+    cachedRelation.foreach { _ =>
+      CacheManager.logCacheOperation(
+        log"Relation cache hit for table ${MDC(TABLE_NAME, name.quoted)}")
+    }
+    cachedRelation
   }
 
   private def findCachedRelations(

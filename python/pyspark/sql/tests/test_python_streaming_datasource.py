@@ -14,33 +14,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import json
 import os
 import tempfile
 import time
 import unittest
-import json
 
+from pyspark.errors import PySparkException
 from pyspark.sql.datasource import (
     DataSource,
-    DataSourceStreamReader,
-    InputPartition,
-    DataSourceStreamWriter,
     DataSourceStreamArrowWriter,
+    DataSourceStreamReader,
+    DataSourceStreamWriter,
+    InputPartition,
     SimpleDataSourceStreamReader,
     WriterCommitMessage,
 )
+from pyspark.sql.streaming import StreamingQueryException
 from pyspark.sql.streaming.datasource import (
     ReadAllAvailable,
     ReadLimit,
     ReadMaxRows,
     SupportsTriggerAvailableNow,
 )
-from pyspark.sql.streaming import StreamingQueryException
 from pyspark.sql.types import Row
-from pyspark.errors import PySparkException
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.utils import eventually, have_pyarrow, pyarrow_requirement_message
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import eventually, have_pyarrow, pyarrow_requirement_message
 
 
 def wait_for_condition(query, condition_fn, timeout_sec=30):
@@ -604,12 +604,13 @@ class BasePythonStreamingDataSourceTestsMixin:
 
     def test_stream_arrow_writer(self):
         """Test DataSourceStreamArrowWriter with Arrow RecordBatch format."""
-        import tempfile
-        import shutil
         import json
         import os
-        import pyarrow as pa
+        import shutil
+        import tempfile
         from dataclasses import dataclass
+
+        import pyarrow as pa
 
         @dataclass
         class ArrowCommitMessage(WriterCommitMessage):

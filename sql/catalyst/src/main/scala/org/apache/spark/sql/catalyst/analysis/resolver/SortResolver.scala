@@ -135,6 +135,14 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
 
     val resolvedChild = operatorResolver.resolve(unresolvedSort.child)
 
+    // ORDER BY over grouping analytics (CUBE/ROLLUP/GROUPING SETS) is not yet supported in
+    // single-pass because the expanded Aggregate's ExprIds get out of sync when ORDER BY
+    // inserts missing expressions. Fall back to legacy for correct results (SPARK-57346).
+    if (operatorResolutionContextStack.current.hasGroupingAnalytics) {
+      throw new ExplicitlyUnsupportedResolverFeature(
+        "ORDER BY with grouping analytics (SPARK-57346)")
+    }
+
     operatorResolutionContextStack.current.ordinalReplacementExpressions = Some(
       OrdinalReplacementSortOrderExpressions(
         expressions = scopes.current.output.toIndexedSeq,

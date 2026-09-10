@@ -40,14 +40,14 @@ import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
-import org.apache.spark.sql.execution.streaming.{StreamingErrors, StreamingQueryPlanTraverseHelper}
+import org.apache.spark.sql.execution.streaming.{ProjectAggregationBufferExec, StatefulStreamlineAggregateExec, StreamingErrors, StreamingQueryPlanTraverseHelper}
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaBroadcast, StateSchemaMetadata}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaBroadcast, StateSchemaMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -83,7 +83,8 @@ class IncrementalExecution(
     val stateSchemaMetadatas: MutableMap[Long, StateSchemaBroadcast] =
       MutableMap[Long, StateSchemaBroadcast](),
     mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
-    val isTerminatingTrigger: Boolean = false)
+    val isTerminatingTrigger: Boolean = false,
+    val isRealTimeMode: Boolean = false)
   extends QueryExecution(sparkSession, logicalPlan, mode = mode,
     shuffleCleanupModeOpt =
       Some(QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)),
@@ -110,6 +111,12 @@ class IncrementalExecution(
   }
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
+
+  // Populated while state schemas are validated during planning. In micro-batch mode each entry
+  // is also written immediately, preserving the existing behavior. Real-Time Mode writes these
+  // entries only after its delayed offset log entry is durable.
+  private var stateStoreWritersWithMetadata:
+      Option[Seq[(StateStoreWriter, OperatorStateMetadata)]] = None
 
   private[sql] val numStateStores = OffsetSeqMetadata.readValueOpt(offsetSeqMetadata,
       SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL)
@@ -194,6 +201,9 @@ class IncrementalExecution(
         a.copy(numShufflePartitions = Some(numStateStores))
 
       case a: UpdatingSessionsExec if a.isStreaming =>
+        a.copy(numShufflePartitions = Some(numStateStores))
+
+      case a: ProjectAggregationBufferExec if a.isStreaming =>
         a.copy(numShufflePartitions = Some(numStateStores))
     }
   }
@@ -281,12 +291,11 @@ class IncrementalExecution(
                 ssw.validateNewMetadata(oldMetadata, metadata)
               case None =>
             }
-            val metadataWriter = OperatorStateMetadataWriter.createWriter(
-              new Path(checkpointLocation, ssw.getStateInfo.operatorId.toString),
-              hadoopConf,
-              ssw.operatorStateMetadataVersion,
-              Some(currentBatchId))
-            metadataWriter.write(metadata)
+            stateStoreWritersWithMetadata = Some(
+              stateStoreWritersWithMetadata.getOrElse(Seq.empty) :+ (ssw -> metadata))
+            if (!isRealTimeMode) {
+              writeStateMetadata(ssw, metadata)
+            }
             if (ssw.supportsSchemaEvolution) {
               val stateSchemaMetadata = StateSchemaMetadata
                 .createStateSchemaMetadata(checkpointLocation, hadoopConf, stateSchemaList.head)
@@ -315,8 +324,37 @@ class IncrementalExecution(
     }
   }
 
+  private def writeStateMetadata(
+      stateStoreWriter: StateStoreWriter,
+      metadata: OperatorStateMetadata): Unit = {
+    val metadataWriter = OperatorStateMetadataWriter.createWriter(
+      new Path(checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString),
+      hadoopConf,
+      metadata.version,
+      Some(currentBatchId))
+    metadataWriter.write(metadata)
+  }
+
+  /** Write state metadata recorded during planning. Used after the delayed RTM offset WAL write. */
+  private[streaming] def writeRecordedStateMetadata(): Unit = {
+    assert(stateStoreWritersWithMetadata.isDefined,
+      "stateStoreWritersWithMetadata must be defined before writing state metadata")
+    stateStoreWritersWithMetadata.get.foreach { case (stateStoreWriter, metadata) =>
+      writeStateMetadata(stateStoreWriter, metadata)
+    }
+  }
+
   object StateOpIdRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      case a: StatefulStreamlineAggregateExec =>
+        val aggStateInfo = nextStatefulOperationStateInfo()
+        a.copy(
+          numShufflePartitions = Some(aggStateInfo.numPartitions),
+          stateInfo = Some(aggStateInfo),
+          outputMode = Some(outputMode),
+          eventTimeWatermarkForLateEvents = None,
+          eventTimeWatermarkForEviction = None)
+
       case StateStoreSaveExec(keys, None, None, None, None, stateFormatVersion,
       UnaryExecNode(agg,
       StateStoreRestoreExec(_, None, _, child))) =>
@@ -393,6 +431,7 @@ class IncrementalExecution(
           prevBatchTimestampMs = prevOffsetSeqMetadata.map(_.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
+          isRealTimeMode = IncrementalExecution.this.isRealTimeMode,
           hasInitialState = hasInitialState
         )
 
@@ -441,6 +480,12 @@ class IncrementalExecution(
     }
 
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      case a: StatefulStreamlineAggregateExec if a.stateInfo.isDefined =>
+        a.copy(
+          eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(a.stateInfo.get),
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(a.stateInfo.get)
+        )
+
       case s: StateStoreSaveExec if s.stateInfo.isDefined =>
         s.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
@@ -585,6 +630,23 @@ class IncrementalExecution(
       rulesToCompose.reduceLeft { (ruleA, ruleB) => ruleA orElse ruleB }
     }
 
+    /**
+     * Returns true if a checkpoint whose metadata records operator `oldOpName` may be reopened by a
+     * plan whose operator is `newOpName`, without tripping the operator-mismatch guard.
+     *
+     * A streaming aggregation may move between the micro-batch operator ([[StateStoreSaveExec]],
+     * "stateStoreSave") and the streamline operator ([[StatefulStreamlineAggregateExec]]) in either
+     * direction: the two share [[StreamingAggregationStateManager]] and the same state format
+     * version, so the on-disk state written by one is readable by the other.
+     */
+    private def isOperatorMetadataConvertible(oldOpName: String, newOpName: String): Boolean = {
+      oldOpName == newOpName || ((oldOpName, newOpName) match {
+        case ("stateStoreSave", "StatefulStreamlineAggregate") => true
+        case ("StatefulStreamlineAggregate", "stateStoreSave") => true
+        case _ => false
+      })
+    }
+
     private def checkOperatorValidWithMetadata(
         planWithStateOpId: SparkPlan,
         batchId: Long): Unit = {
@@ -640,7 +702,7 @@ class IncrementalExecution(
         (opMapInMetadata.keySet ++ opMapInPhysicalPlan.keySet).foreach { opId =>
           val opInMetadata = opMapInMetadata.getOrElse(opId, "not found")
           val opInCurBatch = opMapInPhysicalPlan.getOrElse(opId, "not found")
-          if (opInMetadata != opInCurBatch) {
+          if (!isOperatorMetadataConvertible(opInMetadata, opInCurBatch)) {
             throw QueryExecutionErrors.statefulOperatorNotMatchInStateMetadataError(
               opMapInMetadata,
               opMapInPhysicalPlan)
@@ -657,10 +719,37 @@ class IncrementalExecution(
         checkOperatorValidWithMetadata(planWithStateOpId, currentBatchId - 1)
       }
 
+      stateStoreWritersWithMetadata = Some(Seq.empty)
       val planWithSchemas = planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
 
       simulateWatermarkPropagation(planWithSchemas)
       planWithSchemas transform WatermarkPropagationRule.rule
+    }
+  }
+
+  private def isTransformWithStateInitialStateBootstrap: Boolean = {
+    isRealTimeMode && currentBatchId == 0 && logicalPlan.exists {
+      case tws: TransformWithState => tws.hasInitialState
+      case _ => false
+    }
+  }
+
+  /**
+   * The initial state is loaded in a finite batch before the Real-Time Mode source starts its
+   * first long-running batch. This lets the initial-state shuffle materialize and prevents input
+   * that was already available when the query started from being processed before initialization.
+   * The pipelined-shuffle rule also skips this batch because the DAGScheduler does not support a
+   * job that mixes the initial state's regular shuffle with a pipelined streaming shuffle.
+   */
+  object PrepareTransformWithStateInitialStateForRealTimeMode extends Rule[SparkPlan] {
+    override def apply(plan: SparkPlan): SparkPlan = {
+      if (isTransformWithStateInitialStateBootstrap) {
+        plan.transformUp {
+          case scan: RealTimeStreamScanExec => scan.copy(batchDurationMs = 0L)
+        }
+      } else {
+        plan
+      }
     }
   }
 
@@ -709,7 +798,7 @@ class IncrementalExecution(
   object MarkPipelinedShuffleForRealTimeMode extends Rule[SparkPlan] {
     override def apply(plan: SparkPlan): SparkPlan = {
       val isRealTimeMode = plan.exists(_.isInstanceOf[RealTimeStreamScanExec])
-      if (!isRealTimeMode) {
+      if (!isRealTimeMode || isTransformWithStateInitialStateBootstrap) {
         plan
       } else {
         markStreamingPath(plan)._1
@@ -752,7 +841,9 @@ class IncrementalExecution(
   }
 
   override def preparations: Seq[Rule[SparkPlan]] =
-    state +: (super.preparations :+ MarkPipelinedShuffleForRealTimeMode)
+    state +: (super.preparations :+
+      PrepareTransformWithStateInitialStateForRealTimeMode :+
+      MarkPipelinedShuffleForRealTimeMode)
 
   /** no need to try-catch again as this is already done once */
   override def assertAnalyzed(): Unit = analyzed

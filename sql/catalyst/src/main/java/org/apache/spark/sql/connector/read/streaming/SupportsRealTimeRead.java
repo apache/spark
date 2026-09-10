@@ -25,7 +25,22 @@ import org.apache.spark.sql.connector.read.PartitionReader;
 
 /**
  * A variation on {@link PartitionReader} for use with low latency streaming processing.
- *
+ * <p>
+ * <b>Which method to implement.</b> A source reader must provide a {@code nextWithTimeout} that
+ * proceeds to the next record, blocking until one is available or a timeout elapses. There are two
+ * overloads, and a source should override exactly one:
+ * <ul>
+ *   <li>{@link #nextWithTimeout(Long)} -- implement this in the common case. It receives only the
+ *       timeout and is all a third-party source needs.</li>
+ *   <li>{@link #nextWithTimeout(Long, Long)} -- the overload the execution engine actually invokes.
+ *       Its default implementation ignores the extra parameter and delegates to
+ *       {@link #nextWithTimeout(Long)}. Override it only for engine-internal sources that must
+ *       observe the engine's reference start time (used together with the engine-internal low
+ *       latency clock); that clock is not part of the third-party contract, so most sources should
+ *       not override this overload.</li>
+ * </ul>
+ * Because both overloads are {@code default} methods, overriding neither is not caught at compile
+ * time -- it fails at runtime when {@link #nextWithTimeout(Long)} throws.
  */
 @Evolving
 public interface SupportsRealTimeRead<T> extends PartitionReader<T> {
@@ -78,12 +93,39 @@ public interface SupportsRealTimeRead<T> extends PartitionReader<T> {
      * Alternative function to be called than next(), that proceed to the next record. The different
      * from next() is that, if there is no more records, the call needs to keep waiting until
      * the timeout.
-     * @param startTimeMs the base time (milliseconds) the was used to calculate the timeout.
-     *                  Sources should use it as the reference time to start waiting for the next
-     *                  record instead of getting the latest time from LowLatencyClock.
+     * <p>
+     * This is the recommended method to implement for a source. It is enough for any source that
+     * does not need the engine's reference start time (see {@link #nextWithTimeout(Long, Long)}).
+     * The engine always invokes {@link #nextWithTimeout(Long, Long)}, whose default implementation
+     * delegates here, so overriding only this method is sufficient. If a source overrides neither
+     * overload, this default implementation throws to surface the mistake.
      * @param timeoutMs if no result is available after this timeout (milliseconds), return
      * @return {@link RecordStatus} describing whether a record is available and its arrival time
      * @throws IOException
      */
-    RecordStatus nextWithTimeout(Long startTimeMs, Long timeoutMs) throws IOException;
+    default RecordStatus nextWithTimeout(Long timeoutMs) throws IOException {
+        throw new UnsupportedOperationException(
+            "A SupportsRealTimeRead implementation must override either " +
+            "nextWithTimeout(Long) or nextWithTimeout(Long, Long).");
+    }
+
+    /**
+     * The overload of {@link #nextWithTimeout(Long)} that the execution engine actually invokes. In
+     * addition to the timeout it receives {@code startTimeMs}, the reference time the engine used
+     * to compute that timeout, so the engine and the source agree on when the wait started (this
+     * matters when the engine runs against its internal low latency clock, e.g. a manual clock in
+     * tests). The default implementation ignores {@code startTimeMs} and delegates to
+     * {@link #nextWithTimeout(Long)}.
+     * <p>
+     * This is intended for engine-internal sources. The reference clock is not part of the
+     * third-party contract, so third-party sources should implement {@link #nextWithTimeout(Long)}
+     * and leave this overload to its default.
+     * @param startTimeMs the base time (milliseconds) that was used to calculate the timeout
+     * @param timeoutMs if no result is available after this timeout (milliseconds), return
+     * @return {@link RecordStatus} describing whether a record is available and its arrival time
+     * @throws IOException
+     */
+    default RecordStatus nextWithTimeout(Long startTimeMs, Long timeoutMs) throws IOException {
+        return nextWithTimeout(timeoutMs);
+    }
 }

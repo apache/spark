@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.util.Try
 
 import org.apache.spark.internal.config.ConfigBindingPolicy
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.util.Utils
 
@@ -338,6 +339,29 @@ object StaticSQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
+    buildStaticConf("spark.sql.artifact.copyFromLocalToFs.allowDestLocal")
+      .internal()
+      .doc("Allow the `copyFromLocalToFs` destination to be a local file system path on the " +
+        "driver node. This lets the caller overwrite arbitrary files on the driver node, so it " +
+        "should only be enabled for testing purposes. This is a static conf: it can only be set " +
+        "when starting the driver, and not from a session.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val UNIFIED_UDF_EXECUTION_ENABLED =
+    buildStaticConf("spark.sql.execution.udf.unified.execution.enabled")
+      .doc("When true, enable planning through the language-agnostic external UDF worker " +
+        "framework. Execution requires a supported external UDF physical operator. When false, " +
+        "external UDF expressions are rejected. This config must be set before the SparkSession " +
+        "is created. Experimental.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val REFLECT_ALLOW_LIST = buildStaticConf("spark.sql.reflect.allowList")
     .doc("A comma-separated allow list of regular expressions matched against the canonical " +
       "static method name (in the form `class.method`, e.g. `java.util.UUID.randomUUID`) " +
@@ -352,4 +376,59 @@ object StaticSQLConf {
       _.forall(pattern => Try(pattern.r).isSuccess),
       "Every entry must be a valid regular expression.")
     .createWithDefault(Nil)
+
+  val RESTRICTED_MODE_ENABLED = buildStaticConf("spark.sql.restrictedMode.enabled")
+    .internal()
+    .doc("When true, SQL features that load or execute externally provided code or scripts from " +
+      "the query itself are disabled: the reflect, java_method and try_reflect functions and the " +
+      "TRANSFORM ... USING clause are rejected during analysis. This is an opt-in profile for " +
+      "deployments that want a more constrained SQL surface. As a static configuration it can " +
+      "only be set when starting the driver, and not from a session, so that a session cannot " +
+      "turn it off for itself. The default of false preserves the previous behavior.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
+  // Bounds on the environment a session may install in its Python workers through the reserved
+  // `spark.pythonWorkerEnv.` prefix. Static, so a session cannot raise its own limits. Their keys
+  // are deliberately not under that prefix: every SparkConf entry is copied into a new session's
+  // SQLConf, so a limit named under it would be read back as an environment variable. The binding
+  // policy is NOT_APPLICABLE because a static limit cannot differ between the session that created
+  // a view and one that calls it.
+  val PYTHON_WORKER_ENV_MAX_VARIABLES =
+    buildStaticConf("spark.sql.pythonWorkerEnv.maxVariables")
+      .doc(
+        "The maximum number of environment variables a session may set for its Python " +
+          "workers, across all configurations under the reserved prefix. Zero accepts no " +
+          "user-provided environment at all.")
+      .version("4.4.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "The maximum number of variables must not be negative.")
+      .createWithDefault(100)
+
+  val PYTHON_WORKER_ENV_MAX_NAME_LENGTH =
+    buildStaticConf("spark.sql.pythonWorkerEnv.maxNameLength")
+      .doc("The maximum length, in characters, of an environment variable name a session may " +
+        "set for its Python workers. Zero accepts no user-provided environment at all.")
+      .version("4.4.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "The maximum name length must not be negative.")
+      .createWithDefault(512)
+
+  val PYTHON_WORKER_ENV_MAX_TOTAL_SIZE_BYTES =
+    buildStaticConf("spark.sql.pythonWorkerEnv.maxTotalSizeBytes")
+      .doc(
+        "The maximum total size of the environment a session may set for its Python workers, " +
+          "measured as the sum of the UTF-8 lengths of every variable name and value.")
+      .version("4.4.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= 0, "The maximum total size must not be negative.")
+      .createWithDefault(128 * 1024) // 128 KiB
 }

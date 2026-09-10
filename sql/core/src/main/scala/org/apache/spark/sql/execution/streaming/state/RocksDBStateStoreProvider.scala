@@ -47,7 +47,8 @@ private[sql] class RocksDBStateStoreProvider
       lastVersion: Long,
       private[RocksDBStateStoreProvider] val stamp: Long,
       private[RocksDBStateStoreProvider] var readOnly: Boolean,
-      private[RocksDBStateStoreProvider] var forceSnapshotOnCommit: Boolean) extends StateStore {
+      private[RocksDBStateStoreProvider] var forceSnapshotOnCommit: Boolean)
+    extends StateStore with SupportsReusableIterator {
 
     private sealed trait OPERATION
     private case object UPDATE extends OPERATION
@@ -148,10 +149,10 @@ private[sql] class RocksDBStateStoreProvider
         case Some(nextState) => nextState
         case None =>
           val errorMsg = operation match {
-            case UPDATE => s"Cannot update after ${oldState.toString}"
-            case ABORT => s"Cannot abort after ${oldState.toString}"
-            case RELEASE => s"Cannot release after ${oldState.toString}"
-            case COMMIT => s"Cannot commit after ${oldState.toString}"
+            case UPDATE => s"Cannot update after ${oldState}"
+            case ABORT => s"Cannot abort after ${oldState}"
+            case RELEASE => s"Cannot release after ${oldState}"
+            case COMMIT => s"Cannot commit after ${oldState}"
             case METRICS => s"Cannot get metrics in ${oldState} state"
           }
           throw StateStoreErrors.stateStoreOperationOutOfOrder(errorMsg)
@@ -487,6 +488,49 @@ private[sql] class RocksDBStateStoreProvider
         }
 
         new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+      }
+    }
+
+    private def wrapReusableIterator(
+        rocksDbIter: RocksDBIterator,
+        keyEncoder: RocksDBKeyStateEncoder): ReusableIterator[ByteArrayPair] = {
+      new ReusableIterator[ByteArrayPair] {
+        override def refreshAndSeekToPrefix(prefixRow: UnsafeRow): Unit = {
+          rocksDbIter.refresh()
+          val encoded = keyEncoder match {
+            case rangeKeyScanStateEncoder: RangeKeyScanStateEncoder =>
+              rangeKeyScanStateEncoder.encodePrefixKey(prefixRow)
+            case _ =>
+              throw new StateStoreUnsupportedOperationException(
+                "refreshAndSeekToPrefix", keyEncoder.getClass.getName)
+          }
+          rocksDbIter.seek(encoded)
+        }
+
+        override def hasNext: Boolean = rocksDbIter.hasNext
+
+        override def next(): ByteArrayPair = rocksDbIter.next()
+
+        override def close(): Unit = rocksDbIter.close()
+      }
+    }
+
+    override def reusableIterator(colFamilyName: String): ReusableIterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
+      verifyColFamilyOperations("iterator", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val rowPair = new UnsafeRowPair()
+      wrapReusableIterator(rocksDB.reusableIterator(colFamilyName), kvEncoder._1).map { kv =>
+        rowPair.withRows(
+          kvEncoder._1.decodeKey(kv.key),
+          kvEncoder._2.decodeValue(kv.value))
+        if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+          StateStoreProvider.validateStateRowFormat(
+            rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+          isValidated = true
+        }
+        rowPair
       }
     }
 

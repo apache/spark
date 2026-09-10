@@ -17,9 +17,10 @@
 
 # mypy: disable-error-code="empty-body"
 
-import sys
 import random
+import sys
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -30,28 +31,28 @@ from typing import (
     Tuple,
     Union,
     overload,
-    TYPE_CHECKING,
 )
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.util import is_remote_only
-from pyspark.storagelevel import StorageLevel
 from pyspark.resource import ResourceProfile
 from pyspark.sql.column import Column
-from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.merge import MergeIntoWriter
+from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.table_arg import TableArg
-from pyspark.sql.types import StructType, Row
+from pyspark.sql.types import Row, StructType
 from pyspark.sql.utils import dispatch_df_method
+from pyspark.storagelevel import StorageLevel
+from pyspark.util import is_remote_only
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject
     import pyarrow as pa
+    from py4j.java_gateway import JavaObject
+
+    from pyspark._typing import PrimitiveType
     from pyspark.core.context import SparkContext
     from pyspark.core.rdd import RDD
-    from pyspark._typing import PrimitiveType
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
     from pyspark.sql._typing import (
         ColumnOrName,
@@ -60,16 +61,18 @@ if TYPE_CHECKING:
         OptionalPrimitiveType,
     )
     from pyspark.sql.context import SQLContext
-    from pyspark.sql.session import SparkSession
     from pyspark.sql.group import GroupedData
+    from pyspark.sql.metrics import ExecutionInfo
     from pyspark.sql.observation import Observation
     from pyspark.sql.pandas._typing import (
-        PandasMapIterFunction,
         ArrowMapIterFunction,
+        PandasMapIterFunction,
+    )
+    from pyspark.sql.pandas._typing import (
         DataFrameLike as PandasDataFrameLike,
     )
     from pyspark.sql.plot import PySparkPlotAccessor
-    from pyspark.sql.metrics import ExecutionInfo
+    from pyspark.sql.session import SparkSession
 
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
@@ -3297,7 +3300,7 @@ class DataFrame:
         cols: Sequence[Union[Sequence["ColumnOrNameOrOrdinal"], "ColumnOrNameOrOrdinal"]],
         kwargs: Dict[str, Any],
     ) -> Sequence[Column]:
-        from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkIndexError
+        from pyspark.errors import PySparkIndexError, PySparkTypeError, PySparkValueError
 
         if not cols:
             raise PySparkValueError(

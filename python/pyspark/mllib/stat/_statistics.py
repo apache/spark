@@ -16,13 +16,13 @@
 #
 
 import sys
-from typing import cast, overload, List, Optional, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, List, Optional, Union, cast, overload
 
 from numpy import ndarray
 from py4j.java_gateway import JavaObject
 
 from pyspark.core.rdd import RDD
-from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.mllib.linalg import Matrix, Vector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.test import ChiSqTestResult, KolmogorovSmirnovTestResult
@@ -381,7 +381,9 @@ class Statistics:
 
 def _test() -> None:
     import doctest
+
     import numpy
+
     from pyspark.sql import SparkSession
 
     try:

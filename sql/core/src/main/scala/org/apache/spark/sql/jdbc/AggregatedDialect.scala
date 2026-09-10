@@ -46,6 +46,10 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
     dialects.flatMap(_.getJDBCType(dt)).headOption
   }
 
+  override def updateExtraColumnMetaForWrite(dt: DataType, metadata: MetadataBuilder): Unit = {
+    dialects.foreach(_.updateExtraColumnMetaForWrite(dt, metadata))
+  }
+
   override def quoteIdentifier(colName: String): String = {
     dialects.head.quoteIdentifier(colName)
   }

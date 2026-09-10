@@ -136,7 +136,12 @@ case class Corr(
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0, divideByZeroEvalResult, ck / sqrt(xMk * yMk)))
+      If(n === 1.0, divideByZeroEvalResult,
+        // For an exactly zero variance accumulator, corr is undefined. Keep this check after
+        // n == 1.0 to preserve the legacy single-pair result, and before division to avoid the
+        // ANSI divide-by-zero error for this case.
+        If(xMk === 0.0 || yMk === 0.0, Literal.create(null, DoubleType),
+          ck / sqrt(xMk * yMk))))
   }
 
   override def prettyName: String = "corr"
