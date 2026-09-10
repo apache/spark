@@ -332,7 +332,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // cases fire (it throws MISSING_CATALOG_ABILITY.VIEWS otherwise).
     case CreateView(ResolvedIdentifier(catalog, ident), userSpecifiedColumns, comment,
         collation, properties, originalText, child, allowExisting, replace, viewSchemaMode,
-        _, _) =>
+        _, _, _) =>
       val sqlText = originalText.getOrElse {
         throw QueryCompilationErrors.createPersistedViewFromDatasetAPINotAllowedError()
       }
@@ -375,7 +375,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         originalText, analyzed, allowExisting, replace, deps) :: Nil
 
     case AlterViewAs(rpv @ ResolvedPersistentView(catalog, ident, _),
-        originalText, query, _, _) =>
+        originalText, query, _, _, _) =>
       AlterV2ViewExec(catalog.asInstanceOf[ViewCatalog], ident, rpv.info,
         originalText, query) :: Nil
 
