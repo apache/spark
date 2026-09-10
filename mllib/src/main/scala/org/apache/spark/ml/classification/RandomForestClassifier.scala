@@ -457,9 +457,6 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
       features: Vector,
       trees: Array[DecisionTreeClassificationModel],
       numClasses: Int): Vector = {
-    // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
-    // Classifies using majority votes.
-    // Ignore the tree weights since all are 1.0 for now.
     val votes = Array.ofDim[Double](numClasses)
     trees.foreach { tree =>
       val classCounts = tree.rootNode.predictImpl(features).impurityStats.stats
@@ -479,9 +476,6 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
       features: Vector,
       rootNodes: Array[Node],
       numClasses: Int): Vector = {
-    // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
-    // Classifies using majority votes.
-    // Ignore the tree weights since all are 1.0 for now.
     val votes = Array.ofDim[Double](numClasses)
     rootNodes.foreach { rootNode =>
       val classCounts = rootNode.predictImpl(features).impurityStats.stats
