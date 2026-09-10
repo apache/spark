@@ -55,12 +55,8 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
             df = self.spark.sql(
                 "SELECT CAST('2020-01-02 03:04:05.123456789' AS TIMESTAMP_NTZ(9)) AS ts"
             )
-            self.assertEqual(
-                datetime.datetime(2020, 1, 2, 3, 4, 5, 123456), df.collect()[0].ts
-            )
-            self.assertEqual(
-                pd.Timestamp("2020-01-02 03:04:05.123456789"), df.toPandas()["ts"][0]
-            )
+            self.assertEqual(datetime.datetime(2020, 1, 2, 3, 4, 5, 123456), df.collect()[0].ts)
+            self.assertEqual(pd.Timestamp("2020-01-02 03:04:05.123456789"), df.toPandas()["ts"][0])
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_apply_schema(self):
