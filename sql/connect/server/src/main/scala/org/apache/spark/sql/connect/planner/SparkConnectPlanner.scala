@@ -1525,7 +1525,9 @@ class SparkConnectPlanner(
     if (CharVarcharUtils.shouldApplyWriteSideLengthCheck(session.sessionState.conf)) {
       schema
     } else {
-      CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(schema).asInstanceOf[StructType]
+      CharVarcharUtils
+        .replaceCharVarcharWithStringForPhysicalType(schema)
+        .asInstanceOf[StructType]
     }
   }
 
