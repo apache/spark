@@ -20,14 +20,19 @@ package org.apache.spark.sql.internal.connector
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 
 /**
- * Metadata for one partition field.
+ * Metadata for one field of `Table.partitioning()`. A partition predicate is built over the
+ * fields in partitioning order, so their ordinals match the partition key a connector passes to
+ * `PartitionPredicate.eval`.
  *
  * @param fieldNames  the multi-part field name from the table's partitioning
- *                    (e.g. `Seq("s", "tz")`).
- * @param attrRef  the [[AttributeReference]] for the partition field.
- *                 Created from the resolved partition field so it carries the
- *                 flattened dotted name (e.g. `"s.tz"`) for nested fields.
+ *                    (e.g. `Seq("s", "tz")`) for an identity transform, or the transform's
+ *                    description (e.g. `Seq("bucket(4, id)")`) otherwise.
+ * @param attrRef  the [[AttributeReference]] a filter can reference, for an identity transform.
+ *                 Created from the resolved partition field so it carries the flattened dotted
+ *                 name (e.g. `"s.tz"`) for nested fields. None for any other transform: Spark
+ *                 cannot evaluate a filter against its partition value, so no filter references
+ *                 it, but the field keeps its ordinal.
  */
 case class PartitionPredicateField(
     fieldNames: Seq[String],
-    attrRef: AttributeReference)
+    attrRef: Option[AttributeReference])

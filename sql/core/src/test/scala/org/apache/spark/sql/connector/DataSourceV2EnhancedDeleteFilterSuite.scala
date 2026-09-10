@@ -188,6 +188,50 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
     }
   }
 
+  // Mixed partitioning: the bucket field keeps its ordinal but is never referenced, so the
+  // IN on the identity column still becomes a PartitionPredicate over the full partition key.
+  test("second pass accepted: identity column next to a bucket transform") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk))")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+
+      assertDeleteWithFilters(
+        s"DELETE FROM $deleteTableName WHERE dep IN ('hr', 'software')",
+        expectedNumConditions = 1,
+        expectedNumPartitionPredicates = 1,
+        expectedOrdinalsPerPredicate = Seq(Array(0)),
+        expectedPartitionFieldNames = Array("dep", "bucket(4, pk)"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Row(3, "marketing", 300) :: Nil)
+    }
+  }
+
+  // `dt = DATE'...'` is analyzed as `cast(dt AS DATE) = DATE'...'`, which the table cannot
+  // evaluate in the first pass; the second pass turns it into a PartitionPredicate.
+  test("second pass accepted: cast on a string identity column next to a bucket transform") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dt STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dt, bucket(4, pk))")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, '2026-09-01', 100), (2, '2026-09-02', 200), (3, '2026-09-03', 300)")
+
+      assertDeleteWithFilters(
+        s"DELETE FROM $deleteTableName WHERE dt = DATE'2026-09-02'",
+        expectedNumConditions = 1,
+        expectedNumPartitionPredicates = 1,
+        expectedOrdinalsPerPredicate = Seq(Array(0)),
+        expectedPartitionFieldNames = Array("dt", "bucket(4, pk)"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "2026-09-01", 100), Row(3, "2026-09-03", 300)))
+    }
+  }
+
   // Table property disables PartitionPredicate acceptance;
   // both passes rejected, falls back to row-level operation.
   test("first and second pass rejected: table rejects all") {

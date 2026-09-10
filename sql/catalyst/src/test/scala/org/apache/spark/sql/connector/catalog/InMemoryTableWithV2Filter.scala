@@ -203,14 +203,23 @@ object InMemoryTableWithV2Filter {
     }
   }
 
+  /**
+   * Whether every predicate has a shape [[evalPredicate]] can evaluate: a plain column, or a
+   * column and a literal. A predicate over an expression, e.g. a cast, is not supported and
+   * returned to Spark, as a real connector without expression support would do.
+   */
   def supportsPredicates(predicates: Array[Predicate]): Boolean = {
-    predicates.flatMap(splitAnd).forall {
-      case p: Predicate if p.name().equals("=") => true
-      case p: Predicate if p.name().equals("<=>") => true
-      case p: Predicate if p.name().equals("IS_NULL") => true
-      case p: Predicate if p.name().equals("IS_NOT_NULL") => true
-      case p: Predicate if p.name().equals("ALWAYS_TRUE") => true
-      case _ => false
+    predicates.flatMap(splitAnd).forall { p =>
+      def column = p.children().length == 1 && p.children()(0).isInstanceOf[NamedReference]
+      def columnAndLiteral = p.children().length == 2 &&
+        p.children()(0).isInstanceOf[NamedReference] &&
+        p.children()(1).isInstanceOf[LiteralValue[_]]
+      p.name() match {
+        case "=" | "<=>" => columnAndLiteral
+        case "IS_NULL" | "IS_NOT_NULL" => column
+        case "ALWAYS_TRUE" => true
+        case _ => false
+      }
     }
   }
 
