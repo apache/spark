@@ -48,7 +48,7 @@ jobs:
           repository: apache/spark
           ref: 'master'
       - name: Install Java 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: 17

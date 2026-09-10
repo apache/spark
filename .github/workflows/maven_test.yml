@@ -99,7 +99,7 @@ jobs:
           restore-keys: |
             maven-${{ runner.os }}-java${{ inputs.java }}-
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
@@ -243,12 +243,12 @@ jobs:
           restore-keys: |
             maven-${{ runner.os }}-java${{ matrix.java }}-
       - name: Install Java ${{ matrix.java }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: ${{ matrix.java }}
       - name: Install Python 3.12
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         # We should install one Python that is higher than 3+ for SQL and Yarn because:
         # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
         # - Yarn has a Python specific test too, for example, YarnClusterSuite.
