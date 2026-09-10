@@ -134,12 +134,8 @@ object VectorAffineTransform {
     var vectorIndex = 0
     while (vectorIndex < resultValues.length) {
       val featureIndex = vectorIndices.getInt(vectorIndex)
-      val scaleValue = if (scale == null) {
-        1.0
-      } else {
-        scale.getDouble(featureIndex)
-      }
-      resultValues(vectorIndex) = vectorValues.getDouble(vectorIndex) * scaleValue
+      resultValues(vectorIndex) =
+        vectorValues.getDouble(vectorIndex) * scale.getDouble(featureIndex)
       vectorIndex += 1
     }
     new GenericInternalRow(Array[Any](
@@ -156,39 +152,51 @@ object VectorAffineTransform {
       vectorValues: ArrayData,
       scale: ArrayData,
       shift: ArrayData): InternalRow = {
-    val vectorIndices = if (vectorType == SparseVectorType) vector.getArray(2) else null
     val resultValues = new Array[Double](size)
-    var vectorIndex = 0
-    var featureIndex = 0
-    while (featureIndex < size) {
-      val vectorIsActive = vectorType == DenseVectorType ||
-        (vectorIndex < vectorValues.numElements() &&
-          vectorIndices.getInt(vectorIndex) == featureIndex)
-      val vectorValue = if (vectorType == DenseVectorType) {
-        vectorValues.getDouble(featureIndex)
-      } else if (vectorIsActive) {
-        val value = vectorValues.getDouble(vectorIndex)
-        vectorIndex += 1
-        value
+    if (vectorType == DenseVectorType) {
+      var featureIndex = 0
+      if (scale == null) {
+        while (featureIndex < size) {
+          resultValues(featureIndex) =
+            vectorValues.getDouble(featureIndex) + shift.getDouble(featureIndex)
+          featureIndex += 1
+        }
+      } else if (shift == null) {
+        while (featureIndex < size) {
+          resultValues(featureIndex) =
+            vectorValues.getDouble(featureIndex) * scale.getDouble(featureIndex)
+          featureIndex += 1
+        }
       } else {
-        0.0
+        while (featureIndex < size) {
+          resultValues(featureIndex) = vectorValues.getDouble(featureIndex) *
+            scale.getDouble(featureIndex) + shift.getDouble(featureIndex)
+          featureIndex += 1
+        }
+      }
+    } else {
+      var featureIndex = 0
+      while (featureIndex < size) {
+        resultValues(featureIndex) = 0.0 + shift.getDouble(featureIndex)
+        featureIndex += 1
       }
 
-      val scaleValue = if (scale == null) {
-        1.0
+      val vectorIndices = vector.getArray(2)
+      var vectorIndex = 0
+      if (scale == null) {
+        while (vectorIndex < vectorValues.numElements()) {
+          val featureIndex = vectorIndices.getInt(vectorIndex)
+          resultValues(featureIndex) += vectorValues.getDouble(vectorIndex)
+          vectorIndex += 1
+        }
       } else {
-        scale.getDouble(featureIndex)
+        while (vectorIndex < vectorValues.numElements()) {
+          val featureIndex = vectorIndices.getInt(vectorIndex)
+          resultValues(featureIndex) +=
+            vectorValues.getDouble(vectorIndex) * scale.getDouble(featureIndex)
+          vectorIndex += 1
+        }
       }
-
-      val shiftValue = if (shift == null) {
-        0.0
-      } else {
-        shift.getDouble(featureIndex)
-      }
-
-      resultValues(featureIndex) =
-        (if (vectorIsActive) vectorValue * scaleValue else 0.0) + shiftValue
-      featureIndex += 1
     }
     new GenericInternalRow(Array[Any](
       DenseVectorType,
