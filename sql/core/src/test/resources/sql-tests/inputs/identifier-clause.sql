@@ -527,6 +527,15 @@ SELECT * FROM identifier_expr_view;
 DROP VIEW identifier_expr_view;
 DROP TEMPORARY VARIABLE identifier_expr_col;
 
+-- A GLOBAL TEMPORARY VIEW reads a variable via an IDENTIFIER clause the same way a session-local
+-- temporary view does, so the variable stays resolvable when the stored view text is analyzed again.
+DECLARE OR REPLACE VARIABLE identifier_gtv_col STRING DEFAULT 'c1';
+CREATE OR REPLACE GLOBAL TEMPORARY VIEW identifier_gtv_view AS
+SELECT IDENTIFIER(identifier_gtv_col) AS x FROM VALUES(1) AS t(c1);
+SELECT * FROM global_temp.identifier_gtv_view;
+DROP VIEW global_temp.identifier_gtv_view;
+DROP TEMPORARY VARIABLE identifier_gtv_col;
+
 -- A variable used only to supply a view's NAME via an IDENTIFIER clause is not part of the view
 -- definition, so it must not be recorded as a referred variable of the view.
 DECLARE OR REPLACE VARIABLE identifier_view_name STRING DEFAULT 'identifier_named_view';
@@ -547,8 +556,9 @@ DROP TEMPORARY VARIABLE identifier_name_part;
 DROP TEMPORARY VARIABLE identifier_body_part;
 
 -- ALTER VIEW honors `spark.sql.legacy.allowSessionVariableInPersistedView` just like CREATE VIEW:
--- with it set, a persisted view may reference a session variable read via an IDENTIFIER clause.
--- The default (tested by `identifier_alter_view` above) rejects it.
+-- with it set, the DDL is allowed instead of rejected (the legacy permissive behavior). The flag
+-- does not persist the variable into the stored view, so the view is not guaranteed to resolve in a
+-- fresh session; the default (tested by `identifier_alter_view` above) rejects it outright.
 SET spark.sql.legacy.allowSessionVariableInPersistedView=true;
 DECLARE OR REPLACE VARIABLE identifier_p2a_col STRING DEFAULT 'c1';
 CREATE VIEW identifier_p2a_view AS SELECT 1 AS c1;

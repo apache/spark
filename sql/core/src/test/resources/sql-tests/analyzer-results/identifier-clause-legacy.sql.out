@@ -3499,6 +3499,48 @@ DropVariable false
 
 
 -- !query
+DECLARE OR REPLACE VARIABLE identifier_gtv_col STRING DEFAULT 'c1'
+-- !query analysis
+CreateVariable default(cast(c1 as string), sql=''c1''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_gtv_col
+
+
+-- !query
+CREATE OR REPLACE GLOBAL TEMPORARY VIEW identifier_gtv_view AS
+SELECT IDENTIFIER(identifier_gtv_col) AS x FROM VALUES(1) AS t(c1)
+-- !query analysis
+CreateViewCommand `identifier_gtv_view`, SELECT IDENTIFIER(identifier_gtv_col) AS x FROM VALUES(1) AS t(c1), false, true, GlobalTempView, UNSUPPORTED, true, [[identifier_gtv_col]]
+   +- Project [c1#x AS x#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x]
+
+
+-- !query
+SELECT * FROM global_temp.identifier_gtv_view
+-- !query analysis
+Project [x#x]
++- SubqueryAlias global_temp.identifier_gtv_view
+   +- View (`global_temp`.`identifier_gtv_view`, [x#x])
+      +- Project [cast(x#x as int) AS x#x]
+         +- Project [c1#x AS x#x]
+            +- SubqueryAlias t
+               +- LocalRelation [c1#x]
+
+
+-- !query
+DROP VIEW global_temp.identifier_gtv_view
+-- !query analysis
+DropTempViewCommand global_temp.identifier_gtv_view, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_gtv_col
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_gtv_col
+
+
+-- !query
 DECLARE OR REPLACE VARIABLE identifier_view_name STRING DEFAULT 'identifier_named_view'
 -- !query analysis
 CreateVariable default(cast(identifier_named_view as string), sql=''identifier_named_view''), true

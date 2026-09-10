@@ -3534,6 +3534,47 @@ struct<>
 
 
 -- !query
+DECLARE OR REPLACE VARIABLE identifier_gtv_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE GLOBAL TEMPORARY VIEW identifier_gtv_view AS
+SELECT IDENTIFIER(identifier_gtv_col) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM global_temp.identifier_gtv_view
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW global_temp.identifier_gtv_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_gtv_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DECLARE OR REPLACE VARIABLE identifier_view_name STRING DEFAULT 'identifier_named_view'
 -- !query schema
 struct<>
