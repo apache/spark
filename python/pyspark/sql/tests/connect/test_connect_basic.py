@@ -506,12 +506,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(classic_df.schema, connect_df.schema)
             self.assertEqual(classic_df.schema["c"].dataType, CharType(4))
             self.assertEqual(classic_df.schema["v"].dataType, VarcharType(6))
-            self.assertEqual(
-                classic_df.schema["collated_c"].dataType, CharType(4, "UTF8_LCASE")
-            )
-            self.assertEqual(
-                classic_df.schema["collated_v"].dataType, VarcharType(6, "UNICODE_CI")
-            )
+            self.assertEqual(classic_df.schema["collated_c"].dataType, CharType(4, "UTF8_LCASE"))
+            self.assertEqual(classic_df.schema["collated_v"].dataType, VarcharType(6, "UNICODE_CI"))
             self.assertEqual(classic_df.collect(), connect_df.collect())
             self.assertEqual(
                 connect_df.collect(),

@@ -661,9 +661,7 @@ class TypesTestsMixin:
         from pyspark.sql.types import _parse_datatype_json_string
 
         self.assertEqual(CharType(4).simpleString(), "char(4)")
-        self.assertEqual(
-            CharType(4, "UTF8_LCASE").simpleString(), "char(4) collate UTF8_LCASE"
-        )
+        self.assertEqual(CharType(4, "UTF8_LCASE").simpleString(), "char(4) collate UTF8_LCASE")
         self.assertEqual(VarcharType(6).simpleString(), "varchar(6)")
         self.assertEqual(
             VarcharType(6, "UNICODE_CI").simpleString(), "varchar(6) collate UNICODE_CI"
