@@ -372,24 +372,8 @@ class RandomForestClassificationModel private[ml] (
   }
 
   @Since("3.0.0")
-  override def predictRaw(features: Vector): Vector = {
-    // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
-    // Classifies using majority votes.
-    // Ignore the tree weights since all are 1.0 for now.
-    val votes = Array.ofDim[Double](numClasses)
-    _trees.foreach { tree =>
-      val classCounts = tree.rootNode.predictImpl(features).impurityStats.stats
-      val total = classCounts.sum
-      if (total != 0) {
-        var i = 0
-        while (i < numClasses) {
-          votes(i) += classCounts(i) / total
-          i += 1
-        }
-      }
-    }
-    Vectors.dense(votes)
-  }
+  override def predictRaw(features: Vector): Vector =
+    RandomForestClassificationModel.predictRaw(features, _trees, numClasses)
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
     rawPrediction match {
@@ -468,6 +452,28 @@ class RandomForestClassificationModel private[ml] (
 
 @Since("2.0.0")
 object RandomForestClassificationModel extends MLReadable[RandomForestClassificationModel] {
+
+  private def predictRaw(
+      features: Vector,
+      trees: Array[DecisionTreeClassificationModel],
+      numClasses: Int): Vector = {
+    // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128
+    // Classifies using majority votes.
+    // Ignore the tree weights since all are 1.0 for now.
+    val votes = Array.ofDim[Double](numClasses)
+    trees.foreach { tree =>
+      val classCounts = tree.rootNode.predictImpl(features).impurityStats.stats
+      val total = classCounts.sum
+      if (total != 0) {
+        var i = 0
+        while (i < numClasses) {
+          votes(i) += classCounts(i) / total
+          i += 1
+        }
+      }
+    }
+    Vectors.dense(votes)
+  }
 
   private def predictRaw(
       features: Vector,
