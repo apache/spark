@@ -429,15 +429,8 @@ class GBTClassificationModel private[ml](
     TreeEnsembleModel.featureImportances(trees, numFeatures, perTreeNormalization = false)
 
   /** Raw prediction for the positive class. */
-  private def margin(features: Vector): Double = {
-    var prediction = 0.0
-    var i = 0
-    while (i < _trees.length) {
-      prediction += _trees(i).rootNode.predictImpl(features).prediction * _treeWeights(i)
-      i += 1
-    }
-    prediction
-  }
+  private def margin(features: Vector): Double =
+    TreeEnsembleModel.predict(features, _trees, _treeWeights)
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {

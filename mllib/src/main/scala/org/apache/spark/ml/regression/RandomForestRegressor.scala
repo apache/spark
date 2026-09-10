@@ -266,7 +266,7 @@ class RandomForestRegressionModel private[ml] (
     // TODO: When we add a generic Bagging class, handle transform there.  SPARK-7128
     // Predict average of tree predictions.
     // Ignore the weights since all are 1.0 for now.
-    _trees.map(_.rootNode.predictImpl(features).prediction).sum / getNumTrees
+    TreeEnsembleModel.predict(features, _trees) / getNumTrees
   }
 
   @Since("1.4.0")

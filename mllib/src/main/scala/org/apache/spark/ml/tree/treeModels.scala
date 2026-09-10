@@ -169,6 +169,31 @@ private[spark] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
 private[ml] object TreeEnsembleModel {
 
+  private[ml] def predict[M <: DecisionTreeModel](
+      features: Vector,
+      trees: Array[M],
+      treeWeights: Array[Double]): Double = {
+    var prediction = 0.0
+    var i = 0
+    while (i < trees.length) {
+      prediction += trees(i).rootNode.predictImpl(features).prediction * treeWeights(i)
+      i += 1
+    }
+    prediction
+  }
+
+  private[ml] def predict[M <: DecisionTreeModel](
+      features: Vector,
+      trees: Array[M]): Double = {
+    var prediction = 0.0
+    var i = 0
+    while (i < trees.length) {
+      prediction += trees(i).rootNode.predictImpl(features).prediction
+      i += 1
+    }
+    prediction
+  }
+
   private[ml] def predict(
       features: Vector,
       rootNodes: Array[Node],
