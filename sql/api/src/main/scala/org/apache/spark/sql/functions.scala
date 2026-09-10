@@ -5759,8 +5759,8 @@ object functions {
   def hypot(l: Double, rightName: String): Column = hypot(l, Column(rightName))
 
   /**
-   * Computes the least common multiple of the two given values. The result is non-negative, and is
-   * 0 when either value is 0.
+   * Computes the least common multiple of the two given values. The result is non-negative, and
+   * is 0 when either value is 0.
    *
    * @param l
    *   the first value. A column that evaluates to an integral.
