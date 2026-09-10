@@ -129,12 +129,15 @@ case class ShowCreateTableExec(
 
   /**
    * True for a sort key expression the `transformArgument` grammar rule can represent: a plain
-   * column reference, or a transform whose own arguments are references or constants.
+   * column reference, or a transform whose name is an identifier and whose own arguments are
+   * references or constants. The name check is an approximation of the `identifier` rule, a
+   * reserved word (`select`) passes it but still fails to parse under ANSI.
    */
   private def isSpellable(e: V2Expression): Boolean = e match {
     case _: NamedReference => true
     case t: Transform =>
-      t.arguments().forall(a => a.isInstanceOf[NamedReference] || a.isInstanceOf[Literal[_]])
+      t.name().matches("[a-zA-Z_][a-zA-Z0-9_]*") && t.arguments().nonEmpty &&
+        t.arguments().forall(a => a.isInstanceOf[NamedReference] || a.isInstanceOf[Literal[_]])
     case _ => false
   }
 

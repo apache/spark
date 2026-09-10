@@ -587,9 +587,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SHOW CREATE TABLE omits a pair the syntax cannot spell, and stays runnable") {
-    // A connector can report combinations no statement could have asked for -- `hash` without any
-    // partitioning is the dangerous one, because DISTRIBUTED BY PARTITION does not parse there, so
-    // emitting it would break the whole statement rather than just lose a clause.
     withSQLConf("spark.sql.catalog.reportcat" -> classOf[ReportingInMemoryTableCatalog].getName) {
       Seq(
         // (fabricated mode, clauses, what must not appear)
@@ -605,6 +602,31 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
           assert(!ddl.contains(absent), s"for mode=$mode clauses=[$clauses], got:\n$ddl")
 
           // and what it does emit has to parse -- otherwise the table cannot be recreated at all
+          sql(s"DROP TABLE reportcat.t")
+          sql(ddl)
+          assert(sql("SHOW CREATE TABLE reportcat.t").head().getString(0) === ddl)
+        }
+      }
+
+      // An ordering the syntax cannot spell -- a transform over an arithmetic expression, which no
+      // statement could have produced -- is the ordering-side counterpart of the `hash`-without-
+      // partitioning hazard: emitting `ORDERED BY (+(id, 1) ...)` would break the whole statement.
+      // Both distribution modes are covered, because bailing out of only the `ORDERED BY` half
+      // would leave `range` emitting nothing (fine) but `none` emitting `UNORDERED` -- declaring no
+      // ordering on a table that has one.
+      Seq(
+        ("range", "ORDERED BY"),
+        ("none", "UNORDERED")
+      ).foreach { case (mode, absent) =>
+        withTable("reportcat.t") {
+          sql(s"CREATE TABLE reportcat.t (id INT) USING foo TBLPROPERTIES (" +
+            s"'${ReportingInMemoryTable.MODE_OVERRIDE}' = '$mode', " +
+            s"'${ReportingInMemoryTable.ORDERING_OVERRIDE}' = 'true')")
+          val ddl = sql("SHOW CREATE TABLE reportcat.t").head().getString(0)
+          assert(!ddl.contains(absent), s"for mode=$mode, got:\n$ddl")
+          assert(!ddl.contains("ORDERED BY"), s"for mode=$mode, got:\n$ddl")
+
+          // and what it does emit has to parse -- the unspellable ordering must not leak into it
           sql(s"DROP TABLE reportcat.t")
           sql(ddl)
           assert(sql("SHOW CREATE TABLE reportcat.t").head().getString(0) === ddl)
@@ -754,11 +776,21 @@ class ReportingInMemoryTable(tableName: String, tableInfo: TableInfo)
       .getOrElse(tableInfo.writeDistributionMode())
   }
 
-  override def writeOrdering(): Array[SortOrder] = tableInfo.writeOrdering()
+  override def writeOrdering(): Array[SortOrder] = {
+    if (tableInfo.properties().containsKey(ReportingInMemoryTable.ORDERING_OVERRIDE)) {
+      Array(LogicalExpressions.sort(
+        LogicalExpressions.apply("+", FieldReference("id"), LogicalExpressions.literal(1)),
+        SortDirection.ASCENDING,
+        NullOrdering.NULLS_FIRST))
+    } else {
+      tableInfo.writeOrdering()
+    }
+  }
 }
 
 object ReportingInMemoryTable {
   val MODE_OVERRIDE = "test.write-distribution-mode"
+  val ORDERING_OVERRIDE = "test.write-ordering-unspellable"
 }
 
 /**
