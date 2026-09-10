@@ -542,9 +542,7 @@ class LocalDataToArrowConversion:
             return True
         elif isinstance(dataType, BinaryType):
             return True
-        elif isinstance(
-            dataType, (TimestampType, TimestampNTZType, AnyTimestampNanoType)
-        ):
+        elif isinstance(dataType, (TimestampType, TimestampNTZType, AnyTimestampNanoType)):
             # Always truncate
             return True
         elif isinstance(dataType, DecimalType):
@@ -1179,9 +1177,7 @@ class ArrowTableToRowsConversion:
             return True
         elif isinstance(dataType, BinaryType):
             return True
-        elif isinstance(
-            dataType, (TimestampType, TimestampNTZType, AnyTimestampNanoType)
-        ):
+        elif isinstance(dataType, (TimestampType, TimestampNTZType, AnyTimestampNanoType)):
             # Always remove the time zone info for now
             return True
         elif isinstance(dataType, UserDefinedType):
@@ -1339,6 +1335,11 @@ class ArrowTableToRowsConversion:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
+                    # A timestamp[ns] value materializes as a pandas.Timestamp; collect()'s
+                    # datetime.datetime boundary is microsecond resolution (toPandas is the
+                    # lossless path), so drop any sub-microsecond digits to match classic collect().
+                    if hasattr(value, "to_pydatetime"):
+                        value = value.to_pydatetime(warn=False)
                     return value.astimezone().replace(tzinfo=None)
 
             return convert_timestamp
@@ -1350,6 +1351,10 @@ class ArrowTableToRowsConversion:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
+                    # See convert_timestamp: reduce a nanosecond pandas.Timestamp to a microsecond
+                    # datetime.datetime so collect() matches the classic path.
+                    if hasattr(value, "to_pydatetime"):
+                        value = value.to_pydatetime(warn=False)
                     return value
 
             return convert_timestamp_ntz

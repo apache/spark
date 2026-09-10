@@ -572,11 +572,15 @@ def _check_arrow_array_timestamps_localize(
         # types, but a nanosecond-precision target type keeps its full resolution.
         a = pc.floor_temporal(a, unit="microsecond")
 
-    if types.is_timestamp(a.type) and a.type.tz is None and isinstance(dt, TimestampType):
+    if (
+        types.is_timestamp(a.type)
+        and a.type.tz is None
+        and isinstance(dt, (TimestampType, TimestampLTZNanosType))
+    ):
         assert timezone is not None
 
-        # Only localize timestamps that will become Spark TimestampType columns.
-        # Do not localize timestamps that will become Spark TimestampNTZType columns.
+        # Localize naive Arrow timestamps whose target is a Spark local-time-zone timestamp
+        # (TimestampType or the nanosecond LTZ type); leave NTZ / NTZ-nanos targets naive.
         return pc.assume_timezone(a, timezone)
     if types.is_list(a.type):
         # Return the ListArray as-is if it contains no nested fields or timestamps
@@ -1574,7 +1578,22 @@ def _create_converter_from_pandas(
 
             return convert_struct
 
-        elif isinstance(dt, (TimestampType, TimestampLTZNanosType)):
+        elif isinstance(dt, TimestampLTZNanosType):
+            assert timezone is not None
+
+            def convert_timestamp_ltz_nanos(value: Any) -> Any:
+                if isinstance(value, datetime.datetime) and value.tzinfo is not None:
+                    ts = pd.Timestamp(value)
+                else:
+                    ts = pd.Timestamp(value).tz_localize(timezone)
+                # Keep the tz-aware pandas.Timestamp so a nested LTZ nanosecond value retains its
+                # sub-microsecond digits through the Arrow build (mirrors the nested NTZ path,
+                # which is identity). to_pydatetime() would truncate to microseconds.
+                return ts
+
+            return convert_timestamp_ltz_nanos
+
+        elif isinstance(dt, TimestampType):
             assert timezone is not None
 
             def convert_timestamp(value: Any) -> Any:

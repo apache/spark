@@ -573,12 +573,14 @@ class TimestampNTZNanosType(AnyTimestampNanoType):
     with keys of this type that differ only below a microsecond would collapse to one entry, so
     that conversion raises rather than silently dropping an entry.
 
-    Arrow- and pandas-based conversion -- :meth:`DataFrame.toPandas`,
-    :meth:`SparkSession.createDataFrame` from a pandas ``DataFrame``, and the Spark Connect data
-    path -- carries the value as an Arrow ``timestamp[ns]`` and preserves full nanosecond
-    precision (pandas ``datetime64[ns]``). Because that Arrow encoding counts nanoseconds since
-    the epoch in a 64-bit integer, values outside the ``datetime64[ns]`` range (roughly the years
-    1677 to 2262) cannot be carried on this path.
+    Arrow-based conversion -- :meth:`DataFrame.toPandas` and
+    :meth:`SparkSession.createDataFrame` from a pandas ``DataFrame`` with Arrow enabled
+    (``spark.sql.execution.arrow.pyspark.enabled``), including the Spark Connect data path --
+    carries the value as an Arrow ``timestamp[ns]`` and preserves full nanosecond precision
+    (pandas ``datetime64[ns]``). Because that Arrow encoding counts nanoseconds since the epoch in
+    a 64-bit integer, values outside the ``datetime64[ns]`` range (roughly the years 1677 to 2262)
+    cannot be carried on this path. With Arrow disabled, :meth:`DataFrame.toPandas` falls back to
+    :meth:`DataFrame.collect` and, like it, truncates to microseconds.
 
     .. versionadded:: 4.4.0
     """

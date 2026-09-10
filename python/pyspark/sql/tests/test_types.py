@@ -2396,6 +2396,36 @@ class TypesTestsMixin:
                 # ... and a full pandas -> Spark -> pandas round-trip is lossless.
                 self.assertEqual(pd.Timestamp(ns_string), df.toPandas()["ts"][0])
 
+    def test_timestamp_nanos_type_arrow_conversion_non_utc(self):
+        # SPARK-57462 follow-up: a naive Arrow timestamp[ns] column ingested as the timezone-aware
+        # LTZ nanosecond type under a non-UTC session time zone must be localized to that zone
+        # (assume_timezone), exactly like TimestampType -- otherwise it is silently read as UTC and
+        # the instant is off by the session offset. This exercises the createDataFrame from a
+        # pyarrow.Table path (createDataFrame from a pandas DataFrame uses a different, already
+        # covered converter). NTZ is the control: it stays a naive wall clock either way.
+        import pandas as pd
+        import pyarrow as pa
+
+        ns_string = "2020-06-15 12:30:00.123456789"
+        with self.sql_conf(
+            {
+                "spark.sql.timestampNanosTypes.enabled": True,
+                "spark.sql.session.timeZone": "America/New_York",
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+            }
+        ):
+            table = pa.table({"ts": pa.array([pd.Timestamp(ns_string)], type=pa.timestamp("ns"))})
+            for nanos_type in (TimestampNTZNanosType(9), TimestampLTZNanosType(9)):
+                schema = StructType([StructField("ts", nanos_type)])
+                df = self.spark.createDataFrame(table, schema)
+                self.assertEqual(schema, df.schema)
+                # Rendered in the session time zone the wall clock is unchanged: NTZ carries no
+                # zone, and LTZ interpreted the naive input in the session zone (not UTC -- which
+                # would shift it by the session offset).
+                self.assertEqual(ns_string, df.select(F.col("ts").cast("string")).first()[0])
+                # Nanoseconds survive the Arrow round-trip.
+                self.assertEqual(789, df.toPandas()["ts"][0].nanosecond)
+
     def test_yearmonth_interval_type_constructor(self):
         self.assertEqual(YearMonthIntervalType().simpleString(), "interval year to month")
         self.assertEqual(

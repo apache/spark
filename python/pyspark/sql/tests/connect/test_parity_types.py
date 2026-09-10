@@ -33,15 +33,15 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_timestamp_nanos_type_python_udf(self):
         super().test_timestamp_nanos_type_python_udf()
 
-    @unittest.skip("SPARK-57462: the collect map-key guard is classic-only (classic/dataframe.py).")
+    @unittest.skip("SPARK-57462: classic-only collect map-key guard (classic/dataframe.py).")
     def test_timestamp_nanos_type_map_key_collision(self):
         super().test_timestamp_nanos_type_map_key_collision()
 
-    @unittest.skip("SPARK-57462: uses the classic Py4J (useArrow=False) UDF input path, not Connect.")
+    @unittest.skip("SPARK-57462: classic-only Py4J UDF input path (useArrow=False), not Connect.")
     def test_timestamp_nanos_type_python_udf_input(self):
         super().test_timestamp_nanos_type_python_udf_input()
 
-    @unittest.skip("SPARK-57462: uses the classic Py4J (useArrow=False) UDF input path, not Connect.")
+    @unittest.skip("SPARK-57462: classic-only Py4J map-key UDF input path, not Connect.")
     def test_timestamp_nanos_type_map_key_python_udf_input(self):
         super().test_timestamp_nanos_type_map_key_python_udf_input()
 
