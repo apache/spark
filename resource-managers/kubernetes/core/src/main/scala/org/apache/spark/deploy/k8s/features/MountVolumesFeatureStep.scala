@@ -119,8 +119,10 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
         case KubernetesEmptyDirVolumeConf(medium, sizeLimit) =>
           new VolumeBuilder()
             .withEmptyDir(
-              new EmptyDirVolumeSource(medium.getOrElse(""),
-                sizeLimit.map(new Quantity(_)).orNull))
+              new EmptyDirVolumeSourceBuilder()
+                .withMedium(medium.getOrElse(""))
+                .withSizeLimit(sizeLimit.map(new Quantity(_)).orNull)
+                .build())
 
         case KubernetesNFSVolumeConf(path, server) =>
           new VolumeBuilder()
