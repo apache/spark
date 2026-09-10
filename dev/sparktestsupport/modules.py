@@ -914,8 +914,8 @@ pyspark_ml = Module(
     ],
 )
 
-pyspark_scheduled = Module(
-    name="pyspark-scheduled",
+pyspark_periodic = Module(
+    name="pyspark-periodic",
     dependencies=[],
     source_file_regexes=[
         # This module contains tests that are not sensitive to pyspark code changes.
