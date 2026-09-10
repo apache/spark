@@ -16,19 +16,17 @@
  */
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.{ByteArrayInputStream, File, InputStream}
+import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.time.{Instant, LocalDate}
-
-import com.fasterxml.jackson.core.JsonFactory
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Column, Dataset, Row}
-import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The benchmarks aims to measure performance of JSON parsing when encoding is set and isn't.
@@ -587,29 +585,30 @@ object JsonBenchmark extends SqlBasedBenchmark {
       payloadSize: Int,
       numIters: Int): Unit = {
     val payload = "x" * payloadSize
-    val bytes = (0 until rowsNum)
+    val document = (0 until rowsNum)
       .map(i => s"""{"a":$i,"payload":"$payload"}""")
       .mkString("[", ",", "]")
-      .getBytes("UTF-8")
     val schema = new StructType().add("a", IntegerType).add("payload", StringType)
-    val options = new JSONOptions(Map("multiLine" -> "true"), SQLConf.get.sessionLocalTimeZone)
-    val parser = new JacksonParser(schema, options, allowArrayAsStructs = true)
-    val createParser = CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream)
-    val recordLiteral = (_: InputStream) => UTF8String.EMPTY_UTF8
     val benchmark = new Benchmark(
       s"Top-level JSON array with $payloadSize-byte payloads", rowsNum, output = output)
 
-    benchmark.addCase("whole document", numIters) { _ =>
-      val input = new ByteArrayInputStream(bytes)
-      parser.parse(input, createParser, recordLiteral).size
-    }
+    withTempPath { path =>
+      Files.write(path.toPath, document.getBytes(StandardCharsets.UTF_8))
 
-    benchmark.addCase("streamed", numIters) { _ =>
-      val input = new ByteArrayInputStream(bytes)
-      parser.parseIterator(input, createParser, recordLiteral).size
-    }
+      Seq(false, true).foreach { enabled =>
+        benchmark.addCase(s"streaming enabled: $enabled", numIters) { _ =>
+          withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> enabled.toString) {
+            spark.read
+              .option("multiLine", true)
+              .schema(schema)
+              .json(path.getCanonicalPath)
+              .noop()
+          }
+        }
+      }
 
-    benchmark.run()
+      benchmark.run()
+    }
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
