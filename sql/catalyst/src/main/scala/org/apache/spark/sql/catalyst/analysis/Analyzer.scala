@@ -586,7 +586,7 @@ class Analyzer(
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
-      Seq(ResolveHints.ResolveJoinStrategyHints,
+      Seq(ResolveHints.ResolveJoinHints,
         ResolveHints.ResolveCoalesceHints) ++
         hintResolutionRules: _*),
     Batch("Simple Sanity Check", Once,

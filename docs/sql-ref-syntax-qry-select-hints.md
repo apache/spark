@@ -194,9 +194,11 @@ The hint overrides Spark's cost estimates, but not the requirements that make a 
 correct, so Spark is not guaranteed to follow it. A side that join semantics forbid pruning is
 never pruned, e.g. the left side of a `LEFT OUTER` join, whose rows must all appear in the output.
 The hinted side must produce the same rows each time it is evaluated, since building the filter
-may evaluate it separately from the join; a `LIMIT` without `ORDER BY`, for example, does not
-qualify. Building the filter may evaluate the hinted side once more, which is the cost the hint
-asks Spark to spend.
+may evaluate it separately from the join; a side whose rows or join keys depend on evaluation
+order, such as a `LIMIT` without a unique ordering, a `TABLESAMPLE` without `REPEATABLE`, or a
+key computed by `first` or `last`, does not qualify. Building the filter may evaluate the hinted
+side once more, which is the cost the hint asks Spark to spend. A hint that cannot be applied does
+not make Spark build a filter in the opposite direction instead.
 
 Spark issues a warning with the reason when it cannot apply the hint. Hinting both sides of a join
 is ambiguous, since each side would then have to be built from the other; Spark warns and ignores

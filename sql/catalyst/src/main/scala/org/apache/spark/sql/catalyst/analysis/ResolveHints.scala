@@ -42,7 +42,7 @@ object ResolveHints {
   /**
    * Checks if the given multi-part identifiers are matched with each other.
    *
-   * The [[ResolveJoinStrategyHints]] rule is applied before the resolution batch in the analyzer
+   * The [[ResolveJoinHints]] rule is applied before the resolution batch in the analyzer
    * and we cannot semantically compare them at this stage. Therefore, we follow a simple rule;
    * they match if an identifier in a hint is a tail of an identifier in a relation. This process
    * is independent of a session catalog (`currentDb` in [[SessionCatalog]]) and it just compares
@@ -89,7 +89,7 @@ object ResolveHints {
    *
    * This rule must happen before common table expressions.
    */
-  object ResolveJoinStrategyHints extends Rule[LogicalPlan] {
+  object ResolveJoinHints extends Rule[LogicalPlan] {
     private def hintErrorHandler = conf.hintErrorHandler
 
     def resolver: Resolver = conf.resolver

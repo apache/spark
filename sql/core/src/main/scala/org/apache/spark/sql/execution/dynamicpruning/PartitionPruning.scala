@@ -317,12 +317,16 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    *   (2) it needs to contain a selective predicate or a cheaply-recomputable materialized input
    *
    * (2) is evidence that pruning pays off, which a [[RuntimeFilterHint]] on the filtering side
-   * (`hinted`) supplies directly. A hinted side only has to be a repeatable source, see
-   * `JoinSelectionHelper.isRepeatableRuntimeFilterSource`, since DPP re-evaluates it.
+   * (`hinted`) supplies directly. A hinted side only has to be a repeatable source of the
+   * filtering key, see `JoinSelectionHelper.isRepeatableRuntimeFilterSource`, since DPP
+   * re-evaluates it.
    */
-  private def hasPartitionPruningFilter(plan: LogicalPlan, hinted: Boolean): Boolean = {
+  private def hasPartitionPruningFilter(
+      plan: LogicalPlan,
+      hinted: Boolean,
+      filteringKey: Expression): Boolean = {
     if (hinted) {
-      isRepeatableRuntimeFilterSource(plan)
+      isRepeatableRuntimeFilterSource(plan, filteringKey)
     } else {
       !plan.isStreaming &&
         (hasSelectivePredicate(plan) || isCheaplyRecomputableMaterializedPlan(plan))
@@ -373,13 +377,13 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             // otherwise the pruning will not trigger
             var filterableScan = getFilterableTableScan(l, left)
             if (filterableScan.isDefined && canPruneLeft(joinType) && !pruneRightHinted &&
-                hasPartitionPruningFilter(right, pruneLeftHinted)) {
+                hasPartitionPruningFilter(right, pruneLeftHinted, r)) {
               newLeft = insertPredicate(
                 l, newLeft, Seq(r), right, rightKeys, filterableScan.get, pruneLeftHinted)
             } else {
               filterableScan = getFilterableTableScan(r, right)
               if (filterableScan.isDefined && canPruneRight(joinType) && !pruneLeftHinted &&
-                  hasPartitionPruningFilter(left, pruneRightHinted)) {
+                  hasPartitionPruningFilter(left, pruneRightHinted, l)) {
                 newRight = insertPredicate(
                   r, newRight, Seq(l), left, leftKeys, filterableScan.get, pruneRightHinted)
               }

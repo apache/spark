@@ -2168,7 +2168,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  private def isOrderIrrelevantAggs(aggs: Seq[NamedExpression]): Boolean = {
+  private[optimizer] def isOrderIrrelevantAggs(aggs: Seq[NamedExpression]): Boolean = {
     def isOrderIrrelevantAggFunction(func: AggregateFunction): Boolean = func match {
       case _: Min | _: Max | _: Count | _: BitAggregate => true
       // Arithmetic operations for floating-point values are order-sensitive
