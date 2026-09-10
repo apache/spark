@@ -3534,6 +3534,56 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("time_bucket: nanosecond-precision honors session time zone for TIMESTAMP_LTZ") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
+    val laZone = getZoneId("America/Los_Angeles")
+    withSQLConf(
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        val dt = TimestampLTZNanosType(p)
+
+        // origin = 1970-01-01 00:00:00 LA, with a 500ns sub-micro remainder. The bucket start
+        // lands on a different microsecond than ts in every case below, so the result always
+        // carries origin's remainder (500ns).
+        val originMicros = instantToNanosVal(timestampLTZ(1970, 1, 1, zoneId = laZone)).epochMicros
+        val origin = Literal.create(nanosVal(originMicros, 500), dt)
+
+        // Year-month bucket, summer (PDT): 2024-07-15 10:00 LA -> 2024-07-01 00:00 LA.
+        val summerTs = instantToNanosVal(timestampLTZ(2024, 7, 15, 10, zoneId = laZone))
+        val summerBucket = instantToNanosVal(timestampLTZ(2024, 7, 1, zoneId = laZone))
+        checkEvaluation(
+          TimeBucket(
+            Literal(Period.ofMonths(1)),
+            Literal.create(nanosVal(summerTs.epochMicros, 999), dt),
+            origin),
+          nanosVal(summerBucket.epochMicros, 500))
+
+        // Year-month bucket, winter (PST): 2024-02-15 10:00 LA -> 2024-02-01 00:00 LA. The
+        // UTC offset differs from the summer case, so the session zone must be honored.
+        val winterTs = instantToNanosVal(timestampLTZ(2024, 2, 15, 10, zoneId = laZone))
+        val winterBucket = instantToNanosVal(timestampLTZ(2024, 2, 1, zoneId = laZone))
+        checkEvaluation(
+          TimeBucket(
+            Literal(Period.ofMonths(1)),
+            Literal.create(nanosVal(winterTs.epochMicros, 999), dt),
+            origin),
+          nanosVal(winterBucket.epochMicros, 500))
+
+        // Day-time 1-day bucket aligns to the LA calendar day, not the UTC day: the instant
+        // 2024-07-15 05:00 LA (2024-07-15 12:00 UTC) buckets to 2024-07-15 00:00 LA.
+        val dayTs = instantToNanosVal(timestampLTZ(2024, 7, 15, 5, zoneId = laZone))
+        val dayBucket = instantToNanosVal(timestampLTZ(2024, 7, 15, 0, zoneId = laZone))
+        checkEvaluation(
+          TimeBucket(
+            Literal(Duration.ofDays(1)),
+            Literal.create(nanosVal(dayTs.epochMicros, 999), dt),
+            origin),
+          nanosVal(dayBucket.epochMicros, 500))
+      }
+    }
+  }
+
   test("time_bucket: checkInputDataTypes with nanosecond timestamps") {
     val ntzTsLit = Literal.create(TimestampNanosVal.ZERO, TimestampNTZNanosType(9))
     val ltzTsLit = Literal.create(TimestampNanosVal.ZERO, TimestampLTZNanosType(9))
