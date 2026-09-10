@@ -331,9 +331,9 @@ class UserDefinedFunction:
             if isinstance(data_type, ArrayType):
                 return has_char_varchar_in_udt(data_type.elementType)
             if isinstance(data_type, MapType):
-                return has_char_varchar_in_udt(
-                    data_type.keyType
-                ) or has_char_varchar_in_udt(data_type.valueType)
+                return has_char_varchar_in_udt(data_type.keyType) or has_char_varchar_in_udt(
+                    data_type.valueType
+                )
             return False
 
         if has_char_varchar_in_udt(returnType):

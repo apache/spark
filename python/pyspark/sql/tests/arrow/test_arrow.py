@@ -1505,9 +1505,7 @@ class ArrowTestsMixin:
                 "spark.sql.execution.arrow.localRelationThreshold": "0",
             }
         ):
-            df = self.spark.createDataFrame(
-                pa.table({"c": ["a"], "v": ["abcd"]}), legacy_schema
-            )
+            df = self.spark.createDataFrame(pa.table({"c": ["a"], "v": ["abcd"]}), legacy_schema)
             self.assertEqual(df.schema, StructType().add("c", "string").add("v", "string"))
             self.assertEqual(df.first(), Row(c="a", v="abcd"))
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.SparkException
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -140,7 +140,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       assert(padded.collect().map(_.getString(4)).toSeq ===
         (0 until 10).map(_.toString.padTo(4, ' ').mkString))
 
-      val exception = intercept[SparkException] {
+      val exception = intercept[SparkRuntimeException] {
         df.selectExpr(
           "id", "name", "value", "data",
           "arrow_varchar_udf(name) as udf_name").collect()

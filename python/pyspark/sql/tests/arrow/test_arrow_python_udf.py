@@ -330,9 +330,7 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         outer = udf(lambda value: value, StringType(), useArrow=True)
 
         with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
-            padded = self.spark.range(1).select(
-                outer(inner_char("id")).alias("result")
-            )
+            padded = self.spark.range(1).select(outer(inner_char("id")).alias("result"))
             self.assertEqual(padded.first().result, "a  ")
 
             invalid = self.spark.range(1).select(outer(inner_varchar("id")))
