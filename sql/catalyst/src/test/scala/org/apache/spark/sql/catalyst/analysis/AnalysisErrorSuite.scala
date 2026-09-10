@@ -1336,28 +1336,38 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     def cteRef(cteDef: CTERelationDef): CTERelationRef = {
       CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
     }
-    def assertMaterializedCTEError(
+    def materializedCTEPlan(
         cteChild: LogicalPlan,
         colName: String,
-        referencedCTEDefs: Seq[CTERelationDef] = Nil): Unit = {
+        referencedCTEDefs: Seq[CTERelationDef] = Nil): LogicalPlan = {
       val cteDef = CTERelationDef(cteChild, materialized = Some(true))
-      val plan = WithCTE(cteRef(cteDef).select(colName), referencedCTEDefs :+ cteDef)
+      WithCTE(cteRef(cteDef).select(colName), referencedCTEDefs :+ cteDef)
+    }
+    def assertMaterializedCTEError(plan: LogicalPlan, outerColName: String): Unit = {
       checkError(
         exception = intercept[AnalysisException](getAnalyzer.checkAnalysis(plan)),
         condition = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
-        parameters = Map("colName" -> "`a`"))
+        parameters = Map("colName" -> s"`$outerColName`"))
     }
     val correlated = relation.where(OuterReference($"a".int) === 1)
     // A direct outer reference in the CTE definition.
-    assertMaterializedCTEError(correlated, "a")
+    assertMaterializedCTEError(materializedCTEPlan(correlated, "a"), "a")
     // An outer-scope reference of a subquery in the CTE definition (nested correlation).
     val subquery = ScalarSubquery(
       LocalRelation($"c".int).select($"c"),
       outerAttrs = Seq(OuterScopeReference($"a".int)))
-    assertMaterializedCTEError(relation.select(subquery.as("s")), "s")
+    assertMaterializedCTEError(materializedCTEPlan(relation.select(subquery.as("s")), "s"), "a")
     // An outer reference in another CTE that the MATERIALIZED CTE definition references.
     val correlatedCTEDef = CTERelationDef(correlated)
-    assertMaterializedCTEError(cteRef(correlatedCTEDef).select("a"), "a", Seq(correlatedCTEDef))
+    assertMaterializedCTEError(
+      materializedCTEPlan(cteRef(correlatedCTEDef).select("a"), "a", Seq(correlatedCTEDef)), "a")
+    // A CTE nested in a subquery of the definition may be correlated to the definition's own
+    // relations: the outer reference does not cross the materialized boundary.
+    val a = relation.output.head
+    val innerCTEDef = CTERelationDef(LocalRelation($"c".int).where($"c".int === OuterReference(a)))
+    val innerSubquery = ScalarSubquery(
+      WithCTE(cteRef(innerCTEDef).select("c"), Seq(innerCTEDef)), outerAttrs = Seq(a))
+    MaterializedCTECheck(materializedCTEPlan(relation.select(innerSubquery.as("s")), "s"))
   }
 
   test("SPARK-48871: SupportsNonDeterministicExpression allows non-deterministic expressions") {

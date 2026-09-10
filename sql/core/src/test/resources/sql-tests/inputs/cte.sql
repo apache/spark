@@ -331,6 +331,19 @@ SELECT * FROM t WHERE EXISTS (
   SELECT * FROM s2
 );
 
+-- Inner CTE correlated to the MATERIALIZED CTE's own relation does not cross its boundary
+WITH v AS MATERIALIZED (
+  SELECT t.id, (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) AS c
+  FROM t
+)
+SELECT * FROM v;
+
+WITH v AS MATERIALIZED (
+  SELECT t.id, l.c
+  FROM t, LATERAL (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) l
+)
+SELECT * FROM v;
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;

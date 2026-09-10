@@ -44,10 +44,11 @@ expression_name [ ( column_name [ , ... ] ) ] [ AS ] [ [ NOT ] MATERIALIZED ] ( 
 
     Optionally specifies how the common table expression is evaluated. `MATERIALIZED` forces it
     to be evaluated once and shared by all references. `NOT MATERIALIZED` forces it to be inlined,
-    so that each reference is planned and evaluated independently. A `MATERIALIZED` common table
-    expression cannot reference columns of an outer query. Omit both to let Spark decide whether
-    to inline the common table expression into its references or to evaluate it once and share
-    the result.
+    so that each reference is planned and evaluated independently, and non-deterministic
+    expressions such as `rand()` may yield different values per reference. A `MATERIALIZED`
+    common table expression cannot reference columns of an outer query. Omit both to let Spark
+    decide whether to inline the common table expression into its references or to evaluate it
+    once and share the result.
 
 * **query**
 

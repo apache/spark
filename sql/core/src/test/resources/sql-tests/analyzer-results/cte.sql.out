@@ -1333,6 +1333,80 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+WITH v AS MATERIALIZED (
+  SELECT t.id, (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) AS c
+  FROM t
+)
+SELECT * FROM v
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false, true
+:  +- SubqueryAlias v
+:     +- Project [id#x, scalar-subquery#x [id#x] AS c#xL]
+:        :  +- WithCTE
+:        :     :- CTERelationDef xxxx, false
+:        :     :  +- SubqueryAlias s
+:        :     :     +- Aggregate [count(1) AS c#xL]
+:        :     :        +- Filter (id#x = outer(id#x))
+:        :     :           +- SubqueryAlias t2
+:        :     :              +- View (`t2`, [id#x])
+:        :     :                 +- Project [cast(id#x as int) AS id#x]
+:        :     :                    +- Project [id#x]
+:        :     :                       +- SubqueryAlias t
+:        :     :                          +- LocalRelation [id#x]
+:        :     +- Project [c#xL]
+:        :        +- SubqueryAlias s
+:        :           +- CTERelationRef xxxx, true, [c#xL], false, false, 1
+:        +- SubqueryAlias t
+:           +- View (`t`, [id#x])
+:              +- Project [cast(id#x as int) AS id#x]
+:                 +- Project [id#x]
+:                    +- SubqueryAlias t
+:                       +- LocalRelation [id#x]
++- Project [id#x, c#xL]
+   +- SubqueryAlias v
+      +- CTERelationRef xxxx, true, [id#x, c#xL], false, false
+
+
+-- !query
+WITH v AS MATERIALIZED (
+  SELECT t.id, l.c
+  FROM t, LATERAL (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) l
+)
+SELECT * FROM v
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false, true
+:  +- SubqueryAlias v
+:     +- Project [id#x, c#xL]
+:        +- LateralJoin lateral-subquery#x [id#x], Inner
+:           :  +- SubqueryAlias l
+:           :     +- WithCTE
+:           :        :- CTERelationDef xxxx, false
+:           :        :  +- SubqueryAlias s
+:           :        :     +- Aggregate [count(1) AS c#xL]
+:           :        :        +- Filter (id#x = outer(id#x))
+:           :        :           +- SubqueryAlias t2
+:           :        :              +- View (`t2`, [id#x])
+:           :        :                 +- Project [cast(id#x as int) AS id#x]
+:           :        :                    +- Project [id#x]
+:           :        :                       +- SubqueryAlias t
+:           :        :                          +- LocalRelation [id#x]
+:           :        +- Project [c#xL]
+:           :           +- SubqueryAlias s
+:           :              +- CTERelationRef xxxx, true, [c#xL], false, false, 1
+:           +- SubqueryAlias t
+:              +- View (`t`, [id#x])
+:                 +- Project [cast(id#x as int) AS id#x]
+:                    +- Project [id#x]
+:                       +- SubqueryAlias t
+:                          +- LocalRelation [id#x]
++- Project [id#x, c#xL]
+   +- SubqueryAlias v
+      +- CTERelationRef xxxx, true, [id#x, c#xL], false, false
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query analysis
 DropTempViewCommand t, true

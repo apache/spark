@@ -36,7 +36,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
  *
  * A user-specified `MATERIALIZED` or `NOT MATERIALIZED` option on a CTE definition overrides the
  * conditions above: a `MATERIALIZED` CTE is never inlined, and a `NOT MATERIALIZED` CTE is always
- * inlined, regardless of determinism or reference count.
+ * inlined, regardless of determinism or reference count. A CTE that is not inlined still gets
+ * predicates and column pruning pushed into its definition from its references, see
+ * [[PushdownPredicatesAndPruneColumnsForCTEDef]].
  *
  * CTE definitions that appear in subqueries and are not inlined will be pulled up to the main
  * query level.

@@ -1164,6 +1164,32 @@ abstract class CTEInlineSuiteBase
           |)""".stripMargin)
     }
   }
+
+  test("MATERIALIZED CTE with an inner CTE correlated to its own relations") {
+    withTempView("t", "t2") {
+      Seq((0, 1), (1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceTempView("t")
+      Seq((0, 10), (1, 20), (1, 30)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      // The inner CTE references `a`, a relation of the MATERIALIZED CTE definition itself, so the
+      // outer reference does not cross the materialized boundary.
+      Seq(
+        """with v as materialized (
+          |  select a.c1, (with u as (select max(c2) m from t2 where t2.c1 = a.c1)
+          |                select m from u) as m
+          |  from t a)
+          |select * from v""".stripMargin,
+        """with v as materialized (
+          |  select a.c1, l.m
+          |  from t a, lateral (with u as (select max(c2) m from t2 where t2.c1 = a.c1)
+          |                     select m from u) l)
+          |select * from v""".stripMargin).foreach { query =>
+        val df = sql(query)
+        checkAnswer(df, Row(0, 10) :: Row(1, 30) :: Row(2, null) :: Nil)
+        assert(
+          df.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]),
+          "MATERIALIZED CTE should not be inlined.")
+      }
+    }
+  }
 }
 
 class CTEInlineSuiteAEOff extends CTEInlineSuiteBase with DisableAdaptiveExecutionSuite

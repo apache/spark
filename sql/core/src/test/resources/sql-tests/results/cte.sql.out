@@ -904,6 +904,34 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+WITH v AS MATERIALIZED (
+  SELECT t.id, (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) AS c
+  FROM t
+)
+SELECT * FROM v
+-- !query schema
+struct<id:int,c:bigint>
+-- !query output
+0	1
+1	1
+2	0
+
+
+-- !query
+WITH v AS MATERIALIZED (
+  SELECT t.id, l.c
+  FROM t, LATERAL (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) l
+)
+SELECT * FROM v
+-- !query schema
+struct<id:int,c:bigint>
+-- !query output
+0	1
+1	1
+2	0
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query schema
 struct<>
