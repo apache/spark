@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.{fromAttributes, toAttributes}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
@@ -35,10 +35,10 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReferenc
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -198,17 +198,37 @@ case class DataSourceV2ScanRelation(
    * Resolved attributes that the scan declares for runtime filtering via
    * [[SupportsRuntimeV2Filtering.filterAttributes]] or
    * [[SupportsRuntimeCatalystFiltering.filterAttributes]]. Empty when the scan
-   * implements neither interface or exposes no attributes.
+   * implements neither interface or exposes no attributes. Accessing this value also validates
+   * attributes returned by [[SupportsRuntimeCatalystFiltering.fullyPushedFilterAttributes]].
    */
   lazy val runtimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
-    val filterAttrs = scan match {
-      case s: SupportsRuntimeV2Filtering => s.filterAttributes
-      case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
-      case _ => Array.empty[NamedReference]
-    }
-    AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
-      filterAttrs.toImmutableArraySeq, this))
+    resolvedFullyPushedRuntimeFilterAttrs
+    resolvedRuntimeFilterAttrs
+  }
+
+  private[sql] lazy val declaredRuntimeFilterAttrs: Array[NamedReference] = scan match {
+    case s: SupportsRuntimeV2Filtering => s.filterAttributes
+    case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
+    case _ => Array.empty
+  }
+
+  private lazy val declaredFullyPushedRuntimeFilterAttrs: Array[NamedReference] = scan match {
+    case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
+    case _ => Array.empty
+  }
+
+  private lazy val resolvedRuntimeFilterAttrs: AttributeSet = {
+    resolveFilterAttrs(declaredRuntimeFilterAttrs, "filterAttributes()")
+  }
+
+  private lazy val resolvedFullyPushedRuntimeFilterAttrs: AttributeSet = {
+    checkFullyPushedFilterAttrsAreTopLevel()
+    val resolvedAttrs = resolveFilterAttrs(
+      declaredFullyPushedRuntimeFilterAttrs, "fullyPushedFilterAttributes()")
+    resolvedRuntimeFilterAttrs
+    checkFullyPushedFilterAttrsAreFilterable()
+    resolvedAttrs
   }
 
   /**
@@ -217,12 +237,20 @@ case class DataSourceV2ScanRelation(
    */
   lazy val fullyPushedRuntimeFilterAttrs: AttributeSet = {
     checkRuntimeFilteringInterfaces()
-    val filterAttrs = scan match {
-      case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
-      case _ => Array.empty[NamedReference]
-    }
-    AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
-      filterAttrs.toImmutableArraySeq, this))
+    resolvedFullyPushedRuntimeFilterAttrs
+  }
+
+  /**
+   * Resolves runtime-filter references against this relation's output.
+   *
+   * [[AttributeSet]] reduces nested references to their root attributes. This is sufficient for
+   * ordinary runtime-filter eligibility because Spark retains the post-scan predicate.
+   */
+  private def resolveFilterAttrs(
+      filterAttrs: Array[NamedReference],
+      method: String): AttributeSet = {
+    V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
+      filterAttrs, output, method, scan.getClass.getName)
   }
 
   override def name: String = relation.name
@@ -271,12 +299,37 @@ case class DataSourceV2ScanRelation(
     Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
 
-  private def checkRuntimeFilteringInterfaces(): Unit = scan match {
-    case _: SupportsRuntimeV2Filtering with SupportsRuntimeCatalystFiltering =>
-      throw SparkException.internalError(
-        "A scan must not implement both SupportsRuntimeV2Filtering and " +
-        s"SupportsRuntimeCatalystFiltering, but ${scan.getClass.getName} implements both.")
-    case _ =>
+  private def checkRuntimeFilteringInterfaces(): Unit = {
+    scan match {
+      case _: SupportsRuntimeV2Filtering with SupportsRuntimeCatalystFiltering =>
+        throw SparkException.internalError(
+          "A scan must not implement both SupportsRuntimeV2Filtering and " +
+          s"SupportsRuntimeCatalystFiltering, but ${scan.getClass.getName} implements both.")
+      case _ =>
+    }
+  }
+
+  private def checkFullyPushedFilterAttrsAreTopLevel(): Unit = {
+    declaredFullyPushedRuntimeFilterAttrs.find(_.fieldNames.length > 1).foreach { ref =>
+      throw QueryCompilationErrors.nestedDataSourceFullyPushedRuntimeFilterAttributeError(
+        attribute = ref.fieldNames,
+        scanClass = scan.getClass.getName,
+        relationOutput = fromAttributes(output))
+    }
+  }
+
+  private def checkFullyPushedFilterAttrsAreFilterable(): Unit = {
+    declaredFullyPushedRuntimeFilterAttrs.find { fullyPushedRef =>
+      !declaredRuntimeFilterAttrs.exists { filterRef =>
+        fullyPushedRef.fieldNames.length == filterRef.fieldNames.length &&
+          fullyPushedRef.fieldNames.lazyZip(filterRef.fieldNames).forall(conf.resolver)
+      }
+    }.foreach { ref =>
+      throw QueryCompilationErrors.fullyPushedDataSourceRuntimeFilterAttributeNotFilterableError(
+        attribute = ref.fieldNames,
+        scanClass = scan.getClass.getName,
+        relationOutput = fromAttributes(output))
+    }
   }
 
   override def doCanonicalize(): DataSourceV2ScanRelation = {
