@@ -1517,7 +1517,15 @@ class SparkConnectPlanner(
       if (schema == null) {
         throw InvalidInputErrors.schemaRequiredForLocalRelation()
       }
-      LocalRelation(schema)
+      LocalRelation(localRelationOutputSchema(schema))
+    }
+  }
+
+  private def localRelationOutputSchema(schema: StructType): StructType = {
+    if (CharVarcharUtils.shouldApplyWriteSideLengthCheck(session.sessionState.conf)) {
+      schema
+    } else {
+      CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(schema).asInstanceOf[StructType]
     }
   }
 
@@ -1613,6 +1621,7 @@ class SparkConnectPlanner(
       case None =>
         logical.LocalRelation(attributes, data.map(_.copy()).toArray.toImmutableArraySeq)
       case Some(schema) =>
+        val outputSchema = localRelationOutputSchema(schema)
         def normalize(dt: DataType): DataType = dt match {
           case udt: UserDefinedType[_] => normalize(udt.sqlType)
           case StructType(fields) =>
@@ -1628,7 +1637,7 @@ class SparkConnectPlanner(
           case _ => dt
         }
 
-        val normalized = normalize(schema).asInstanceOf[StructType]
+        val normalized = normalize(outputSchema).asInstanceOf[StructType]
 
         import org.apache.spark.util.ArrayImplicits._
         val project = Dataset
@@ -1642,7 +1651,7 @@ class SparkConnectPlanner(
 
         val proj = UnsafeProjection.create(project.projectList, project.child.output)
         logical.LocalRelation(
-          DataTypeUtils.toAttributes(schema),
+          DataTypeUtils.toAttributes(outputSchema),
           data.map(proj).map(_.copy()).toSeq)
     }
   }

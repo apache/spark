@@ -122,7 +122,8 @@ case class UserDefinedPythonFunction(
         e,
         pythonEvalType,
         udfDeterministic,
-        applyCharVarcharChecks = applyCharVarcharChecks)
+        applyCharVarcharChecks = applyCharVarcharChecks,
+        hasCharVarcharResult = CharVarcharUtils.hasCharVarchar(dataType))
     }
     // The ``_udf_param_N`` substitution below is positional, so a UDF
     // call site that supplied named arguments (e.g. SQL ``name => val``

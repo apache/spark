@@ -338,7 +338,8 @@ case class PythonUDF(
     // lambda (e.g. `transform(arr, i -> transform(i, x -> f(x)))` lifts `f` to depth 2). Ignored
     // for every non-element-wise eval type, where it stays at its default of 1.
     elementwiseNestingDepth: Int = 1,
-    applyCharVarcharChecks: Boolean = false)
+    applyCharVarcharChecks: Boolean = false,
+    hasCharVarcharResult: Boolean = false)
   extends Expression with PythonFuncExpression with Unevaluable {
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
