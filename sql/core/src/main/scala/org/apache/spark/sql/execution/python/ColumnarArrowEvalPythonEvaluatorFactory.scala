@@ -97,9 +97,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     }
   }
   private val hasCharVarcharOutput =
-    udfOutput.zip(udfs).exists { case (attr, udf) =>
-      udf.applyCharVarcharChecks && CharVarcharUtils.hasCharVarchar(attr.dataType)
-    }
+    udfs.exists(_.hasCharVarcharResult)
   private val physicalOutputSchema = ColumnarArrowEvalPythonEvaluatorFactory
     .toPhysicalType(outputSchema)
     .asInstanceOf[StructType]
