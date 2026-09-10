@@ -104,13 +104,14 @@ trait DataSourceV2ScanExecBase
     keyGroupedPartitioning match {
       case Some(exprs) if conf.v2BucketingEnabled && KeyedPartitioning.supportsExpressions(exprs) &&
           inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
-        // `sortKeys` rather than sorting here, so the ordering and the type list come off the one
-        // factory that also wraps the keys, instead of this deriving a second ordering over the
-        // same schema.
-        Some(KeyedPartitioning(
-          exprs,
-          inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey()),
-          sortKeys = true))
+        // A data source reports its splits in its own order, and a keyed side and a side
+        // re-shuffled onto it have to agree on the order or
+        // `PartitioningCollection.fromPartitionings` refuses them. `groupedKeyRowOrdering` is what
+        // lays grouped keys out everywhere else, and it reads the same cached ordering the keys are
+        // built from, so the two cannot drift.
+        val keys = inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
+          .sorted(KeyedPartitioning.groupedKeyRowOrdering(exprs.map(_.dataType)))
+        Some(KeyedPartitioning(exprs, keys))
       case _ => None
     }
   }

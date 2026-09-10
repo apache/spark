@@ -502,6 +502,27 @@ case class KeyLayout(
   require(partitionKeys.isEmpty || partitionKeys.head.dataTypes == dataTypes,
     s"A KeyLayout's dataTypes ($dataTypes) must be the types its keys are compared at " +
       s"(${partitionKeys.head.dataTypes})")
+
+  /**
+   * Whether `other` describes the same partition keys as this layout, which is the question every
+   * caller comparing two layouts' keys is asking.
+   *
+   * The types are asked as well as the rows, because `InternalRowComparableWrapper.equals` compares
+   * them first and **two empty key lists compare equal whatever they describe**. Without the type
+   * clause a join between two sides whose partitions were all pruned would call two different key
+   * spaces one layout. Where a key row exists the type clause is implied.
+   *
+   * A type list identifies a space only up to the type, so two empty sides whose spaces differ but
+   * share a type pair anyway, e.g. `identity(id INT)` against `bucket(4, id INT)`. That residual is
+   * a decision, not an oversight: an empty layout holds no row, so every claim over it is vacuous,
+   * and a merge that later brings real rows under it rewrites each member's expressions through
+   * `reducersBothWays` or a `GroupPartitionsExec` first.
+   *
+   * `isGrouped` is deliberately not part of this. Two layouts can describe one key set and disagree
+   * on whether it is grouped, and the sites that care say so separately.
+   */
+  def describesSameKeys(other: KeyLayout): Boolean =
+    dataTypes == other.dataTypes && partitionKeys == other.partitionKeys
 }
 
 /**
@@ -922,20 +943,16 @@ object KeyedPartitioning {
    * Creates a KeyedPartitioning with isGrouped computed from the partition keys. Use this when
    * creating a new KeyedPartitioning from scratch (e.g., from a data source).
    *
-   * `sortKeys` sorts them first, at the types they will be compared at. A data source reports its
-   * splits in its own order, and a keyed side and a side re-shuffled onto it have to agree on the
-   * order or `PartitioningCollection.fromPartitionings` refuses them. Sorting here rather than in
-   * the caller is what keeps the type list and the ordering to one derivation: both come off the
-   * factory that builds the keys.
+   * A caller whose keys arrive in an arbitrary order sorts them with `groupedKeyRowOrdering` first.
+   * That is the ordering `GroupPartitionsExec` and `EnsureRequirements` lay grouped keys out with,
+   * and it reads the same cached ordering this builds the keys from, so the two cannot drift.
    */
   def apply(
       expressions: Seq[Expression],
-      partitionKeys: Seq[InternalRow],
-      sortKeys: Boolean = false): KeyedPartitioning = {
+      partitionKeys: Seq[InternalRow]): KeyedPartitioning = {
     val factory = InternalRowComparableWrapper
       .getInternalRowComparableWrapperFactory(expressions.map(_.dataType))
-    val ordered = if (sortKeys) partitionKeys.sorted(factory.ordering) else partitionKeys
-    val comparablePartitionKeys = ordered.map(factory)
+    val comparablePartitionKeys = partitionKeys.map(factory)
     val isGrouped = comparablePartitionKeys.distinct.size == comparablePartitionKeys.size
     // Built from scratch, so it is the layout everything else is compared against.
     new KeyedPartitioning(
@@ -1250,7 +1267,7 @@ object PartitioningCollection {
    * One [[KeyedPartitioning]] standing for every one in this partitioning, if there is any. By the
    * invariant in the class doc, any of them describes the layout.
    */
-  private[physical] def representativeOf(p: Partitioning): Option[KeyedPartitioning] = p match {
+  private[sql] def representativeOf(p: Partitioning): Option[KeyedPartitioning] = p match {
     case k: KeyedPartitioning => Some(k)
     case pc: PartitioningCollection => pc.firstKeyedPartitioning
     case _ => None
@@ -1312,18 +1329,19 @@ object PartitioningCollection {
         if (representative.layout eq canonicalLayout) {
           p
         } else {
-          require(representative.partitionKeys == canonicalLayout.partitionKeys,
-            "All KeyedPartitionings in a PartitioningCollection must have equal partitionKeys")
+          // Interning replaces a member's layout whole, so a member describing another key space
+          // would be silently retyped. `describesSameKeys` carries the reason, including why the
+          // types are asked as well as the rows.
+          require(representative.layout.describesSameKeys(canonicalLayout),
+            "All KeyedPartitionings in a PartitioningCollection must describe one key space, got " +
+              s"dataTypes ${representative.keyDataTypes} with partitionKeys " +
+              s"${representative.partitionKeys}, and dataTypes ${canonicalLayout.dataTypes} with " +
+              s"partitionKeys ${canonicalLayout.partitionKeys}")
           // Whether the keys are unique is a property of the keys, so two layouts over equal keys
-          // that disagree on it cannot both be right.
+          // that disagree on it cannot both be right. Kept separate, since two layouts can describe
+          // one key set and legitimately disagree on it elsewhere.
           require(representative.isGrouped == canonicalLayout.isGrouped,
             "All KeyedPartitionings in a PartitioningCollection must agree on isGrouped")
-          // Interning replaces a member's layout whole, so a member that describes another key
-          // space would be silently retyped. Two empty key lists compare equal whatever they
-          // describe, which is the case the clause above them cannot see.
-          require(representative.keyDataTypes == canonicalLayout.dataTypes,
-            "All KeyedPartitionings in a PartitioningCollection must describe one key space, got " +
-              s"${representative.keyDataTypes} and ${canonicalLayout.dataTypes}")
           p match {
             case keyed: KeyedPartitioning => keyed.copy(layout = canonicalLayout)
             case pc: PartitioningCollection =>
@@ -2027,9 +2045,10 @@ case class KeyedShuffleSpec(
     //
     // There is nothing to decide about `isCollapsed`: a later grouping of the shared key set
     // carries the same risk whichever side reports it.
-    partitioning
-      .copy(expressions = newExpressions)
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    // One `copy`, so no intermediate node is built and discarded.
+    partitioning.copy(
+      expressions = newExpressions,
+      layout = partitioning.layout.copy(mayContainUnknownPartitionKeys = true))
   }
 }
 

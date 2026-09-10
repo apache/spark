@@ -102,11 +102,9 @@ case class GroupPartitionsExec(
         if (marked && !identityGrouping) {
           UnknownPartitioning(grouping.partitions.size)
         } else {
-          // One instance for every member, so they share it by reference. The marker comes from the
-          // child rather than from the grouping, and the guard above is what lets it carry over.
-          val layout =
-            if (marked) grouping.layout.copy(mayContainUnknownPartitionKeys = true)
-            else grouping.layout
+          // One instance for every member, so they share it by reference. It already carries the
+          // child's marker, and the guard above is what lets that carry over.
+          val layout = grouping.layout
           p.transform {
             case k: KeyedPartitioning =>
               val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
@@ -282,8 +280,13 @@ case class GroupPartitionsExec(
         group.tail.exists(childKeys(_) != first)
       }
     }
-    PartitionGrouping(partitions, reducedDataTypes, isGrouped, isCollapsed, keysRewritten,
-      numPrunedPartitions, numReplicatedPartitionReads)
+    PartitionGrouping(
+      partitions,
+      // Built here, where the child is in scope, so the layout is complete from the start and
+      // `outputPartitioning` has nothing left to re-apply.
+      KeyLayout(partitions.map(_._1), reducedDataTypes, isGrouped, isCollapsed,
+        childKp.mayContainUnknownPartitionKeys),
+      keysRewritten, numPrunedPartitions, numReplicatedPartitionReads)
   }
 
   /**
@@ -571,23 +574,18 @@ case class GroupPartitionsExec(
 
 /**
  * What a [[GroupPartitionsExec]] computes once and reports from several members: which of the
- * child's partitions each of its own is built from, and the layout that describes them. The last
- * two fields count the alignment's effect on the reads of the child's splits (see
- * `alignToExpectedKeys`), and are 0 outside the alignment path.
+ * child's partitions each of its own is built from, and the layout that describes them. Every
+ * member is given the same `layout` instance, which is what
+ * `PartitioningCollection.fromPartitionings` needs to return them untouched. The last two fields
+ * count the alignment's effect on the reads of the child's splits (see `alignToExpectedKeys`), and
+ * are 0 outside the alignment path.
  */
 private case class PartitionGrouping(
     partitions: Seq[(InternalRowComparableWrapper, Seq[Int])],
-    dataTypes: Seq[DataType],
-    isGrouped: Boolean,
-    isCollapsed: Boolean,
+    layout: KeyLayout,
     keysRewritten: Boolean,
     numPrunedPartitions: Int,
-    numReplicatedPartitionReads: Int) {
-
-  /** Built once, so every member of a [[PartitioningCollection]] is given the same instance. */
-  lazy val layout: KeyLayout =
-    KeyLayout(partitions.map(_._1), dataTypes, isGrouped, isCollapsed)
-}
+    numReplicatedPartitionReads: Int)
 
 /**
  * A PartitionCoalescer that groups partitions according to a pre-computed grouping plan.

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, JoinType, LeftAnti, LeftExistence, LeftOuter, LeftSingle, RightOuter}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, KeyedPartitioning, KeyLayout, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -103,18 +103,30 @@ trait ShuffledJoin extends JoinCodegenSupport {
     if (markers.isEmpty || markers.forall(_ == markers.head)) {
       partitionings
     } else {
+      // The whole input has to come out holding one layout object, not merely equal ones.
+      // `PartitioningCollection.fromPartitionings` returns a member untouched only where its layout
+      // is `eq` the canonical one, so a fresh copy here would make the unmarked side rebuild, and
+      // re-check the collection's invariant, on every `outputPartitioning` call.
+      //
+      // The guard above means an unmarked side exists, so its layout is the one to keep. It equals
+      // the cleared copy whenever the two sides describe one layout, which is what
+      // `fromPartitionings` requires of them anyway, and the `==` is O(1) because they share the
+      // `partitionKeys` reference. Where they differ the copy is used and `fromPartitionings`
+      // reports it.
+      val unmarkedLayout = partitionings.iterator
+        .flatMap(PartitioningCollection.representativeOf)
+        .find(!_.mayContainUnknownPartitionKeys)
+        .map(_.layout)
       partitionings.map {
         case partitioning: Partitioning with Expression
             if PartitioningCollection.keyedMarkerOf(partitioning).contains(true) =>
-          // One cleared layout for the whole input, because a collection's members must share the
-          // layout by reference. They already share one, so the first member's answers for all.
-          var cleared: KeyLayout = null
+          // Every keyed member of one partitioning shares its layout, so the representative's
+          // answers for all of them.
+          val copied = PartitioningCollection.representativeOf(partitioning).get.layout
+            .copy(mayContainUnknownPartitionKeys = false)
+          val cleared = unmarkedLayout.filter(_ == copied).getOrElse(copied)
           partitioning.transform {
-            case k: KeyedPartitioning if k.mayContainUnknownPartitionKeys =>
-              if (cleared == null) {
-                cleared = k.layout.copy(mayContainUnknownPartitionKeys = false)
-              }
-              k.copy(layout = cleared)
+            case k: KeyedPartitioning => k.copy(layout = cleared)
           }.asInstanceOf[Partitioning]
         case p => p
       }
