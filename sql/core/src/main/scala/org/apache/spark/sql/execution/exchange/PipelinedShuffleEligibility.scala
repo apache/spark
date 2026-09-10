@@ -53,6 +53,29 @@ private[sql] object PipelinedShuffleEligibility extends Logging {
   }
 
   /**
+   * Estimate the complete group's task demand without executing or materializing the plan.
+   * Each exchange contributes its producer width; the root contributes the consumer width.
+   * Unknown widths conservatively retain regular execution. The scheduler still checks actual
+   * RDD widths and free slots at submission, including contention from other jobs.
+   */
+  def fitsLocalCapacity(plan: SparkPlan, candidates: Set[Int]): Boolean = {
+    val exchanges = plan.collect {
+      case s: ShuffleExchangeExec if s.pipelined || candidates.contains(s.id) => s
+    }.groupBy(_.id).values.map(_.head).toSeq
+    val widths = plan.outputPartitioning.numPartitions +:
+      exchanges.map(_.child.outputPartitioning.numPartitions)
+    val sc = plan.session.sparkContext
+    val slots = sc.maxNumConcurrentTasks(sc.resourceProfileManager.defaultResourceProfile)
+    val demand = widths.map(_.toLong).sum
+    val fits = widths.forall(_ > 0) && demand <= slots
+    if (!fits) {
+      logDebug(s"Pipelined shuffle: estimated stage widths ${widths.mkString(",")} cannot " +
+        s"fit $slots local task slots; retaining regular shuffles.")
+    }
+    fits
+  }
+
+  /**
    * Whether the pipelined channel transport may be used for `plan` at all, independent of plan
    * shape. Requires: the opt-in flag on; single-executor local mode (the in-process channel
    * transport needs producer and consumer in one JVM); and the configured incremental manager

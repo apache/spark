@@ -1854,6 +1854,7 @@ package object config {
 
   private[spark] val SHUFFLE_PIPELINED_CHANNEL_BATCH_SIZE =
     ConfigBuilder("spark.shuffle.channel.batchSize")
+      .internal()
       .doc("Number of records the in-process pipelined channel shuffle accumulates per output " +
         "partition before handing a batch across its queue in one operation. Larger batches " +
         "amortize the queue's per-operation lock cost at the price of higher hand-off latency " +
@@ -1867,6 +1868,7 @@ package object config {
 
   private[spark] val SHUFFLE_PIPELINED_CHANNEL_QUEUE_CAPACITY =
     ConfigBuilder("spark.shuffle.channel.queueCapacity")
+      .internal()
       .doc("Depth, in BATCHES, of each per-reduce-partition queue in the in-process pipelined " +
         "channel shuffle. This is the backpressure bound: a producer blocks once a partition's " +
         "queue holds this many batches. It also sets the worst-case heap the transport pins for " +

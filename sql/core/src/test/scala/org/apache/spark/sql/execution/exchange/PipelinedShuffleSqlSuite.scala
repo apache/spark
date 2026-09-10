@@ -256,29 +256,74 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
       }
     }
 
-    test(s"toLocalIterator returns every row across repeated jobs with AQE=$aqe") {
+    test(s"toLocalIterator uses regular output across jobs with AQE=$aqe") {
       withPipelinedSession("pipelined-local-iterator", aqe) { spark =>
         import scala.jdk.CollectionConverters._
-        spark.conf.set("spark.sql.classic.shuffleDependency.fileCleanup.enabled", "false")
         import spark.implicits._
-        val evaluated = spark.sparkContext.longAccumulator("producer rows")
-        val recordEvaluation = org.apache.spark.sql.functions.udf { id: Long =>
-          evaluated.add(1)
-          id
-        }
-        val df = spark.range(0, 1000, 1, 2).select(recordEvaluation($"id").as("id"))
-          .repartition(4).as[Long]
-        for (run <- 1 to 3) {
-          assert(df.toLocalIterator().asScala.toArray.sorted === (0L until 1000L).toArray)
-          assert(evaluated.value === run * 4000L)
+        spark.conf.set("spark.sql.classic.shuffleDependency.fileCleanup.enabled", "false")
+        val expected = (0L until 1000L).toArray
+        for (collectFirst <- Seq(false, true)) {
+          val evaluated = spark.sparkContext.longAccumulator("producer rows")
+          val recordEvaluation = org.apache.spark.sql.functions.udf { id: Long =>
+            evaluated.add(1)
+            id
+          }
+          val df = spark.range(0, 1000, 1, 2).select(recordEvaluation($"id").as("id"))
+            .repartition(4).as[Long]
+          val initialRuns = if (collectFirst) {
+            assert(df.collect().sorted === expected)
+            1
+          } else {
+            0
+          }
+          for (run <- 1 to 3) {
+            val iterator = df.toLocalIterator()
+            assert(spark.conf.get("spark.sql.shuffle.localPipelined.enabled") === "true")
+            assert(iterator.asScala.toArray.sorted === expected)
+            // Four output-partition jobs reuse regular shuffle output: the producer runs once.
+            assert(evaluated.value === (initialRuns + run) * 1000L)
+          }
+          assert(df.collect().sorted === expected)
+          assert(evaluated.value === (initialRuns + 4) * 1000L)
           val exchanges = collect(df.queryExecution.executedPlan) {
             case s: ShuffleExchangeExec if s.pipelined => s
           }
-          assert(exchanges.nonEmpty)
+          assert(exchanges.nonEmpty, "collect must still use the original pipelined plan")
           exchanges.foreach { s =>
             assert(!ChannelShuffleRendezvous.holdsShuffle(s.shuffleDependency.shuffleId))
           }
         }
+      }
+    }
+
+    test(s"capacity fallback preserves explicit repartition width with AQE=$aqe") {
+      withPipelinedSession("pipelined-explicit-width", aqe, cores = 8) { spark =>
+        val df = spark.range(0, 1000, 1, 2).repartition(200)
+        assert(df.collect().sorted === (0L until 1000L).toArray)
+        val exchanges = collect(df.queryExecution.executedPlan) { case s: ShuffleExchangeExec => s }
+        assert(exchanges.nonEmpty)
+        assert(exchanges.forall(!_.pipelined))
+        assert(exchanges.exists(_.outputPartitioning.numPartitions == 200))
+      }
+    }
+
+    test(s"capacity accounts for all stages of the group with AQE=$aqe") {
+      withPipelinedSession("pipelined-group-width", aqe, cores = 8) { spark =>
+        import spark.implicits._
+        spark.conf.set("spark.sql.shuffle.partitions", "6")
+        val grouped = spark.range(0, 1000, 1, 2).groupBy(($"id" % 7).as("k")).count()
+        assert(grouped.collect().map(_.getLong(1)).sum === 1000L)
+        assert(collect(grouped.queryExecution.executedPlan) {
+          case s: ShuffleExchangeExec if s.pipelined => s
+        }.nonEmpty, "two producer tasks plus six consumer tasks fit exactly")
+
+        val total = grouped.agg(org.apache.spark.sql.functions.max("count"))
+        assert(total.collect().head.getLong(0) === 143L)
+        val exchanges = collect(total.queryExecution.executedPlan) {
+          case s: ShuffleExchangeExec => s
+        }
+        assert(exchanges.size >= 2)
+        assert(exchanges.forall(!_.pipelined), "the full group needs 2 + 6 + 1 slots")
       }
     }
   }
@@ -314,27 +359,16 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
     }
   }
 
-  test("an exchange wider than the task-concurrency limit fails loudly at admission") {
-    // Deliberate design decision (viirya): the rule does NOT cap flipped exchanges at the
-    // local concurrency limit. The user opted in explicitly, so an over-wide plan surfaces
-    // the scheduler's CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT error -- actionable and
-    // explicit -- rather than silently degrading to a regular run.
-    withPipelinedSession { spark =>
+  test("default shuffle width falls back to regular execution in local mode") {
+    withPipelinedSession("pipelined-default-width", aqe = false, cores = 8) { spark =>
       import spark.implicits._
-      spark.conf.set("spark.sql.shuffle.partitions", "64")
-      try {
-        val ex = intercept[Exception] {
-          spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 7))
-            .groupBy($"k").count().collect()
-        }
-        val messages = Iterator.iterate(ex: Throwable)(_.getCause).takeWhile(_ != null)
-          .map(t => Option(t.getMessage).getOrElse("")).mkString(" | ")
-        assert(messages.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT") ||
-          messages.contains("concurrent task slots"),
-          s"expected the explicit slot-admission error, got: $messages")
-      } finally {
-        spark.conf.set("spark.sql.shuffle.partitions", "4")
-      }
+      spark.conf.unset("spark.sql.shuffle.partitions")
+      assert(spark.conf.get("spark.sql.shuffle.partitions") === "200")
+      val df = spark.range(0, 1000, 1, 2).groupBy(($"id" % 7).as("k")).count()
+      assert(df.collect().map(_.getLong(1)).sum === 1000L)
+      assert(collect(df.queryExecution.executedPlan) {
+        case s: ShuffleExchangeExec if s.pipelined => s
+      }.isEmpty)
     }
   }
 

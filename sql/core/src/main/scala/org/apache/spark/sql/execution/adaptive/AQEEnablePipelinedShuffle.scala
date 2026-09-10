@@ -77,6 +77,7 @@ object AQEEnablePipelinedShuffle extends Rule[SparkPlan] {
       case other => other.children.exists(hasRegularPrefix)
     }
     if (hasRegularPrefix(plan)) return plan
+    if (!PipelinedShuffleEligibility.fitsLocalCapacity(plan, toFlip.toSet)) return plan
 
     // transformDown, NOT transformUp: candidates can be nested (a SinglePartition candidate
     // above a hash candidate). transformUp rebuilds children first, so by the time it

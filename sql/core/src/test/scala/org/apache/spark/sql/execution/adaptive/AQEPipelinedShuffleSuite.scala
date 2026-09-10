@@ -102,25 +102,15 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite
     }
   }
 
-  test("an exchange wider than the task-concurrency limit fails loudly under AQE too") {
-    // Same design decision as the non-AQE suite (viirya): no silent degrade; the explicit
-    // slot-admission error reaches the user.
-    withAqePipelinedSession { spark =>
+  test("default shuffle width retains regular AQE execution") {
+    withPipelinedSession("aqe-pipelined-default-width", aqe = true, cores = 8) { spark =>
       import spark.implicits._
-      spark.conf.set("spark.sql.shuffle.partitions", "64")
-      try {
-        val ex = intercept[Exception] {
-          spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 7))
-            .groupBy($"k").count().collect()
-        }
-        val messages = Iterator.iterate(ex: Throwable)(_.getCause).takeWhile(_ != null)
-          .map(t => Option(t.getMessage).getOrElse("")).mkString(" | ")
-        assert(messages.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT") ||
-          messages.contains("concurrent task slots"),
-          s"expected the explicit slot-admission error, got: $messages")
-      } finally {
-        spark.conf.set("spark.sql.shuffle.partitions", "4")
-      }
+      spark.conf.unset("spark.sql.shuffle.partitions")
+      assert(spark.conf.get("spark.sql.shuffle.partitions") === "200")
+      val ds = spark.range(0, 1000, 1, 2).groupBy(($"id" % 7).as("k")).count()
+      assert(ds.collect().map(_.getLong(1)).sum === 1000L)
+      assert(pipelinedExchanges(ds.queryExecution.executedPlan).isEmpty)
+      assert(materializedStages(ds.queryExecution.executedPlan).nonEmpty)
     }
   }
 

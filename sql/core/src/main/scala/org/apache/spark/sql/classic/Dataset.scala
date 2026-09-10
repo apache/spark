@@ -1570,7 +1570,18 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def toLocalIterator(): java.util.Iterator[T] = {
-    withAction("toLocalIterator", queryExecution) { plan =>
+    // This action submits one job per output partition. A channel cannot retain its output
+    // between those jobs, so use a separate regular plan even if queryExecution already ran.
+    // Clone the session to keep the setting off during lazy planning and AQE replanning without
+    // changing the caller's session or its other actions.
+    val iteratorSession = SparkSession.getOrCloneSessionWithConfigsOff(
+      sparkSession, Seq(SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED))
+    val iteratorExecution = if (iteratorSession eq sparkSession) {
+      queryExecution
+    } else {
+      iteratorSession.sessionState.executePlan(logicalPlan)
+    }
+    withAction("toLocalIterator", iteratorExecution) { plan =>
       val fromRow = resolvedEnc.createDeserializer()
       plan.executeToIterator().map(fromRow).asJava
     }

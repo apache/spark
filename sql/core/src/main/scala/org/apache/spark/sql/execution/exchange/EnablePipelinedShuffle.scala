@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.SparkPlan
  * pipelined channel manager and the concurrent-stage scheduler runs the map and reduce stages
  * together.
  *
- * The rewrite is deliberately unconditional rather than cost-based: the scheduler requires a job to
+ * The rewrite considers the whole group: the scheduler requires a job to
  * be all-pipelined (or a materialized prefix below a pipelined suffix), so choosing per exchange
  * would produce exactly the mixed shapes it rejects. What the rule does decide is ELIGIBILITY --
  * the environment gates in [[PipelinedShuffleEligibility]] and the plan shapes below that force the
@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution.SparkPlan
  * id (SinglePartition is the numPartitions == 1 degenerate case).
  *
  * These shapes make the rule leave the whole plan regular:
+ *   - the estimated producer and consumer widths cannot fit local task capacity.
  *   - Dataset.rdd deserialization and cached inputs (the shared eligibility gate): their actual
  *     shuffle readers depend on consumers or cache availability outside this plan.
  *   - reuse: a pipelined producer with more than one consumer (fan-out) is rejected, so if any
@@ -110,6 +111,10 @@ object EnablePipelinedShuffle extends Rule[SparkPlan] {
       logDebug("EnablePipelinedShuffle: a shuffle is read through an operator the channel " +
         "transport cannot serve (coalesce / cartesian product / a limit operator that builds a " +
         "hidden shuffle); leaving the plan regular.")
+      return plan
+    }
+
+    if (!PipelinedShuffleEligibility.fitsLocalCapacity(plan, shuffles.map(_.id).toSet)) {
       return plan
     }
 

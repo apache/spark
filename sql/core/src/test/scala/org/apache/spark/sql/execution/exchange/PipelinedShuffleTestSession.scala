@@ -38,7 +38,8 @@ trait PipelinedShuffleTestSession {
    */
   protected def withPipelinedSession(
       appName: String,
-      aqe: Boolean)(body: SparkSession => Unit): Unit = {
+      aqe: Boolean,
+      cores: Int = 16)(body: SparkSession => Unit): Unit = {
     // sql/core suites share a JVM. If an earlier suite left an active/default SparkSession behind,
     // getOrCreate() below would return THAT session and silently ignore every .config() here, so
     // no exchange would be flipped and the assertions would fail pointing nowhere near the cause.
@@ -56,7 +57,7 @@ trait PipelinedShuffleTestSession {
       // every concurrent stage's partitions) is admitted. These are correctness harnesses, not perf
       // ones: on a smaller physical machine these logical slots oversubscribe the cores, which is
       // fine for verifying results but meaningless for timing.
-      .master("local[16]")
+      .master(s"local[$cores]")
       .appName(appName)
       .config("spark.shuffle.manager.incremental",
         "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager")

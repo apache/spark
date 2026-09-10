@@ -1257,19 +1257,16 @@ object SQLConf {
     .createWithDefault(true)
 
   val LOCAL_PIPELINED_SHUFFLE_ENABLED = buildConf("spark.sql.shuffle.localPipelined.enabled")
-    .doc("When true and the application runs on a single executor (local mode), eligible " +
-      "shuffle exchanges are marked pipelined: the concurrent-stage scheduler runs their map " +
-      "and reduce stages together, and the shuffle is served by the pipelined shuffle manager " +
-      "(spark.shuffle.manager.incremental) instead of being materialized. A plan whose " +
-      "pipelined stage group cannot fit the local task-concurrency limit fails with an " +
-      "explicit CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT error. Set spark.sql.shuffle.partitions " +
-      "low enough that all producer and consumer tasks fit together; the default 200 is " +
-      "usually too wide, and AQE does not coalesce pipelined exchanges. Dataset.rdd, cache " +
-      "construction, cached inputs and mixed AQE plans use regular shuffles. " +
-      "Concurrent actions sharing a pipelined exchange are unsupported. Multi-job actions " +
-      "such as toLocalIterator recompute the pipelined producers for each job, once per " +
-      "output partition for toLocalIterator; cache the Dataset first to avoid this cost. " +
-      "Experimental.")
+    .internal()
+    .doc("When true in local mode, eligible shuffle exchanges use the in-process channel " +
+      "manager configured by spark.shuffle.manager.incremental. Producer and consumer stages " +
+      "run concurrently. Plans whose estimated group width exceeds the local task capacity, " +
+      "or whose width cannot be determined, retain regular shuffles. Runtime admission still " +
+      "checks available slots and can reject a group when other work occupies them. " +
+      "Pipelined exchanges do not receive AQE coalescing. Dataset.rdd, toLocalIterator, cache " +
+      "construction, cached inputs and mixed AQE plans use regular shuffles. Concurrent " +
+      "actions sharing a pipelined exchange remain unsupported. Other multi-job consumers " +
+      "can recompute pipelined producers for each job. Experimental.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
