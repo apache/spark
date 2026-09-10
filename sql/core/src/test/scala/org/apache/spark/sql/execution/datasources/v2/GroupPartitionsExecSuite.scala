@@ -138,15 +138,15 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val gpe = GroupPartitionsExec(child)
 
     assert(!gpe.groupedPartitions.forall(_._2.size <= 1), "expected coalescing")
-    // With the config disabled (default), key-expression filtering is skipped.
-    assert(gpe.outputOrdering === Nil)
-    // When enabled, the key-expression order is preserved through coalescing.
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
-      val ordering = gpe.outputOrdering
-      assert(ordering.length === 1)
-      assert(ordering.head.child === exprA)
-      assert(ordering.head.direction === Ascending)
-      assert(ordering.head.sameOrderExpressions.isEmpty)
+    // The key-expression order is preserved through coalescing.
+    val ordering = gpe.outputOrdering
+    assert(ordering.length === 1)
+    assert(ordering.head.child === exprA)
+    assert(ordering.head.direction === Ascending)
+    assert(ordering.head.sameOrderExpressions.isEmpty)
+    // With the config disabled, key-expression filtering is skipped.
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
+      assert(gpe.outputOrdering === Nil)
     }
   }
 
@@ -159,14 +159,14 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val gpe = GroupPartitionsExec(child)
 
     assert(!gpe.groupedPartitions.forall(_._2.size <= 1), "expected coalescing")
-    assert(gpe.outputOrdering === Nil)
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
-      val ordering = gpe.outputOrdering
-      assert(ordering.length === 2)
-      assert(ordering.head.child === exprA)
-      assert(ordering(1).child === exprB)
-      assert(ordering.head.sameOrderExpressions.isEmpty)
-      assert(ordering(1).sameOrderExpressions.isEmpty)
+    val ordering = gpe.outputOrdering
+    assert(ordering.length === 2)
+    assert(ordering.head.child === exprA)
+    assert(ordering(1).child === exprB)
+    assert(ordering.head.sameOrderExpressions.isEmpty)
+    assert(ordering(1).sameOrderExpressions.isEmpty)
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
+      assert(gpe.outputOrdering === Nil)
     }
   }
 
@@ -183,12 +183,12 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val gpe = GroupPartitionsExec(child)
 
     assert(!gpe.groupedPartitions.forall(_._2.size <= 1), "expected coalescing")
-    assert(gpe.outputOrdering === Nil)
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
-      val ordering = gpe.outputOrdering
-      assert(ordering.length === 1)
-      assert(ordering.head.child === exprA)
-      assert(ordering.head.sameOrderExpressions === Seq(exprB))
+    val ordering = gpe.outputOrdering
+    assert(ordering.length === 1)
+    assert(ordering.head.child === exprA)
+    assert(ordering.head.sameOrderExpressions === Seq(exprB))
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
+      assert(gpe.outputOrdering === Nil)
     }
   }
 
@@ -203,11 +203,12 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val gpe = GroupPartitionsExec(child)
 
     assert(!gpe.groupedPartitions.forall(_._2.size <= 1), "expected coalescing")
-    assert(gpe.outputOrdering === Nil)
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
-      val ordering = gpe.outputOrdering
-      assert(ordering.length === 1)
-      assert(ordering.head.child === exprA)
+    // Only the key-expression order survives; exprC is not a partition key.
+    val ordering = gpe.outputOrdering
+    assert(ordering.length === 1)
+    assert(ordering.head.child === exprA)
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
+      assert(gpe.outputOrdering === Nil)
     }
   }
 

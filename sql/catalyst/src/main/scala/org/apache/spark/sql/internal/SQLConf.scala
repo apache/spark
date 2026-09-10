@@ -2547,7 +2547,7 @@ object SQLConf {
         s"enabled.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_SORTING_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.sorting.enabled")
@@ -2569,7 +2569,7 @@ object SQLConf {
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.preserveKeyOrderingOnCoalesce.enabled")
@@ -2583,7 +2583,7 @@ object SQLConf {
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.preserveOrderingOnCoalesce.enabled")

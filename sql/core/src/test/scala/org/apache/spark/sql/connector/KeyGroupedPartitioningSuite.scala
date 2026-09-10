@@ -252,7 +252,10 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
               SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
               SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10",
               SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
-              SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
+              SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable,
+              // The expected counts pad up to the union of both sides' keys, which filtering
+              // would narrow to their intersection.
+              SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
 
             // When partition values are pushed down, storage-partitioned join fills the missing
             // partitions & splits after dynamic filtering with empty partitions & splits.
@@ -2914,6 +2917,9 @@ class KeyGroupedPartitioningSuite
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
             partiallyClustered.toString,
+          // The partition counts below are the union of both sides' keys; this test is about
+          // allowKeysSubsetOfPartitionKeys grouping, not about dropping unmatched key groups.
+          SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false",
           SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
           val df = sql(
             s"""
@@ -5040,6 +5046,8 @@ class KeyGroupedPartitioningSuite
   test("SPARK-55535: Multi table join granular partition grouping") {
     withSQLConf(
       SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+      // The expected partition counts are the union of both sides' keys.
+      SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val items_partitions = Array(identity("id"), years("arrive_time"))
       createTable(items, itemsColumns, items_partitions)
@@ -5087,7 +5095,10 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-55535: Multi table join partial clustering") {
-    withSQLConf(SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+      // The expected partition counts are the union of both sides' keys.
+      SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
       val items_partitions = Array(identity("id"))
       createTable(items, itemsColumns, items_partitions)
 
@@ -5235,7 +5246,9 @@ class KeyGroupedPartitioningSuite
     sql(s"INSERT INTO testcat.ns.$purchases VALUES (2, 10.0, cast('2021-01-01' as timestamp))")
     withSQLConf(
       SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
-      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+      // The explained key count is the union of both sides' reduced keys.
+      SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
       val df = sql(
         s"""
            |${selectWithMergeJoinHint("i", "p")}
@@ -5419,7 +5432,9 @@ class KeyGroupedPartitioningSuite
 
     withSQLConf(
       SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+      // The expected partition count is the union of both sides' reduced keys.
+      SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
       Seq(
         s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id",
         s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.id = p.item_id"
@@ -5453,19 +5468,17 @@ class KeyGroupedPartitioningSuite
     val plan = df.queryExecution.executedPlan
     val scans = collectScans(plan)
     assert(scans.size === 1)
-    // With the config disabled (default), ordering derivation is suppressed.
-    assert(scans.head.outputOrdering.isEmpty)
-    // When enabled, the scan derives an ascending sort on the partition key `id`.
-    // identity transforms are unwrapped to AttributeReferences by V2ExpressionUtils.
-    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
-      val scansEnabled = collectScans(df.queryExecution.executedPlan)
-      assert(scansEnabled.size === 1)
-      val ordering = scansEnabled.head.outputOrdering
-      assert(ordering.length === 1)
-      assert(ordering.head.direction === Ascending)
-      val keyExpr = ordering.head.child
-      assert(keyExpr.isInstanceOf[AttributeReference])
-      assert(keyExpr.asInstanceOf[AttributeReference].name === "id")
+    // The scan derives an ascending sort on the partition key `id`. identity transforms are
+    // unwrapped to AttributeReferences by V2ExpressionUtils.
+    val ordering = scans.head.outputOrdering
+    assert(ordering.length === 1)
+    assert(ordering.head.direction === Ascending)
+    val keyExpr = ordering.head.child
+    assert(keyExpr.isInstanceOf[AttributeReference])
+    assert(keyExpr.asInstanceOf[AttributeReference].name === "id")
+    // With the config disabled, ordering derivation is suppressed.
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "false") {
+      assert(scans.head.outputOrdering.isEmpty)
     }
   }
 
@@ -6557,7 +6570,10 @@ class KeyGroupedPartitioningSuite
         withSQLConf(
             SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
             SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
-            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushPartValues.toString) {
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushPartValues.toString,
+            // This asserts the superset padding of pushPartValues, so key groups that cannot
+            // match must stay in the pushed-down list.
+            SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
           val df = sql(
             """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
               |FROM (
@@ -6614,7 +6630,10 @@ class KeyGroupedPartitioningSuite
 
       withSQLConf(
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+          // This asserts the superset padding of pushPartValues, so key groups that cannot
+          // match must stay in the pushed-down list.
+          SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
         val df = sql(
           """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
             |FROM (
@@ -8191,7 +8210,10 @@ class KeyGroupedPartitioningSuite
       withSQLConf(
           SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
           "spark.sql.autoBroadcastJoinThreshold" -> "-1",
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          // The identity grouping only appears when the marked side is padded up to the union
+          // of both sides' keys instead of being narrowed to their intersection.
+          SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
         val df = sql(query)
         checkAnswer(df, expected)
         val plan = df.queryExecution.executedPlan
