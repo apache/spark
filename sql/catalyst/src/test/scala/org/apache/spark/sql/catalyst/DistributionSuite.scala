@@ -477,7 +477,7 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     // the OR'd-on marker only costs a shuffle while the AND'd-off one could cost correctness.
     val members = combined.partitionings.map(_.asInstanceOf[KeyedPartitioning])
     assert(members.forall(_.mayContainUnknownPartitionKeys), members.toString)
-    assert(members.last.partitionKeys eq members.head.partitionKeys)
+    assert(members.last.layout eq members.head.layout)
   }
 
   test("SPARK-59050: PartitioningCollection requires members to agree on the marker") {

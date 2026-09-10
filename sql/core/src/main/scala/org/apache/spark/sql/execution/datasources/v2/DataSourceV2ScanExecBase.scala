@@ -106,9 +106,8 @@ trait DataSourceV2ScanExecBase
           inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
         // A data source reports its splits in its own order, and a keyed side and a side
         // re-shuffled onto it have to agree on the order or
-        // `PartitioningCollection.fromPartitionings` refuses them. `groupedKeyRowOrdering` is what
-        // lays grouped keys out everywhere else, and it reads the same cached ordering the keys are
-        // built from, so the two cannot drift.
+        // `PartitioningCollection.fromPartitionings` refuses them. See `KeyedPartitioning.apply`
+        // for why this is the ordering to sort with.
         val keys = inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
           .sorted(KeyedPartitioning.groupedKeyRowOrdering(exprs.map(_.dataType)))
         Some(KeyedPartitioning(exprs, keys))

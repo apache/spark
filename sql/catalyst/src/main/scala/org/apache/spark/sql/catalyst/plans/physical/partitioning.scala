@@ -777,17 +777,17 @@ case class KeyedPartitioning(
           case _ =>
         }
       }
+      // A `copy` of the layout rather than a fresh one, so every field this method does not decide
+      // is carried, including the unknown-keys marker and anything the layout grows later. A
+      // projection that coarsens the declared key set cannot keep a marked claim, and
+      // `createShuffleSpec` refuses that case before it gets here, but this does not depend on it.
       copy(
         expressions = positions.map(expressions),
-        layout = KeyLayout(
-          projectedKeys,
-          projectedDataTypes,
+        layout = layout.copy(
+          partitionKeys = projectedKeys,
+          dataTypes = projectedDataTypes,
           isGrouped = !collapses && sourceOf.size == projectedKeys.length,
-          isCollapsed = isCollapsed || collapses,
-          // Carried, so the contract holds whatever positions a caller asks for. A projection that
-          // coarsens the declared key set cannot keep a marked claim, and `createShuffleSpec`
-          // refuses that case before it gets here, but this method does not depend on that.
-          mayContainUnknownPartitionKeys = mayContainUnknownPartitionKeys))
+          isCollapsed = isCollapsed || collapses))
     }
   }
 
@@ -1305,29 +1305,29 @@ object PartitioningCollection {
     // See the class doc for why the flags are normalized by OR rather than required to agree. One
     // representative per member is enough, because every collection agrees internally by this same
     // construction, and only a member that disagrees is rebuilt.
-    val anyCollapsed = partitionings.exists(representativeOf(_).exists(_.isCollapsed))
-    val anyUnknownKeys =
-      partitionings.exists(representativeOf(_).exists(_.mayContainUnknownPartitionKeys))
+    val representatives = partitionings.flatMap(representativeOf)
+    val anyCollapsed = representatives.exists(_.isCollapsed)
+    val anyUnknownKeys = representatives.exists(_.mayContainUnknownPartitionKeys)
 
-    var canonicalLayout: KeyLayout = null
+    // The canonical layout is the first one that already agrees with the OR'd flags, so the members
+    // that agree keep their instance and only the ones that disagree are rebuilt. Anchoring on the
+    // first representative instead would push *every* member off the `eq` path whenever that one
+    // happened to need a flag fixed, since no existing layout is `eq` a fresh copy.
+    //
     // A partitioning with no `KeyedPartitioning` in it has nothing to normalize, and one that
     // already holds the canonical layout is returned as it is. That is what keeps repeated
     // `outputPartitioning` computations over deeply nested collections (e.g. chains of same-key
     // joins) O(1) per level.
+    val canonicalLayout = representatives.map(_.layout)
+      .find(l => l.isCollapsed == anyCollapsed &&
+        l.mayContainUnknownPartitionKeys == anyUnknownKeys)
+      .orElse(representatives.headOption.map(_.layout.copy(
+        isCollapsed = anyCollapsed, mayContainUnknownPartitionKeys = anyUnknownKeys)))
+      .orNull
+
     def intern(p: Partitioning): Partitioning = representativeOf(p) match {
       case None => p
       case Some(representative) =>
-        if (canonicalLayout == null) {
-          val layout = representative.layout
-          canonicalLayout =
-            if (layout.isCollapsed == anyCollapsed &&
-                layout.mayContainUnknownPartitionKeys == anyUnknownKeys) {
-              layout
-            } else {
-              layout.copy(
-                isCollapsed = anyCollapsed, mayContainUnknownPartitionKeys = anyUnknownKeys)
-            }
-        }
         if (representative.layout eq canonicalLayout) {
           p
         } else {
@@ -1336,7 +1336,7 @@ object PartitioningCollection {
           // types are asked as well as the rows.
           require(representative.layout.describesSameKeys(canonicalLayout),
             "All KeyedPartitionings in a PartitioningCollection must describe one key space, got " +
-              s"dataTypes ${representative.keyDataTypes} with partitionKeys " +
+              s"dataTypes ${representative.layout.dataTypes} with partitionKeys " +
               s"${representative.partitionKeys}, and dataTypes ${canonicalLayout.dataTypes} with " +
               s"partitionKeys ${canonicalLayout.partitionKeys}")
           // Whether the keys are unique follows from the keys, so two layouts over equal keys that

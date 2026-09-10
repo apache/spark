@@ -304,7 +304,7 @@ class ProjectedOrderingAndPartitioningSuite
           === Set("x", "x_alias"),
           "both the original and aliased attribute must appear")
         // The invariant: all KPs in the collection must share the same partitionKeys object.
-        assert(kps.tail.forall(_.partitionKeys eq kps.head.partitionKeys),
+        assert(kps.tail.forall(_.layout eq kps.head.layout),
           "all KPs must share the same partitionKeys object")
       case other =>
         fail(s"Expected PartitioningCollection, got $other")
@@ -332,7 +332,7 @@ class ProjectedOrderingAndPartitioningSuite
           "projected KPs must have 2 expressions (z dropped, x and y kept)")
         assert(kps.map(_.expressions.map(_.asInstanceOf[Attribute].name)).toSet ===
           Set(Seq("x", "y"), Seq("x_alias", "y")))
-        assert(kps.tail.forall(_.partitionKeys eq kps.head.partitionKeys),
+        assert(kps.tail.forall(_.layout eq kps.head.layout),
           "all projected KPs must share the same partitionKeys object")
       case other =>
         fail(s"Expected PartitioningCollection, got $other")
@@ -391,7 +391,7 @@ class ProjectedOrderingAndPartitioningSuite
         assert(kps.map(_.expressions.map(_.asInstanceOf[Attribute].name)).toSet ===
           Set(Seq("y", "z"), Seq("y", "z_alias")),
           "expressions must follow original KP position order [y, z/z_alias], not output order")
-        assert(kps.tail.forall(_.partitionKeys eq kps.head.partitionKeys),
+        assert(kps.tail.forall(_.layout eq kps.head.layout),
           "all projected KPs must share the same partitionKeys object")
         assert(kps.forall(_.isCollapsed), "all KPs must be marked as collapsed")
         assert(kps.forall(!_.isGrouped), "projected keys have duplicate (1,1) entries")
@@ -431,7 +431,7 @@ class ProjectedOrderingAndPartitioningSuite
           Set(Seq("x", "y_alias"), Seq("x_alias", "y_alias")),
           "both x/y_alias and x_alias/y_alias projections must appear")
         // The invariant: all KPs must share the same partitionKeys object.
-        assert(kps.tail.forall(_.partitionKeys eq kps.head.partitionKeys),
+        assert(kps.tail.forall(_.layout eq kps.head.layout),
           "all KPs must share the same partitionKeys object")
       case other =>
         fail(s"Expected PartitioningCollection, got $other")
@@ -648,7 +648,7 @@ class ProjectedOrderingAndPartitioningSuite
               "bucket's column argument must be rewritten to the aliased attribute")
           case other => fail(s"Expected TransformExpression, got $other")
         }
-        assert(kp.partitionKeys eq child.partitioning.asInstanceOf[KeyedPartitioning].partitionKeys,
+        assert(kp.layout eq child.partitioning.asInstanceOf[KeyedPartitioning].layout,
           "partition keys must be unchanged")
         assert(!kp.isCollapsed, "no position dropped: nothing collapsed")
       case other => fail(s"Expected KeyedPartitioning, got $other")
@@ -717,7 +717,7 @@ class ProjectedOrderingAndPartitioningSuite
               "years() argument must be rewritten to ts_alias")
           case other => fail(s"Expected TransformExpression at pos 1, got $other")
         }
-        assert(kp.partitionKeys eq child.partitioning.asInstanceOf[KeyedPartitioning].partitionKeys,
+        assert(kp.layout eq child.partitioning.asInstanceOf[KeyedPartitioning].layout,
           "partition keys must be unchanged")
         assert(!kp.isCollapsed, "both positions projected: nothing collapsed")
       case other => fail(s"Expected KeyedPartitioning, got $other")

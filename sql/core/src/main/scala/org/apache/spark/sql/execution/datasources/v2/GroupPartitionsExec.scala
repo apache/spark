@@ -98,8 +98,7 @@ case class GroupPartitionsExec(
         // join planned over it does not see its required distribution satisfied and a plan
         // containing it does not pass `ValidateRequirements`. `identityGrouping` is a lazy val, so
         // repeated `outputPartitioning` calls scan it at most once.
-        val marked = PartitioningCollection.keyedMarkerOf(p).contains(true)
-        if (marked && !identityGrouping) {
+        if (PartitioningCollection.keyedMarkerOf(p).contains(true) && !identityGrouping) {
           UnknownPartitioning(grouping.partitions.size)
         } else {
           // One instance for every member, so they share it by reference. It already carries the
@@ -280,12 +279,16 @@ case class GroupPartitionsExec(
         group.tail.exists(childKeys(_) != first)
       }
     }
+    // A `copy` of the child's layout rather than a fresh one, so the marker and anything the layout
+    // grows later are carried without this having to name them. Built here, where the child is in
+    // scope, so `outputPartitioning` has nothing left to re-apply.
     PartitionGrouping(
       partitions,
-      // Built here, where the child is in scope, so the layout is complete from the start and
-      // `outputPartitioning` has nothing left to re-apply.
-      KeyLayout(partitions.map(_._1), reducedDataTypes, isGrouped, isCollapsed,
-        childKp.mayContainUnknownPartitionKeys),
+      childKp.layout.copy(
+        partitionKeys = partitions.map(_._1),
+        dataTypes = reducedDataTypes,
+        isGrouped = isGrouped,
+        isCollapsed = isCollapsed),
       keysRewritten, numPrunedPartitions, numReplicatedPartitionReads)
   }
 
