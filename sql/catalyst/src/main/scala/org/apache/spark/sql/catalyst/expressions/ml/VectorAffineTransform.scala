@@ -65,7 +65,6 @@ case class VectorAffineTransform(
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val cls = VectorAffineTransform.getClass.getName
     val vectorJavaType = CodeGenerator.javaType(dataType)
     val arrayJavaType = CodeGenerator.javaType(VectorAffineTransform.doubleArraySqlType)
     val vectorGen = vector.genCode(ctx)
@@ -73,6 +72,15 @@ case class VectorAffineTransform(
     val shiftInput = ctx.freshName("shiftInput")
     val scaleGen = scale.genCode(ctx)
     val shiftGen = shift.genCode(ctx)
+    val vectorType = ctx.freshName("vectorType")
+    val vectorValues = ctx.freshName("vectorValues")
+    val size = ctx.freshName("size")
+    val scaleSize = ctx.freshName("scaleSize")
+    val shiftSize = ctx.freshName("shiftSize")
+    val vectorIndices = ctx.freshName("vectorIndices")
+    val resultValues = ctx.freshName("resultValues")
+    val featureIndex = ctx.freshName("featureIndex")
+    val vectorIndex = ctx.freshName("vectorIndex")
 
     ev.copy(code = code"""
       ${vectorGen.code}
@@ -83,7 +91,97 @@ case class VectorAffineTransform(
         ${shiftGen.code}
         $arrayJavaType $scaleInput = ${scaleGen.isNull} ? null : ${scaleGen.value};
         $arrayJavaType $shiftInput = ${shiftGen.isNull} ? null : ${shiftGen.value};
-        ${ev.value} = $cls.MODULE$$.transform(${vectorGen.value}, $scaleInput, $shiftInput);
+        if ($scaleInput == null && $shiftInput == null) {
+          ${ev.value} = ${vectorGen.value};
+        } else {
+          final byte $vectorType = ${vectorGen.value}.getByte(0);
+          final ArrayData $vectorValues = ${vectorGen.value}.getArray(3);
+          int $size = -1;
+          if ($vectorType == ${VectorAffineTransform.SparseVectorType}) {
+            $size = ${vectorGen.value}.getInt(1);
+          } else if ($vectorType == ${VectorAffineTransform.DenseVectorType}) {
+            $size = $vectorValues.numElements();
+          } else {
+            throw new IllegalArgumentException("Unknown vector type " + $vectorType + ".");
+          }
+
+          final int $scaleSize = $scaleInput == null ? $size : $scaleInput.numElements();
+          final int $shiftSize = $shiftInput == null ? $size : $shiftInput.numElements();
+          if ($size != $scaleSize || $size != $shiftSize) {
+            throw new IllegalArgumentException(
+              "requirement failed: VectorAffineTransform was given inputs with " +
+              "non-matching sizes: vector.size = " + $size + ", scale.size = " +
+              $scaleSize + ", shift.size = " + $shiftSize);
+          }
+
+          if ($vectorType == ${VectorAffineTransform.SparseVectorType} &&
+              $shiftInput == null) {
+            final ArrayData $vectorIndices = ${vectorGen.value}.getArray(2);
+            final double[] $resultValues = new double[$vectorValues.numElements()];
+            for (int $vectorIndex = 0;
+                 $vectorIndex < $resultValues.length;
+                 $vectorIndex++) {
+              final int $featureIndex = $vectorIndices.getInt($vectorIndex);
+              $resultValues[$vectorIndex] = $vectorValues.getDouble($vectorIndex) *
+                $scaleInput.getDouble($featureIndex);
+            }
+            ${ev.value} = new GenericInternalRow(new Object[] {
+              (byte) ${VectorAffineTransform.SparseVectorType},
+              $size,
+              $vectorIndices,
+              UnsafeArrayData.fromPrimitiveArray($resultValues)
+            });
+          } else {
+            final double[] $resultValues = new double[$size];
+            if ($vectorType == ${VectorAffineTransform.DenseVectorType}) {
+              if ($scaleInput == null) {
+                for (int $featureIndex = 0; $featureIndex < $size; $featureIndex++) {
+                  $resultValues[$featureIndex] = $vectorValues.getDouble($featureIndex) +
+                    $shiftInput.getDouble($featureIndex);
+                }
+              } else if ($shiftInput == null) {
+                for (int $featureIndex = 0; $featureIndex < $size; $featureIndex++) {
+                  $resultValues[$featureIndex] = $vectorValues.getDouble($featureIndex) *
+                    $scaleInput.getDouble($featureIndex);
+                }
+              } else {
+                for (int $featureIndex = 0; $featureIndex < $size; $featureIndex++) {
+                  $resultValues[$featureIndex] = $vectorValues.getDouble($featureIndex) *
+                    $scaleInput.getDouble($featureIndex) +
+                    $shiftInput.getDouble($featureIndex);
+                }
+              }
+            } else {
+              for (int $featureIndex = 0; $featureIndex < $size; $featureIndex++) {
+                $resultValues[$featureIndex] = 0.0D + $shiftInput.getDouble($featureIndex);
+              }
+
+              final ArrayData $vectorIndices = ${vectorGen.value}.getArray(2);
+              if ($scaleInput == null) {
+                for (int $vectorIndex = 0;
+                     $vectorIndex < $vectorValues.numElements();
+                     $vectorIndex++) {
+                  final int $featureIndex = $vectorIndices.getInt($vectorIndex);
+                  $resultValues[$featureIndex] += $vectorValues.getDouble($vectorIndex);
+                }
+              } else {
+                for (int $vectorIndex = 0;
+                     $vectorIndex < $vectorValues.numElements();
+                     $vectorIndex++) {
+                  final int $featureIndex = $vectorIndices.getInt($vectorIndex);
+                  $resultValues[$featureIndex] += $vectorValues.getDouble($vectorIndex) *
+                    $scaleInput.getDouble($featureIndex);
+                }
+              }
+            }
+            ${ev.value} = new GenericInternalRow(new Object[] {
+              (byte) ${VectorAffineTransform.DenseVectorType},
+              null,
+              null,
+              UnsafeArrayData.fromPrimitiveArray($resultValues)
+            });
+          }
+        }
       }
     """)
   }
