@@ -758,6 +758,31 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
+  test("SPARK-59122: the codegen gate re-derives when a rule replaces the children") {
+    // The gate's children-dependent terms must not outlive the children they were taken from.
+    // `SparkPlanInfo` reads `metrics` on every node when AQE posts a plan update, and that happens
+    // before the rules running just ahead of `CollapseCodegenStages`; a decision carried from there
+    // onto the rebuilt node would fuse a topology that the gate rejects.
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true") {
+      val df = rangeDF(100).union(rangeDF(100))
+      val unions = fusedUnions(df)
+      assert(unions.size == 1, "this shape must fuse, or the test exercises nothing")
+      val union = unions.head
+      // What the plan update does, and what decides the gate for this instance.
+      assert(union.metrics.contains("numOutputRows"))
+      assert(union.supportCodegen)
+
+      // A nested union is one of the topologies the gate rejects, and `withNewChildren` is the path
+      // every rule takes to install a replacement.
+      val nested = UnionExec(Seq(union.children.head, union.children.head))
+      val rebuilt = union.withNewChildren(Seq(nested, union.children.last)).asInstanceOf[UnionExec]
+      assert(!rebuilt.supportCodegen, "the rebuilt union must answer against its own children")
+      assert(rebuilt.metrics.isEmpty)
+    }
+  }
+
   test("SPARK-56482: input_file_name child fuses (Nondeterministic but partition-index-free)") {
     // `InputFileName` is `Nondeterministic` but reads from `InputFileBlockHolder`
     // (a per-task thread-local) and does not embed `partitionIndex`. The gate's
