@@ -19,19 +19,20 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{OuterReference, OuterScopeReference, SubqueryExpression}
-import org.apache.spark.sql.catalyst.optimizer.InlineCTE
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, LogicalPlan, WithCTE}
+import org.apache.spark.sql.catalyst.expressions.{OuterReference, OuterScopeReference, SubExprUtils, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, LogicalPlan, SubqueryAlias, WithCTE}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CTE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Checks that a MATERIALIZED CTE does not reference the query enclosing it, as it is evaluated
- * once on its own. The CTEs it references, transitively, are inlined into it for the check, unless
- * they are MATERIALIZED themselves and form their own boundary. Once the boundary is closed this
- * way, a correlation kept inside a nested subquery stays inside it, so every outer reference left
- * at the operator level crosses the boundary. Unresolved definitions are skipped: the analysis
- * checks that follow report them. The check covers the given plan and all its subqueries.
+ * once on its own. The CTEs it references, transitively, are checked with it, since they are
+ * inlined into it, unless they are MATERIALIZED themselves and form their own boundary. Each
+ * definition is scanned at its own operator level and never inside its subquery plans: a
+ * correlation a definition keeps inside its own subquery targets that definition, not the
+ * enclosing query. A MATERIALIZED CTE is also rejected in a correlated subquery when the query
+ * of its WITH clause references the outer query, as a `WithCTE` that is not inlined cannot be
+ * decorrelated. The check covers the given plan and all its subqueries.
  */
 object MaterializedCTECheck extends (LogicalPlan => Unit) {
   override def apply(plan: LogicalPlan): Unit = {
@@ -43,21 +44,29 @@ object MaterializedCTECheck extends (LogicalPlan => Unit) {
         case cteDef: CTERelationDef => cteDefs(cteDef.id) = cteDef
         case _ =>
       }
-      cteDefs.values.filter(d => d.materialized.contains(true) && d.resolved).foreach { cteDef =>
-        checkMaterializedCTE(cteDef, cteDefs)
+      cteDefs.values.filter(_.materialized.contains(true)).foreach { cteDef =>
+        (cteDef +: collectReferencedDefs(cteDef, cteDefs)).foreach(checkDefinition)
       }
+      // Decorrelation stops at a subtree without outer references, so only a `WithCTE` whose
+      // own subtree is correlated is on its path. A correlation above the WITH clause, e.g. on a
+      // derived table holding it, is fine.
+      plan.subqueriesAll.foreach(_.foreach {
+        case withCTE: WithCTE if SubExprUtils.hasOuterReferences(withCTE) =>
+          withCTE.cteDefs.find(_.materialized.contains(true)).foreach { cteDef =>
+            val cteName = cteDef.child match {
+              case alias: SubqueryAlias => alias.alias
+              case _ => cteDef.id.toString
+            }
+            throw QueryCompilationErrors.materializedCTEInCorrelatedSubqueryError(
+              cteName, cteDef.child.origin)
+          }
+        case _ =>
+      })
     }
   }
 
-  private def checkMaterializedCTE(
-      cteDef: CTERelationDef,
-      cteDefs: collection.Map[Long, CTERelationDef]): Unit = {
-    val referencedDefs = collectReferencedDefs(cteDef, cteDefs)
-    val closed = if (referencedDefs.isEmpty) cteDef.child else WithCTE(cteDef.child, referencedDefs)
-    val boundary = InlineCTE(alwaysInline = true, isAnalysis = true).apply(closed)
-    // The scan stays out of subquery plans on purpose: with the boundary closed, the outer
-    // references they hold target the boundary itself.
-    boundary.foreach(_.expressions.foreach(_.foreach {
+  private def checkDefinition(cteDef: CTERelationDef): Unit = {
+    cteDef.child.foreach(_.expressions.foreach(_.foreach {
       case o: OuterReference =>
         throw QueryCompilationErrors.materializedCTEWithOuterReferenceError(o)
       case s: SubqueryExpression if s.outerScopeAttrs.nonEmpty =>
@@ -70,9 +79,10 @@ object MaterializedCTECheck extends (LogicalPlan => Unit) {
   }
 
   /**
-   * The definitions referenced by the given definition, transitively, that are inlined into it
-   * for the check. Definitions nested in a definition are inlined in place and not collected. A
-   * referenced MATERIALIZED definition forms its own boundary and is not followed.
+   * The definitions referenced by the given definition, transitively, that are inlined into it.
+   * A definition nested in a definition is not collected, as its outer references target the
+   * definition it is nested in. A referenced MATERIALIZED definition forms its own boundary and
+   * is not followed.
    */
   private def collectReferencedDefs(
       cteDef: CTERelationDef,

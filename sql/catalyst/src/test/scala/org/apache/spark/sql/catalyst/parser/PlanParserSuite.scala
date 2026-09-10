@@ -72,7 +72,7 @@ class PlanParserSuite extends AnalysisTest {
         } else {
           UnresolvedSubqueryColumnAliases(columnAliases, cte)
         }
-        CTERelation(name, SubqueryAlias(name, subquery))
+        UnresolvedCTERelation(name, SubqueryAlias(name, subquery))
     }
     UnresolvedWith(plan, ctes, allowRecursion)
   }
@@ -2169,7 +2169,7 @@ class PlanParserSuite extends AnalysisTest {
     def cteWithOption(materialized: Option[Boolean]): UnresolvedWith = {
       UnresolvedWith(
         table("t").select(star()),
-        Seq(CTERelation(
+        Seq(UnresolvedCTERelation(
           "t", SubqueryAlias("t", table("a").select($"c")), materialized = materialized)))
     }
     assertEqual(
@@ -2191,7 +2191,7 @@ class PlanParserSuite extends AnalysisTest {
         "SELECT * FROM r",
       UnresolvedWith(
         table("r").select(star()),
-        Seq(CTERelation(
+        Seq(UnresolvedCTERelation(
           "r",
           SubqueryAlias("r", UnresolvedSubqueryColumnAliases(Seq("x"), table("a").select($"c"))),
           maxDepth = Some(5),

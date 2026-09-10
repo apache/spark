@@ -9119,6 +9119,11 @@
           "MATERIALIZED CTE <cteName> in a statement that always inlines its CTEs."
         ]
       },
+      "MATERIALIZED_CTE_IN_CORRELATED_SUBQUERY" : {
+        "message" : [
+          "MATERIALIZED CTE <cteName> in a correlated subquery."
+        ]
+      },
       "MATERIALIZED_CTE_WITH_OUTER_REFERENCE" : {
         "message" : [
           "MATERIALIZED CTE referencing the outer query column <colName>."

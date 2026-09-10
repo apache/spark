@@ -1195,7 +1195,7 @@ WITH t AS MATERIALIZED (SELECT 1 AS x)
 SELECT * FROM t, t AS t2
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, true
+:- CTERelationDef xxxx, false, MATERIALIZED
 :  +- SubqueryAlias t
 :     +- Project [1 AS x#x]
 :        +- OneRowRelation
@@ -1213,7 +1213,7 @@ WITH t AS NOT MATERIALIZED (SELECT 1 AS x)
 SELECT * FROM t, t AS t2
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, false
+:- CTERelationDef xxxx, false, NOT MATERIALIZED
 :  +- SubqueryAlias t
 :     +- Project [1 AS x#x]
 :        +- OneRowRelation
@@ -1231,7 +1231,7 @@ WITH t(x) MATERIALIZED (SELECT 1)
 SELECT * FROM t
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, true
+:- CTERelationDef xxxx, false, MATERIALIZED
 :  +- SubqueryAlias t
 :     +- Project [1#x AS x#x]
 :        +- Project [1 AS 1#x]
@@ -1264,7 +1264,7 @@ SELECT * FROM t WHERE EXISTS (
 Project [id#x]
 +- Filter exists#x [id#x]
    :  +- WithCTE
-   :     :- CTERelationDef xxxx, false, false
+   :     :- CTERelationDef xxxx, false, NOT MATERIALIZED
    :     :  +- SubqueryAlias s
    :     :     +- Project [1 AS 1#x]
    :     :        +- Filter (id#x = outer(id#x))
@@ -1310,6 +1310,84 @@ org.apache.spark.sql.AnalysisException
 
 -- !query
 SELECT * FROM t WHERE EXISTS (
+  WITH s AS MATERIALIZED (SELECT 1 FROM t2 WHERE t2.id = t.id)
+  SELECT 1
+)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 89,
+    "stopIndex" : 92,
+    "fragment" : "t.id"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t o WHERE EXISTS (
+  WITH v AS MATERIALIZED (SELECT id FROM t2)
+  SELECT * FROM v WHERE v.id = o.id
+)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_IN_CORRELATED_SUBQUERY",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "cteName" : "`v`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 77,
+    "fragment" : "v AS MATERIALIZED (SELECT id FROM t2)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t o WHERE EXISTS (
+  SELECT * FROM (WITH v AS MATERIALIZED (SELECT id FROM t2) SELECT * FROM v) x WHERE x.id = o.id
+)
+-- !query analysis
+Project [id#x]
++- Filter exists#x [id#x]
+   :  +- Project [id#x]
+   :     +- Filter (id#x = outer(id#x))
+   :        +- SubqueryAlias x
+   :           +- WithCTE
+   :              :- CTERelationDef xxxx, false, MATERIALIZED
+   :              :  +- SubqueryAlias v
+   :              :     +- Project [id#x]
+   :              :        +- SubqueryAlias t2
+   :              :           +- View (`t2`, [id#x])
+   :              :              +- Project [cast(id#x as int) AS id#x]
+   :              :                 +- Project [id#x]
+   :              :                    +- SubqueryAlias t
+   :              :                       +- LocalRelation [id#x]
+   :              +- Project [id#x]
+   :                 +- SubqueryAlias v
+   :                    +- CTERelationRef xxxx, true, [id#x], false, false
+   +- SubqueryAlias o
+      +- SubqueryAlias t
+         +- View (`t`, [id#x])
+            +- Project [cast(id#x as int) AS id#x]
+               +- Project [id#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x]
+
+
+-- !query
+SELECT * FROM t WHERE EXISTS (
   WITH s AS (SELECT 1 FROM t2 WHERE t2.id = t.id),
        s2 AS MATERIALIZED (SELECT * FROM s)
   SELECT * FROM s2
@@ -1340,7 +1418,7 @@ WITH v AS MATERIALIZED (
 SELECT * FROM v
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, true
+:- CTERelationDef xxxx, false, MATERIALIZED
 :  +- SubqueryAlias v
 :     +- Project [id#x, scalar-subquery#x [id#x] AS c#xL]
 :        :  +- WithCTE
@@ -1376,7 +1454,7 @@ WITH v AS MATERIALIZED (
 SELECT * FROM v
 -- !query analysis
 WithCTE
-:- CTERelationDef xxxx, false, true
+:- CTERelationDef xxxx, false, MATERIALIZED
 :  +- SubqueryAlias v
 :     +- Project [id#x, c#xL]
 :        +- LateralJoin lateral-subquery#x [id#x], Inner
@@ -1438,7 +1516,7 @@ WithCTE
 :                 +- Project [id#x]
 :                    +- SubqueryAlias t
 :                       +- LocalRelation [id#x]
-:- CTERelationDef xxxx, false, true
+:- CTERelationDef xxxx, false, MATERIALIZED
 :  +- SubqueryAlias v2
 :     +- Project [id#x, c#xL]
 :        +- SubqueryAlias v1
@@ -1467,6 +1545,78 @@ org.apache.spark.sql.AnalysisException
     "objectName" : "",
     "startIndex" : 123,
     "stopIndex" : 126,
+    "fragment" : "o.id"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t o WHERE EXISTS (
+  WITH s AS (SELECT i.id FROM t2 i WHERE i.id = o.id),
+       v AS MATERIALIZED (SELECT t.id, (SELECT count(*) FROM s) AS n FROM t)
+  SELECT * FROM v
+)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 82,
+    "stopIndex" : 85,
+    "fragment" : "o.id"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t o WHERE EXISTS (
+  WITH s AS (SELECT i.id FROM t2 i WHERE i.id = o.id),
+       v AS MATERIALIZED (SELECT t.id, l.n FROM t, LATERAL (SELECT count(*) n FROM s) l)
+  SELECT * FROM v
+)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 82,
+    "stopIndex" : 85,
+    "fragment" : "o.id"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t o WHERE EXISTS (
+  WITH s AS (SELECT i.id FROM t2 i WHERE i.id = o.id),
+       v AS MATERIALIZED (SELECT t.id FROM t WHERE t.id IN (SELECT id FROM s))
+  SELECT * FROM v
+)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 82,
+    "stopIndex" : 85,
     "fragment" : "o.id"
   } ]
 }

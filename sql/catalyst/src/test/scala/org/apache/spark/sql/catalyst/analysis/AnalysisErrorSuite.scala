@@ -1096,7 +1096,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     "it refers to non-existent table with same name") {
     val plan = UnresolvedWith(
       UnresolvedRelation(TableIdentifier("t")),
-      Seq(CTERelation("t", SubqueryAlias("t",
+      Seq(UnresolvedCTERelation("t", SubqueryAlias("t",
         Project(
           Alias(Literal(1), "x")() :: Nil,
           UnresolvedRelation(TableIdentifier("t", Option("nonexist"))))))))
@@ -1347,7 +1347,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     }
     def assertMaterializedCTEError(plan: LogicalPlan, outerColName: String): Unit = {
       checkError(
-        exception = intercept[AnalysisException](getAnalyzer.checkAnalysis(plan)),
+        exception = intercept[AnalysisException](MaterializedCTECheck(plan)),
         condition = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
         parameters = Map("colName" -> s"`$outerColName`"))
     }
@@ -1363,6 +1363,12 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     assertMaterializedCTEError(
       materializedCTEPlan(
         cteRef(correlatedCTEDef).select(correlatedCTEDef.output.head), Seq(correlatedCTEDef)),
+      "o")
+    // The same, referenced through a subquery of the MATERIALIZED CTE definition.
+    val referencingSubquery =
+      ScalarSubquery(cteRef(correlatedCTEDef).select(correlatedCTEDef.output.head))
+    assertMaterializedCTEError(
+      materializedCTEPlan(relation.select(referencingSubquery.as("s")), Seq(correlatedCTEDef)),
       "o")
     // A CTE nested in a subquery of the definition may be correlated to the definition's own
     // relations: the outer reference does not cross the materialized boundary.

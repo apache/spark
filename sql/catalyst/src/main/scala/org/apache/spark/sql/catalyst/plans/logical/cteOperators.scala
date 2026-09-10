@@ -132,13 +132,12 @@ case class CTERelationDef(
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
   // Keep the default string representation stable when `forceSkipInline` is not set, so that
-  // existing plan comparisons and golden files are unaffected by the field.
+  // existing plan comparisons and golden files are unaffected by the field. The materialization
+  // option is printed as its keyword, and omitted when unspecified.
   override def stringArgs: Iterator[Any] = {
-    if (forceSkipInline) {
-      super.stringArgs
-    } else {
-      super.stringArgs.toArray.dropRight(1).iterator
-    }
+    val option = materialized.map(m => if (m) "MATERIALIZED" else "NOT MATERIALIZED")
+    Iterator(child, id, originalPlanWithPredicates, underSubquery, maxDepth, option) ++
+      (if (forceSkipInline) Iterator(forceSkipInline) else Iterator.empty)
   }
 
   override def maxRows: Option[Long] = if (conf.getConf(SQLConf.CTE_RELATION_DEF_MAX_ROWS)) {
@@ -301,7 +300,7 @@ trait CTEInChildren extends LogicalPlan {
  * @param materialized The materialization option: `Some(true)` for `MATERIALIZED`,
  *                     `Some(false)` for `NOT MATERIALIZED`, `None` if unspecified.
  */
-case class CTERelation(
+case class UnresolvedCTERelation(
     name: String,
     plan: SubqueryAlias,
     maxDepth: Option[Int] = None,
@@ -318,7 +317,7 @@ case class CTERelation(
  */
 case class UnresolvedWith(
     child: LogicalPlan,
-    cteRelations: Seq[CTERelation],
+    cteRelations: Seq[UnresolvedCTERelation],
     allowRecursion: Boolean = false) extends UnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WITH)
 

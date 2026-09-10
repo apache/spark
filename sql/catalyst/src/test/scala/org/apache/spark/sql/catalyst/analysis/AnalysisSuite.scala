@@ -1199,7 +1199,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         UnresolvedRelation(TableIdentifier("cte"))
       ),
       Seq(
-        CTERelation(
+        UnresolvedCTERelation(
           "cte",
           SubqueryAlias(
             AliasIdentifier("cte"),

@@ -782,7 +782,7 @@ class AstBuilder extends DataTypeAstBuilder
         None
       }
       val materialized = if (nCtx.MATERIALIZED() != null) Some(nCtx.NOT() == null) else None
-      CTERelation(namedQuery.alias, namedQuery, maxDepth, materialized)
+      UnresolvedCTERelation(namedQuery.alias, namedQuery, maxDepth, materialized)
     }
     // Check for duplicate names.
     val duplicates = ctes.groupBy(_.name.toLowerCase(Locale.ROOT)).filter(_._2.size > 1).keys

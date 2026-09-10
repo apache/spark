@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelation, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedCTERelation, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -141,7 +141,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
         val newNames = ArrayBuffer.empty[String]
         newNames ++= outerCTERelationNames
         relations.foreach {
-          case CTERelation(name, relation, _, _) =>
+          case UnresolvedCTERelation(name, relation, _, _) =>
             if (startOfQuery && outerCTERelationNames.exists(resolver(_, name))) {
               throw QueryCompilationErrors.ambiguousRelationAliasNameInNestedCTEError(name)
             }
@@ -262,7 +262,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
   }
 
   private def resolveCTERelations(
-      relations: Seq[CTERelation],
+      relations: Seq[UnresolvedCTERelation],
       isLegacy: Boolean,
       forceInline: Boolean,
       outerCTEDefs: Seq[(String, CTERelationDef)],
@@ -275,7 +275,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
     } else {
       outerCTEDefs
     }
-    for (CTERelation(name, relation, maxDepth, materialized) <- relations) {
+    for (UnresolvedCTERelation(name, relation, maxDepth, materialized) <- relations) {
       // A MATERIALIZED CTE cannot be evaluated once when the CTEs are inlined here.
       if (alwaysInline && materialized.contains(true)) {
         throw QueryCompilationErrors.materializedCTEAlwaysInlinedError(name, relation.origin)

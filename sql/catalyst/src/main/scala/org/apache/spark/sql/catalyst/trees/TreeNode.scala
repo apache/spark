@@ -1279,8 +1279,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     case table: CatalogTableType => true
     case storage: CatalogStorageFormat => true
     // Write out product that contains TreeNode, since there are some products such as
-    // CTERelation in UnresolvedWith, branches in CaseWhen which are essential to understand
-    // the plan.
+    // UnresolvedCTERelation in UnresolvedWith, branches in CaseWhen which are essential to
+    // understand the plan.
     case p if p.productIterator.exists(_.isInstanceOf[TreeNode[_]]) => true
     case _ => false
   }
