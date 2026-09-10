@@ -86,13 +86,50 @@ class VectorAffineTransformSuite extends SparkFunSuite with ExpressionEvalHelper
       denseRow(2.0, 1.0, 12.0))
   }
 
-  test("vector affine transform with null vectors") {
+  test("vector affine transform with a null vector") {
     val nullVector = Literal(null, vectorSqlType)
     val vector = dense(1.0)
 
     checkEvaluation(VectorAffineTransform(nullVector, vector, vector), null)
-    checkEvaluation(VectorAffineTransform(vector, nullVector, vector), null)
-    checkEvaluation(VectorAffineTransform(vector, vector, nullVector), null)
+  }
+
+  test("vector affine transform with a null scale") {
+    val nullVector = Literal(null, vectorSqlType)
+
+    checkEvaluation(
+      VectorAffineTransform(dense(1.0, 2.0), nullVector, dense(3.0, 4.0)),
+      denseRow(4.0, 6.0))
+    checkEvaluation(
+      VectorAffineTransform(
+        sparse(3, Array(0, 2), Array(1.0, 3.0)),
+        null,
+        sparse(3, Array(1), Array(2.0))),
+      denseRow(1.0, 2.0, 3.0))
+  }
+
+  test("vector affine transform with a null shift") {
+    val nullVector = Literal(null, vectorSqlType)
+
+    checkEvaluation(
+      VectorAffineTransform(dense(1.0, 2.0), dense(3.0, 4.0), nullVector),
+      denseRow(3.0, 8.0))
+    checkEvaluation(
+      VectorAffineTransform(
+        sparse(3, Array(0, 2), Array(1.0, 3.0)),
+        dense(2.0, 3.0, 4.0),
+        null),
+      sparseRow(3, Array(0, 2), Array(2.0, 12.0)))
+  }
+
+  test("vector affine transform rejects a null scale and shift") {
+    val nullVector = Literal(null, vectorSqlType)
+    checkExceptionInExpression[IllegalArgumentException](
+      VectorAffineTransform(dense(1.0), nullVector, nullVector),
+      "scale and shift cannot both be null")
+    val error = intercept[IllegalArgumentException] {
+      VectorAffineTransform(dense(1.0), null, null)
+    }
+    assert(error.getMessage.contains("scale and shift cannot both be null"))
   }
 
   test("vector affine transform with empty vectors") {
