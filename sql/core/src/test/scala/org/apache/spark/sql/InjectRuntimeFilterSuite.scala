@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, Literal, ScalarSubquery, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, DynamicPruningSubquery, Literal, NamedExpression, ScalarSubquery, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, SHUFFLE_MERGE}
 import org.apache.spark.sql.columnar.CachedBatch
@@ -259,21 +259,31 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
   }
 
   def getNumBloomFilters(plan: LogicalPlan): Integer = {
+    // Counts the Bloom filter aggregates at the root of each Bloom filter subquery, where every
+    // aggregate expression must be one. Aggregates below the root belong to a hinted creation
+    // side (e.g. a `SELECT DISTINCT` one) and are not visited; a subquery whose root aggregate
+    // has no Bloom filter aggregate is the query's own.
+    def isBloomFilterAgg(e: NamedExpression): Boolean = e.exists {
+      case AggregateExpression(_: BloomFilterAggregate, _, _, _, _) => true
+      case _ => false
+    }
+    def countBloomFilterAggs(plan: LogicalPlan): Int = plan match {
+      case Aggregate(_, aggregateExpressions, _, _)
+          if aggregateExpressions.exists(isBloomFilterAgg) =>
+        aggregateExpressions.map {
+          case Alias(AggregateExpression(bfAgg : BloomFilterAggregate, _, _, _, _),
+          _) =>
+            assert(bfAgg.estimatedNumItemsExpression.isInstanceOf[Literal])
+            assert(bfAgg.numBitsExpression.isInstanceOf[Literal])
+            1
+        }.sum
+      case _: Aggregate => 0
+      case other => other.children.map(countBloomFilterAggs).sum
+    }
     val numBloomFilterAggs = plan.collect {
       case Filter(condition, _) => condition.collect {
-        case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery
-        => subquery.plan.collect {
-          // A hinted creation side can carry its own `Aggregate` (e.g. a `SELECT DISTINCT` one),
-          // so count the Bloom filter aggregates rather than assuming every aggregate is one.
-          case Aggregate(_, aggregateExpressions, _, _) =>
-            aggregateExpressions.collect {
-              case Alias(AggregateExpression(bfAgg : BloomFilterAggregate, _, _, _, _),
-              _) =>
-                assert(bfAgg.estimatedNumItemsExpression.isInstanceOf[Literal])
-                assert(bfAgg.numBitsExpression.isInstanceOf[Literal])
-                1
-            }.sum
-        }.sum
+        case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery =>
+          countBloomFilterAggs(subquery.plan)
       }.sum
     }.sum
     val numMightContains = plan.collect {
@@ -333,6 +343,18 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     val warnings = hintWarnings(query)
     assert(warnings.exists(_.contains(s"is not supported in the query: $reason")),
       s"expected a warning mentioning '$reason', got: $warnings")
+  }
+
+  /** Asserts `query` gets no runtime Bloom filter, without executing it. */
+  def assertNoBloomFilters(query: String): Unit = {
+    assert(getNumBloomFilters(sql(query).queryExecution.optimizedPlan) == 0)
+  }
+
+  def hasDynamicPruning(query: String): Boolean = {
+    sql(query).queryExecution.optimizedPlan.exists {
+      case Filter(condition, _) => condition.exists(_.isInstanceOf[DynamicPruningSubquery])
+      case _ => false
+    }
   }
 
   test("SPARK-58272: safely use fully materialized selectively filtered caches") {
@@ -1388,12 +1410,13 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         """.stripMargin
       assertDidNotRewriteWithBloomFilter(s"SELECT * $distinctSource")
       assertRewroteWithBloomFilter(s"SELECT /*+ RUNTIME_FILTER(t) */ * $distinctSource")
-      // Likewise for an ordered `Limit`, which the search does not descend through either.
+      // Likewise for a `Limit` the search does not descend through, here a top-n of grouping
+      // keys, whose order is total because the keys are unique.
       assertRewroteWithBloomFilter(
         """
           |SELECT /*+ RUNTIME_FILTER(t) */ *
           |FROM   bf1
-          |       JOIN (SELECT c2 FROM bf2 WHERE a2 = 62 ORDER BY c2 LIMIT 5) t
+          |       JOIN (SELECT c2 FROM bf2 WHERE a2 = 62 GROUP BY c2 ORDER BY c2 LIMIT 5) t
           |       ON bf1.c1 = t.c2
         """.stripMargin)
     }
@@ -1414,34 +1437,52 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
-  test("RUNTIME_FILTER hint does not duplicate an existing DPP filter") {
+  test("RUNTIME_FILTER hint takes effect through one mechanism") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
       // `bf5part` is partitioned by `f5`, and the selective `bf2.a2 = 62` makes DPP prune it on
-      // that key. The hint does not waive the duplication check, so no Bloom filter is added on the
-      // key DPP already prunes -- matching the unhinted behavior asserted above.
-      assertDidNotRewriteWithBloomFilter("select /*+ RUNTIME_FILTER(bf2) */ * from bf5part " +
-        "join bf2 on bf5part.f5 = bf2.c2 where bf2.a2 = 62")
-      // On a join with another, non-partition key, the filter still lands on that key.
-      assertRewroteWithBloomFilter("select /*+ RUNTIME_FILTER(bf2) */ * from bf5part join bf2 " +
-        "on bf5part.c5 = bf2.c2 and bf5part.f5 = bf2.f2 where bf2.a2 = 62")
+      // that key. The hint is honored by that DPP filter, so no Bloom filter is added: not on the
+      // key DPP already prunes, matching the unhinted behavior asserted above, and not on the
+      // other join key either, where the heuristics would add one ("add bloom filter if dpp
+      // filter exists on a different column" above).
+      val oneKey = "select /*+ RUNTIME_FILTER(bf2) */ * from bf5part join bf2 " +
+        "on bf5part.f5 = bf2.c2 where bf2.a2 = 62"
+      assertDidNotRewriteWithBloomFilter(oneKey)
+      assert(hasDynamicPruning(oneKey))
+      val twoKeys = "select /*+ RUNTIME_FILTER(bf2) */ * from bf5part join bf2 " +
+        "on bf5part.c5 = bf2.c2 and bf5part.f5 = bf2.f2 where bf2.a2 = 62"
+      assertDidNotRewriteWithBloomFilter(twoKeys)
+      assert(hasDynamicPruning(twoKeys))
     }
   }
 
-  test("RUNTIME_FILTER hint adds a Bloom filter when the DPP filter cannot reach the scan") {
+  test("RUNTIME_FILTER hint is honored by a DPP filter only when that filter reaches the scan") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      // The hint gets a DPP filter on `bf5part`'s partition key, but the non-deterministic filter
-      // on the pruned side keeps it from being pushed to the scan, so it is later dropped. The
-      // Bloom filter needs no pushdown, so the hint is honored with one instead.
       spark.udf.register("bf_nondeterministic_true", udf((_: Int) => true).asNondeterministic())
-      assertRewroteWithBloomFilter(
-        """
-          |SELECT /*+ RUNTIME_FILTER(bf2) */ f.f5, bf2.c2
-          |FROM   (SELECT f5 FROM bf5part WHERE bf_nondeterministic_true(f5)) f
-          |       JOIN bf2
-          |       ON f.f5 = bf2.c2
-        """.stripMargin)
+      // The hint gets a DPP filter on `bf5part`'s partition key, but a barrier on the pruned side
+      // keeps it from being pushed to the scan, so it is dropped later: a non-deterministic
+      // filter, or a window whose partitioning does not cover the key. The Bloom filter needs no
+      // pushdown, so the hint is honored with one instead, and exactly one of the two remains.
+      Seq(
+        "SELECT f5 FROM bf5part WHERE bf_nondeterministic_true(f5)",
+        "SELECT f5 FROM (SELECT f5, row_number() OVER (PARTITION BY c5 ORDER BY f5) rn " +
+          "FROM bf5part) WHERE rn = 1"
+      ).foreach { prunedSide =>
+        val query = "SELECT /*+ RUNTIME_FILTER(bf2) */ f.f5, bf2.c2 " +
+          s"FROM ($prunedSide) f JOIN bf2 ON f.f5 = bf2.c2"
+        assertRewroteWithBloomFilter(query)
+        assert(!hasDynamicPruning(query))
+      }
+      // A DPP filter that does reach the scan honors the hint on its own, even when the pruned
+      // side is not deterministic elsewhere (here on the other side of a join the DPP filter is
+      // pushed past), so no Bloom filter is added on top of it.
+      val reaching = "SELECT /*+ RUNTIME_FILTER(bf2) */ f.f5, f.nd, bf2.c2 FROM " +
+        "(SELECT p.f5, b.nd FROM bf5part p JOIN " +
+        "(SELECT c3, bf_nondeterministic_true(a3) AS nd FROM bf3) b ON p.c5 = b.c3) f " +
+        "JOIN bf2 ON f.f5 = bf2.c2"
+      assertDidNotRewriteWithBloomFilter(reaching)
+      assert(hasDynamicPruning(reaching))
     }
   }
 
@@ -1449,28 +1490,73 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       // The filter subquery re-executes the creation side, so one that can produce different rows
-      // on re-evaluation could yield keys the join itself never sees and prune rows that do match.
-      val reason = "the hinted side may produce different rows when evaluated again"
-      // A non-deterministic expression.
-      val nonDeterministic =
-        """
-          |SELECT /*+ RUNTIME_FILTER(t) */ *
-          |FROM   bf1
-          |       JOIN (SELECT c2 FROM bf2 WHERE rand() < 0.5) t
-          |       ON bf1.c1 = t.c2
-        """.stripMargin
-      assertDidNotRewriteWithBloomFilter(nonDeterministic)
-      assertHintNotApplied(nonDeterministic, reason)
-      // An unordered limit, whose rows depend on evaluation order.
-      val unorderedLimit =
-        """
-          |SELECT /*+ RUNTIME_FILTER(t) */ *
-          |FROM   bf1
-          |       JOIN (SELECT c2 FROM bf2 WHERE a2 = 62 LIMIT 5) t
-          |       ON bf1.c1 = t.c2
-        """.stripMargin
-      assertDidNotRewriteWithBloomFilter(unorderedLimit)
-      assertHintNotApplied(unorderedLimit, reason)
+      // or keys on re-evaluation could yield keys the join itself never sees and prune rows that
+      // do match. Catalyst flags most of these as deterministic.
+      val reason = "the hinted side may produce different rows or join keys when evaluated again"
+      spark.udf.register("bf_nondeterministic_array",
+        udf((i: Int) => Seq(i)).asNondeterministic())
+      def query(source: String): String =
+        s"SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf1 JOIN ($source) t ON bf1.c1 = t.c2"
+      Seq(
+        // A non-deterministic expression.
+        "SELECT c2 FROM bf2 WHERE rand() < 0.5",
+        // A limit keeps whichever rows arrive first: unordered, or ordered on a key that is not
+        // unique, so that ties at the cutoff can be resolved differently.
+        "SELECT c2 FROM bf2 WHERE a2 = 62 LIMIT 5",
+        "SELECT c2 FROM bf2 WHERE a2 = 62 ORDER BY c2 LIMIT 5",
+        // A sample without a seed draws a different sample per evaluation.
+        "SELECT c2 FROM bf2 TABLESAMPLE (50 PERCENT)",
+        // A key computed by an order-dependent aggregate function.
+        "SELECT first(c2) AS c2 FROM bf2 GROUP BY b2",
+        "SELECT any_value(c2) AS c2 FROM bf2 GROUP BY b2",
+        // A key computed by a window function.
+        "SELECT row_number() OVER (ORDER BY c2) AS c2 FROM bf2",
+        // An inner generate drops the rows for which an unstable generator yields nothing.
+        "SELECT c2 FROM bf2 LATERAL VIEW explode(bf_nondeterministic_array(a2)) x AS v",
+        // A key computed by a subquery whose own plan is not repeatable.
+        "SELECT (SELECT max(c2) FROM bf2 TABLESAMPLE (50 PERCENT)) AS c2 FROM bf2"
+      ).foreach { source =>
+        assertNoBloomFilters(query(source))
+        assertHintNotApplied(query(source), reason)
+      }
+      // A seeded sample over a scan is repeatable.
+      assertRewroteWithBloomFilter(
+        query("SELECT c2 FROM bf2 TABLESAMPLE (50 PERCENT) REPEATABLE (42)"))
+    }
+  }
+
+  test("RUNTIME_FILTER hint accepts a creation side whose unstable values do not reach the key") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // Only the key values and the row set have to be repeatable. An order-dependent value that
+      // is merely carried to the output, next to a stable key, does not disqualify the side, and
+      // neither does a filter on a window aggregate whose frame is the whole partition.
+      def query(source: String, key: String): String =
+        s"SELECT /*+ RUNTIME_FILTER(t) */ * FROM bf1 JOIN ($source) t ON bf1.c1 = t.$key"
+      spark.udf.register("bf_nondeterministic_array",
+        udf((i: Int) => Seq(i)).asNondeterministic())
+      Seq(
+        ("SELECT b2, first(c2) AS c2 FROM bf2 GROUP BY b2", "b2"),
+        ("SELECT c2, v FROM bf2 LATERAL VIEW OUTER explode(bf_nondeterministic_array(a2)) x AS v",
+          "c2"),
+        ("SELECT (SELECT max(c2) FROM bf2) AS c2, b2 FROM bf2", "c2"),
+        ("SELECT c2, row_number() OVER (ORDER BY a2) AS rn FROM bf2", "c2"),
+        ("SELECT c2, sum(a2) OVER (PARTITION BY b2) AS s FROM bf2", "c2"),
+        ("SELECT c2 FROM (SELECT c2, sum(a2) OVER (PARTITION BY b2) AS s FROM bf2) WHERE s > 0",
+          "c2")
+      ).foreach { case (source, key) =>
+        assertRewroteWithBloomFilter(query(source, key))
+      }
+      // Once an unstable value decides which rows survive, the row set is not repeatable.
+      val reason = "the hinted side may produce different rows or join keys when evaluated again"
+      Seq(
+        ("SELECT c2 FROM (SELECT c2, row_number() OVER (PARTITION BY b2 ORDER BY a2) AS rn " +
+          "FROM bf2) WHERE rn = 1", "c2"),
+        ("SELECT b2 FROM bf2 GROUP BY b2 HAVING first(c2) > 0", "b2")
+      ).foreach { case (source, key) =>
+        assertNoBloomFilters(query(source, key))
+        assertHintNotApplied(query(source, key), reason)
+      }
     }
   }
 
@@ -1493,6 +1579,54 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       assertDidNotRewriteWithBloomFilter(udfKey)
       assertHintNotApplied(udfKey, "the join key is not a simple expression")
     }
+  }
+
+  test("RUNTIME_FILTER hint accepts a creation side that carries a runtime filter of its own") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // The inner join gets a Bloom filter on `bf1.c1` from the selective `bf2` on its own. The
+      // hinted outer join uses that join as its source; the filter it carries is a stable value,
+      // so a second filter is built from the source for `bf3`.
+      val query = "select /*+ RUNTIME_FILTER(t) */ * from bf3 join " +
+        "(select bf1.c1 from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 5) t " +
+        "on bf3.c3 = t.c1"
+      assertRewroteWithBloomFilter(query, 2)
+      assert(bloomFilterApplicationSideKeys(query) == Set("c1", "c3"))
+    }
+  }
+
+  test("RUNTIME_FILTER hint reports a creation side it cannot analyze") {
+    withTempView("bf2_typed") {
+      spark.table("bf2").filter((_: Row) => true).createOrReplaceTempView("bf2_typed")
+      assertHintNotApplied(
+        "select /*+ RUNTIME_FILTER(bf2_typed) */ * from bf1 join bf2_typed " +
+          "on bf1.c1 = bf2_typed.c2",
+        "the hinted side contains TypedFilter, which cannot be checked for repeatability")
+    }
+  }
+
+  test("RUNTIME_FILTER hint that cannot be applied does not fall back to the other direction") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // Left to itself the rule builds a filter from the selective `bf2` and applies it to `t`.
+      val join = "FROM (SELECT c1 FROM bf1 ORDER BY c1 LIMIT 5) t JOIN bf2 ON t.c1 = bf2.c2 " +
+        "WHERE bf2.a2 = 62"
+      assertRewroteWithBloomFilter(s"SELECT * $join")
+      // Hinting `t` as the source designates the opposite direction. `t` is not a repeatable
+      // source, so the hint fails, and the filter the heuristics would have built is not built
+      // either: the hint decides the direction rather than adding to the heuristics.
+      val hinted = s"SELECT /*+ RUNTIME_FILTER(t) */ * $join"
+      assertDidNotRewriteWithBloomFilter(hinted)
+      assertHintNotApplied(hinted,
+        "the hinted side may produce different rows or join keys when evaluated again")
+    }
+  }
+
+  test("RUNTIME_FILTER hint inside a correlated subquery is reported") {
+    assertHintNotApplied(
+      "select * from bf1 where exists (select /*+ RUNTIME_FILTER(bf3) */ 1 from bf2 join bf3 " +
+        "on bf2.c2 = bf3.c3 where bf2.a2 = bf1.a1)",
+      "the join is inside a correlated subquery")
   }
 
   test("RUNTIME_FILTER hint never filters the hinted side") {
