@@ -215,7 +215,7 @@ class StreamingQueryManagerSuite extends StreamTest {
     }
   }
 
-  test("streaming EXCEPT resolves a generated checkpoint location once") {
+  test("streaming EXCEPT reuses the generated checkpoint location during analysis") {
     withTempDir { checkpointRoot =>
       val input = MemoryStream[Int]
       val result = input.toDS().except(Seq(100).toDS())
