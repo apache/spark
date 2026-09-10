@@ -329,6 +329,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Substring(bytes, -4, 2), Array[Byte](1, 2))
     checkEvaluation(Substring(bytes, -5, 2), Array[Byte](1))
     checkEvaluation(Substring(bytes, -8, 2), Array.empty[Byte])
+
+    // SPARK-58708: the end offset must be computed without overflowing, so that a binary
+    // input behaves like the string input tested above. Before the fix these returned a
+    // byte array much longer than the input, zero-padded by `Arrays.copyOfRange`.
+    checkEvaluation(Substring(bytes, -1207959552, -1207959552), Array.empty[Byte])
+    checkEvaluation(Substring(bytes, -2147483647, Int.MinValue), Array.empty[Byte])
+    checkEvaluation(Substring(bytes, Int.MinValue, 2), Array.empty[Byte])
+    checkEvaluation(Substring(bytes, 1, Int.MaxValue), Array[Byte](1, 2, 3, 4))
+    checkEvaluation(Substring(bytes, Int.MinValue, Int.MaxValue), Array[Byte](1, 2, 3))
   }
 
   test("string substring_index function") {
@@ -1241,6 +1250,44 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(StringRPad(Literal("\"quote"), s2, Literal("\"quote")) :: Nil)
     checkEvaluation(StringRPad(Literal("hi"), Literal(5)), "hi   ")
     checkEvaluation(StringRPad(Literal("hi"), Literal(1)), "h")
+
+    // SPARK-58708: a non-positive length returns the empty value rather than reaching the
+    // allocation. The string overloads already did; the binary ones threw
+    // NegativeArraySizeException, which is not a SparkThrowable.
+    val bin = Literal(Array[Byte](1, 2))
+    val binPad = Literal(Array[Byte](3, 4))
+    val emptyBinPad = Literal(Array[Byte]())
+    Seq(0, -1, -100, Int.MinValue).foreach { len =>
+      checkEvaluation(StringLPad(Literal("hi"), Literal(len), Literal("??")), "")
+      checkEvaluation(StringRPad(Literal("hi"), Literal(len), Literal("??")), "")
+      checkEvaluation(BinaryPad("lpad", bin, Literal(len), binPad), Array.empty[Byte])
+      checkEvaluation(BinaryPad("rpad", bin, Literal(len), binPad), Array.empty[Byte])
+      checkEvaluation(BinaryPad("lpad", bin, Literal(len), emptyBinPad), Array.empty[Byte])
+      checkEvaluation(BinaryPad("rpad", bin, Literal(len), emptyBinPad), Array.empty[Byte])
+    }
+  }
+
+  test("SPARK-58708: LPAD/RPAD length handling is collation-independent") {
+    // `StringLPad` and `StringRPad` call `UTF8String.lpad` and `UTF8String.rpad` directly.
+    // Neither dispatches on collation, and `CollationSupport` defines no collation-aware
+    // pad, so the collation only reaches the result type. The non-positive lengths fixed
+    // above therefore behave identically under every collation.
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach { collation =>
+      val st = StringType(collation)
+      val str = Literal.create("hi", st)
+      val pad = Literal.create("??", st)
+      Seq(0, -1, -100, Int.MinValue).foreach { len =>
+        checkEvaluation(StringLPad(str, Literal(len), pad), "")
+        checkEvaluation(StringRPad(str, Literal(len), pad), "")
+      }
+      // Positive lengths are unaffected too, and the case of the input is preserved even
+      // under the case-insensitive collations.
+      checkEvaluation(StringLPad(str, Literal(5), pad), "???hi")
+      checkEvaluation(StringRPad(str, Literal(5), pad), "hi???")
+      val mixed = Literal.create("Hi", st)
+      checkEvaluation(StringLPad(mixed, Literal(2), pad), "Hi")
+      checkEvaluation(StringRPad(mixed, Literal(1), pad), "H")
+    }
   }
 
   test("PadExpressionBuilderBase") {

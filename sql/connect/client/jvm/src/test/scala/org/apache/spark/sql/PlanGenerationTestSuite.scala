@@ -2845,6 +2845,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.variant_strip_nulls(fn.parse_json(fn.col("g")), false)
   }
 
+  functionTest("variant_pick") {
+    fn.variant_pick(fn.parse_json(fn.col("g")), "$.a", "$.b")
+  }
+
   functionTest("variant_get") {
     fn.variant_get(fn.parse_json(fn.col("g")), "$", "int")
   }

@@ -2357,7 +2357,7 @@ object SQLConf {
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val DATA_SOURCE_DONT_ASSERT_ON_PREDICATE =
     buildConf("spark.sql.dataSource.skipAssertOnPredicatePushdown")

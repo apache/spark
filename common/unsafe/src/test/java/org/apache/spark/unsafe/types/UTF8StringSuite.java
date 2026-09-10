@@ -473,6 +473,15 @@ public class UTF8StringSuite {
     assertEquals(fromString("数据砖头"), fromString("数据砖头").rpad(5, EMPTY_UTF8));
     assertEquals(fromString("数据砖"), fromString("数据砖头").rpad(3, EMPTY_UTF8));
     assertEquals(EMPTY_UTF8, EMPTY_UTF8.rpad(3, EMPTY_UTF8));
+
+    // SPARK-58708: `len - numChars()` wraps for len == Integer.MIN_VALUE, which used to send
+    // a non-positive length down the padding branch and fail with an ArithmeticException.
+    for (int len : new int[]{0, -1, -100, Integer.MIN_VALUE}) {
+      assertEquals(EMPTY_UTF8, fromString("hello").lpad(len, fromString("??")));
+      assertEquals(EMPTY_UTF8, fromString("hello").rpad(len, fromString("??")));
+      assertEquals(EMPTY_UTF8, fromString("hello").lpad(len, EMPTY_UTF8));
+      assertEquals(EMPTY_UTF8, fromString("hello").rpad(len, EMPTY_UTF8));
+    }
   }
 
   @Test

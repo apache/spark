@@ -168,7 +168,9 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
     val startAt = Scd2BatchProcessor.startAtColName
     val endAt = Scd2BatchProcessor.endAtColName
     val recordStartAt = Scd2BatchProcessor.recordStartAtFieldName
-    s"$startAt BIGINT, $endAt BIGINT, $col STRUCT<$recordStartAt:BIGINT> NOT NULL"
+    val versionMap = Scd2BatchProcessor.versionMapFieldName
+    s"$startAt BIGINT, $endAt BIGINT, " +
+      s"$col STRUCT<$recordStartAt:BIGINT,$versionMap:MAP<STRING,BOOLEAN>> NOT NULL"
   }
 
   /**
