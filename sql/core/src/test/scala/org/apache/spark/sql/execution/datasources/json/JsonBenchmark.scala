@@ -614,6 +614,13 @@ object JsonBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numIters = 3
+    if (mainArgs.contains("top-level-array")) {
+      runBenchmark("Benchmark for top-level JSON array parsing") {
+        topLevelArrayBenchmark(rowsNum = 100000, payloadSize = 0, numIters = numIters)
+        topLevelArrayBenchmark(rowsNum = 1000, payloadSize = 64 * 1024, numIters = numIters)
+      }
+      return
+    }
     runBenchmark("Benchmark for performance of JSON parsing") {
       schemaInferring(5 * 1000 * 1000, numIters)
       countShortColumn(5 * 1000 * 1000, numIters)
