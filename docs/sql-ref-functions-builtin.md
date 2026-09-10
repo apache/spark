@@ -41,6 +41,11 @@ user-defined function that may share the same name.
 #### Examples
 {% include_api_gen generated-collection-funcs-examples.html %}
 
+### Lambda Functions
+{% include_api_gen generated-lambda-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-lambda-funcs-examples.html %}
+
 ### STRUCT Functions
 {% include_api_gen generated-struct-funcs-table.html %}
 #### Examples
