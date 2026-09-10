@@ -37,7 +37,7 @@ import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 class CollectionExpressionsSuite
   extends SparkFunSuite with ExpressionEvalHelper with DataTypeErrorsBase {
@@ -1399,6 +1399,65 @@ class CollectionExpressionsSuite
         Timestamp.valueOf("2020-11-01 00:00:00.000"),
         Timestamp.valueOf("2019-06-01 00:00:00.000"),
         Timestamp.valueOf("2018-01-01 00:00:00.000")))
+  }
+
+  test("SPARK-57834: sequence of nanosecond-precision timestamps") {
+    // Membership is decided on the microsecond grid (every step is microsecond-granular) and each
+    // generated element carries the start value's sub-microsecond fraction.
+    val sec = 1000000L // microseconds per second
+    val day = 86400000000L // microseconds per day
+    def ntz(micros: Long, frac: Int, p: Int = 9): Literal =
+      Literal(TimestampNanosVal.fromParts(micros, frac.toShort), TimestampNTZNanosType(p))
+    def ltz(micros: Long, frac: Int, p: Int = 9): Literal =
+      Literal(TimestampNanosVal.fromParts(micros, frac.toShort), TimestampLTZNanosType(p))
+    def tnv(micros: Long, frac: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(micros, frac.toShort)
+
+    // NTZ(9), day-time interval step; the 123ns fraction is kept on every element.
+    checkEvaluation(new Sequence(
+      ntz(0, 123), ntz(2 * sec, 123),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(0, 123), tnv(sec, 123), tnv(2 * sec, 123)))
+
+    // LTZ(9), hour step (zone-independent since it adds pure microseconds).
+    checkEvaluation(new Sequence(
+      ltz(0, 500), ltz(2 * 3600 * sec, 500),
+      Literal(stringToInterval("interval 1 hour"))),
+      Seq(tnv(0, 500), tnv(3600 * sec, 500), tnv(2 * 3600 * sec, 500)))
+
+    // Precision 8 (fraction is a multiple of 10) and precision 7 (multiple of 100).
+    checkEvaluation(new Sequence(
+      ntz(0, 120, 8), ntz(sec, 120, 8),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(0, 120), tnv(sec, 120)))
+    checkEvaluation(new Sequence(
+      ntz(0, 100, 7), ntz(sec, 100, 7),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(0, 100), tnv(sec, 100)))
+
+    // Negative step.
+    checkEvaluation(new Sequence(
+      ntz(2 * sec, 999), ntz(0, 999),
+      Literal(negateExact(stringToInterval("interval 1 second")))),
+      Seq(tnv(2 * sec, 999), tnv(sec, 999), tnv(0, 999)))
+
+    // start == stop yields a single element that still carries the fraction.
+    checkEvaluation(new Sequence(
+      ntz(5 * sec, 42), ntz(5 * sec, 42),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(5 * sec, 42)))
+
+    // No explicit step: the default step (+1 day) is chosen from the microsecond comparison.
+    checkEvaluation(new Sequence(ntz(0, 7), ntz(day, 7)),
+      Seq(tnv(0, 7), tnv(day, 7)))
+
+    // Null propagation.
+    checkEvaluation(new Sequence(
+      Literal.create(null, TimestampNTZNanosType(9)), ntz(sec, 1),
+      Literal(stringToInterval("interval 1 second"))), null)
+    checkEvaluation(new Sequence(
+      ntz(0, 1), Literal.create(null, TimestampNTZNanosType(9)),
+      Literal(stringToInterval("interval 1 second"))), null)
   }
 
   test("Sequence on DST boundaries") {

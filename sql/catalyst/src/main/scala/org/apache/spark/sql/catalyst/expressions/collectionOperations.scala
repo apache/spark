@@ -43,7 +43,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SQLOpenHashSet
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.{ByteArray, CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{ByteArray, CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
  * Base trait for [[BinaryExpression]]s with two arrays of the same element type and implicit
@@ -3503,6 +3503,9 @@ case class Flatten(child: Expression) extends UnaryExpression
 
       Supported types are: byte, short, integer, long, date, timestamp.
 
+      The timestamp types include the nanosecond-precision timestamp types; their generated values
+      advance on the microsecond grid and keep the start value's sub-microsecond fraction.
+
       The start and stop expressions must resolve to the same type.
       If start and stop expressions resolve to the 'date' or 'timestamp' type
       then the step expression must resolve to the 'interval' or 'year-month interval' or
@@ -3584,6 +3587,10 @@ case class Sequence(
             stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
               YearMonthIntervalType.acceptsType(stepType) ||
               DayTimeIntervalType.acceptsType(stepType)
+          case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+            stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
+              YearMonthIntervalType.acceptsType(stepType) ||
+              DayTimeIntervalType.acceptsType(stepType)
           case DateType =>
             stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
               YearMonthIntervalType.acceptsType(stepType) ||
@@ -3600,7 +3607,8 @@ case class Sequence(
         errorSubClass = "SEQUENCE_WRONG_INPUT_TYPES",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "startType" -> toSQLType(TypeCollection(TimestampType, TimestampNTZType, DateType)),
+          "startType" -> toSQLType(
+            TypeCollection(TimestampType, TimestampNTZType, AnyTimestampNanoType, DateType)),
           "stepType" -> toSQLType(
             TypeCollection(CalendarIntervalType, YearMonthIntervalType, DayTimeIntervalType)),
           "otherStartType" -> toSQLType(IntegralType)
@@ -3647,27 +3655,93 @@ case class Sequence(
       } else {
         new DurationSequenceImpl[Int](IntegerType, start.dataType, MICROS_PER_DAY, _.toInt, zoneId)
       }
+
+    case _: TimestampLTZNanosType | _: TimestampNTZNanosType =>
+      // Nanosecond endpoints reuse the microsecond sequence machinery: the math runs on
+      // epochMicros and each result is re-wrapped with the start value's sub-microsecond fraction
+      // (see eval/doGenCode). The micros counterpart drives zone-aware interval addition
+      // (LTZ nanos -> TimestampType session zone, NTZ nanos -> TimestampNTZType UTC).
+      val microsType: DataType =
+        if (start.dataType.isInstanceOf[TimestampLTZNanosType]) TimestampType else TimestampNTZType
+      if (stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepOpt.get.dataType)) {
+        new TemporalSequenceImpl[Long](LongType, microsType, 1, identity, zoneId)
+      } else if (YearMonthIntervalType.acceptsType(stepOpt.get.dataType)) {
+        new PeriodSequenceImpl[Long](LongType, microsType, 1, identity, zoneId)
+      } else {
+        new DurationSequenceImpl[Long](LongType, microsType, 1, identity, zoneId)
+      }
   }
+
+  private def isNanos: Boolean = start.dataType.isInstanceOf[AnyTimestampNanoType]
 
   override def eval(input: InternalRow): Any = {
     val startVal = start.eval(input)
     if (startVal == null) return null
     val stopVal = stop.eval(input)
     if (stopVal == null) return null
-    val stepVal = stepOpt.map(_.eval(input)).getOrElse(impl.defaultStep(startVal, stopVal))
-    if (stepVal == null) return null
 
-    ArrayData.toArrayData(impl.eval(startVal, stopVal, stepVal))
+    if (isNanos) {
+      // Run the sequence on epochMicros (membership is decided at microsecond granularity, since
+      // every step is microsecond-granular) and re-wrap each element with the start value's
+      // sub-microsecond fraction.
+      val startNanos = startVal.asInstanceOf[TimestampNanosVal]
+      val startMicros = startNanos.epochMicros
+      val stopMicros = stopVal.asInstanceOf[TimestampNanosVal].epochMicros
+      val stepVal =
+        stepOpt.map(_.eval(input)).getOrElse(impl.defaultStep(startMicros, stopMicros))
+      if (stepVal == null) return null
+      val microsArr = impl.eval(startMicros, stopMicros, stepVal).asInstanceOf[Array[Long]]
+      val frac = startNanos.nanosWithinMicro
+      val out = new Array[TimestampNanosVal](microsArr.length)
+      var i = 0
+      while (i < microsArr.length) {
+        out(i) = TimestampNanosVal.fromParts(microsArr(i), frac)
+        i += 1
+      }
+      ArrayData.toArrayData(out)
+    } else {
+      val stepVal = stepOpt.map(_.eval(input)).getOrElse(impl.defaultStep(startVal, stopVal))
+      if (stepVal == null) return null
+      ArrayData.toArrayData(impl.eval(startVal, stopVal, stepVal))
+    }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val startGen = start.genCode(ctx)
     val stopGen = stop.genCode(ctx)
+    // Nanosecond endpoints box as TimestampNanosVal; the sequence math (and the default-step
+    // sign) run on epochMicros, then each element is re-wrapped with the start value's fraction.
+    val (defaultStepStart, defaultStepStop) = if (isNanos) {
+      (startGen.copy(value = JavaCode.expression(s"${startGen.value}.epochMicros", LongType)),
+        stopGen.copy(value = JavaCode.expression(s"${stopGen.value}.epochMicros", LongType)))
+    } else {
+      (startGen, stopGen)
+    }
     val stepGen = stepOpt.map(_.genCode(ctx)).getOrElse(
-      impl.defaultStep.genCode(ctx, startGen, stopGen))
+      impl.defaultStep.genCode(ctx, defaultStepStart, defaultStepStop))
 
     val resultType = CodeGenerator.javaType(dataType)
-    val resultCode = {
+    val resultCode = if (isNanos) {
+      val microsArr = ctx.freshName("microsArr")
+      val nanosArr = ctx.freshName("nanosArr")
+      val frac = ctx.freshName("frac")
+      val idx = ctx.freshName("idx")
+      val tnv = classOf[TimestampNanosVal].getName
+      val genericArr = "org.apache.spark.sql.catalyst.util.GenericArrayData"
+      val microsGen =
+        impl.genCode(ctx, s"${startGen.value}.epochMicros", s"${stopGen.value}.epochMicros",
+          stepGen.value, microsArr, "long")
+      s"""
+         |long[] $microsArr = null;
+         |$microsGen
+         |short $frac = ${startGen.value}.nanosWithinMicro;
+         |$tnv[] $nanosArr = new $tnv[$microsArr.length];
+         |for (int $idx = 0; $idx < $microsArr.length; $idx++) {
+         |  $nanosArr[$idx] = $tnv.fromParts($microsArr[$idx], $frac);
+         |}
+         |${ev.value} = new $genericArr($nanosArr);
+       """.stripMargin
+    } else {
       val arr = ctx.freshName("arr")
       val arrElemType = CodeGenerator.javaType(dataType.elementType)
       s"""
