@@ -545,6 +545,57 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     equivalence1.addExprTree(caseWhenExpr1)
     assert(equivalence1.getCommonSubexpressions.size == 1)
   }
+
+  test("SPARK-58902: no candidate below a With, with or without the short-circuit peel") {
+    // A `CommonExpressionRef` can only be evaluated inside the `With` that binds it: the codegen
+    // slots exist only while that `With` is being generated, and `getCommonExpr` throws otherwise.
+    // Subexpression elimination generates its candidates outside every `With` scope, so a candidate
+    // holding a reference would fail the query. `childrenToRecurse` therefore stops at a `With`,
+    // including after `skipForShortcut` has peeled an `And`/`Or` down to one.
+    val a = AttributeReference("a", IntegerType)()
+    val memoized = With(Add(a, a)) { case Seq(ref) =>
+      And(GreaterThan(ref, Literal(0)), LessThan(ref, Literal(10)))
+    }
+    // The bare `With`; one behind an `And`, which is where the peel lands on it; and one in every
+    // branch of a `CaseWhen`, which reaches the map through `commonChildrenToRecurse` instead.
+    val shapes = Seq[Expression](
+      memoized,
+      And(memoized, GreaterThan(a, Literal(0))),
+      CaseWhen(Seq((GreaterThan(a, Literal(0)), memoized)), memoized))
+    Seq(false, true).foreach { peel =>
+      shapes.foreach { expr =>
+        val equivalence = new EquivalentExpressions(skipForShortcutEnable = peel)
+        equivalence.addExprTree(expr)
+        val states = equivalence.getAllExprStates()
+        // Without this, an implementation that recorded nothing at all would satisfy every
+        // assertion below by iterating over an empty list.
+        assert(states.nonEmpty, s"nothing was recorded for $expr (peel = $peel)")
+        // The `With` itself stays a candidate wherever it is reached: deduplicating it as a whole
+        // is safe, since it carries its own definitions and brings their slots into scope wherever
+        // it is generated. The exception is an `And` root with the peel on, where the peel lands on
+        // the `With` and the guard drops it along with its subtree -- no opportunity is lost there,
+        // because the peel never hands back the node it lands on, only that node's children.
+        if (!(peel && expr.isInstanceOf[And])) {
+          assert(states.exists(_.expr.isInstanceOf[With]),
+            s"the With itself stopped being a candidate for $expr (peel = $peel)")
+        }
+        states.foreach { state =>
+          // A candidate may hold a reference only if it also holds the `With` that binds it -- the
+          // whole `With`, or something above it, is a legal candidate; anything below it is not.
+          // The ids are collected over the whole candidate rather than per reference, so a
+          // reference sitting beside its binder rather than under it would pass; `With.apply`
+          // cannot build that shape.
+          val refIds = state.expr.collect { case r: CommonExpressionRef => r.id }.toSet
+          val boundIds =
+            state.expr.collect { case inScope: With => inScope.defs.map(_.id) }.flatten.toSet
+          assert(refIds.subsetOf(boundIds),
+            s"a candidate below the With was added for $expr (peel = $peel): ${state.expr}")
+          assert(!state.expr.isInstanceOf[CommonExpressionDef],
+            s"an unevaluable definition was added for $expr (peel = $peel): ${state.expr}")
+        }
+      }
+    }
+  }
 }
 
 case class CodegenFallbackExpression(child: Expression)

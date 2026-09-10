@@ -1356,6 +1356,64 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-59300: from_utc_timestamp and to_utc_timestamp on nanosecond timestamps") {
+    withDefaultTimeZone(UTC) {
+      val tz = LA.getId
+
+      // A zone shift moves only the whole-microsecond instant (zone offsets are whole seconds),
+      // so the sub-microsecond nanosWithinMicro is carried through unchanged, and the result keeps
+      // the source's exact nanosecond type/family (LTZ(p) stays LTZ(p), NTZ(p) stays NTZ(p)).
+      def check(
+          build: (Expression, Expression) => Expression,
+          micros: (Long, String) => Long): Unit = {
+        Seq(7, 8, 9).foreach { p =>
+          // Positive- and pre-1970 (negative-epoch) instants; the 9-digit fraction is floored to
+          // precision p, leaving a non-zero sub-microsecond remainder at every p.
+          Seq("2015-07-24T00:00:00.123456789", "1960-01-01T00:00:00.123456789").foreach { dtStr =>
+            val srcs = Seq(
+              DateTimeUtils.localDateTimeToTimestampNanos(
+                LocalDateTime.parse(dtStr), p) -> TimestampNTZNanosType(p),
+              DateTimeUtils.instantToTimestampNanos(
+                Instant.parse(dtStr + "Z"), p) -> TimestampLTZNanosType(p))
+            srcs.foreach { case (src, dt) =>
+              // The source must carry a sub-microsecond remainder for the checks below to be
+              // meaningful; the result then only shifts epochMicros and keeps that remainder.
+              assert(src.nanosWithinMicro != 0)
+              val expected =
+                TimestampNanosVal.fromParts(micros(src.epochMicros, tz), src.nanosWithinMicro)
+
+              // Foldable tz -> hand-written codegen; non-foldable tz -> defineCodeGen branch.
+              checkEvaluation(build(Literal.create(src, dt), Literal(tz)), expected)
+              checkEvaluation(
+                build(Literal.create(src, dt), NonFoldableLiteral.create(tz, StringType)), expected)
+
+              // Result keeps the exact source nanosecond type/family.
+              assert(build(Literal.create(src, dt), Literal(tz)).dataType === dt)
+
+              // NULL timestamp and NULL zone both propagate.
+              checkEvaluation(build(Literal.create(null, dt), Literal(tz)), null)
+              checkEvaluation(
+                build(Literal.create(src, dt), Literal.create(null, StringType)), null)
+            }
+          }
+
+          // Interpreted-vs-codegen parity over random remainders, through both the foldable-tz
+          // (Literal) and non-foldable-tz (NonFoldableLiteral) codegen branches.
+          Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p)).foreach { dt =>
+            checkConsistencyBetweenInterpretedAndCodegen(
+              (ts: Expression, _: Expression) => build(ts, Literal(tz)), dt, StringType)
+            checkConsistencyBetweenInterpretedAndCodegen(
+              (ts: Expression, _: Expression) =>
+                build(ts, NonFoldableLiteral.create(tz, StringType)), dt, StringType)
+          }
+        }
+      }
+
+      check(FromUTCTimestamp(_, _), DateTimeUtils.fromUTCTime(_, _))
+      check(ToUTCTimestamp(_, _), DateTimeUtils.toUTCTime(_, _))
+    }
+  }
+
   test("creating values of DateType via make_date") {
     Seq(true, false).foreach({ ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
