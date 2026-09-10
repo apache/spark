@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
 import java.lang.{Long => JLong}
+import java.nio.ByteOrder
 import java.time.{Instant, LocalDateTime, ZoneId, ZoneOffset}
 
 import org.apache.parquet.column.{ColumnDescriptor, Dictionary}
@@ -28,7 +29,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{INT64, INT96}
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
@@ -192,10 +193,14 @@ private[parquet] trait TimestampNanosParquetOps extends ParquetTypeOps {
       int96RebaseSpec: RebaseSpec): Converter with HasParentContainerUpdater = {
     // INT96 carries no logical annotation, so the requested type's family decides handling (mirrors
     // the INT96 arms of ParquetRowConverter): LTZ applies the INT96 Julian rebase and any timezone
-    // conversion; NTZ applies neither. INT96 decodes to microseconds, so each value promotes to
-    // (micros, 0) -- the read side of widening a legacy INT96 TIMESTAMP(6) to nanosecond precision.
-    val int96Rebase =
-      DataSourceUtils.createTimestampRebaseFuncInRead(int96RebaseSpec, "Parquet INT96")
+    // conversion; NTZ applies neither. INT96 stores nanoseconds-of-day, so a foreign file (e.g.
+    // Impala/Hive) can carry true sub-microsecond digits; binaryToSQLTimestamp floors to micros, so
+    // the sub-micro remainder is recovered straight from the raw INT96 as nanosWithinMicro -- a
+    // whole-microsecond rebase/timezone shift never perturbs it -- and truncated to the read
+    // precision. The read side of widening a legacy INT96 timestamp to nanosecond precision.
+    val int96Rebase: Long => Long =
+      if (isNtz) identity
+      else DataSourceUtils.createTimestampRebaseFuncInRead(int96RebaseSpec, "Parquet INT96")
     new ParquetPrimitiveConverter(updater) {
       override def addBinary(value: Binary): Unit = {
         val julianMicros = ParquetRowConverter.binaryToSQLTimestamp(value)
@@ -206,7 +211,11 @@ private[parquet] trait TimestampNanosParquetOps extends ParquetTypeOps {
           convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
             .getOrElse(gregorianMicros)
         }
-        this.updater.set(TimestampNanosVal.fromParts(micros, 0.toShort))
+        val timeOfDayNanos = value.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN).getLong
+        val rawNanosWithinMicro = (timeOfDayNanos % DateTimeConstants.NANOS_PER_MICROS).toInt
+        val nanosWithinMicro =
+          DateTimeUtils.truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision).toShort
+        this.updater.set(TimestampNanosVal.fromParts(micros, nanosWithinMicro))
       }
     }
   }
@@ -282,6 +291,11 @@ private[ops] object TimestampNanosParquetOps {
    * annotation (and thus no time-zone family), so only the physical type is checked; the requested
    * nanos type's family (LTZ / NTZ) decides the rebase / timezone handling, exactly as the INT96
    * arms of [[ParquetRowConverter]] do for the microsecond timestamp types.
+   *
+   * Unlike the annotated micros path ([[isMicrosTimestamp]]), there is no time-zone family to match
+   * against, so an INT96 file can be requested as either LTZ or NTZ nanos -- mirroring Spark's
+   * existing INT96 -> TimestampType / TimestampNTZType reads. The same-family guard therefore
+   * applies only to the annotated micros path, not here.
    */
   private[ops] def isInt96Timestamp(parquetType: Type): Boolean =
     parquetType.isPrimitive && parquetType.asPrimitiveType.getPrimitiveTypeName == INT96

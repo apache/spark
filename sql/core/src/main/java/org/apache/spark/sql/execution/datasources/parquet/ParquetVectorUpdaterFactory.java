@@ -30,6 +30,7 @@ import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
+import org.apache.spark.sql.catalyst.util.DateTimeUtils$;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException;
@@ -40,6 +41,7 @@ import org.apache.spark.sql.types.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.nio.ByteOrder;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
@@ -228,16 +230,15 @@ public class ParquetVectorUpdaterFactory {
             }
           }
         } else if (sparkType instanceof TimestampNTZNanosType) {
-          // Read side of widening a legacy INT96 TIMESTAMP(6) to NTZ nanos: no rebase / no timezone
-          // conversion (mirrors the TimestampNTZType path), promoting each value to (micros, 0).
-          return new Int96AsTimestampNanosUpdater(false, false, null, null);
+          return new Int96AsTimestampNanosUpdater(
+              false, false, null, null, ((TimestampNTZNanosType) sparkType).precision());
         } else if (sparkType instanceof TimestampLTZNanosType) {
-          // Read side of widening a legacy INT96 TIMESTAMP(6) to LTZ nanos: the same INT96 rebase
-          // and timezone conversion as the TimestampType path, promoting each value to (micros, 0).
           final boolean failIfRebase = "EXCEPTION".equals(int96RebaseMode);
           final boolean rebase = !"CORRECTED".equals(int96RebaseMode);
           final ZoneId tz = shouldConvertTimestamps() ? convertTz : null;
-          return new Int96AsTimestampNanosUpdater(rebase, failIfRebase, int96RebaseTz, tz);
+          return new Int96AsTimestampNanosUpdater(
+              rebase, failIfRebase, int96RebaseTz, tz,
+              ((TimestampLTZNanosType) sparkType).precision());
         }
       }
       case BINARY -> {
@@ -1547,24 +1548,28 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  // Reads a legacy INT96 timestamp column as a nanosecond timestamp, promoting each value to the
-  // two-child (epochMicros, nanosWithinMicro) vector as (micros, 0) -- the vectorized read side of
-  // widening an INT96-encoded TIMESTAMP(6) to nanosecond precision. INT96 decodes to microseconds
-  // (binaryToSQLTimestamp), so there are no sub-microsecond digits. The LTZ family applies the same
-  // INT96 Julian rebase and timezone conversion as the TimestampType path; the NTZ family passes
-  // rebase=false and convertTz=null (mirrors the TimestampNTZType path).
+  // Reads a legacy INT96 timestamp column as a nanosecond timestamp, into the two-child
+  // (epochMicros, nanosWithinMicro) vector -- the vectorized read side of widening a legacy INT96
+  // timestamp to nanosecond precision. INT96 stores nanoseconds-of-day, so a foreign file (e.g.
+  // Impala/Hive) can carry true sub-microsecond digits; binaryToSQLTimestamp floors to micros, so
+  // the sub-micro remainder is recovered straight from the raw INT96 and truncated to the read
+  // precision (kept in lock-step with the row-based int96AsNanosConverter). The LTZ family applies
+  // the same INT96 Julian rebase and timezone conversion as the TimestampType path; the NTZ family
+  // passes rebase=false and convertTz=null (mirrors the TimestampNTZType path).
   private static class Int96AsTimestampNanosUpdater implements ParquetVectorUpdater {
     private final boolean rebase;
     private final boolean failIfRebase;
     private final String timeZone;
     private final ZoneId convertTz;
+    private final int precision;
 
     Int96AsTimestampNanosUpdater(
-        boolean rebase, boolean failIfRebase, String timeZone, ZoneId convertTz) {
+        boolean rebase, boolean failIfRebase, String timeZone, ZoneId convertTz, int precision) {
       this.rebase = rebase;
       this.failIfRebase = failIfRebase;
       this.timeZone = timeZone;
       this.convertTz = convertTz;
+      this.precision = precision;
     }
 
     @Override
@@ -1608,8 +1613,15 @@ public class ParquetVectorUpdaterFactory {
       if (convertTz != null) {
         micros = DateTimeUtils.convertTz(micros, convertTz, UTC);
       }
+      // INT96 stores nanoseconds-of-day (first 8 bytes, little-endian). Recover the sub-micro
+      // remainder (1000 ns per micro), truncate to the read precision (matching
+      // int96AsNanosConverter), so a foreign nanosecond INT96 is not silently floored to micros.
+      long timeOfDayNanos = binary.toByteBuffer().order(ByteOrder.LITTLE_ENDIAN).getLong();
+      int rawNanosWithinMicro = (int) (timeOfDayNanos % 1000L);
+      short nanosWithinMicro = (short) DateTimeUtils$.MODULE$
+        .truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision);
       values.getChild(0).putLong(offset, micros);
-      values.getChild(1).putShort(offset, (short) 0);
+      values.getChild(1).putShort(offset, nanosWithinMicro);
     }
   }
 

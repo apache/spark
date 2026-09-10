@@ -226,22 +226,28 @@ class ParquetTypeWideningSuite
     }
   }
 
-  // The same widening from a legacy INT96 timestamp column. INT96 has no logical unit; it decodes
-  // to microseconds and is promoted to (epochMicros, 0). INT96 is only produced for the LTZ family;
-  // the write/read INT96 rebase are pinned to CORRECTED so proleptic-Gregorian values round-trip.
+  // The same widening from a legacy INT96 timestamp column. INT96 has no logical unit; each value
+  // decodes to micros (binaryToSQLTimestamp) and is promoted to (epochMicros, nanosWithinMicro).
+  // Spark writes micro-aligned INT96, so a round-trip carries no sub-microsecond digits; foreign
+  // nanosecond INT96 (whose sub-micro remainder is preserved) is covered by
+  // TimestampNanosParquetOpsSuite. INT96 is only produced for the LTZ family. Both a CORRECTED and
+  // a LEGACY (Julian) INT96 rebase are exercised: LEGACY over the pre-1582 value actually runs the
+  // INT96 read rebase, which the earlier CORRECTED-only pinning skipped.
   for {
     toType: DataType <- Seq(
       TimestampLTZNanosType(TimestampLTZNanosType.NANOS_PRECISION),
       TimestampLTZNanosType(7))
+    int96RebaseMode <- Seq(LegacyBehaviorPolicy.CORRECTED, LegacyBehaviorPolicy.LEGACY)
   }
-  test(s"parquet widening conversion TimestampType (int96) -> $toType") {
+  test(s"parquet widening conversion TimestampType (int96, $int96RebaseMode) -> $toType") {
     withSQLConf(
       SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
       SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> ParquetOutputTimestampType.INT96.toString,
-      SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LegacyBehaviorPolicy.CORRECTED.toString,
-      SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key -> LegacyBehaviorPolicy.CORRECTED.toString) {
+      SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> int96RebaseMode.toString,
+      SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key -> int96RebaseMode.toString) {
       checkAllParquetReaders(
-        values = Seq("2020-01-01 12:34:56.123456", "5138-11-16 09:46:40"),
+        values = Seq(
+          "2020-01-01 12:34:56.123456", "1312-02-27 01:02:03.654321", "5138-11-16 09:46:40"),
         fromType = TimestampType,
         toType = toType,
         expectError = false)
