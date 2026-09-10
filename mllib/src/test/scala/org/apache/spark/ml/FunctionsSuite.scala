@@ -261,6 +261,7 @@ class FunctionsSuite extends MLTest {
       (Vectors.dense(1.0, 2.0), Array(2.0, 3.0), Array(4.0, 5.0)),
       (Vectors.sparse(2, Seq((0, 1.0))), Array(2.0, 3.0), null),
       (Vectors.dense(1.0, 2.0), null, Array(4.0, 5.0)),
+      (Vectors.sparse(2, Seq((0, 1.0))), Array(2.0, 3.0), Array(0.0, 0.0)),
       (Vectors.sparse(2, Seq((0, 1.0))), null, null),
       (null, Array(2.0, 3.0), Array(4.0, 5.0)))
       .toDF("vector", "scale", "shift")
@@ -273,6 +274,7 @@ class FunctionsSuite extends MLTest {
       Vectors.dense(6.0, 11.0),
       Vectors.sparse(2, Seq((0, 2.0))),
       Vectors.dense(5.0, 7.0),
+      Vectors.dense(2.0, 0.0),
       Vectors.sparse(2, Seq((0, 1.0))),
       null))
 

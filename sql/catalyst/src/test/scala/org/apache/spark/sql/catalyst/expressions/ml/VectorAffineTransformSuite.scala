@@ -68,25 +68,15 @@ class VectorAffineTransformSuite extends SparkFunSuite with ExpressionEvalHelper
       denseRow(2.0, 1.0, 12.0))
   }
 
-  test("vector affine transform preserves sparse vectors for a zero shift") {
+  test("vector affine transform produces a dense vector for a non-null shift") {
     val vector = sparse(3, Array(0, 2), Array(1.0, 3.0))
-    val expected = sparseRow(3, Array(0, 2), Array(2.0, 12.0))
 
     checkEvaluation(
       VectorAffineTransform(vector, array(2.0, 3.0, 4.0), array(0.0, 0.0, 0.0)),
-      expected)
+      denseRow(2.0, 0.0, 12.0))
     checkEvaluation(
       VectorAffineTransform(
         vector,
-        array(2.0, 3.0, 4.0),
-        array(0.0, 0.0, 0.0)),
-      expected)
-  }
-
-  test("vector affine transform produces a dense vector for a nonzero shift") {
-    checkEvaluation(
-      VectorAffineTransform(
-        sparse(3, Array(0, 2), Array(1.0, 3.0)),
         array(2.0, 3.0, 4.0),
         array(0.0, 1.0, 0.0)),
       denseRow(2.0, 1.0, 12.0))
@@ -150,7 +140,7 @@ class VectorAffineTransformSuite extends SparkFunSuite with ExpressionEvalHelper
       denseRow())
     checkEvaluation(
       VectorAffineTransform(emptySparse, emptyArray, emptyArray),
-      sparseRow(0, Array.emptyIntArray, Array.emptyDoubleArray))
+      denseRow())
   }
 
   test("vector affine transform with infinite and NaN values") {

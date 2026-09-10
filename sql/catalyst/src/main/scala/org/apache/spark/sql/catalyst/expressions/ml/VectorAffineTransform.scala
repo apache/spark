@@ -124,15 +124,6 @@ object VectorAffineTransform {
     }
   }
 
-  private def isZeroArray(values: ArrayData): Boolean = {
-    var index = 0
-    while (index < values.numElements()) {
-      if (values.getDouble(index) != 0.0) return false
-      index += 1
-    }
-    true
-  }
-
   private def sparseResult(
       vector: InternalRow,
       size: Int,
@@ -220,7 +211,7 @@ object VectorAffineTransform {
       "VectorAffineTransform was given inputs with non-matching sizes:" +
         s" vector.size = $size, scale.size = $scaleSize, shift.size = $shiftSize")
 
-    if (vectorType == SparseVectorType && (shift == null || isZeroArray(shift))) {
+    if (vectorType == SparseVectorType && shift == null) {
       sparseResult(vector, size, vectorValues, scale)
     } else {
       denseResult(vector, size, vectorType, vectorValues, scale, shift)
