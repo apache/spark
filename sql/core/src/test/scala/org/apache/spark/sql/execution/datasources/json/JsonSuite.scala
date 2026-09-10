@@ -54,6 +54,7 @@ import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.TestUDT.{MyDenseVector, MyDenseVectorUDT}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -1063,6 +1064,42 @@ abstract class JsonSuite
           Row(null, "str_b_3", null) ::
           Row("str_a_4", "str_b_4", "str_c_4") :: Nil
       )
+    }
+
+    withTempPath { file =>
+      Files.write(file.toPath, """[{"a":1},{"a":2}]""".getBytes(StandardCharsets.UTF_8))
+      checkAnswer(
+        spark.read.option("multiLine", true).schema("a int").json(file.getCanonicalPath),
+        Seq(Row(1), Row(2)))
+    }
+  }
+
+  test("multiline top level JSON arrays are parsed lazily") {
+    val schema = StructType(Seq(StructField("a", IntegerType)))
+    val options = new JSONOptions(Map("multiLine" -> "true"), SQLConf.get.sessionLocalTimeZone)
+    val parser = new JacksonParser(schema, options, allowArrayAsStructs = true)
+    val input = new ByteArrayInputStream(
+      s"""[{"a":1},{"a":2,"payload":"${"x" * 200000}"}]""".getBytes(StandardCharsets.UTF_8))
+    val rows = parser.parseIterator[InputStream](
+      input,
+      CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream),
+      stream => UTF8String.fromBytes(stream.readAllBytes()))
+
+    assert(rows.next().getInt(0) === 1)
+    assert(input.available() > 0)
+  }
+
+  test("multiline top level JSON array keeps rows emitted before malformed input") {
+    withTempPath { file =>
+      val document = """[{"a":1} {"a":2}]"""
+      Files.write(file.toPath, document.getBytes(StandardCharsets.UTF_8))
+
+      checkAnswer(
+        spark.read
+          .option("multiLine", true)
+          .schema("a int, _corrupt_record string")
+          .json(file.getCanonicalPath),
+        Seq(Row(1, null), Row(null, document)))
     }
   }
 

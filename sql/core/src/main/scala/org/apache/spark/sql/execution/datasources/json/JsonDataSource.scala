@@ -409,13 +409,14 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
 
     val safeParser = new FailureSafeParser[InputStream](
-      input => parser.parse[InputStream](input, streamParser, partitionedFileString),
+      input => parser.parseIterator[InputStream](input, streamParser, partitionedFileString),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
 
-    safeParser.parse(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.toPath))
+    val input = CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => input.close()))
+    safeParser.parse(input)
   }
 
   override protected def readStream(
@@ -430,7 +431,8 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
 
     val safeParser = new FailureSafeParser[InputStream](
-      input => parser.parse[InputStream](input, streamParser, _ => UTF8String.fromBytes(bytes)),
+      input => parser.parseIterator[InputStream](
+        input, streamParser, _ => UTF8String.fromBytes(bytes)),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)

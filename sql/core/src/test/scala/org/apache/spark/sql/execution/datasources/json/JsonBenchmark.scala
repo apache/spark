@@ -16,15 +16,19 @@
  */
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.File
+import java.io.{ByteArrayInputStream, File, InputStream}
 import java.time.{Instant, LocalDate}
+
+import com.fasterxml.jackson.core.JsonFactory
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Column, Dataset, Row}
+import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The benchmarks aims to measure performance of JSON parsing when encoding is set and isn't.
@@ -578,6 +582,36 @@ object JsonBenchmark extends SqlBasedBenchmark {
     benchmark.run()
   }
 
+  private def topLevelArrayBenchmark(
+      rowsNum: Int,
+      payloadSize: Int,
+      numIters: Int): Unit = {
+    val payload = "x" * payloadSize
+    val bytes = (0 until rowsNum)
+      .map(i => s"""{"a":$i,"payload":"$payload"}""")
+      .mkString("[", ",", "]")
+      .getBytes("UTF-8")
+    val schema = new StructType().add("a", IntegerType).add("payload", StringType)
+    val options = new JSONOptions(Map("multiLine" -> "true"), SQLConf.get.sessionLocalTimeZone)
+    val parser = new JacksonParser(schema, options, allowArrayAsStructs = true)
+    val createParser = CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream)
+    val recordLiteral = (_: InputStream) => UTF8String.EMPTY_UTF8
+    val benchmark = new Benchmark(
+      s"Top-level JSON array with $payloadSize-byte payloads", rowsNum, output = output)
+
+    benchmark.addCase("whole document", numIters) { _ =>
+      val input = new ByteArrayInputStream(bytes)
+      parser.parse(input, createParser, recordLiteral).size
+    }
+
+    benchmark.addCase("streamed", numIters) { _ =>
+      val input = new ByteArrayInputStream(bytes)
+      parser.parseIterator(input, createParser, recordLiteral).size
+    }
+
+    benchmark.run()
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numIters = 3
     runBenchmark("Benchmark for performance of JSON parsing") {
@@ -595,6 +629,8 @@ object JsonBenchmark extends SqlBasedBenchmark {
       // TODO (SPARK-32325): Add benchmarks for filters with nested column attributes.
       filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)
       partialResultBenchmark(rowsNum = 10000, numIters)
+      topLevelArrayBenchmark(rowsNum = 100000, payloadSize = 0, numIters = numIters)
+      topLevelArrayBenchmark(rowsNum = 1000, payloadSize = 64 * 1024, numIters = numIters)
     }
   }
 }

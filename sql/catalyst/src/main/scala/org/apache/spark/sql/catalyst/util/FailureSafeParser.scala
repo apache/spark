@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 class FailureSafeParser[IN](
-    rawParser: IN => Iterable[InternalRow],
+    rawParser: IN => IterableOnce[InternalRow],
     mode: ParseMode,
     schema: StructType,
     columnNameOfCorruptRecord: String) {
@@ -56,33 +56,50 @@ class FailureSafeParser[IN](
   }
 
   def parse(input: IN): Iterator[InternalRow] = {
-    try {
+    var delegate = try {
       rawParser.apply(input).iterator.map(row => toResultRow(Some(row), () => null))
     } catch {
-      case e: BadRecordException => mode match {
-        case PermissiveMode =>
-          val partialResults = e.partialResults()
-          if (partialResults.nonEmpty) {
-            partialResults.iterator.map(row => toResultRow(Some(row), e.record))
-          } else {
-            Iterator(toResultRow(None, e.record))
-          }
-        case DropMalformedMode =>
-          Iterator.empty
-        case FailFastMode =>
-          e.getCause match {
-            case _: JsonArraysAsStructsException =>
-              // SPARK-42298 we recreate the exception here to make sure the error message
-              // have the record content.
-              throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError(e.record().toString)
-            case StringAsDataTypeException(fieldName, fieldValue, dataType) =>
-              throw QueryExecutionErrors.cannotParseStringAsDataTypeError(e.record().toString,
-                fieldName, fieldValue, dataType)
-            case causeWrapper: LazyBadRecordCauseWrapper =>
-              throwMalformedRecordsDetectedInRecordParsingError(e, causeWrapper.cause())
-            case cause => throwMalformedRecordsDetectedInRecordParsingError(e, cause)
-          }
+      case e: BadRecordException => parseFailure(e)
+    }
+    new Iterator[InternalRow] {
+      private def handleFailure[T](operation: Iterator[InternalRow] => T): T = {
+        try operation(delegate) catch {
+          case e: BadRecordException =>
+            delegate = parseFailure(e)
+            operation(delegate)
+        }
       }
+
+      override def hasNext: Boolean = handleFailure(_.hasNext)
+
+      override def next(): InternalRow = handleFailure(_.next())
+    }
+  }
+
+  private def parseFailure(e: BadRecordException): Iterator[InternalRow] = {
+    mode match {
+      case PermissiveMode =>
+        val partialResults = e.partialResults()
+        if (partialResults.nonEmpty) {
+          partialResults.iterator.map(row => toResultRow(Some(row), e.record))
+        } else {
+          Iterator(toResultRow(None, e.record))
+        }
+      case DropMalformedMode =>
+        Iterator.empty
+      case FailFastMode =>
+        e.getCause match {
+          case _: JsonArraysAsStructsException =>
+            // SPARK-42298 we recreate the exception here to make sure the error message
+            // have the record content.
+            throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError(e.record().toString)
+          case StringAsDataTypeException(fieldName, fieldValue, dataType) =>
+            throw QueryExecutionErrors.cannotParseStringAsDataTypeError(e.record().toString,
+              fieldName, fieldValue, dataType)
+          case causeWrapper: LazyBadRecordCauseWrapper =>
+            throwMalformedRecordsDetectedInRecordParsingError(e, causeWrapper.cause())
+          case cause => throwMalformedRecordsDetectedInRecordParsingError(e, cause)
+        }
     }
   }
 
