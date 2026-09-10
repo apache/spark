@@ -70,7 +70,7 @@ case class Scd2ForeachBatchHandler(
 
     val targetTableDf = batchDf.sparkSession.read.table(targetTableIdentifier.quotedString)
     val auxTableDf = batchDf.sparkSession.read.table(auxiliaryTableIdentifier.quotedString)
-    
+
     val preprocessedBatchDf = batchProcessor.preprocessMicrobatch(
       microbatchDf = batchDf,
       targetTableDf = targetTableDf
