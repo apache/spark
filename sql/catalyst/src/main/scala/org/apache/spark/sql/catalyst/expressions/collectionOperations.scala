@@ -3657,10 +3657,6 @@ case class Sequence(
       }
 
     case _: TimestampLTZNanosType | _: TimestampNTZNanosType =>
-      // Nanosecond endpoints reuse the microsecond sequence machinery: the math runs on
-      // epochMicros and each result is re-wrapped with the start value's sub-microsecond fraction
-      // (see eval/doGenCode). The micros counterpart drives zone-aware interval addition
-      // (LTZ nanos -> TimestampType session zone, NTZ nanos -> TimestampNTZType UTC).
       val microsType: DataType =
         if (start.dataType.isInstanceOf[TimestampLTZNanosType]) TimestampType else TimestampNTZType
       if (stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepOpt.get.dataType)) {
