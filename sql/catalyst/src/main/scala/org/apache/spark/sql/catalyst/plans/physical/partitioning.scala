@@ -668,10 +668,11 @@ case class KeyedPartitioning(
    * for two reasons. `partitionKeys` has to be printed as a `Seq` for `maxFields` to truncate it,
    * and a partitioning can hold one key per split. And `dataTypes` has its naming erased, so
    * printing it would put a struct field name into a plan that appears nowhere in the query. A
-   * field the layout grows is therefore a decision here.
+   * field the layout grows is therefore a decision here, and the default is to print it: the plan
+   * string is the only place a reader sees why a marked partitioning still shuffles.
    */
   override protected def stringArgs: Iterator[Any] =
-    Iterator(expressions, partitionKeys, isGrouped, isCollapsed)
+    Iterator(expressions, partitionKeys, isGrouped, isCollapsed, mayContainUnknownPartitionKeys)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): KeyedPartitioning =
@@ -759,7 +760,11 @@ case class KeyedPartitioning(
           projectedKeys,
           projectedDataTypes,
           isGrouped = !collapses && sourceOf.size == projectedKeys.length,
-          isCollapsed = isCollapsed || collapses))
+          isCollapsed = isCollapsed || collapses,
+          // Carried, so the contract holds whatever positions a caller asks for. A projection that
+          // coarsens the declared key set cannot keep a marked claim, and `createShuffleSpec`
+          // refuses that case before it gets here, but this method does not depend on that.
+          mayContainUnknownPartitionKeys = mayContainUnknownPartitionKeys))
     }
   }
 
@@ -1792,6 +1797,13 @@ case class KeyedShuffleSpec(
           // were all pruned would call two different spaces one layout, and
           // `ShuffledJoin.outputPartitioning` would then report both as alternative descriptions of
           // it. Where a key row exists this clause is implied.
+          //
+          // A type list still identifies a space only up to the type, so two empty sides whose
+          // spaces differ but share a type pair anyway, e.g. `identity(id INT)` against
+          // `bucket(4, id INT)`. That residual is a decision, not an oversight: an empty layout
+          // holds no row, so every claim over it is vacuous, and a merge that later brings real
+          // rows under it rewrites each member's expressions through `reducersBothWays` or a
+          // `GroupPartitionsExec` first.
           partitioning.keyDataTypes == otherPartitioning.keyDataTypes &&
           partitioning.partitionKeys == otherPartitioning.partitionKeys
     case ShuffleSpecCollection(specs) =>

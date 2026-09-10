@@ -2871,6 +2871,20 @@ class KeyGroupedPartitioningSuite
         }, "no node reports two key spaces as one layout")
         assert(ValidateRequirements.validate(plan), "and the plan it does report holds up")
 
+        // The assert above is on absence, so a regression that dropped every keyed claim would
+        // satisfy it with no key space at all. These pin the claim positively: nothing shuffles,
+        // and the topmost node that reports a keyed partitioning describes the bucket key space the
+        // two legs share, which is `IntegerType` rather than the identity side's `LongType`. The
+        // identity legs below it still report their own `LongType` space, which is why this asks
+        // the topmost node rather than the whole plan.
+        assert(collectAllShuffles(plan).isEmpty, "the whole query should be co-partitioned")
+        val topKeySpaces = plan.collectFirst {
+          case p if keyedPartitioningsOf(Seq(p)).nonEmpty =>
+            keyedPartitioningsOf(Seq(p)).map(_.keyDataTypes).distinct
+        }
+        assert(topKeySpaces.contains(Seq(Seq(IntegerType))),
+          s"the shared key space should be the bucket one, got $topKeySpaces")
+
         checkAnswer(df, Seq(Row(null, null, 3L)))
       }
     }
