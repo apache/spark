@@ -2542,9 +2542,10 @@ object SQLConf {
     buildConf("spark.sql.sources.v2.bucketing.partition.filter.enabled")
       .doc(s"Whether to filter partitions when running storage-partition join. " +
         s"When enabled, partitions without matches on the other side can be omitted for " +
-        s"scanning, if allowed by the join type. This config requires both " +
-        s"${V2_BUCKETING_ENABLED.key} and ${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be " +
-        s"enabled.")
+        s"scanning, if allowed by the join type. This config requires " +
+        s"${V2_BUCKETING_ENABLED.key} to be enabled, together with either " +
+        s"${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} or " +
+        s"${V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key}.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
