@@ -33,9 +33,11 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.io.ZStdCompressionCodec
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.{functions => F, _}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.{CharsetProvider, DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
@@ -44,7 +46,7 @@ import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPr
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.execution.ExternalRDD
-import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
+import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1093,18 +1095,44 @@ abstract class JsonSuite
     assert(input.available() > 0)
   }
 
-  test("multiline top level JSON array keeps rows emitted before malformed input") {
+  gridTest("multiline top level JSON array keeps rows emitted before malformed input")(
+      Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST")) { mode =>
     withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
       withTempPath { file =>
         val document = """[{"a":1} {"a":2}]"""
         Files.write(file.toPath, document.getBytes(StandardCharsets.UTF_8))
+        val actualSchema = StructType(Seq(StructField("a", IntegerType)))
+        val schema = StructType(Seq(
+          actualSchema.head,
+          StructField("_corrupt_record", StringType)))
+        val options = new JSONOptions(
+          Map("multiLine" -> "true", "mode" -> mode),
+          SQLConf.get.sessionLocalTimeZone,
+          SQLConf.get.columnNameOfCorruptRecord)
+        val parser = new JacksonParser(actualSchema, options, allowArrayAsStructs = true)
+        val partitionedFile = PartitionedFile(
+          InternalRow.empty,
+          SparkPath.fromPathString(file.getCanonicalPath),
+          0,
+          file.length())
+        val rows = MultiLineJsonDataSource.readFile(
+          spark.sessionState.newHadoopConf(), partitionedFile, parser, schema)
 
-        checkAnswer(
-          spark.read
-            .option("multiLine", true)
-            .schema("a int, _corrupt_record string")
-            .json(file.getCanonicalPath),
-          Seq(Row(1, null), Row(null, document)))
+        assert(rows.next().getInt(0) === 1)
+        mode match {
+          case "PERMISSIVE" =>
+            val corruptRow = rows.next()
+            assert(corruptRow.isNullAt(0))
+            val corruptRecord = corruptRow.getUTF8String(1)
+            assert(corruptRecord != null, corruptRow.toString)
+            assert(corruptRecord.toString === document)
+            assert(!rows.hasNext)
+          case "DROPMALFORMED" =>
+            assert(!rows.hasNext)
+          case "FAILFAST" =>
+            val error = intercept[SparkException](rows.hasNext)
+            assert(error.getCondition === "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+        }
       }
     }
   }

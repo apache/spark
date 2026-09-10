@@ -101,7 +101,7 @@ class FailureSafeParser[IN](
         e.getCause match {
           case _: JsonArraysAsStructsException =>
             // SPARK-42298 we recreate the exception here to make sure the error message
-            // have the record content.
+            // has the record content.
             throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError(e.record().toString)
           case StringAsDataTypeException(fieldName, fieldValue, dataType) =>
             throw QueryExecutionErrors.cannotParseStringAsDataTypeError(e.record().toString,
