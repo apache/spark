@@ -33,12 +33,12 @@ that must react to data the moment it arrives, such as fraud detection, real-tim
 personalization.
 
 Real-time Mode in Apache Spark supports **stateless queries** -- projections, filters and other
-map-like operations, unions, and stream-static joins -- and, starting in Spark 4.3.0, a first set of
-**stateful queries**: streaming **deduplication** (`dropDuplicates`, plus
-`dropDuplicatesWithinWatermark` starting in Spark 4.4.0), streaming **aggregations**
-(`groupBy(...).agg(...)`), and the JVM (Scala/Java) **`transformWithState`** operator. These
-stateful operations require a shuffle, which Real-time Mode runs as a *pipelined shuffle* so that
-records still stream through without waiting for a batch boundary; see
+map-like operations, unions, and stream-static joins. Stateful support starts in Spark 4.3.0 with
+streaming **deduplication** using `dropDuplicates`, streaming **aggregations**
+(`groupBy(...).agg(...)`), and the JVM (Scala/Java) **`transformWithState`** operator. Starting in
+Spark 4.4.0, Real-time Mode also supports `dropDuplicatesWithinWatermark`. These stateful operations
+require a shuffle, which Real-time Mode runs as a *pipelined shuffle* so that records still stream
+through without waiting for a batch boundary; see
 [How Stateful Queries Work](#how-stateful-queries-work). Other stateful operations, including
 stream-stream joins and `flatMapGroupsWithState`, are not yet supported. See
 [Supported Queries](#supported-queries) for the full list.
@@ -219,8 +219,9 @@ substantially:
 - **Real-time Mode** is designed to support all query shapes, including stateful operations, while
   reusing Spark's mature components such as state management, the Catalyst optimizer, and the
   existing SQL operators. It provides exactly-once processing semantics. It supports stateless
-  queries and, starting in Spark 4.3.0, stateful deduplication, aggregation, and JVM
-  `transformWithState`; support for the remaining stateful operations is ongoing.
+  queries and, starting in Spark 4.3.0, `dropDuplicates`, stateful aggregation, and JVM
+  `transformWithState`. Starting in Spark 4.4.0, it also supports
+  `dropDuplicatesWithinWatermark`; support for the remaining stateful operations is ongoing.
 
 For new low-latency workloads, prefer Real-time Mode over Continuous Processing.
 
@@ -355,9 +356,9 @@ The following operations, sources, and sinks are supported:
 - *Stateful operations*: support began in Spark 4.3.0. These regroup records by key through a
   pipelined shuffle (see [How Stateful Queries Work](#how-stateful-queries-work)) and keep their
   state in the state store, checkpointed each batch.
-  + **Deduplication**: `dropDuplicates`, and `dropDuplicatesWithinWatermark` starting in Spark
-    4.4.0. The latter requires `withWatermark` and bounds state retention according to the
-    event-time watermark.
+  + **Deduplication**: `dropDuplicates` is supported starting in Spark 4.3.0.
+    `dropDuplicatesWithinWatermark` is supported starting in Spark 4.4.0; it requires
+    `withWatermark` and bounds state retention according to the event-time watermark.
   + **Streaming aggregation**: `groupBy(...).agg(...)` (and the SQL `GROUP BY` equivalent), including
     windowed aggregations with `window(...)`. Distinct aggregates such as `count(distinct ...)` are
     not supported (see [Not supported](#not-supported)).
@@ -529,10 +530,93 @@ spark
 
 ### Deduplication
 
-Drop duplicate records by key. This is a stateful operation: Real-time Mode regroups records by the
-deduplication key through a pipelined shuffle and keeps the set of seen keys in the state store (see
-[How Stateful Queries Work](#how-stateful-queries-work)). No code changes are needed beyond running
-under a Real-time trigger.
+Real-time Mode supports two deduplication operations. Both regroup records by the deduplication key
+through a pipelined shuffle and keep seen keys in the state store (see
+[How Stateful Queries Work](#how-stateful-queries-work)).
+
+#### `dropDuplicates` (Real-time Mode support since Spark 4.3.0)
+
+This example uses `dropDuplicates` without a watermark, so it retains every distinct `id` for the
+lifetime of the query. `dropDuplicates` can use a watermark to bound state when the event-time
+column is included in the deduplication columns. Use `dropDuplicatesWithinWatermark` below when
+event time should bound state without being part of the deduplication key.
+
+<div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "input-topic") \
+  .load() \
+  .selectExpr("CAST(key AS STRING) AS id", "CAST(value AS STRING) AS value") \
+  .dropDuplicates(["id"]) \
+  .writeStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("topic", "output-topic") \
+  .option("checkpointLocation", "/path/to/checkpoint") \
+  .outputMode("update") \
+  .trigger(realTime="5 minutes") \
+  .start()
+{% endhighlight %}
+</div>
+
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+import org.apache.spark.sql.streaming.Trigger
+
+spark
+  .readStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "input-topic")
+  .load()
+  .selectExpr("CAST(key AS STRING) AS id", "CAST(value AS STRING) AS value")
+  .dropDuplicates("id")
+  .writeStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "output-topic")
+  .option("checkpointLocation", "/path/to/checkpoint")
+  .outputMode("update")
+  .trigger(Trigger.RealTime("5 minutes"))
+  .start()
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+import org.apache.spark.sql.streaming.Trigger;
+
+spark
+  .readStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "input-topic")
+  .load()
+  .selectExpr("CAST(key AS STRING) AS id", "CAST(value AS STRING) AS value")
+  .dropDuplicates("id")
+  .writeStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "output-topic")
+  .option("checkpointLocation", "/path/to/checkpoint")
+  .outputMode("update")
+  .trigger(Trigger.RealTime("5 minutes"))
+  .start();
+{% endhighlight %}
+</div>
+
+</div>
+
+#### `dropDuplicatesWithinWatermark` (Real-time Mode support since Spark 4.4.0)
+
+Use `dropDuplicatesWithinWatermark` with an event-time watermark to bound deduplication state
+without including event time in the deduplication key. This example aliases Kafka's record
+timestamp as `eventTime` and sets a 10-minute watermark delay threshold.
 
 <div class="codetabs">
 
@@ -617,14 +701,10 @@ spark
 
 </div>
 
-This bounded example aliases Kafka's record timestamp as `eventTime`, sets a 10-minute watermark
-delay threshold, and uses `dropDuplicatesWithinWatermark` to deduplicate by `id`. It bounds
-deduplication state as the event-time watermark advances. Records that pass deduplication are still
-emitted as they are processed, while watermark advancement and state eviction take effect at
-Real-time Mode batch boundaries. The trigger duration therefore determines how often cleanup has
-an opportunity to remove state after the watermark advances past a key's expiry. To deduplicate
-keys for the lifetime of the query instead, use `dropDuplicates`, which keeps every distinct key it
-has seen in the state store.
+Records that pass deduplication are emitted as they are processed, while watermark advancement and
+state eviction take effect at Real-time Mode batch boundaries. The trigger duration therefore
+determines how often cleanup has an opportunity to remove state after the watermark advances past a
+key's expiry.
 
 ### Streaming aggregation
 
