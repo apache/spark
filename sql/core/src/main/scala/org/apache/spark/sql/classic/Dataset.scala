@@ -568,7 +568,7 @@ class Dataset[T] private[sql](
       reliableCheckpoint: Boolean,
       storageLevel: Option[StorageLevel]): Dataset[T] = {
     val actionName = if (reliableCheckpoint) "checkpoint" else "localCheckpoint"
-    withAction(actionName, queryExecution) { physicalPlan =>
+    withAction(actionName, queryExecution.withRegularShuffle) { physicalPlan =>
       val internalRdd = physicalPlan.execute().map(_.copy())
       if (reliableCheckpoint) {
         assert(storageLevel.isEmpty, "StorageLevel should not be defined for reliableCheckpoint")
@@ -1575,18 +1575,7 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def toLocalIterator(): java.util.Iterator[T] = {
-    // This action submits one job per output partition. A channel cannot retain its output
-    // between those jobs, so use a separate regular plan even if queryExecution already ran.
-    // Clone the session to keep the setting off during lazy planning and AQE replanning without
-    // changing the caller's session or its other actions.
-    val iteratorSession = SparkSession.getOrCloneSessionWithConfigsOff(
-      sparkSession, Seq(SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED))
-    val iteratorExecution = if (iteratorSession eq sparkSession) {
-      queryExecution
-    } else {
-      iteratorSession.sessionState.executePlan(logicalPlan)
-    }
-    withAction("toLocalIterator", iteratorExecution) { plan =>
+    withAction("toLocalIterator", queryExecution.withRegularShuffle) { plan =>
       val fromRow = resolvedEnc.createDeserializer()
       plan.executeToIterator().map(fromRow).asJava
     }
@@ -1673,7 +1662,7 @@ class Dataset[T] private[sql](
   // Represents the `QueryExecution` used to produce the content of the Dataset as an `RDD`.
   @transient private lazy val rddQueryExecution: QueryExecution = {
     val deserialized = CatalystSerde.deserialize[T](logicalPlan)
-    sparkSession.sessionState.executePlan(deserialized)
+    sparkSession.sessionState.executePlan(deserialized).withRegularShuffle
   }
 
   private[sql] lazy val materializedRdd: RDD[T] = {
@@ -2143,9 +2132,13 @@ class Dataset[T] private[sql](
    * Converts a JavaRDD to a PythonRDD.
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
+    javaToPython(queryExecution.withRegularShuffle)
+  }
+
+  private def javaToPython(qe: QueryExecution): JavaRDD[Array[Byte]] = {
     val structType = schema  // capture it for closure
     val binaryAsBytes = sparkSession.sessionState.conf.pysparkBinaryAsBytes  // capture config value
-    val rdd = queryExecution.toRdd.map(row =>
+    val rdd = qe.toRdd.map(row =>
       EvaluatePython.toJava(row, structType, binaryAsBytes))
     EvaluatePython.javaToPython(rdd)
   }
@@ -2298,8 +2291,9 @@ class Dataset[T] private[sql](
   }
 
   private[sql] def toPythonIterator(prefetchPartitions: Boolean = false): Array[Any] = {
-    withNewExecutionId {
-      PythonRDD.toLocalIteratorAndServe(javaToPython.rdd, prefetchPartitions)
+    val qe = queryExecution.withRegularShuffle
+    SQLExecution.withNewExecutionId(qe) {
+      PythonRDD.toLocalIteratorAndServe(javaToPython(qe).rdd, prefetchPartitions)
     }
   }
 

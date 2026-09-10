@@ -409,6 +409,23 @@ class QueryExecution(
 
   def assertExecutedPlanPrepared(): Unit = executedPlan
 
+  /**
+   * RDD consumers and partition-at-a-time iterators can outlive one SQL job. Give them a
+   * separate plan whose shuffles retain output, without changing this execution's plan.
+   * Keep the cloned session for lazy planning and AQE, not just for this method's call.
+   */
+  private[sql] def withRegularShuffle: QueryExecution = {
+    val session = SparkSession.getOrCloneSessionWithConfigsOff(
+      sparkSession, Seq(SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED))
+    if (session eq sparkSession) {
+      this
+    } else {
+      new QueryExecution(session, commandExecuted, mode = mode,
+        shuffleCleanupModeOpt = shuffleCleanupModeOpt,
+        refreshPhaseEnabled = refreshPhaseEnabled, analyzerOpt = Some(analyzer))
+    }
+  }
+
   val lazyToRdd = LazyTry {
     new SQLExecutionRDD(
       executedPlan.execute(),

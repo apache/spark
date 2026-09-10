@@ -214,6 +214,79 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
   }
 
   for (aqe <- Seq(false, true)) {
+    test(s"typed and Python RDD exports retain regular shuffle lineage with AQE=$aqe") {
+      withPipelinedSession("pipelined-rdd-exports", aqe) { spark =>
+        import spark.implicits._
+        val df = spark.range(0, 4000, 1, 2).repartition(4)
+        assert(df.collect().length === 4000)
+        val typed = df.groupByKey(_ % 4).mapGroups { (key, rows) =>
+          (key, rows.size.toLong)
+        }
+        val rdd = typed.rdd
+        assertRegularRDD(rdd)
+        assert(rdd.coalesce(1).collect().map(_._2).sum === 4000L)
+        val pythonRDD = df.asInstanceOf[org.apache.spark.sql.classic.Dataset[Long]]
+          .javaToPython.rdd
+        assertRegularRDD(pythonRDD)
+        assert(pythonRDD.coalesce(1).count() > 0)
+        val fromRDD = spark.createDataFrame(rdd).repartition(4).rdd
+        assertRegularRDD(fromRDD)
+        assert(fromRDD.coalesce(1).count() === 4L)
+      }
+    }
+
+    test(s"lazy checkpoints retain regular shuffle lineage with AQE=$aqe") {
+      withPipelinedSession("pipelined-checkpoint", aqe) { spark =>
+        withTempDir { dir =>
+          spark.sparkContext.setCheckpointDir(dir.getCanonicalPath)
+          for (reliable <- Seq(false, true)) {
+            val df = spark.range(0, 4000, 1, 2).repartition(4)
+            assert(df.collect().length === 4000)
+            val checkpointed = if (reliable) {
+              df.checkpoint(eager = false)
+            } else {
+              df.localCheckpoint(eager = false)
+            }
+            val rdd = checkpointed.rdd
+            assertRegularRDD(rdd)
+            assert(rdd.coalesce(1).count() === 4000L)
+            assert(checkpointed.collect().sorted === (0L until 4000L).toArray)
+          }
+        }
+      }
+    }
+
+    test(s"SQL cursor computes its producer once with AQE=$aqe") {
+      withPipelinedSession("pipelined-cursor", aqe) { spark =>
+        spark.conf.set("spark.sql.scripting.enabled", "true")
+        spark.conf.set("spark.sql.scripting.cursorEnabled", "true")
+        spark.conf.set("spark.sql.classic.shuffleDependency.fileCleanup.enabled", "false")
+        val evaluated = spark.sparkContext.longAccumulator("cursor producer rows")
+        spark.udf.register("record_cursor_row", (id: Long) => {
+          evaluated.add(1)
+          id
+        })
+        val result = spark.sql(
+          """BEGIN
+            |  DECLARE v BIGINT;
+            |  DECLARE total BIGINT DEFAULT 0;
+            |  DECLARE i INT DEFAULT 0;
+            |  DECLARE c CURSOR FOR
+            |    SELECT /*+ REPARTITION(4) */ record_cursor_row(id) FROM range(100);
+            |  OPEN c;
+            |  WHILE i < 100 DO
+            |    FETCH c INTO v;
+            |    SET total = total + v;
+            |    SET i = i + 1;
+            |  END WHILE;
+            |  CLOSE c;
+            |  VALUES (total);
+            |END""".stripMargin)
+        assert(result.collect().head.getLong(0) === (0L until 100L).sum)
+        assert(evaluated.value === 100L)
+      }
+    }
+
     test(s"Dataset.rdd supports narrow and shuffle consumers with AQE=$aqe") {
       withPipelinedSession("pipelined-rdd-boundary", aqe) { spark =>
         val rdd = spark.range(0, 4000, 1, 2).repartition(4).toDF().rdd
