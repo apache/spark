@@ -1517,10 +1517,12 @@ class SparkConnectPlanner(
       if (schema == null) {
         throw InvalidInputErrors.schemaRequiredForLocalRelation()
       }
-      val physicalSchema = schema.transformRecursively {
-        case c: CharType => c.toStringType
-        case v: VarcharType => v.toStringType
-      }.asInstanceOf[StructType]
+      val physicalSchema = schema
+        .transformRecursively {
+          case c: CharType => c.toStringType
+          case v: VarcharType => v.toStringType
+        }
+        .asInstanceOf[StructType]
       buildLocalRelationFromRows(Iterator.empty, physicalSchema, Some(schema))
     }
   }
