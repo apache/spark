@@ -2737,25 +2737,53 @@ sealed trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes {
   val funcName: String
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TimestampType, StringTypeWithCollation(supportsTrimCollation = true))
-  override def dataType: DataType = TimestampType
+    Seq(
+      TypeCollection(TimestampType, AnyTimestampNanoType),
+      StringTypeWithCollation(supportsTrimCollation = true))
+
+  // Preserves the exact input type: a nanosecond source (TIMESTAMP_LTZ(p)/TIMESTAMP_NTZ(p),
+  // p in [7, 9]) yields the same nanosecond type/family, while the microsecond TimestampType path
+  // is unchanged. Matching left.dataType (rather than AnyTimestampNanoType.defaultConcreteType) is
+  // deliberate: defaultConcreteType is TimestampNTZNanosType(9), which would both widen the
+  // precision to 9 and flip a TimestampLTZNanosType source to the NTZ family. Preserving an NTZ(p)
+  // source as NTZ(p) -- while a microsecond TimestampNTZType argument is still implicitly cast to
+  // LTZ TimestampType before it reaches here -- matches date_trunc (SPARK-57821), the established
+  // convention for these TimestampType-typed functions gaining nanosecond support.
+  override def dataType: DataType = left.dataType match {
+    case _: AnyTimestampNanoType => left.dataType
+    case _ => TimestampType
+  }
+
+  // A zone shift moves only the whole-microsecond instant -- zone offsets are whole seconds -- so
+  // a nanosecond value converts its epochMicros with the exact same code as a microsecond value
+  // and carries nanosWithinMicro through unchanged. NTZ vs LTZ needs no special casing here: the
+  // shift is a pure arithmetic offset on epochMicros, independent of the zone family.
+  private def isTsNanos: Boolean = left.dataType.isInstanceOf[AnyTimestampNanoType]
 
   override def nullSafeEval(time: Any, timezone: Any): Any = {
-    func(time.asInstanceOf[Long], timezone.asInstanceOf[UTF8String].toString)
+    val tz = timezone.asInstanceOf[UTF8String].toString
+    if (isTsNanos) {
+      val v = time.asInstanceOf[TimestampNanosVal]
+      TimestampNanosVal.fromParts(func(v.epochMicros, tz), v.nanosWithinMicro)
+    } else {
+      func(time.asInstanceOf[Long], tz)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val tnv = classOf[TimestampNanosVal].getName
+    val javaType = CodeGenerator.javaType(dataType)
+    val defaultValue = CodeGenerator.defaultValue(dataType)
     if (right.foldable) {
       val tz = right.eval().asInstanceOf[UTF8String]
       if (tz == null) {
         ev.copy(code = code"""
            |boolean ${ev.isNull} = true;
-           |long ${ev.value} = 0;
+           |$javaType ${ev.value} = $defaultValue;
          """.stripMargin)
       } else {
         val tzClass = classOf[ZoneId].getName
-        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
         val tzTerm = ctx.addMutableState(tzClass, "tz",
           v => s"""$v = $dtu.getZoneId("$escapedTz");""")
@@ -2765,15 +2793,27 @@ sealed trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes {
           case _: ToUTCTimestamp => (tzTerm, utcTerm)
         }
         val eval = left.genCode(ctx)
+        val convert = if (isTsNanos) {
+          s"$tnv.fromParts(" +
+            s"$dtu.convertTz(${eval.value}.epochMicros, $fromTz, $toTz), " +
+            s"${eval.value}.nanosWithinMicro)"
+        } else {
+          s"$dtu.convertTz(${eval.value}, $fromTz, $toTz)"
+        }
         ev.copy(code = code"""
            |${eval.code}
            |boolean ${ev.isNull} = ${eval.isNull};
-           |long ${ev.value} = 0;
+           |$javaType ${ev.value} = $defaultValue;
            |if (!${ev.isNull}) {
-           |  ${ev.value} = $dtu.convertTz(${eval.value}, $fromTz, $toTz);
+           |  ${ev.value} = $convert;
            |}
          """.stripMargin)
       }
+    } else if (isTsNanos) {
+      defineCodeGen(ctx, ev, (timestamp, format) =>
+        s"$tnv.fromParts(" +
+          s"$dtu.$funcName($timestamp.epochMicros, $format.toString()), " +
+          s"$timestamp.nanosWithinMicro)")
     } else {
       defineCodeGen(ctx, ev, (timestamp, format) => {
         s"""$dtu.$funcName($timestamp, $format.toString())"""
