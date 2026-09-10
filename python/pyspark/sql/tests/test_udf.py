@@ -152,7 +152,7 @@ class BaseUDFTestsMixin:
                 }
             ):
                 self.assertEqual(
-                    self.spark.sql("SELECT c FROM char_varchar_udf_view").first().c,
+                    self.spark.sql("SELECT c FROM char_varchar_udf_view").collect()[0].c,
                     "a  ",
                 )
                 with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
@@ -173,7 +173,7 @@ class BaseUDFTestsMixin:
             unchecked_varchar = varchar_udf("id").alias("v")
 
         self.assertEqual(
-            self.spark.range(1).select(checked_char, unchecked_varchar).first(),
+            self.spark.range(1).select(checked_char, unchecked_varchar).collect()[0],
             Row(c="a  ", v="abcd"),
         )
 
