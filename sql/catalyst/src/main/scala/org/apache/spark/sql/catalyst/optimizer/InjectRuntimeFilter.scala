@@ -24,7 +24,7 @@ import scala.util.{Left, Right}
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, NodeWithOnlyDeterministicProjectAndFilter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
@@ -43,7 +43,9 @@ import org.apache.spark.sql.internal.SQLConf
  * pays off: the user has asserted the benefit they try to predict. It waives no correctness
  * requirement (see `JoinSelectionHelper.isRepeatableRuntimeFilterSource`), and it does not lift
  * the limits on the number of filters and on a filter's size. A hinted side is never itself
- * filtered. When the hint is not applied, the reason is reported through the hint error handler.
+ * filtered, and a hint takes effect through one mechanism: when a DPP filter honors it on any
+ * join key, no Bloom filter is added for that join. When the hint is not applied, the reason is
+ * reported through the hint error handler.
  */
 object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
@@ -103,7 +105,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
     val aggregate =
-      ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
+      ConstantFolding(pruneColumns(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
     // Runtime filters are introduced after subquery optimization, so Python UDFs in a new
     // creation-side subquery cannot be extracted into a Python evaluation operator.
     if (aggregate.containsPattern(PYTHON_UDF)) {
@@ -113,6 +115,20 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val filter = BloomFilterMightContain(bloomFilterSubquery,
       new XxHash64(Seq(filterApplicationSideKey)))
     Right(Filter(filter, filterApplicationSidePlan))
+  }
+
+  // Prunes the columns of the new subquery to a fixed point. A hinted creation side can have any
+  // shape, e.g. an aggregate or a window whose extra columns take more than one pass to remove.
+  private def pruneColumns(plan: LogicalPlan): LogicalPlan = {
+    var current = plan
+    var pruned = ColumnPruning(current)
+    var iteration = 1
+    while (!pruned.fastEquals(current) && iteration < conf.optimizerMaxIterations) {
+      current = pruned
+      pruned = ColumnPruning(current)
+      iteration += 1
+    }
+    pruned
   }
 
   /**
@@ -326,22 +342,22 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    *
    * All three predict whether a filter pays off, so a [[RuntimeFilterHint]] on the creation side
    * (`hinted`) waives them: the creation side is used as it is, whatever its shape, as long as it
-   * is a repeatable source, since the filter subquery re-executes it.
+   * is a repeatable source, since the filter subquery re-executes it. Returns the reason when no
+   * creation side is extracted; only a hinted one is reported.
    */
   private def extractBeneficialFilterCreatePlan(
       filterApplicationSide: LogicalPlan,
       filterCreationSide: LogicalPlan,
       filterApplicationSideKey: Expression,
       filterCreationSideKey: Expression,
-      hinted: Boolean): Option[FilterCreationSide] = {
+      hinted: Boolean): Either[String, FilterCreationSide] = {
     if (hinted) {
-      Option.when(isRepeatableRuntimeFilterSource(filterCreationSide)) {
+      runtimeFilterSourceRejection(filterCreationSide, filterCreationSideKey).toLeft(
         FilterCreationSide(
           filterCreationSideKey,
           filterCreationSide,
           useMaterializedThreshold = false,
-          hinted = true)
-      }
+          hinted = true))
     } else if (findExpressionAndTrackLineageDown(
       filterApplicationSideKey, filterApplicationSide).isDefined &&
       satisfyByteSizeRequirement(filterApplicationSide)) {
@@ -380,7 +396,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           currentDistinctCount
         }
       }
-      if (allowMaterializedCache) {
+      val extracted = if (allowMaterializedCache) {
         var sawMaterializedLeaf = false
         val selectiveCreationSide = extractSelectiveFilterOverScan(
           filterCreationSide,
@@ -408,24 +424,45 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           allowMaterializedCache = false,
           applicationDistinctCount = None)
       }
+      extracted.toRight("no selective creation side")
     } else {
-      None
+      Left("the application side does not qualify")
     }
   }
 
-  // This checks if there is already a DPP filter, as this rule is called just after DPP.
+  // Returns the DPP filter on `key` at the top of `plan`, as this rule is called just after DPP.
   @tailrec
-  private def hasDynamicPruningSubquery(
-      left: LogicalPlan,
-      right: LogicalPlan,
-      leftKey: Expression,
-      rightKey: Expression): Boolean = {
-    (left, right) match {
-      case (Filter(DynamicPruningSubquery(pruningKey, _, _, _, _, _, _), plan), _) =>
-        pruningKey.fastEquals(leftKey) || hasDynamicPruningSubquery(plan, right, leftKey, rightKey)
-      case (_, Filter(DynamicPruningSubquery(pruningKey, _, _, _, _, _, _), plan)) =>
-        pruningKey.fastEquals(rightKey) ||
-          hasDynamicPruningSubquery(left, plan, leftKey, rightKey)
+  private def findDynamicPruning(
+      plan: LogicalPlan,
+      key: Expression): Option[DynamicPruningSubquery] = plan match {
+    case Filter(dpp @ DynamicPruningSubquery(pruningKey, _, _, _, _, _, _), child) =>
+      if (pruningKey.fastEquals(key)) Some(dpp) else findDynamicPruning(child, key)
+    case _ => None
+  }
+
+  /**
+   * Whether the DPP filter `exprId` at the top of `prunedSide` reaches the scan. It is not final
+   * here: `PushDownPredicates` carries it towards the scan later, and
+   * `CleanupDynamicPruningFilters` then keeps it only in a chain of deterministic projections and
+   * filters directly over the scan. Simulate that with the same pushdown rule rather than
+   * predicting what it can push through. The cleanup also folds a filter into an equality on the
+   * same key already sitting on the scan, which prunes at least as much.
+   */
+  private def dynamicPruningReachesScan(prunedSide: LogicalPlan, exprId: ExprId): Boolean = {
+    var plan = prunedSide
+    var pushed = PushDownPredicates(plan)
+    var iteration = 1
+    while (!pushed.fastEquals(plan) && iteration < conf.optimizerMaxIterations) {
+      plan = pushed
+      pushed = PushDownPredicates(plan)
+      iteration += 1
+    }
+    pushed.exists {
+      case f @ Filter(condition, _) if condition.exists {
+          case dpp: DynamicPruningSubquery => dpp.exprId == exprId
+          case _ => false
+        } =>
+        NodeWithOnlyDeterministicProjectAndFilter.unapply(f).exists(_.isInstanceOf[LeafNode])
       case _ => false
     }
   }
@@ -458,7 +495,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         val injectLeftHinted = hintedSource.contains(BuildRight)
         val injectRightHinted = hintedSource.contains(BuildLeft)
         if (isRuntimeFilterHintAmbiguous(hint)) {
-          hintErrorHandler.joinHintNotSupported(HintInfo(runtimeFilterSource = true),
+          reportHintNotApplied(join,
             "the runtime filter source is ambiguous as both join sides are hinted")
         }
         var appliedHint = false
@@ -501,26 +538,35 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             blocked("a runtime filter on the join key already exists")
           } else {
             extractBeneficialFilterCreatePlan(applicationSide, creationSide,
-              applicationSideKey, creationSideKey, applicationHinted) match {
-              case Some(filterCreationSide) =>
-                injectFilter(applicationSideKey, currentApplicationSide, filterCreationSide)
-                  .fold(reason => blocked(reason), Some(_))
-              case None =>
-                blocked("the hinted side may produce different rows when evaluated again")
-            }
+              applicationSideKey, creationSideKey, applicationHinted)
+              .flatMap(injectFilter(applicationSideKey, currentApplicationSide, _))
+              .fold(reason => blocked(reason), Some(_))
           }
         }
+        // A DPP filter prunes by whole partitions rather than by rows, so it is preferred. The
+        // hint is honored by one that prunes the application side and survives to the physical
+        // plan, and then takes effect through that mechanism alone: no Bloom filter is added on
+        // any key of the join. A Bloom filter needs no pushdown, so one is added instead when no
+        // DPP filter survives.
+        val dppHonorsHint = hinted && leftKeys.lazyZip(rightKeys).exists { (l, r) =>
+          val (applicationSide, applicationSideKey) =
+            if (injectLeftHinted) (left, l) else (right, r)
+          findDynamicPruning(applicationSide, applicationSideKey)
+            .exists(dpp => dynamicPruningReachesScan(applicationSide, dpp.exprId))
+        }
+        appliedHint = dppHonorsHint
         leftKeys.lazyZip(rightKeys).foreach((l, r) => {
-          // A DPP filter on the key already prunes the application side, by whole partitions
-          // rather than by rows, so no Bloom filter is added. That also honors the hint, if any,
-          // provided the DPP predicate survives: `CleanupDynamicPruningFilters` drops it when
-          // `PushDownPredicates` cannot carry it to the scan, which a non-deterministic operator
-          // on the pruned side prevents. A Bloom filter needs no pushdown, so one is still added
-          // for the hint in that case.
-          val prunedByDpp = hasDynamicPruningSubquery(left, right, l, r) &&
-            (!hinted || (if (injectLeftHinted) left else right).deterministic)
-          if (prunedByDpp) {
-            appliedHint = appliedHint || hinted
+          val dppOnLeft = findDynamicPruning(left, l)
+          val dppOnRight = findDynamicPruning(right, r)
+          // A DPP filter that prunes the hinted side is a runtime filter on the key too, and only
+          // one is built per key.
+          val dppOnHintedSide =
+            hinted && (if (injectLeftHinted) dppOnRight else dppOnLeft).isDefined
+          if (dppHonorsHint || (!hinted && (dppOnLeft.isDefined || dppOnRight.isDefined))) {
+            // Already pruned by partition pruning: no Bloom filter for the key.
+          } else if (dppOnHintedSide) {
+            hintBlocked("a dynamic partition pruning filter on the join key already prunes " +
+              "the hinted side")
           } else if (!bloomFilterEnabled) {
             hintBlocked(s"${SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key} is false")
           } else if (filterCounter >= numFilterThreshold) {
@@ -546,7 +592,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           }
         })
         if (hinted && !appliedHint) {
-          hintErrorHandler.joinHintNotSupported(HintInfo(runtimeFilterSource = true),
+          reportHintNotApplied(join,
             notAppliedReason.getOrElse("no runtime filter could be built from the hinted side"))
         }
         join.withNewChildren(Seq(newLeft, newRight))
@@ -554,26 +600,50 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           if hintToRuntimeFilterSourceLeft(hint) || hintToRuntimeFilterSourceRight(hint) =>
         // A runtime filter is built from the join keys, so a join without equi-join keys has
         // nothing to build from.
-        val reason = if (isRuntimeFilterHintAmbiguous(hint)) {
+        reportHintNotApplied(join, if (isRuntimeFilterHintAmbiguous(hint)) {
           "the runtime filter source is ambiguous as both join sides are hinted"
         } else {
           "no equi-join keys"
-        }
-        hintErrorHandler.joinHintNotSupported(HintInfo(runtimeFilterSource = true), reason)
+        })
         join
     }
   }
 
+  private def hasRuntimeFilterHint(hint: JoinHint): Boolean = {
+    hintToRuntimeFilterSourceLeft(hint) || hintToRuntimeFilterSourceRight(hint)
+  }
+
+  // A HintInfo carries no relation name, so the join is identified by the hinted side and its
+  // condition. Only the runtime filter facet is reported.
+  private def reportHintNotApplied(join: Join, reason: String): Unit = {
+    val side = (hintToRuntimeFilterSourceLeft(join.hint),
+      hintToRuntimeFilterSourceRight(join.hint)) match {
+      case (true, true) => "both"
+      case (true, false) => "left"
+      case _ => "right"
+    }
+    val condition = join.condition.map(_.toString).getOrElse("none")
+    hintErrorHandler.joinHintNotSupported(HintInfo(runtimeFilterSource = true),
+      s"$reason (hinted side: $side, join condition: $condition)")
+  }
+
   private def hasRuntimeFilterHint(plan: LogicalPlan): Boolean = plan.exists {
-    case Join(_, _, _, _, hint) =>
-      hintToRuntimeFilterSourceLeft(hint) || hintToRuntimeFilterSourceRight(hint)
+    case Join(_, _, _, _, hint) => hasRuntimeFilterHint(hint)
     case _ => false
   }
 
   // With Bloom filters disabled the rule still runs over a plan with a runtime filter hint, so the
   // hint is credited to a DPP filter or reported as not applied.
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
-    case s: Subquery if s.correlated => plan
+    case s: Subquery if s.correlated =>
+      // Runtime filters are not injected inside a correlated subquery, so a hint there is
+      // reported rather than dropped silently.
+      s.foreach {
+        case join: Join if hasRuntimeFilterHint(join.hint) =>
+          reportHintNotApplied(join, "the join is inside a correlated subquery")
+        case _ =>
+      }
+      plan
     case _ if !conf.runtimeFilterBloomFilterEnabled && !hasRuntimeFilterHint(plan) => plan
     case _ => tryInjectRuntimeFilter(plan)
   }

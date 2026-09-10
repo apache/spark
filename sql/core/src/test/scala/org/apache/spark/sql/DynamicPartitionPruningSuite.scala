@@ -2200,6 +2200,20 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
     }
   }
 
+  test("RUNTIME_FILTER hint keeps DPP's repeatable-source requirement") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // DPP re-evaluates the filtering side, so a sample without a seed, which draws different
+      // rows per evaluation, is not accepted as a source however strongly the user asserts a
+      // benefit. The same predicate gates the row-level filter.
+      val hinted = sql(
+        """SELECT /*+ RUNTIME_FILTER(s) */ f.date_id, f.store_id
+          |FROM fact_sk f JOIN (SELECT store_id FROM dim_store TABLESAMPLE (50 PERCENT)) s
+          |ON f.store_id = s.store_id""".stripMargin)
+      checkPartitionPruningPredicate(hinted, withSubquery = false, withBroadcast = false)
+    }
+  }
+
   test("RUNTIME_FILTER hint on both join sides leaves DPP to its own estimates") {
     // The confs and query of "simple inner join triggers DPP with mock-up tables": an ambiguous
     // hint is ignored, so the selective predicate on `dim_store` still gets DPP as without a hint,
