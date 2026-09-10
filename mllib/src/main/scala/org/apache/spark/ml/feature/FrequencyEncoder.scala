@@ -363,9 +363,18 @@ class FrequencyEncoderModel private[ml] (
           when(castedCol.isNull, fillNullCol).otherwise(fillUnseenCol)
         } else {
           val targetCol = try_element_at(typedlit(filteredMapping), castedCol)
-          when(castedCol.isNull, fillNullCol)
-            .when(!targetCol.isNull, targetCol)
-            .otherwise(fillUnseenCol)
+          // coalesce, rather than testing the lookup for null and then reading it again. The
+          // second shape evaluated the lookup twice for a known category and common
+          // subexpression elimination did not remove the duplicate: the generated Java carried
+          // two scan loops below spark.sql.optimizer.mapLookupHashThreshold and two hash probes
+          // at or above it. coalesce evaluates its arguments lazily, so fillUnseenCol, which is
+          // a raise_error under handleInvalid=error, still fires only on an actual miss.
+          //
+          // The null branch stays explicit because a learned null category carries an encoding
+          // of its own, which coalesce could not distinguish from a miss. Every fitted value is
+          // a non-null double, so a null coming back from the lookup can only mean the category
+          // was absent.
+          when(castedCol.isNull, fillNullCol).otherwise(coalesce(targetCol, fillUnseenCol))
         }
 
         // Numeric, not nominal: an encoded frequency is a continuous quantity, and its ordering

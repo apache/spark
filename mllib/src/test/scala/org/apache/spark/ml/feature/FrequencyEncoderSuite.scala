@@ -19,10 +19,12 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.attribute.NumericAttribute
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class FrequencyEncoderSuite extends MLTest with DefaultReadWriteTest {
@@ -438,6 +440,125 @@ class FrequencyEncoderSuite extends MLTest with DefaultReadWriteTest {
 
     val row = model.transform(far).select("output3").head()
     assert(row.getDouble(0) === 0.0, "an out of range value must not inherit a learned frequency")
+  }
+
+  test("FrequencyEncoder - a known category does not raise under handleInvalid error") {
+
+    // transform looks the category up once and coalesces the miss handler in, rather than
+    // testing the lookup for null and reading it again. Under handleInvalid=error that miss
+    // handler is a raise_error, so this asserts the property the shape depends on: coalesce
+    // evaluates its second argument only when the first is null. A known category must come
+    // back with its own encoding and must not trip the error.
+    val df = spark.createDataFrame(sc.parallelize(data), schema)
+
+    val model = multiColumnEncoder
+      .setHandleInvalid(FrequencyEncoder.ERROR_INVALID)
+      .fit(df)
+
+    val rows = model.transform(df).select("output1", "output2", "output3").collect()
+    assert(rows.length === data.length)
+    rows.foreach { row =>
+      assert(row.getDouble(0) === 3.0/9.0)
+      assert(row.getDouble(1) === 5.0/9.0 || row.getDouble(1) === 4.0/9.0)
+    }
+  }
+
+  test("FrequencyEncoder - a feature that trained on nothing but nulls") {
+
+    // Every value is null, so the only category learned is the null one and the non-null mapping
+    // is empty. Nulls take their learned encoding of 1.0; anything else is unseen.
+    val nullSchema = StructType(Array(StructField("cat", DoubleType, nullable = true)))
+    val allNull = spark.createDataFrame(
+      sc.parallelize(Seq(Row(null), Row(null), Row(null))), nullSchema)
+
+    val model = new FrequencyEncoder()
+      .setInputCol("cat").setOutputCol("freq")
+      .setHandleInvalid(FrequencyEncoder.KEEP_INVALID)
+      .fit(allNull)
+
+    assert(model.encodings.head === Map(FrequencyEncoder.NULL_CATEGORY -> 1.0))
+
+    val mixed = spark.createDataFrame(
+      sc.parallelize(Seq(Row(null), Row(7.0))), nullSchema)
+    val got = model.transform(mixed).select("cat", "freq").collect()
+      .map(r => (if (r.isNullAt(0)) None else Some(r.getDouble(0))) -> r.getDouble(1)).toMap
+    assert(got(None) === 1.0, "a learned null keeps its own encoding")
+    assert(got(Some(7.0)) === 0.0, "a value never seen is unseen, not the null encoding")
+  }
+
+  test("FrequencyEncoder - a fit over zero rows learns nothing") {
+
+    // An empty mapping is the other way into the short-circuit branch: nothing was learned, so
+    // every value is unseen, including null, which has no learned encoding to fall back on.
+    val nullSchema = StructType(Array(StructField("cat", DoubleType, nullable = true)))
+    val empty = spark.createDataFrame(sc.emptyRDD[Row], nullSchema)
+
+    val keep = new FrequencyEncoder()
+      .setInputCol("cat").setOutputCol("freq")
+      .setHandleInvalid(FrequencyEncoder.KEEP_INVALID)
+      .fit(empty)
+    assert(keep.encodings.head.isEmpty)
+
+    val probe = spark.createDataFrame(sc.parallelize(Seq(Row(1.0), Row(null))), nullSchema)
+    assert(keep.transform(probe).select("freq").collect().forall(_.getDouble(0) === 0.0))
+
+    val strict = new FrequencyEncoder()
+      .setInputCol("cat").setOutputCol("freq")
+      .setHandleInvalid(FrequencyEncoder.ERROR_INVALID)
+      .fit(empty)
+    intercept[SparkRuntimeException] {
+      strict.transform(probe).select("freq").collect()
+    }
+  }
+
+  test("FrequencyEncoder - output type, metadata and nullability") {
+
+    val df = spark.createDataFrame(sc.parallelize(data), schema)
+
+    for (mode <- Seq(FrequencyEncoder.KEEP_INVALID, FrequencyEncoder.ERROR_INVALID)) {
+      val model = multiColumnEncoder.setHandleInvalid(mode).fit(df)
+
+      val declared = model.transformSchema(df.schema)("output1")
+      val delivered = model.transform(df).schema("output1")
+
+      for (field <- Seq(declared, delivered)) {
+        assert(field.dataType === DoubleType)
+        assert(NumericAttribute.fromStructField(field).name === Some("output1"))
+      }
+      assert(!declared.nullable, "schema inference promises a value for every row")
+
+      // Under keep the single-lookup shape is provably non-null: coalesce falls back to a
+      // literal. Under error the fallback is raise_error, which Catalyst types as nullable, so
+      // the delivered field still reports nullable even though it can only ever throw or
+      // produce a double. Either way no null is ever emitted, which is what matters.
+      if (mode == FrequencyEncoder.KEEP_INVALID) {
+        assert(!delivered.nullable, "keep mode coalesces to a literal, so nothing can be null")
+      }
+      assert(model.transform(df).filter(col("output1").isNull).count() === 0)
+    }
+  }
+
+  test("FrequencyEncoder - encoding is unchanged with codegen disabled") {
+
+    // The single-lookup shape is a Catalyst expression change, so it has an interpreted path as
+    // well as a generated one. Both must produce the same values.
+    val df = spark.createDataFrame(sc.parallelize(data), schema)
+    val model = multiColumnEncoder
+      .setHandleInvalid(FrequencyEncoder.KEEP_INVALID)
+      .fit(df)
+
+    def encode(): Seq[Double] = model.transform(df)
+      .select("output1", "output2", "output3").collect()
+      .flatMap(r => Seq(r.getDouble(0), r.getDouble(1), r.getDouble(2))).toSeq
+
+    val generated = encode()
+    val interpreted = withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
+      encode()
+    }
+    assert(generated === interpreted)
+    assert(generated.nonEmpty)
   }
 
   test("FrequencyEncoder - R/W single-column") {
