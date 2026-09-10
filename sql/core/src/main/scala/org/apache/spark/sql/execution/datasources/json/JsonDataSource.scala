@@ -409,7 +409,13 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
 
     val safeParser = new FailureSafeParser[InputStream](
-      input => parser.parseIterator[InputStream](input, streamParser, partitionedFileString),
+      input => {
+        if (parser.options.streamMultilineTopLevelArray) {
+          parser.parseIterator[InputStream](input, streamParser, partitionedFileString)
+        } else {
+          parser.parse[InputStream](input, streamParser, partitionedFileString)
+        }
+      },
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
@@ -431,8 +437,13 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
 
     val safeParser = new FailureSafeParser[InputStream](
-      input => parser.parseIterator[InputStream](
-        input, streamParser, _ => UTF8String.fromBytes(bytes)),
+      input => {
+        if (parser.options.streamMultilineTopLevelArray) {
+          parser.parseIterator[InputStream](input, streamParser, _ => UTF8String.fromBytes(bytes))
+        } else {
+          parser.parse[InputStream](input, streamParser, _ => UTF8String.fromBytes(bytes))
+        }
+      },
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)

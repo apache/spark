@@ -1068,9 +1068,13 @@ abstract class JsonSuite
 
     withTempPath { file =>
       Files.write(file.toPath, """[{"a":1},{"a":2}]""".getBytes(StandardCharsets.UTF_8))
-      checkAnswer(
-        spark.read.option("multiLine", true).schema("a int").json(file.getCanonicalPath),
-        Seq(Row(1), Row(2)))
+      Seq("false", "true").foreach { enabled =>
+        withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> enabled) {
+          checkAnswer(
+            spark.read.option("multiLine", true).schema("a int").json(file.getCanonicalPath),
+            Seq(Row(1), Row(2)))
+        }
+      }
     }
   }
 
@@ -1090,16 +1094,18 @@ abstract class JsonSuite
   }
 
   test("multiline top level JSON array keeps rows emitted before malformed input") {
-    withTempPath { file =>
-      val document = """[{"a":1} {"a":2}]"""
-      Files.write(file.toPath, document.getBytes(StandardCharsets.UTF_8))
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      withTempPath { file =>
+        val document = """[{"a":1} {"a":2}]"""
+        Files.write(file.toPath, document.getBytes(StandardCharsets.UTF_8))
 
-      checkAnswer(
-        spark.read
-          .option("multiLine", true)
-          .schema("a int, _corrupt_record string")
-          .json(file.getCanonicalPath),
-        Seq(Row(1, null), Row(null, document)))
+        checkAnswer(
+          spark.read
+            .option("multiLine", true)
+            .schema("a int, _corrupt_record string")
+            .json(file.getCanonicalPath),
+          Seq(Row(1, null), Row(null, document)))
+      }
     }
   }
 
