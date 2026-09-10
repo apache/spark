@@ -54,9 +54,9 @@ import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
  * source location and a nested STANDARD-format error object, and parsing
  * continues with later statements. Nested error locations are relative to the
  * individual statement, while `start` is relative to the original batch. An
- * empty or comment-only batch produces an empty array. Only [[ParseException]] /
- * [[SqlScriptingException]] are converted to JSON; unexpected / internal
- * failures propagate so the function fails.
+ * empty or closed-comment-only batch produces an empty array. Only
+ * [[ParseException]] / [[SqlScriptingException]] are converted to JSON;
+ * unexpected / internal failures propagate so the function fails.
  */
 object ParseSqlResult {
 

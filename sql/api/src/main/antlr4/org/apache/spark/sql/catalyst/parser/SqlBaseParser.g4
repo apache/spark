@@ -109,7 +109,13 @@ parseSqlBatchItem
 
 parseSqlBatchStatement
     : parseSqlBatchCompoundStatement
+    | parseSqlBatchMalformedEmptyCompoundBlock
+    | parseSqlBatchMalformedBeginStatement
     | parseSqlBatchLeafStatement
+    ;
+
+parseSqlBatchMalformedBeginStatement
+    : BEGIN
     ;
 
 parseSqlBatchPartialCompoundStatement
@@ -124,12 +130,27 @@ parseSqlBatchBeginEndCompoundBlock
     : beginLabel? BEGIN (NOT ATOMIC)? parseSqlBatchCompoundBody? END endLabel?
     ;
 
+parseSqlBatchMalformedEmptyCompoundBlock
+    : beginLabel? BEGIN (NOT ATOMIC)? SEMICOLON END endLabel?
+    ;
+
+parseSqlBatchMalformedBodyBeginStatement
+    : BEGIN (~(SEMICOLON | PARSE_SQL_BATCH_DELIMITER))+
+    ;
+
 parseSqlBatchCompoundBody
     : (parseSqlBatchCompoundBodyStatement SEMICOLON)+
     ;
 
 parseSqlBatchCompoundBodyStatement
+    : parseSqlBatchNestedStatement
+    | parseSqlBatchOrphanControlEndStatement
+    | parseSqlBatchBodyLeafStatement
+    ;
+
+parseSqlBatchNestedStatement
     : parseSqlBatchBeginEndCompoundBlock
+    | parseSqlBatchMalformedEmptyCompoundBlock
     | parseSqlBatchDeclareHandlerStatement
     | parseSqlBatchIfElseStatement
     | parseSqlBatchCaseStatement
@@ -137,46 +158,109 @@ parseSqlBatchCompoundBodyStatement
     | parseSqlBatchRepeatStatement
     | parseSqlBatchLoopStatement
     | parseSqlBatchForStatement
-    | parseSqlBatchLeafStatement
+    | parseSqlBatchMalformedBodyBeginStatement
+    | parseSqlBatchMalformedBeginStatement
+    ;
+
+parseSqlBatchOrphanControlEndStatement
+    : END (IF | WHILE | LOOP | REPEAT | FOR | CASE)
     ;
 
 parseSqlBatchDeclareHandlerStatement
     : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues
-      (parseSqlBatchBeginEndCompoundBlock | parseSqlBatchLeafStatement)
+      (parseSqlBatchBeginEndCompoundBlock
+      | parseSqlBatchMalformedEmptyCompoundBlock
+      | parseSqlBatchMalformedBodyBeginStatement
+      | parseSqlBatchBodyLeafStatement)
     ;
 
 parseSqlBatchWhileStatement
-    : beginLabel? WHILE booleanExpression DO parseSqlBatchCompoundBody END WHILE endLabel?
+    : beginLabel? WHILE booleanExpression DO parseSqlBatchCompoundBody
+      parseSqlBatchPrematureEnds? END WHILE endLabel?
     ;
 
 parseSqlBatchIfElseStatement
-    : IF booleanExpression THEN parseSqlBatchCompoundBody
-      (ELSEIF booleanExpression THEN parseSqlBatchCompoundBody)*
-      (ELSE parseSqlBatchCompoundBody)? END IF
+    : IF parseSqlBatchIfCondition THEN parseSqlBatchConditionalBody
+      (ELSEIF parseSqlBatchIfCondition THEN parseSqlBatchConditionalBody)*
+      (ELSE parseSqlBatchConditionalBody)? parseSqlBatchPrematureEnds? END IF
+    ;
+
+parseSqlBatchIfCondition
+    : (~(THEN | SEMICOLON | PARSE_SQL_BATCH_DELIMITER))*
+    ;
+
+parseSqlBatchConditionalBody
+    : (parseSqlBatchConditionalBodyStatement SEMICOLON)+
+    ;
+
+parseSqlBatchConditionalBodyStatement
+    : parseSqlBatchNestedStatement
+    | parseSqlBatchConditionalBodyLeafStatement
+    ;
+
+parseSqlBatchConditionalBodyLeafStatement
+    : {_input.LA(1) != BEGIN && _input.LA(1) != END &&
+        _input.LA(1) != ELSEIF && _input.LA(1) != ELSE}?
+      (~(SEMICOLON | PARSE_SQL_BATCH_DELIMITER))+
     ;
 
 parseSqlBatchRepeatStatement
-    : beginLabel? REPEAT parseSqlBatchCompoundBody UNTIL booleanExpression END REPEAT endLabel?
+    : beginLabel? REPEAT parseSqlBatchCompoundBody parseSqlBatchPrematureEnds?
+      UNTIL booleanExpression END REPEAT endLabel?
     ;
 
 parseSqlBatchCaseStatement
-    : CASE (WHEN booleanExpression THEN parseSqlBatchCompoundBody)+
-      (ELSE parseSqlBatchCompoundBody)? END CASE
-    | CASE expression (WHEN expression THEN parseSqlBatchCompoundBody)+
-      (ELSE parseSqlBatchCompoundBody)? END CASE
+    : CASE (WHEN parseSqlBatchCaseWhenCondition THEN parseSqlBatchCaseBody)+
+      (ELSE parseSqlBatchCaseBody)? parseSqlBatchPrematureEnds? END CASE
+    | CASE parseSqlBatchCaseOperand
+      (WHEN parseSqlBatchCaseWhenCondition THEN parseSqlBatchCaseBody)+
+      (ELSE parseSqlBatchCaseBody)? parseSqlBatchPrematureEnds? END CASE
+    ;
+
+parseSqlBatchCaseOperand
+    : (~(WHEN | SEMICOLON | PARSE_SQL_BATCH_DELIMITER))+
+    ;
+
+parseSqlBatchCaseWhenCondition
+    : (~(THEN | SEMICOLON | PARSE_SQL_BATCH_DELIMITER))*
+    ;
+
+parseSqlBatchCaseBody
+    : (parseSqlBatchCaseBodyStatement SEMICOLON)+
+    ;
+
+parseSqlBatchCaseBodyStatement
+    : parseSqlBatchNestedStatement
+    | parseSqlBatchCaseBodyLeafStatement
+    ;
+
+parseSqlBatchCaseBodyLeafStatement
+    : {_input.LA(1) != BEGIN && _input.LA(1) != END &&
+        _input.LA(1) != WHEN && _input.LA(1) != ELSE}?
+      (~(SEMICOLON | PARSE_SQL_BATCH_DELIMITER))+
     ;
 
 parseSqlBatchLoopStatement
-    : beginLabel? LOOP parseSqlBatchCompoundBody END LOOP endLabel?
+    : beginLabel? LOOP parseSqlBatchCompoundBody
+      parseSqlBatchPrematureEnds? END LOOP endLabel?
     ;
 
 parseSqlBatchForStatement
     : beginLabel? FOR (strictIdentifier AS)? query DO
-      parseSqlBatchCompoundBody END FOR endLabel?
+      parseSqlBatchCompoundBody parseSqlBatchPrematureEnds? END FOR endLabel?
+    ;
+
+parseSqlBatchPrematureEnds
+    : (END SEMICOLON)+
     ;
 
 parseSqlBatchLeafStatement
     : {_input.LA(1) != BEGIN}?
+      (~(SEMICOLON | PARSE_SQL_BATCH_DELIMITER))+
+    ;
+
+parseSqlBatchBodyLeafStatement
+    : {_input.LA(1) != BEGIN && _input.LA(1) != END}?
       (~(SEMICOLON | PARSE_SQL_BATCH_DELIMITER))+
     ;
 

@@ -49,7 +49,7 @@ import org.apache.spark.unsafe.types.UTF8String
     Requires spark.sql.function.parseSql.enabled=true. On syntax / parse error returns JSON
     for that statement with `parse_success` false, source location, and a nested STANDARD
     error object instead of throwing or stopping the remaining statements. Nested error
-    locations are statement-relative. An empty or comment-only batch returns `[]`.""",
+    locations are statement-relative. An empty or closed-comment-only batch returns `[]`.""",
   arguments = """
     Arguments:
       * sqlStmt - A SQL batch string to split and parse.
