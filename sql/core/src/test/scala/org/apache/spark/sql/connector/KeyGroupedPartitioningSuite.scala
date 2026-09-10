@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
@@ -1127,6 +1128,57 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         if (pushDownValues) {
           val scans = collectScans(df.queryExecution.executedPlan)
           assert(scans.forall(_.inputRDD.partitions.length === 3))
+        }
+      }
+    }
+  }
+
+  for (joined <- Seq(false, true)) {
+    test(s"SPARK-58968: establish subset clustering below a window, joined=$joined") {
+      val windowColumns = Array("k", "discard", "v").map(name => Column.create(name, IntegerType))
+      createTable("window_subset", windowColumns, Array(identity("k"), identity("discard")))
+      sql("INSERT INTO testcat.ns.window_subset VALUES (1, 10, 10), (1, 20, 20), (2, 30, 30)")
+      createTable("window_right", Array(Column.create("k", IntegerType)), Array.empty)
+      sql("INSERT INTO testcat.ns.window_right VALUES (1), (2)")
+
+      for {
+        requireAll <- Seq(false, true)
+        fullKey <- Seq(false, true)
+      } {
+        withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> requireAll.toString,
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+            SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+            SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false") {
+          val windowKeys = if (fullKey) "k, discard" else "k"
+          val join = if (joined) "JOIN testcat.ns.window_right r ON w.k = r.k" else ""
+          val hint = if (joined) "/*+ MERGE(w, r) */" else ""
+          val df = sql(
+            s"""SELECT $hint w.k, w.discard, w.rn
+               |FROM (
+               |  SELECT k, discard, ROW_NUMBER() OVER (
+               |    PARTITION BY $windowKeys ORDER BY v) AS rn
+               |  FROM testcat.ns.window_subset
+               |) w $join
+               |""".stripMargin)
+
+          withClue(s"requireAll=$requireAll, fullKey=$fullKey: ") {
+            checkAnswer(df, Seq(Row(1, 10, 1), Row(1, 20, if (fullKey) 1 else 2), Row(2, 30, 1)))
+            val plan = df.queryExecution.executedPlan
+            val Seq(window) = collect(plan) { case w: WindowExec => w }
+            val shuffles = collectAllShuffles(window.child)
+            if (fullKey) {
+              assert(shuffles.isEmpty, "full-key window should retain the scan's clustering")
+            } else {
+              assert(shuffles.size == 1, "the shuffle must be below the window")
+              val partitioning = shuffles.head.outputPartitioning
+                .asInstanceOf[physical.HashPartitioning]
+              assert(partitioning.expressions == window.partitionSpec)
+            }
+            assert(collect(plan) { case j: SortMergeJoinExec => j }.size == (if (joined) 1 else 0))
+          }
         }
       }
     }
