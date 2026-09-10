@@ -530,7 +530,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Base64(UnBase64(Literal("AQIDBA=="))), "AQIDBA==", create_row("abdef"))
     // A non-base64 multi-byte char is ignored by the MIME decoder, so decoding the raw bytes
     // (getBytes) matches decoding the toString() form.
+    // scalastyle:off nonascii
     checkEvaluation(Base64(UnBase64(Literal("AQ数IDBA=="))), "AQIDBA==", create_row("abdef"))
+    // scalastyle:on nonascii
     checkEvaluation(Base64(UnBase64(Literal(""))), "", create_row("abdef"))
     checkEvaluation(Base64(UnBase64(Literal.create(null, StringType))), null, create_row("abdef"))
 
