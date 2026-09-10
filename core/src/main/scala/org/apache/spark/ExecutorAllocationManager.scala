@@ -108,7 +108,8 @@ private[spark] class ExecutorAllocationManager(
     cleaner: Option[ContextCleaner] = None,
     clock: Clock = new SystemClock(),
     resourceProfileManager: ResourceProfileManager,
-    reliableShuffleStorage: Boolean)
+    reliableShuffleStorage: Boolean,
+    isShuffleReliablyStored: Int => Boolean = _ => false)
   extends Logging {
 
   allocationManager =>
@@ -168,7 +169,13 @@ private[spark] class ExecutorAllocationManager(
   val executorAllocationManagerSource = new ExecutorAllocationManagerSource(this)
 
   val executorMonitor =
-    new ExecutorMonitor(conf, client, listenerBus, clock, executorAllocationManagerSource)
+    new ExecutorMonitor(
+      conf,
+      client,
+      listenerBus,
+      clock,
+      executorAllocationManagerSource,
+      isShuffleReliablyStored)
 
   // Whether we are still waiting for the initial set of executors to be allocated.
   // While this is true, we will not cancel outstanding executor requests. This is
