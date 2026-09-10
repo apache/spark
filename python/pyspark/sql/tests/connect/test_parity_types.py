@@ -25,17 +25,12 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     # SPARK-57462 follow-up: the nanosecond timestamp value path now works over Spark Connect,
     # whose data path goes through Arrow (to_arrow_type / ArrowTableToRowsConversion). The
-    # data-path tests -- test_timestamp_nanos_type, test_timestamp_nanos_type_preview_flag_off and
-    # test_timestamp_nanos_type_arrow_conversion -- are therefore inherited and run here. The
-    # nanosecond tests below exercise classic-only mechanisms that do not apply to Connect: the
-    # Py4J (useArrow=False) UDF path and the classic collect map-key guard in classic/dataframe.py.
+    # data-path tests -- and the collect map-key collision guard, now mirrored onto the Connect
+    # DataFrame -- are therefore inherited and run here. The nanosecond tests still skipped below
+    # exercise the classic-only Py4J (useArrow=False) UDF path, which does not apply to Connect.
     @unittest.skip("SPARK-57462: uses the classic Py4J (useArrow=False) UDF path, not Connect.")
     def test_timestamp_nanos_type_python_udf(self):
         super().test_timestamp_nanos_type_python_udf()
-
-    @unittest.skip("SPARK-57462: classic-only collect map-key guard (classic/dataframe.py).")
-    def test_timestamp_nanos_type_map_key_collision(self):
-        super().test_timestamp_nanos_type_map_key_collision()
 
     @unittest.skip("SPARK-57462: classic-only Py4J UDF input path (useArrow=False), not Connect.")
     def test_timestamp_nanos_type_python_udf_input(self):

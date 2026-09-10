@@ -94,8 +94,6 @@ def _with_timestamp_nanos_precision(
     """Merge the nanosecond-precision tag into an Arrow field's metadata for a nanosecond
     timestamp type, mirroring the JVM's ``toPrecisionTaggedArrowField``; other types are
     unchanged."""
-    from pyspark.sql.types import AnyTimestampNanoType
-
     if isinstance(dt, AnyTimestampNanoType):
         merged = dict(metadata) if metadata else {}
         merged[timestamp_nanos_precision_key] = str(dt.precision).encode("utf-8")
