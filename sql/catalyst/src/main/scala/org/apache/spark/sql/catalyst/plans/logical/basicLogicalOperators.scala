@@ -1900,7 +1900,7 @@ object BinBy {
    * Builds the `stringArgs` for EXPLAIN. LTZ formats `alignTo` in the captured zone and appends
    * `zone=`; NTZ formats in UTC and omits it.
    */
-  def explainStringArgs(
+  private[sql] def explainStringArgs(
       rangeStart: Attribute,
       rangeEnd: Attribute,
       binWidthMicros: Long,
