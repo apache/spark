@@ -135,8 +135,7 @@ case class Scd2BatchProcessor(
    * @param microbatchDf
    *   the incoming CDC microbatch.
    * @param targetTableDf
-   *   the current persisted target. The selected microbatch is aligned to its schema so target
-   *   columns omitted by the source receive explicit nulls before reconciliation.
+   *   the current persisted target table.
    * @return
    *   a dataframe that retains every input row 1:1 - no rows added, dropped, reordered, or
    *   merged. Its fields use `targetTableDf` as the authority for order and spelling.
@@ -254,7 +253,8 @@ case class Scd2BatchProcessor(
    * side is empty, so this retains exactly the microbatch's rows while [[DataFrame.unionByName]]
    * supplies nulls for target columns omitted by the source, including nested struct/array fields.
    *
-   * Keeping the target as the left schema authority also preserves its column order and spelling.
+   * Keeping the target as the left schema authority also preserves its column order and exact
+   * case-spelling.
    */
   private def alignMicrobatchToTargetSchema(
       projectedDf: DataFrame,

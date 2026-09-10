@@ -768,7 +768,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  gridTest("preprocessMicrobatch uses target spelling under case-insensitive analysis")(
+  gridTest("preprocessMicrobatch keeps divergent target spelling under case-insensitive analysis")(
     Seq(
       ("id", "Value", "ID", "value"),
       ("ID", "value", "id", "Value")
@@ -800,7 +800,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("preprocessMicrobatch keeps distinct case-sensitive columns") {
+  test("preprocessMicrobatch keeps distinct case-sensitive columns between target " +
+    "and microbatch") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       val batchSchema = new StructType()
         .add("id", IntegerType)
@@ -828,7 +829,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("preprocessMicrobatch uses target spelling recursively under case-insensitive analysis") {
+  test("preprocessMicrobatch keeps nested target field spelling recursively under " +
+    "case-insensitive analysis") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val batchSchema = new StructType()
         .add("ID", IntegerType)
