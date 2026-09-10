@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 class FailureSafeParser[IN](
-    rawParser: IN => IterableOnce[InternalRow],
+    rawParser: IN => Iterable[InternalRow],
     mode: ParseMode,
     schema: StructType,
     columnNameOfCorruptRecord: String) {
@@ -56,8 +56,18 @@ class FailureSafeParser[IN](
   }
 
   def parse(input: IN): Iterator[InternalRow] = {
-    var delegate = try {
+    try {
       rawParser.apply(input).iterator.map(row => toResultRow(Some(row), () => null))
+    } catch {
+      case e: BadRecordException => parseFailure(e)
+    }
+  }
+
+  def parseIterator(
+      input: IN,
+      iteratorParser: IN => Iterator[InternalRow]): Iterator[InternalRow] = {
+    var delegate = try {
+      iteratorParser.apply(input).map(row => toResultRow(Some(row), () => null))
     } catch {
       case e: BadRecordException => parseFailure(e)
     }
