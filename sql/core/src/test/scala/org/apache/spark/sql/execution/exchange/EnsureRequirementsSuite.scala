@@ -1161,11 +1161,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       EnsureRequirements.apply(smjExec) match {
         case ShuffledHashJoinExec(_, _, _, _, _,
         DummySparkPlan(_, _, left: KeyedPartitioning, _, _),
-        ShuffleExchangeExec(KeyedPartitioning(attrs, pks, _, _, _),
+        ShuffleExchangeExec(shuffled: KeyedPartitioning,
         DummySparkPlan(_, _, SinglePartition, _, _), _, _, _), _) =>
           assert(left.expressions == a1 :: Nil)
-          assert(attrs == a1 :: Nil)
-          assert(partitionKeys == pks.map(_.row))
+          assert(shuffled.expressions == a1 :: Nil)
+          assert(partitionKeys == shuffled.partitionKeys.map(_.row))
         case other => fail(other.toString)
       }
     }
@@ -2094,7 +2094,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // filtering, sends the whole child to a shuffle.
     val keys = Seq(
       InternalRow(1, 1, 1), InternalRow(1, 2, 2), InternalRow(2, 2, 3), InternalRow(2, 2, 4))
-    val onlyA = KeyedPartitioning(Seq(exprA, exprX, exprY), keys).copy(isGrouped = false)
+    val onlyA =
+      KeyedPartitioning(Seq(exprA, exprX, exprY), keys).withLayout(_.copy(isGrouped = false))
     val aAndB = onlyA.copy(expressions = Seq(exprA, exprB, exprY))
 
     val child = new DummySparkPlanWithBatchScanChild(
@@ -2119,7 +2120,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // toward the wider set, the one that still names `b`. Ranking by count alone would take
     // whichever the child reports first.
     val keys = Seq(InternalRow(1, 1, 7), InternalRow(2, 2, 7), InternalRow(3, 3, 7))
-    val onlyA = KeyedPartitioning(Seq(exprA, exprX, exprY), keys).copy(isGrouped = false)
+    val onlyA =
+      KeyedPartitioning(Seq(exprA, exprX, exprY), keys).withLayout(_.copy(isGrouped = false))
     val aAndB = onlyA.copy(expressions = Seq(exprA, exprB, exprY))
 
     val child = new DummySparkPlanWithBatchScanChild(
@@ -2144,7 +2146,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // `isGrouped = false` keeps both members out of the needs-no-node case, so both are candidates
     // and the ranking decides. The wider one comes first, so taking the widest gives positions
     // [1, 2] and 3 partitions instead.
-    val onlyB = KeyedPartitioning(Seq(exprX, exprB, exprC), keys).copy(isGrouped = false)
+    val onlyB =
+      KeyedPartitioning(Seq(exprX, exprB, exprC), keys).withLayout(_.copy(isGrouped = false))
     val onlyA = onlyB.copy(expressions = Seq(exprA, exprY, exprZ))
 
     val child = new DummySparkPlanWithBatchScanChild(

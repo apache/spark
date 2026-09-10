@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, RowOrdering, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -104,11 +104,13 @@ trait DataSourceV2ScanExecBase
     keyGroupedPartitioning match {
       case Some(exprs) if conf.v2BucketingEnabled && KeyedPartitioning.supportsExpressions(exprs) &&
           inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
-        val dataTypes = exprs.map(_.dataType)
-        val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
-        val partitionKeys =
-          inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey()).sorted(rowOrdering)
-        Some(KeyedPartitioning(exprs, partitionKeys))
+        // A data source reports its splits in its own order, and a keyed side and a side
+        // re-shuffled onto it have to agree on the order or
+        // `PartitioningCollection.fromPartitionings` refuses them. See `KeyedPartitioning.apply`
+        // for why this is the ordering to sort with.
+        val keys = inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
+          .sorted(KeyedPartitioning.groupedKeyRowOrdering(exprs.map(_.dataType)))
+        Some(KeyedPartitioning(exprs, keys))
       case _ => None
     }
   }
