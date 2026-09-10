@@ -306,6 +306,35 @@ class FunctionsSuite extends MLTest {
       .first()
       .getAs[Vector](0)
     assert(emptyConstantsResult === Vectors.dense(Array.emptyDoubleArray))
+
+    val specialValues = Seq(Double.NaN, Double.NegativeInfinity, Double.PositiveInfinity)
+    val specialValueRows = specialValues.flatMap { value =>
+      Seq(
+        (Vectors.dense(value), Array(1.0), Array(0.0)),
+        (Vectors.dense(1.0), Array(value), Array(0.0)),
+        (Vectors.dense(1.0), Array(1.0), Array(value)))
+    }
+    val specialValueResults = specialValueRows
+      .toDF("vector", "scale", "shift")
+      .select(vector_affine_transform($"vector", $"scale", $"shift"))
+      .collect()
+      .map(_.getAs[Vector](0)(0))
+    specialValueResults.zip(specialValues.flatMap(value => Seq.fill(3)(value)))
+      .foreach { case (actual, expected) =>
+        assert(java.lang.Double.compare(actual, expected) === 0)
+      }
+
+    Seq(
+      (Array(1.0, 2.0), Array(0.0)),
+      (Array(1.0), Array(0.0, 0.0))).foreach { case (scale, shift) =>
+      val error = intercept[IllegalArgumentException] {
+        Seq((Vectors.dense(1.0), scale, shift))
+          .toDF("vector", "scale", "shift")
+          .select(vector_affine_transform($"vector", $"scale", $"shift"))
+          .collect()
+      }
+      assert(error.getMessage.contains("inputs with non-matching sizes"))
+    }
   }
 
   test("test get_vector") {
