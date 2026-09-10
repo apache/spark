@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.ml
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, GenericInternalRow, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, GenericInternalRow, TernaryExpression, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.ArrayData
@@ -34,17 +34,15 @@ case class VectorAffineTransform(
     vector: Expression,
     scale: Expression,
     shift: Expression)
-  extends Expression with ExpectsInputTypes {
+  extends TernaryExpression with ExpectsInputTypes {
 
-  require(scale != null || shift != null, "The scale and shift cannot both be null.")
-
-  override def children: Seq[Expression] =
-    Seq(vector) ++ Option(scale) ++ Option(shift)
+  override def first: Expression = vector
+  override def second: Expression = scale
+  override def third: Expression = shift
 
   override def prettyName: String = "ml_vector_affine_transform"
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq.fill(children.length)(VectorAffineTransform.vectorSqlType)
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(3)(VectorAffineTransform.vectorSqlType)
 
   override def dataType: DataType = VectorAffineTransform.vectorSqlType
 
@@ -57,8 +55,8 @@ case class VectorAffineTransform(
     } else {
       VectorAffineTransform.transform(
         vectorInput.asInstanceOf[InternalRow],
-        if (scale == null) null else scale.eval(input).asInstanceOf[InternalRow],
-        if (shift == null) null else shift.eval(input).asInstanceOf[InternalRow])
+        scale.eval(input).asInstanceOf[InternalRow],
+        shift.eval(input).asInstanceOf[InternalRow])
     }
   }
 
@@ -68,43 +66,28 @@ case class VectorAffineTransform(
     val vectorGen = vector.genCode(ctx)
     val scaleInput = ctx.freshName("scaleInput")
     val shiftInput = ctx.freshName("shiftInput")
-    val scaleGen = Option(scale).map(_.genCode(ctx))
-    val shiftGen = Option(shift).map(_.genCode(ctx))
-    val scaleEval = scaleGen.map { gen =>
-      code"""
-        ${gen.code}
-        $javaType $scaleInput = ${gen.isNull} ? null : ${gen.value};
-      """
-    }.getOrElse(code"$javaType $scaleInput = null;")
-    val shiftEval = shiftGen.map { gen =>
-      code"""
-        ${gen.code}
-        $javaType $shiftInput = ${gen.isNull} ? null : ${gen.value};
-      """
-    }.getOrElse(code"$javaType $shiftInput = null;")
+    val scaleGen = scale.genCode(ctx)
+    val shiftGen = shift.genCode(ctx)
 
     ev.copy(code = code"""
       ${vectorGen.code}
       boolean ${ev.isNull} = ${vectorGen.isNull};
       $javaType ${ev.value} = null;
       if (!${ev.isNull}) {
-        $scaleEval
-        $shiftEval
+        ${scaleGen.code}
+        ${shiftGen.code}
+        $javaType $scaleInput = ${scaleGen.isNull} ? null : ${scaleGen.value};
+        $javaType $shiftInput = ${shiftGen.isNull} ? null : ${shiftGen.value};
         ${ev.value} = $cls.MODULE$$.transform(${vectorGen.value}, $scaleInput, $shiftInput);
       }
     """)
   }
 
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): VectorAffineTransform = {
-    var index = 1
-    val newScale = if (scale == null) null else {
-      val child = newChildren(index)
-      index += 1
-      child
-    }
-    val newShift = if (shift == null) null else newChildren(index)
-    copy(vector = newChildren.head, scale = newScale, shift = newShift)
+      newVector: Expression,
+      newScale: Expression,
+      newShift: Expression): VectorAffineTransform = {
+    copy(vector = newVector, scale = newScale, shift = newShift)
   }
 }
 

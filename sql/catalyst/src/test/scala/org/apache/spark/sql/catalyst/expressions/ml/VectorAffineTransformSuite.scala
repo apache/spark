@@ -102,7 +102,7 @@ class VectorAffineTransformSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(
       VectorAffineTransform(
         sparse(3, Array(0, 2), Array(1.0, 3.0)),
-        null,
+        nullVector,
         sparse(3, Array(1), Array(2.0))),
       denseRow(1.0, 2.0, 3.0))
   }
@@ -117,7 +117,7 @@ class VectorAffineTransformSuite extends SparkFunSuite with ExpressionEvalHelper
       VectorAffineTransform(
         sparse(3, Array(0, 2), Array(1.0, 3.0)),
         dense(2.0, 3.0, 4.0),
-        null),
+        nullVector),
       sparseRow(3, Array(0, 2), Array(2.0, 12.0)))
   }
 
@@ -126,10 +126,6 @@ class VectorAffineTransformSuite extends SparkFunSuite with ExpressionEvalHelper
     checkExceptionInExpression[IllegalArgumentException](
       VectorAffineTransform(dense(1.0), nullVector, nullVector),
       "scale and shift cannot both be null")
-    val error = intercept[IllegalArgumentException] {
-      VectorAffineTransform(dense(1.0), null, null)
-    }
-    assert(error.getMessage.contains("scale and shift cannot both be null"))
   }
 
   test("vector affine transform with empty vectors") {
