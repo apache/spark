@@ -1033,9 +1033,24 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 
 object Overlay {
 
+  // `pos - 1` and `pos + length` overflow for positions near the ends of the `int` range,
+  // which turns an empty slice into the whole input and duplicates it around the
+  // replacement. Compute them as `long` and saturate into the `int` range instead, which
+  // is how `substring` already treats out-of-range positions.
+  private def clamp(value: Long): Int =
+    math.max(Int.MinValue.toLong, math.min(Int.MaxValue.toLong, value)).toInt
+
+  // The tail of the result starts at `pos + length`. `substringSQL` derives its end offset from
+  // `start + Int.MaxValue`, which still reaches the end of the input for every position down to
+  // `Int.MinValue + 1` but falls one character short at `Int.MinValue` itself. Both denote the
+  // same tail, the whole input, so raise the floor by one rather than reading the input length,
+  // which would cost an O(n) scan on every call to spare the one extreme position.
+  private def clampTail(value: Long): Int =
+    math.max(Int.MinValue.toLong + 1, math.min(Int.MaxValue.toLong, value)).toInt
+
   def calculate(input: UTF8String, replace: UTF8String, pos: Int, len: Int): UTF8String = {
     val builder = new UTF8StringBuilder
-    builder.append(input.substringSQL(1, pos - 1))
+    builder.append(input.substringSQL(1, clamp(pos.toLong - 1)))
     builder.append(replace)
     // If you specify length, it must be a positive whole number or zero.
     // Otherwise it will be ignored.
@@ -1045,7 +1060,8 @@ object Overlay {
     } else {
       replace.numChars
     }
-    builder.append(input.substringSQL(pos + length, Int.MaxValue))
+    val tail = clampTail(pos.toLong + length)
+    builder.append(input.substringSQL(tail, Int.MaxValue))
     builder.build()
   }
 
@@ -1058,8 +1074,9 @@ object Overlay {
     } else {
       replace.length
     }
-    ByteArray.concat(ByteArray.subStringSQL(input, 1, pos - 1),
-      replace, ByteArray.subStringSQL(input, pos + length, Int.MaxValue))
+    val tail = clampTail(pos.toLong + length)
+    ByteArray.concat(ByteArray.subStringSQL(input, 1, clamp(pos.toLong - 1)),
+      replace, ByteArray.subStringSQL(input, tail, Int.MaxValue))
   }
 }
 
