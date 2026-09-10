@@ -263,7 +263,7 @@ class RandomForestRegressionModel private[ml] (
   }
 
   override def predict(features: Vector): Double = {
-    TreeEnsembleModel.predict(features, _trees) / getNumTrees
+    TreeEnsembleModel.predictRaw(features, _trees) / getNumTrees
   }
 
   @Since("1.4.0")

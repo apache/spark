@@ -280,7 +280,7 @@ class GBTRegressionModel private[ml](
       if ($(predictionCol).nonEmpty) {
         val predUDF = udf { features: Vector =>
           val (rootNodes, treeWeights) = bcTreeData.value
-          TreeEnsembleModel.predict(features, rootNodes, treeWeights)
+          TreeEnsembleModel.predictRaw(features, rootNodes, treeWeights)
         }
         predColNames :+= $(predictionCol)
         predCols :+= predUDF(col($(featuresCol)))
@@ -305,7 +305,7 @@ class GBTRegressionModel private[ml](
   }
 
   override def predict(features: Vector): Double = {
-    TreeEnsembleModel.predict(features, _trees, _treeWeights)
+    TreeEnsembleModel.predictRaw(features, _trees, _treeWeights)
   }
 
   @Since("1.4.0")

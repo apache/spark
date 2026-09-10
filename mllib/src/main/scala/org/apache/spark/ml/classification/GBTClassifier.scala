@@ -369,7 +369,7 @@ class GBTClassificationModel private[ml](
       }).apply(features)
     } else {
       udf((features: Vector) => {
-        val margin = TreeEnsembleModel.predict(features, localRootNodes, localTreeWeights)
+        val margin = TreeEnsembleModel.predictRaw(features, localRootNodes, localTreeWeights)
         if (margin > 0.0) 1.0 else 0.0
       }).apply(features)
     }
@@ -380,13 +380,13 @@ class GBTClassificationModel private[ml](
     if (isDefined(thresholds)) {
       super.predict(features)
     } else {
-      if (TreeEnsembleModel.predict(features, _trees, _treeWeights) > 0.0) 1.0 else 0.0
+      if (TreeEnsembleModel.predictRaw(features, _trees, _treeWeights) > 0.0) 1.0 else 0.0
     }
   }
 
   @Since("3.0.0")
   override def predictRaw(features: Vector): Vector = {
-    val prediction = TreeEnsembleModel.predict(features, _trees, _treeWeights)
+    val prediction = TreeEnsembleModel.predictRaw(features, _trees, _treeWeights)
     Vectors.dense(Array(-prediction, prediction))
   }
 
@@ -459,7 +459,7 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
       features: Vector,
       rootNodes: Array[Node],
       treeWeights: Array[Double]): Vector = {
-    val prediction = TreeEnsembleModel.predict(features, rootNodes, treeWeights)
+    val prediction = TreeEnsembleModel.predictRaw(features, rootNodes, treeWeights)
     Vectors.dense(-prediction, prediction)
   }
 

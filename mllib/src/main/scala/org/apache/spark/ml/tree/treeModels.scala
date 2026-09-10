@@ -169,7 +169,7 @@ private[spark] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
 private[ml] object TreeEnsembleModel {
 
-  private[ml] def predict[M <: DecisionTreeModel](
+  private[ml] def predictRaw[M <: DecisionTreeModel](
       features: Vector,
       trees: Array[M],
       treeWeights: Array[Double]): Double = {
@@ -182,7 +182,7 @@ private[ml] object TreeEnsembleModel {
     prediction
   }
 
-  private[ml] def predict[M <: DecisionTreeModel](
+  private[ml] def predictRaw[M <: DecisionTreeModel](
       features: Vector,
       trees: Array[M]): Double = {
     var prediction = 0.0
@@ -194,7 +194,7 @@ private[ml] object TreeEnsembleModel {
     prediction
   }
 
-  private[ml] def predict(
+  private[ml] def predictRaw(
       features: Vector,
       rootNodes: Array[Node],
       treeWeights: Array[Double]): Double = {
