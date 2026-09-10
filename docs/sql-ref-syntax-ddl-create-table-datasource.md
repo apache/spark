@@ -122,22 +122,23 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
     Requests a sort order for every write to the table, recorded on the table so that later writes
     honor it too. `UNORDERED` asks for no ordering at all, which is different from omitting the
-    clause -- omitting it leaves the choice to the data source. The parentheses are optional:
+    clause -- omitting it leaves the choice to the catalog. The parentheses are optional:
     `ORDERED BY (a, b)` and `ORDERED BY a, b` are the same. The sort keys must resolve against the
     table's columns, so a `CREATE TABLE` with neither a column list nor `AS SELECT` cannot use this
     clause.
 
     The distribution decides how far the order reaches, and this clause picks one when
     `DISTRIBUTED BY PARTITION` is absent: a bare `ORDERED BY` range-partitions each write, so the
-    order holds across the whole table, while `LOCALLY ORDERED BY` asks for it to hold within each
-    write task only, without a shuffle. `UNORDERED` on its own asks for no distribution either.
+    order holds across the tasks of a write, not only within one, while `LOCALLY ORDERED BY` asks
+    for it to hold within each write task only, without a shuffle. `UNORDERED` on its own asks for
+    no distribution either.
 
     When `DISTRIBUTED BY PARTITION` is given it decides the distribution instead, and the order then
     holds within each write task. `LOCALLY` therefore adds nothing beside it, and `UNORDERED` beside
     it contributes only "no sort keys":
 
     ```sql
-    -- range-partition each write by id, so the order holds across the whole table
+    -- range-partition each write by id, so the order holds across that write's tasks
     CREATE TABLE t (id INT, c STRING) USING iceberg PARTITIONED BY (c) ORDERED BY (id);
 
     -- cluster each write by partition instead, and sort by id within each task
