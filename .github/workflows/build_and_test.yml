@@ -650,7 +650,7 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-connect-old-client != 'true' &&  'pyspark-connect-old-client'}}
-          # pyspark-periodic will only run when explicitly requested, it contains tests that are not sensitive to pyspark code changes.
+          # pyspark-periodic will only run on pre-merge and scheduled CIs, it contains tests that are not sensitive to pyspark code changes.
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-periodic != 'true' && 'pyspark-periodic' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow' }}
