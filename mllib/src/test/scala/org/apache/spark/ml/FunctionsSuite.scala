@@ -26,7 +26,7 @@ import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, MatrixUDT => OldM
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.ml.{VectorAffineTransform, VectorPosExplode}
 import org.apache.spark.sql.functions.{col, unwrap_udt, wrap_udt}
-import org.apache.spark.sql.types.{StructField, StructType, UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, StructField, StructType, UserDefinedType}
 
 class FunctionsSuite extends MLTest {
 
@@ -258,13 +258,15 @@ class FunctionsSuite extends MLTest {
 
   test("test vector_affine_transform") {
     val df = Seq(
-      (Vectors.dense(1.0, 2.0), Vectors.dense(2.0, 3.0), Vectors.dense(4.0, 5.0)),
-      (Vectors.sparse(2, Seq((0, 1.0))), Vectors.dense(2.0, 3.0), null),
-      (Vectors.dense(1.0, 2.0), null, Vectors.dense(4.0, 5.0)),
+      (Vectors.dense(1.0, 2.0), Array(2.0, 3.0), Array(4.0, 5.0)),
+      (Vectors.sparse(2, Seq((0, 1.0))), Array(2.0, 3.0), null),
+      (Vectors.dense(1.0, 2.0), null, Array(4.0, 5.0)),
       (Vectors.sparse(2, Seq((0, 1.0))), null, null),
-      (null, Vectors.dense(2.0, 3.0), Vectors.dense(4.0, 5.0)))
+      (null, Array(2.0, 3.0), Array(4.0, 5.0)))
       .toDF("vector", "scale", "shift")
 
+    assert(df.schema("scale").dataType === ArrayType(DoubleType, containsNull = false))
+    assert(df.schema("shift").dataType === ArrayType(DoubleType, containsNull = false))
     val transformed = df.select(vector_affine_transform($"vector", $"scale", $"shift"))
     assert(transformed.schema.head.dataType === new VectorUDT)
     assert(transformed.collect().map(_.get(0)).toSeq === Seq(
@@ -281,8 +283,8 @@ class FunctionsSuite extends MLTest {
     val constantResult = df.limit(1)
       .select(vector_affine_transform(
         $"vector",
-        Vectors.dense(2.0, 3.0),
-        Vectors.dense(4.0, 5.0)))
+        Array(2.0, 3.0),
+        Array(4.0, 5.0)))
       .first()
       .getAs[Vector](0)
     assert(constantResult === Vectors.dense(6.0, 11.0))
@@ -290,11 +292,18 @@ class FunctionsSuite extends MLTest {
     val nullConstantsResult = df.limit(1)
       .select(vector_affine_transform(
         $"vector",
-        null.asInstanceOf[Vector],
-        null.asInstanceOf[Vector]))
+        null.asInstanceOf[Array[Double]],
+        null.asInstanceOf[Array[Double]]))
       .first()
       .getAs[Vector](0)
     assert(nullConstantsResult === Vectors.dense(1.0, 2.0))
+
+    val emptyConstantsResult = Seq(Tuple1(Vectors.dense(Array.emptyDoubleArray)))
+      .toDF("vector")
+      .select(vector_affine_transform($"vector", Array.emptyDoubleArray, Array.emptyDoubleArray))
+      .first()
+      .getAs[Vector](0)
+    assert(emptyConstantsResult === Vectors.dense(Array.emptyDoubleArray))
   }
 
   test("test get_vector") {

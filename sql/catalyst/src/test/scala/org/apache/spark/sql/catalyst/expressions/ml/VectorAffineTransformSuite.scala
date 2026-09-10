@@ -20,9 +20,11 @@ package org.apache.spark.sql.catalyst.expressions.ml
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal, UnsafeArrayData}
+import org.apache.spark.sql.types.{ArrayType, DoubleType}
 
 class VectorAffineTransformSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val vectorSqlType = VectorAffineTransform.vectorSqlType
+  private val doubleArraySqlType = VectorAffineTransform.doubleArraySqlType
 
   private def denseRow(values: Double*): InternalRow = {
     new GenericInternalRow(Array[Any](
@@ -46,19 +48,23 @@ class VectorAffineTransformSuite extends SparkFunSuite with ExpressionEvalHelper
     Literal(sparseRow(size, indices, values), vectorSqlType)
   }
 
+  private def array(values: Double*): Literal = {
+    Literal(UnsafeArrayData.fromPrimitiveArray(values.toArray), doubleArraySqlType)
+  }
+
   test("vector affine transform interpreted and code-generated evaluation") {
     val expression = VectorAffineTransform(
       dense(1.0, 2.0, 3.0),
-      dense(2.0, 3.0, 4.0),
-      dense(5.0, 6.0, 7.0))
+      array(2.0, 3.0, 4.0),
+      array(5.0, 6.0, 7.0))
     assert(expression.prettyName === "ml_vector_affine_transform")
     checkEvaluation(expression, denseRow(7.0, 12.0, 19.0))
 
     checkEvaluation(
       VectorAffineTransform(
         dense(1.0, 2.0, 3.0),
-        sparse(3, Array(0, 2), Array(2.0, 4.0)),
-        sparse(3, Array(1), Array(1.0))),
+        array(2.0, 0.0, 4.0),
+        array(0.0, 1.0, 0.0)),
       denseRow(2.0, 1.0, 12.0))
   }
 
@@ -67,13 +73,13 @@ class VectorAffineTransformSuite extends SparkFunSuite with ExpressionEvalHelper
     val expected = sparseRow(3, Array(0, 2), Array(2.0, 12.0))
 
     checkEvaluation(
-      VectorAffineTransform(vector, dense(2.0, 3.0, 4.0), dense(0.0, 0.0, 0.0)),
+      VectorAffineTransform(vector, array(2.0, 3.0, 4.0), array(0.0, 0.0, 0.0)),
       expected)
     checkEvaluation(
       VectorAffineTransform(
         vector,
-        sparse(3, Array(0, 2), Array(2.0, 4.0)),
-        sparse(3, Array.emptyIntArray, Array.emptyDoubleArray)),
+        array(2.0, 3.0, 4.0),
+        array(0.0, 0.0, 0.0)),
       expected)
   }
 
@@ -81,92 +87,103 @@ class VectorAffineTransformSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(
       VectorAffineTransform(
         sparse(3, Array(0, 2), Array(1.0, 3.0)),
-        dense(2.0, 3.0, 4.0),
-        sparse(3, Array(1), Array(1.0))),
+        array(2.0, 3.0, 4.0),
+        array(0.0, 1.0, 0.0)),
       denseRow(2.0, 1.0, 12.0))
   }
 
   test("vector affine transform with a null vector") {
     val nullVector = Literal(null, vectorSqlType)
-    val vector = dense(1.0)
+    val values = array(1.0)
 
-    checkEvaluation(VectorAffineTransform(nullVector, vector, vector), null)
+    checkEvaluation(VectorAffineTransform(nullVector, values, values), null)
   }
 
   test("vector affine transform with a null scale") {
-    val nullVector = Literal(null, vectorSqlType)
+    val nullArray = Literal(null, doubleArraySqlType)
 
     checkEvaluation(
-      VectorAffineTransform(dense(1.0, 2.0), nullVector, dense(3.0, 4.0)),
+      VectorAffineTransform(dense(1.0, 2.0), nullArray, array(3.0, 4.0)),
       denseRow(4.0, 6.0))
     checkEvaluation(
       VectorAffineTransform(
         sparse(3, Array(0, 2), Array(1.0, 3.0)),
-        nullVector,
-        sparse(3, Array(1), Array(2.0))),
+        nullArray,
+        array(0.0, 2.0, 0.0)),
       denseRow(1.0, 2.0, 3.0))
   }
 
   test("vector affine transform with a null shift") {
-    val nullVector = Literal(null, vectorSqlType)
+    val nullArray = Literal(null, doubleArraySqlType)
 
     checkEvaluation(
-      VectorAffineTransform(dense(1.0, 2.0), dense(3.0, 4.0), nullVector),
+      VectorAffineTransform(dense(1.0, 2.0), array(3.0, 4.0), nullArray),
       denseRow(3.0, 8.0))
     checkEvaluation(
       VectorAffineTransform(
         sparse(3, Array(0, 2), Array(1.0, 3.0)),
-        dense(2.0, 3.0, 4.0),
-        nullVector),
+        array(2.0, 3.0, 4.0),
+        nullArray),
       sparseRow(3, Array(0, 2), Array(2.0, 12.0)))
   }
 
   test("vector affine transform with a null scale and shift") {
-    val nullVector = Literal(null, vectorSqlType)
+    val nullArray = Literal(null, doubleArraySqlType)
 
     checkEvaluation(
-      VectorAffineTransform(dense(1.0, 2.0), nullVector, nullVector),
+      VectorAffineTransform(dense(1.0, 2.0), nullArray, nullArray),
       denseRow(1.0, 2.0))
     checkEvaluation(
       VectorAffineTransform(
         sparse(3, Array(0, 2), Array(1.0, 3.0)),
-        nullVector,
-        nullVector),
+        nullArray,
+        nullArray),
       sparseRow(3, Array(0, 2), Array(1.0, 3.0)))
   }
 
   test("vector affine transform with empty vectors") {
-    val emptyDense = dense()
     val emptySparse = sparse(0, Array.emptyIntArray, Array.emptyDoubleArray)
+    val emptyArray = array()
 
     checkEvaluation(
-      VectorAffineTransform(emptyDense, emptyDense, emptyDense),
+      VectorAffineTransform(dense(), emptyArray, emptyArray),
       denseRow())
     checkEvaluation(
-      VectorAffineTransform(emptySparse, emptySparse, emptySparse),
+      VectorAffineTransform(emptySparse, emptyArray, emptyArray),
       sparseRow(0, Array.emptyIntArray, Array.emptyDoubleArray))
   }
 
   test("vector affine transform with infinite and NaN values") {
     Seq(Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN).foreach { value =>
       checkEvaluation(
-        VectorAffineTransform(dense(value), dense(1.0), dense(0.0)),
+        VectorAffineTransform(dense(value), array(1.0), array(0.0)),
         denseRow(value))
       checkEvaluation(
-        VectorAffineTransform(dense(1.0), dense(value), dense(0.0)),
+        VectorAffineTransform(dense(1.0), array(value), array(0.0)),
         denseRow(value))
       checkEvaluation(
-        VectorAffineTransform(dense(1.0), dense(1.0), dense(value)),
+        VectorAffineTransform(dense(1.0), array(1.0), array(value)),
         denseRow(value))
     }
   }
 
-  test("vector affine transform rejects vectors with different sizes") {
+  test("vector affine transform rejects inputs with different sizes") {
     checkExceptionInExpression[IllegalArgumentException](
-      VectorAffineTransform(dense(1.0), dense(1.0, 2.0), dense(1.0)),
-      "vectors with non-matching sizes")
+      VectorAffineTransform(dense(1.0), array(1.0, 2.0), array(1.0)),
+      "inputs with non-matching sizes")
     checkExceptionInExpression[IllegalArgumentException](
-      VectorAffineTransform(dense(1.0), dense(1.0), dense(1.0, 2.0)),
-      "vectors with non-matching sizes")
+      VectorAffineTransform(dense(1.0), array(1.0), array(1.0, 2.0)),
+      "inputs with non-matching sizes")
+  }
+
+  test("vector affine transform requires arrays without null elements") {
+    val nullableArray = Literal(
+      UnsafeArrayData.fromPrimitiveArray(Array(1.0)),
+      ArrayType(DoubleType, containsNull = true))
+
+    assert(VectorAffineTransform(dense(1.0), nullableArray, array(0.0))
+      .checkInputDataTypes().isFailure)
+    assert(VectorAffineTransform(dense(1.0), array(1.0), nullableArray)
+      .checkInputDataTypes().isFailure)
   }
 }

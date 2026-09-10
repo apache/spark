@@ -43,7 +43,10 @@ case class VectorAffineTransform(
 
   override def prettyName: String = "ml_vector_affine_transform"
 
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(3)(VectorAffineTransform.vectorSqlType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    VectorAffineTransform.vectorSqlType,
+    VectorAffineTransform.NonNullableDoubleArrayType,
+    VectorAffineTransform.NonNullableDoubleArrayType)
 
   override def dataType: DataType = VectorAffineTransform.vectorSqlType
 
@@ -56,14 +59,15 @@ case class VectorAffineTransform(
     } else {
       VectorAffineTransform.transform(
         vectorInput.asInstanceOf[InternalRow],
-        scale.eval(input).asInstanceOf[InternalRow],
-        shift.eval(input).asInstanceOf[InternalRow])
+        scale.eval(input).asInstanceOf[ArrayData],
+        shift.eval(input).asInstanceOf[ArrayData])
     }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val cls = VectorAffineTransform.getClass.getName
-    val javaType = CodeGenerator.javaType(dataType)
+    val vectorJavaType = CodeGenerator.javaType(dataType)
+    val arrayJavaType = CodeGenerator.javaType(VectorAffineTransform.doubleArraySqlType)
     val vectorGen = vector.genCode(ctx)
     val scaleInput = ctx.freshName("scaleInput")
     val shiftInput = ctx.freshName("shiftInput")
@@ -73,12 +77,12 @@ case class VectorAffineTransform(
     ev.copy(code = code"""
       ${vectorGen.code}
       boolean ${ev.isNull} = ${vectorGen.isNull};
-      $javaType ${ev.value} = null;
+      $vectorJavaType ${ev.value} = null;
       if (!${ev.isNull}) {
         ${scaleGen.code}
         ${shiftGen.code}
-        $javaType $scaleInput = ${scaleGen.isNull} ? null : ${scaleGen.value};
-        $javaType $shiftInput = ${shiftGen.isNull} ? null : ${shiftGen.value};
+        $arrayJavaType $scaleInput = ${scaleGen.isNull} ? null : ${scaleGen.value};
+        $arrayJavaType $shiftInput = ${shiftGen.isNull} ? null : ${shiftGen.value};
         ${ev.value} = $cls.MODULE$$.transform(${vectorGen.value}, $scaleInput, $shiftInput);
       }
     """)
@@ -102,6 +106,16 @@ object VectorAffineTransform {
     StructField("indices", ArrayType(IntegerType, containsNull = false), nullable = true),
     StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
 
+  private[ml] val doubleArraySqlType = ArrayType(DoubleType, containsNull = false)
+
+  private object NonNullableDoubleArrayType extends AbstractDataType {
+    override private[sql] def defaultConcreteType: DataType = doubleArraySqlType
+
+    override private[sql] def acceptsType(other: DataType): Boolean = other == doubleArraySqlType
+
+    override private[spark] def simpleString: String = doubleArraySqlType.simpleString
+  }
+
   private def vectorSize(vector: InternalRow, vectorType: Byte, values: ArrayData): Int = {
     vectorType match {
       case SparseVectorType => vector.getInt(1)
@@ -110,48 +124,29 @@ object VectorAffineTransform {
     }
   }
 
-  private def isZeroVector(vectorType: Byte, values: ArrayData): Boolean = {
+  private def isZeroArray(values: ArrayData): Boolean = {
     var index = 0
     while (index < values.numElements()) {
       if (values.getDouble(index) != 0.0) return false
       index += 1
     }
-    vectorType match {
-      case SparseVectorType | DenseVectorType => true
-      case _ => throw new IllegalArgumentException(s"Unknown vector type $vectorType.")
-    }
+    true
   }
 
   private def sparseResult(
       vector: InternalRow,
-      scale: InternalRow,
       size: Int,
       vectorValues: ArrayData,
-      scaleType: Byte,
-      scaleValues: ArrayData): InternalRow = {
+      scale: ArrayData): InternalRow = {
     val vectorIndices = vector.getArray(2)
-    val scaleIndices =
-      if (scale != null && scaleType == SparseVectorType) scale.getArray(2) else null
     val resultValues = new Array[Double](vectorValues.numElements())
     var vectorIndex = 0
-    var scaleIndex = 0
     while (vectorIndex < resultValues.length) {
       val featureIndex = vectorIndices.getInt(vectorIndex)
       val scaleValue = if (scale == null) {
         1.0
-      } else if (scaleType == DenseVectorType) {
-        scaleValues.getDouble(featureIndex)
       } else {
-        while (scaleIndex < scaleValues.numElements() &&
-            scaleIndices.getInt(scaleIndex) < featureIndex) {
-          scaleIndex += 1
-        }
-        if (scaleIndex < scaleValues.numElements() &&
-            scaleIndices.getInt(scaleIndex) == featureIndex) {
-          scaleValues.getDouble(scaleIndex)
-        } else {
-          0.0
-        }
+        scale.getDouble(featureIndex)
       }
       resultValues(vectorIndex) = vectorValues.getDouble(vectorIndex) * scaleValue
       vectorIndex += 1
@@ -165,24 +160,14 @@ object VectorAffineTransform {
 
   private def denseResult(
       vector: InternalRow,
-      scale: InternalRow,
-      shift: InternalRow,
       size: Int,
       vectorType: Byte,
-      scaleType: Byte,
-      shiftType: Byte,
       vectorValues: ArrayData,
-      scaleValues: ArrayData,
-      shiftValues: ArrayData): InternalRow = {
+      scale: ArrayData,
+      shift: ArrayData): InternalRow = {
     val vectorIndices = if (vectorType == SparseVectorType) vector.getArray(2) else null
-    val scaleIndices =
-      if (scale != null && scaleType == SparseVectorType) scale.getArray(2) else null
-    val shiftIndices =
-      if (shift != null && shiftType == SparseVectorType) shift.getArray(2) else null
     val resultValues = new Array[Double](size)
     var vectorIndex = 0
-    var scaleIndex = 0
-    var shiftIndex = 0
     var featureIndex = 0
     while (featureIndex < size) {
       val vectorIsActive = vectorType == DenseVectorType ||
@@ -200,28 +185,14 @@ object VectorAffineTransform {
 
       val scaleValue = if (scale == null) {
         1.0
-      } else if (scaleType == DenseVectorType) {
-        scaleValues.getDouble(featureIndex)
-      } else if (scaleIndex < scaleValues.numElements() &&
-          scaleIndices.getInt(scaleIndex) == featureIndex) {
-        val value = scaleValues.getDouble(scaleIndex)
-        scaleIndex += 1
-        value
       } else {
-        0.0
+        scale.getDouble(featureIndex)
       }
 
       val shiftValue = if (shift == null) {
         0.0
-      } else if (shiftType == DenseVectorType) {
-        shiftValues.getDouble(featureIndex)
-      } else if (shiftIndex < shiftValues.numElements() &&
-          shiftIndices.getInt(shiftIndex) == featureIndex) {
-        val value = shiftValues.getDouble(shiftIndex)
-        shiftIndex += 1
-        value
       } else {
-        0.0
+        shift.getDouble(featureIndex)
       }
 
       resultValues(featureIndex) =
@@ -237,37 +208,22 @@ object VectorAffineTransform {
 
   private[ml] def transform(
       vector: InternalRow,
-      scale: InternalRow,
-      shift: InternalRow): InternalRow = {
+      scale: ArrayData,
+      shift: ArrayData): InternalRow = {
     if (scale == null && shift == null) return vector
     val vectorType = vector.getByte(0)
-    val scaleType = if (scale == null) DenseVectorType else scale.getByte(0)
-    val shiftType = if (shift == null) DenseVectorType else shift.getByte(0)
     val vectorValues = vector.getArray(3)
-    val scaleValues = if (scale == null) null else scale.getArray(3)
-    val shiftValues = if (shift == null) null else shift.getArray(3)
     val size = vectorSize(vector, vectorType, vectorValues)
-    val scaleSize = if (scale == null) size else vectorSize(scale, scaleType, scaleValues)
-    val shiftSize = if (shift == null) size else vectorSize(shift, shiftType, shiftValues)
+    val scaleSize = if (scale == null) size else scale.numElements()
+    val shiftSize = if (shift == null) size else shift.numElements()
     require(size == scaleSize && size == shiftSize,
-      "VectorAffineTransform was given vectors with non-matching sizes:" +
+      "VectorAffineTransform was given inputs with non-matching sizes:" +
         s" vector.size = $size, scale.size = $scaleSize, shift.size = $shiftSize")
 
-    if (vectorType == SparseVectorType &&
-        (shift == null || isZeroVector(shiftType, shiftValues))) {
-      sparseResult(vector, scale, size, vectorValues, scaleType, scaleValues)
+    if (vectorType == SparseVectorType && (shift == null || isZeroArray(shift))) {
+      sparseResult(vector, size, vectorValues, scale)
     } else {
-      denseResult(
-        vector,
-        scale,
-        shift,
-        size,
-        vectorType,
-        scaleType,
-        shiftType,
-        vectorValues,
-        scaleValues,
-        shiftValues)
+      denseResult(vector, size, vectorType, vectorValues, scale, shift)
     }
   }
 }

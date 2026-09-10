@@ -21,7 +21,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
 import org.apache.spark.sql.{functions => sf}
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.types.{ArrayType, IntegerType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType}
 
 // scalastyle:off
 @Since("3.0.0")
@@ -78,21 +78,29 @@ object functions {
     val transformed = Column.internalFn(
       "ml_vector_affine_transform",
       sf.unwrap_udt(vector),
-      sf.unwrap_udt(scale),
-      sf.unwrap_udt(shift))
+      scale,
+      shift)
     sf.wrap_udt(transformed, new VectorUDT)
   }
 
   private[ml] def vector_affine_transform(
       vector: Column,
-      scale: Vector,
-      shift: Vector): Column = {
+      scale: Array[Double],
+      shift: Array[Double]): Column = {
     val transformed = Column.internalFn(
       "ml_vector_affine_transform",
       sf.unwrap_udt(vector),
-      vectorToStruct(scale),
-      vectorToStruct(shift))
+      doubleArrayLiteral(scale),
+      doubleArrayLiteral(shift))
     sf.wrap_udt(transformed, new VectorUDT)
+  }
+
+  private def doubleArrayLiteral(values: Array[Double]): Column = {
+    if (values == null) {
+      sf.lit(null).cast(ArrayType(DoubleType, containsNull = false))
+    } else {
+      sf.typedLit(values)
+    }
   }
 
   private def vectorToStruct(vector: Vector): Column = vector match {
