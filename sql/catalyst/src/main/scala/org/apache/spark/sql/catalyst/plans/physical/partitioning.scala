@@ -510,7 +510,8 @@ case class KeyLayout(
    * The types are asked as well as the rows, because `InternalRowComparableWrapper.equals` compares
    * them first and **two empty key lists compare equal whatever they describe**. Without the type
    * clause a join between two sides whose partitions were all pruned would call two different key
-   * spaces one layout. Where a key row exists the type clause is implied.
+   * spaces one layout, and `ShuffledJoin.outputPartitioning` would then report both as alternative
+   * descriptions of it. Where a key row exists the type clause is implied.
    *
    * A type list identifies a space only up to the type, so two empty sides whose spaces differ but
    * share a type pair anyway, e.g. `identity(id INT)` against `bucket(4, id INT)`. That residual is
@@ -518,8 +519,9 @@ case class KeyLayout(
    * and a merge that later brings real rows under it rewrites each member's expressions through
    * `reducersBothWays` or a `GroupPartitionsExec` first.
    *
-   * `isGrouped` is deliberately not part of this. Two layouts can describe one key set and disagree
-   * on whether it is grouped, and the sites that care say so separately.
+   * `isGrouped` is not part of this, because it follows from the keys: it says they are unique, so
+   * two layouts over equal keys cannot answer it differently. `PartitioningCollection` still
+   * asserts it, as a consistency check on layouts that were built independently.
    */
   def describesSameKeys(other: KeyLayout): Boolean =
     dataTypes == other.dataTypes && partitionKeys == other.partitionKeys
@@ -1337,9 +1339,9 @@ object PartitioningCollection {
               s"dataTypes ${representative.keyDataTypes} with partitionKeys " +
               s"${representative.partitionKeys}, and dataTypes ${canonicalLayout.dataTypes} with " +
               s"partitionKeys ${canonicalLayout.partitionKeys}")
-          // Whether the keys are unique is a property of the keys, so two layouts over equal keys
-          // that disagree on it cannot both be right. Kept separate, since two layouts can describe
-          // one key set and legitimately disagree on it elsewhere.
+          // Whether the keys are unique follows from the keys, so two layouts over equal keys that
+          // disagree on it cannot both be right. Asserted separately from `describesSameKeys`,
+          // which answers what the keys are rather than how they are laid out.
           require(representative.isGrouped == canonicalLayout.isGrouped,
             "All KeyedPartitionings in a PartitioningCollection must agree on isGrouped")
           p match {
@@ -1809,21 +1811,9 @@ case class KeyedShuffleSpec(
     case otherSpec @ KeyedShuffleSpec(otherPartitioning, otherDistribution, _) =>
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == otherSpec.numPartitions && areKeysCompatible(otherSpec) &&
-          // The key rows are compared at their types, since `InternalRowComparableWrapper.equals`
-          // compares those first. Two empty key lists compare equal whatever they describe, so the
-          // key space is asked separately: without that, a join between two sides whose partitions
-          // were all pruned would call two different spaces one layout, and
-          // `ShuffledJoin.outputPartitioning` would then report both as alternative descriptions of
-          // it. Where a key row exists this clause is implied.
-          //
-          // A type list still identifies a space only up to the type, so two empty sides whose
-          // spaces differ but share a type pair anyway, e.g. `identity(id INT)` against
-          // `bucket(4, id INT)`. That residual is a decision, not an oversight: an empty layout
-          // holds no row, so every claim over it is vacuous, and a merge that later brings real
-          // rows under it rewrites each member's expressions through `reducersBothWays` or a
-          // `GroupPartitionsExec` first.
-          partitioning.keyDataTypes == otherPartitioning.keyDataTypes &&
-          partitioning.partitionKeys == otherPartitioning.partitionKeys
+          // The reason the types are asked as well as the rows is on `describesSameKeys`, so the
+          // next site comparing keys cannot forget the type clause.
+          partitioning.layout.describesSameKeys(otherPartitioning.layout)
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
     case _ => false
