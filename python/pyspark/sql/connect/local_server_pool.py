@@ -847,6 +847,8 @@ class ServerPool:
         attendant_pid = parsed_pid if parsed_pid is not None else -1
         attendant_alive = _pid_alive(attendant_pid)
         if not attendant_alive:
+            # Recovered fields from malformed state guide cleanup, but cannot authorize a
+            # process-group signal because the complete pending record was not validated.
             if pending is not None and not self._signal_attendant_group(
                 attendant_pid, signal.SIGKILL, leader_may_be_dead=True
             ):

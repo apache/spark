@@ -1060,6 +1060,28 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
 
         self.assertIsNone(unrelated.poll())
 
+    def test_reap_does_not_signal_pid_reused_after_dead_attendant_check(self) -> None:
+        unrelated_group_leader = self._attendant("cafe")
+        self._write_state(
+            self._directory.pending_path("bad9"),
+            {
+                "attendant_pid": unrelated_group_leader.pid,
+                "created": time.time(),
+                "fingerprint": "fp",
+            },
+        )
+        self._write_state(self._directory.conf_path("bad9"), {"spark.foo": "bar"})
+
+        with (
+            mock.patch.object(local_server_pool, "_pid_alive", side_effect=[False, True, True]),
+            mock.patch.object(local_server_pool.os, "killpg") as killpg,
+        ):
+            with self._directory:
+                self.assertTrue(self._pool.reap("bad9"))
+
+        killpg.assert_not_called()
+        self.assertIsNone(unrelated_group_leader.poll())
+
     def test_reap_timed_out_attendant_kills_its_launch_group(self) -> None:
         attendant, launch_child_pid = self._attendant_with_launch_child("bad0")
         self._write_state(
