@@ -116,9 +116,7 @@ class BaseUDFTestsMixin:
         outer = udf(lambda value: value, StringType(), useArrow=False)
 
         with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
-            padded = self.spark.range(1).select(
-                outer(inner_char("id")).alias("result")
-            )
+            padded = self.spark.range(1).select(outer(inner_char("id")).alias("result"))
             self.assertEqual(padded.first().result, "a  ")
 
             invalid = self.spark.range(1).select(outer(inner_varchar("id")))
@@ -180,9 +178,7 @@ class BaseUDFTestsMixin:
         )
 
     def test_char_varchar_non_scalar_return_types_unsupported(self):
-        nested_return_type = StructType(
-            [StructField("nested", ArrayType(CharType(3)))]
-        )
+        nested_return_type = StructType([StructField("nested", ArrayType(CharType(3)))])
         struct_eval_types = [
             PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
             PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,

@@ -249,8 +249,8 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
 
   test("CHAR/VARCHAR value, list, and map state schemas are rejected") {
     val unsupportedSchema =
-      StructType(StructField("value", ArrayType(CharType(3))) :: Nil).toString
-    val supportedSchema = stateSchema.toString
+      StructType(StructField("value", ArrayType(CharType(3))) :: Nil).json
+    val supportedSchema = stateSchema.json
     val calls = Seq(
       StatefulProcessorCall.newBuilder().setGetValueState(
         StateCallCommand.newBuilder()
