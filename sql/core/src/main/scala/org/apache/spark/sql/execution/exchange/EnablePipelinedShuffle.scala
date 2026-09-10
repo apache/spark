@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution.exchange
 
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{CoalesceExec, CollectLimitExec, CollectTailExec, SparkPlan, TakeOrderedAndProjectExec}
-import org.apache.spark.sql.execution.joins.CartesianProductExec
+import org.apache.spark.sql.execution.SparkPlan
 
 /**
  * Opt-in (SPARK-57399). Rewrites EVERY [[ShuffleExchangeExec]] in a
@@ -44,6 +43,8 @@ import org.apache.spark.sql.execution.joins.CartesianProductExec
  * id (SinglePartition is the numPartitions == 1 degenerate case).
  *
  * These shapes make the rule leave the whole plan regular:
+ *   - Dataset.rdd deserialization and cached inputs (the shared eligibility gate): their actual
+ *     shuffle readers depend on consumers or cache availability outside this plan.
  *   - reuse: a pipelined producer with more than one consumer (fan-out) is rejected, so if any
  *     exchange in the plan is reused the rule bails out.
  *   - an UNSUPPORTED CONSUMER reading a shuffle (see [[readsShuffleThroughUnsupportedConsumer]]):
@@ -135,13 +136,9 @@ object EnablePipelinedShuffle extends Rule[SparkPlan] {
       case _: ShuffleExchangeExec => true
       case other => other.children.exists(reachesShuffle)
     }
-    def isUnsupportedConsumer(p: SparkPlan): Boolean = p match {
-      case _: CoalesceExec | _: CartesianProductExec |
-          _: CollectLimitExec | _: CollectTailExec | _: TakeOrderedAndProjectExec => true
-      case _ => false
-    }
     plan.exists {
-      case p if isUnsupportedConsumer(p) => p.children.exists(reachesShuffle)
+      case p if PipelinedShuffleEligibility.isUnsupportedConsumer(p) =>
+        p.children.exists(reachesShuffle)
       case _ => false
     }
   }

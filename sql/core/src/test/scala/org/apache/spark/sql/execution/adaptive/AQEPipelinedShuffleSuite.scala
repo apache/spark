@@ -23,14 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.exchange.{PipelinedShuffleTestSession, ShuffleExchangeExec}
 
-/**
- * End-to-end coverage of the pipelined channel path UNDER AQE: AQEEnablePipelinedShuffle
- * flips the final unmaterialized tail's exchanges to pipelined, exchanges below the tail
- * materialize as regular query stages (keeping full AQE treatment), and the final result job
- * runs the pipelined gang over the materialized prefix -- the scheduler shape admitted by
- * the materialized-prefix relaxation. Self-manages its SparkSession (shuffle manager is a
- * start-up config).
- */
+/** End-to-end coverage of channel eligibility and regular-shuffle fallbacks under AQE. */
 class AQEPipelinedShuffleSuite extends SparkFunSuite
   with AdaptiveSparkPlanHelper with PipelinedShuffleTestSession {
 
@@ -63,11 +56,7 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite
     }
   }
 
-  test("groupBy + ORDER BY: materialized prefix + pipelined tail under AQE") {
-    // The canonical AQE shape this feature targets: the groupBy's hash exchange sits BELOW
-    // the sort's range exchange, so it stays regular and materializes as a query stage
-    // (keeping AQE coalescing); the range exchange on top is free and flips. The final job
-    // is the pipelined tail over the materialized prefix.
+  test("an AQE regular prefix remains recoverable across repeated actions") {
     withAqePipelinedSession { spark =>
       import spark.implicits._
       val ds = spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 7))
@@ -75,13 +64,16 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite
 
       val rows = ds.collect()
       val plan = ds.queryExecution.executedPlan
-      assert(pipelinedExchanges(plan).size === 1,
-        s"expected exactly the top (range) exchange pipelined; plan:\n$plan")
+      assert(pipelinedExchanges(plan).isEmpty,
+        s"a regular prefix must not feed a pipelined tail; plan:\n$plan")
       assert(materializedStages(plan).nonEmpty,
         s"expected the groupBy exchange materialized as a regular stage; plan:\n$plan")
       val expected = (0L until 1000L).groupBy(_ % 7).map { case (k, vs) => (k, vs.size.toLong) }
         .toSeq.sortBy(_._1)
       assert(rows.toSeq === expected)
+      // File cleanup leaves tracker entries behind. A later fetch must recover the prefix.
+      assert(ds.collect().toSeq === expected)
+      assert(ds.collect().toSeq === expected)
     }
   }
 

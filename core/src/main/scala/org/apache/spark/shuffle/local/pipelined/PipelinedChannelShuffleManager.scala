@@ -83,6 +83,10 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
   // liveMask), and the per-run epoch to key its rendezvous.
   override def supportsLiveReducePartitionHints: Boolean = true
 
+  override def startRun(epoch: Int): Unit = ChannelShuffleRendezvous.startRun(epoch)
+
+  override def endRun(epoch: Int): Unit = ChannelShuffleRendezvous.endRun(epoch)
+
   // Answer from the rendezvous -- the state that would leak -- rather than from a registration
   // record: a shuffle unregistered BEFORE its job runs (Dataset.rdd under fileCleanup)
   // recreates its

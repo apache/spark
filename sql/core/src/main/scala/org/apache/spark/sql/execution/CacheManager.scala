@@ -638,7 +638,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
     // Bucketed scan only has one time overhead but can have multi-times benefits in cache,
     // so we always do bucketed scan in a cached plan.
-    var disableConfigs = Seq(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
+    // Cache hits bypass shuffle readers. Materialize caches with regular shuffles so a
+    // partially evicted cache can recompute only its missing partitions safely.
+    var disableConfigs = Seq(
+      SQLConf.AUTO_BUCKETED_SCAN_ENABLED, SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED)
     if (!session.sessionState.conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
       // Allowing changing cached plan output partitioning might lead to regression as it introduces
       // extra shuffle

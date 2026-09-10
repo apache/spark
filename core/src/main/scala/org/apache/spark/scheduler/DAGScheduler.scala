@@ -1267,7 +1267,8 @@ private[spark] class DAGScheduler(
         // is single-executor local mode, where executor loss does not occur in normal operation;
         // and (2) if a FetchFailed did strip the prefix, handleTaskCompletion routes it to a
         // WHOLE-GROUP abort (the failing stage is a pipelined group member), not a lone-stage
-        // resubmit into the held slots -- the job reruns from scratch rather than deadlocking.
+        // resubmit into the held slots. A caller must rematerialize lost prefixes before retrying;
+        // the SQL channel rules exclude this mixed shape.
         if (mapOutputTracker.getNumAvailableOutputs(sd.shuffleId) != sd.rdd.partitions.length) {
           hasUnmaterialized = true
         }
@@ -1482,6 +1483,9 @@ private[spark] class DAGScheduler(
    * @param job The job whose state to cleanup.
    */
   private def cleanupStateForJobAndIndependentStages(job: ActiveJob): Unit = {
+    if (job.hasPipelinedDependency && pipelinedManagerWantsLiveReduceHints) {
+      sc.env.pipelinedShuffleManager.endRun(job.jobId)
+    }
     val registeredStages = jobIdToStageIds.get(job.jobId)
     if (registeredStages.isEmpty || registeredStages.get.isEmpty) {
       logError(log"No stages registered for job ${MDC(JOB_ID, job.jobId)}")
@@ -2470,6 +2474,9 @@ private[spark] class DAGScheduler(
     listenerBus.post(
       SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos,
         Utils.cloneProperties(properties)))
+    if (hasPipelined && pipelinedManagerWantsLiveReduceHints) {
+      sc.env.pipelinedShuffleManager.startRun(jobId)
+    }
     submitStage(finalStage)
   }
 

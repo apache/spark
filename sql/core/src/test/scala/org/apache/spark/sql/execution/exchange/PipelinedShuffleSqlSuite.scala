@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import java.util.concurrent.{Executors, TimeUnit}
+import java.util.concurrent.{Callable, CountDownLatch, Executors, TimeUnit}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{PipelinedShuffleDependency, SparkEnv, SparkFunSuite}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.shuffle.local.pipelined.ChannelShuffleRendezvous
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 /**
  * End-to-end SQL coverage of the pipelined channel path: a batch query whose hash
@@ -196,23 +199,118 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
     }
   }
 
-  test("Dataset.rdd (shuffle unregistered before the job runs) loses no rows") {
-    // Dataset.rdd builds the RDD inside a SQL execution scope that ENDS before any job runs;
-    // with spark.sql.classic.shuffleDependency.fileCleanup.enabled (the default under
-    // testing), the scope's end removes the shuffle from every manager -- BEFORE the collect
-    // below executes it. An early manager version kept the per-shuffle map-task count in a
-    // registry keyed by shuffleId; the unregister wiped it, the reader treated the missing
-    // entry as numMaps = 0, stopped at the first end-of-stream marker, and silently dropped
-    // whatever one writer had not yet enqueued (a race, ~2/3 reproducible). numMaps is now
-    // derived from the handle's own dependency, which cannot be unregistered away.
+  private def assertRegularRDD(root: RDD[_]): Unit = {
+    val visited = scala.collection.mutable.Set.empty[Int]
+    val pending = scala.collection.mutable.Stack[RDD[_]](root)
+    while (pending.nonEmpty) {
+      val rdd = pending.pop()
+      if (visited.add(rdd.id)) {
+        rdd.dependencies.foreach { dep =>
+          assert(!dep.isInstanceOf[PipelinedShuffleDependency[_, _, _]])
+          pending.push(dep.rdd)
+        }
+      }
+    }
+  }
+
+  for (aqe <- Seq(false, true)) {
+    test(s"Dataset.rdd supports narrow and shuffle consumers with AQE=$aqe") {
+      withPipelinedSession("pipelined-rdd-boundary", aqe) { spark =>
+        val rdd = spark.range(0, 4000, 1, 2).repartition(4).toDF().rdd
+        // Assert eligibility before executing a shape that would hang with the channel.
+        assertRegularRDD(rdd)
+        assert(rdd.coalesce(2).count() === 4000L)
+        assert(rdd.union(rdd).count() === 8000L)
+        assert(rdd.zip(rdd).count() === 4000L)
+        val grouped = rdd.map(r => (r.getLong(0) % 2, 1L)).reduceByKey(_ + _)
+        assert(grouped.collect().toMap === Map(0L -> 2000L, 1L -> 2000L))
+        assert(rdd.repartition(2).count() === 4000L)
+      }
+    }
+
+    test(s"cache construction and partial eviction use regular shuffles with AQE=$aqe") {
+      withPipelinedSession("pipelined-cache", aqe) { spark =>
+        val df = spark.range(0, 4000, 1, 2).repartition(4).persist(StorageLevel.MEMORY_ONLY)
+        try {
+          val classicDf = df.asInstanceOf[org.apache.spark.sql.classic.Dataset[_]]
+          val cached = spark.sharedState.cacheManager.lookupCachedData(classicDf).get
+            .cachedRepresentation.cacheBuilder
+          assert(collect(cached.cachedPlan) {
+            case s: ShuffleExchangeExec if s.pipelined => s
+          }.isEmpty)
+          val expected = (0L until 4000L).toArray
+          assert(df.collect().sorted === expected)
+          val buffers = cached.cachedColumnBuffers
+          assert(buffers.getNumPartitions > 1)
+          SparkEnv.get.blockManager.removeBlock(RDDBlockId(buffers.id, 0))
+          assert(df.collect().sorted === expected)
+          assert(df.collect().sorted === expected)
+          val consumer = df.repartition(2)
+          assert(consumer.collect().sorted === expected)
+          assert(collect(consumer.queryExecution.executedPlan) {
+            case s: ShuffleExchangeExec if s.pipelined => s
+          }.isEmpty)
+        } finally {
+          df.unpersist(blocking = true)
+        }
+      }
+    }
+
+    test(s"toLocalIterator returns every row across repeated jobs with AQE=$aqe") {
+      withPipelinedSession("pipelined-local-iterator", aqe) { spark =>
+        import scala.jdk.CollectionConverters._
+        spark.conf.set("spark.sql.classic.shuffleDependency.fileCleanup.enabled", "false")
+        import spark.implicits._
+        val evaluated = spark.sparkContext.longAccumulator("producer rows")
+        val recordEvaluation = org.apache.spark.sql.functions.udf { id: Long =>
+          evaluated.add(1)
+          id
+        }
+        val df = spark.range(0, 1000, 1, 2).select(recordEvaluation($"id").as("id"))
+          .repartition(4).as[Long]
+        for (run <- 1 to 3) {
+          assert(df.toLocalIterator().asScala.toArray.sorted === (0L until 1000L).toArray)
+          assert(evaluated.value === run * 4000L)
+          val exchanges = collect(df.queryExecution.executedPlan) {
+            case s: ShuffleExchangeExec if s.pipelined => s
+          }
+          assert(exchanges.nonEmpty)
+          exchanges.foreach { s =>
+            assert(!ChannelShuffleRendezvous.holdsShuffle(s.shuffleDependency.shuffleId))
+          }
+        }
+      }
+    }
+  }
+
+  test("concurrent non-AQE actions on one pipelined Dataset fail without affecting its owner") {
     withPipelinedSession { spark =>
       import spark.implicits._
-      val df = spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 100))
-        .repartitionByRange($"k")
-      val rows = df.rdd.mapPartitionsWithIndex { (idx, iter) =>
-        iter.map(row => (idx, row.getLong(1)))
-      }.collect()
-      assert(rows.length === 1000)
+      spark.conf.set("spark.sql.classic.shuffleDependency.fileCleanup.enabled", "true")
+      PipelinedShuffleSqlSuite.started = new CountDownLatch(1)
+      PipelinedShuffleSqlSuite.release = new CountDownLatch(1)
+      val waitForRelease = org.apache.spark.sql.functions.udf(
+        PipelinedShuffleSqlSuite.waitForRelease _)
+      val df = spark.range(0, 1000, 1, 2).select(waitForRelease($"id").as("id"))
+        .repartition(4).as[Long]
+      val pool = Executors.newSingleThreadExecutor()
+      val first = pool.submit(new Callable[Array[Long]] {
+        override def call(): Array[Long] = df.collect()
+      })
+      try {
+        assert(PipelinedShuffleSqlSuite.started.await(30, TimeUnit.SECONDS))
+        val error = intercept[Exception] { df.collect() }
+        val messages = Iterator.iterate(error: Throwable)(_.getCause).takeWhile(_ != null)
+          .map(_.getMessage).mkString(" ")
+        assert(messages.contains("PIPELINED_SHUFFLE_CROSS_JOB_REUSE"))
+        PipelinedShuffleSqlSuite.release.countDown()
+        assert(first.get(30, TimeUnit.SECONDS).sorted === (0L until 1000L).toArray)
+        assert(df.collect().sorted === (0L until 1000L).toArray)
+      } finally {
+        PipelinedShuffleSqlSuite.release.countDown()
+        spark.sparkContext.cancelAllJobs()
+        pool.shutdownNow()
+      }
     }
   }
 
@@ -508,5 +606,16 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
         assertNotPipelined(df, "an exchange below a hidden-shuffle limit op must stay regular")
       }
     }
+  }
+}
+
+private object PipelinedShuffleSqlSuite {
+  @volatile var started = new CountDownLatch(1)
+  @volatile var release = new CountDownLatch(1)
+
+  def waitForRelease(id: Long): Long = {
+    started.countDown()
+    require(release.await(30, TimeUnit.SECONDS), "Timed out waiting for concurrent action")
+    id
   }
 }

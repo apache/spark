@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 
 import org.mockito.Mockito.{mock, when}
 
-import org.apache.spark.{HashPartitioner, Partitioner, PipelinedShuffleDependency, SparkConf, SparkContext, SparkEnv, SparkFunSuite}
+import org.apache.spark.{HashPartitioner, Partitioner, PipelinedShuffleDependency, SparkConf, SparkContext, SparkEnv, SparkFunSuite, TaskContext, TaskKilledException}
 import org.apache.spark.executor.TempShuffleReadMetrics
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.shuffle.BaseShuffleHandle
@@ -177,8 +177,9 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
         .asInstanceOf[org.apache.spark.ShuffleDependency[_, _, _]].shuffleId
       // Run it so the writer creates the rendezvous queues.
       rdd.collect()
-      assert(ChannelShuffleRendezvous.numQueuesForTesting > 0,
-        "the pipelined run should have created rendezvous queues")
+      assert(ChannelShuffleRendezvous.numQueuesForTesting === 0)
+      // The cleaner also handles state created outside a scheduler-managed run.
+      ChannelShuffleRendezvous.queue(shuffleId, epoch = -1, 0)
 
       // The production cleanup path: ContextCleaner.doCleanupShuffle for this shuffle id. With the
       // fix, its tracker-less branch calls shuffleDriverComponents.removeShuffle, which routes to
@@ -203,8 +204,9 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       val pipelinedId = rdd.dependencies.head
         .asInstanceOf[org.apache.spark.ShuffleDependency[_, _, _]].shuffleId
       rdd.collect()
-      assert(ChannelShuffleRendezvous.holdsShuffle(pipelinedId),
-        "the rendezvous must hold a channel shuffle that has run")
+      assert(!ChannelShuffleRendezvous.holdsShuffle(pipelinedId))
+      ChannelShuffleRendezvous.queue(pipelinedId, epoch = -1, 0)
+      assert(ChannelShuffleRendezvous.holdsShuffle(pipelinedId))
 
       // A REGULAR shuffle in the same feature-on context routes to the DEFAULT manager and never
       // touches the rendezvous, so holdsShuffle is false -- the arm skips it (no duplicate RPC).
@@ -239,8 +241,8 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       // the queues -- WITHOUT any manager re-registration in between.
       ChannelShuffleRendezvous.removeShuffle(shuffleId)
       rdd.collect()
-      assert(ChannelShuffleRendezvous.holdsShuffle(shuffleId),
-        "running the shuffle must recreate its rendezvous queues")
+      assert(!ChannelShuffleRendezvous.holdsShuffle(shuffleId),
+        "job cleanup must free state even when the shuffle was unregistered before running")
 
       // The cleanup arm must now free them (it keys off the rendezvous, not a stale registry).
       sc.cleaner.get.doCleanupShuffle(shuffleId, blocking = true)
@@ -356,6 +358,7 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
         val out = new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(4))
         // The job must FAIL (the producer threw), not hang. intercept confirms it returned.
         intercept[org.apache.spark.SparkException](out.collect())
+        assert(ChannelShuffleRendezvous.numQueuesForTesting === 0)
       }
     })
     try {
@@ -410,6 +413,65 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
       }
       assert(ex.getMessage.contains("fully-materialized prefix"),
         s"expected the unmaterialized-prefix rejection, got: ${ex.getMessage}")
+    }
+  }
+
+  test("unregister preserves an active run until its owner finishes") {
+    ChannelShuffleRendezvous.clear()
+    try {
+      ChannelShuffleRendezvous.startRun(1)
+      val q = ChannelShuffleRendezvous.queue(42, 1, 0)
+      q.put("live")
+      ChannelShuffleRendezvous.abandon(42, 1, 1)
+      ChannelShuffleRendezvous.queue(42, 0, 0).put("idle")
+      ChannelShuffleRendezvous.removeShuffle(42)
+      assert(ChannelShuffleRendezvous.queue(42, 1, 0) eq q)
+      assert(q.peek() === "live")
+      assert(ChannelShuffleRendezvous.isAbandoned(42, 1, 1))
+      assert(ChannelShuffleRendezvous.numQueuesForTesting === 1)
+      ChannelShuffleRendezvous.endRun(1)
+      assert(!ChannelShuffleRendezvous.holdsShuffle(42))
+    } finally {
+      ChannelShuffleRendezvous.clear()
+    }
+  }
+
+  test("ending a run releases only its epoch and rejects late task accesses") {
+    ChannelShuffleRendezvous.clear()
+    val tc = TaskContext.empty()
+    try {
+      ChannelShuffleRendezvous.startRun(1)
+      ChannelShuffleRendezvous.startRun(2)
+      ChannelShuffleRendezvous.queue(42, 1, 0).put("old")
+      ChannelShuffleRendezvous.abandon(42, 1, 1)
+      ChannelShuffleRendezvous.queue(42, 2, 0).put("new")
+      ChannelShuffleRendezvous.endRun(1)
+      assert(ChannelShuffleRendezvous.numQueuesForTesting === 1)
+      assert(!ChannelShuffleRendezvous.isAbandoned(42, 1, 1))
+      assert(ChannelShuffleRendezvous.queue(42, 2, 0).peek() === "new")
+
+      TaskContext.setTaskContext(tc)
+      intercept[TaskKilledException] {
+        ChannelShuffleRendezvous.queue(42, 1, 0)
+      }
+      ChannelShuffleRendezvous.abandon(42, 1, 0)
+      assert(ChannelShuffleRendezvous.isAbandoned(42, 1, 0))
+      ChannelShuffleRendezvous.endRun(2)
+      assert(!ChannelShuffleRendezvous.holdsShuffle(42))
+    } finally {
+      TaskContext.unset()
+      ChannelShuffleRendezvous.clear()
+    }
+  }
+
+  test("repeated actions release queues while the shuffle dependency remains reachable") {
+    withPipelinedSparkContext(cores = 8) { sc =>
+      val input = sc.parallelize(0 until 1000, 2).map(i => (i, i))
+      val shuffled = new PipelinedShuffledRDD[Int, Int, Int](input, new HashPartitioner(4))
+      for (_ <- 0 until 5) {
+        assert(shuffled.collect().map(_._1).sorted === (0 until 1000).toArray)
+        assert(ChannelShuffleRendezvous.numQueuesForTesting === 0)
+      }
     }
   }
 

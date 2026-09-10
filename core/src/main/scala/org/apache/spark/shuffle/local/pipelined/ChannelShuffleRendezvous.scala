@@ -19,38 +19,13 @@ package org.apache.spark.shuffle.local.pipelined
 
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
-import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.{SparkContext, TaskContext, TaskKilledException}
 
 /**
- * Process-wide rendezvous between the map (writer) and reduce (reader) sides of an
- * in-process pipelined shuffle. One bounded queue exists per
- * `(shuffleId, epoch, reducePartitionId)`; every map task writing to a given reduce partition
- * shares the queue with the single reduce task that drains it. Queue elements are BATCHES
- * of records (`Array[AnyRef]` of pairs, see [[ChannelShuffleWriter]]) or the
- * [[EndOfStream]] marker, so the queue's per-operation lock cost is paid per batch, not
- * per row.
- *
- * The `epoch` is the per-run id (the jobId, propagated to both the writer and the reader of
- * one gang via a job-level local property -- see `SparkContext.SPARK_PIPELINED_RUN_EPOCH`). A
- * shuffleId is RE-RUN within one query (a RangePartitioner sample job then the main job;
- * executeTake's per-batch jobs; a classic Dataset re-executing a reused plan), and each run is
- * a different job, hence a different epoch. Keying by epoch makes each run's queues and marks
- * PHYSICALLY separate: the new run never sees a partition whose reader never started in the old
- * run (whose queue still holds stale batches + end-of-stream markers), and a straggler writer
- * from an aborted run -- still looping because a task kill need not interrupt the thread -- can
- * only touch its OWN (old) epoch's queue, never the new run's. This replaces an earlier design
- * that reused one key per shuffleId and tried to reset shared marks between runs, which left
- * stale queues and raced stragglers.
- *
- * This is correct only when producer and consumer tasks are co-resident in the same JVM,
- * i.e. a single executor (local mode). The concurrent-stage scheduler co-schedules the two
- * stages so both are running, but it does not by itself guarantee co-location; the
- * [[PipelinedChannelShuffleManager]] is only intended for single-executor deployments,
- * where co-location is automatic. Cross-executor pipelined shuffle is served by the RPC
- * streaming shuffle instead.
- *
- * The queues are bounded, so a fast producer blocks on `put` when the consumer lags --
- * this is the backpressure that keeps the pipelined hand-off memory-bounded.
+ * Bounded in-JVM channels, one per (shuffleId, job epoch, reduce partition). All map tasks
+ * share a partition's queue with its single reader. Values are record batches or EndOfStream.
+ * Each run uses separate state so tasks from an aborted run cannot reach a later run's queues.
+ * The scheduler opens the epoch before launching tasks and closes it when the job ends.
  */
 private[spark] object ChannelShuffleRendezvous {
 
@@ -60,27 +35,14 @@ private[spark] object ChannelShuffleRendezvous {
    */
   val EndOfStream: AnyRef = new AnyRef
 
-  /**
-   * The per-run epoch for the current task, read from the job-level local property the
-   * DAGScheduler stamps on a pipelined job (`SparkContext.SPARK_PIPELINED_RUN_EPOCH` = jobId).
-   * Both the writer and the reader of one gang read this, so they address the same per-run
-   * queues. Absent (a core-RDD path that never sets it) defaults to 0; that is fine because such
-   * a shuffleId is never re-run into a colliding second live run.
-   */
+  /** The job epoch propagated to both sides of a channel; standalone tests use epoch 0. */
   def epochOf(tc: TaskContext): Int =
     Option(tc)
       .flatMap(t => Option(t.getLocalProperty(SparkContext.SPARK_PIPELINED_RUN_EPOCH)))
       .map(_.toInt)
       .getOrElse(0)
 
-  // State is nested by shuffleId FIRST, then keyed by (epoch, reducePartitionId) within it. The
-  // outer level exists so the two per-shuffle operations the ContextCleaner drives -- holdsShuffle
-  // and removeShuffle -- are O(1) map lookups instead of a scan of every live entry: holdsShuffle
-  // now runs for EVERY shuffle cleaned in a feature-on session, including the regular prefix
-  // shuffles this feature itself produces, so a flat key made that O(live entries) per cleanup.
-  //
-  // Queue values are AnyRef because a queue carries both record batches (Array[AnyRef]) and the
-  // EndOfStream marker.
+  // Index by shuffle first so cleanup inspects only the requested shuffle.
   private val queues =
     new ConcurrentHashMap[Int, ConcurrentHashMap[(Int, Int), LinkedBlockingQueue[AnyRef]]]()
 
@@ -90,6 +52,34 @@ private[spark] object ChannelShuffleRendezvous {
   // and quit): without it the writer fills the partition's bounded queue and blocks forever.
   private val abandoned =
     new ConcurrentHashMap[Int, java.util.Set[(Int, Int)]]()
+
+  // Only active jobs are retained. Access and teardown serialize so a cancelled task cannot
+  // recreate registered state after endRun. A task already holding a queue may finish against
+  // that detached queue, but cannot affect a later epoch.
+  private val activeRuns = ConcurrentHashMap.newKeySet[Int]()
+
+  def startRun(epoch: Int): Unit = synchronized {
+    activeRuns.add(epoch)
+  }
+
+  def endRun(epoch: Int): Unit = synchronized {
+    activeRuns.remove(epoch)
+    val queueIterator = queues.entrySet().iterator()
+    while (queueIterator.hasNext) {
+      val entry = queueIterator.next()
+      entry.getValue.keySet().removeIf(_._1 == epoch)
+      if (entry.getValue.isEmpty) queueIterator.remove()
+    }
+    val markIterator = abandoned.entrySet().iterator()
+    while (markIterator.hasNext) {
+      val entry = markIterator.next()
+      entry.getValue.removeIf(_._1 == epoch)
+      if (entry.getValue.isEmpty) markIterator.remove()
+    }
+  }
+
+  private def runHasEnded(epoch: Int): Boolean =
+    TaskContext.get() != null && !activeRuns.contains(epoch)
 
   /**
    * Per-queue capacity in BATCHES (not rows), the backpressure bound and the heap-residency
@@ -104,17 +94,34 @@ private[spark] object ChannelShuffleRendezvous {
   private[pipelined] def setCapacity(batches: Int): Unit = { capacity = batches }
 
   /** The queue for one `(shuffleId, epoch, reducePartitionId)`, created on first access. */
-  def queue(shuffleId: Int, epoch: Int, reducePartitionId: Int): LinkedBlockingQueue[AnyRef] = {
-    val perShuffle = queues.computeIfAbsent(
-      shuffleId, _ => new ConcurrentHashMap[(Int, Int), LinkedBlockingQueue[AnyRef]]())
-    perShuffle.computeIfAbsent(
-      (epoch, reducePartitionId), _ => new LinkedBlockingQueue[AnyRef](capacity))
+  def queue(
+      shuffleId: Int,
+      epoch: Int,
+      reducePartitionId: Int): LinkedBlockingQueue[AnyRef] = {
+    def checkRun(): Unit = {
+      if (runHasEnded(epoch)) {
+        throw new TaskKilledException("Pipelined shuffle run has ended")
+      }
+    }
+    checkRun()
+    val existing = queues.get(shuffleId)
+    if (existing != null) {
+      val q = existing.get((epoch, reducePartitionId))
+      if (q != null) return q
+    }
+    synchronized {
+      checkRun()
+      val perShuffle = queues.computeIfAbsent(
+        shuffleId, _ => new ConcurrentHashMap[(Int, Int), LinkedBlockingQueue[AnyRef]]())
+      perShuffle.computeIfAbsent(
+        (epoch, reducePartitionId), _ => new LinkedBlockingQueue[AnyRef](capacity))
+    }
   }
 
   /** Whether this reduce partition's reader has departed for this run (see [[abandon]]). */
   def isAbandoned(shuffleId: Int, epoch: Int, reducePartitionId: Int): Boolean = {
     val marks = abandoned.get(shuffleId)
-    marks != null && marks.contains((epoch, reducePartitionId))
+    runHasEnded(epoch) || (marks != null && marks.contains((epoch, reducePartitionId)))
   }
 
   /**
@@ -124,7 +131,8 @@ private[spark] object ChannelShuffleRendezvous {
    * parked in a full-queue `put`: clearing capacity lets that put return, after which the
    * writer's next abandoned-check stops it cooperatively (no reliance on interrupt).
    */
-  def abandon(shuffleId: Int, epoch: Int, reducePartitionId: Int): Unit = {
+  def abandon(shuffleId: Int, epoch: Int, reducePartitionId: Int): Unit = synchronized {
+    if (runHasEnded(epoch)) return
     abandoned
       .computeIfAbsent(shuffleId, _ => ConcurrentHashMap.newKeySet[(Int, Int)]())
       .add((epoch, reducePartitionId))
@@ -136,31 +144,29 @@ private[spark] object ChannelShuffleRendezvous {
   }
 
   /**
-   * Drop all queues and marks for a shuffle once it is unregistered, releasing their memory.
-   * Removes entries for EVERY epoch of the shuffle: cleanup runs without an epoch, and a shuffle
-   * may have left queues under several run epochs.
-   *
-   * A non-empty queue here is NORMAL, not a hazard: a reader may legitimately stop early
-   * (e.g. LIMIT reads only the first rows and never drains the rest), so leftover elements
-   * at unregister time are expected. Queue occupancy is therefore NOT a usable signal for
-   * "unregistered mid-job", and this method makes no such check. The mid-job-unregister
-   * hazard is handled by audit rather than a runtime sentinel -- see the class scaladoc.
+   * Release idle state on unregister. SQL cleanup can run while another action still owns a
+   * live epoch; removing its queues would disconnect its readers and writers. endRun releases
+   * those entries when their owner finishes.
    */
-  def removeShuffle(shuffleId: Int): Unit = {
-    // One atomic remove per map, dropping every epoch of the shuffle with it.
-    queues.remove(shuffleId)
-    abandoned.remove(shuffleId)
+  def removeShuffle(shuffleId: Int): Unit = synchronized {
+    if (activeRuns.isEmpty) {
+      queues.remove(shuffleId)
+      abandoned.remove(shuffleId)
+      return
+    }
+    val perShuffle = queues.get(shuffleId)
+    if (perShuffle != null) {
+      perShuffle.keySet().removeIf(key => !activeRuns.contains(key._1))
+      if (perShuffle.isEmpty) queues.remove(shuffleId)
+    }
+    val marks = abandoned.get(shuffleId)
+    if (marks != null) {
+      marks.removeIf(key => !activeRuns.contains(key._1))
+      if (marks.isEmpty) abandoned.remove(shuffleId)
+    }
   }
 
-  /**
-   * Whether this rendezvous currently holds any state (a queue or an abandoned mark, under any
-   * epoch) for `shuffleId`. This is the authoritative signal for the `ContextCleaner`'s
-   * tracker-less cleanup arm: the queues are created lazily on first writer/reader access, so a
-   * shuffle unregistered BEFORE its job runs (Dataset.rdd under fileCleanup) and then run
-   * recreates its queues here even though the manager's registry no longer lists it. Keying
-   * cleanup off the rendezvous (rather than the manager's registry) frees those recreated queues,
-   * and is still false for a regular shuffle (never present here), so the arm stays scoped.
-   */
+  /** Whether there is transport state for the cleaner to release. */
   def holdsShuffle(shuffleId: Int): Boolean = {
     val perShuffle = queues.get(shuffleId)
     val marks = abandoned.get(shuffleId)
@@ -175,7 +181,8 @@ private[spark] object ChannelShuffleRendezvous {
    * under the same (shuffleId, epoch, reducePartitionId). Also the reset hook used by tests
    * between contexts.
    */
-  private[spark] def clear(): Unit = {
+  private[spark] def clear(): Unit = synchronized {
+    activeRuns.clear()
     queues.clear()
     abandoned.clear()
   }

@@ -20,41 +20,20 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{BinaryExecNode, CoalesceExec, CollectLimitExec, CollectTailExec, SparkPlan, TakeOrderedAndProjectExec}
+import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{PipelinedShuffleEligibility, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.ShuffledJoin
 
 /**
- * Opt-in (SPARK-57399). Flips eligible [[ShuffleExchangeExec]]
- * nodes to `pipelined = true` under AQE, the adaptive counterpart of the non-AQE
- * `EnablePipelinedShuffle` preparation rule (which is a no-op once the plan is wrapped in
- * `AdaptiveSparkPlanExec`). Runs in `AdaptiveSparkPlanExec.queryStagePreparationRules`, so
- * it is re-applied on every replanning round; the decision is deterministic on plan shape,
- * and already-flipped exchanges are left alone.
+ * Opt-in channel shuffle rewrite under AQE. Candidates have no stats-sensitive consumer above
+ * them, or are the symmetric shuffle inputs of a join with no such consumer above the join.
+ * A SinglePartition candidate can extend the candidate chain into its child.
  *
- * Placement policy. A flipped exchange has no
- * map output statistics (it never materializes as a query stage: the DAGScheduler
- * gang-runs it inline with its consumer in the final job -- see the pipelined case in
- * `AdaptiveSparkPlanExec.createNonResultQueryStages`), so only exchanges whose statistics
- * no AQE decision consumes are flipped:
- *
- *   - "free" candidate: the path from the candidate to the plan root crosses no
- *     stats-sensitive node ([[BinaryExecNode]], another [[ShuffleExchangeExec]], or a
- *     query stage). Its own coalescing/skew handling is given up; nothing above needed its
- *     stats.
- *   - "join-paired" candidate: the immediate shuffle inputs of a [[ShuffledJoin]] whose
- *     path to the root is otherwise free, flipped only as a symmetric pair (an asymmetric
- *     flip would leave one side participating in AQE coalesce/skew and the other fixed).
- *   - everything else stays regular and materializes as usual -- those stages form the
- *     fully-materialized prefix the scheduler's mixed-job shape requires.
- *
- * A pipelined exchange supports every
- * partitioning, so a SinglePartition exchange in a free position is simply a candidate
- * itself. The walk stops below a flipped candidate: exchanges underneath stay regular and
- * keep full AQE treatment. Candidates whose canonicalized form occurs more than once in
- * the plan (including inside materialized stages and subqueries) are skipped: flipping
- * them would trade AQE's stage reuse for duplicate recomputation, and a pipelined producer
- * cannot be consumed twice.
+ * Pipelined exchanges remain inline rather than becoming ShuffleQueryStageExec nodes, so they
+ * give up AQE coalescing and skew optimization. If any shuffle would remain regular, skip the
+ * rewrite: a mixed plan can lose its materialized outputs between actions, and the pipelined
+ * group cannot recover those outputs. Reused exchanges and unsupported consumers also retain
+ * regular execution. The shared environment gate excludes streaming, RDD and cache boundaries.
  */
 object AQEEnablePipelinedShuffle extends Rule[SparkPlan] {
 
@@ -86,6 +65,18 @@ object AQEEnablePipelinedShuffle extends Rule[SparkPlan] {
     val toFlip = mutable.HashSet.empty[Int]
     collectCandidates(plan, blocked = false, shared, toFlip)
     if (toFlip.isEmpty) return plan
+
+    // A regular prefix can lose its files between actions. The scheduler cannot recover that
+    // prefix inside a running pipelined group. Keep the entire plan regular if any
+    // exchange stays regular, including sibling branches and materialized query stages.
+    def hasRegularPrefix(p: SparkPlan): Boolean = p match {
+      case s: ShuffleExchangeExec =>
+        (!s.pipelined && !toFlip.contains(s.id)) || hasRegularPrefix(s.child)
+      case q: QueryStageExec => hasRegularPrefix(q.plan)
+      case r: ReusedExchangeExec => hasRegularPrefix(r.child)
+      case other => other.children.exists(hasRegularPrefix)
+    }
+    if (hasRegularPrefix(plan)) return plan
 
     // transformDown, NOT transformUp: candidates can be nested (a SinglePartition candidate
     // above a hash candidate). transformUp rebuilds children first, so by the time it
@@ -163,27 +154,11 @@ object AQEEnablePipelinedShuffle extends Rule[SparkPlan] {
     case _ => None
   }
 
-  /**
-   * Nodes below which a candidate exchange must NOT be flipped. Reasons a node lands here:
-   *   - AQE consumes map output statistics from the stages below it ([[BinaryExecNode]], another
-   *     [[ShuffleExchangeExec]]); flipping below it would give up stats a decision needs.
-   *   - [[CoalesceExec]] reads its child shuffle multi-partition-per-task (a `CoalescedRDD` over
-   *     the `ShuffledRowRDD`), which the channel transport cannot serve; the shuffle it reads
-   *     must stay regular.
-   *   - the limit operators [[CollectLimitExec]] / [[CollectTailExec]] /
-   *     [[TakeOrderedAndProjectExec]] each build a hidden regular (`pipelined = false`) shuffle
-   *     inside `doExecute` (via `prepareShuffleDependency`) that no plan walk can see; a flipped
-   *     exchange below one of them would sit under that unmaterialized regular boundary and the
-   *     job would hard-fail at submission (pipelined-below-regular).
-   * Blocking here keeps the shuffle below -- and everything deeper -- regular, so no pipelined
-   * exchange ends up below the operator's regular boundary. See the non-AQE
-   * `EnablePipelinedShuffle` for the full rationale on each operator.
-   */
+  /** Block candidates below stats consumers and operators unsupported by the channel. */
   private def isStatsSensitive(plan: SparkPlan): Boolean = plan match {
     case _: BinaryExecNode => true
     case _: ShuffleExchangeExec => true
-    case _: CoalesceExec => true
-    case _: CollectLimitExec | _: CollectTailExec | _: TakeOrderedAndProjectExec => true
+    case p if PipelinedShuffleEligibility.isUnsupportedConsumer(p) => true
     case _ => false
   }
 

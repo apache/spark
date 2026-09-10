@@ -23,7 +23,10 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{CoalesceExec, CollectLimitExec, CollectTailExec, DeserializeToObjectExec, SparkPlan, TakeOrderedAndProjectExec}
+import org.apache.spark.sql.execution.adaptive.QueryStageExec
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.joins.CartesianProductExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -41,6 +44,13 @@ private[sql] object PipelinedShuffleEligibility extends Logging {
   // The flag/manager mismatch is a start-up misconfiguration, so warn once per JVM rather than on
   // every query planned in the session.
   private val mismatchWarned = new AtomicBoolean(false)
+
+  /** Operators whose consumers cannot safely drain a bounded, single-reader channel. */
+  def isUnsupportedConsumer(plan: SparkPlan): Boolean = plan match {
+    case _: CoalesceExec | _: CartesianProductExec | _: DeserializeToObjectExec |
+        _: CollectLimitExec | _: CollectTailExec | _: TakeOrderedAndProjectExec => true
+    case _ => false
+  }
 
   /**
    * Whether the pipelined channel transport may be used for `plan` at all, independent of plan
@@ -65,6 +75,15 @@ private[sql] object PipelinedShuffleEligibility extends Logging {
     // marks its own pipelined boundaries; this opt-in batch path must not pre-empt that decision.
     // (`logicalLink.exists(_.isStreaming)` is the same signal InsertAdaptiveSparkPlan uses to keep
     // AQE off streaming plans.)
+    // Dataset.rdd exposes arbitrary consumers beyond the SQL plan, including RDD shuffles,
+    // multi-partition reads and repeated reads of the same partition. Cached inputs also hide
+    // shuffle lineage: cache hits skip those readers, while misses may require regular stages.
+    def hasUnsupportedBoundary(p: SparkPlan): Boolean = p match {
+      case _: DeserializeToObjectExec | _: InMemoryTableScanExec => true
+      case q: QueryStageExec => hasUnsupportedBoundary(q.plan)
+      case other => other.children.exists(hasUnsupportedBoundary)
+    }
+    if (hasUnsupportedBoundary(plan)) return false
     if (plan.exists(_.logicalLink.exists(_.isStreaming))) {
       logDebug("Pipelined shuffle: the plan is a streaming plan; leaving it to the streaming " +
         "engine's own pipelined-shuffle marking.")

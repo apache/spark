@@ -306,15 +306,18 @@ object ShuffleExchangeExec {
    * @param partitioner the partitioner for the shuffle
    * @return true if rows should be copied before being shuffled, false otherwise
    */
-  private def needToCopyObjectsBeforeShuffle(partitioner: Partitioner): Boolean = {
+  private def needToCopyObjectsBeforeShuffle(
+      partitioner: Partitioner,
+      pipelined: Boolean): Boolean = {
+    if (pipelined) {
+      return SparkEnv.get.pipelinedShuffleManager.requiresDetachedRecords
+    }
     // Note: even though we only use the partitioner's `numPartitions` field, we require it to be
     // passed instead of directly passing the number of partitions in order to guard against
     // corner-cases where a partitioner constructed with `numPartitions` partitions may output
     // fewer partitions (like RangePartitioner, for example).
     val conf = SparkEnv.get.conf
-    // This decision concerns the regular (materialized) shuffle path only. A pipelined shuffle is
-    // served by a separate pipelined manager (see SparkEnv.shuffleManagerFor) and does not go
-    // through here, so inspect the blocking manager's type directly.
+    // The remaining cases concern the regular shuffle manager.
     val shuffleManager = SparkEnv.get.blockingShuffleManager
     val sortBasedShuffleOn = shuffleManager.isInstanceOf[SortShuffleManager]
     val bypassMergeThreshold = conf.get(config.SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD)
@@ -532,7 +535,7 @@ object ShuffleExchangeExec {
       // would reject a chain of round-robin repartitions rather than protect anything.
       val isOrderSensitive = (isRoundRobin || isNullAwareHashPartitioning) &&
         !SQLConf.get.sortBeforeRepartition && !pipelined
-      if (needToCopyObjectsBeforeShuffle(part)) {
+      if (needToCopyObjectsBeforeShuffle(part, pipelined)) {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
           iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
@@ -569,15 +572,7 @@ object ShuffleExchangeExec {
           rddWithPartitionIds,
           new PartitionIdPassthrough(part.numPartitions),
           serializer,
-          // Copy rows only for a transport that hands object references to a concurrent
-          // consumer (the in-process channel). The RPC streaming transport detaches rows by
-          // serializing them promptly and must not pay an extra per-row copy on its path. And
-          // skip it when rddWithPartitionIds already copied: needToCopyObjectsBeforeShuffle makes
-          // that RDD emit (pid, row.copy()), so a second copy here would be redundant.
-          shuffleWriterProcessor = createShuffleWriteProcessor(
-            writeMetrics,
-            copyRows = SparkEnv.get.pipelinedShuffleManager.requiresDetachedRecords &&
-              !needToCopyObjectsBeforeShuffle(part)),
+          shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
           rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize))
       } else {
         new ShuffleDependency[Int, InternalRow, InternalRow](
@@ -594,40 +589,12 @@ object ShuffleExchangeExec {
     dependency
   }
 
-  /**
-   * Create a customized [[ShuffleWriteProcessor]] for SQL which wrap the default metrics reporter
-   * with [[SQLShuffleWriteMetricsReporter]] as new reporter for [[ShuffleWriteProcessor]].
-   *
-   * When `copyRows` is true (the pipelined path), each record's value row is copied before the
-   * shuffle writer sees it. A pipelined shuffle hands rows to a concurrently-running reducer
-   * through an in-process channel with no serialization, so the producer's reused output
-   * UnsafeRow buffer must be detached here -- in the SQL layer, where `InternalRow.copy()` is
-   * available -- or every enqueued row would alias the same buffer. A regular (materializing)
-   * shuffle serializes on write and so needs no copy; `copyRows` stays false for it.
-   */
-  def createShuffleWriteProcessor(
-      metrics: Map[String, SQLMetric],
-      copyRows: Boolean = false): ShuffleWriteProcessor = {
+  /** Create the SQL shuffle metrics reporter shared by both shuffle transports. */
+  def createShuffleWriteProcessor(metrics: Map[String, SQLMetric]): ShuffleWriteProcessor = {
     new ShuffleWriteProcessor {
       override protected def createMetricsReporter(
           context: TaskContext): ShuffleWriteMetricsReporter = {
         new SQLShuffleWriteMetricsReporter(context.taskMetrics().shuffleWriteMetrics, metrics)
-      }
-
-      override def write(
-          inputs: Iterator[_],
-          dep: ShuffleDependency[_, _, _],
-          mapId: Long,
-          mapIndex: Int,
-          context: TaskContext): org.apache.spark.scheduler.MapStatus = {
-        val rows = if (copyRows) {
-          inputs.asInstanceOf[Iterator[Product2[Int, InternalRow]]].map { pair =>
-            (pair._1, pair._2.copy()): Product2[Int, InternalRow]
-          }
-        } else {
-          inputs
-        }
-        super.write(rows, dep, mapId, mapIndex, context)
       }
     }
   }

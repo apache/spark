@@ -143,7 +143,8 @@ private[spark] trait PipelinedShuffleManager extends ShuffleManager {
   /**
    * Whether this manager's writer hands record OBJECTS to a concurrently-running consumer, so
    * each record must be detached from any producer-reused buffer before `write` sees it (for a
-   * SQL row: `InternalRow.copy()`, done by the SQL layer's write processor). A transport that
+   * SQL row: `InternalRow.copy()`, done before constructing the shuffle dependency). A transport
+   * that
    * serializes records promptly -- the RPC streaming manager -- detaches by serializing and
    * must NOT pay an extra per-row copy on its hot path; that is the default. The in-process
    * channel transport shares object references across threads and overrides this to true.
@@ -165,6 +166,12 @@ private[spark] trait PipelinedShuffleManager extends ShuffleManager {
    * whose remedy does not apply to it.
    */
   def supportsLiveReducePartitionHints: Boolean = false
+
+  /** Open a job's transport epoch before submitting any of its tasks. */
+  def startRun(epoch: Int): Unit = {}
+
+  /** Release a job's transport state, including on cancellation or failure. */
+  def endRun(epoch: Int): Unit = {}
 
   /**
    * Whether this manager currently holds driver-side cleanup state for `shuffleId`.

@@ -1262,7 +1262,14 @@ object SQLConf {
       "and reduce stages together, and the shuffle is served by the pipelined shuffle manager " +
       "(spark.shuffle.manager.incremental) instead of being materialized. A plan whose " +
       "pipelined stage group cannot fit the local task-concurrency limit fails with an " +
-      "explicit CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT error. Experimental.")
+      "explicit CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT error. Set spark.sql.shuffle.partitions " +
+      "low enough that all producer and consumer tasks fit together; the default 200 is " +
+      "usually too wide, and AQE does not coalesce pipelined exchanges. Dataset.rdd, cache " +
+      "construction, cached inputs and mixed AQE plans use regular shuffles. " +
+      "Concurrent actions sharing a pipelined exchange are unsupported. Multi-job actions " +
+      "such as toLocalIterator recompute the pipelined producers for each job, once per " +
+      "output partition for toLocalIterator; cache the Dataset first to avoid this cost. " +
+      "Experimental.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
