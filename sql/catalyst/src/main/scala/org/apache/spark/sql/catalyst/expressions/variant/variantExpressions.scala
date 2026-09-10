@@ -32,9 +32,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.json.JsonInferSchema
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET}
-import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, QuotingUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, QuotingUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -191,6 +191,159 @@ case class ToVariantObject(child: Expression)
         }
       """
     ev.copy(code = code)
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(keys, values) - Creates a variant object from the given arrays of keys and values. The keys must be non-null strings and the two arrays must have the same length.",
+  arguments = """
+    Arguments:
+      * keys - An array of non-null strings used as the object keys.
+      * values - An array of values, with the same length as the keys array.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array('a', 'b'), array(1, 2));
+       {"a":1,"b":2}
+  """,
+  since = "4.4.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit
+case class VariantFromArrays(left: Expression, right: Expression)
+    extends BinaryExpression
+    with ExpectsInputTypes
+    with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
+  override def dataType: DataType = VariantType
+
+  private lazy val valueType: DataType = right.dataType.asInstanceOf[ArrayType].elementType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      left.dataType.asInstanceOf[ArrayType].elementType match {
+        case _: StringType if VariantGet.checkDataType(valueType, allowStructsAndMaps = true) =>
+          TypeCheckResult.TypeCheckSuccess
+        case _: StringType =>
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITHOUT_SUGGESTION",
+            messageParameters =
+              Map("srcType" -> toSQLType(valueType), "targetType" -> toSQLType(VariantType)))
+        case _ =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> ordinalNumber(0),
+              "requiredType" -> toSQLType(ArrayType(StringType)),
+              "inputSql" -> toSQLExpr(left),
+              "inputType" -> toSQLType(left.dataType)))
+      }
+    }
+  }
+
+  override def prettyName: String = "variant_from_arrays"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): VariantFromArrays =
+    copy(left = newLeft, right = newRight)
+
+  override protected def nullSafeEval(keyArray: Any, valueArray: Any): Any =
+    VariantExpressionEvalUtils.variantFromArrays(
+      keyArray.asInstanceOf[ArrayData], valueArray.asInstanceOf[ArrayData], valueType)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (keyArray, valueArray) => {
+      val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+      val valueTypeArg = ctx.addReferenceObj("valueType", valueType)
+      s"${ev.value} = $cls.variantFromArrays($keyArray, $valueArray, $valueTypeArg);"
+    })
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(entries) - Creates a variant object from an array of key/value struct entries. The keys must be non-null strings.",
+  arguments = """
+    Arguments:
+      * entries - An array of key/value structs, where the first field is a non-null string key.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(struct('a', 1), struct('b', 2)));
+       {"a":1,"b":2}
+  """,
+  since = "4.4.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit
+case class VariantFromEntries(child: Expression)
+    extends UnaryExpression
+    with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
+
+  @transient
+  private lazy val dataTypeDetails: Option[(DataType, Boolean)] = child.dataType match {
+    case ArrayType(
+        StructType(Array(StructField(_, _, _, _), StructField(_, valueType, _, _))),
+        containsNull) =>
+      Some((valueType, containsNull))
+    case _ => None
+  }
+
+  @transient private lazy val valueType: DataType = dataTypeDetails.get._1
+  @transient private lazy val nullEntries: Boolean = dataTypeDetails.get._2
+
+  override def nullable: Boolean = child.nullable || nullEntries
+  override def dataType: DataType = VariantType
+
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case ArrayType(
+        StructType(Array(StructField(_, _: StringType, _, _), StructField(_, vt, _, _))), _) =>
+      if (VariantGet.checkDataType(vt, allowStructsAndMaps = true)) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITHOUT_SUGGESTION",
+          messageParameters =
+            Map("srcType" -> toSQLType(vt), "targetType" -> toSQLType(VariantType)))
+      }
+    case _ =>
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> s"${toSQLType(ArrayType)} of pair ${toSQLType(StructType)}",
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)))
+  }
+
+  override def prettyName: String = "variant_from_entries"
+
+  override protected def withNewChildInternal(newChild: Expression): VariantFromEntries =
+    copy(child = newChild)
+
+  override protected def nullSafeEval(input: Any): Any = {
+    val entries = input.asInstanceOf[ArrayData]
+    VariantExpressionEvalUtils.variantFromEntries(entries, valueType)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+      val valueTypeArg = ctx.addReferenceObj("valueType", valueType)
+      // nullSafeCodeGen only declares `ev.isNull` as a local when this expression is
+      // nullable; when it isn't, entries can never contain a null and the helper can never
+      // return null, so the reassignment must be skipped rather than referencing an
+      // undeclared variable.
+      val markNull = if (nullable) s"${ev.isNull} = ${ev.value} == null;" else ""
+      s"""
+         |${ev.value} = $cls.variantFromEntries($c, $valueTypeArg);
+         |$markNull
+       """.stripMargin
+    })
   }
 }
 
@@ -373,6 +526,7 @@ case object VariantGet {
         VariantType =>
       true
     case ArrayType(elementType, _) => checkDataType(elementType, allowStructsAndMaps)
+    case MapType(_: CharType | _: VarcharType, _, _) => false
     case MapType(_: StringType, valueType, _) if allowStructsAndMaps =>
         checkDataType(valueType, allowStructsAndMaps)
     case StructType(fields) if allowStructsAndMaps =>
@@ -728,7 +882,7 @@ object TryVariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(fa
       > SELECT _FUNC_(NULL, '$.a');
        NULL
   """,
-  since = "5.0.0",
+  since = "4.3.0",
   group = "variant_funcs"
 )
 // scalastyle:on line.size.limit
@@ -842,6 +996,192 @@ object VariantDelete {
       }
     } else {
       Some(DynamicDeletePath(child))
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(v, path1[, path2, ...]) - Keeps only the fields or array elements of a variant " +
+    "at the given JSONPath locations, preserving their enclosing structure; kept array elements " +
+    "are compacted into a new array in their original order. If no path matches, an object or " +
+    "array input yields an empty object or array, while a scalar or variant-null input is " +
+    "unchanged. Returns NULL if `v` is NULL; NULL paths are skipped.",
+  arguments = """
+    Arguments:
+      * v - A variant value to project.
+      * path1, path2, ... - One or more string expressions, each evaluating to a JSONPath
+          identifying a substructure to keep. A valid path should start with `$` and is followed by
+          zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('{"a": 1, "b": 2, "c": 3}'), '$.a', '$.c');
+       {"a":1,"c":3}
+      > SELECT _FUNC_(parse_json('{"a": {"b": 1, "c": 2}, "d": 3}'), '$.a.b');
+       {"a":{"b":1}}
+      > SELECT _FUNC_(parse_json('[10, 20, 30, 40]'), '$[0]', '$[2]');
+       [10,30]
+      > SELECT _FUNC_(parse_json('{"a": 1, "b": 2}'), NULL, '$.a', '$.missing');
+       {"a":1}
+      > SELECT _FUNC_(parse_json('{"a": {"b": 1}}'), '$.a.x');
+       {}
+      > SELECT _FUNC_(parse_json('42'), '$.a');
+       42
+      > SELECT _FUNC_(NULL, '$.a');
+       NULL
+  """,
+  since = "4.4.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+case class VariantPick(children: Seq[Expression])
+    extends Expression
+    with ExpectsInputTypes {
+
+  override def dataType: DataType = VariantType
+
+  override def nullable: Boolean = children.headOption.forall(_.nullable)
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    // First argument is the variant; subsequent arguments are JSONPath strings.
+    VariantType +: Seq.fill(math.max(children.length - 1, 0))(
+      StringTypeWithCollation(supportsTrimCollation = true))
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length < 2) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        prettyName, Seq("> 1"), children.length)
+    }
+    super.checkInputDataTypes()
+  }
+
+  private def variantChild: Expression = children.head
+  private def pathChildren: Seq[Expression] = children.tail
+
+  @transient private lazy val pathArgs: Seq[VariantPick.PickPathArg] =
+    pathChildren.flatMap(VariantPick.toPathArg)
+
+  // When every path is constant, the keep-tree is the same for all rows, so build it once here and
+  // reuse it rather than rebuilding it per row. `None` means at least one path is dynamic.
+  @transient private lazy val foldableTree: Option[VariantBuilder.PickNode] = {
+    if (pathArgs.forall(_.isInstanceOf[VariantPick.ParsedPickPath])) {
+      val paths = new java.util.ArrayList[Array[VariantBuilder.PathSegment]](pathArgs.length)
+      pathArgs.foreach {
+        case parsed: VariantPick.ParsedPickPath => paths.add(parsed.javaSegments)
+        case _ =>
+      }
+      Some(VariantBuilder.buildPickTree(paths))
+    } else {
+      None
+    }
+  }
+
+  // Collect the java path segments of all non-NULL paths.
+  private def collectPaths(
+      input: InternalRow): java.util.List[Array[VariantBuilder.PathSegment]] = {
+    val paths = new java.util.ArrayList[Array[VariantBuilder.PathSegment]](pathArgs.length)
+    var i = 0
+    while (i < pathArgs.length) {
+      pathArgs(i) match {
+        case parsed: VariantPick.ParsedPickPath =>
+          paths.add(parsed.javaSegments)
+        case VariantPick.DynamicPickPath(expr) =>
+          val pathVal = expr.eval(input).asInstanceOf[UTF8String]
+          if (pathVal != null) {
+            paths.add(VariantExpressionEvalUtils.parsePickPath(pathVal))
+          }
+      }
+      i += 1
+    }
+    paths
+  }
+
+  override def eval(input: InternalRow): Any = {
+    // Force constant-path parsing before the NULL short-circuit so a malformed constant path fails
+    // identically in interpreted and codegen modes, even when the input variant is NULL (codegen
+    // parses constant paths at code-generation time).
+    val tree = foldableTree
+    val inputVariant = variantChild.eval(input).asInstanceOf[VariantVal]
+    if (inputVariant == null) return null
+    tree match {
+      case Some(t) => VariantExpressionEvalUtils.pickAtPaths(inputVariant, t)
+      case None => VariantExpressionEvalUtils.pickAtPaths(inputVariant, collectPaths(input))
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val cls = VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+    val variantValType = CodeGenerator.javaType(VariantType)
+    val childCode = variantChild.genCode(ctx)
+
+    val project = foldableTree match {
+      case Some(tree) =>
+        // Constant paths: use the keep-tree built once and shipped as a reference.
+        val treeArg = ctx.addReferenceObj("vpTree", tree, classOf[VariantBuilder.PickNode].getName)
+        s"${ev.value} = $cls.pickAtPaths(${childCode.value}, $treeArg);"
+      case None =>
+        // At least one dynamic path: gather the paths per row, then project.
+        val paths = ctx.freshName("vpPaths")
+        val addPaths = pathArgs.map {
+          case parsed: VariantPick.ParsedPickPath =>
+            val parsedArg = ctx.addReferenceObj("vpParsed", parsed)
+            s"$paths.add($parsedArg.javaSegments());"
+          case VariantPick.DynamicPickPath(expr) =>
+            val pCode = expr.genCode(ctx)
+            s"""
+               |${pCode.code}
+               |if (!${pCode.isNull}) {
+               |  $paths.add($cls.parsePickPath(${pCode.value}));
+               |}
+             """.stripMargin
+        }.mkString("\n")
+        s"""
+           |java.util.ArrayList $paths = new java.util.ArrayList();
+           |$addPaths
+           |${ev.value} = $cls.pickAtPaths(${childCode.value}, $paths);
+         """.stripMargin
+    }
+
+    val code = code"""
+      ${childCode.code}
+      boolean ${ev.isNull} = ${childCode.isNull};
+      $variantValType ${ev.value} = ${CodeGenerator.defaultValue(VariantType)};
+      if (!${ev.isNull}) {
+        $project
+      }
+    """
+    ev.copy(code = code)
+  }
+
+  override def prettyName: String = "variant_pick"
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): VariantPick = copy(children = newChildren)
+}
+
+object VariantPick {
+  sealed trait PickPathArg
+  case class ParsedPickPath(segments: Array[VariantPathSegment]) extends PickPathArg {
+    // `VariantBuilder.PathSegment` is not `Serializable`, so the cached Java form is
+    // `@transient` and re-initialized once per executor task after deserialization.
+    @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
+      VariantExpressionEvalUtils.toJavaSegments(segments)
+  }
+  case class DynamicPickPath(expr: Expression) extends PickPathArg
+
+  private[variant] def toPathArg(child: Expression): Option[PickPathArg] = {
+    if (child.foldable) {
+      val v = child.eval()
+      if (v == null) {
+        None
+      } else {
+        Some(ParsedPickPath(VariantExpressionEvalUtils.parseVariantPath(
+          v.asInstanceOf[UTF8String].toString, "variant_pick", allowRoot = true)))
+      }
+    } else {
+      Some(DynamicPickPath(child))
     }
   }
 }
@@ -1084,6 +1424,13 @@ case class VariantSet(
     val result = super.checkInputDataTypes()
     if (result.isFailure) {
       result
+    } else if (!createIfMissing.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("create_if_missing"),
+          "inputType" -> toSQLType(createIfMissing.dataType),
+          "inputExpr" -> toSQLExpr(createIfMissing)))
     } else if (value.dataType == NullType) {
       TypeCheckResult.TypeCheckSuccess
     } else if (!VariantGet.checkDataType(value.dataType, allowStructsAndMaps = false)) {
@@ -1219,7 +1566,7 @@ abstract class VariantSetExpressionBuilderBase(failOnError: Boolean) extends Exp
           path should start with `$` and is followed by one or more segments like `[123]`,
           `.name`, `['name']`, or `["name"]`. The root path `$` is not allowed.
       * val - Any expression castable to variant.
-      * create_if_missing - An optional boolean (default true).
+      * create_if_missing - An optional boolean (default true). Must be a constant.
   """,
   examples = """
     Examples:
@@ -1260,7 +1607,7 @@ object VariantSetExpressionBuilder extends VariantSetExpressionBuilderBase(true)
           path should start with `$` and is followed by one or more segments like `[123]`,
           `.name`, `['name']`, or `["name"]`. The root path `$` is not allowed.
       * val - Any expression castable to variant.
-      * create_if_missing - An optional boolean (default true).
+      * create_if_missing - An optional boolean (default true). Must be a constant.
   """,
   examples = """
     Examples:
@@ -1489,7 +1836,94 @@ object VariantArrayAppendExpressionBuilder extends VariantArrayAppendExpressionB
 )
 // scalastyle:on line.size.limit
 object TryVariantArrayAppendExpressionBuilder
-    extends VariantArrayAppendExpressionBuilderBase(false)
+extends VariantArrayAppendExpressionBuilderBase(false)
+
+case class VariantStripNulls(child: Expression, includeArrays: Expression)
+    extends RuntimeReplaceable
+    with ExpectsInputTypes
+    with BinaryLike[Expression]
+    with QueryErrorsBase {
+
+  override def left: Expression = child
+  override def right: Expression = includeArrays
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType, BooleanType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val result = super.checkInputDataTypes()
+    if (result.isFailure) {
+      result
+    } else if (!includeArrays.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("include_arrays"),
+          "inputType" -> toSQLType(includeArrays.dataType),
+          "inputExpr" -> toSQLExpr(includeArrays)))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override lazy val replacement: Expression = StaticInvoke(
+    VariantExpressionEvalUtils.getClass,
+    VariantType,
+    "stripNulls",
+    Seq(child, includeArrays),
+    inputTypes,
+    returnNullable = false)
+
+  override def prettyName: String = "variant_strip_nulls"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): VariantStripNulls =
+    copy(child = newLeft, includeArrays = newRight)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(v[, include_arrays]) - Recursively removes object fields and array elements " +
+    "whose value is a variant null, unless `include_arrays` is false, in which case null array " +
+    "elements are kept. Returns NULL if any argument is NULL.",
+  arguments = """
+    Arguments:
+      * v - The variant value to strip.
+      * include_arrays - An optional boolean (default true). Must be a constant.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('{"a": 1, "b": null, "c": 3}'));
+       {"a":1,"c":3}
+      > SELECT _FUNC_(parse_json('[1, null, 3]'));
+       [1,3]
+      > SELECT _FUNC_(parse_json('{"a": {"b": null, "c": [1, null]}}'));
+       {"a":{"c":[1]}}
+      > SELECT _FUNC_(parse_json('{"a": [1, null], "b": null}'), false);
+       {"a":[1,null]}
+      > SELECT _FUNC_(parse_json('{"a": null}'));
+       {}
+      > SELECT _FUNC_(parse_json('null'));
+       null
+      > SELECT _FUNC_(NULL);
+       NULL
+  """,
+  since = "4.3.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+object VariantStripNullsExpressionBuilder extends ExpressionBuilder {
+  override def functionSignature: Option[FunctionSignature] = {
+    val vArg = InputParameter("v")
+    val includeArraysArg =
+      InputParameter("include_arrays", Some(Literal.create(true, BooleanType)))
+    Some(FunctionSignature(Seq(vArg, includeArraysArg)))
+  }
+
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    assert(expressions.size == 2)
+    VariantStripNulls(expressions(0), expressions(1))
+  }
+}
 
 case class VariantExplode(child: Expression) extends UnaryExpression with Generator
   with ExpectsInputTypes {
@@ -1685,13 +2119,24 @@ object SchemaOfVariant {
         val field = v.getFieldAtIndex(i)
         fields(i) = StructField(field.key, schemaOf(field.value))
       }
-      // According to the variant spec, object fields must be sorted alphabetically. So we don't
-      // have to sort, but just need to validate they are sorted.
+      var utf8Sorted = true
+      var utf16Sorted = true
+      var previousKey = if (size > 0) fields(0).name else null
+      var previousKeyBytes = if (size > 0) VariantUtil.encodeKey(previousKey) else null
       for (i <- 1 until size) {
-        if (fields(i - 1).name >= fields(i).name) {
-          throw new SparkRuntimeException("MALFORMED_VARIANT", Map.empty)
-        }
+        val currentKey = fields(i).name
+        val currentKeyBytes = VariantUtil.encodeKey(currentKey)
+        utf8Sorted &&= VariantUtil.compareKeys(previousKeyBytes, currentKeyBytes) < 0
+        utf16Sorted &&= previousKey.compareTo(currentKey) < 0
+        previousKey = currentKey
+        previousKeyBytes = currentKeyBytes
       }
+      if (!utf8Sorted && !utf16Sorted) {
+        throw new SparkRuntimeException("MALFORMED_VARIANT", Map.empty)
+      }
+      // `mergeSchema` expects StructType fields in Java String order. Older Spark values already
+      // use that order, while spec-compliant values need to be reordered after validation.
+      java.util.Arrays.sort(fields, JsonInferSchema.structFieldComparator)
       StructType(fields)
     case Type.ARRAY =>
       var elementType: DataType = NullType

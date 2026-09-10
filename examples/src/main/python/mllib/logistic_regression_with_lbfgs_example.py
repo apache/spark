@@ -19,9 +19,11 @@
 Logistic Regression With LBFGS Example.
 """
 from pyspark import SparkContext
+
 # $example on$
-from pyspark.mllib.classification import LogisticRegressionWithLBFGS, LogisticRegressionModel
+from pyspark.mllib.classification import LogisticRegressionModel, LogisticRegressionWithLBFGS
 from pyspark.mllib.regression import LabeledPoint
+
 # $example off$
 
 if __name__ == "__main__":

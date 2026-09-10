@@ -76,4 +76,15 @@ public class FakeCredentialProvider implements CredentialProvider {
   public int getCloseCount() {
     return closeCount.get();
   }
+
+  @Override
+  public Map<String, String> additionalSparkProperties() {
+    return Map.of(
+        // A spark.hadoop.* property (reaches the Hadoop Configuration with the prefix stripped).
+        "spark.hadoop.fs.fake.credentials.provider",
+        "org.apache.spark.security.FakeExecutorCredentialProvider",
+        // A non-Hadoop spark.* property, to verify the wiring is type-agnostic (applied as
+        // ordinary Spark configuration, not only spark.hadoop.*).
+        "spark.fake.credentials.enabled", "true");
+  }
 }

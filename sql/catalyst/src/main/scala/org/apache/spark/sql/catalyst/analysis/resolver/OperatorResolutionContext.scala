@@ -51,7 +51,8 @@ class OperatorResolutionContext(
     var baseOperator: Option[LogicalPlan] = None,
     val isResolvingTreeUnderHaving: Boolean = false,
     var parameterNamesToValues: Option[LinkedHashMap[String, Expression]] = None,
-    var hasGroupingAnalytics: Boolean = false) {
+    var hasGroupingAnalytics: Boolean = false,
+    val isSubqueryRoot: Boolean = false) {
 
   /**
    * @param subqueryExpressionsToValidate List of [[SubqueryExpression]]s in the context of current
@@ -130,7 +131,8 @@ class OperatorResolutionContextStack {
       new OperatorResolutionContext(
         unresolvedPlan = Some(unresolvedPlan),
         isResolvingTreeUnderHaving = isResolvingTreeUnderHaving,
-        parameterNamesToValues = current.parameterNamesToValues
+        parameterNamesToValues = current.parameterNamesToValues,
+        isSubqueryRoot = isSubqueryRoot
       )
     )
   }
@@ -138,11 +140,20 @@ class OperatorResolutionContextStack {
   /**
    * Pops the top resolution context from the stack. Before popping, propagates the
    * `hasGroupingAnalytics` from the child context to the parent context if it was set.
+   * The flag is NOT propagated across subquery boundaries (isSubqueryRoot) or derived-table
+   * boundaries (SubqueryAlias), because grouping analytics inside a subquery or derived table
+   * are unrelated to operators in the outer query.
    */
   def pop(): Unit = {
     val childContext = current
     stack.pop()
-    if (childContext.hasGroupingAnalytics) {
+    val isDerivedTableBoundary = childContext.unresolvedPlan match {
+      case Some(_: SubqueryAlias) => true
+      case _ => false
+    }
+    if (childContext.hasGroupingAnalytics &&
+        !childContext.isSubqueryRoot &&
+        !isDerivedTableBoundary) {
       current.hasGroupingAnalytics = childContext.hasGroupingAnalytics
     }
   }

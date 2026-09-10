@@ -64,8 +64,9 @@ class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: Str
   @Since("1.4.0")
   def setDegree(value: Int): this.type = set(degree, value)
 
-  override protected def createTransformFunc: Vector => Vector = { v =>
-    PolynomialExpansion.expand(v, $(degree))
+  override protected def createTransformFunc: Vector => Vector = {
+    val localDegree = $(degree)
+    v => PolynomialExpansion.expand(v, localDegree)
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {

@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, TreePattern}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.{fromAttributes, toAttributes}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
@@ -35,10 +36,10 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReferenc
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
-import org.apache.spark.sql.internal.connector.V2StatisticsUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -145,6 +146,8 @@ case class DataSourceV2Relation(
     table.capabilities.contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
 
   def isVersioned: Boolean = table.version != null
+
+  override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_RELATION)
 }
 
 /**
@@ -196,15 +199,64 @@ case class DataSourceV2ScanRelation(
 
   /**
    * Resolved attributes that the scan declares for runtime filtering via
-   * [[SupportsRuntimeV2Filtering.filterAttributes]]. Empty when the scan
-   * does not implement [[SupportsRuntimeV2Filtering]] or exposes no attributes.
+   * [[SupportsRuntimeV2Filtering.filterAttributes]] or
+   * [[SupportsRuntimeCatalystFiltering.filterAttributes]]. Empty when the scan
+   * implements neither interface or exposes no attributes. Accessing this value also validates
+   * attributes returned by [[SupportsRuntimeCatalystFiltering.fullyPushedFilterAttributes]].
    */
-  lazy val runtimeFilterAttrs: AttributeSet = scan match {
-    case s: SupportsRuntimeV2Filtering =>
-      AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
-        s.filterAttributes.toImmutableArraySeq, this))
-    case _ => AttributeSet.empty
+  lazy val runtimeFilterAttrs: AttributeSet = {
+    checkRuntimeFilteringInterfaces()
+    resolvedFullyPushedRuntimeFilterAttrs
+    resolvedRuntimeFilterAttrs
   }
+
+  private[sql] lazy val declaredRuntimeFilterAttrs: Array[NamedReference] = scan match {
+    case s: SupportsRuntimeV2Filtering => s.filterAttributes
+    case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
+    case _ => Array.empty
+  }
+
+  private lazy val declaredFullyPushedRuntimeFilterAttrs: Array[NamedReference] = scan match {
+    case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
+    case _ => Array.empty
+  }
+
+  private lazy val resolvedRuntimeFilterAttrs: AttributeSet = {
+    resolveFilterAttrs(declaredRuntimeFilterAttrs, "filterAttributes()")
+  }
+
+  private lazy val resolvedFullyPushedRuntimeFilterAttrs: AttributeSet = {
+    checkFullyPushedFilterAttrsAreTopLevel()
+    val resolvedAttrs = resolveFilterAttrs(
+      declaredFullyPushedRuntimeFilterAttrs, "fullyPushedFilterAttributes()")
+    resolvedRuntimeFilterAttrs
+    checkFullyPushedFilterAttrsAreFilterable()
+    resolvedAttrs
+  }
+
+  /**
+   * Resolved attributes for which a Catalyst runtime-filtering scan fully evaluates predicates.
+   * Empty for a [[SupportsRuntimeV2Filtering]] scan, which keeps its post-scan filters.
+   */
+  lazy val fullyPushedRuntimeFilterAttrs: AttributeSet = {
+    checkRuntimeFilteringInterfaces()
+    resolvedFullyPushedRuntimeFilterAttrs
+  }
+
+  /**
+   * Resolves runtime-filter references against this relation's output.
+   *
+   * [[AttributeSet]] reduces nested references to their root attributes. This is sufficient for
+   * ordinary runtime-filter eligibility because Spark retains the post-scan predicate.
+   */
+  private def resolveFilterAttrs(
+      filterAttrs: Array[NamedReference],
+      method: String): AttributeSet = {
+    V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
+      filterAttrs, output, method, scan.getClass.getName)
+  }
+
+  override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_SCAN_RELATION)
 
   override def name: String = relation.name
 
@@ -252,17 +304,60 @@ case class DataSourceV2ScanRelation(
     Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
 
+  private def checkRuntimeFilteringInterfaces(): Unit = {
+    scan match {
+      case _: SupportsRuntimeV2Filtering with SupportsRuntimeCatalystFiltering =>
+        throw SparkException.internalError(
+          "A scan must not implement both SupportsRuntimeV2Filtering and " +
+          s"SupportsRuntimeCatalystFiltering, but ${scan.getClass.getName} implements both.")
+      case _ =>
+    }
+  }
+
+  private def checkFullyPushedFilterAttrsAreTopLevel(): Unit = {
+    declaredFullyPushedRuntimeFilterAttrs.find(_.fieldNames.length > 1).foreach { ref =>
+      throw QueryCompilationErrors.nestedDataSourceFullyPushedRuntimeFilterAttributeError(
+        attribute = ref.fieldNames,
+        scanClass = scan.getClass.getName,
+        relationOutput = fromAttributes(output))
+    }
+  }
+
+  private def checkFullyPushedFilterAttrsAreFilterable(): Unit = {
+    declaredFullyPushedRuntimeFilterAttrs.find { fullyPushedRef =>
+      !declaredRuntimeFilterAttrs.exists { filterRef =>
+        fullyPushedRef.fieldNames.length == filterRef.fieldNames.length &&
+          fullyPushedRef.fieldNames.lazyZip(filterRef.fieldNames).forall(conf.resolver)
+      }
+    }.foreach { ref =>
+      throw QueryCompilationErrors.fullyPushedDataSourceRuntimeFilterAttributeNotFilterableError(
+        attribute = ref.fieldNames,
+        scanClass = scan.getClass.getName,
+        relationOutput = fromAttributes(output))
+    }
+  }
+
   override def doCanonicalize(): DataSourceV2ScanRelation = {
     this.copy(
       relation = this.relation.copy(
         output = this.relation.output.map(QueryPlan.normalizeExpressions(_, this.relation.output))
       ),
       output = this.output.map(QueryPlan.normalizeExpressions(_, this.output)),
+      // keyGroupedPartitioning may reference columns pruned out of `output`, which is kept as long
+      // as any key survives. A pruned key carries no information for plan comparison, since the
+      // physical outputPartitioning projects it away, so drop it before normalizing; otherwise the
+      // dangling attribute's exprId would keep otherwise-equivalent scans unequal and defeat
+      // subplan merging.
       keyGroupedPartitioning = keyGroupedPartitioning.map(
-        _.map(QueryPlan.normalizeExpressions(_, output))
+        _.filter(_.references.subsetOf(outputSet))
+          .map(QueryPlan.normalizeExpressions(_, output))
       ),
+      // ordering may likewise reference columns pruned out of `output`. Ordering is prefix-based,
+      // so keep only the leading run of sort orders that reference output columns and drop the rest
+      // before normalizing, for the same reason as keyGroupedPartitioning above.
       ordering = ordering.map(
-        _.map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
+        _.takeWhile(_.references.subsetOf(outputSet))
+          .map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
       ),
       // pushedFilters may reference columns pruned out of `output` (see the field doc), so they are
       // normalized against the relation's full output rather than `output`.

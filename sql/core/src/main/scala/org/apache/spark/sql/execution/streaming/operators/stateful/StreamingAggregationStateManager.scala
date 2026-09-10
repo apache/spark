@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.streaming.state.{NoopStatePartitionKeyExtractor, ReadStateStore, StateStore, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{EvictionIterator, NoopStatePartitionKeyExtractor, ReadStateStore, StateStore, UnsafeRowPair}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -61,6 +61,15 @@ sealed trait StreamingAggregationStateManager extends Serializable {
 
   /** Return an iterator containing all the values in target state store. */
   def values(store: ReadStateStore): Iterator[UnsafeRow]
+
+  /**
+   * Return an iterator over the rows of the target state store whose event time is older than
+   * `evictionTimestamp`, removing each row as it is returned. See [[EvictionIterator]].
+   */
+  def evictionIterator(
+      store: StateStore,
+      evictionTimestamp: Option[Long],
+      allowMultipleEventTimeColumns: Boolean = false): EvictionIterator
 }
 
 object StreamingAggregationStateManager extends Logging {
@@ -95,6 +104,18 @@ abstract class StreamingAggregationStateManagerBaseImpl(
   override def keys(store: ReadStateStore): Iterator[UnsafeRow] = {
     // discard and don't convert values to avoid computation
     store.iterator().map(_.key)
+  }
+
+  override def evictionIterator(
+      store: StateStore,
+      evictionTimestamp: Option[Long],
+      allowMultipleEventTimeColumns: Boolean = false): EvictionIterator = {
+    EvictionIterator(
+      store,
+      iterator(store),
+      keyExpressions,
+      allowMultipleEventTimeColumns,
+      evictionTimestamp)
   }
 }
 

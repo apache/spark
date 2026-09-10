@@ -176,6 +176,13 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     assert(model.predictions === Array(1, 2, 3, 4, 5))
   }
 
+  test("isotonic regression merges partial results across partitions") {
+    val model = runIsotonicRegressionOnInput(generateIsotonicInput(Seq(1, 3, 2, 4)), true, 2)
+
+    assert(model.boundaries === Array(0, 1, 2, 3))
+    assert(model.predictions === Array(1, 2.5, 2.5, 4))
+  }
+
   test("weighted isotonic regression") {
     val model = runIsotonicRegression(Seq(1, 2, 3, 4, 2), Seq(1, 1, 1, 1, 2), true)
 

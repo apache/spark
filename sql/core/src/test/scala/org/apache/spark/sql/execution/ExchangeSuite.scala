@@ -238,4 +238,32 @@ class ExchangeSuite extends SharedSparkSession {
         "ReusedExchangeExec should reuse an existing exchange")
     }
   }
+
+  test("ShuffleExchangeExec string args show `pipelined` only when it is set") {
+    val plan = spark.range(10).selectExpr("id % 4 AS key").queryExecution.executedPlan
+    val partitioning = HashPartitioning(Seq(Literal(1)), 4)
+
+    // The default: nothing about pipelining is printed, so plan output (and every golden file that
+    // captures it) is unchanged by the existence of the field.
+    val nonPipelined = ShuffleExchangeExec(partitioning, plan).simpleString(10)
+    assert(!nonPipelined.contains("pipelined") && !nonPipelined.contains("false"),
+      s"a non-pipelined exchange should not mention pipelining, but was: $nonPipelined")
+
+    // When set, it is printed with a name rather than as a bare positional `true`.
+    val pipelined = ShuffleExchangeExec(partitioning, plan, pipelined = true).simpleString(10)
+    assert(pipelined.contains("isPipelined=true"),
+      s"a pipelined exchange should report it, but was: $pipelined")
+
+    // `stringArgs` drops `pipelined` by position, so it must stay the last constructor field --
+    // otherwise a newly added field would be dropped instead and the bare `false` would come back.
+    val exchange = ShuffleExchangeExec(partitioning, plan)
+    assert(exchange.productElementName(exchange.productArity - 1) == "pipelined",
+      "`pipelined` must remain the last constructor field of ShuffleExchangeExec, because " +
+        "stringArgs drops it positionally")
+
+    // Exchange's plan_id suffix is re-appended by the override and must survive.
+    Seq(nonPipelined, pipelined).foreach { s =>
+      assert(s.contains("[plan_id="), s"the plan_id suffix should be preserved, but was: $s")
+    }
+  }
 }

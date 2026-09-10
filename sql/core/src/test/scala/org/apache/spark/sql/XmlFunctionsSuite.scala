@@ -361,6 +361,69 @@ class XmlFunctionsSuite extends SharedSparkSession {
     checkAnswer(dfTwo, readBackTwo)
   }
 
+  test("SPARK-57458: to_xml with nanos timestamp types") {
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        // The pattern must carry `p` fractional digits to emit the full declared precision; the
+        // stored value is truncated to precision `p`, so the rendered fraction is the first
+        // `p` digits of 123456789.
+        val fracPat = "S" * p
+        val frac = "123456789".take(p)
+        val ldt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+        Seq(
+          (TimestampNTZNanosType(p): DataType, "timestampNTZFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.$fracPat", ldt: Any,
+            s"2020-01-01T00:00:00.$frac"),
+          (TimestampLTZNanosType(p): DataType, "timestampFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.${fracPat}XXX", ldt.toInstant(ZoneOffset.UTC): Any,
+            s"2020-01-01T00:00:00.${frac}Z")).foreach {
+          case (nanosType, optKey, fmt, value, expectedTs) =>
+            val schema = new StructType().add("ts", nanosType)
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value))), schema)
+            val expectedXml =
+              s"""|<ROW>
+                  |    <ts>$expectedTs</ts>
+                  |</ROW>""".stripMargin
+            checkAnswer(
+              df.select(to_xml(struct($"ts"), Map(optKey -> fmt).asJava)),
+              Row(expectedXml))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57458: roundtrip in to_xml and from_xml - nanos timestamps") {
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        val fracPat = "S" * p
+        val ldt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+        Seq(
+          (TimestampNTZNanosType(p): DataType, "timestampNTZFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.$fracPat", ldt: Any),
+          (TimestampLTZNanosType(p): DataType, "timestampFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.${fracPat}XXX", ldt.toInstant(ZoneOffset.UTC): Any)).foreach {
+          case (nanosType, optKey, fmt, value) =>
+            val schema = new StructType().add("ts", nanosType)
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value))), schema)
+            val options = Map(optKey -> fmt).asJava
+            // The input column already carries precision `p`, so the to_xml -> from_xml
+            // round-trip with a `p`-digit pattern is loss-free.
+            val readBack = df
+              .select(to_xml(struct($"ts"), options).as("xml"))
+              .select(from_xml($"xml", schema, options).as("data"))
+              .select($"data.ts".as("ts"))
+            checkAnswer(readBack, df.select($"ts"))
+        }
+      }
+    }
+  }
+
   test("Support to_xml in SQL") {
     val schemaOne = StructType(StructField("a", IntegerType, nullable = false) :: Nil)
     val dataOne = Seq(Row(1))

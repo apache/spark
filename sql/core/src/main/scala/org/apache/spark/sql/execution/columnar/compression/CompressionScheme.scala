@@ -84,4 +84,10 @@ private[columnar] object CompressionScheme {
     // null count + null positions
     4 + 4 * nullCount
   }
+
+  def createNullsBuffer(buffer: ByteBuffer): ByteBuffer = {
+    val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+    nullsBuffer.rewind()
+    nullsBuffer
+  }
 }

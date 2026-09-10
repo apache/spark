@@ -62,6 +62,14 @@ private[spark] abstract class MemoryManager(
   protected[this] val offHeapStorageMemory =
     (maxOffHeapMemory * conf.get(MEMORY_STORAGE_FRACTION)).toLong
 
+  /**
+   * The maximum number of consumers listed individually in the per-consumer memory breakdown
+   * attached to an UNABLE_TO_ACQUIRE_MEMORY error. Read by [[TaskMemoryManager]]. See
+   * `spark.memory.oomErrorConsumerBreakdownLimit`.
+   */
+  private[memory] val oomErrorConsumerBreakdownLimit: Int =
+    conf.get(MEMORY_OOM_ERROR_CONSUMER_BREAKDOWN_LIMIT)
+
   offHeapExecutionMemoryPool.incrementPoolSize(maxOffHeapMemory - offHeapStorageMemory)
   offHeapStorageMemoryPool.incrementPoolSize(offHeapStorageMemory)
 

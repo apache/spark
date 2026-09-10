@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -353,6 +354,22 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))),
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))))
     }
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      val collatedChar = Literal.create("ab", CharType(2, "UTF8_LCASE"))
+      val collatedString = StringType("UTF8_LCASE")
+      Seq(TypeCoercion.ConcatCoercion, AnsiTypeCoercion.ConcatCoercion).foreach { r =>
+        ruleTest(r,
+          Concat(Seq(charLit, charLit)),
+          Concat(Seq(Cast(charLit, StringType), Cast(charLit, StringType))))
+        ruleTest(r,
+          Concat(Seq(collatedChar, collatedChar)),
+          Concat(Seq(
+            Cast(collatedChar, collatedString),
+            Cast(collatedChar, collatedString))))
+      }
+    }
   }
 
   test("type coercion for Elt") {
@@ -407,6 +424,23 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))))
     }
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(5))
+      val collatedChar = Literal.create("ab", CharType(5, "UTF8_LCASE"))
+      val collatedString = StringType("UTF8_LCASE")
+      Seq(TypeCoercion.EltCoercion, AnsiTypeCoercion.EltCoercion).foreach { r =>
+        ruleTest(r,
+          Elt(Seq(Literal(1), charLit, charLit)),
+          Elt(Seq(Literal(1), Cast(charLit, StringType), Cast(charLit, StringType))))
+        ruleTest(r,
+          Elt(Seq(Literal(1), collatedChar, collatedChar)),
+          Elt(Seq(
+            Literal(1),
+            Cast(collatedChar, collatedString),
+            Cast(collatedChar, collatedString))))
+      }
+    }
   }
 
   test("Datetime operations") {
@@ -436,6 +470,67 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     ruleTest(rule,
       SubtractTimestamps(timestampNTZLiteral, timestampLiteral),
       SubtractTimestamps(timestampNTZLiteral, Cast(timestampLiteral, TimestampNTZType)))
+
+    // SPARK-57832: subtraction accepts nanosecond-precision timestamps. A DATE operand takes the
+    // nanos type of the other side; a timestamp pair that differs only in precision or family is
+    // widened to a common type before being handed to SubtractTimestamps.
+    val ntzNanos9 = Literal.create(
+      DateTimeUtils.localDateTimeToTimestampNanos(
+        LocalDateTime.parse("2021-01-01T00:00:00"), precision = 9),
+      TimestampNTZNanosType(9))
+    val ltzNanos9 = Literal.create(
+      DateTimeUtils.instantToTimestampNanos(
+        java.time.Instant.parse("2021-01-01T00:00:00Z"), precision = 9),
+      TimestampLTZNanosType(9))
+    val ntzNanos7 = Literal.create(
+      DateTimeUtils.localDateTimeToTimestampNanos(
+        LocalDateTime.parse("2021-01-01T00:00:00"), precision = 7),
+      TimestampNTZNanosType(7))
+
+    // DATE - nanos and nanos - DATE cast the DATE side to the nanos type. Both the NTZ-nanos and
+    // the LTZ-nanos side are covered so the DATE-adopts-the-other-family arm is exercised in both
+    // time-zone families and both operand orders.
+    ruleTest(rule,
+      SubtractTimestamps(dateLiteral, ntzNanos9),
+      SubtractTimestamps(Cast(dateLiteral, TimestampNTZNanosType(9)), ntzNanos9))
+    ruleTest(rule,
+      SubtractTimestamps(ntzNanos9, dateLiteral),
+      SubtractTimestamps(ntzNanos9, Cast(dateLiteral, TimestampNTZNanosType(9))))
+    ruleTest(rule,
+      SubtractTimestamps(dateLiteral, ltzNanos9),
+      SubtractTimestamps(Cast(dateLiteral, TimestampLTZNanosType(9)), ltzNanos9))
+    ruleTest(rule,
+      SubtractTimestamps(ltzNanos9, dateLiteral),
+      SubtractTimestamps(ltzNanos9, Cast(dateLiteral, TimestampLTZNanosType(9))))
+    // Same-precision same-family pair is already the same type -> left untouched.
+    ruleTest(rule,
+      SubtractTimestamps(ntzNanos9, ntzNanos9),
+      SubtractTimestamps(ntzNanos9, ntzNanos9))
+    // Cross-family nanos pair (LTZ vs NTZ) unifies in the NTZ family at the max precision.
+    ruleTest(rule,
+      SubtractTimestamps(ltzNanos9, ntzNanos7),
+      SubtractTimestamps(
+        Cast(ltzNanos9, TimestampNTZNanosType(9)), Cast(ntzNanos7, TimestampNTZNanosType(9))))
+    // Micro NTZ vs nanos NTZ: same family, widen precision to the nanos type.
+    ruleTest(rule,
+      SubtractTimestamps(timestampNTZLiteral, ntzNanos9),
+      SubtractTimestamps(Cast(timestampNTZLiteral, TimestampNTZNanosType(9)), ntzNanos9))
+    // Micro LTZ (TIMESTAMP) vs nanos LTZ: same LTZ family, widen precision to the nanos LTZ type
+    // so the subtraction still runs in the session time zone.
+    ruleTest(rule,
+      SubtractTimestamps(timestampLiteral, ltzNanos9),
+      SubtractTimestamps(Cast(timestampLiteral, TimestampLTZNanosType(9)), ltzNanos9))
+    // Cross-family micro/nanos pairs: a micro operand on one side and a nanos operand of the other
+    // family on the other. Both unify in the NTZ family at the nanos precision (the cross-family
+    // rule prefers NTZ), so the micro operand widens across both axes at once.
+    ruleTest(rule,
+      SubtractTimestamps(timestampLiteral, ntzNanos9),
+      SubtractTimestamps(Cast(timestampLiteral, TimestampNTZNanosType(9)), ntzNanos9))
+    ruleTest(rule,
+      SubtractTimestamps(timestampNTZLiteral, ltzNanos9),
+      SubtractTimestamps(
+        Cast(timestampNTZLiteral, TimestampNTZNanosType(9)),
+        Cast(ltzNanos9, TimestampNTZNanosType(9))))
   }
 
   test("datetime comparison") {
@@ -1021,6 +1116,34 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     ruleTest(TypeCoercion.ImplicitTypeCasts,
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        Upper(charLit),
+        Upper(Cast(charLit, StringType)))
+    }
+  }
+
+  test("coerce JsonTuple children without the NullType rewrite") {
+    val json = Literal("""{"a":1}""")
+    val nullField = Literal.create(null, NullType)
+    val intField = Literal(1)
+
+    // JsonTuple keeps its own NON_STRING_TYPE check, so these stay for checkInputDataTypes.
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      JsonTuple(Seq(json, nullField)),
+      JsonTuple(Seq(json, nullField)))
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      JsonTuple(Seq(json, intField)),
+      JsonTuple(Seq(json, intField)))
+
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charLit = Literal.create("ab", CharType(2))
+      ruleTest(TypeCoercion.ImplicitTypeCasts,
+        JsonTuple(Seq(charLit, charLit)),
+        JsonTuple(Seq(Cast(charLit, StringType), Cast(charLit, StringType))))
+    }
   }
 
   test("cast NullType for binary operators") {
@@ -1624,10 +1747,10 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1))),
       In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1)))
     )
+    // Only the children that are not already of the common type are cast.
     ruleTest(inConversion,
       In(Literal("a"), Seq(Literal(1), Literal("b"))),
-      In(Cast(Literal("a"), StringType),
-        Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
+      In(Literal("a"), Seq(Cast(Literal(1), StringType), Literal("b")))
     )
   }
 

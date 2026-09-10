@@ -18,14 +18,17 @@ package org.apache.spark.sql.connect.service
 
 import java.io.ByteArrayOutputStream
 import java.util.UUID
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 
 import com.github.luben.zstd.{Zstd, ZstdOutputStreamNoFinalizer}
 import com.google.protobuf.ByteString
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.connect.proto
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.connect.SparkConnectServerTest
 import org.apache.spark.sql.connect.config.Connect
 
@@ -36,6 +39,32 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   // even if the connection got closed, the client would see it as succeeded because the results
   // were all already in the buffer.
   val BIG_ENOUGH_QUERY = "select * from range(1000000)"
+
+  test("ExecutePlan operation ID is available as a Spark local property") {
+    val operationIdFromJob = new AtomicReference[String]()
+    val jobStarted = new CountDownLatch(1)
+    val listener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        val operationId =
+          jobStart.properties.getProperty(SparkContext.SPARK_CONNECT_OPERATION_ID_PROPERTY)
+        if (operationId != null) {
+          operationIdFromJob.set(operationId)
+          jobStarted.countDown()
+        }
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+    try {
+      withClient { client =>
+        val responses = client.execute(buildPlan("select count(*) from range(10)")).toSeq
+        val operationId = responses.head.getOperationId
+        assert(jobStarted.await(10, TimeUnit.SECONDS))
+        assert(operationIdFromJob.get() == operationId)
+      }
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
 
   test("Execute is sent eagerly to the server upon iterator creation") {
     // This behavior changed with grpc upgrade from 1.56.0 to 1.59.0.

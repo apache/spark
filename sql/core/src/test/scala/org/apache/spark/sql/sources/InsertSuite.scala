@@ -34,6 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.Utils
 
 class SimpleInsertSource extends SchemaRelationProvider {
@@ -57,10 +58,10 @@ case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSes
   }
 }
 
+@ExtendedSQLTest
 class InsertSuite extends DataSourceTest with SharedSparkSession {
   import testImplicits._
 
-  protected override lazy val sql = spark.sql _
   private var path: File = null
 
   override def beforeAll(): Unit = {

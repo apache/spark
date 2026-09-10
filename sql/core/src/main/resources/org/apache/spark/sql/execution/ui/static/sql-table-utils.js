@@ -30,6 +30,14 @@ function formatDurationSql(milliseconds) {
   return hours.toFixed(1) + " h";
 }
 
+// Format a total task time value. A negative or absent value means "unknown"
+// (e.g. the execution has no stages to aggregate), which is shown as "N/A"
+// rather than a misleading "0 ms".
+function formatTotalTaskTime(value) {
+  if (value === null || value === undefined || value < 0) return "N/A";
+  return formatDurationSql(value);
+}
+
 function formatDateSql(dateStr) {
   if (!dateStr) return "";
   try {
@@ -232,6 +240,14 @@ function getSqlTableColumns(opts) {
     }
   };
 
+  var totalTaskTimeColumn = {
+    data: "totalTaskTime", name: "totalTaskTime", title: "Total Task Time",
+    render: function (data, type) {
+      if (type !== "display") return data;
+      return formatTotalTaskTime(data);
+    }
+  };
+
   var jobsColumn = {
     data: "jobIds", name: "jobIds", title: "Succeeded Jobs",
     orderable: false,
@@ -258,5 +274,6 @@ function getSqlTableColumns(opts) {
   };
 
   return [idColumn, queryIdColumn, statusColumn, descriptionColumn,
-    submissionColumn, durationColumn, jobsColumn, errorColumn];
+    submissionColumn, durationColumn, totalTaskTimeColumn, jobsColumn,
+    errorColumn];
 }

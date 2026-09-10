@@ -386,7 +386,8 @@ object SparkConnectService extends Logging {
       Some(
         new SparkConnectServerTab(
           new SparkConnectServerAppStatusStore(kvStore),
-          SparkConnectServerTab.getSparkUI(sc)))
+          SparkConnectServerTab.getSparkUI(sc),
+          Some(sessionManager)))
     } else {
       None
     }
@@ -557,19 +558,6 @@ object SparkConnectService extends Logging {
     }
 
     listenerBus.post(eventBuilder(bindingAddress))
-  }
-
-  def extractErrorMessage(st: Throwable): String = {
-    val message = Utils.abbreviate(st.getMessage, 2048)
-    convertNullString(message)
-  }
-
-  def convertNullString(str: String): String = {
-    if (str != null) {
-      str
-    } else {
-      ""
-    }
   }
 }
 

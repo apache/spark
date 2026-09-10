@@ -15,25 +15,24 @@
 # limitations under the License.
 #
 
-from math import exp
 import sys
 import warnings
-from typing import Any, Iterable, Optional, Union, overload, TYPE_CHECKING
+from math import exp
+from typing import TYPE_CHECKING, Any, Iterable, Optional, Union, overload
 
 import numpy
 
 from pyspark import RDD, SparkContext, since
-from pyspark.streaming.dstream import DStream
-from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
-from pyspark.mllib.linalg import _convert_to_vector
+from pyspark.mllib.common import _java2py, _py2java, callMLlibFunc
+from pyspark.mllib.linalg import Vector, _convert_to_vector
 from pyspark.mllib.regression import (
     LabeledPoint,
     LinearModel,
-    _regression_train_wrapper,
     StreamingLinearAlgorithm,
+    _regression_train_wrapper,
 )
-from pyspark.mllib.util import Saveable, Loader, inherit_doc
-from pyspark.mllib.linalg import Vector
+from pyspark.mllib.util import Loader, Saveable, inherit_doc
+from pyspark.streaming.dstream import DStream
 
 if TYPE_CHECKING:
     from pyspark.mllib._typing import VectorLike
@@ -950,12 +949,13 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
         def update(rdd: RDD[LabeledPoint]) -> None:
             # LogisticRegressionWithSGD.train raises an error for an empty RDD.
             if not rdd.isEmpty():
+                assert self._model is not None
                 self._model = LogisticRegressionWithSGD.train(
                     rdd,
                     self.numIterations,
                     self.stepSize,
                     self.miniBatchFraction,
-                    self._model.weights,  # type: ignore[union-attr]
+                    self._model.weights,
                     regParam=self.regParam,
                     convergenceTol=self.convergenceTol,
                 )
@@ -965,8 +965,9 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.mllib.classification
+    from pyspark.sql import SparkSession
 
     globs = pyspark.mllib.classification.__dict__.copy()
     spark = (

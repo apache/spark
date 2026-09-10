@@ -23,7 +23,7 @@ import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{Column, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -55,6 +55,14 @@ class PredictorSuite extends SparkFunSuite with MLlibTestSparkContext {
       predictor.fit(df.select(col("label"), col("weight").cast(StringType), col("features")))
     }
   }
+
+  test("PredictionModel transform should use predictionColumn") {
+    val df = spark.createDataFrame(Seq(Tuple1(Vectors.dense(1.0)))).toDF("features")
+    val prediction = new MockPredictionModel()
+      .transform(df).select("prediction").head().getDouble(0)
+
+    assert(prediction === 1.0)
+  }
 }
 
 object PredictorSuite {
@@ -83,6 +91,8 @@ object PredictorSuite {
 
     override def predict(features: Vector): Double =
       throw new UnsupportedOperationException()
+
+    override protected def predictionColumn(features: Column): Column = lit(1.0)
 
     override def copy(extra: ParamMap): MockPredictionModel =
       throw new UnsupportedOperationException()

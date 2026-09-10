@@ -325,10 +325,12 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(empty.count() === 0)
     assert(empty.collect().length === 0)
 
-    val thrown = intercept[UnsupportedOperationException]{
-      empty.reduce(_ + _)
-    }
-    assert(thrown.getMessage.contains("empty"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        empty.reduce(_ + _)
+      },
+      condition = "EMPTY_COLLECTION_NOT_ALLOWED",
+      parameters = Map.empty[String, String])
 
     val emptyKv = new EmptyRDD[(Int, Int)](sc)
     val rdd = sc.parallelize(1 to 2, 2).map(x => (x, x))

@@ -184,10 +184,41 @@ object Project {
         if (other == target) {
           col
         } else if (Cast.canANSIStoreAssign(other, target)) {
-          Cast(col, target, Option(conf.sessionLocalTimeZone), ansiEnabled = true)
+          storeAssignCast(col, other, target, conf)
         } else {
           throw QueryCompilationErrors.invalidColumnOrFieldDataTypeError(columnPath, other, target)
         }
+    }
+  }
+
+  /**
+   * Cast `col` for ANSI store assignment without using character-to-character CAST
+   * truncation (ISO 6.13).
+   *
+   * For CHAR/VARCHAR targets the plan is Cast to unconstrained STRING, then
+   * `stringLengthCheck` (write-side overflow). Avoid replaceCharVarcharWithString
+   * so first-class types stay CHAR/VARCHAR.
+   */
+  private def storeAssignCast(
+      col: Expression,
+      other: DataType,
+      target: DataType,
+      conf: SQLConf): Expression = {
+    val (castTarget, lengthCheckType) = target match {
+      case c: CharType => (c.toStringType, Some(c: DataType))
+      case v: VarcharType => (v.toStringType, Some(v: DataType))
+      case otherType => (otherType, None)
+    }
+    val casted = if (other == castTarget) {
+      col
+    } else {
+      Cast(col, castTarget, Option(conf.sessionLocalTimeZone), ansiEnabled = true)
+    }
+    lengthCheckType match {
+      case Some(dt) if CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) =>
+        CharVarcharUtils.stringLengthCheck(casted, dt)
+      case _ =>
+        casted
     }
   }
 
@@ -1291,18 +1322,25 @@ object Aggregate {
     schema.forall(f => UnsafeRow.isMutable(f.dataType))
   }
 
+  /**
+   * Returns whether grouping keys of this type can use raw binary equality or schema-aware key
+   * operations in hash aggregation.
+   */
+  def supportsHashAggregateGroupingKey(dataType: DataType): Boolean = {
+    UnsafeRowKeyOperations.supportsDataType(dataType)
+  }
+
   def supportsHashAggregate(
       aggregateBufferAttributes: Seq[Attribute], groupingExpression: Seq[Expression]): Boolean = {
     val aggregationBufferSchema = DataTypeUtils.fromAttributes(aggregateBufferAttributes)
     isAggregateBufferMutable(aggregationBufferSchema) &&
-      groupingExpression.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
+      groupingExpression.forall(e => supportsHashAggregateGroupingKey(e.dataType))
   }
 
   def supportsObjectHashAggregate(
       aggregateExpressions: Seq[AggregateExpression],
       groupingExpressions: Seq[Expression]): Boolean = {
-    // We should not use hash aggregation on binary unstable types.
-    if (groupingExpressions.exists(e => !UnsafeRowUtils.isBinaryStable(e.dataType))) {
+    if (groupingExpressions.exists(e => !supportsHashAggregateGroupingKey(e.dataType))) {
       return false
     }
 
@@ -1838,10 +1876,56 @@ case class BinBy(
   override def producedAttributes: AttributeSet =
     AttributeSet(scaledDistributeColumns ++ appendedAttributes)
 
+  override protected def stringArgs: Iterator[Any] = {
+    BinBy.explainStringArgs(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidthMicros = binWidthMicros,
+      originMicros = originMicros,
+      distributeColumns = distributeColumns,
+      scaledDistributeColumns = scaledDistributeColumns,
+      appendedAttributes = appendedAttributes,
+      timeZoneId = timeZoneId)
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(BIN_BY)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): BinBy =
     copy(child = newChild)
+}
+
+object BinBy {
+
+  // Builds the `stringArgs` for EXPLAIN. LTZ formats `alignTo` in the captured zone and appends
+  // `zone=`, NTZ formats in UTC and omits it.
+  private[sql] def explainStringArgs(
+      rangeStart: Attribute,
+      rangeEnd: Attribute,
+      binWidthMicros: Long,
+      originMicros: Long,
+      distributeColumns: Seq[Attribute],
+      scaledDistributeColumns: Seq[Attribute],
+      appendedAttributes: Seq[Attribute],
+      timeZoneId: Option[String]): Iterator[Any] = {
+    val maxFields = SQLConf.get.maxToStringFields
+    val fmt = TimestampFormatter.getFractionFormatter(
+      DateTimeUtils.getZoneId(timeZoneId.getOrElse("UTC")))
+
+    def refs(attrs: Seq[Attribute]): String = {
+      truncatedString(attrs.map(_.simpleString(maxFields)), "[", ", ", "]", maxFields)
+    }
+
+    Iterator(
+      s"range=[${rangeStart.simpleString(maxFields)}, ${rangeEnd.simpleString(maxFields)}]",
+      "binWidth=" + IntervalUtils.toDayTimeIntervalString(
+        binWidthMicros, IntervalStringStyles.ANSI_STYLE,
+        DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND),
+      s"alignTo=${fmt.format(originMicros)}",
+      s"distribute=${refs(distributeColumns)}",
+      s"scaledDistribute=${refs(scaledDistributeColumns)}",
+      s"appends=${refs(appendedAttributes)}") ++
+      timeZoneId.map(z => s"zone=$z")
+  }
 }
 
 /**
@@ -2069,6 +2153,18 @@ object SampleMethod {
 }
 
 object Sample {
+  /**
+   * Resolves the seed of a sample, generating a random one when the user did not specify one.
+   *
+   * Generated seeds are non-negative. A pushed-down sample renders its seed into SQL as
+   * `REPEATABLE (<seed>)`, and the seed in that grammar does not accept a sign. A
+   * user-specified seed is returned unchanged, negative values included.
+   */
+  def resolveSeed(seed: Option[Long]): Long = {
+    // `Utils` in this file is o.a.s.util.collection.Utils, so qualify the one we want here.
+    seed.getOrElse(org.apache.spark.util.Utils.random.nextLong() & Long.MaxValue)
+  }
+
   /**
    * Convenience constructor that wraps a concrete seed in [[Some]].
    * Use the case-class constructor directly with [[None]] when no seed

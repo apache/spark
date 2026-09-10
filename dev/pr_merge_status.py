@@ -60,6 +60,10 @@ import re
 import subprocess
 import sys
 
+# Shared with dev/merge_spark_pr.py so the two committer tools cannot disagree about where a
+# PR landed. Importable because Python puts this script's own directory first on sys.path.
+from spark_merge_footer import branches_with_merge_footer, merge_footer_trailer
+
 REPO = "apache/spark"
 
 
@@ -177,38 +181,6 @@ def fetch_branches(remote):
         )
 
 
-def commits_with_trailer(trailer, remote):
-    """Returns the full SHAs of commits on `remote`'s branches whose message contains
-    `trailer`. Scoping to the one remote (rather than `--all`) keeps fork refs and tags
-    from adding noise or walk cost."""
-    out = git("log", "--remotes=%s" % remote, "--fixed-strings", "--grep", trailer, "--format=%H")
-    return list(dict.fromkeys(out.split()))
-
-
-def official_branches_containing(commit, remote):
-    """Returns the `remote` branch names (e.g. 'master', 'branch-4.x') that contain
-    `commit`, ignoring the remote's HEAD alias and any non-branch refs."""
-    out = git(
-        "for-each-ref",
-        "--contains",
-        commit,
-        "--format=%(refname:short)",
-        "refs/remotes/%s/" % remote,
-    )
-    prefix = remote + "/"
-    branches = set()
-    for ref in out.splitlines():
-        # Real branches are "<remote>/<branch>"; the remote's HEAD symref shortens to the
-        # bare remote name (e.g. "upstream") -- skip anything without the "<remote>/" prefix,
-        # and the explicit "<remote>/HEAD" form for good measure.
-        if not ref.startswith(prefix):
-            continue
-        name = ref[len(prefix) :]
-        if name != "HEAD":
-            branches.add(name)
-    return branches
-
-
 def display_key(name):
     """Sorts `master` first, then branch-<major>.<minor> ascending, with branch-<N>.x
     (the active dev line for the next feature release) after its numeric siblings."""
@@ -257,19 +229,25 @@ def main():
     # its merge there, since a merge always lands on the base branch.
     majors = {m for m in (latest_major(remote), branch_major(base)) if m is not None}
 
-    trailer = "Closes #%s from " % pr
-    landed = {}
-    for commit in commits_with_trailer(trailer, remote):
-        for branch in official_branches_containing(commit, remote):
-            if all_branches or is_relevant(branch, majors):
-                landed[branch] = commit[:11]
+    # The shared reader consumes local remote-tracking refs only, so fetch_branches above is
+    # what refreshes them -- best-effort, since it warns and continues on a failed fetch,
+    # leaving the refs possibly stale (a recently merged PR could look unmerged).
+    all_landed = branches_with_merge_footer(pr, remote, lambda args: git(*args))
+    landed = {
+        branch: commit[:11]
+        for branch, commit in all_landed.items()
+        if all_branches or is_relevant(branch, majors)
+    }
 
     if landed:
         print("merged: yes")
         for branch in sorted(landed, key=display_key):
             print("  %-12s %s" % (branch, landed[branch]))
     else:
-        print('closed without merging -- no "%s" commit found (rejected or superseded).' % trailer)
+        print(
+            'closed without merging -- no "%s" commit found (rejected or superseded).'
+            % merge_footer_trailer(pr)
+        )
 
 
 if __name__ == "__main__":

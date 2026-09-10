@@ -19,25 +19,25 @@
 A collections of builtin functions
 """
 
-import inspect
 import decimal
-import sys
 import functools
+import inspect
+import sys
 import warnings
 from typing import (
+    TYPE_CHECKING,
     Any,
-    cast,
     Callable,
-    Mapping,
-    Sequence,
     Iterable,
-    overload,
+    Mapping,
     Optional,
+    Sequence,
     Tuple,
     Type,
-    TYPE_CHECKING,
     Union,
     ValuesView,
+    cast,
+    overload,
 )
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
@@ -47,43 +47,61 @@ from pyspark.sql.types import (
     ArrayType,
     ByteType,
     DataType,
-    StringType,
-    StructType,
     MapType,
     NumericType,
+    StringType,
+    StructType,
     _from_numpy_type,
 )
-
-# Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
-from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
-from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
-from pyspark.sql.udtf import OrderingColumn, PartitioningColumn, SelectedColumn  # noqa: F401
-from pyspark.sql.udtf import SkipRestOfInputTableException  # noqa: F401
-from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf, _create_pyarrow_udtf
-
-# Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
-from pyspark.sql.pandas.functions import (  # noqa: F401
-    arrow_udf,
-    pandas_udf,
-    ArrowUDFType,
-    PandasUDFType,
+from pyspark.sql.types import (
+    UserDefinedType as _UserDefinedType,
 )
 
+if TYPE_CHECKING:
+    from pyspark.sql.types import UserDefinedType
+
+# Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
+# Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
+from pyspark.sql.pandas.functions import (  # noqa: F401
+    ArrowUDFType,
+    PandasUDFType,
+    arrow_udf,
+    pandas_udf,
+)
+from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
+from pyspark.sql.udtf import (  # noqa: F401
+    AnalyzeArgument,
+    AnalyzeResult,
+    OrderingColumn,
+    PartitioningColumn,
+    SelectedColumn,
+    SkipRestOfInputTableException,
+    UserDefinedTableFunction,
+    _create_py_udtf,
+    _create_pyarrow_udtf,
+)
+from pyspark.sql.utils import (
+    enum_to_value as _enum_to_value,
+)
+from pyspark.sql.utils import (
+    get_active_spark_context as _get_active_spark_context,
+)
 from pyspark.sql.utils import (
     to_str as _to_str,
+)
+from pyspark.sql.utils import (
     try_remote_functions as _try_remote_functions,
-    get_active_spark_context as _get_active_spark_context,
-    enum_to_value as _enum_to_value,
 )
 
 if TYPE_CHECKING:
     from pyspark import SparkContext
-    from pyspark.sql.dataframe import DataFrame
     from pyspark.sql._typing import (
         ColumnOrName,
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
+    from pyspark.sql.aggregator import Aggregator
+    from pyspark.sql.dataframe import DataFrame
 
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
@@ -91,6 +109,8 @@ if TYPE_CHECKING:
 # even though there might be few exceptions for legacy or inevitable reasons.
 # If you are fixing other language APIs together, also please note that Scala side is not the case
 # since it requires making every single overridden definition.
+# Public function groups are defined by pyspark.sql.functions.__all__ and mirrored in the API
+# reference.
 
 
 def _get_jvm_function(name: str, sc: "SparkContext") -> Callable:
@@ -140,7 +160,7 @@ def _invoke_binary_math_function(name: str, col1: Any, col2: Any) -> Column:
     Invokes binary JVM math function identified by name
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
-    from pyspark.sql.classic.column import _to_java_column, _create_column_from_literal
+    from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
 
     # For legacy reasons, the arguments here can be implicitly converted into column
     cols = [
@@ -1039,6 +1059,12 @@ def abs(col: "ColumnOrName") -> Column:
         A new column object representing the absolute value of the input.
         Returns a column of the same type as the input.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Compute the absolute value of a long column
@@ -1675,6 +1701,12 @@ def sum(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.max`
     :meth:`pyspark.sql.functions.avg`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Calculating the sum of values in a column
@@ -1740,6 +1772,12 @@ def avg(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.max`
     :meth:`pyspark.sql.functions.sum`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Calculating the average age
@@ -1788,6 +1826,12 @@ def mean(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -1879,6 +1923,12 @@ def sumDistinct(col: "ColumnOrName") -> Column:
 
     .. deprecated:: 3.2.0
         Use :func:`sum_distinct` instead.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
     """
     warnings.warn("Deprecated in 3.2, use sum_distinct instead.", FutureWarning)
     return sum_distinct(col)
@@ -1903,6 +1953,12 @@ def sum_distinct(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -2738,6 +2794,12 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     --------
     :meth:`pyspark.sql.functions.ceiling`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Compute the ceiling of a column value
@@ -2798,6 +2860,12 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     See Also
     --------
     :meth:`pyspark.sql.functions.ceil`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -3218,6 +3286,12 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
         nearest integer that is less than or equal to given value.
         Returns a column that evaluates to a long or decimal.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Compute the floor of a column value
@@ -3365,6 +3439,12 @@ def negative(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         negative value.
         Returns a column of the same type as the input.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -6599,6 +6679,10 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
     -----
     Supports Spark Connect.
 
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -7129,6 +7213,7 @@ def broadcast(df: "DataFrame") -> "DataFrame":
     +-----+---+
     """
     from py4j.java_gateway import JVMView
+
     from pyspark.sql.dataframe import DataFrame
 
     sc = _get_active_spark_context()
@@ -7411,7 +7496,7 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     |                             2|
     +------------------------------+
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function(
@@ -8281,6 +8366,12 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
         A column for the rounded value.
         Returns a column of the same type as the input.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Compute the rounded of a column value
@@ -8312,6 +8403,67 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 
 
 @_try_remote_functions
+def truncate(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    """
+    Truncate the given value toward zero to `scale` decimal places when `scale` >= 0,
+    or to the left of the decimal point when `scale` < 0. `scale` defaults to 0.
+
+    Unlike :func:`round`, the result is always rounded toward zero, and unlike :func:`floor`
+    negative values are not rounded toward negative infinity.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column or column name to truncate.
+        A column that evaluates to a numeric.
+    scale : :class:`~pyspark.sql.Column` or int, optional
+        An optional parameter to control the number of decimal places to keep.
+        A column that evaluates to an integer. Must be a constant. Defaults to 0.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column for the truncated value, of the same type as the input, except that a decimal
+        input may return a decimal of different precision and scale.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.round`
+    :meth:`pyspark.sql.functions.trunc`
+    :meth:`pyspark.sql.functions.floor`
+    :meth:`pyspark.sql.functions.ceil`
+
+    Examples
+    --------
+    Example 1: Truncate toward zero to a given number of decimal places
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(15.79), sf.lit(1)).alias("r")).collect()
+    [Row(r=15.7)]
+
+    Example 2: Truncation rounds toward zero for negative values
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(-2.99), sf.lit(0)).alias("r")).collect()
+    [Row(r=-2.0)]
+
+    Example 3: The scale argument defaults to 0 when omitted
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(1234.5678)).alias("r")).collect()
+    [Row(r=1234.0)]
+    """
+    if scale is None:
+        return _invoke_function_over_columns("truncate", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("truncate", col, scale)
+
+
+@_try_remote_functions
 def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_EVEN rounding mode if `scale` >= 0
@@ -8339,6 +8491,12 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     :class:`~pyspark.sql.Column`
         A column for the rounded value.
         Returns a column of the same type as the input.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -9069,6 +9227,12 @@ def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
         logariphm of given value.
         Returns a column that evaluates to a string.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -9131,9 +9295,6 @@ def factorial(col: "ColumnOrName") -> Column:
     +---+-------------+
     """
     return _invoke_function_over_columns("factorial", col)
-
-
-# ---------------  Window functions ------------------------
 
 
 @_try_remote_functions
@@ -9736,9 +9897,6 @@ def ntile(n: int) -> Column:
     return _invoke_function("ntile", int(_enum_to_value(n)))
 
 
-# ---------------------- Date/Timestamp functions ------------------------------
-
-
 @_try_remote_functions
 def curdate() -> Column:
     """
@@ -9758,6 +9916,12 @@ def curdate() -> Column:
     :meth:`pyspark.sql.functions.current_date`
     :meth:`pyspark.sql.functions.current_timestamp`
     :meth:`pyspark.sql.functions.localtimestamp`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -9795,6 +9959,12 @@ def current_date() -> Column:
     :meth:`pyspark.sql.functions.current_timestamp`
     :meth:`pyspark.sql.functions.localtimestamp`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -9823,6 +9993,12 @@ def current_timezone() -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.convert_timezone`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -9882,6 +10058,12 @@ def current_time(precision: Optional[int] = None) -> Column:
     --------
     :meth:`pyspark.sql.functions.current_date`
     :meth:`pyspark.sql.functions.current_timestamp`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -10003,6 +10185,12 @@ def localtimestamp() -> Column:
     :meth:`pyspark.sql.functions.current_date`
     :meth:`pyspark.sql.functions.current_timestamp`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -10034,6 +10222,10 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
 
     Notes
     -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Whenever possible, use specialized functions like `year`.
 
     Parameters
@@ -10155,6 +10347,13 @@ def year(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the year from a string column representing dates
@@ -10247,6 +10446,13 @@ def quarter(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.extract`
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -10342,6 +10548,13 @@ def month(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the month from a string column representing dates
@@ -10431,6 +10644,13 @@ def dayofweek(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofmonth`
     :meth:`pyspark.sql.functions.weekofyear`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the day of the week from a string column representing dates
@@ -10518,6 +10738,13 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         day of the month for given date/timestamp as integer.
         Returns a column that evaluates to an integer.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -10614,6 +10841,13 @@ def day(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.date_part`
     :meth:`pyspark.sql.functions.weekday`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the day of the month from a string column representing dates
@@ -10702,6 +10936,13 @@ def dayofyear(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofmonth`
     :meth:`pyspark.sql.functions.weekofyear`
     :meth:`pyspark.sql.functions.dayofweek`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -10799,6 +11040,13 @@ def hour(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the hours from a string column representing timestamp
@@ -10882,6 +11130,13 @@ def minute(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         minutes part of the timestamp as integer.
         Returns a column that evaluates to an integer.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -10967,6 +11222,13 @@ def second(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the seconds from a string column representing timestamp
@@ -11044,6 +11306,13 @@ def weekofyear(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofweek`
     :meth:`pyspark.sql.functions.dayofmonth`
     :meth:`pyspark.sql.functions.dayofyear`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -11131,6 +11400,13 @@ def weekday(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the day of the week from a string column representing dates
@@ -11214,6 +11490,13 @@ def monthname(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.month`
     :meth:`pyspark.sql.functions.dayname`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Extract the month name from a string column representing dates
@@ -11296,6 +11579,13 @@ def dayname(col: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.monthname`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -11389,6 +11679,13 @@ def extract(field: Column, source: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> import datetime
@@ -11445,6 +11742,13 @@ def date_part(field: Column, source: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.second`
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.extract`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -11503,6 +11807,13 @@ def datepart(field: Column, source: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.date_part`
     :meth:`pyspark.sql.functions.extract`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> import datetime
@@ -11559,6 +11870,12 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     :meth:`pyspark.sql.functions.make_timestamp`
     :meth:`pyspark.sql.functions.make_timestamp_ltz`
     :meth:`pyspark.sql.functions.make_timestamp_ntz`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -12007,6 +12324,12 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
         number of months between two dates.
         Returns a column that evaluates to a double.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -12077,6 +12400,13 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     :meth:`pyspark.sql.functions.try_to_timestamp`
     :meth:`pyspark.sql.functions.date_format`
     :meth:`pyspark.sql.functions.try_to_date`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -12522,6 +12852,14 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     :meth:`pyspark.sql.functions.try_to_timestamp`
     :meth:`pyspark.sql.functions.date_format`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+
     Examples
     --------
     Example 1: Convert string to a timestamp
@@ -12660,6 +12998,13 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
     :meth:`pyspark.sql.functions.date_format`
     :meth:`pyspark.sql.functions.try_to_date`
     :meth:`pyspark.sql.functions.try_to_time`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
 
     Examples
     --------
@@ -13119,6 +13464,12 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.trunc`
     :meth:`pyspark.sql.functions.time_trunc`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -13168,6 +13519,12 @@ def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
     :class:`~pyspark.sql.Column`
         the column of computed results.
         Returns a column that evaluates to a date.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -13269,6 +13626,12 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
     :meth:`pyspark.sql.functions.date_from_unix_date`
     :meth:`pyspark.sql.functions.unix_seconds`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -13327,6 +13690,13 @@ def unix_timestamp(
     :class:`~pyspark.sql.Column`
         unix time as long integer.
         Returns a column that evaluates to a long.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -13828,6 +14198,12 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
     :meth:`pyspark.sql.functions.date_diff`
     :meth:`pyspark.sql.functions.time_diff`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> import datetime
@@ -13893,6 +14269,12 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
     --------
     :meth:`pyspark.sql.functions.dateadd`
     :meth:`pyspark.sql.functions.date_add`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -13966,6 +14348,12 @@ def time_bucket(
     -------
     :class:`~pyspark.sql.Column`
         The start of the bucket containing ``ts``, as the same type as ``ts``.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -14278,6 +14666,13 @@ def to_unix_timestamp(
     :meth:`pyspark.sql.functions.to_timestamp_ntz`
     :meth:`pyspark.sql.functions.to_utc_timestamp`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -14332,7 +14727,7 @@ def to_timestamp_ltz(
 ) -> Column:
     """
     Parses the `timestamp` with the `format` to a timestamp with time zone.
-    Returns null with invalid input.
+    Returns null with invalid input when ANSI mode is disabled, or raises an error otherwise.
 
     .. versionadded:: 3.5.0
 
@@ -14354,6 +14749,13 @@ def to_timestamp_ltz(
     :meth:`pyspark.sql.functions.to_unix_timestamp`
     :meth:`pyspark.sql.functions.date_format`
     :meth:`pyspark.sql.functions.try_to_timestamp`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -14405,7 +14807,7 @@ def to_timestamp_ntz(
 ) -> Column:
     """
     Parses the `timestamp` with the `format` to a timestamp without time zone.
-    Returns null with invalid input.
+    Returns null with invalid input when ANSI mode is disabled, or raises an error otherwise.
 
     .. versionadded:: 3.5.0
 
@@ -14427,6 +14829,13 @@ def to_timestamp_ntz(
     :meth:`pyspark.sql.functions.to_unix_timestamp`
     :meth:`pyspark.sql.functions.date_format`
     :meth:`pyspark.sql.functions.try_to_timestamp`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -14469,9 +14878,6 @@ def to_timestamp_ntz(
         return _invoke_function_over_columns("to_timestamp_ntz", timestamp, format)
     else:
         return _invoke_function_over_columns("to_timestamp_ntz", timestamp)
-
-
-# ---------------------------- misc functions ----------------------------------
 
 
 @_try_remote_functions
@@ -14766,6 +15172,71 @@ def md5(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def xxh3_64(col: "ColumnOrName") -> Column:
+    """Returns a 64-bit hash value of the argument using the XXH3 algorithm.
+
+    Unlike :func:`xxhash64`, which hashes one or more columns structurally, this hashes the raw
+    bytes of a single value with seed 0, so its result is byte compatible with the reference XXH3.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column to hash, which must have string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_128`
+    :meth:`pyspark.sql.functions.xxhash64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.xxh3_64('a').alias('h')).collect()
+    [Row(h=80997306238743657)]
+    """
+    return _invoke_function_over_columns("xxh3_64", col)
+
+
+@_try_remote_functions
+def xxh3_128(col: "ColumnOrName") -> Column:
+    """Returns a 128-bit XXH3 hash of the argument as a 32-character hex string.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column to hash, which must have string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_64`
+    :meth:`pyspark.sql.functions.md5`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.xxh3_128('a').alias('h')).collect()
+    [Row(h='7d57dd84c60c86ca1f4e82ab91a12b5e')]
+    """
+    return _invoke_function_over_columns("xxh3_128", col)
+
+
+@_try_remote_functions
 def sha1(col: "ColumnOrName") -> Column:
     """Returns the hex string result of SHA-1.
 
@@ -14940,6 +15411,7 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.hash`
+    :meth:`pyspark.sql.functions.xxh3_64`
 
     Examples
     --------
@@ -15091,9 +15563,6 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     return _invoke_function_over_columns("raise_error", lit(errMsg))
 
 
-# ---------------------- String/Binary functions ------------------------------
-
-
 @_try_remote_functions
 def upper(col: "ColumnOrName") -> Column:
     """
@@ -15120,6 +15589,12 @@ def upper(col: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.lower`
     :meth:`pyspark.sql.functions.ucase`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
 
     Examples
     --------
@@ -15163,6 +15638,12 @@ def lower(col: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.upper`
     :meth:`pyspark.sql.functions.lcase`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
 
     Examples
     --------
@@ -15243,6 +15724,13 @@ def base64(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.unbase64`
+    :meth:`pyspark.sql.functions.to_base32`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.chunkBase64String.enabled``
 
     Examples
     --------
@@ -15258,6 +15746,41 @@ def base64(col: "ColumnOrName") -> Column:
     +----------+----------------+
     """
     return _invoke_function_over_columns("base64", col)
+
+
+@_try_remote_functions
+def to_base32(col: "ColumnOrName") -> Column:
+    """
+    Computes the BASE32 (RFC 4648) encoding of a binary column and returns it as a
+    string column.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to work on.
+        A column that evaluates to a binary.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        BASE32 encoding of the binary value.
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_base32`
+    :meth:`pyspark.sql.functions.base64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(b"foobar",)], ["value"])
+    >>> df.select(sf.to_base32("value").alias("r")).collect()
+    [Row(r='MZXW6YTBOI======')]
+    """
+    return _invoke_function_over_columns("to_base32", col)
 
 
 @_try_remote_functions
@@ -15285,6 +15808,7 @@ def unbase64(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.base64`
+    :meth:`pyspark.sql.functions.from_base32`
 
     Examples
     --------
@@ -15300,6 +15824,41 @@ def unbase64(col: "ColumnOrName") -> Column:
     +----------------+-------------------------------+
     """
     return _invoke_function_over_columns("unbase64", col)
+
+
+@_try_remote_functions
+def from_base32(col: "ColumnOrName") -> Column:
+    """
+    Decodes a BASE32 (RFC 4648) encoded string column and returns it as a binary
+    column.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to work on.
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        decoded binary value.
+        Returns a column that evaluates to a binary.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_base32`
+    :meth:`pyspark.sql.functions.unbase64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("MZXW6YTBOI======",)], ["value"])
+    >>> df.select(sf.from_base32("value").alias("r")).collect()
+    [Row(r=b'foobar')]
+    """
+    return _invoke_function_over_columns("from_base32", col)
 
 
 @_try_remote_functions
@@ -15577,7 +16136,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     |abcd|123|           abcd-123-xyz|
     +----+---+-----------------------+
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function("concat_ws", _enum_to_value(sep), _to_seq(sc, cols, _to_java_column))
@@ -15826,6 +16385,46 @@ def try_validate_utf8(str: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def normalize(str: "ColumnOrName", form: Optional["ColumnOrName"] = None) -> Column:
+    """
+    Returns the Unicode normalization of ``str`` using the given normalization ``form``, as
+    defined by Unicode Standard Annex #15. Normalization is backed by Spark's bundled ICU4J
+    library rather than the JVM's own Unicode data, so results are stable across JVM vendors
+    and versions.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or column name
+        the input string to normalize.
+    form : :class:`~pyspark.sql.Column` or column name, optional
+        the normalization form, one of 'NFC', 'NFD', 'NFKC', 'NFKD' (case-insensitive).
+        If omitted, 'NFC' is used.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the normalized string.
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("\ufb01",)], ["s"])
+    >>> df.select(sf.normalize(df.s, sf.lit("NFKC"))).show()
+    +------------------+
+    |normalize(s, NFKC)|
+    +------------------+
+    |                fi|
+    +------------------+
+    """
+    if form is None:
+        return _invoke_function_over_columns("normalize", str)
+    else:
+        return _invoke_function_over_columns("normalize", str, form)
+
+
+@_try_remote_functions
 def format_number(col: "ColumnOrName", d: int) -> Column:
     """
     Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places
@@ -15907,7 +16506,7 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
     |  5|hello|                   5 hello|
     +---+-----+--------------------------+
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function(
@@ -17583,6 +18182,12 @@ def initcap(col: "ColumnOrName") -> Column:
         string with all first letters are uppercase in each word.
         Returns a column that evaluates to a string.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -18475,6 +19080,12 @@ def parse_url(
         A new column of strings, each representing the value of the extracted part from the URL.
         Returns a column that evaluates to a string.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     Example 1: Extracting the query part from a URL
@@ -18585,7 +19196,7 @@ def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     |        aa123cc|
     +---------------+
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function("printf", _to_java_column(format), _to_seq(sc, cols, _to_java_column))
@@ -19256,13 +19867,19 @@ def elt(*inputs: "ColumnOrName") -> Column:
     inputs : :class:`~pyspark.sql.Column` or str
         Input columns or strings.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     Examples
     --------
     >>> df = spark.createDataFrame([(1, "scala", "java")], ['a', 'b', 'c'])
     >>> df.select(elt(df.a, df.b, df.c).alias('r')).collect()
     [Row(r='scala')]
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function("elt", _to_seq(sc, inputs, _to_java_column))
@@ -19434,6 +20051,12 @@ def lcase(str: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.ucase`
     :meth:`pyspark.sql.functions.upper`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -19465,6 +20088,12 @@ def ucase(str: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.upper`
     :meth:`pyspark.sql.functions.lcase`
     :meth:`pyspark.sql.functions.lower`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.icu.caseMappings.enabled``
 
     Examples
     --------
@@ -19681,9 +20310,6 @@ def quote(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("quote", col)
 
 
-# ---------------------- Collection functions ------------------------------
-
-
 @overload
 def create_map(*cols: "ColumnOrName") -> Column: ...
 
@@ -19719,6 +20345,12 @@ def create_map(
     :class:`~pyspark.sql.Column`
         A new Column of Map type, where each value is a map formed from the corresponding
         key-value pairs provided in the input arguments.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
 
     Examples
     --------
@@ -19806,6 +20438,10 @@ def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Notes
     -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     The input arrays for keys and values must have the same length and all elements
     in keys should not be null. If these conditions are not met, an exception will be thrown.
 
@@ -20215,6 +20851,62 @@ def slice(
 
 
 @_try_remote_functions
+def trim_array(x: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
+    """
+    Array function: Returns the given array column with the last ``n`` elements removed.
+    Raises an error if ``n`` is negative or greater than the number of elements in the array.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    x : :class:`~pyspark.sql.Column` or str
+        Input array column or column name to be trimmed.
+        A column that evaluates to an array.
+    n : :class:`~pyspark.sql.Column`, str, or int
+        The number of elements to remove from the end of the array. Must be between 0 and
+        the number of elements in the array (inclusive).
+        A column that evaluates to an integer.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new Column object of Array type, where each value is the corresponding input array
+        with its last ``n`` elements removed.
+        Returns a column that evaluates to an array.
+
+    Examples
+    --------
+    Example 1: Basic usage of the trim_array function.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3, 4, 5],), ([4, 5],)], ['x'])
+    >>> df.select(sf.trim_array(df.x, 2)).show()
+    +----------------+
+    |trim_array(x, 2)|
+    +----------------+
+    |       [1, 2, 3]|
+    |              []|
+    +----------------+
+
+    Example 2: trim_array function with a column input for n.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3, 4, 5], 1), ([4, 5], 0)], ['x', 'n'])
+    >>> df.select(sf.trim_array(df.x, df.n)).show()
+    +----------------+
+    |trim_array(x, n)|
+    +----------------+
+    |    [1, 2, 3, 4]|
+    |          [4, 5]|
+    +----------------+
+    """
+    n = _enum_to_value(n)
+    n = lit(n) if isinstance(n, int) else n
+    return _invoke_function_over_columns("trim_array", x, n)
+
+
+@_try_remote_functions
 def array_join(
     col: "ColumnOrName", delimiter: str, null_replacement: Optional[str] = None
 ) -> Column:
@@ -20564,6 +21256,10 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
 
     Notes
     -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+
     The position is not zero based, but 1 based index.
     If extraction is a string, :meth:`element_at` treats it as a literal string,
     while :meth:`try_element_at` treats it as a column name.
@@ -22358,7 +23054,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2')).collect()
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     if len(fields) == 0:
         raise PySparkValueError(
@@ -22407,6 +23103,14 @@ def from_json(
     :class:`~pyspark.sql.Column`
         a new column of complex type from given JSON object.
         Returns a column that evaluates to a struct, array, or map.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.columnNameOfCorruptRecord``
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
 
     Examples
     --------
@@ -22579,6 +23283,75 @@ def to_variant_object(
 
 
 @_try_remote_functions
+def variant_from_arrays(keys: "ColumnOrName", values: "ColumnOrName") -> Column:
+    """
+    Creates a variant object from the given arrays of keys and values. The keys must be non-null
+    strings and the two arrays must have the same length.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    keys : :class:`~pyspark.sql.Column` or column name
+        an array of string keys.
+    values : :class:`~pyspark.sql.Column` or column name
+        an array of values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.variant_from_entries`
+    :meth:`pyspark.sql.functions.to_variant_object`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT array('a', 'b') AS keys, array(1, 2) AS values")
+    >>> df.select(sf.variant_from_arrays("keys", "values").cast("string").alias("r")).collect()
+    [Row(r='{"a":1,"b":2}')]
+    """
+    return _invoke_function_over_columns("variant_from_arrays", keys, values)
+
+
+@_try_remote_functions
+def variant_from_entries(entries: "ColumnOrName") -> Column:
+    """
+    Creates a variant object from an array of key/value struct entries. The keys must be non-null
+    strings.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    entries : :class:`~pyspark.sql.Column` or column name
+        an array of key/value structs, where the first field is a string key and the second field
+        is the value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.variant_from_arrays`
+    :meth:`pyspark.sql.functions.to_variant_object`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT array(struct('a', 1), struct('b', 2)) AS entries")
+    >>> df.select(sf.variant_from_entries("entries").cast("string").alias("r")).collect()
+    [Row(r='{"a":1,"b":2}')]
+    """
+    return _invoke_function_over_columns("variant_from_entries", entries)
+
+
+@_try_remote_functions
 def parse_json(
     col: "ColumnOrName",
 ) -> Column:
@@ -22680,7 +23453,7 @@ def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
     Multiple paths are applied left to right. Returns NULL if `v` is NULL; NULL paths are
     skipped.
 
-    .. versionadded:: 5.0.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------
@@ -23116,6 +23889,119 @@ def try_variant_array_append(
 
 
 @_try_remote_functions
+def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Column:
+    """
+    Recursively removes object fields and array elements whose value is a variant null, unless
+    `include_arrays` is False, in which case null array elements are kept. Returns NULL if any
+    argument is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    include_arrays : bool, optional
+        whether null elements are also removed from arrays (default True).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with variant null fields/elements removed
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_strip_nulls
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''{ "a" : 1, "b" : null, "c" : [1, null], "d" : { "e" : null, "f" : 4 } }'''
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_strip_nulls(v)).alias("r")).collect()
+    [Row(r='{"a":1,"c":[1],"d":{"f":4}}')]
+    >>> df.select(to_json(variant_strip_nulls(v, False)).alias("r")).collect()
+    [Row(r='{"a":1,"c":[1,null],"d":{"f":4}}')]
+    >>> df.select(variant_strip_nulls(lit(None)).alias("r")).collect()
+    [Row(r=None)]
+    >>> df2 = spark.createDataFrame([{'json': '{"a": null}'}, {'json': 'null'}])
+    >>> v2 = parse_json(df2.json)
+    >>> df2.select(to_json(variant_strip_nulls(v2)).alias("r")).collect()
+    [Row(r='{}'), Row(r='null')]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function(
+        "variant_strip_nulls", _to_java_column(v), _enum_to_value(include_arrays)
+    )
+
+
+@_try_remote_functions
+def variant_pick(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
+    """
+    Keeps only the fields or array elements of a variant at the given JSONPath locations, preserving
+    their enclosing structure; kept array elements are compacted into a new array in their
+    original order. If no path matches, an object or array input yields an empty object or array,
+    while a scalar or variant-null input is unchanged. Returns NULL if `v` is NULL; NULL paths are
+    skipped.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    paths : :class:`~pyspark.sql.Column` or str
+        one or more JSONPaths identifying substructures to keep. A `str` is a literal path; a
+        :class:`~pyspark.sql.Column` supplies the path at runtime. A valid path should start with
+        `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
+        `["name"]`.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column keeping only the specified paths
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_pick
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''{ "a": {"b": 1, "c": 2}, "items": [10, 20, 30, 40] }''',
+    ...     'path': '$.a.b'
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_pick(v, "$.a.b")).alias("r")).collect()
+    [Row(r='{"a":{"b":1}}')]
+    >>> df.select(to_json(variant_pick(v, lit(None), "$.a.c", "$.items[0]")).alias("r")).collect()
+    [Row(r='{"a":{"c":2},"items":[10]}')]
+    >>> df.select(to_json(variant_pick(v, "$.items[0]", "$.items[2]")).alias("r")).collect()
+    [Row(r='{"items":[10,30]}')]
+    >>> df.select(to_json(variant_pick(v, df.path)).alias("r")).collect()
+    [Row(r='{"a":{"b":1}}')]
+    >>> df.select(to_json(variant_pick(v, "$.missing")).alias("r")).collect()
+    [Row(r='{}')]
+    >>> df.select(to_json(variant_pick(parse_json(lit('[1, 2, 3]')), "$[9]")).alias("r")).collect()
+    [Row(r='[]')]
+    >>> df.select(variant_pick(lit(None), "$.a").alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
+
+    if len(paths) == 0:
+        raise PySparkValueError(
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "paths"},
+        )
+    sc = _get_active_spark_context()
+
+    path_cols = [p if isinstance(p, Column) else lit(p) for p in paths]
+    return _invoke_function(
+        "variant_pick",
+        _to_java_column(v),
+        _to_java_column(path_cols[0]),
+        _to_seq(sc, path_cols[1:], _to_java_column),
+    )
+
+
+@_try_remote_functions
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
@@ -23142,6 +24028,13 @@ def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) ->
     :class:`~pyspark.sql.Column`
         a column of `targetType` representing the extracted result
         Returns a column of the type given by `targetType`.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
 
     Examples
     --------
@@ -23193,6 +24086,13 @@ def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str
     :class:`~pyspark.sql.Column`
         a column of `targetType` representing the extracted result
         Returns a column of the type given by `targetType`.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
 
     Examples
     --------
@@ -23309,6 +24209,13 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
     :class:`~pyspark.sql.Column`
         JSON object as string column.
         Returns a column that evaluates to a string.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.jsonGenerator.ignoreNullFields``
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -23432,6 +24339,12 @@ def schema_of_json(json: Union[Column, str], options: Optional[Mapping[str, str]
         a string representation of a :class:`StructType` parsed from given JSON.
         Returns a column that evaluates to a string.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.timestampType``
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -23519,6 +24432,42 @@ def json_object_keys(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("json_object_keys", col)
 
 
+@_try_remote_functions
+def json_typeof(col: "ColumnOrName") -> Column:
+    """
+    Returns the type of the outermost JSON value as a string: one of 'object', 'array',
+    'string', 'number', 'boolean', or 'null'. Returns null if the input is not a valid JSON
+    string or is an empty string.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col: :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the type of the outermost JSON value.
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.json_object_keys`
+    :meth:`pyspark.sql.functions.get_json_object`
+    :meth:`pyspark.sql.functions.json_array_length`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('{"a": 1}',), ('[1, 2, 3]',), ('123',), ('',)], ['data'])
+    >>> df.select(json_typeof(df.data).alias('r')).collect()
+    [Row(r='object'), Row(r='array'), Row(r='number'), Row(r=None)]
+    """
+    return _invoke_function_over_columns("json_typeof", col)
+
+
 # TODO: Fix and add an example for StructType with Spark Connect
 #   e.g., StructType([StructField("a", IntegerType())])
 @_try_remote_functions
@@ -23555,6 +24504,15 @@ def from_xml(
     :class:`~pyspark.sql.Column`
         a new column of complex type from given XML object.
         Returns a column that evaluates to a struct.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.columnNameOfCorruptRecord``
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+    * ``spark.sql.xml.variant.respectInferSchema``
 
     Examples
     --------
@@ -23664,6 +24622,13 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
         a string representation of a :class:`StructType` parsed from given XML.
         Returns a column that evaluates to a string.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.columnNameOfCorruptRecord``
+    * ``spark.sql.timestampType``
+
     Examples
     --------
     Example 1: Parsing a simple XML with a single element
@@ -23763,6 +24728,12 @@ def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
         a XML string converted from given :class:`StructType`.
         Returns a column that evaluates to a string.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -23818,6 +24789,12 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
     :class:`~pyspark.sql.Column`
         A string representation of a :class:`StructType` parsed from the given CSV.
         Returns a column that evaluates to a string.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.timestampType``
 
     Examples
     --------
@@ -23911,6 +24888,12 @@ def to_csv(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
         A CSV string converted from the given :class:`StructType`.
         Returns a column that evaluates to a string.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Converting a simple StructType to a CSV string
@@ -23995,6 +24978,12 @@ def size(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         length of the array/map.
         Returns a column that evaluates to an integer.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -24299,6 +25288,12 @@ def cardinality(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         length of the array/map.
         Returns a column that evaluates to an integer.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -25000,6 +25995,12 @@ def map_from_entries(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         A map created from the given array of entries.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     Examples
     --------
     Example 1: Basic usage of map_from_entries
@@ -25252,6 +26253,10 @@ def map_concat(
 
     Notes
     -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     For duplicate keys in input maps, the handling is governed by `spark.sql.mapKeyDedupPolicy`.
     By default, it throws an exception. If set to `LAST_WIN`, it uses the last map's value.
 
@@ -25353,6 +26358,12 @@ def sequence(
         A new column that contains an array of sequence values.
         Returns a column that evaluates to an array.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     Example 1: Generating a sequence with default step
@@ -25431,6 +26442,14 @@ def from_csv(
     :class:`~pyspark.sql.Column`
         A column of parsed CSV values.
         Returns a column that evaluates to a struct.
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.columnNameOfCorruptRecord``
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
 
     Examples
     --------
@@ -25572,6 +26591,7 @@ def _create_lambda(f: Callable) -> Callable:
             - (Column, Column, Column) -> Column: ...
     """
     from py4j.java_gateway import JVMView
+
     from pyspark.sql.classic.column import _to_seq
 
     parameters = _get_lambda_parameters(f)
@@ -25611,7 +26631,8 @@ def _invoke_higher_order_function(
     :return: a Column
     """
     from py4j.java_gateway import JVMView
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     jfuns = [_create_lambda(f) for f in funs]
@@ -26085,6 +27106,12 @@ def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -
         a new map of entries where new keys were calculated by applying given function to
         each key value argument.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     Examples
     --------
     >>> df = spark.createDataFrame([(1, {"foo": -2.0, "bar": 2.0})], ("id", "data"))
@@ -26311,6 +27338,12 @@ def str_to_map(
         A new column of map type where each string in the original column is converted into a map.
         Returns a column that evaluates to a map.
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.mapKeyDedupPolicy``
+
     Examples
     --------
     Example 1: Using default delimiters
@@ -26379,9 +27412,6 @@ def str_to_map(
     if keyValueDelim is None:
         keyValueDelim = lit(":")
     return _invoke_function_over_columns("str_to_map", text, pairDelim, keyValueDelim)
-
-
-# ---------------------- Partition transform functions --------------------------------
 
 
 @_try_remote_functions
@@ -26592,6 +27622,12 @@ def convert_timezone(
     See Also
     --------
     :meth:`pyspark.sql.functions.current_timezone`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -26961,6 +27997,12 @@ def make_interval(
     :meth:`pyspark.sql.functions.make_dt_interval`
     :meth:`pyspark.sql.functions.make_ym_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -27410,6 +28452,14 @@ def make_timestamp(
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -27645,6 +28695,13 @@ def try_make_timestamp(
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
+    * ``spark.sql.timestampType``
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -27833,6 +28890,13 @@ def make_timestamp_ltz(
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
+    * ``spark.sql.session.timeZone``
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
@@ -27937,6 +29001,12 @@ def try_make_timestamp_ltz(
     :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.session.timeZone``
 
     Examples
     --------
@@ -28098,6 +29168,12 @@ def make_timestamp_ntz(
     :meth:`pyspark.sql.functions.make_time`
     :meth:`pyspark.sql.functions.make_interval`
     :meth:`pyspark.sql.functions.try_make_interval`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.ansi.enabled``
 
     Examples
     --------
@@ -28443,9 +29519,6 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     return partitioning.bucket(numBuckets, col)
 
 
-# Geospatial ST Functions
-
-
 @_try_remote_functions
 def st_asbinary(geo: "ColumnOrName", endianness: Optional["ColumnOrName"] = None) -> Column:
     """Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
@@ -28613,9 +29686,6 @@ def st_srid(geo: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("st_srid", geo)
 
 
-# Call Functions
-
-
 @_try_remote_functions
 def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     """
@@ -28659,7 +29729,7 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     |         cc|
     +-----------+
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function("call_udf", udfName, _to_seq(sc, cols, _to_java_column))
@@ -28730,7 +29800,7 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     |                               102.0|
     +------------------------------------+
     """
-    from pyspark.sql.classic.column import _to_seq, _to_java_column
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
 
     sc = _get_active_spark_context()
     return _invoke_function("call_function", funcName, _to_seq(sc, cols, _to_java_column))
@@ -28751,6 +29821,10 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         The underlying representation.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.wrap_udt`
 
     Examples
     --------
@@ -28797,7 +29871,105 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
     return _invoke_function("unwrap_udt", _to_java_column(col))
 
 
-# ---------------------- Datasketch functions ------------------------------
+@_try_remote_functions
+def wrap_udt(col: "ColumnOrName", udt: "Union[UserDefinedType, Column]") -> Column:
+    """
+    Wrap a column as a user-defined type.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column to wrap. The column data type must match the UDT's underlying SQL type.
+    udt : :class:`~pyspark.sql.types.UserDefinedType` or :class:`~pyspark.sql.Column`
+        The target user-defined type, or a constant string column containing its JSON
+        representation.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column of the target user-defined type.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.unwrap_udt`
+
+    Examples
+    --------
+    Example 1: Wrapping a vector struct as VectorUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Row
+    >>> from pyspark.sql.types import StructField, StructType
+    >>> from pyspark.ml.linalg import VectorUDT
+    >>> vector_schema = StructType([StructField("vec", VectorUDT.sqlType(), True)])
+    >>> df = spark.createDataFrame(
+    ...     [(Row(type=1, size=None, indices=None, values=[1.0, 2.0, 3.0]),)],
+    ...     vector_schema)
+    >>> df.select("*", sf.wrap_udt("vec", VectorUDT())).show()
+    +--------------------+...+
+    |                 vec|wrap_udt(vec...|
+    +--------------------+...+
+    |{1, NULL, NULL, [...|...[1.0,2.0,3.0]|
+    +--------------------+...+
+    >>> row = df.select(sf.wrap_udt("vec", VectorUDT())).first()
+    >>> type(row[0])
+    <class 'pyspark.ml.linalg.DenseVector'>
+
+    Example 2: Wrapping a matrix struct as MatrixUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Row
+    >>> from pyspark.sql.types import StructField, StructType
+    >>> from pyspark.mllib.linalg import MatrixUDT
+    >>> matrix_schema = StructType([StructField("mat", MatrixUDT.sqlType(), True)])
+    >>> df = spark.createDataFrame(
+    ...     [(
+    ...         Row(
+    ...             type=1,
+    ...             numRows=2,
+    ...             numCols=2,
+    ...             colPtrs=None,
+    ...             rowIndices=None,
+    ...             values=[1.0, 2.0, 3.0, 4.0],
+    ...             isTransposed=False),
+    ...     )],
+    ...     matrix_schema)
+    >>> df.select("*", sf.wrap_udt("mat", MatrixUDT())).printSchema()
+    root
+     |-- mat: struct (nullable = true)
+     |    |-- type: byte (nullable = false)
+     |    |-- numRows: integer (nullable = false)
+     |    |-- numCols: integer (nullable = false)
+     |    |-- colPtrs: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- rowIndices: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- values: array (nullable = true)
+     |    |    |-- element: double (containsNull = false)
+     |    |-- isTransposed: boolean (nullable = false)
+     |-- wrap_udt(mat...: matrix... (nullable = true)
+    >>> row = df.select(sf.wrap_udt("mat", MatrixUDT())).first()
+    >>> type(row[0])
+    <class 'pyspark.mllib.linalg.DenseMatrix'>
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    if isinstance(udt, _UserDefinedType):
+        udt_col = lit(udt.json())
+    elif isinstance(udt, Column):
+        udt_col = udt
+    else:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "UserDefinedType or Column",
+                "arg_name": "udt",
+                "arg_type": type(udt).__name__,
+            },
+        )
+    return _invoke_function("wrap_udt", _to_java_column(col), _to_java_column(udt_col))
 
 
 @_try_remote_functions
@@ -31343,9 +32515,6 @@ def tuple_union_theta_integer(
     return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
 
 
-# ---------------------- Predicates functions ------------------------------
-
-
 @_try_remote_functions
 def ifnull(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
@@ -32235,6 +33404,12 @@ def reflect(*cols: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.java_method`
     :meth:`pyspark.sql.functions.try_reflect`
 
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.reflect.allowList``
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -32269,6 +33444,12 @@ def java_method(*cols: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.reflect`
     :meth:`pyspark.sql.functions.try_reflect`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.reflect.allowList``
 
     Examples
     --------
@@ -32324,6 +33505,12 @@ def try_reflect(*cols: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.reflect`
     :meth:`pyspark.sql.functions.java_method`
+
+    Notes
+    -----
+    Affected by these public SQL configurations:
+
+    * ``spark.sql.reflect.allowList``
 
     Examples
     --------
@@ -32597,6 +33784,194 @@ def bitmap_count(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def bitmap_and(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise AND of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_andnot`
+    :meth:`pyspark.sql.functions.bitmap_or`
+    :meth:`pyspark.sql.functions.bitmap_xor`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0", "70")], ["left", "right"])
+    >>> df.select(sf.bitmap_and(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[70 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_and", left, right)
+
+
+@_try_remote_functions
+def bitmap_or(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise OR of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_and`
+    :meth:`pyspark.sql.functions.bitmap_andnot`
+    :meth:`pyspark.sql.functions.bitmap_xor`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("10", "20")], ["left", "right"])
+    >>> df.select(sf.bitmap_or(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[30 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_or", left, right)
+
+
+@_try_remote_functions
+def bitmap_andnot(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise AND NOT of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_and`
+    :meth:`pyspark.sql.functions.bitmap_or`
+    :meth:`pyspark.sql.functions.bitmap_xor`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0", "70")], ["left", "right"])
+    >>> df.select(sf.bitmap_andnot(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[80 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_andnot", left, right)
+
+
+@_try_remote_functions
+def bitmap_xor(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise XOR of two input bitmaps.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The left input bitmap.
+    right : :class:`~pyspark.sql.Column` or column name
+        The right input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_and`
+    :meth:`pyspark.sql.functions.bitmap_andnot`
+    :meth:`pyspark.sql.functions.bitmap_or`
+
+    Notes
+    -----
+    Inputs use Spark's Binary bitmap representation, not a RoaringBitmap serialization. Each
+    input may contain 0 to 4096 bytes; missing bytes are treated as zero. The result is always a
+    4096-byte Binary value. NULL input returns NULL, and inputs longer than 4096 bytes raise
+    ``BITMAP_INPUT_TOO_LARGE``. Both inputs must use the same bit-position mapping. If they were
+    constructed by grouping ``bitmap_bit_position`` values by ``bitmap_bucket_number``, they must
+    represent the same bucket because the bitmap bytes do not retain bucket metadata. This scalar
+    function combines two bitmaps from the same row; use ``bitmap_*_agg`` to combine bitmaps across
+    rows.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0", "70")], ["left", "right"])
+    >>> df.select(sf.bitmap_xor(
+    ...     sf.to_binary("left", sf.lit("hex")),
+    ...     sf.to_binary("right", sf.lit("hex"))).alias("bitmap")).show()
+    +--------------------+
+    |              bitmap|
+    +--------------------+
+    |[80 00 00 00 00 0...|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("bitmap_xor", left, right)
+
+
+@_try_remote_functions
 def bitmap_or_agg(col: "ColumnOrName") -> Column:
     """
     Returns a bitmap that is the bitwise OR of all of the bitmaps from the input column.
@@ -32666,7 +34041,164 @@ def bitmap_and_agg(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitmap_and_agg", col)
 
 
-# ---------------------------- User Defined Function ----------------------------------
+@_try_remote_functions
+def bitmap_xor_agg(col: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise XOR of all of the bitmaps from the input column.
+    The input column should be bitmaps created from bitmap_construct_agg().
+
+    .. versionadded:: 4.4.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bit_position`
+    :meth:`pyspark.sql.functions.bitmap_bucket_number`
+    :meth:`pyspark.sql.functions.bitmap_construct_agg`
+    :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_or_agg`
+    :meth:`pyspark.sql.functions.bitmap_and_agg`
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The input column should be bitmaps created from bitmap_construct_agg().
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("10",), ("30",), ("40",)], ["a"])
+    >>> df.select(sf.bitmap_xor_agg(sf.to_binary(df.a, sf.lit("hex")))).show()
+    +---------------------------------+
+    |bitmap_xor_agg(to_binary(a, hex))|
+    +---------------------------------+
+    |             [60 00 00 00 00 0...|
+    +---------------------------------+
+    """
+    return _invoke_function_over_columns("bitmap_xor_agg", col)
+
+
+def udaf(agg: "Aggregator") -> "UserDefinedFunctionLike":
+    """Turn an :class:`~pyspark.sql.aggregator.Aggregator` instance into a callable usable in
+    ``groupBy().agg(...)`` (and as a window function), the Python counterpart of Scala's
+    ``functions.udaf``.
+
+    The aggregator is executed with true incremental (partial) aggregation and transfers its
+    intermediate buffer as Arrow; PyArrow is therefore required.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    agg : :class:`~pyspark.sql.aggregator.Aggregator`
+        The aggregator instance.
+
+    Returns
+    -------
+    function
+        A callable that, applied to input columns, produces an aggregate
+        :class:`~pyspark.sql.Column`.
+
+    Raises
+    ------
+    :class:`PySparkImportError`
+        If a supported version of PyArrow is not installed.
+    :class:`PySparkTypeError`
+        If ``agg`` is not an :class:`~pyspark.sql.aggregator.Aggregator`, or its ``bufferSchema`` is
+        not a :class:`StructType`.
+
+    Examples
+    --------
+    >>> from pyspark.sql.aggregator import Aggregator
+    >>> from pyspark.sql.functions import udaf
+    >>> from pyspark.sql.types import StructType, StructField, DoubleType, LongType
+    >>> class Mean(Aggregator):
+    ...     @property
+    ...     def bufferSchema(self):
+    ...         return StructType(
+    ...             [StructField("sum", DoubleType()), StructField("count", LongType())]
+    ...         )
+    ...
+    ...     @property
+    ...     def outputType(self):
+    ...         return DoubleType()
+    ...
+    ...     def zero(self):
+    ...         return (0.0, 0)
+    ...
+    ...     def reduce(self, buffer, value):
+    ...         (v,) = value
+    ...         return buffer if v is None else (buffer[0] + v, buffer[1] + 1)
+    ...
+    ...     def merge(self, b1, b2):
+    ...         return (b1[0] + b2[0], b1[1] + b2[1])
+    ...
+    ...     def finish(self, buffer):
+    ...         return buffer[0] / buffer[1] if buffer[1] else None
+    >>> df = spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0)], ("k", "v"))
+    >>> df.groupBy("k").agg(udaf(Mean())(df.v).alias("m")).orderBy("k").show()
+    +---+---+
+    |  k|  m|
+    +---+---+
+    |  1|1.5|
+    |  2|3.0|
+    +---+---+
+    """
+    from pyspark.sql.aggregator import Aggregator
+    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+    from pyspark.sql.utils import is_remote
+    from pyspark.util import PythonEvalType
+
+    require_minimum_pyarrow_version()
+
+    if is_remote():
+        from pyspark.sql.connect.udf import UserDefinedFunction
+    else:
+        # The classic UserDefinedFunction is a distinct class from the Connect one above;
+        # both provide the same interface used below, so silence mypy's reassignment check.
+        from pyspark.sql.udf import UserDefinedFunction  # type: ignore[assignment]
+
+    if not isinstance(agg, Aggregator):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "agg",
+                "expected_type": "Aggregator",
+                "arg_type": type(agg).__name__,
+            },
+        )
+    if not isinstance(agg.bufferSchema, StructType):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "bufferSchema",
+                "expected_type": "StructType",
+                "arg_type": type(agg.bufferSchema).__name__,
+            },
+        )
+    # The buffer crosses the shuffle as an Arrow struct whose children are matched by name, and the
+    # worker keys the buffer tuple back by field name. Duplicate names would silently collapse
+    # fields on the map side and then fail with an opaque Arrow error post-shuffle, so reject them
+    # up front where the aggregator is created.
+    field_names = [field.name for field in agg.bufferSchema.fields]
+    if len(field_names) != len(set(field_names)):
+        duplicates = sorted({name for name in field_names if field_names.count(name) > 1})
+        raise PySparkValueError(
+            errorClass="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+            messageParameters={"field_names": ", ".join(duplicates)},
+        )
+
+    # ``bufferSchema`` is a first-class ``UserDefinedFunction`` field (threaded to the JVM in
+    # ``_create_judf`` so ``PythonAggregate`` can plan the two-stage aggregation), so it survives
+    # ``_wrapped()`` and ``spark.udf.register`` without being re-attached.
+    udf_obj = UserDefinedFunction(
+        agg,
+        returnType=agg.outputType,
+        name=agg.__class__.__name__,
+        evalType=PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+        deterministic=True,
+        bufferSchema=agg.bufferSchema,
+    )
+    return udf_obj._wrapped()
 
 
 @overload
@@ -33118,9 +34650,6 @@ def arrow_udtf(
         return _create_pyarrow_udtf(cls=cls, returnType=returnType)
 
 
-# ---------------------- Vector Functions ----------------------
-
-
 @_try_remote_functions
 def vector_cosine_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """Returns the cosine similarity between two float vectors.
@@ -33344,8 +34873,9 @@ def vector_sum(col: "ColumnOrName") -> Column:
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.functions.builtin
+    from pyspark.sql import SparkSession
     from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.functions.builtin.__dict__.copy()
@@ -33353,6 +34883,7 @@ def _test() -> None:
     if not have_pandas or not have_pyarrow:
         del pyspark.sql.functions.builtin.udf.__doc__
         del pyspark.sql.functions.builtin.arrow_udtf.__doc__
+        del pyspark.sql.functions.builtin.udaf.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.functions.builtin tests").getOrCreate()

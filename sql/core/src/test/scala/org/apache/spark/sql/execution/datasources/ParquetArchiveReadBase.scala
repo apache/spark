@@ -18,23 +18,18 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.File
-import java.nio.file.Files
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
 
 /**
  * Binds [[ArchiveReadSuiteBase]]'s hooks to Parquet (entries unpacked to a local file for footer
  * random access). Parquet is self-describing, so the base's schema-inference tests run too.
  */
 trait ParquetArchiveReadBase extends ArchiveReadSuiteBase {
-
-  import testImplicits._
 
   override protected def format: String = "parquet"
 
@@ -54,89 +49,10 @@ trait ParquetArchiveReadBase extends ArchiveReadSuiteBase {
   // Parquet unpacks each entry to a local temp file for footer random access.
   override protected def localizesEntries: Boolean = true
 
-  for (vectorized <- Seq(true, false)) {
-    test(s"archive reads return the same rows with vectorized reader = $vectorized") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        assertArchiveMatchesDir(
-          Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
-      }
-    }
-  }
+  override protected def archiveTempDirPrefix: String = "parquet-archive"
 
-  test("an abandoned read (LIMIT) over an archive returns partial rows and cleans up") {
-    def archiveTempDirs(localDir: File): Set[String] =
-      Option(localDir.listFiles()).getOrElse(Array.empty)
-        .filter(_.getName.startsWith("parquet-archive")).map(_.getName).toSet
-    withArchiveFile() { archive =>
-      val parts = (0 until 4).map(i => entryName(i) -> encodeFile(sampleDf((i, s"v$i"))))
-      writeArchive(archive, parts)
-      val localDir = new File(Utils.getLocalDir(spark.sparkContext.getConf))
-      val before = archiveTempDirs(localDir)
-      assert(read(archive.getCanonicalPath).limit(2).collect().length == 2)
-      // This read's per-entry temp dir (prefix `parquet-archive`) must be removed on task
-      // completion, so no new one survives.
-      assert((archiveTempDirs(localDir) -- before).isEmpty,
-        "the read's temp dir was not cleaned up")
-    }
-  }
-
-  test("extensionless entries are read and inferred like a directory of part-files") {
-    val data = sampleDf((1, "Alice"), (2, "Bob"))
-    withArchiveFile() { archive =>
-      writeArchive(archive, Seq("part-00000" -> encodeFile(data)))
-      checkAnswer(read(archive.getCanonicalPath), data)
-      assert(inferredSchema(Seq(archive.getCanonicalPath)).fieldNames.toSet == Set("id", "name"),
-        "an extensionless entry should be inferred like a directory of part-files")
-    }
-  }
-
-  private def parquetArchiveTempDirs(prefix: String): Set[String] = {
-    val localDir = new File(Utils.getLocalDir(spark.sparkContext.getConf))
-    Option(localDir.listFiles()).getOrElse(Array.empty)
-      .filter(_.getName.startsWith(prefix)).map(_.getName).toSet
-  }
-
-  test("a corrupt archive cleans up its read temp dir rather than leaking it") {
-    // A corrupt archive throws before the read returns an iterator, but must not leak the temp dir.
-    withArchiveFile(corruptArchiveExtension) { archive =>
-      writeCorruptArchive(archive)
-      val before = parquetArchiveTempDirs("parquet-archive")
-      intercept[SparkException](read(archive.getCanonicalPath).collect())
-      assert((parquetArchiveTempDirs("parquet-archive") -- before).isEmpty,
-        "a corrupt archive leaked its read temp dir")
-    }
-  }
-
-  test("a corrupt archive cleans up its inference temp dir rather than leaking it") {
-    // Inference localizes entries too (readArchiveFooters), on a worker without a TaskContext; a
-    // corrupt archive throws during that eager localize and must not leak parquet-archive-infer.
-    withArchiveFile(corruptArchiveExtension) { archive =>
-      writeCorruptArchive(archive)
-      val before = parquetArchiveTempDirs("parquet-archive-infer")
-      intercept[SparkException](inferredSchema(Seq(archive.getCanonicalPath)))
-      assert((parquetArchiveTempDirs("parquet-archive-infer") -- before).isEmpty,
-        "a corrupt archive leaked its inference temp dir")
-    }
-  }
-
-  test("archive inference unions differing fields across entries with mergeSchema=true") {
-    // mergeSchema=true folds every entry's footer; over an archive, one unpacked entry at a time.
-    val withName = sampleDf((1, "Alice"), (2, "Bob"))
-    val idExtra = Seq((3, 30)).toDF("id", "extra")
-    val entries = Seq(entryName(0) -> encodeFile(withName), entryName(1) -> encodeFile(idExtra))
-    val merge = Map("mergeSchema" -> "true")
-    withArchiveFile() { archive =>
-      writeArchive(archive, entries)
-      val archiveSchema = inferredSchema(Seq(archive.getCanonicalPath), merge)
-      withTempDir { dir =>
-        entries.foreach { case (n, b) => Files.write(new File(dir, n).toPath, b) }
-        assert(archiveSchema.fieldNames.toSet == Set("id", "name", "extra"),
-          s"expected the union of entry fields, got $archiveSchema")
-        assert(archiveSchema == inferredSchema(Seq(dir.getCanonicalPath), merge),
-          s"archive mergeSchema inference diverged from a directory read; got $archiveSchema")
-      }
-    }
-  }
+  override protected def vectorizedReaderConfKey: Option[String] =
+    Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key)
 
   test("inference skips a missing archive among good ones (ignoreMissingFiles)") {
     // Exercised on ParquetFileFormat.inferSchema(files) directly: inference now runs on the

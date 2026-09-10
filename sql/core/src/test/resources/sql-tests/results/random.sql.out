@@ -857,15 +857,23 @@ SELECT randstr(-1, 0) AS result
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.LENGTH",
-  "sqlState" : "22023",
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "functionName" : "`randstr`",
-    "length" : "-1",
-    "parameter" : "`length`"
-  }
+    "currentValue" : "-1",
+    "exprName" : "`length`",
+    "sqlExpr" : "\"randstr(-1, 0)\"",
+    "valueRange" : "[0, 2147483647]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "randstr(-1, 0)"
+  } ]
 }
 
 

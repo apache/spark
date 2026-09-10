@@ -60,7 +60,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
       registerMaterializedView("b", query = readFlowFunc("a"))
     }
     val unresolvedGraph = pipelineDef.toDataflowGraph
-    val resolvedGraph = unresolvedGraph.resolve()
+    val resolvedGraph = unresolvedGraph.resolve(spark.sessionState.conf.caseSensitiveAnalysis)
     assert(resolvedGraph.flows.size == 2)
     assert(unresolvedGraph.flows.size == 2)
     assert(unresolvedGraph.tables.size == 2)
@@ -109,7 +109,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     }
 
     val unresolvedGraph = pipelineDef.toDataflowGraph
-    val resolvedGraph = unresolvedGraph.resolve()
+    val resolvedGraph = unresolvedGraph.resolve(spark.sessionState.conf.caseSensitiveAnalysis)
     assert(resolvedGraph.flows.size == 4)
     assert(resolvedGraph.tables.size == 3)
     assert(resolvedGraph.views.size == 1)
@@ -462,6 +462,8 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     updateContext2.pipelineExecution.runPipeline()
     updateContext2.pipelineExecution.awaitCompletion()
 
+    // A streaming source change is unrecoverable without a full refresh, so the flow must not be
+    // retried: we should see exactly one failure rather than maxFlowRetryAttempts + 1 of them.
     assertFlowProgressEvent(
       eventBuffer = updateContext2.eventBuffer,
       identifier = fullyQualifiedIdentifier("input_table"),
@@ -469,6 +471,17 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
       expectedEventLevel = EventLevel.ERROR,
       msgChecker = _.contains(
         s"Flow '${eventLogName("input_table")}' had streaming sources added or removed."
+      ),
+      expectedNumOfEvents = Option(1)
+    )
+
+    // The run should fail because of the source change, not because the flow exhausted its retries.
+    assertRunProgressEvent(
+      eventBuffer = updateContext2.eventBuffer,
+      state = RunState.FAILED,
+      expectedEventLevel = EventLevel.ERROR,
+      msgChecker = _.contains(
+        s"flow '${eventLogName("input_table")}' had streaming sources added or removed."
       )
     )
   }

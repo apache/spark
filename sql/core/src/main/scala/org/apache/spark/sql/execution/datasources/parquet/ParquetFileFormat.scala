@@ -27,7 +27,7 @@ import scala.util.{Failure, Try}
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
 import org.apache.hadoop.mapred.FileSplit
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -41,12 +41,12 @@ import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, SCHEMA}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, RebaseDateTime}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, RebaseDateTime}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
@@ -210,6 +210,18 @@ class ParquetFileFormat
     val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
+    // When shredded-variant predicate pushdown is enabled and `requiredSchema` actually carries a
+    // variant-extraction struct produced by PushVariantIntoScan, passing it lets ParquetFilters map
+    // logical paths like "v.`0`" to the physical shredded columns for row-group skipping. The
+    // `isVariantStruct` check keeps the per-file ParquetFilters construction free of any shredded
+    // traversal for the common case of scans with no variant-extraction columns.
+    val variantExtractionSchema =
+      if (sqlConf.getConf(SQLConf.VARIANT_SHREDDED_PREDICATE_PUSHDOWN_ENABLED) &&
+          requiredSchema.existsRecursively(VariantMetadata.isVariantStruct)) {
+        Some(requiredSchema)
+      } else {
+        None
+      }
     val parquetOptions = new ParquetOptions(options, sqlConf)
     val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
     val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
@@ -266,7 +278,8 @@ class ParquetFileFormat
             pushDownStringPredicate,
             pushDownInFilterThreshold,
             isCaseSensitive,
-            datetimeRebaseSpec)
+            datetimeRebaseSpec,
+            variantExtractionSchema = variantExtractionSchema)
           filters
             // Collects all converted Parquet filter predicates. Notice that not all predicates
             // can be converted (`ParquetFilters.createFilter` returns an `Option`). That's why
@@ -322,7 +335,9 @@ class ParquetFileFormat
     // An archive is read by unpacking each Parquet entry to a local temp file and reading it with
     // the plain reader (readSingleFile); readLocalizedEntries owns the unpack/iterate/cleanup.
     def readArchiveFile(file: PartitionedFile): Iterator[InternalRow] =
-      readLocalizedEntries(file, broadcastedHadoopConf.value.value, "parquet-archive") {
+      readLocalizedEntries(
+          file, broadcastedHadoopConf.value.value, "parquet-archive",
+          parquetOptions.archivePathFilterPattern) {
         entryFile => readSingleFile(entryFile)
       }
 
@@ -552,6 +567,11 @@ object ParquetFileFormat extends Logging {
       ignoreCorruptFiles: Boolean,
       ignoreMissingFiles: Boolean = false): Seq[Footer] = {
     val archiveEnabled = SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
+    // This signature is shared with `SchemaMergeUtils.mergeSchemasInParallel`'s `schemaReader`, so
+    // the glob comes from `conf`, which that caller builds with the user options via
+    // `newHadoopConfWithOptions`.
+    val archivePathFilter = Option(conf.get(FileSourceOptions.ARCHIVE_PATH_FILTER))
+      .filter(_.nonEmpty).map(FileSourceOptions.compileArchivePathFilter)
     ThreadUtils.parmap(partFiles, "readingParquetFooters", 8,
         preserveSparkThrowable = true) { currentFile =>
       try {
@@ -561,7 +581,7 @@ object ParquetFileFormat extends Logging {
         if (archiveEnabled && SupportsArchiveFormat.isArchivePath(currentFile.getPath)) {
           // An archive is one file here; read each of its Parquet entries' footers (the archive is
           // atomic under ignoreCorruptFiles, see readArchiveFooters).
-          readArchiveFooters(conf, currentFile)
+          readArchiveFooters(conf, currentFile, archivePathFilter)
         } else {
           Seq(new Footer(currentFile.getPath,
             ParquetFooterReader.readFooter(
@@ -591,13 +611,17 @@ object ParquetFileFormat extends Logging {
   }
 
   /** Reads every Parquet entry's footer in one archive. */
-  private def readArchiveFooters(conf: Configuration, archive: FileStatus): Seq[Footer] = {
+  private def readArchiveFooters(
+      conf: Configuration,
+      archive: FileStatus,
+      archivePathFilter: Option[GlobPattern]): Seq[Footer] = {
     val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), "parquet-archive-infer")
     // localizeEntries eagerly opens/copies the first entry, so build it inside the try -- a corrupt
     // archive throws there and the finally must still delete tempDir.
     var entries: Iterator[(String, File)] = Iterator.empty
     try {
-      entries = SupportsArchiveFormat.localizeEntries(archive.getPath, conf, tempDir, _ => true)
+      entries = SupportsArchiveFormat.localizeEntries(
+        archive.getPath, conf, tempDir, _ => true, archivePathFilter)
       entries.map { case (_, entryFile) =>
         try {
           val status = new FileStatus(entryFile.length(), false, 0, 0, entryFile.lastModified(),
@@ -653,6 +677,11 @@ object ParquetFileFormat extends Logging {
         nanosAsLong = nanosAsLong,
         timestampNanosTypesEnabled = timestampNanosTypesEnabled,
         respectUnknownTypeAnnotation = respectUnknownTypeAnnotation)
+
+      // readParquetFootersInParallel reads archivePathFilter from the conf (its signature is fixed
+      // by SchemaMergeUtils' schemaReader type), so put the option there.
+      new FileSourceOptions(CaseInsensitiveMap(parameters)).archivePathFilter.foreach(
+        conf.set(FileSourceOptions.ARCHIVE_PATH_FILTER, _))
 
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles, ignoreMissingFiles)
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))

@@ -28,7 +28,7 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.UpdateFieldsBenchmark._
-import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression, With}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
@@ -428,6 +428,221 @@ class ColumnExpressionSuite extends SharedSparkSession {
       filter(r => r.getInt(0) >= r.getInt(1) && r.getInt(0) <= r.getInt(2))
 
     checkAnswer(testData.filter($"a".between($"b", $"c")), expectAnswer)
+  }
+
+  // Runs `f` on each of the three evaluation paths, since a `With` left in a conditional branch is
+  // evaluated by all three and the memoization is implemented separately for interpretation and for
+  // codegen.
+  private def onEachEvalPath(f: => Unit): Unit = {
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN")(f)
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY")(f)
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY")(f)
+  }
+
+  test("SPARK-58902: BETWEEN on a nondeterministic input inside a conditional branch") {
+    onEachEvalPath {
+      // `BETWEEN` reads its input twice. Inlining the common expression into a branch gave each
+      // read its own value, so the two comparisons saw two different ids and 6 of the 10 rows came
+      // back true where 3 is correct. A single partition makes the id sequence 0, 1, 2, ... `id` is
+      // selected alongside because `checkAnswer` compares rows as a bag: without it the assertion
+      // would only count trues, and an off-by-one in the sequence would still pass.
+      val df = spark.range(0, 10, 1, 1)
+      checkAnswer(
+        df.selectExpr(
+          "id",
+          "CASE WHEN id < 0 THEN false " +
+            "ELSE monotonically_increasing_id() BETWEEN 3 AND 5 END"),
+        (0 until 10).map(i => Row(i.toLong, i >= 3 && i <= 5)))
+    }
+  }
+
+  test("SPARK-58902: a definition in a branch is evaluated only on the rows that reach it") {
+    onEachEvalPath {
+      // Rows 0 to 4 take the first branch, so the five rows that reach the ELSE see ids 0 to 4 --
+      // the same values they would see if the branch were the whole expression. `id` is selected
+      // alongside for the reason given in the case above.
+      val df = spark.range(0, 10, 1, 1)
+      checkAnswer(
+        df.selectExpr(
+          "id",
+          "CASE WHEN id < 5 THEN NULL " +
+            "ELSE monotonically_increasing_id() BETWEEN 1 AND 2 END"),
+        (0 until 10).map { i =>
+          if (i < 5) Row(i.toLong, null) else Row(i.toLong, i - 5 >= 1 && i - 5 <= 2)
+        })
+    }
+  }
+
+  test("SPARK-58902: a branch condition that can raise is not evaluated on other rows") {
+    onEachEvalPath {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // Nothing is relocated, so a condition is evaluated only where it always was. `a` runs
+        // -2, -1, 0, 1, 2, 3: the first two take the third branch, 0 the first, 1 and 2 the second,
+        // and 3 falls through. `rand` is in [0, 1), so a row reaching a BETWEEN is true whatever it
+        // draws -- the answers here do not depend on memoization. What this rules out is the
+        // alternative that was measured and rejected: hoisting the definition into a `Project` and
+        // guarding that column with the branch condition, which puts `6 / a` outside conditional
+        // evaluation and raises on the `a = 0` row under ANSI.
+        val df = spark.range(0, 6, 1, 1).selectExpr("cast(id as int) - 2 as a")
+        checkAnswer(
+          df.selectExpr(
+            "a",
+            "CASE WHEN a = 0 THEN false " +
+              "WHEN 6 / a > 2 THEN rand(1) BETWEEN 0 AND 1 " +
+              "WHEN 6 / a < -2 THEN rand(2) BETWEEN 0 AND 1 " +
+              "ELSE false END"),
+          Seq(Row(-2, true), Row(-1, true), Row(0, false),
+            Row(1, true), Row(2, true), Row(3, false)))
+      }
+    }
+  }
+
+  test("SPARK-58902: a nondeterministic input a branch cannot pre-evaluate is still read once") {
+    onEachEvalPath {
+      // 20 rows so the two copies an inlining implementation makes fall out of step: each owns an
+      // identically seeded generator, and they diverge once a failed first comparison skips the
+      // second. Both bounds therefore have to be failable, which the assertion below pins: with an
+      // upper bound no 3-character draw can miss, the answer is the first comparison's alone and
+      // inlining is invisible. The value is a string, so this also covers a non-primitive slot, and
+      // `id` is selected alongside because `checkAnswer` compares as a bag.
+      val df = spark.range(0, 20, 1, 1)
+      val inBranch = df.selectExpr(
+        "id", "CASE WHEN id < 0 THEN false ELSE randstr(3, 0) BETWEEN 'a' AND 'm' END")
+      val draws = df.selectExpr("randstr(3, 0) as s").collect().map(_.getString(0))
+      assert(draws.exists(_ < "a") && draws.exists(_ > "m"),
+        s"a bound is not failable over these rows: ${draws.mkString(", ")}")
+      val branchFreeStr = df.selectExpr("id", "randstr(3, 0) BETWEEN 'a' AND 'm'").collect()
+      checkAnswer(inBranch, branchFreeStr.toSeq)
+
+      // The same for a nondeterministic input wrapped in arithmetic, with the same requirement on
+      // the window: `BETWEEN 0 AND 1` over `rand` is satisfied by every draw, which would keep the
+      // two copies in lockstep.
+      val branchFree = df.selectExpr("id", "(rand(7) / 1.0) BETWEEN 0.3 AND 0.6").collect()
+      assert(branchFree.exists(!_.getBoolean(1)) && branchFree.exists(_.getBoolean(1)),
+        s"the window is not selective over these rows: ${branchFree.mkString(", ")}")
+      val inBranchRand = df.selectExpr(
+        "id", "CASE WHEN id < 0 THEN false ELSE (rand(7) / 1.0) BETWEEN 0.3 AND 0.6 END")
+      checkAnswer(inBranchRand, branchFree.toSeq)
+    }
+  }
+
+  test("SPARK-58902: a nested With agrees across the evaluation paths") {
+    // The outer `nullif`'s definition is the inner `nullif`, itself a `With`, and neither is cheap
+    // or read once, so both survive inside the branch. This is about the two evaluation paths
+    // agreeing on nested scopes, not about code size -- see `CommonExprSlots.fill` for that. `a` is
+    // selected alongside so `checkAnswer`, which compares as a bag, compares per row.
+    val query = "SELECT a, CASE WHEN a < 0 THEN NULL ELSE nullif(nullif(a + b, b), c) END AS r " +
+      "FROM VALUES (0, 5, 3), (2, 5, 7), (4, 5, 6), (-1, 1, 1) AS t(a, b, c)"
+    // The shape assertion keeps a rewrite change from leaving this with no `With` at all and still
+    // passing on the answers. It survives `ConvertToLocalRelation` only because
+    // `CommonExpressionDef` is `Unevaluable`; otherwise the whole `VALUES` projection would fold.
+    // The conf block pins the default `NullIf` builds under, so a suite-level override cannot turn
+    // this into a test of the inlining path.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      val withs = spark.sql(query).queryExecution.optimizedPlan.collect {
+        case p => p.expressions.flatMap(_.collect { case w: With => w })
+      }.flatten
+      assert(withs.size == 2, s"expected two surviving With nodes, got ${withs.size}")
+      onEachEvalPath {
+        // a = 0 makes `a + b` equal b, a = 2 makes it equal c, so both are null; a = 4 differs from
+        // both and gives 9; a = -1 takes the first branch.
+        checkAnswer(
+          spark.sql(query),
+          Seq(Row(0, null), Row(2, null), Row(4, 9), Row(-1, null)))
+      }
+    }
+  }
+
+  test("SPARK-58902: a surviving With in a Filter predicate reads its definition once per row") {
+    // Every other end-to-end case goes through a Project. A `With` survives in a Filter predicate
+    // the same way, and `FilterExec`'s whole-stage `doConsume` generates common state lazily, at
+    // the first predicate that reads it, so the lazy fill and the in-place clearing land next to
+    // machinery with its own ordering contract.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      onEachEvalPath {
+        val df = spark.range(0, 10, 1, 1).toDF()
+        // One id per row, so the ids are the row numbers and rows 3 to 5 pass. Inlining would let
+        // the second comparison draw again and a different set of rows would come through.
+        checkAnswer(
+          df.filter("CASE WHEN id < 0 THEN false " +
+            "ELSE monotonically_increasing_id() BETWEEN 3 AND 5 END"),
+          Seq(Row(3L), Row(4L), Row(5L)))
+      }
+    }
+  }
+
+  test("SPARK-58902: a surviving With in a Sort key is generated once per comparison side") {
+    // `GenerateOrdering` generates the key once per comparison side, each in its own scope with its
+    // own slots. A slot shared between the sides would read the wrong row, and here, where
+    // `Expression.reduceCodeSize` has hoisted each side's key into a method taking one row, would
+    // not compile. What this does not cover is a comparison the ordering performs: the keys are
+    // distinct, so `UnsafeInMemorySorter` settles them on their prefixes.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      onEachEvalPath {
+        // The DataFrame is built inside, not outside: `QueryExecution.executedPlan` is a lazy val,
+        // so one built ahead of these blocks would be planned under the first block's confs and the
+        // whole-stage block would re-run that same physical plan.
+        val df = spark.range(0, 5, 1, 1).toDF()
+        val sorted = df.orderBy(expr("CASE WHEN id < 0 THEN 0 ELSE nullif(id * 2, -1) END").desc)
+        val withs = sorted.queryExecution.optimizedPlan.collect {
+          case p => p.expressions.flatMap(_.collect { case w: With => w })
+        }.flatten
+        assert(withs.size == 1, s"expected one surviving With node, got ${withs.size}")
+        // `checkAnswer` compares in order when the plan holds a `Sort`.
+        checkAnswer(sorted, Seq(Row(4L), Row(3L), Row(2L), Row(1L), Row(0L)))
+      }
+    }
+  }
+
+  test("SPARK-58902: a definition that has to fall back to eval works on every path") {
+    // The only case whose definition is a real `CodegenFallback`, which covers it being generated
+    // inside `fill`, its `Nondeterministic` state being initialized, and `INPUT_ROW` reaching it. A
+    // regression there is a compile failure or an uninitialized-state error, not a wrong value.
+    // These are two paths, not three: `CollapseCodegenStages` rejects an operator holding a
+    // non-leaf `CodegenFallback`, which is what guarantees `With.doGenCode` an `INPUT_ROW`.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      val query = "SELECT CASE WHEN id < 0 THEN 'skipped' " +
+        "ELSE nullif(reflect('java.util.UUID', 'randomUUID'), 'never') END AS r " +
+        "FROM range(0, 3, 1, 1)"
+      val withs = spark.sql(query).queryExecution.optimizedPlan.collect {
+        case p => p.expressions.flatMap(_.collect { case w: With => w })
+      }.flatten
+      assert(withs.size == 1, s"expected one surviving With node, got ${withs.size}")
+      onEachEvalPath {
+        val got = spark.sql(query).collect().map(_.getString(0))
+        assert(got.length == 3, s"expected three rows, got ${got.mkString(", ")}")
+        assert(got.forall(_.length == 36), s"expected UUIDs, got ${got.mkString(", ")}")
+        assert(got.distinct.length == 3, s"expected a UUID per row, got ${got.mkString(", ")}")
+      }
+    }
+  }
+
+  test("SPARK-58902: a surviving With inside a window expression is evaluated once per row") {
+    // `ExtractWindowExpressions` moves the window function's argument into a `_w0` alias in the
+    // `Project` it synthesizes below the `Window`, so the host is `ProjectExec` as above and what
+    // this adds is that analyzer relocation. The definition is deterministic, so the values pin
+    // per-row clearing rather than memoization; the shape assertion is what keeps the test from
+    // passing on a plan that dropped the `With`.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      val query = "SELECT id, sum(CASE WHEN id < 0 THEN 0 ELSE nullif(id * 2, -1) END) " +
+        "OVER (ORDER BY id) AS s FROM range(0, 4, 1, 1)"
+      val withs = spark.sql(query).queryExecution.optimizedPlan.collect {
+        case p => p.expressions.flatMap(_.collect { case w: With => w })
+      }.flatten
+      assert(withs.size == 1, s"expected one surviving With node, got ${withs.size}")
+      onEachEvalPath {
+        // Keys are 0, 2, 4, 6, so the running sums are 0, 2, 6, 12.
+        checkAnswer(
+          spark.sql(query),
+          Seq(Row(0L, 0L), Row(1L, 2L), Row(2L, 6L), Row(3L, 12L)))
+      }
+    }
   }
 
   test("in") {

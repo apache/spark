@@ -486,6 +486,11 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     assert(intercept[AnalysisException] {
       sql("SELECT variant_set(parse_json('{}'), '$.a', named_struct('x', 1))")
     }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+
+    // A non-constant create_if_missing is rejected at analysis.
+    assert(intercept[AnalysisException] {
+      sql("SELECT variant_set(parse_json('{\"a\": 1}'), '$.a', 2, c) FROM VALUES (true) AS t(c)")
+    }.getCondition == "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT")
   }
 
   test("variant_set with dynamic arguments") {
@@ -676,6 +681,173 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
         checkAnswer(
           arrDf.select(to_json(try_variant_array_append(arrV, "$", col("val"))).alias("r")),
           rows("[1,2,3]", null))
+      }
+    }
+  }
+
+  test("variant_strip_nulls with literal arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json('{\"a\": 1, \"b\": null, \"c\": 3}')))"),
+      rows("""{"a":1,"c":3}"""))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json('[1, null, 3]')))"),
+      rows("[1,3]"))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json(" +
+        "'{\"a\": [null, 3, {\"b\": null, \"c\": [null, 1]}], \"d\": null, " +
+        "\"e\": {\"f\": null, \"g\": 2}}')))"),
+      rows("""{"a":[3,{"c":[1]}],"e":{"g":2}}"""))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json(" +
+        "'{\"a\": 100000, \"b\": null, \"c\": 10000000000, \"d\": \"hello world\"}')))"),
+      rows("""{"a":100000,"c":10000000000,"d":"hello world"}"""))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json('{\"a\": [1, null], \"b\": null}'), " +
+        "include_arrays => false))"),
+      rows("""{"a":[1,null]}"""))
+
+    // include_arrays = false keeps array null elements but still strips null fields of objects.
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(" +
+        "parse_json('[{\"a\": 1, \"b\": null}, null, {\"c\": null, \"d\": 4}]'), false))"),
+      rows("""[{"a":1},null,{"d":4}]"""))
+
+    // Empty containers are preserved.
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json('{\"a\": null}')))"),
+      rows("{}"))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json('[null, null]')))"),
+      rows("[]"))
+
+    // Top-level variant null is unchanged.
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json('null')))"),
+      rows("null"))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(CAST(NULL AS VARIANT)))"),
+      rows(null))
+
+    assert(intercept[AnalysisException] {
+      sql("SELECT variant_strip_nulls(parse_json('{\"a\": null}'), c) FROM VALUES (true) AS t(c)")
+    }.getCondition == "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT")
+  }
+
+  test("variant_strip_nulls with dynamic arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+    val df = Seq(
+      """{"a": [1, null], "b": null}""",
+      """{"x": null, "y": 2}""",
+      null
+    ).toDF("json")
+    val v = parse_json(col("json"))
+
+    // Single-argument overload defaults include_arrays to true.
+    checkAnswer(
+      df.select(to_json(variant_strip_nulls(v)).alias("r")),
+      rows("""{"a":[1]}""", """{"y":2}""", null))
+
+    // Boolean overload with include_arrays = false preserves array null elements.
+    checkAnswer(
+      df.select(to_json(variant_strip_nulls(v, false)).alias("r")),
+      rows("""{"a":[1,null]}""", """{"y":2}""", null))
+  }
+
+  test("variant_pick with literal paths") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+
+    // SQL parse/registration path end to end, including array compaction and the root identity.
+    checkAnswer(
+      sql("SELECT to_json(variant_pick(parse_json('{\"a\": 1, \"b\": 2, \"c\": 3}'), " +
+        "'$.a', '$.c'))"),
+      rows("""{"a":1,"c":3}"""))
+    checkAnswer(
+      sql("SELECT to_json(variant_pick(parse_json('[10, 20, 30, 40]'), '$[2]', '$[0]'))"),
+      rows("[10,30]"))
+    checkAnswer(
+      sql("SELECT to_json(variant_pick(parse_json('{\"a\": 1}'), '$'))"),
+      rows("""{"a":1}"""))
+
+    // The String* DataFrame-API overload compiles each path to a literal.
+    val df = Seq("""{"a": 1, "b": 2, "c": 3}""").toDF("json")
+    checkAnswer(
+      df.select(to_json(variant_pick(parse_json(col("json")), "$.a", "$.c")).alias("r")),
+      rows("""{"a":1,"c":3}"""))
+
+    // A NULL path is skipped; a fully-missing projection yields an empty container.
+    checkAnswer(
+      sql("SELECT to_json(variant_pick(parse_json('{\"a\": 1, \"b\": 2}'), NULL, '$.a'))"),
+      rows("""{"a":1}"""))
+    checkAnswer(
+      sql("SELECT to_json(variant_pick(parse_json('{\"a\": 1}'), '$.missing'))"),
+      rows("{}"))
+    checkAnswer(
+      sql("SELECT to_json(variant_pick(CAST(NULL AS VARIANT), '$.a'))"),
+      rows(null))
+
+    // A malformed path is rejected.
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT variant_pick(parse_json('{\"a\": 1}'), 'garbage')").collect()
+      },
+      condition = "INVALID_VARIANT_PATH",
+      parameters = Map("path" -> "garbage", "functionName" -> toSQLId("variant_pick")))
+
+    // At least one path argument is required.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT variant_pick(parse_json('{}'))").collect()
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> toSQLId("variant_pick"),
+        "expectedNum" -> "> 1",
+        "actualNum" -> "1",
+        "docroot" -> "https://spark.apache.org/docs/latest"))
+  }
+
+  test("variant_pick with dynamic paths") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val df = Seq(
+          ("""{"a": 1, "b": 2, "c": 3}""", "$.c", "$.a"),
+          ("""{"a": 1, "b": 2}""", "$.b", "$.b"),
+          (null, "$.a", "$.a")
+        ).toDF("json", "p1", "p2")
+        val v = parse_json(col("json"))
+        // Dynamic (non-foldable) column paths, collected per row; row 2 has a duplicate path.
+        val out = df.select(to_json(variant_pick(v, col("p1"), col("p2"))).alias("r"))
+        checkAnswer(out, rows("""{"a":1,"c":3}""", """{"b":2}""", null))
+      }
+    }
+  }
+
+  test("variant_pick with a mix of literal and non-literal paths") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val df = Seq(
+          ("""{"a": 1, "b": 2, "c": 3}""", "$.b", "$.c"),
+          ("""{"a": 1, "b": 2, "c": 3}""", "$.b", null)
+        ).toDF("json", "p1", "p2")
+        val v = parse_json(col("json"))
+        // One literal path followed by two dynamic column paths; the second is NULL in row 2.
+        checkAnswer(
+          df.select(to_json(variant_pick(v, lit("$.a"), col("p1"), col("p2"))).alias("r")),
+          rows("""{"a":1,"b":2,"c":3}""", """{"a":1,"b":2}"""))
+        // A dynamic column path followed by two literal paths; the dynamic is NULL in row 2.
+        checkAnswer(
+          df.select(to_json(variant_pick(v, col("p2"), lit("$.a"), lit("$.b"))).alias("r")),
+          rows("""{"a":1,"b":2,"c":3}""", """{"a":1,"b":2}"""))
       }
     }
   }

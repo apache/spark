@@ -111,7 +111,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>inferSchema</code></td>
     <td>false</td>
-    <td>Infers the input schema automatically from data. It requires one extra pass over the data. CSV built-in functions ignore this option.</td>
+    <td>Infers the input schema automatically from data. It requires one extra pass over the data. CSV built-in functions ignore this option, except as noted under <code>variantRespectInferSchema</code>.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -207,9 +207,9 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>mode</code></td>
     <td>PERMISSIVE</td>
-    <td>Allows a mode for dealing with corrupt records during parsing. It supports the following case-insensitive modes. Note that Spark tries to parse only required columns in CSV under column pruning. Therefore, corrupt records can be different based on required set of fields. This behavior can be controlled by <code>spark.sql.csv.parser.columnPruning.enabled</code> (enabled by default).<br>
+    <td>Allows a mode for dealing with corrupt records during parsing. It supports the following case-insensitive modes. Note that Spark tries to parse only required columns in CSV under column pruning. Therefore, corrupt records can be different based on required set of fields. This behavior can be controlled by <code>spark.sql.csv.parser.columnPruning.enabled</code> (enabled by default). In particular, when <code>multiLine</code> is disabled, a quoted value containing a line separator (<code>lineSep</code>) splits one source record into two before <code>mode</code> is applied. Each of the two is then evaluated on its own, so a record whose token count happens to match the schema is retained as valid even though its value was truncated. This holds under <code>DROPMALFORMED</code> as well, since that mode drops only the records it finds malformed. An action requiring no columns (a bare <code>count()</code>, for example) may surface none of this because of column pruning.<br>
     <ul>
-      <li><code>PERMISSIVE</code>: when it meets a corrupted record, puts the malformed string into a field configured by <code>columnNameOfCorruptRecord</code>, and sets malformed fields to <code>null</code>. To keep corrupt records, an user can set a string type field named <code>columnNameOfCorruptRecord</code> in an user-defined schema. If a schema does not have the field, it drops corrupt records during parsing. A record with less/more tokens than schema is not a corrupted record to CSV. When it meets a record having fewer tokens than the length of the schema, sets <code>null</code> to extra fields. When the record has more tokens than the length of the schema, it drops extra tokens.</li>
+      <li><code>PERMISSIVE</code>: when it meets a corrupted record, puts the malformed string into a field configured by <code>columnNameOfCorruptRecord</code>, and sets malformed fields to <code>null</code>. To capture the malformed string, a user can set a string type field named <code>columnNameOfCorruptRecord</code> in a user-defined schema. If a schema does not have the field, the corrupt record is still retained with its malformed fields set to <code>null</code>, but the malformed string is not available. A record with a different number of tokens than the schema is a corrupted record, and is handled by this <code>mode</code> like any other; it is still parsed as far as it can be, with <code>null</code> set for tokens the record does not have and extra tokens dropped.</li>
       <li><code>DROPMALFORMED</code>: ignores the whole corrupted records. This mode is unsupported in the CSV built-in functions.</li>
       <li><code>FAILFAST</code>: throws an exception when it meets corrupted records.</li>
     </ul>
@@ -225,13 +225,20 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>singleVariantColumn</code></td>
     <td>(none)</td>
-    <td>If specified, the entire CSV record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields.</td>
+    <td>If specified, the entire CSV record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields. By default, scalar values are type-inferred inside the variant on a best-effort basis (for example, <code>"0001"</code> may be inferred as the integer <code>1</code>). To preserve scalar values as strings, set <code>variantRespectInferSchema</code> to <code>true</code> and <code>inferSchema</code> to <code>false</code>.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>variantRespectInferSchema</code></td>
+    <td>false</td>
+    <td>When reading into a <code>VARIANT</code> (see <code>singleVariantColumn</code> or a <code>VariantType</code> column in the schema), controls whether the <code>inferSchema</code> option is honored. When <code>true</code> and <code>inferSchema</code> is <code>false</code>, scalar values are preserved as strings inside the variant instead of being inferred as boolean, long, decimal, date, or timestamp. When <code>false</code> (the default), scalar types are inferred on a best-effort basis regardless of <code>inferSchema</code>. Enabling this option forces <code>from_csv</code> to observe <code>inferSchema</code> when reading into a <code>VARIANT</code>.</td>
     <td>read</td>
   </tr>
   <tr>
     <td><code>multiLine</code></td>
     <td>false</td>
-    <td>Allows a row to span multiple lines, by parsing line breaks within quoted values as part of the value itself. CSV built-in functions ignore this option.</td>
+    <td>Allows a row to span multiple lines, by parsing line breaks within quoted values as part of the value itself. CSV built-in functions ignore this option.<br>
+    When this option is disabled (the default), a line break inside a quoted value terminates the record at that break: the value is truncated, and the rest of the value begins a new record. Either or both of the resulting records may then be malformed (for example when the token count no longer matches the schema); how they are handled is controlled by <code>mode</code>.</td>
     <td>read</td>
   </tr>
   <tr>
