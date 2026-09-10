@@ -106,6 +106,63 @@ struct<col:int>
 
 
 -- !query
+WITH s AS MATERIALIZED (SELECT 46 AS col)
+FROM s
+INSERT INTO cte_tbl SELECT col
+INSERT INTO cte_tbl2 SELECT col
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_ALWAYS_INLINED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "cteName" : "`s`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 6,
+    "stopIndex" : 41,
+    "fragment" : "s AS MATERIALIZED (SELECT 46 AS col)"
+  } ]
+}
+
+
+-- !query
+WITH s AS NOT MATERIALIZED (SELECT 46 AS col)
+FROM s
+INSERT INTO cte_tbl SELECT col
+INSERT INTO cte_tbl2 SELECT col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM cte_tbl
+-- !query schema
+struct<col:int>
+-- !query output
+42
+43
+44
+45
+46
+
+
+-- !query
+SELECT * FROM cte_tbl2
+-- !query schema
+struct<col:int>
+-- !query output
+45
+46
+
+
+-- !query
 DROP TABLE cte_tbl
 -- !query schema
 struct<>

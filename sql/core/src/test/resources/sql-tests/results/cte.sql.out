@@ -932,6 +932,47 @@ struct<id:int,c:bigint>
 
 
 -- !query
+WITH v1 AS (
+  SELECT t.id, (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) AS c
+  FROM t
+),
+v2 AS MATERIALIZED (SELECT * FROM v1)
+SELECT * FROM v2
+-- !query schema
+struct<id:int,c:bigint>
+-- !query output
+0	1
+1	1
+2	0
+
+
+-- !query
+WITH s AS (SELECT id FROM t)
+SELECT * FROM s o WHERE EXISTS (
+  WITH v AS MATERIALIZED (SELECT i.id FROM s i WHERE i.id = o.id)
+  SELECT * FROM v
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 123,
+    "stopIndex" : 126,
+    "fragment" : "o.id"
+  } ]
+}
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query schema
 struct<>

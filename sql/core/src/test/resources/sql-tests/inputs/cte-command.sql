@@ -29,5 +29,20 @@ INSERT INTO cte_tbl2 SELECT col;
 SELECT * FROM cte_tbl;
 SELECT * FROM cte_tbl2;
 
+-- MATERIALIZED CTE in a Multi-INSERT, should fail
+WITH s AS MATERIALIZED (SELECT 46 AS col)
+FROM s
+INSERT INTO cte_tbl SELECT col
+INSERT INTO cte_tbl2 SELECT col;
+
+-- NOT MATERIALIZED CTE in a Multi-INSERT
+WITH s AS NOT MATERIALIZED (SELECT 46 AS col)
+FROM s
+INSERT INTO cte_tbl SELECT col
+INSERT INTO cte_tbl2 SELECT col;
+
+SELECT * FROM cte_tbl;
+SELECT * FROM cte_tbl2;
+
 DROP TABLE cte_tbl;
 DROP TABLE cte_tbl2;

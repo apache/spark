@@ -1407,6 +1407,72 @@ WithCTE
 
 
 -- !query
+WITH v1 AS (
+  SELECT t.id, (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) AS c
+  FROM t
+),
+v2 AS MATERIALIZED (SELECT * FROM v1)
+SELECT * FROM v2
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias v1
+:     +- Project [id#x, scalar-subquery#x [id#x] AS c#xL]
+:        :  +- WithCTE
+:        :     :- CTERelationDef xxxx, false
+:        :     :  +- SubqueryAlias s
+:        :     :     +- Aggregate [count(1) AS c#xL]
+:        :     :        +- Filter (id#x = outer(id#x))
+:        :     :           +- SubqueryAlias t2
+:        :     :              +- View (`t2`, [id#x])
+:        :     :                 +- Project [cast(id#x as int) AS id#x]
+:        :     :                    +- Project [id#x]
+:        :     :                       +- SubqueryAlias t
+:        :     :                          +- LocalRelation [id#x]
+:        :     +- Project [c#xL]
+:        :        +- SubqueryAlias s
+:        :           +- CTERelationRef xxxx, true, [c#xL], false, false, 1
+:        +- SubqueryAlias t
+:           +- View (`t`, [id#x])
+:              +- Project [cast(id#x as int) AS id#x]
+:                 +- Project [id#x]
+:                    +- SubqueryAlias t
+:                       +- LocalRelation [id#x]
+:- CTERelationDef xxxx, false, true
+:  +- SubqueryAlias v2
+:     +- Project [id#x, c#xL]
+:        +- SubqueryAlias v1
+:           +- CTERelationRef xxxx, true, [id#x, c#xL], false, false
++- Project [id#x, c#xL]
+   +- SubqueryAlias v2
+      +- CTERelationRef xxxx, true, [id#x, c#xL], false, false
+
+
+-- !query
+WITH s AS (SELECT id FROM t)
+SELECT * FROM s o WHERE EXISTS (
+  WITH v AS MATERIALIZED (SELECT i.id FROM s i WHERE i.id = o.id)
+  SELECT * FROM v
+)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "colName" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 123,
+    "stopIndex" : 126,
+    "fragment" : "o.id"
+  } ]
+}
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query analysis
 DropTempViewCommand t, true

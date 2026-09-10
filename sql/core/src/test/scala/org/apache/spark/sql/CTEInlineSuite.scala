@@ -1190,6 +1190,107 @@ abstract class CTEInlineSuiteBase
       }
     }
   }
+
+  test("MATERIALIZED CTE referencing a CTE with an inner correlated CTE") {
+    withTempView("t", "t2") {
+      Seq((0, 1), (1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceTempView("t")
+      Seq((0, 10), (1, 20), (1, 30)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      // `v1` is inlined into the MATERIALIZED `v2`, and its inner CTE `u` is correlated to `v1`'s
+      // own relation `a`, which is within the materialized boundary.
+      val df = sql(
+        """with v1 as (
+          |  select a.c1, (with u as (select max(c2) m from t2 where t2.c1 = a.c1)
+          |                select m from u) as m
+          |  from t a),
+          |v2 as materialized (select * from v1)
+          |select * from v2""".stripMargin)
+      checkAnswer(df, Row(0, 10) :: Row(1, 30) :: Row(2, null) :: Nil)
+      assert(
+        df.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]),
+        "MATERIALIZED CTE should not be inlined.")
+    }
+  }
+
+  test("MATERIALIZED CTE correlated through a CTE shared with the enclosing query") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      // The enclosing query and the MATERIALIZED CTE both read `s`, so the outer reference and
+      // the definition may share attribute ids. The correlation still crosses the boundary.
+      val query =
+        """with s as (select c1, c2 from t)
+          |select * from s o where exists (
+          |  with v as materialized (select i.c1 from s i where i.c1 = o.c1)
+          |  select * from v
+          |)""".stripMargin
+      checkError(
+        exception = intercept[AnalysisException](sql(query)),
+        condition = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+        parameters = Map("colName" -> "`c1`"),
+        context = ExpectedContext(
+          fragment = "o.c1",
+          start = query.lastIndexOf("o.c1"),
+          stop = query.lastIndexOf("o.c1") + 3))
+    }
+  }
+
+  test("MATERIALIZED CTE check does not preempt resolution errors") {
+    withTempView("t", "t2") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      Seq((0, 10), (1, 20)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      val e = intercept[AnalysisException](sql(
+        """select * from t o where exists (
+          |  with v as materialized (select no_such_col from t2 i where i.c1 = o.c1)
+          |  select * from v
+          |)""".stripMargin))
+      assert(e.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+    }
+  }
+
+  test("MATERIALIZED CTE with an outer reference is rejected when creating a view") {
+    withTempView("t", "mv") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      val e = intercept[AnalysisException](sql(
+        """create temporary view mv as
+          |select * from t o where exists (
+          |  with v as materialized (select 1 from t i where i.c1 = o.c1) select * from v
+          |)""".stripMargin))
+      assert(e.getCondition == "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE")
+    }
+  }
+
+  test("MATERIALIZED CTE is rejected where CTEs are inlined during analysis") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      def assertAlwaysInlinedError(query: String): Unit = {
+        val definition = "v as materialized (select c1 from t)"
+        checkError(
+          exception = intercept[AnalysisException](sql(query)),
+          condition = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_ALWAYS_INLINED",
+          parameters = Map("cteName" -> "`v`"),
+          context = ExpectedContext(
+            fragment = definition,
+            start = query.indexOf(definition),
+            stop = query.indexOf(definition) + definition.length - 1))
+      }
+      withTable("a", "b") {
+        sql("create table a(c1 int) using parquet")
+        sql("create table b(c1 int) using parquet")
+        // A multi-insert statement runs each insert as its own command.
+        assertAlwaysInlinedError(
+          """with v as materialized (select c1 from t)
+            |from v
+            |insert into a select c1
+            |insert into b select c1""".stripMargin)
+        withSQLConf(SQLConf.LEGACY_INLINE_CTE_IN_COMMANDS.key -> "true") {
+          assertAlwaysInlinedError(
+            "insert into a with v as materialized (select c1 from t) select c1 from v")
+        }
+      }
+      withSQLConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY.key -> "LEGACY") {
+        assertAlwaysInlinedError("with v as materialized (select c1 from t) select * from v")
+      }
+    }
+  }
 }
 
 class CTEInlineSuiteAEOff extends CTEInlineSuiteBase with DisableAdaptiveExecutionSuite

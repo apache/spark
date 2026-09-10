@@ -344,6 +344,21 @@ WITH v AS MATERIALIZED (
 )
 SELECT * FROM v;
 
+-- MATERIALIZED CTE referencing a CTE whose inner CTE is correlated to that CTE's own relation
+WITH v1 AS (
+  SELECT t.id, (WITH s AS (SELECT count(*) c FROM t2 WHERE t2.id = t.id) SELECT c FROM s) AS c
+  FROM t
+),
+v2 AS MATERIALIZED (SELECT * FROM v1)
+SELECT * FROM v2;
+
+-- MATERIALIZED CTE correlated through a CTE shared with the enclosing query, should fail
+WITH s AS (SELECT id FROM t)
+SELECT * FROM s o WHERE EXISTS (
+  WITH v AS MATERIALIZED (SELECT i.id FROM s i WHERE i.id = o.id)
+  SELECT * FROM v
+);
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;

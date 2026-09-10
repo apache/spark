@@ -276,6 +276,10 @@ object CTESubstitution extends Rule[LogicalPlan] {
       outerCTEDefs
     }
     for (CTERelation(name, relation, maxDepth, materialized) <- relations) {
+      // A MATERIALIZED CTE cannot be evaluated once when the CTEs are inlined here.
+      if (alwaysInline && materialized.contains(true)) {
+        throw QueryCompilationErrors.materializedCTEAlwaysInlinedError(name, relation.origin)
+      }
       // If recursion is allowed (RECURSIVE keyword specified)
       // then it has higher priority than outer or previous relations.
       // Therefore, we construct a `CTERelationDef` for the current relation.
