@@ -993,10 +993,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             // PreprocessTableCreation, which normalizes references: that rule can only rewrite a
             // RewritableTransform, so a transform like `truncate(4, col)` would otherwise reach the
             // connector with a column the table does not have, and it skips the ordering entirely
-            // when the schema is not defined. Like the partitioning check above, this resolves
-            // case-sensitively: normalization has already fixed the case of every reference it
-            // could rewrite, so a reference that still does not match exactly is one that would
-            // reach the connector misspelled.
+            // when the schema is not defined.
             val badOrderingReferences =
               create.writeOrdering.flatMap(_.expression().references()).toSet
                 .map((ref: NamedReference) => ref.fieldNames)
