@@ -702,12 +702,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // KubernetesClusterSchedulerBackend.stop already anticipates). Otherwise the
     // UserCredentialManager renewal thread would be left running while SparkContext.stop()
     // closes the shared CredentialProviderLoader, causing the renewal task to fail repeatedly
-    // against an already-closed loader.
+    // against an already-closed loader. The two stops are independent so that a failure in one
+    // does not skip the other.
     try {
       stopExecutors()
     } finally {
-      stopTokenManager()
-      stopUserCredentialManager()
+      Utils.tryLogNonFatalError {
+        stopTokenManager()
+      }
+      Utils.tryLogNonFatalError {
+        stopUserCredentialManager()
+      }
     }
     try {
       if (driverEndpoint != null) {

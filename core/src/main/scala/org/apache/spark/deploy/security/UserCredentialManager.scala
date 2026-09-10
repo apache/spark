@@ -279,17 +279,27 @@ private[spark] class UserCredentialManager(
           } else {
             credentialMap.put(scheme, credential)
 
-            // Fallback wiring for a provider that actually resolved a credential. Idempotent
-            // with the selection phase (guarded by !contains); only on initial acquisition.
-            if (applyProperties) {
-              applyResolvedProviderProperties(scheme, provider)
-            }
-
             val expiry = credential.getExpiresAt
             if (expiry != null) {
               earliestExpiry = earliestExpiry match {
                 case Some(existing) if existing.isBefore(expiry) => Some(existing)
                 case _ => Some(expiry)
+              }
+            }
+
+            // Fallback wiring for a provider that actually resolved a credential. Idempotent
+            // with the selection phase (guarded by !contains); only on initial acquisition.
+            // Isolated in its own catch so that a throwing additionalSparkProperties() does not
+            // discard the credential we just resolved (which is already in credentialMap with
+            // its expiry accounted for above) or get misreported as a resolution failure.
+            if (applyProperties) {
+              try {
+                applyResolvedProviderProperties(scheme, provider)
+              } catch {
+                case NonFatal(e) =>
+                  logWarning(log"Resolved a credential for scheme ${MDC(LogKeys.URI, scheme)} " +
+                    log"but failed to apply its declared Spark properties; the credential is " +
+                    log"still used, but its provider wiring may be missing.", e)
               }
             }
           }

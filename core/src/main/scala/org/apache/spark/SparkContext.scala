@@ -347,8 +347,8 @@ class SparkContext(config: SparkConf) extends Logging {
   def hadoopConfiguration: Configuration = _hadoopConfiguration
 
   // The CredentialProviderLoader from the OIDC selection phase, reused by the credential
-  // resolution phase so providers are initialized exactly once. Null if OIDC is disabled or
-  // before initialization. Internal.
+  // resolution phase so providers are initialized exactly once. `None` when OIDC credential
+  // propagation is disabled, in local mode, or before initialization. Internal.
   private[spark] def userCredentialProviderLoader: Option[CredentialProviderLoader] =
     _userCredentialProviderLoader
 

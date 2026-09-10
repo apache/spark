@@ -433,6 +433,33 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     }
   }
 
+  test("start() keeps a resolved credential even if applying its properties throws") {
+    // If a resolved provider's additionalSparkProperties() throws during the start() fallback,
+    // the credential it resolved must still be used (start() succeeds), not discarded or
+    // misreported as a resolution failure. Use the "shared" scheme bound explicitly to
+    // AnotherFakeCredentialProvider, whose resolve() succeeds but whose
+    // additionalSparkProperties() throws when throwOnProperties is set.
+    val conf = createSparkConf()
+    conf.set("spark.security.oidc.provider.shared",
+      "org.apache.spark.security.AnotherFakeCredentialProvider")
+    val ctx = createUserContext(expiresInSeconds = 60)
+    val callbackCount = new AtomicInteger()
+
+    AnotherFakeCredentialProvider.throwOnProperties = true
+    val manager = new UserCredentialManager(
+      conf, createIngestor(ctx), (_, _) => { callbackCount.incrementAndGet() })
+    try {
+      // Must not throw: the credential resolved successfully; only property application failed.
+      val (_, serialized) = manager.start()
+      assert(serialized != null)
+      assert(callbackCount.get() === 1,
+        "initial credentials should still be propagated despite the property-application failure")
+    } finally {
+      AnotherFakeCredentialProvider.throwOnProperties = false
+      manager.stop()
+    }
+  }
+
   test("stop() after start() does not throw") {
     val conf = createSparkConf()
     conf.set("spark.security.oidc.provider.fake",
