@@ -2787,6 +2787,16 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val STANDALONE_SUBMIT_FILTER_ENVIRONMENT =
+    ConfigBuilder("spark.standalone.submit.filterEnvironment")
+      .doc("In standalone cluster mode, controls whether the client forwards only " +
+        "Spark-related environment variables to the driver, matching the REST submission " +
+        "client. If set to false, the full environment of the submitting process is " +
+        "forwarded to the driver.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val EXECUTOR_ALLOW_SPARK_CONTEXT =
     ConfigBuilder("spark.executor.allowSparkContext")
       .doc("If set to true, SparkContext can be created in executors.")
