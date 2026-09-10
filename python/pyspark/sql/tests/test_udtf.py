@@ -98,9 +98,7 @@ class BaseUDTFTestsMixin:
         class DynamicNestedCharUDTF:
             @staticmethod
             def analyze() -> AnalyzeResult:
-                return AnalyzeResult(
-                    StructType([StructField("nested", ArrayType(CharType(3)))])
-                )
+                return AnalyzeResult(StructType([StructField("nested", ArrayType(CharType(3)))]))
 
             def eval(self):
                 yield (["a"],)

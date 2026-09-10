@@ -36,7 +36,7 @@ from pyspark.sql.types import DataType, StructType
 from pyspark.sql.udtf import (  # noqa: F401
     AnalyzeArgument,
     AnalyzeResult,
-    _check_arrow_udtf_return_type,
+    _check_udtf_return_type,
     _validate_udtf_handler,
 )
 from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration
@@ -186,7 +186,7 @@ class UserDefinedTableFunction:
             if isinstance(self.returnType, UnparsedDataType)
             else self.returnType
         )
-        _check_arrow_udtf_return_type(return_type, self.evalType)
+        _check_udtf_return_type(return_type)
         self._validated_return_type_session_ids.add(session._session_id)
 
     def _build_common_inline_user_defined_table_function(
