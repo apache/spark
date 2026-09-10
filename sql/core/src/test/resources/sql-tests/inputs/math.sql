@@ -152,7 +152,7 @@ SELECT POSITIVE(null);
 -- Gcd
 SELECT gcd(24, 36);
 SELECT gcd(17, 5);
--- The result is never negative, whichever inputs are.
+-- The result is non-negative regardless of the inputs' signs.
 SELECT gcd(-24, 36);
 SELECT gcd(24, -36);
 SELECT gcd(-24, -36);
@@ -166,7 +166,7 @@ SELECT gcd(5, null);
 -- Lcm
 SELECT lcm(4, 6);
 SELECT lcm(17, 5);
--- The result is never negative, whichever inputs are.
+-- The result is non-negative regardless of the inputs' signs.
 SELECT lcm(-4, 6);
 SELECT lcm(4, -6);
 SELECT lcm(-4, -6);
