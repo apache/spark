@@ -192,6 +192,8 @@ class UserDefinedFunction:
         # so it survives ``_wrapped()``, ``asNondeterministic()`` and ``spark.udf.register``.
         self.bufferSchema = bufferSchema
 
+    _check_return_type = staticmethod(PySparkUserDefinedFunction._check_return_type)
+
     @property
     def returnType(self) -> DataType:
         # Make sure this is called after Connect Session is initialized.
