@@ -28,12 +28,13 @@ import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.reflectiveCalls
 
-import org.mockito.ArgumentMatchers.{any, anyInt, anyString, eq => meq}
-import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
+import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyLong, anyString, eq => meq}
+import org.mockito.Mockito.{atLeast, atMost, clearInvocations, never, spy, times, verify, when}
 import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.resource.{CpuAmount, ExecutorResourceRequests, ResourceAmountUtils, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
@@ -206,6 +207,738 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(count > 0)
     assert(count < numTrials)
     assert(!failedTaskSet)
+  }
+
+  private def setupOomRetryScheduler(
+      clock: Clock,
+      confs: (String, String)*): TaskSchedulerImpl = {
+    val conf = new SparkConf().setMaster("local[8]").setAppName("TaskSchedulerImplSuite")
+      .set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+    confs.foreach { case (k, v) => conf.set(k, v) }
+    sc = new SparkContext(conf)
+    taskScheduler = new TaskSchedulerImpl(sc, sc.conf.get(config.TASK_MAX_FAILURES),
+      clock = clock) {
+      override def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = offers
+    }
+    setupHelper()
+  }
+
+  private def oomReservationInfo(
+      manager: TaskSetManager,
+      executorId: String): OomRetryReservationInfo = {
+    val taskSet = manager.taskSet
+    OomRetryReservationInfo(
+      taskSet.resourceProfileId, executorId, taskSet.stageId, taskSet.stageAttemptId, 0)
+  }
+
+  private def failTaskWithOom(task: TaskDescription): Unit = taskScheduler.synchronized {
+    val manager = taskScheduler.taskIdToTaskSetManager.get(task.taskId)
+    // Keep the synchronous failure handler ahead of TaskResultGetter's asynchronous callback.
+    failTask(task.taskId, TaskState.FAILED,
+      new ExceptionFailure(new OutOfMemoryError("test OOM"), Nil), manager)
+  }
+
+  private def finishOomTestTask(task: TaskDescription): Unit = {
+    val manager = taskScheduler.taskIdToTaskSetManager.get(task.taskId)
+    val value = sc.env.serializer.newInstance().serialize(0)
+    val result = new DirectTaskResult[Int](value, Seq.empty, Array.empty[Long])
+    taskScheduler.statusUpdate(task.taskId, TaskState.FINISHED,
+      sc.env.closureSerializer.newInstance().serialize(result))
+    eventually(timeout(10.seconds)) {
+      assert(manager.taskInfos(task.taskId).finished)
+      assert(manager.successful(task.index))
+    }
+  }
+
+  private def prepareOomRetries(numTasks: Int = 1, stageId: Int = 1): TaskSetManager = {
+    taskScheduler.submitTasks(FakeTask.createTaskSet(numTasks, stageId, stageAttemptId = 0))
+    val manager = taskScheduler.taskSetManagerForAttempt(stageId, 0).get
+    (0 until 2).foreach { _ =>
+      val tasks = taskScheduler.resourceOffers(
+        IndexedSeq(WorkerOffer("origin", "origin-host", numTasks))).flatten
+      assert(tasks.size === numTasks)
+      assert(tasks.forall(task =>
+        taskScheduler.taskIdToTaskSetManager.get(task.taskId) eq manager))
+      tasks.foreach(failTaskWithOom)
+    }
+    manager
+  }
+
+  test("OOM retries prefer idle executors before ordinary work") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1),
+      config.DYN_ALLOCATION_ENABLED.key -> "true")
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 0))
+    scheduler.resourceOffers(IndexedSeq(WorkerOffer("a", "host-a", 1)))
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 2, stageAttemptId = 0))
+    val original = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 1))).flatten.head
+    val manager = scheduler.taskSetManagerForAttempt(2, 0).get
+    failTaskWithOom(original)
+
+    // This TaskSet precedes the retry in FIFO order and could consume every offered slot.
+    scheduler.submitTasks(FakeTask.createTaskSet(7, stageId = 1, stageAttemptId = 0))
+    val tasks = scheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("a", "host-a", 3), WorkerOffer("b", "host-b", 4))).flatten
+    val retries = tasks.filter(task =>
+      scheduler.taskIdToTaskSetManager.get(task.taskId) eq manager)
+
+    assert(tasks.size === 7)
+    assert(retries.map(_.executorId) === Seq("b"))
+    assert(retries.head.attemptNumber === 1)
+    assert(retries.head.cpus === 1)
+    // A first OOM changes placement only; ordinary tasks can still share its executor.
+    assert(tasks.count(_.executorId == "b") === 4)
+  }
+
+  test("a first OOM retry uses busy capacity when no executor is idle") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1))
+    scheduler.submitTasks(FakeTask.createTaskSet(2))
+    val originals = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 2))).flatten
+    failTaskWithOom(originals.head)
+
+    val tasks = scheduler.resourceOffers(IndexedSeq(WorkerOffer("a", "host-a", 2))).flatten
+    assert(tasks.map(_.index) === Seq(originals.head.index))
+    assert(tasks.head.executorId === "a")
+    assert(tasks.head.cpus === 1)
+  }
+
+  test("OOM recovery preserves fractional CPU accounting before and after isolation") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1),
+      config.CPUS_PER_TASK.key -> "0.2")
+    val taskCpus = BigDecimal("0.2")
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0))
+    val original = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("origin", "host-origin", 1))).flatten.head
+    val manager = scheduler.taskSetManagerForAttempt(1, 0).get
+    failTaskWithOom(original)
+
+    scheduler.submitTasks(FakeTask.createTaskSet(10, stageId = 0, stageAttemptId = 0))
+    val first = scheduler.resourceOffers(IndexedSeq(WorkerOffer("a", "host-a", 1))).flatten
+    val retry = first.find(task =>
+      scheduler.taskIdToTaskSetManager.get(task.taskId) eq manager).get
+    assert(first.size === 5)
+    assert(first.forall(_.cpus == taskCpus))
+    assert(first.map(_.cpus).sum === BigDecimal(1))
+    failTaskWithOom(retry)
+
+    val isolated = scheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("a", "host-a", taskCpus), WorkerOffer("b", "host-b", 1))).flatten
+    val secondRetry = isolated.find(task =>
+      scheduler.taskIdToTaskSetManager.get(task.taskId) eq manager).get
+    assert(secondRetry.executorId === "b")
+    assert(secondRetry.cpus === taskCpus)
+    assert(isolated.count(_.executorId == "b") === 1)
+    assert(isolated.count(_.executorId == "a") === 1)
+    assert(scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("b", "host-b", BigDecimal("0.8")))).flatten.isEmpty)
+
+    finishOomTestTask(secondRetry)
+    val remaining = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("b", "host-b", 1))).flatten
+    assert(remaining.size === 5)
+    assert(remaining.map(_.cpus).sum === BigDecimal(1))
+  }
+
+  test("repeated OOM retries stay isolated across TaskSets and partial offers until completion") {
+    val clock = new ManualClock(1)
+    val scheduler = setupOomRetryScheduler(clock)
+    val manager = prepareOomRetries()
+    scheduler.submitTasks(FakeTask.createTaskSet(8, stageId = 0, stageAttemptId = 0))
+
+    val tasks = scheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("a", "host-a", 4), WorkerOffer("b", "host-b", 4))).flatten
+    val retry = tasks.find(task =>
+      scheduler.taskIdToTaskSetManager.get(task.taskId) eq manager).get
+    assert(retry.executorId === "a")
+    assert(retry.cpus === 1)
+    assert(tasks.count(_.executorId == "a") === 1)
+    assert(tasks.count(_.executorId == "b") === 4)
+    assert(scheduler.oomRetryReservationInfo === Some(oomReservationInfo(manager, "a")))
+
+    // The wait deadline must not end isolation after the retry has started.
+    clock.advance(60001)
+    assert(scheduler.resourceOffers(IndexedSeq(WorkerOffer("b", "host-b", 0)),
+      isAllFreeResources = false).flatten.isEmpty)
+    assert(scheduler.resourceOffers(IndexedSeq(WorkerOffer("a", "host-a", 3)),
+      isAllFreeResources = false).flatten.isEmpty)
+
+    finishOomTestTask(retry)
+    assert(scheduler.oomRetryReservationInfo.isEmpty)
+    val ordinary = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 4))).flatten
+    assert(ordinary.size === 4)
+    assert(ordinary.forall(_.executorId == "a"))
+  }
+
+  test("an OOM recovery launch clears the unschedulable TaskSet expiry") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1))
+    val manager = prepareOomRetries()
+    scheduler.unschedulableTaskSetToExpiryTime(manager) = 60000L
+
+    val tasks = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 4))).flatten
+    assert(tasks.size === 1)
+    assert(scheduler.taskIdToTaskSetManager.get(tasks.head.taskId) eq manager)
+    assert(scheduler.unschedulableTaskSetToExpiryTime.isEmpty)
+  }
+
+  test("OOM isolation reselects an executor when the drained reservation cannot fit the task") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1))
+    scheduler.submitTasks(FakeTask.createTaskSet(3))
+    val blocker = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("small", "host-small", 1))).flatten.head
+    val otherBlockers = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("large", "host-large", 4))).flatten
+    assert(otherBlockers.size === 2)
+
+    val profile = new TaskResourceProfile(new TaskResourceRequests().cpus(2).requests)
+    sc.resourceProfileManager.addResourceProfile(profile)
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0,
+      priority = 0, rpId = profile.id))
+    val manager = scheduler.taskSetManagerForAttempt(1, 0).get
+    (0 until 2).foreach { _ =>
+      val tasks = scheduler.resourceOffers(
+        IndexedSeq(WorkerOffer("origin", "host-origin", 2))).flatten
+      assert(tasks.size === 1)
+      failTaskWithOom(tasks.head)
+    }
+    scheduler.executorLost("origin", ExecutorProcessLost())
+
+    // The one-core executor is least busy, but cannot fit this two-core task after draining.
+    assert(scheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("small", "host-small", 0),
+      WorkerOffer("large", "host-large", 2))).flatten.isEmpty)
+    finishOomTestTask(blocker)
+    otherBlockers.foreach(finishOomTestTask)
+
+    // Reselect immediately, without advancing the isolation deadline.
+    val tasks = scheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("small", "host-small", 1),
+      WorkerOffer("large", "host-large", 4))).flatten
+    assert(tasks.size === 1)
+    assert(scheduler.taskIdToTaskSetManager.get(tasks.head.taskId) eq manager)
+    assert(tasks.head.executorId === "large")
+    assert(tasks.head.cpus === 2)
+  }
+
+  test("repeated OOM retries drain only one executor without killing existing tasks") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1))
+    val backend = spy(new FakeSchedulerBackend)
+    scheduler.initialize(backend)
+    scheduler.submitTasks(FakeTask.createTaskSet(3, stageId = 0, stageAttemptId = 0))
+    val blocker = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 1))).flatten.head
+    scheduler.resourceOffers(IndexedSeq(WorkerOffer("b", "host-b", 2)))
+    val manager = prepareOomRetries(numTasks = 2)
+    scheduler.submitTasks(FakeTask.createTaskSet(8, stageId = 2, stageAttemptId = 0))
+
+    // Select the least busy executor even though the busier executor is offered first.
+    val ordinary = scheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("b", "host-b", 2), WorkerOffer("a", "host-a", 3))).flatten
+    assert(ordinary.size === 2)
+    assert(ordinary.forall(_.executorId == "b"))
+    assert(scheduler.oomRetryReservationInfo === Some(oomReservationInfo(manager, "a")))
+    assert(scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 3))).flatten.isEmpty)
+
+    finishOomTestTask(blocker)
+    // Keep the retry identity stable while the executor drains.
+    assert(scheduler.oomRetryReservationInfo === Some(oomReservationInfo(manager, "a")))
+    val isolated = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 4))).flatten
+    assert(isolated.size === 1)
+    assert(scheduler.taskIdToTaskSetManager.get(isolated.head.taskId) eq manager)
+    assert(manager.copiesRunning.count(_ > 0) === 1)
+    val snapshotRead = new CountDownLatch(1)
+    val snapshotMatches = new AtomicBoolean(false)
+    val reader = new Thread(() => {
+      snapshotMatches.set(
+        scheduler.oomRetryReservationInfo.contains(oomReservationInfo(manager, "a")))
+      snapshotRead.countDown()
+    })
+    try {
+      scheduler.synchronized {
+        reader.start()
+        assert(snapshotRead.await(10, TimeUnit.SECONDS), "allocation must not take scheduler locks")
+        assert(snapshotMatches.get())
+      }
+    } finally {
+      reader.join(10000)
+    }
+    // The second OOM retry must not drain another executor while this one is isolated.
+    val moreOrdinary = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("b", "host-b", 2))).flatten
+    assert(moreOrdinary.size === 2)
+    assert(moreOrdinary.forall(task =>
+      scheduler.taskIdToTaskSetManager.get(task.taskId) ne manager))
+    verify(backend, never()).killTask(anyLong(), anyString(), anyBoolean(), anyString())
+  }
+
+  test("OOM isolation waiting expires without rearming the reservation") {
+    val clock = new ManualClock(1)
+    val scheduler = setupOomRetryScheduler(clock,
+      config.SCHEDULER_OOM_RETRY_ISOLATION_TIMEOUT.key -> "1s")
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 0))
+    scheduler.resourceOffers(IndexedSeq(WorkerOffer("a", "host-a", 1)))
+    val manager = prepareOomRetries()
+    scheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 2, stageAttemptId = 0))
+
+    assert(scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 3))).flatten.isEmpty)
+    clock.advance(999)
+    assert(scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 3))).flatten.isEmpty)
+    clock.advance(1)
+    // Let the wait expire in an offer that cannot launch the retry yet.
+    assert(scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 0))).flatten.isEmpty)
+    assert(scheduler.oomRetryReservationInfo.isEmpty)
+    clock.advance(1)
+    val retry = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 1))).flatten
+    assert(retry.size === 1)
+    assert(scheduler.taskIdToTaskSetManager.get(retry.head.taskId) eq manager)
+    assert(retry.head.cpus === 1)
+    // Timed-out retries neither reacquire a reservation nor isolate their fallback attempt.
+    assert(scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 2))).flatten.size === 2)
+  }
+
+  test("OOM isolation can expire while resource offers are being processed") {
+    val clock = new ManualClock(1) {
+      var tickOnRead = false
+
+      override def getTimeMillis(): Long = {
+        val now = super.getTimeMillis()
+        if (tickOnRead) advance(1)
+        now
+      }
+    }
+    val scheduler = setupOomRetryScheduler(clock)
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 0))
+    scheduler.resourceOffers(IndexedSeq(WorkerOffer("a", "host-a", 1)))
+    val manager = prepareOomRetries()
+    val offers = IndexedSeq(WorkerOffer("a", "host-a", 1))
+    assert(scheduler.resourceOffers(offers).flatten.isEmpty)
+
+    // Start three milliseconds before the deadline and cross it within one offer, rather
+    // than only advancing time between offers. The free core must not stay masked on expiry.
+    clock.advance(manager.oomRetryIsolationTimeRemaining(0) - 3)
+    clock.tickOnRead = true
+    val tasks = try {
+      scheduler.resourceOffers(offers).flatten
+    } finally {
+      clock.tickOnRead = false
+    }
+    assert(!manager.oomRetryNeedsIsolation(0))
+    assert(tasks.size === 1)
+    assert(scheduler.taskIdToTaskSetManager.get(tasks.head.taskId) eq manager)
+    assert(tasks.head.executorId === "a")
+  }
+
+  test("cancelling an isolated OOM retry protects its executor until the task exits") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1))
+    val backend = mock[SchedulerBackend]
+    scheduler.initialize(backend)
+    val manager = prepareOomRetries()
+    val retry = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 4))).flatten.head
+    scheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 0, stageAttemptId = 0))
+
+    scheduler.killAllTaskAttempts(1, interruptThread = true, reason = "test cancellation")
+    assert(scheduler.oomRetryReservationInfo === Some(oomReservationInfo(manager, "a")))
+    verify(backend).killTask(retry.taskId, "a", true, "Stage cancelled: test cancellation")
+    assert(scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 3))).flatten.isEmpty)
+
+    scheduler.synchronized {
+      failTask(retry.taskId, TaskState.KILLED, TaskKilled("test cancellation"), manager)
+    }
+    assert(scheduler.oomRetryReservationInfo.isEmpty)
+    assert(scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 4))).flatten.size === 2)
+  }
+
+  test("pending OOM reservations clear when cancelled or completed by another attempt") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1))
+    val backend = mock[SchedulerBackend]
+    scheduler.initialize(backend)
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 0))
+    scheduler.resourceOffers(IndexedSeq(WorkerOffer("a", "host-a", 1)))
+
+    Seq(false, true).zipWithIndex.foreach { case (partitionCompleted, i) =>
+      val stageId = i + 1
+      scheduler.submitTasks(FakeTask.createTaskSet(2, stageId, stageAttemptId = 0))
+      val originals = scheduler.resourceOffers(
+        IndexedSeq(WorkerOffer("origin", "origin-host", 2))).flatten
+      assert(originals.size === 2)
+      val otherPartition = originals(1)
+      failTaskWithOom(originals.head)
+      val retry = scheduler.resourceOffers(
+        IndexedSeq(WorkerOffer("origin", "origin-host", 1))).flatten.head
+      failTaskWithOom(retry)
+      assert(scheduler.resourceOffers(
+        IndexedSeq(WorkerOffer("a", "host-a", 3))).flatten.isEmpty)
+
+      scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = i + 10, stageAttemptId = 0))
+      assert(scheduler.resourceOffers(
+        IndexedSeq(WorkerOffer("a", "host-a", 1))).flatten.isEmpty)
+      scheduler.synchronized {
+        clearInvocations(backend)
+        if (partitionCompleted) {
+          scheduler.handlePartitionCompleted(stageId, originals.head.partitionId)
+        } else {
+          scheduler.killAllTaskAttempts(
+            stageId, interruptThread = true, reason = "test cancellation")
+        }
+
+        // The other partition has not exited, so taskSetFinished has not released the reservation.
+        verify(backend).reviveOffers()
+        assert(scheduler.oomRetryReservationInfo.isEmpty)
+      }
+      val ordinary = scheduler.resourceOffers(
+        IndexedSeq(WorkerOffer("a", "host-a", 1))).flatten
+      assert(ordinary.size === 1)
+      finishOomTestTask(ordinary.head)
+      finishOomTestTask(otherPartition)
+    }
+  }
+
+  test("OOM reservations recover from decommissioning and executor loss") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1))
+    scheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 0, stageAttemptId = 0))
+    scheduler.resourceOffers(IndexedSeq(WorkerOffer("a", "host-a", 1)))
+    val blocker = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("b", "host-b", 1))).flatten.head
+    val manager = prepareOomRetries()
+
+    assert(scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 3))).flatten.isEmpty)
+    scheduler.executorDecommission("a", ExecutorDecommissionInfo("test", None))
+    assert(scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("b", "host-b", 3))).flatten.isEmpty)
+    finishOomTestTask(blocker)
+    val retry = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("b", "host-b", 4))).flatten
+    assert(retry.size === 1)
+    assert(scheduler.taskIdToTaskSetManager.get(retry.head.taskId) eq manager)
+
+    scheduler.executorLost("b", ExecutorExited(0, exitCausedByApp = false, "test loss"))
+    assert(scheduler.oomRetryReservationInfo.isEmpty)
+    val replacement = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("c", "host-c", 4))).flatten
+    assert(replacement.size === 1)
+    assert(scheduler.taskIdToTaskSetManager.get(replacement.head.taskId) eq manager)
+    assert(replacement.head.executorId === "c")
+  }
+
+  test("OOM retries preserve exclusions, resource profiles and custom resource requirements") {
+    val scheduler = setupSchedulerWithMockTaskSetExcludelist(
+      config.SCHEDULER_OOM_RETRY_ENABLED.key -> "true")
+    val execReqs = new ExecutorResourceRequests().cores(4).resource(GPU, 1)
+    val taskReqs = new TaskResourceRequests().cpus(1).resource(GPU, 0.5)
+    val rp = new ResourceProfile(execReqs.requests, taskReqs.requests)
+    scheduler.sc.resourceProfileManager.addResourceProfile(rp)
+    def offer(execId: String, gpu: Double, profileId: Int = rp.id): WorkerOffer = {
+      WorkerOffer(execId, s"host-$execId", 4, resources = new ExecutorResourcesAmounts(
+        Map(GPU -> toInternalResource(Map("0" -> gpu)))), resourceProfileId = profileId)
+    }
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0,
+      priority = 0, rpId = rp.id))
+    (0 until 2).foreach { _ =>
+      val tasks = scheduler.resourceOffers(IndexedSeq(offer("origin", 1))).flatten
+      assert(tasks.size === 1)
+      failTaskWithOom(tasks.head)
+    }
+    val excluded = stageToMockTaskSetExcludelist(1)
+    when(excluded.isNodeExcludedForTaskSet("host-node")).thenReturn(true)
+    when(excluded.isExecutorExcludedForTaskSet("executor")).thenReturn(true)
+    when(excluded.isExecutorExcludedForTask("task", 0)).thenReturn(true)
+
+    val tasks = scheduler.resourceOffers(IndexedSeq(
+      offer("wrong-profile", 1, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID),
+      offer("no-gpu", 0), offer("fractional", 0.25),
+      offer("node", 1), offer("executor", 1), offer("task", 1),
+      offer("eligible", 0.5))).flatten
+    assert(tasks.map(_.executorId) === Seq("eligible"))
+    assert(tasks.head.cpus === 1)
+    assert(tasks.head.resources(GPU).values.sum === ONE_ENTIRE_RESOURCE / 2)
+  }
+
+  test("OOM retry placement bypasses locality without changing ordinary locality") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1),
+      config.LOCALITY_WAIT.key -> "60s")
+    scheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("a", "host-a", 0), WorkerOffer("b", "host-b", 0)))
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0,
+      Seq(TaskLocation("host-a", "a"))))
+    val manager = scheduler.taskSetManagerForAttempt(1, 0).get
+    val original = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 1))).flatten.head
+    failTaskWithOom(original)
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 0,
+      Seq(TaskLocation("host-a", "a"))))
+
+    val retry = scheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("a", "host-a", 0), WorkerOffer("b", "host-b", 2))).flatten
+    assert(retry.size === 1)
+    assert(retry.head.executorId === "b")
+    assert(manager.taskInfos(retry.head.taskId).taskLocality === TaskLocality.ANY)
+    val ordinary = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 1))).flatten
+    assert(ordinary.size === 1)
+    val ordinaryManager = scheduler.taskSetManagerForAttempt(0, 0).get
+    assert(ordinaryManager.taskInfos(ordinary.head.taskId).taskLocality ===
+      TaskLocality.PROCESS_LOCAL)
+  }
+
+  test("OOM-affected tasks are not speculated but ordinary tasks still are") {
+    val clock = new ManualClock(1)
+    val scheduler = setupOomRetryScheduler(clock,
+      config.SPECULATION_ENABLED.key -> "true",
+      config.SPECULATION_TASK_DURATION_THRESHOLD.key -> "1ms",
+      config.EXECUTOR_CORES.key -> "8")
+    scheduler.submitTasks(FakeTask.createTaskSet(2))
+    val manager = scheduler.taskSetManagerForAttempt(0, 0).get
+    val originals = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 2))).flatten
+    // Leave an entry in the speculative pending queues from before the OOM.
+    manager.speculatableTasks += originals.head.index
+    manager.addPendingTask(originals.head.index, speculatable = true)
+    failTaskWithOom(originals.head)
+    val retry = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("b", "host-b", 1))).flatten.head
+
+    clock.advance(1000)
+    assert(manager.checkSpeculatableTasks(0))
+    assert(manager.speculatableTasks.contains(originals(1).index))
+    val speculative = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("c", "host-c", 2))).flatten
+    assert(speculative.map(_.index) === Seq(originals(1).index))
+    assert(manager.taskInfos(speculative.head.taskId).speculative)
+    assert(manager.copiesRunning(retry.index) === 1)
+  }
+
+  test("OOM retries leave normal scheduling unchanged when recovery is disabled by default") {
+    val scheduler = setupScheduler()
+    val manager = prepareOomRetries()
+    scheduler.submitTasks(FakeTask.createTaskSet(3, stageId = 0, stageAttemptId = 0))
+    val tasks = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("a", "host-a", 4))).flatten
+    assert(tasks.size === 4)
+    assert(tasks.exists(task => scheduler.taskIdToTaskSetManager.get(task.taskId) eq manager))
+    assert(tasks.forall(_.cpus == 1))
+  }
+
+  test("barrier scheduling respects OOM isolation and does not retry individual OOM failures") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1))
+    val manager = prepareOomRetries()
+    scheduler.submitTasks(FakeTask.createBarrierTaskSet(2))
+    val tasks = scheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("a", "host-a", 4, Some("host-a:1000")),
+      WorkerOffer("b", "host-b", 1, Some("host-b:1000")))).flatten
+    assert(tasks.size === 1)
+    assert(scheduler.taskIdToTaskSetManager.get(tasks.head.taskId) eq manager)
+
+    val barrier = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("b", "host-b", 2, Some("host-b:1000")))).flatten
+    assert(barrier.size === 2)
+    assert(barrier.forall(_.executorId == "b"))
+    val barrierManager = scheduler.taskSetManagerForAttempt(0, 0).get
+    failTaskWithOom(barrier.head)
+    assert(barrierManager.isZombie)
+
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 2, stageAttemptId = 0))
+    val ordinary = scheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("b", "host-b", 1))).flatten
+    assert(ordinary.size === 1)
+    assert(scheduler.taskIdToTaskSetManager.get(ordinary.head.taskId) ne barrierManager)
+  }
+
+  for (oomRecovery <- Seq(false, true); failedPartition <- 0 until 3) {
+    test(s"barrier serialization failure preserves other launches: " +
+        s"OOM recovery=$oomRecovery, partition=$failedPartition") {
+      val clock = new ManualClock(1)
+      val scheduler = setupOomRetryScheduler(clock,
+        config.SCHEDULER_OOM_RETRY_ENABLED.key -> oomRecovery.toString,
+        config.EXECUTOR_CORES.key -> "8",
+        config.CPUS_PER_TASK.key -> "2",
+        EXECUTOR_GPU_ID.amountConf -> "2",
+        TASK_GPU_ID.amountConf -> "0.5")
+      def offer(executorId: String, cores: Int): WorkerOffer = {
+        val resources = new ExecutorResourcesAmounts(
+          Map(GPU -> Map("0" -> ONE_ENTIRE_RESOURCE, "1" -> ONE_ENTIRE_RESOURCE)))
+        WorkerOffer(executorId, s"host-$executorId", cores,
+          Some(s"host-$executorId:1000"), resources)
+      }
+      scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0,
+        priority = 1, rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      val retryManager = scheduler.taskSetManagerForAttempt(1, 0).get
+      (0 until 2).foreach { _ =>
+        val original = scheduler.resourceOffers(IndexedSeq(offer("origin", 2))).flatten.head
+        failTaskWithOom(original)
+      }
+
+      // The RDD/function broadcast serializes, but the real ResultTask's partition does not.
+      // Try each bad partition so both early and later preparation failures are covered without
+      // depending on the iteration order of barrierPendingLaunchTasks.
+      val data = (0 until 3).map[AnyRef] { i =>
+        if (i == failedPartition) new Object else Int.box(i)
+      }
+      val rdd = sc.parallelize(data, 3).barrier().mapPartitions(_.map(_ => 1))
+      val func = (_: TaskContext, values: Iterator[Int]) => values.sum
+      val serializer = sc.env.closureSerializer.newInstance()
+      val serialized = serializer.serialize((rdd, func): AnyRef)
+      val binary = new Array[Byte](serialized.remaining())
+      serialized.get(binary)
+      val broadcast = sc.broadcast(binary)
+      val metrics = TaskMetrics.registered
+      val serializedMetrics = serializer.serialize(metrics).array()
+      val barrierTasks = rdd.partitions.map[Task[_]] { partition =>
+        new ResultTask[Int, Int](0, 0, broadcast, partition, 3, Nil, partition.index,
+          JobArtifactSet.defaultJobArtifactSet, new Properties, serializedMetrics, isBarrier = true)
+      }
+      scheduler.submitTasks(new TaskSet(barrierTasks, 0, 0, 0, null,
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None))
+      val barrierManager = scheduler.taskSetManagerForAttempt(0, 0).get
+      scheduler.submitTasks(FakeTask.createTaskSet(5, stageId = 2, stageAttemptId = 0,
+        priority = 2, rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      assert(scheduler.rootPool.getSortedTaskSetQueue.head eq barrierManager)
+
+      val offers = IndexedSeq(offer("a", 4), offer("b", 6))
+      val tasks = scheduler.resourceOffers(offers).flatten
+      assert(failedTaskSet)
+      assert(failedTaskSetReason.contains("Failed to serialize task"))
+      assert(barrierManager.isZombie)
+      assert(barrierManager.runningTasks === 0)
+      assert(barrierManager.barrierPendingLaunchTasks.isEmpty)
+      assert(scheduler.taskSetManagerForAttempt(0, 0).isEmpty)
+      val prepared = barrierManager.taskInfos.values.filter(_.index != failedPartition)
+      assert(prepared.forall(_.killed))
+      assert(!scheduler.taskIdToTaskSetManager.containsValue(barrierManager))
+
+      val retries = tasks.filter(task =>
+        scheduler.taskIdToTaskSetManager.get(task.taskId) eq retryManager)
+      assert(retries.size === 1)
+      assert(retries.head.attemptNumber === 2)
+      assert(tasks.size === (if (oomRecovery) 4 else 5))
+      assert(tasks.forall(_.cpus == 2))
+      assert(tasks.count(_.executorId == "b") === 3)
+      assert(scheduler.rootPool.runningTasks === tasks.size)
+      offers.foreach { offered =>
+        val used = tasks.filter(_.executorId == offered.executorId)
+          .map(_.resources(GPU).values.sum).sum
+        assert(offered.resources.availableResources(GPU).values.sum ===
+          2.0 - ResourceAmountUtils.toFractionalResource(used))
+      }
+
+      // The returned retry remains isolated until its real completion, then releases capacity.
+      clock.advance(60001)
+      if (oomRecovery) {
+        assert(scheduler.resourceOffers(IndexedSeq(offer("a", 2))).flatten.isEmpty)
+      }
+      finishOomTestTask(retries.head)
+      val remaining = scheduler.resourceOffers(IndexedSeq(offer("a", 4))).flatten
+      assert(remaining.size === (if (oomRecovery) 2 else 1))
+    }
+  }
+
+  test("legacy barrier abort preserves other launches and releases its assignments") {
+    val scheduler = setupSchedulerWithMockTaskSetExcludelist(
+      config.LEGACY_LOCALITY_WAIT_RESET.key -> "true")
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 0, stageAttemptId = 0))
+    scheduler.submitTasks(FakeTask.createBarrierTaskSet(2, 1, 0, 0,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+    scheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 2, stageAttemptId = 0))
+    when(stageToMockTaskSetExcludelist(0).isExecutorExcludedForTaskSet("b")).thenReturn(true)
+    when(stageToMockTaskSetExcludelist(1).isExecutorExcludedForTaskSet("b")).thenReturn(true)
+    val barrierManager = scheduler.taskSetManagerForAttempt(1, 0).get
+
+    // After stage 0 launches, two slots remain, but the barrier can only use one of them.
+    val tasks = scheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("a", "host-a", 2, Some("host-a:1000")),
+      WorkerOffer("b", "host-b", 1, Some("host-b:1000")))).flatten
+    assert(failedTaskSet)
+    assert(failedTaskSetReason.contains("of 2 tasks got resource offers"))
+    assert(tasks.map(task => scheduler.taskIdToTaskSetManager.get(task.taskId).stageId).sorted ===
+      Seq(0, 2, 2))
+    assert(tasks.map(_.executorId).sorted === Seq("a", "a", "b"))
+    assert(barrierManager.runningTasks === 0)
+    assert(barrierManager.barrierPendingLaunchTasks.isEmpty)
+    assert(scheduler.taskSetManagerForAttempt(1, 0).isEmpty)
+  }
+
+  Seq(1.0, 0.5).foreach { gpuPerTask =>
+    test(s"barrier scheduling accounts for GPU $gpuPerTask consumed by a first OOM retry") {
+      val scheduler = setupOomRetryScheduler(new ManualClock(1),
+        config.EXECUTOR_CORES.key -> "8",
+        EXECUTOR_GPU_ID.amountConf -> "2",
+        TASK_GPU_ID.amountConf -> gpuPerTask.toString,
+        config.LEGACY_LOCALITY_WAIT_RESET.key -> "true")
+      def offer(): WorkerOffer = {
+        val resources = new ExecutorResourcesAmounts(
+          Map(GPU -> Map("0" -> ONE_ENTIRE_RESOURCE, "1" -> ONE_ENTIRE_RESOURCE)))
+        WorkerOffer("gpu", "host-gpu", 8, Some("host-gpu:1000"), resources)
+      }
+      scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0))
+      val original = scheduler.resourceOffers(IndexedSeq(offer())).flatten.head
+      failTaskWithOom(original)
+
+      val numBarrierTasks = (2 / gpuPerTask).toInt
+      scheduler.submitTasks(FakeTask.createBarrierTaskSet(numBarrierTasks))
+      val barrierManager = scheduler.taskSetManagerForAttempt(0, 0).get
+      val tasks = scheduler.resourceOffers(IndexedSeq(offer())).flatten
+      assert(tasks.size === 1)
+      assert(tasks.head.attemptNumber === 1)
+      assert(scheduler.taskIdToTaskSetManager.get(tasks.head.taskId) ne barrierManager)
+      assert(!barrierManager.isZombie)
+      assert(!failedTaskSet)
+
+      finishOomTestTask(tasks.head)
+      val barrierTasks = scheduler.resourceOffers(IndexedSeq(offer())).flatten
+      assert(barrierTasks.size === numBarrierTasks)
+      assert(barrierTasks.forall(task =>
+        scheduler.taskIdToTaskSetManager.get(task.taskId) eq barrierManager))
+    }
+  }
+
+  test("GPU-limited barrier stages do not count resources on an OOM-reserved executor") {
+    val scheduler = setupOomRetryScheduler(new ManualClock(1),
+      config.EXECUTOR_CORES.key -> "4",
+      EXECUTOR_GPU_ID.amountConf -> "2",
+      TASK_GPU_ID.amountConf -> "1",
+      config.LEGACY_LOCALITY_WAIT_RESET.key -> "true")
+    def offer(execId: String, cores: Int, addresses: Seq[String]): WorkerOffer = {
+      val resources = new ExecutorResourcesAmounts(
+        Map(GPU -> addresses.map(_ -> ONE_ENTIRE_RESOURCE).toMap))
+      WorkerOffer(execId, s"host-$execId", cores, Some(s"host-$execId:1000"), resources)
+    }
+    scheduler.submitTasks(FakeTask.createTaskSet(1, stageId = 1, stageAttemptId = 0))
+    (0 until 2).foreach { _ =>
+      val tasks = scheduler.resourceOffers(
+        IndexedSeq(offer("origin", 4, Seq("0", "1")))).flatten
+      assert(tasks.size === 1)
+      failTaskWithOom(tasks.head)
+    }
+    assert(scheduler.resourceOffers(
+      IndexedSeq(offer("a", 4, Seq("0", "1")))).flatten.size === 1)
+    scheduler.submitTasks(FakeTask.createBarrierTaskSet(3))
+    val barrierManager = scheduler.taskSetManagerForAttempt(0, 0).get
+
+    // The reserved executor has one free GPU, but it must not count toward barrier capacity.
+    // Otherwise legacy delay scheduling aborts after partially assigning the other two tasks.
+    val tasks = scheduler.resourceOffers(IndexedSeq(
+      offer("a", 3, Seq("1")), offer("b", 4, Seq("0", "1")))).flatten
+    assert(tasks.isEmpty)
+    assert(!barrierManager.isZombie)
+    assert(!failedTaskSet)
+
+    val barrier = scheduler.resourceOffers(IndexedSeq(
+      offer("a", 3, Seq("1")), offer("b", 4, Seq("0", "1")),
+      offer("c", 4, Seq("0", "1")))).flatten
+    assert(barrier.size === 3)
+    assert(barrier.forall(_.executorId != "a"))
   }
 
   test("Scheduler correctly accounts for multiple CPUs per task") {

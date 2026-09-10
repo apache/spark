@@ -2950,6 +2950,42 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.8.0</td>
 </tr>
 <tr>
+  <td><code>spark.scheduler.oomRetry.enabled</code></td>
+  <td>false</td>
+  <td>
+    Prefer eligible idle executors when retrying a task after an out-of-memory failure.
+    After two OOM failures of the same task, temporarily reserve one executor for its retry:
+    existing tasks finish first, and no other tasks are placed there until the retry exits.
+    At most one executor per application is reserved. Other repeated OOM retries wait up to
+    <code>spark.scheduler.oomRetry.isolationTimeout</code> before falling back to ordinary placement.
+    Normal tasks retain their ordinary placement policy. OOM retries may ignore preferred
+    locations, but still respect exclusions, resource profiles, and custom resource requirements.
+    Task CPU requests, executor memory limits, and <code>spark.task.maxFailures</code> are unchanged.
+    Dynamic allocation counts the reserved executor separately from the remaining work, within
+    the configured executor limits, so its unused slots do not suppress requests for other tasks.
+    Barrier and pipelined stages are excluded, and OOM-affected tasks are not speculated.
+    Recognized failures include JVM/Spark OOM exceptions (including wrapped exceptions), Spark
+    executor exit code 52, and Kubernetes executor-container <code>OOMKilled</code> termination.
+    Exit code 137 alone is not considered OOM. Native errors without a typed OOM signal
+    are not recognized; fixed per-task native memory limits are not increased.
+    An idle executor may retain cached or native memory, so recovery is not guaranteed.
+  </td>
+  <td>5.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.oomRetry.isolationTimeout</code></td>
+  <td>60s</td>
+  <td>
+    Maximum wait for isolation, measured from the task's latest OOM failure, when
+    <code>spark.scheduler.oomRetry.enabled</code> is enabled. If an executor cannot be reserved
+    and drained within this time, the pending retry falls back to ordinary placement. The same
+    pending retry does not start another wait; a new OOM failure starts a new wait.
+    This timeout does not end isolation or kill a retry that has already started.
+    Must be positive.
+  </td>
+  <td>5.0.0</td>
+</tr>
+<tr>
   <td><code>spark.scheduler.revive.interval</code></td>
   <td>1s</td>
   <td>
