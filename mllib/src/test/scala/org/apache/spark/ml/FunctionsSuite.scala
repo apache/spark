@@ -25,7 +25,7 @@ import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, MatrixUDT => OldM
   Vector => OldVector, Vectors => OldVectors, VectorUDT => OldVectorUDT}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.ml.{VectorAffineTransform, VectorPosExplode}
-import org.apache.spark.sql.functions.{col, unwrap_udt, wrap_udt}
+import org.apache.spark.sql.functions.{col, typedLit, unwrap_udt, wrap_udt}
 import org.apache.spark.sql.types.{ArrayType, DoubleType, StructField, StructType, UserDefinedType}
 
 class FunctionsSuite extends MLTest {
@@ -290,6 +290,36 @@ class FunctionsSuite extends MLTest {
       .first()
       .getAs[Vector](0)
     assert(constantResult === Vectors.dense(6.0, 11.0))
+
+    val cachedScaleResult = df.limit(1)
+      .select(vector_affine_transform($"vector", typedLit(Array(2.0, 3.0)), $"shift"))
+      .first()
+      .getAs[Vector](0)
+    assert(cachedScaleResult === Vectors.dense(6.0, 11.0))
+
+    val cachedShiftResult = df.limit(1)
+      .select(vector_affine_transform($"vector", $"scale", typedLit(Array(4.0, 5.0))))
+      .first()
+      .getAs[Vector](0)
+    assert(cachedShiftResult === Vectors.dense(6.0, 11.0))
+
+    val scaleOnlyConstantResult = df.limit(1)
+      .select(vector_affine_transform(
+        $"vector",
+        Array(2.0, 3.0),
+        null.asInstanceOf[Array[Double]]))
+      .first()
+      .getAs[Vector](0)
+    assert(scaleOnlyConstantResult === Vectors.dense(2.0, 6.0))
+
+    val shiftOnlyConstantResult = df.limit(1)
+      .select(vector_affine_transform(
+        $"vector",
+        null.asInstanceOf[Array[Double]],
+        Array(4.0, 5.0)))
+      .first()
+      .getAs[Vector](0)
+    assert(shiftOnlyConstantResult === Vectors.dense(5.0, 7.0))
 
     val nullConstantsResult = df.limit(1)
       .select(vector_affine_transform(
