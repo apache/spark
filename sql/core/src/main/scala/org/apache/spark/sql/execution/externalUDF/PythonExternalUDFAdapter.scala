@@ -20,15 +20,20 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions.{ExternalUserDefinedFunction, PythonUDF}
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 
-/** Converts PySpark UDF metadata to the language-neutral external UDF representation. */
-private[sql] object PythonExternalUserDefinedFunction {
-  val PAYLOAD_FORMAT: String = "pyspark-udf-v2"
+/**
+ * Adapts PySpark UDF metadata to the language-neutral external UDF representation.
+ *
+ * This helper only constructs protocol-facing metadata. Execution remains in the generic
+ * external UDF framework.
+ */
+private[externalUDF] object PythonExternalUDFAdapter {
+  private val PAYLOAD_FORMAT: String = "pyspark-udf-experimental"
 
   /**
    * Creates a scalar Python external UDF while leaving worker launch policy to the caller. Python
    * metadata stays inside the opaque payload; Init construction remains language-independent.
    */
-  def fromPythonUDF(
+  def toExternalUDF(
       udf: PythonUDF,
       workerSpec: UDFWorkerSpecification): ExternalUserDefinedFunction = {
     require(
