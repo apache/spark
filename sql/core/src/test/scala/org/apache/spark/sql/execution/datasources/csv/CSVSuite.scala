@@ -3095,8 +3095,8 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-58946: reject file extensions that are not exactly three letters") {
-    Seq("abcd", "ab1", "a", "a/b").foreach { ext =>
+  test("SPARK-58946: reject empty or non-letter file extensions") {
+    Seq("", "ab1", "a/b").foreach { ext =>
       withTempPath { path =>
         checkError(
           exception = intercept[SparkIllegalArgumentException] {
@@ -3107,6 +3107,25 @@ abstract class CSVSuite
             "functionName" -> "`csv`",
             "parameter" -> "`extension`",
             "invalidValue" -> s"`$ext`"))
+      }
+    }
+  }
+
+  test("SPARK-58946: allow alphabetic file extensions of arbitrary length") {
+    Seq("a", "abcd").foreach { ext =>
+      withTempPath { path =>
+        val input = Seq(
+          "1423-11-12T23:41:00",
+          "1765-03-28",
+          "2016-01-28T20:00:00"
+        ).toDF().repartition(1)
+        input.write.option("extension", ext).csv(path.getAbsolutePath)
+
+        val files = Files.list(path.toPath)
+          .iterator().asScala.map(_.getFileName.toString)
+          .toList.filter(_.endsWith(s".$ext"))
+
+        assert(files.size == 1)
       }
     }
   }
