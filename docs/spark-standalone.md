@@ -575,6 +575,16 @@ Spark applications supports the following configuration properties specific to s
   </td>
   <td>3.1.0</td>
   </tr>
+  <tr>
+  <td><code>spark.standalone.submit.filterEnvironment</code></td>
+  <td><code>true</code></td>
+  <td>
+  In standalone cluster mode, controls whether the client forwards only Spark-related environment
+  variables to the driver, matching the REST submission client. If set to <code>false</code>,
+  the full environment of the submitting process is forwarded to the driver.
+  </td>
+  <td>4.4.0</td>
+  </tr>
 </table>
 
 

@@ -20,7 +20,8 @@ package org.apache.spark.deploy
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.STANDALONE_SUBMIT_FILTER_ENVIRONMENT
 
 class ClientSuite extends SparkFunSuite with Matchers {
   test("correctly validates driver jar URL's") {
@@ -47,5 +48,20 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
     // Invalid syntax.
     ClientArguments.isValidJarUrl("hdfs:") should be (false)
+  }
+
+  test("SPARK-59404: forward only Spark-related environment variables to the driver") {
+    val env = Map(
+      "SPARK_LOCAL_IP" -> "127.0.0.1",
+      "SPARK_HOME" -> "/opt/spark",
+      "PATH" -> "/usr/bin",
+      "SECRET_TOKEN" -> "hunter2")
+    Client.driverEnvironment(new SparkConf(), env) should be (Map("SPARK_LOCAL_IP" -> "127.0.0.1"))
+  }
+
+  test("SPARK-59404: forward the full environment when filtering is disabled") {
+    val env = Map("SPARK_LOCAL_IP" -> "127.0.0.1", "PATH" -> "/usr/bin")
+    val conf = new SparkConf().set(STANDALONE_SUBMIT_FILTER_ENVIRONMENT, false)
+    Client.driverEnvironment(conf, env) should be (env)
   }
 }

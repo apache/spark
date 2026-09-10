@@ -102,12 +102,10 @@ private class ClientEndpoint(
 
         val sparkJavaOpts = Utils.sparkJavaOpts(conf)
         val javaOpts = sparkJavaOpts ++ extraJavaOpts
-        // Forward only Spark-relevant environment variables, matching the REST submission
-        // client, instead of the submitter's full environment.
-        val filteredEnv = RestSubmissionClient.filterSystemEnvironment(sys.env)
+        val driverEnv = Client.driverEnvironment(conf, sys.env)
         val command = new Command(mainClass,
           Seq("{{WORKER_URL}}", "{{USER_JAR}}", driverArgs.mainClass) ++ driverArgs.driverOptions,
-          filteredEnv, classPathEntries, libraryPathEntries, javaOpts)
+          driverEnv, classPathEntries, libraryPathEntries, javaOpts)
         val driverResourceReqs = ResourceUtils.parseResourceRequirements(conf,
           config.SPARK_DRIVER_PREFIX)
         val driverDescription = new DriverDescription(
@@ -278,6 +276,21 @@ object Client {
     }
     // scalastyle:on println
     new ClientApp().start(args, new SparkConf())
+  }
+
+  /**
+   * Environment variables to forward to the driver. Only Spark-related variables are forwarded,
+   * matching the REST submission client, unless `spark.standalone.submit.filterEnvironment` is
+   * disabled, in which case the full environment of the submitting process is forwarded.
+   */
+  private[deploy] def driverEnvironment(
+      conf: SparkConf,
+      env: Map[String, String]): Map[String, String] = {
+    if (conf.get(config.STANDALONE_SUBMIT_FILTER_ENVIRONMENT)) {
+      RestSubmissionClient.filterSystemEnvironment(env)
+    } else {
+      env
+    }
   }
 }
 
