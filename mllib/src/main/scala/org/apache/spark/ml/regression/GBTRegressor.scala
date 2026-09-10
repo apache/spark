@@ -305,8 +305,6 @@ class GBTRegressionModel private[ml](
   }
 
   override def predict(features: Vector): Double = {
-    // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
-    // Classifies by thresholding sum of weighted tree predictions
     TreeEnsembleModel.predict(features, _trees, _treeWeights)
   }
 
