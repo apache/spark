@@ -501,18 +501,13 @@ class Word2VecModel private[spark] (
     private[spark] val wordIndex: Map[String, Int],
     private[spark] val wordVectors: Array[Float]) extends Serializable with Saveable {
 
-  private val numWords = wordIndex.size
+  private def numWords: Int = wordIndex.size
   // vectorSize: Dimension of each word's vector.
-  private val vectorSize = wordVectors.length / numWords
-
-  // wordList: Ordered list of words obtained from wordIndex.
-  private lazy val wordList: Array[String] = {
-    wordIndex.toSeq.sortBy(_._2).iterator.map(_._1).toArray
-  }
+  private def vectorSize: Int = wordVectors.length / numWords
 
   // wordVecInvNorms: Array of length numWords, each value being the inverse of
   //                  Euclidean norm of the wordVector.
-  private lazy val wordVecInvNorms: Array[Float] = {
+  @transient private lazy val wordVecInvNorms: Array[Float] = {
     val size = vectorSize
     Array.tabulate(numWords) { i =>
       val norm = BLAS.nativeBLAS.snrm2(size, wordVectors, i * size, 1)
@@ -599,10 +594,9 @@ class Word2VecModel private[spark] (
     val floatVec = vector.map(_.toFloat)
     val vecNorm = BLAS.nativeBLAS.snrm2(localVectorSize, floatVec, 1)
 
-    val localWordList = wordList
     val localNumWords = numWords
     if (vecNorm == 0) {
-      Iterator.tabulate(num + 1)(i => (localWordList(i), 0.0))
+      wordIndex.keysIterator.map((_, 0.0))
         .filterNot(t => wordOpt.contains(t._1))
         .take(num)
         .toArray
@@ -618,15 +612,15 @@ class Word2VecModel private[spark] (
       var i = 0
       while (i < cosineVec.length) { cosineVec(i) *= localWordVecInvNorms(i); i += 1 }
 
-      val idxOrd = new GuavaOrdering[Int] {
-        override def compare(left: Int, right: Int): Int = {
-          Ordering[Float].compare(cosineVec(left), cosineVec(right))
+      val idxOrd = new GuavaOrdering[(String, Int)] {
+        override def compare(left: (String, Int), right: (String, Int)): Int = {
+          Ordering[Float].compare(cosineVec(left._2), cosineVec(right._2))
         }
       }
 
-      idxOrd.greatestOf(Iterator.range(0, localNumWords).asJava, num + 1)
+      idxOrd.greatestOf(wordIndex.iterator.asJava, num + 1)
         .iterator.asScala
-        .map(i => (localWordList(i), cosineVec(i).toDouble))
+        .map { case (word, index) => (word, cosineVec(index).toDouble) }
         .filterNot(t => wordOpt.contains(t._1))
         .take(num)
         .toArray
