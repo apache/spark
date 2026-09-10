@@ -794,8 +794,7 @@ case class Gcd(
 
   override def dataType: DataType = LongType
 
-  // The result overflows for inputs whose divisor is -Long.MinValue, which is null in non-ANSI
-  // mode.
+  // Overflow yields null in non-ANSI mode.
   override def nullable: Boolean = true
 
   override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {
@@ -861,7 +860,7 @@ case class Lcm(
 
   override def dataType: DataType = LongType
 
-  // The result overflows once it exceeds Long.MaxValue, which is null in non-ANSI mode.
+  // Overflow yields null in non-ANSI mode.
   override def nullable: Boolean = true
 
   override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {

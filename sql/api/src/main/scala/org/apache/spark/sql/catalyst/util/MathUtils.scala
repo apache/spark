@@ -128,8 +128,7 @@ object MathUtils {
   // Greatest common divisor of two longs, computed with the Euclidean algorithm. The result is
   // always non-negative, and `gcd(0, 0)` is 0. The only unrepresentable result is `-Long.MinValue`,
   // reached by `(0, x)`, `(x, 0)` and `(x, x)` for `x == Long.MinValue`; as elsewhere in Spark that
-  // overflow raises under ANSI mode and yields null otherwise. Shared by `Gcd`'s eval and codegen
-  // paths so the two never diverge.
+  // overflow raises under ANSI mode and yields null otherwise.
   def gcd(a: Long, b: Long, ansiEnabled: Boolean, context: QueryContext): jl.Long = {
     var x = a
     var y = b
@@ -148,8 +147,7 @@ object MathUtils {
 
   // Least common multiple of two longs. Dividing by the greatest common divisor before multiplying
   // keeps the intermediate product as small as possible, so only genuinely unrepresentable results
-  // overflow. The result is always non-negative, and is 0 when either input is 0. Shared by `Lcm`'s
-  // eval and codegen paths so the two never diverge.
+  // overflow. The result is always non-negative, and is 0 when either input is 0.
   def lcm(a: Long, b: Long, ansiEnabled: Boolean, context: QueryContext): jl.Long = {
     if (a == 0 || b == 0) {
       jl.Long.valueOf(0L)

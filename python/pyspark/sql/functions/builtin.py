@@ -9301,7 +9301,7 @@ def factorial(col: "ColumnOrName") -> Column:
 def gcd(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Computes the greatest common divisor of the two given values.
-    The result is never negative, and is 0 when both values are 0.
+    The result is non-negative, and is 0 when both values are 0.
 
     .. versionadded:: 4.4.0
 
@@ -9344,7 +9344,7 @@ def gcd(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 def lcm(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Computes the least common multiple of the two given values.
-    The result is never negative, and is 0 when either value is 0.
+    The result is non-negative, and is 0 when either value is 0.
 
     .. versionadded:: 4.4.0
 

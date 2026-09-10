@@ -5574,8 +5574,8 @@ object functions {
   def floor(columnName: String): Column = floor(Column(columnName))
 
   /**
-   * Computes the greatest common divisor of the two given values. The result is never negative,
-   * and is 0 when both values are 0.
+   * Computes the greatest common divisor of the two given values. The result is non-negative, and
+   * is 0 when both values are 0.
    *
    * @param l
    *   the first value. A column that evaluates to an integral.
@@ -5759,8 +5759,8 @@ object functions {
   def hypot(l: Double, rightName: String): Column = hypot(l, Column(rightName))
 
   /**
-   * Computes the least common multiple of the two given values. The result is never negative, and
-   * is 0 when either value is 0.
+   * Computes the least common multiple of the two given values. The result is non-negative, and is
+   * 0 when either value is 0.
    *
    * @param l
    *   the first value. A column that evaluates to an integral.
