@@ -101,9 +101,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         plan = df.agg({"value": "sum"})._plan.to_proto(self.connect)
         aggregate = plan.root.aggregate
-        self.assertEqual(
-            aggregate.group_type, proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY
-        )
+        self.assertEqual(aggregate.group_type, proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
         self.assertEqual(len(aggregate.grouping_expressions), 0)
         self.assertEqual(
             aggregate.aggregate_expressions[0].unresolved_function.function_name, "sum"
@@ -111,9 +109,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         plan = df.groupBy("key").agg(sum("value"))._plan.to_proto(self.connect)
         aggregate = plan.root.aggregate
-        self.assertEqual(
-            aggregate.group_type, proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY
-        )
+        self.assertEqual(aggregate.group_type, proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
         self.assertEqual(
             aggregate.grouping_expressions[0].unresolved_attribute.unparsed_identifier, "key"
         )
@@ -124,9 +120,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         )
 
         plan = df.cube("key").agg(sum("value"))._plan.to_proto(self.connect)
-        self.assertEqual(
-            plan.root.aggregate.group_type, proto.Aggregate.GroupType.GROUP_TYPE_CUBE
-        )
+        self.assertEqual(plan.root.aggregate.group_type, proto.Aggregate.GroupType.GROUP_TYPE_CUBE)
 
         plan = (
             df.groupingSets([["key"], ["category"]], "key", "category")
@@ -134,9 +128,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             ._plan.to_proto(self.connect)
         )
         aggregate = plan.root.aggregate
-        self.assertEqual(
-            aggregate.group_type, proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS
-        )
+        self.assertEqual(aggregate.group_type, proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS)
         self.assertEqual(
             [
                 expression.unresolved_attribute.unparsed_identifier
@@ -220,9 +212,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertTrue(lateral_join.HasField("left"))
         self.assertTrue(lateral_join.HasField("right"))
         self.assertTrue(lateral_join.HasField("join_condition"))
-        self.assertEqual(
-            lateral_join.join_type, proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER
-        )
+        self.assertEqual(lateral_join.join_type, proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER)
 
     def test_nearest_by_join(self):
         left = self.connect.readTable(table_name=self.tbl_name)
@@ -238,9 +228,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         nearest_by_join = plan.root.nearest_by_join
         self.assertTrue(nearest_by_join.HasField("left"))
         self.assertTrue(nearest_by_join.HasField("right"))
-        self.assertEqual(
-            nearest_by_join.ranking_expression.unresolved_function.function_name, "-"
-        )
+        self.assertEqual(nearest_by_join.ranking_expression.unresolved_function.function_name, "-")
         self.assertEqual(nearest_by_join.num_results, 3)
         self.assertEqual(nearest_by_join.join_type, "left")
         self.assertEqual(nearest_by_join.mode, "exact")
@@ -1030,9 +1018,9 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(alias.name, ["constant"])
         self.assertEqual(alias.expr.literal.integer, 1)
 
-        plan = df.withColumns(
-            {"constant": lit(1), "copied": df.source}
-        )._plan.to_proto(self.connect)
+        plan = df.withColumns({"constant": lit(1), "copied": df.source})._plan.to_proto(
+            self.connect
+        )
         aliases = plan.root.with_columns.aliases
         self.assertEqual([alias.name[0] for alias in aliases], ["constant", "copied"])
         self.assertEqual(aliases[0].expr.literal.integer, 1)
