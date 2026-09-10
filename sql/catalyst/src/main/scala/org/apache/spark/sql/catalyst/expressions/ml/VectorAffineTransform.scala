@@ -28,7 +28,8 @@ import org.apache.spark.sql.types._
  * Applies an element-wise affine transformation to SQL struct representations of MLlib vectors:
  * `vector(i) * scale(i) + shift(i)`. This expression is dedicated only for Spark ML and should be
  * used together with `unwrap_udt` and `wrap_udt`. A null scale is treated as an identity scale, and
- * a null shift is treated as a zero shift. The scale and shift cannot both be null.
+ * a null shift is treated as a zero shift. If both are null, the input vector is returned
+ * unchanged.
  */
 case class VectorAffineTransform(
     vector: Expression,
@@ -238,7 +239,7 @@ object VectorAffineTransform {
       vector: InternalRow,
       scale: InternalRow,
       shift: InternalRow): InternalRow = {
-    require(scale != null || shift != null, "The scale and shift cannot both be null.")
+    if (scale == null && shift == null) return vector
     val vectorType = vector.getByte(0)
     val scaleType = if (scale == null) DenseVectorType else scale.getByte(0)
     val shiftType = if (shift == null) DenseVectorType else shift.getByte(0)
