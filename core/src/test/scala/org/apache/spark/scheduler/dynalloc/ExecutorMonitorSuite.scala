@@ -384,6 +384,39 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors(idleDeadline) === Seq("1"))
   }
 
+  test("shuffle tracking ignores reliably stored shuffles") {
+    val bus = mockListenerBus()
+    conf.set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true).set(SHUFFLE_SERVICE_ENABLED, false)
+    monitor = new ExecutorMonitor(
+      conf,
+      client,
+      bus,
+      clock,
+      allocationManagerSource(),
+      isShuffleReliablyStored = _ == 0)
+
+    knownExecs ++= Set("1", "2")
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "2", execInfo))
+
+    val reliableStage = stageInfo(1, shuffleId = 0)
+    val localStage = stageInfo(2, shuffleId = 1)
+    monitor.onJobStart(
+      SparkListenerJobStart(1, clock.getTimeMillis(), Seq(reliableStage, localStage)))
+
+    monitor.onTaskStart(SparkListenerTaskStart(1, 0, taskInfo("1", 1)))
+    monitor.onTaskEnd(SparkListenerTaskEnd(
+      1, 0, "foo", Success, taskInfo("1", 1), new ExecutorMetrics, null))
+    monitor.onTaskStart(SparkListenerTaskStart(2, 0, taskInfo("2", 2)))
+    monitor.onTaskEnd(SparkListenerTaskEnd(
+      2, 0, "foo", Success, taskInfo("2", 2), new ExecutorMetrics, null))
+
+    assert(monitor.timedOutExecutors(idleDeadline) === Seq("1"))
+    monitor.onJobEnd(SparkListenerJobEnd(1, clock.getTimeMillis(), JobSucceeded))
+    assert(monitor.timedOutExecutors(idleDeadline) === Seq("1"))
+    assert(monitor.timedOutExecutors(shuffleDeadline).toSet === Set("1", "2"))
+  }
+
 
   test("SPARK-28839: Avoids NPE in context cleaner when shuffle service is on") {
     val bus = mockListenerBus()

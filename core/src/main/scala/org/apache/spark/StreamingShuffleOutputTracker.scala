@@ -46,6 +46,8 @@ private[spark] trait ShuffleOutputTrackerMaster {
       isReliablyStored: Boolean = false): Unit
   /** Whether the given shuffle is registered with this tracker. */
   def containsShuffle(shuffleId: Int): Boolean
+  /** Whether the given shuffle's output is reliably stored off-executor. */
+  def isReliablyStored(shuffleId: Int): Boolean
   /** Unregister a shuffle and release its tracked state. */
   def unregisterShuffle(shuffleId: Int): Unit
 }
@@ -215,7 +217,11 @@ private[spark] abstract class StreamingShuffleOutputTracker(conf: SparkConf) ext
   def getAvailableShuffleWriterTaskLocations(shuffleId: Int): Option[ShuffleLocationResponse]
 }
 
-private[spark] case class StreamingShuffleInfo(numMaps: Int, numReduces: Int, jobId: Int)
+private[spark] case class StreamingShuffleInfo(
+    numMaps: Int,
+    numReduces: Int,
+    jobId: Int,
+    isReliablyStored: Boolean)
 
 private[spark] class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
   extends StreamingShuffleOutputTracker(conf) with ShuffleOutputTrackerMaster {
@@ -252,12 +258,16 @@ private[spark] class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
       MDC(LogKeys.NUM_MAPPERS, numMaps)} mappers and ${
       MDC(LogKeys.NUM_REDUCERS, numReduces)} reducers")
     if (shuffleInfos.putIfAbsent(
-        shuffleId, StreamingShuffleInfo(numMaps, numReduces, jobId)) != null) {
+        shuffleId, StreamingShuffleInfo(numMaps, numReduces, jobId, isReliablyStored)) != null) {
       throw new IllegalArgumentException(s"Shuffle ID $shuffleId registered twice")
     }
   }
 
   override def containsShuffle(shuffleId: Int): Boolean = shuffleInfos.containsKey(shuffleId)
+
+  override def isReliablyStored(shuffleId: Int): Boolean = {
+    Option(shuffleInfos.get(shuffleId)).exists(_.isReliablyStored)
+  }
 
   // for testing purposes
   private[spark] def getShuffleInfo(shuffleId: Int): Option[StreamingShuffleInfo] = {

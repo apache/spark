@@ -1171,6 +1171,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val reduceRdd = new MyRDD(sc, 1, List(reliableDep, fallbackDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0))
 
+    assert(scheduler.isShuffleReliablyStored(reliableDep.shuffleId))
+    assert(!scheduler.isShuffleReliablyStored(fallbackDep.shuffleId))
+
     completeShuffleMapStageSuccessfully(0, 0, 1)
     completeShuffleMapStageSuccessfully(1, 0, 1)
 

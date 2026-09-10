@@ -792,6 +792,20 @@ private[spark] class DAGScheduler(
     }
   }
 
+  private[spark] def isShuffleReliablyStored(shuffleId: Int): Boolean = {
+    if (mapOutputTracker.containsShuffle(shuffleId)) {
+      mapOutputTracker.isReliablyStored(shuffleId)
+    } else {
+      sc.env.streamingShuffleOutputTracker
+        .collect {
+          case tracker: StreamingShuffleOutputTrackerMaster
+              if tracker.containsShuffle(shuffleId) =>
+            tracker.isReliablyStored(shuffleId)
+        }
+        .getOrElse(false)
+    }
+  }
+
   private def pipelinedUnsupportedError(reason: String): PipelinedShuffleUnsupportedException =
     new PipelinedShuffleUnsupportedException(reason)
 

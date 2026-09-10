@@ -1130,7 +1130,7 @@ private[spark] class MapOutputTrackerMaster(
    * Whether this shuffle's output is reliably stored off-executor, so it is not lost when an
    * executor or worker holding it is lost. Unknown shuffles default to false.
    */
-  def isReliablyStored(shuffleId: Int): Boolean = {
+  override def isReliablyStored(shuffleId: Int): Boolean = {
     shuffleStatuses.get(shuffleId).exists(_.isReliablyStored)
   }
 
