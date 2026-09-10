@@ -887,11 +887,21 @@ class SparkSession private(
   private[sql] def applySchemaToPythonRDD(
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
+    val applyCharVarcharChecks =
+      CharVarcharUtils.hasCharVarchar(schema) &&
+        CharVarcharUtils.shouldApplyWriteSideLengthCheck(sessionState.conf)
+    val outputSchema = if (applyCharVarcharChecks) {
+      schema
+    } else {
+      CharVarcharUtils
+        .replaceCharVarcharWithStringForPhysicalType(schema)
+        .asInstanceOf[StructType]
+    }
     val rowRdd = rdd.mapPartitions { iter =>
       val fromJava = python.EvaluatePython.makeFromJava(schema)
       iter.map(r => fromJava(r).asInstanceOf[InternalRow])
     }
-    internalCreateDataFrame(rowRdd, schema)
+    internalCreateDataFrame(rowRdd, outputSchema)
   }
 
   /**
