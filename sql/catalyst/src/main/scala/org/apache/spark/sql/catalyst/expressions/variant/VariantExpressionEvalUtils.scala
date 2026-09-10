@@ -76,6 +76,19 @@ object VariantExpressionEvalUtils {
   def isValidVariant(input: VariantVal): Boolean =
     VariantUtil.isValidVariant(input.getValue, input.getMetadata)
 
+  def variantArrayLength(input: VariantVal): Integer = {
+    if (input == null) {
+      null
+    } else {
+      val v = new Variant(input.getValue, input.getMetadata)
+      if (v.getType == VariantUtil.Type.ARRAY) {
+        v.arraySize()
+      } else {
+        null
+      }
+    }
+  }
+
   /**
    * Parse a JSONPath for a variant manipulation function. Throws `INVALID_VARIANT_PATH` on a
    * malformed path, or on the empty (root `$`) path unless `allowRoot` is set (as
