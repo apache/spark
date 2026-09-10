@@ -39,6 +39,40 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceU
         k -> ResourceAmountUtils.toInternalResource(v) }
   }
 
+  test("available task slots use current amounts without consuming the offer") {
+    val resources = new ExecutorResourcesAmounts(
+      toInternalResourceMap(Map(GPU -> Map("0" -> 1.0, "1" -> 1.0))))
+    val profile = new ResourceProfileBuilder()
+      .require(new TaskResourceRequests().resource(GPU, 1)).build()
+    assert(resources.availableTaskSlots(profile, 1) === 1)
+    val assigned = resources.assignAddressesCustomResources(profile).get
+    resources.acquire(assigned)
+    val before = resources.availableResources
+    assert(resources.availableTaskSlots(profile, 8) === 1)
+    assert(resources.availableResources === before)
+    resources.release(assigned)
+    assert(resources.availableTaskSlots(profile, 8) === 2)
+  }
+
+  test("available task slots respect fractional resource fragmentation") {
+    val resources = new ExecutorResourcesAmounts(
+      toInternalResourceMap(Map(GPU -> Map("0" -> 0.25, "1" -> 0.75))))
+    val fractional = new ResourceProfileBuilder()
+      .require(new TaskResourceRequests().resource(GPU, 0.5)).build()
+    val whole = new ResourceProfileBuilder()
+      .require(new TaskResourceRequests().resource(GPU, 1)).build()
+    assert(resources.availableTaskSlots(fractional, 8) === 1)
+    assert(resources.availableTaskSlots(whole, 8) === 0)
+  }
+
+  test("available task slots check every requested resource") {
+    val resources = new ExecutorResourcesAmounts(toInternalResourceMap(Map(
+      GPU -> Map("0" -> 1.0, "1" -> 1.0), "fpga" -> Map("0" -> 1.0))))
+    val profile = new ResourceProfileBuilder()
+      .require(new TaskResourceRequests().resource(GPU, 0.5).resource("fpga", 1)).build()
+    assert(resources.availableTaskSlots(profile, 8) === 1)
+  }
+
   test("assign to rp without task resources requirement") {
     val executorsInfo = Map(
       "gpu" -> new ExecutorResourceInfo("gpu", Seq("2", "4", "6")),

@@ -108,7 +108,8 @@ private[spark] class ExecutorAllocationManager(
     cleaner: Option[ContextCleaner] = None,
     clock: Clock = new SystemClock(),
     resourceProfileManager: ResourceProfileManager,
-    reliableShuffleStorage: Boolean)
+    reliableShuffleStorage: Boolean,
+    oomRetryReservationInfo: () => Option[OomRetryReservationInfo] = () => None)
   extends Logging {
 
   allocationManager =>
@@ -134,6 +135,8 @@ private[spark] class ExecutorAllocationManager(
     conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
 
   private val decommissionEnabled = conf.get(DECOMMISSION_ENABLED)
+
+  private val oomRetryEnabled = conf.get(SCHEDULER_OOM_RETRY_ENABLED)
 
   private val defaultProfileId = resourceProfileManager.defaultResourceProfile.id
 
@@ -413,7 +416,7 @@ private[spark] class ExecutorAllocationManager(
    * The maximum number of executors, for the ResourceProfile id passed in, that we would need
    * under the current load to satisfy all running and pending tasks, rounded up.
    */
-  private[spark] def maxNumExecutorsNeededPerResourceProfile(rpId: Int): Int = {
+  private[spark] def maxNumExecutorsNeededPerResourceProfile(rpId: Int): Int = synchronized {
     val pendingTask = listener.pendingTasksPerResourceProfile(rpId)
     val pendingSpeculative = listener.pendingSpeculativeTasksPerResourceProfile(rpId)
     val unschedulableTaskSets = listener.pendingUnschedulableTaskSetsPerResourceProfile(rpId)
@@ -423,16 +426,28 @@ private[spark] class ExecutorAllocationManager(
     val tasksPerExecutor = rp.maxTasksPerExecutor(conf)
     logDebug(s"max needed for rpId: $rpId numpending: $numRunningOrPendingTasks," +
       s" tasksperexecutor: $tasksPerExecutor")
-    val maxNeeded = math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
-      tasksPerExecutor).toInt
+    def executorsNeeded(tasks: Int, speculationNeedsSeparation: Boolean): Int = {
+      val needed = math.ceil(tasks * executorAllocationRatio / tasksPerExecutor).toInt
+      if (tasksPerExecutor > 1 && needed == 1 && speculationNeedsSeparation) {
+        // A speculative copy needs an executor other than the one running its original attempt.
+        needed + 1
+      } else {
+        needed
+      }
+    }
 
-    val maxNeededWithSpeculationLocalityOffset =
-      if (tasksPerExecutor > 1 && maxNeeded == 1 && pendingSpeculative > 0) {
-      // If we have pending speculative tasks and only need a single executor, allocate one more
-      // to satisfy the locality requirements of speculation
-      maxNeeded + 1
+    val baseline = executorsNeeded(numRunningOrPendingTasks, pendingSpeculative > 0)
+    val maxNeeded = if (oomRetryEnabled && tasksPerExecutor > 1) {
+      oomRetryReservationInfo().filter(_.resourceProfileId == rpId).map { reservation =>
+        // The reservation occupies one whole executor, even at a reduced allocation ratio.
+        // Size the remaining work separately, including its speculative-locality requirement.
+        val (coveredTasks, speculationNeedsSeparation) =
+          listener.oomRetryAllocation(reservation)
+        val ordinaryTasks = math.max(0, numRunningOrPendingTasks - coveredTasks)
+        math.max(baseline, 1 + executorsNeeded(ordinaryTasks, speculationNeedsSeparation))
+      }.getOrElse(baseline)
     } else {
-      maxNeeded
+      baseline
     }
 
     if (unschedulableTaskSets > 0) {
@@ -441,10 +456,10 @@ private[spark] class ExecutorAllocationManager(
       // the max needed which we would normally get.
       val maxNeededForUnschedulables = math.ceil(unschedulableTaskSets * executorAllocationRatio /
         tasksPerExecutor).toInt
-      math.max(maxNeededWithSpeculationLocalityOffset,
+      math.max(maxNeeded,
         executorMonitor.executorCountWithResourceProfile(rpId) + maxNeededForUnschedulables)
     } else {
-      maxNeededWithSpeculationLocalityOffset
+      maxNeeded
     }
   }
 
@@ -791,6 +806,9 @@ private[spark] class ExecutorAllocationManager(
     // Number of running tasks per stageAttempt including speculative tasks.
     // Should be 0 when no stages are active.
     private val stageAttemptToNumRunningTask = new mutable.HashMap[StageAttempt, Int]
+    // Used only for OOM recovery. Keep coverage in the same event domain as allocation demand.
+    private val executorToRunningTasks =
+      new mutable.HashMap[String, mutable.HashMap[Long, (StageAttempt, Int, Boolean)]]
     private val stageAttemptToTaskIndices = new mutable.HashMap[StageAttempt, mutable.HashSet[Int]]
     // Map from each stageAttempt to a set of running speculative task indexes
     // TODO(SPARK-41192): We simply need an Int for this.
@@ -901,6 +919,11 @@ private[spark] class ExecutorAllocationManager(
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       val taskIndex = taskStart.taskInfo.index
       allocationManager.synchronized {
+        if (oomRetryEnabled) {
+          executorToRunningTasks.getOrElseUpdate(taskStart.taskInfo.executorId,
+            new mutable.HashMap)(taskStart.taskInfo.taskId) =
+            (stageAttempt, taskIndex, taskStart.taskInfo.speculative)
+        }
         stageAttemptToNumRunningTask(stageAttempt) =
           stageAttemptToNumRunningTask.getOrElse(stageAttempt, 0) + 1
         // If this is the last pending task, mark the scheduler queue as empty
@@ -925,7 +948,15 @@ private[spark] class ExecutorAllocationManager(
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       val taskIndex = taskEnd.taskInfo.index
       allocationManager.synchronized {
-        if (stageAttemptToNumRunningTask.contains(stageAttempt)) {
+        executorToRunningTasks.get(taskEnd.taskInfo.executorId).foreach { runningTasks =>
+          runningTasks.remove(taskEnd.taskInfo.taskId)
+          if (runningTasks.isEmpty) {
+            executorToRunningTasks.remove(taskEnd.taskInfo.executorId)
+          }
+        }
+        // Resubmitted reports lost output from a task that already finished, not another exit.
+        if (taskEnd.reason != Resubmitted &&
+            stageAttemptToNumRunningTask.contains(stageAttempt)) {
           stageAttemptToNumRunningTask(stageAttempt) -= 1
           if (stageAttemptToNumRunningTask(stageAttempt) == 0) {
             stageAttemptToNumRunningTask -= stageAttempt
@@ -943,6 +974,16 @@ private[spark] class ExecutorAllocationManager(
             stageAttemptToPendingSpeculativeTasks.get(stageAttempt).foreach(_.remove(taskIndex))
           case _: TaskKilled =>
           case _ =>
+            val isOom = taskEnd.reason match {
+              case e: ExceptionFailure => e.isOutOfMemoryError
+              case e: ExecutorLostFailure => e.exitCausedByApp && e.isOutOfMemoryError
+              case _ => false
+            }
+            if (oomRetryEnabled && isOom) {
+              // TaskSetManager revokes speculation for OOM-affected partitions. Do not retain
+              // executor demand for a speculative attempt that can no longer be scheduled.
+              stageAttemptToPendingSpeculativeTasks.get(stageAttempt).foreach(_.remove(taskIndex))
+            }
             if (!hasPendingTasks) {
               // If the task failed (not intentionally killed), we expect it to be resubmitted
               // later. To ensure we have enough resources to run the resubmitted task, we need to
@@ -950,7 +991,8 @@ private[spark] class ExecutorAllocationManager(
               // (SPARK-8366)
               allocationManager.onSchedulerBacklogged()
             }
-            if (!taskEnd.taskInfo.speculative) {
+            // Lost shuffle output is retried as a regular task even if a speculative copy won.
+            if (!taskEnd.taskInfo.speculative || taskEnd.reason == Resubmitted) {
               // If a non-speculative task is intentionally killed, it means the speculative task
               // has succeeded, and no further task of this task index will be resubmitted. In this
               // case, the task index is completed and we shouldn't remove it from
@@ -1078,6 +1120,32 @@ private[spark] class ExecutorAllocationManager(
       attempts.map { attempt =>
         stageAttemptToNumRunningTask.getOrElse(attempt, 0)
       }.sum
+    }
+
+    /** Count only reserved tasks that also contribute to this listener's demand. */
+    def oomRetryAllocation(reservation: OomRetryReservationInfo): (Int, Boolean) = {
+      val attempts = resourceProfileIdToStageAttempt
+        .getOrElse(reservation.resourceProfileId, mutable.Set.empty[StageAttempt])
+      val coveredRunning = executorToRunningTasks.get(reservation.executorId).iterator
+        .flatMap(_.valuesIterator).filter { case (attempt, _, _) => attempts.contains(attempt) }
+        .toSeq
+      val retryAttempt = StageAttempt(reservation.stageId, reservation.stageAttemptId)
+      val coveredPending = if (attempts.contains(retryAttempt) &&
+          stageAttemptToNumTasks.contains(retryAttempt) &&
+          !stageAttemptToTaskIndices.get(retryAttempt).exists(_.contains(reservation.taskIndex))) {
+        1
+      } else {
+        0
+      }
+      val coveredOriginals = coveredRunning.collect {
+        case (attempt, index, false) => (attempt, index)
+      }.toSet
+      val speculationNeedsSeparation = attempts.exists { attempt =>
+        stageAttemptToPendingSpeculativeTasks.get(attempt).exists { indices =>
+          indices.exists(index => !coveredOriginals.contains((attempt, index)))
+        }
+      }
+      (coveredRunning.size + coveredPending, speculationNeedsSeparation)
     }
 
     /**
