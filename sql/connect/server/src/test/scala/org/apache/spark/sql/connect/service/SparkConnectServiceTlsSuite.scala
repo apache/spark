@@ -30,8 +30,8 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSui
 
 /**
  * Unit tests for `SparkConnectService.buildConnectSslContext`, which reads the
- * `spark.ssl.connect.*` namespace via `SSLOptions` and returns a Netty `SslContext`
- * when TLS is enabled. Also covers the mTLS branch (client-cert verification).
+ * `spark.ssl.connect.*` namespace via `SSLOptions` and returns a Netty `SslContext` when TLS is
+ * enabled. Also covers the mTLS branch (client-cert verification).
  */
 class SparkConnectServiceTlsSuite extends SparkFunSuite {
 
@@ -63,12 +63,13 @@ class SparkConnectServiceTlsSuite extends SparkFunSuite {
   }
 
   /**
-   * Start a Netty gRPC server on an ephemeral port with only the reflection service
-   * bound, so the handshake path is exercised end-to-end without dragging in
-   * SparkSession or the Connect handlers. Returns (server, port).
+   * Start a Netty gRPC server on an ephemeral port with only the reflection service bound, so the
+   * handshake path is exercised end-to-end without dragging in SparkSession or the Connect
+   * handlers. Returns (server, port).
    */
   private def startTlsServer(sslCtx: SslContext): (Server, Int) = {
-    val server = NettyServerBuilder.forPort(0)
+    val server = NettyServerBuilder
+      .forPort(0)
       .sslContext(sslCtx)
       .addService(ProtoReflectionService.newInstance())
       .build()
@@ -87,7 +88,8 @@ class SparkConnectServiceTlsSuite extends SparkFunSuite {
       case (Some(c), Some(k)) => builder.keyManager(c, k)
       case _ =>
     }
-    NettyChannelBuilder.forAddress("localhost", port)
+    NettyChannelBuilder
+      .forAddress("localhost", port)
       .overrideAuthority("localhost")
       .sslContext(builder.build())
       .build()
@@ -98,9 +100,8 @@ class SparkConnectServiceTlsSuite extends SparkFunSuite {
     val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
     var state = channel.getState(true)
     while (state != ConnectivityState.READY && state != ConnectivityState.TRANSIENT_FAILURE
-        && System.nanoTime() < deadline) {
-      val remainingMs = math.max(1L,
-        TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()))
+      && System.nanoTime() < deadline) {
+      val remainingMs = math.max(1L, TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()))
       channel.notifyWhenStateChanged(state, new Runnable { override def run(): Unit = () })
       Thread.sleep(math.min(50L, remainingMs))
       state = channel.getState(true)
@@ -204,32 +205,32 @@ class SparkConnectServiceTlsSuite extends SparkFunSuite {
       ctx = SparkConnectService.buildConnectSslContext(new SecurityManager(conf))
     }
     assert(ctx.exists(_.isServer))
-    assert(logs.loggingEvents.exists(_.getMessage.getFormattedMessage
-      .contains("trustStoreReloadingEnabled=true is not yet supported")))
+    assert(
+      logs.loggingEvents.exists(_.getMessage.getFormattedMessage
+        .contains("trustStoreReloadingEnabled=true is not yet supported")))
   }
 
   test("mTLS: trusted client cert handshake succeeds") {
     withMtlsChannel(
       clientCertPem = Some(new File(resourcePath("client-cert.pem"))),
-      clientKeyPem = Some(new File(resourcePath("client-key.pem"))))(
-      expected = ConnectivityState.READY)
+      clientKeyPem = Some(new File(resourcePath("client-key.pem"))))(expected =
+      ConnectivityState.READY)
   }
 
   test("mTLS: no client cert is rejected") {
-    withMtlsChannel(clientCertPem = None, clientKeyPem = None)(
-      expected = ConnectivityState.TRANSIENT_FAILURE)
+    withMtlsChannel(clientCertPem = None, clientKeyPem = None)(expected =
+      ConnectivityState.TRANSIENT_FAILURE)
   }
 
   test("mTLS: untrusted client cert is rejected") {
     withMtlsChannel(
       clientCertPem = Some(new File(resourcePath("untrusted-client-cert.pem"))),
-      clientKeyPem = Some(new File(resourcePath("untrusted-client-key.pem"))))(
-      expected = ConnectivityState.TRANSIENT_FAILURE)
+      clientKeyPem = Some(new File(resourcePath("untrusted-client-key.pem"))))(expected =
+      ConnectivityState.TRANSIENT_FAILURE)
   }
 
-  private def withMtlsChannel(
-      clientCertPem: Option[File],
-      clientKeyPem: Option[File])(expected: ConnectivityState): Unit = {
+  private def withMtlsChannel(clientCertPem: Option[File], clientKeyPem: Option[File])(
+      expected: ConnectivityState): Unit = {
     val sm = new SecurityManager(mtlsConf())
     val ctx = SparkConnectService.buildConnectSslContext(sm).get
     val (server, port) = startTlsServer(ctx)
