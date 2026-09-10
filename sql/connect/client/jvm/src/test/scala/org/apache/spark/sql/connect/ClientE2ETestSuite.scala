@@ -661,13 +661,14 @@ class ClientE2ETestSuite
 
   test("SPARK-59276: CHAR/VARCHAR result schema preserves collations") {
     withSQLConf("spark.sql.charVarchar.standardSemantics.enabled" -> "true") {
-      val schema = spark.sql(
-        """SELECT
+      val schema = spark
+        .sql("""SELECT
           |  CAST('ab' AS CHAR(4)) AS c,
           |  CAST('cd' AS VARCHAR(6)) AS v,
           |  CAST('ef' AS CHAR(4) COLLATE UTF8_LCASE) AS collated_c,
           |  CAST('gh' AS VARCHAR(6) COLLATE UNICODE_CI) AS collated_v
-          |""".stripMargin).schema
+          |""".stripMargin)
+        .schema
 
       assert(schema("c").dataType === CharType(4))
       assert(schema("v").dataType === VarcharType(6))
