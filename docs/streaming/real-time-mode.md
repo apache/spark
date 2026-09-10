@@ -35,7 +35,7 @@ personalization.
 Real-time Mode in Apache Spark supports **stateless queries** -- projections, filters and other
 map-like operations, unions, and stream-static joins -- and, starting in Spark 4.3.0, a first set of
 **stateful queries**: streaming **deduplication** (`dropDuplicates`, plus
-`dropDuplicatesWithinWatermark` starting in Spark 5.0.0), streaming **aggregations**
+`dropDuplicatesWithinWatermark` starting in Spark 4.4.0), streaming **aggregations**
 (`groupBy(...).agg(...)`), and the JVM (Scala/Java) **`transformWithState`** operator. These
 stateful operations require a shuffle, which Real-time Mode runs as a *pipelined shuffle* so that
 records still stream through without waiting for a batch boundary; see
@@ -356,7 +356,7 @@ The following operations, sources, and sinks are supported:
   pipelined shuffle (see [How Stateful Queries Work](#how-stateful-queries-work)) and keep their
   state in the state store, checkpointed each batch.
   + **Deduplication**: `dropDuplicates`, and `dropDuplicatesWithinWatermark` starting in Spark
-    5.0.0. The latter requires `withWatermark` and bounds state retention according to the
+    4.4.0. The latter requires `withWatermark` and bounds state retention according to the
     event-time watermark.
   + **Streaming aggregation**: `groupBy(...).agg(...)` (and the SQL `GROUP BY` equivalent), including
     windowed aggregations with `window(...)`. Distinct aggregates such as `count(distinct ...)` are
@@ -544,8 +544,12 @@ spark \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
   .option("subscribe", "input-topic") \
   .load() \
-  .selectExpr("CAST(key AS STRING) AS id", "CAST(value AS STRING) AS value") \
-  .dropDuplicates(["id"]) \
+  .selectExpr(
+    "CAST(key AS STRING) AS id",
+    "CAST(value AS STRING) AS value",
+    "timestamp AS eventTime") \
+  .withWatermark("eventTime", "10 minutes") \
+  .dropDuplicatesWithinWatermark(["id"]) \
   .writeStream \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
@@ -567,8 +571,12 @@ spark
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "input-topic")
   .load()
-  .selectExpr("CAST(key AS STRING) AS id", "CAST(value AS STRING) AS value")
-  .dropDuplicates("id")
+  .selectExpr(
+    "CAST(key AS STRING) AS id",
+    "CAST(value AS STRING) AS value",
+    "timestamp AS eventTime")
+  .withWatermark("eventTime", "10 minutes")
+  .dropDuplicatesWithinWatermark("id")
   .writeStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -590,8 +598,12 @@ spark
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "input-topic")
   .load()
-  .selectExpr("CAST(key AS STRING) AS id", "CAST(value AS STRING) AS value")
-  .dropDuplicates("id")
+  .selectExpr(
+    "CAST(key AS STRING) AS id",
+    "CAST(value AS STRING) AS value",
+    "timestamp AS eventTime")
+  .withWatermark("eventTime", "10 minutes")
+  .dropDuplicatesWithinWatermark("id")
   .writeStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -605,15 +617,14 @@ spark
 
 </div>
 
-This example uses `dropDuplicates`, which keeps every distinct key it has seen in the state store.
-To bound state, define an event-time watermark and use `dropDuplicatesWithinWatermark`. For example,
-Scala and Java use
-`withWatermark("eventTime", "10 minutes").dropDuplicatesWithinWatermark("id")`; in PySpark, pass the
-column subset as a list:
-`withWatermark("eventTime", "10 minutes").dropDuplicatesWithinWatermark(["id"])`. Records are still
+This bounded example aliases Kafka's record timestamp as `eventTime`, sets a 10-minute watermark
+delay threshold, and uses `dropDuplicatesWithinWatermark` to deduplicate by `id`. It bounds
+deduplication state as the event-time watermark advances. Records that pass deduplication are still
 emitted as they are processed, while watermark advancement and state eviction take effect at
 Real-time Mode batch boundaries. The trigger duration therefore determines how often cleanup has
-an opportunity to remove state after the event-time watermark advances past its expiry.
+an opportunity to remove state after the watermark advances past a key's expiry. To deduplicate
+keys for the lifetime of the query instead, use `dropDuplicates`, which keeps every distinct key it
+has seen in the state store.
 
 ### Streaming aggregation
 
