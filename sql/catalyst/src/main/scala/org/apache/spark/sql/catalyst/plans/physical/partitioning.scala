@@ -520,8 +520,9 @@ case class KeyLayout(
    * `reducersBothWays` or a `GroupPartitionsExec` first.
    *
    * `isGrouped` is not part of this, because it follows from the keys: it says they are unique, so
-   * two layouts over equal keys cannot answer it differently. `PartitioningCollection` still
-   * asserts it, as a consistency check on layouts that were built independently.
+   * two layouts over equal keys cannot answer it differently. `PartitioningCollection
+   * .fromPartitionings` still asserts it where it interns a member, as a consistency check on
+   * layouts that were built independently.
    */
   def describesSameKeys(other: KeyLayout): Boolean =
     dataTypes == other.dataTypes && partitionKeys == other.partitionKeys
@@ -1336,9 +1337,11 @@ object PartitioningCollection {
           // types are asked as well as the rows.
           require(representative.layout.describesSameKeys(canonicalLayout),
             "All KeyedPartitionings in a PartitioningCollection must describe one key space, got " +
-              s"dataTypes ${representative.layout.dataTypes} with partitionKeys " +
-              s"${representative.partitionKeys}, and dataTypes ${canonicalLayout.dataTypes} with " +
-              s"partitionKeys ${canonicalLayout.partitionKeys}")
+              s"dataTypes ${representative.layout.dataTypes} over " +
+              s"${representative.partitionKeys.length} partitionKeys, and dataTypes " +
+              s"${canonicalLayout.dataTypes} over ${canonicalLayout.partitionKeys.length} " +
+              "partitionKeys. A partitioning holds one key per split, so the keys themselves are " +
+              "counted rather than printed")
           // Whether the keys are unique follows from the keys, so two layouts over equal keys that
           // disagree on it cannot both be right. Asserted separately from `describesSameKeys`,
           // which answers what the keys are rather than how they are laid out.

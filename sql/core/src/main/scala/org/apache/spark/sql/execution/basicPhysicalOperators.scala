@@ -960,6 +960,12 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       // same way, since one type list has to stand for every row of the concatenation, and a
       // wrapper compares its types before its values, so keys of two types would never be found
       // equal to one another.
+      //
+      // No query is known to reach the type clause: a child whose type had to be widened gets a
+      // `Cast` alias, and `AliasAwareOutputExpression` drops the keyed partitioning before the
+      // union sees it, while nested nullability and struct field names are erased out of
+      // `keyDataTypes` already. It is kept because the cost of being wrong here is a union that
+      // claims one key space over rows of two.
       case (l: KeyedPartitioning, r: KeyedPartitioning) =>
         l.expressions.length == r.expressions.length &&
           l.keyDataTypes == r.keyDataTypes &&
