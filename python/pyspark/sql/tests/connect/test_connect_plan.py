@@ -100,9 +100,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         default_char = pyspark_types_to_proto_types(CharType(4)).char
         self.assertFalse(default_char.HasField("collation"))
-        explicit_binary_char = pyspark_types_to_proto_types(
-            CharType(4, "UTF8_BINARY")
-        ).char
+        explicit_binary_char = pyspark_types_to_proto_types(CharType(4, "UTF8_BINARY")).char
         self.assertTrue(explicit_binary_char.HasField("collation"))
         self.assertEqual(explicit_binary_char.collation, "UTF8_BINARY")
 
