@@ -132,7 +132,7 @@ class UnifiedExternalUDFPlanner(
       profile: Option[ResourceProfile]): LogicalPlan = {
     val pythonUdf = func.asInstanceOf[PythonUDF]
     val workerSpec =
-      PythonUDFWorkerSpecification.fromPythonFunction(
+      PythonUDFWorkerSpecBuilder.build(
         pythonUdf.func, conf)
     val udf = ExternalUserDefinedFunction(
       name = Some(pythonUdf.name),

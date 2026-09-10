@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, 
 import org.apache.spark.udf.worker.{DynamicConfigRequirement, Init, UDFWorkerDataFormat,
   UDFWorkerSpecification, WorkerContextReference, WorkerSessionSpecification}
 
-class PythonExternalUserDefinedFunctionSuite extends QueryTest with SharedSparkSession {
+class ExternalUDFInitializationSuite extends QueryTest with SharedSparkSession {
 
   private def contextReference(
       source: String,
@@ -59,7 +59,7 @@ class PythonExternalUserDefinedFunctionSuite extends QueryTest with SharedSparkS
       environmentVariables: Map[String, String] = Map.empty,
       dynamicConfig: Map[String, String] = Map.empty,
       resourceDirectories: Map[String, String] = Map(
-        PythonUDFWorkerSpecification.ARTIFACTS_RESOURCE_DIRECTORY ->
+        PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY ->
           "/var/resources/artifact-1"),
       timezone: String = "America/Los_Angeles"): ExternalUDFInitContext = {
     ExternalUDFInitContext(
@@ -267,10 +267,10 @@ class PythonExternalUserDefinedFunctionSuite extends QueryTest with SharedSparkS
     val udf = pythonUDF(Seq(
       Literal(1),
       NamedArgumentExpression("named", Literal("value"))))
-    val workerSpec = PythonUDFWorkerSpecification.fromPythonFunction(
+    val workerSpec = PythonUDFWorkerSpecBuilder.build(
       udf.func,
       spark.sparkContext.getConf)
-    val external = PythonExternalUserDefinedFunction.fromPythonUDF(
+    val external = PythonExternalUDFAdapter.toExternalUDF(
       udf,
       workerSpec)
     val pythonTaskContext = Map(
@@ -286,7 +286,7 @@ class PythonExternalUserDefinedFunctionSuite extends QueryTest with SharedSparkS
 
     assert(external.getClass === classOf[ExternalUserDefinedFunction])
     assert(init.getUdf.getName === "plus_one")
-    assert(init.getUdf.getFormat === "pyspark-udf-v2")
+    assert(init.getUdf.getFormat === "pyspark-udf-experimental")
     assert(init.getUdf.getEvalType === PythonEvalType.SQL_ARROW_BATCHED_UDF.toString)
     assert(init.getUdf.getInvocationId === udf.resultId.id)
     assert(init.getEnvironmentVariablesMap.isEmpty)
@@ -308,7 +308,7 @@ class PythonExternalUserDefinedFunctionSuite extends QueryTest with SharedSparkS
       taskContext = nextTaskContext,
       dynamicConfig = pythonDynamicConfig,
       resourceDirectories = Map(
-        PythonUDFWorkerSpecification.ARTIFACTS_RESOURCE_DIRECTORY ->
+        PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY ->
           "/var/resources/artifact-2"),
       timezone = "UTC"))
     assert(nextInit.getUdf === init.getUdf)
@@ -318,7 +318,7 @@ class PythonExternalUserDefinedFunctionSuite extends QueryTest with SharedSparkS
     assert(nextInit.getTaskContextMap.get(
       ExternalUDFInitContext.IS_DRIVER_CONTEXT_KEY) === "true")
     assert(nextInit.getResourceDirectoriesMap.get(
-      PythonUDFWorkerSpecification.ARTIFACTS_RESOURCE_DIRECTORY) ===
+      PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY) ===
       "/var/resources/artifact-2")
     assert(nextInit.getTimezone === "UTC")
 
@@ -359,7 +359,7 @@ class PythonExternalUserDefinedFunctionSuite extends QueryTest with SharedSparkS
   }
 
   test("Python worker specification declares its generic session requirements") {
-    val spec = PythonUDFWorkerSpecification.fromPythonFunction(
+    val spec = PythonUDFWorkerSpecBuilder.build(
       pythonFunction(),
       spark.sparkContext.getConf)
     val session = spec.getSession
@@ -378,21 +378,21 @@ class PythonExternalUserDefinedFunctionSuite extends QueryTest with SharedSparkS
       requirement.getIsRequired === !optionalKeys.contains(name)
     })
     assert(session.getRequiredResourceDirectoriesList.asScala.toSeq ===
-      Seq(PythonUDFWorkerSpecification.ARTIFACTS_RESOURCE_DIRECTORY))
+      Seq(PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY))
     assert(session.getStaticConfigMap.isEmpty)
-    val defaultFunction = PythonExternalUserDefinedFunction.fromPythonUDF(
+    val defaultFunction = PythonExternalUDFAdapter.toExternalUDF(
       pythonUDF(Seq(Literal(1))),
       spec)
     val defaultInit = defaultFunction.buildInit(initContext(
       dynamicConfig = pythonDynamicConfig,
       resourceDirectories = Map(
-        PythonUDFWorkerSpecification.ARTIFACTS_RESOURCE_DIRECTORY ->
+        PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY ->
           "/var/resources/artifact-default")))
     assert(defaultInit.getSessionConfMap.get(SQLConf.PYSPARK_BINARY_AS_BYTES.key) === "true")
     assert(!defaultInit.getSessionConfMap.containsKey(
       SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL.key))
     assert(defaultInit.getResourceDirectoriesMap.get(
-      PythonUDFWorkerSpecification.ARTIFACTS_RESOURCE_DIRECTORY) ===
+      PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY) ===
       "/var/resources/artifact-default")
 
     val missingConfig = intercept[IllegalArgumentException] {
@@ -402,7 +402,7 @@ class PythonExternalUserDefinedFunctionSuite extends QueryTest with SharedSparkS
 
     Seq(
       Map.empty[String, String],
-      Map(PythonUDFWorkerSpecification.ARTIFACTS_RESOURCE_DIRECTORY -> "")
+      Map(PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY -> "")
     ).foreach { resourceDirectories =>
       val error = intercept[IllegalArgumentException] {
         defaultFunction.buildInit(initContext(
@@ -417,23 +417,23 @@ class PythonExternalUserDefinedFunctionSuite extends QueryTest with SharedSparkS
   test("PySpark conversion rejects unsupported evaluation types") {
     val udf = pythonUDF(Seq(Literal(1)), PythonEvalType.SQL_BATCHED_UDF)
     val error = intercept[IllegalArgumentException] {
-      PythonExternalUserDefinedFunction.fromPythonUDF(
+      PythonExternalUDFAdapter.toExternalUDF(
         udf,
         UDFWorkerSpecification.getDefaultInstance)
     }
     assert(error.getMessage.contains("Unsupported Python external UDF eval type"))
   }
 
-  test("Python payload encoding has a stable versioned wire format") {
+  test("experimental Python payload encoding has an explicit wire version") {
     val payload = PythonUDFPayload.encode(pythonFunction(
       command = Array[Byte](1),
       pythonIncludes = Seq("x"),
       pythonVersion = "v"))
     val expectedPayload = hexBytes(
-      "505955440000000200000001010000000100000001780000000176")
+      "505955440000000100000001010000000100000001780000000176")
     assert(payload.sameElements(expectedPayload))
 
-    Seq(1, 3).foreach { version =>
+    Seq(0, 2).foreach { version =>
       val unsupportedVersion = payload.clone()
       ByteBuffer.wrap(unsupportedVersion).putInt(Integer.BYTES, version)
       assert(intercept[IllegalArgumentException] {

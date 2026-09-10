@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.externalUDF
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkConf
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.python.{PythonFunction, PythonUtils}
 import org.apache.spark.internal.config.OptionalConfigEntry
 import org.apache.spark.internal.config.Python.PYTHON_WORKER_MODULE
@@ -28,9 +27,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.udf.worker._
 
 /**
- * :: Experimental ::
- * Builds a [[UDFWorkerSpecification]] for Python UDFs from a
- * [[PythonFunction]] and [[SparkConf]].
+ * Builds a [[UDFWorkerSpecification]] for Python UDFs from a [[PythonFunction]] and
+ * [[SparkConf]]. This helper adapts Python launch metadata without adding Python-specific
+ * behavior to the language-neutral worker protocol.
  *
  * Reuses the same information the existing
  * [[org.apache.spark.api.python.PythonWorkerFactory]] uses:
@@ -44,8 +43,7 @@ import org.apache.spark.udf.worker._
  * Unified execution serializes them in the per-UDF payload delivered
  * to the already-running worker during Init.
  */
-@Experimental
-object PythonUDFWorkerSpecification {
+private[externalUDF] object PythonUDFWorkerSpecBuilder {
 
   private[externalUDF] val ARTIFACTS_RESOURCE_DIRECTORY: String = "artifacts"
 
@@ -57,7 +55,7 @@ object PythonUDFWorkerSpecification {
    * @param conf the SparkConf for reading the worker module config
    * @return a fully populated [[UDFWorkerSpecification]]
    */
-  def fromPythonFunction(
+  def build(
       func: PythonFunction,
       conf: SparkConf): UDFWorkerSpecification = {
 

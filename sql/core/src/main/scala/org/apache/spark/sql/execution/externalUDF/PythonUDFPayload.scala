@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.python.PythonFunction
 
 /**
- * Versioned static payload for a scalar PySpark UDF.
+ * Experimental, versioned static payload for a scalar PySpark UDF.
  *
  * Only Python-private state which does not change when Catalyst rewrites an invocation is stored
  * here. Logical input types, argument bindings, resource locations, and runtime state are supplied
@@ -42,7 +42,7 @@ private[sql] final class PythonUDFPayload private (
 private[sql] object PythonUDFPayload {
   // ASCII "PYUD" followed by a format version.
   private val MAGIC = 0x50595544
-  private val VERSION = 2
+  private val VERSION = 1
 
   /** Encodes all Python-specific state which is invariant across task attempts. */
   def encode(func: PythonFunction): Array[Byte] = {
