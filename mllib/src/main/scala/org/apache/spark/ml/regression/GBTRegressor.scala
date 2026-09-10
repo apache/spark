@@ -304,9 +304,8 @@ class GBTRegressionModel private[ml](
     }
   }
 
-  override def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double =
     TreeEnsembleModel.predictRaw(features, _trees, _treeWeights)
-  }
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): GBTRegressionModel = {
