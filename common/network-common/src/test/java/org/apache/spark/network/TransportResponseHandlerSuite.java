@@ -205,8 +205,8 @@ public class TransportResponseHandlerSuite {
     // (the server answers StreamRequests in send order; SPARK-11265). This asserts that invariant:
     // a StreamResponse whose streamId does not match means the queue is desynced, and delivering it
     // would feed the wrong block's bytes to the callback. The check must throw instead
-    // (SPARK-59142); throwing propagates to Netty's exceptionCaught -> the connection is torn down
-    // and its outstanding requests re-fetched in order on a fresh channel.
+    // (SPARK-59142); throwing propagates to Netty's exceptionCaught, which closes the desynced
+    // connection and fails its remaining outstanding requests.
     // A mismatch is simulated by registering "stream-A" and handling a response for "stream-B".
     Channel c = new LocalChannel();
     c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
@@ -248,16 +248,16 @@ public class TransportResponseHandlerSuite {
   }
 
   @Test
-  public void desyncTearsDownConnectionAndFailsAllOutstandingRequestsRetriably() throws Exception {
+  public void desyncTearsDownConnectionAndFailsAllOutstandingRequests() throws Exception {
     // Upstream impact of the streamId assert. In production, throwing from handle() propagates to
     // TransportChannelHandler.exceptionCaught, which calls responseHandler.exceptionCaught (failing
     // EVERY outstanding request on the channel) and then ctx.close(). This test simulates that
     // sequence and shows the meaning for callers: when a stream-callback desync is detected, the
     // whole (poisoned) connection is torn down and ALL its in-flight requests -- the mismatched
-    // stream AND any innocent concurrent chunk-fetch sharing the channel -- fail with a retriable
-    // error. None receive data. Upstream, each onFailure becomes a FetchFailedException -> stage
-    // retry on a fresh, in-order connection. The cost of a detected desync is a retry, never
-    // corrupt bytes.
+    // stream AND any innocent concurrent chunk-fetch sharing the channel -- are failed. None
+    // receive data. The polled stream callback is failed with an IOException (which block fetches
+    // retry via RetryingBlockTransferor); the remaining callbacks are failed on teardown and their
+    // callers apply their own retry behavior where they support it.
     Channel c = new LocalChannel();
     c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
     TransportResponseHandler handler = new TransportResponseHandler(c);
@@ -284,7 +284,7 @@ public class TransportResponseHandlerSuite {
     handler.exceptionCaught(thrown);
     verify(chunkCb, times(1)).onFailure(eq(0), any());
 
-    // Net result: no request on the poisoned connection received data; all failed retriably.
+    // Net result: no request on the poisoned connection received data; all were failed.
     assertEquals(0, handler.numOutstandingRequests());
   }
 

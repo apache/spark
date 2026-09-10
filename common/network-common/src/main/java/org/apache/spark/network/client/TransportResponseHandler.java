@@ -300,12 +300,14 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
    * it requested, so a matching response always finds its callback at the head of the queue.
    *
    * <p>If the invariant does not hold the callback queue is desynced -- delivering this response
-   * would route the wrong block's bytes to the callback. It fails the polled callback under its own
-   * streamId (so its caller does not hang waiting for a response it will never correctly receive;
-   * {@code poll()} has already removed it from the queue) and throws {@link IllegalStateException},
-   * which propagates to Netty's {@code exceptionCaught} so the connection is torn down and its
-   * remaining outstanding requests are re-fetched in order on a fresh channel. This turns a silent
-   * wrong-block delivery into a loud, retriable failure.
+   * would route the wrong block's bytes to the callback. It fails the polled callback under its
+   * own streamId with an {@link IOException} (so its caller does not hang waiting for a response it
+   * will never correctly receive; {@code poll()} has already removed it from the queue, and block
+   * fetches retry an {@code IOException} via {@code RetryingBlockTransferor}) and throws
+   * {@link IllegalStateException}. The throw propagates to Netty's {@code exceptionCaught}, which
+   * closes the desynced connection and fails its remaining outstanding requests; those callers
+   * then apply their own retry behavior where they support it. This turns a silent wrong-block
+   * delivery into a loud failure.
    */
   private void verifyStreamCallbackMatches(
       Pair<String, StreamCallback> entry, String responseStreamId, String kind) {
