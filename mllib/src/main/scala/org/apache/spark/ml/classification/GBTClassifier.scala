@@ -380,13 +380,13 @@ class GBTClassificationModel private[ml](
     if (isDefined(thresholds)) {
       super.predict(features)
     } else {
-      if (margin(features) > 0.0) 1.0 else 0.0
+      if (TreeEnsembleModel.predict(features, _trees, _treeWeights) > 0.0) 1.0 else 0.0
     }
   }
 
   @Since("3.0.0")
   override def predictRaw(features: Vector): Vector = {
-    val prediction: Double = margin(features)
+    val prediction = TreeEnsembleModel.predict(features, _trees, _treeWeights)
     Vectors.dense(Array(-prediction, prediction))
   }
 
@@ -427,10 +427,6 @@ class GBTClassificationModel private[ml](
   @Since("2.0.0")
   lazy val featureImportances: Vector =
     TreeEnsembleModel.featureImportances(trees, numFeatures, perTreeNormalization = false)
-
-  /** Raw prediction for the positive class. */
-  private def margin(features: Vector): Double =
-    TreeEnsembleModel.predict(features, _trees, _treeWeights)
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {
