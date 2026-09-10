@@ -514,3 +514,45 @@ DROP VIEW ivt_target;
 DROP TEMPORARY VARIABLE ivt_name;
 USE default;
 DROP SCHEMA ivt_schema;
+
+-- A temporary view whose body reads a variable via an IDENTIFIER clause in expression position
+-- (here as a column name). Unlike the table-position case above, this identifier expression
+-- resolves to a bare variable reference, so recording it requires visiting the root of the
+-- expression tree. If it is not recorded, the variable is missing from the stored view text and
+-- reading the view back fails.
+DECLARE OR REPLACE VARIABLE identifier_expr_col STRING DEFAULT 'c1';
+CREATE OR REPLACE TEMPORARY VIEW identifier_expr_view AS
+SELECT IDENTIFIER(identifier_expr_col) AS x FROM VALUES(1) AS t(c1);
+SELECT * FROM identifier_expr_view;
+DROP VIEW identifier_expr_view;
+DROP TEMPORARY VARIABLE identifier_expr_col;
+
+-- A variable used only to supply a view's NAME via an IDENTIFIER clause is not part of the view
+-- definition, so it must not be recorded as a referred variable of the view.
+DECLARE OR REPLACE VARIABLE identifier_view_name STRING DEFAULT 'identifier_named_view';
+CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(identifier_view_name) AS SELECT 1 AS c1;
+SELECT * FROM identifier_named_view;
+DROP VIEW identifier_named_view;
+DROP TEMPORARY VARIABLE identifier_view_name;
+
+-- When both the NAME and the BODY use an IDENTIFIER clause, only the body variable is a dependency
+-- of the view; the name variable must not be recorded.
+DECLARE OR REPLACE VARIABLE identifier_name_part STRING DEFAULT 'identifier_named_view2';
+DECLARE OR REPLACE VARIABLE identifier_body_part STRING DEFAULT 'c1';
+CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(identifier_name_part) AS
+SELECT IDENTIFIER(identifier_body_part) AS x FROM VALUES(1) AS t(c1);
+SELECT * FROM identifier_named_view2;
+DROP VIEW identifier_named_view2;
+DROP TEMPORARY VARIABLE identifier_name_part;
+DROP TEMPORARY VARIABLE identifier_body_part;
+
+-- ALTER VIEW honors `spark.sql.legacy.allowSessionVariableInPersistedView` just like CREATE VIEW:
+-- with it set, a persisted view may reference a session variable read via an IDENTIFIER clause.
+-- The default (tested by `identifier_alter_view` above) rejects it.
+SET spark.sql.legacy.allowSessionVariableInPersistedView=true;
+DECLARE OR REPLACE VARIABLE identifier_p2a_col STRING DEFAULT 'c1';
+CREATE VIEW identifier_p2a_view AS SELECT 1 AS c1;
+ALTER VIEW identifier_p2a_view AS SELECT IDENTIFIER(identifier_p2a_col) FROM VALUES(1) AS t(c1);
+DROP VIEW identifier_p2a_view;
+DROP TEMPORARY VARIABLE identifier_p2a_col;
+SET spark.sql.legacy.allowSessionVariableInPersistedView=false;

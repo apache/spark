@@ -3570,3 +3570,490 @@ DROP SCHEMA identifier_clause_test_schema
 struct<>
 -- !query output
 
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_var_target AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_var_name STRING DEFAULT 'identifier_var_target'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_var_view AS
+SELECT * FROM IDENTIFIER(identifier_var_name)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT count(*) AS row_count FROM identifier_var_view
+-- !query schema
+struct<row_count:bigint>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_var_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW identifier_var_target
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_var_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW identifier_perm_target AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_perm_name STRING DEFAULT 'identifier_perm_target'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW identifier_perm_view AS SELECT * FROM IDENTIFIER(identifier_perm_name)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "VIEW",
+    "objName" : "`unknown`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`identifier_perm_name`"
+  }
+}
+
+
+-- !query
+DROP VIEW identifier_perm_target
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_perm_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE SCHEMA identifier_alter_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE identifier_alter_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE identifier_alter_target (c1 INT) USING parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_alter_name STRING DEFAULT 'identifier_alter_target'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW identifier_alter_view AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ALTER VIEW identifier_alter_view AS SELECT * FROM IDENTIFIER(identifier_alter_name)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`identifier_alter_schema`.`identifier_alter_view`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`identifier_alter_name`"
+  }
+}
+
+
+-- !query
+SELECT * FROM identifier_alter_view
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_alter_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE identifier_alter_target
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_alter_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP SCHEMA identifier_alter_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE SCHEMA ivt_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE ivt_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW ivt_target AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE ivt_name STRING DEFAULT 'ivt_target'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ALTER VIEW IDENTIFIER(ivt_name) AS SELECT 2 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM ivt_target
+-- !query schema
+struct<c1:int>
+-- !query output
+2
+
+
+-- !query
+DROP VIEW ivt_target
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE ivt_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP SCHEMA ivt_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_expr_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_expr_view AS
+SELECT IDENTIFIER(identifier_expr_col) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_expr_view
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_expr_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_expr_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_view_name STRING DEFAULT 'identifier_named_view'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(identifier_view_name) AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_named_view
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_named_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_view_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_name_part STRING DEFAULT 'identifier_named_view2'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_body_part STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(identifier_name_part) AS
+SELECT IDENTIFIER(identifier_body_part) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_named_view2
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_named_view2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_name_part
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_body_part
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.allowSessionVariableInPersistedView	true
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_p2a_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW identifier_p2a_view AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ALTER VIEW identifier_p2a_view AS SELECT IDENTIFIER(identifier_p2a_col) FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW identifier_p2a_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_p2a_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.allowSessionVariableInPersistedView	false

@@ -3490,3 +3490,197 @@ DROP SCHEMA ivt_schema
 struct<>
 -- !query output
 
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_expr_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_expr_view AS
+SELECT IDENTIFIER(identifier_expr_col) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_expr_view
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_expr_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_expr_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_view_name STRING DEFAULT 'identifier_named_view'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(identifier_view_name) AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_named_view
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_named_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_view_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_name_part STRING DEFAULT 'identifier_named_view2'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_body_part STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(identifier_name_part) AS
+SELECT IDENTIFIER(identifier_body_part) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_named_view2
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_named_view2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_name_part
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_body_part
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.allowSessionVariableInPersistedView	true
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_p2a_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW identifier_p2a_view AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ALTER VIEW identifier_p2a_view AS SELECT IDENTIFIER(identifier_p2a_col) FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW identifier_p2a_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_p2a_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.allowSessionVariableInPersistedView	false

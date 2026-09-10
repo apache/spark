@@ -166,8 +166,11 @@ case class AnalysisContext(
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
-    // LinkedHashSet keeps insertion order so the recorded names (and any error naming them) are
-    // deterministic when more than one variable is read via an IDENTIFIER clause.
+    // Like `referredTempFunctionNames`, this is populated only by fixed-point analysis (by
+    // `ResolveIdentifierClause`, the sole writer) and exported to the view metadata; the single-pass
+    // resolver has no IDENTIFIER-clause resolution of its own, so there is no second writer to keep
+    // in sync. LinkedHashSet keeps insertion order so the recorded names (and any error naming them)
+    // are deterministic when more than one variable is read via an IDENTIFIER clause.
     referredTempVariableNamesUnderIdentifier: mutable.Set[Seq[String]] =
       mutable.LinkedHashSet.empty,
     outerPlan: Option[LogicalPlan] = None,

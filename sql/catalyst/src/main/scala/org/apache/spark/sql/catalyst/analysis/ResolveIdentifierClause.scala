@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, CreateView, LogicalPlan, V2WriteCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, Command, CreateView, LogicalPlan, V2WriteCommand}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -78,12 +78,18 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
         if (referredTempVars.isDefined) {
           referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
         }
-        if (recordUnderIdentifier) {
+
+        val resolvedPlan = executor.execute(p.planBuilder.apply(
+          IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children))
+        // Only record the variables when the identifier names something inside a view body. When it
+        // instead supplies the *name* of a command (e.g. the target of
+        // `CREATE TEMPORARY VIEW IDENTIFIER(v) AS ...`), the evaluated plan is that command and `v`
+        // is not a variable the view refers to, so recording it would wrongly persist it as a
+        // dependency of the created view.
+        if (recordUnderIdentifier && !resolvedPlan.isInstanceOf[Command]) {
           recordTemporaryVariablesUnderIdentifier(p.identifierExpr)
         }
-
-        executor.execute(p.planBuilder.apply(
-          IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children))
+        resolvedPlan
       case w: V2WriteCommand if w.table.isInstanceOf[PlanWithUnresolvedIdentifier] =>
         val p = w.table.asInstanceOf[PlanWithUnresolvedIdentifier]
         if (p.identifierExpr.resolved && p.childrenResolved) {
