@@ -118,7 +118,17 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch], met
         return ArrowStreamCoGroupSerializer(write_start_stream=True)
 
 
-# Imported for its registration side effect: defining each handler registers it
-# in EVAL_TYPE_HANDLERS. Imported last so the submodule can import the base
-# classes above.
-from pyspark.sql.eval_handlers import _arrow  # noqa: F401
+# Re-export the concrete handlers from their private submodules so callers reach
+# them from this package (or via EVAL_TYPE_HANDLERS), never from the ``_``
+# submodules. The import also registers them. Kept last so the submodules can
+# import the base classes above.
+from pyspark.sql.eval_handlers._arrow import ArrowScalarUDFHandler
+
+__all__ = [
+    "EVAL_TYPE_HANDLERS",
+    "EvalTypeHandler",
+    "BatchEvalTypeHandler",
+    "GroupedEvalTypeHandler",
+    "CoGroupedEvalTypeHandler",
+    "ArrowScalarUDFHandler",
+]
