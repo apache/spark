@@ -51,7 +51,7 @@ class EvalTypeHandlerTests(unittest.TestCase):
 
     def test_category_bases_are_abstract(self):
         # The interface and the three category bases must not be instantiable:
-        # they leave the pipeline stages abstract.
+        # they leave ``run`` abstract.
         for base in (
             EvalTypeHandler,
             BatchEvalTypeHandler,
@@ -74,34 +74,16 @@ class EvalTypeHandlerTests(unittest.TestCase):
 
     def test_default_serializer_per_category(self):
         class _Batch(BatchEvalTypeHandler["pa.RecordBatch"]):
-            def pre_process(self, data):
+            def run(self, split_index, data):
                 return data
-
-            def process(self, work_items):
-                return work_items
-
-            def post_process(self, results):
-                return results
 
         class _Grouped(GroupedEvalTypeHandler["pa.RecordBatch"]):
-            def pre_process(self, data):
+            def run(self, split_index, data):
                 return data
-
-            def process(self, work_items):
-                return work_items
-
-            def post_process(self, results):
-                return results
 
         class _CoGrouped(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
-            def pre_process(self, data):
+            def run(self, split_index, data):
                 return data
-
-            def process(self, work_items):
-                return work_items
-
-            def post_process(self, results):
-                return results
 
         self.assertIsInstance(_Batch([], _RunnerConf(), None).serializer, ArrowStreamSerializer)
         self.assertIsInstance(
@@ -111,45 +93,22 @@ class EvalTypeHandlerTests(unittest.TestCase):
             _CoGrouped([], _RunnerConf(), None).serializer, ArrowStreamCoGroupSerializer
         )
 
-    def test_run_chains_stages_in_order(self):
-        calls = []
-
-        class _Recording(BatchEvalTypeHandler["pa.RecordBatch"]):
-            def pre_process(self, data):
-                calls.append("pre")
+    def test_run_produces_output(self):
+        class _Doubler(BatchEvalTypeHandler["pa.RecordBatch"]):
+            def run(self, split_index, data):
                 for item in data:
-                    yield item + 1
+                    yield item * 2
 
-            def process(self, work_items):
-                calls.append("process")
-                for item in work_items:
-                    yield item * 10
-
-            def post_process(self, results):
-                calls.append("post")
-                for item in results:
-                    yield item - 2
-
-        handler = _Recording([], _RunnerConf(), None)
-        out = list(handler.run(0, iter([1, 2, 3])))
-        # Each element flows pre -> process -> post: (x + 1) * 10 - 2.
-        self.assertEqual(out, [18, 28, 38])
-        # All three stages participate in the pipeline.
-        self.assertEqual(set(calls), {"pre", "process", "post"})
+        handler = _Doubler([], _RunnerConf(), None)
+        self.assertEqual(list(handler.run(0, iter([1, 2, 3]))), [2, 4, 6])
 
     def test_duplicate_eval_type_rejected(self):
         def _define_duplicate():
             class _Dup(BatchEvalTypeHandler["pa.RecordBatch"]):
                 eval_type = PythonEvalType.SQL_SCALAR_ARROW_UDF
 
-                def pre_process(self, data):
+                def run(self, split_index, data):
                     return data
-
-                def process(self, work_items):
-                    return work_items
-
-                def post_process(self, results):
-                    return results
 
         self.assertRaises(AssertionError, _define_duplicate)
         # The failed definition must not clobber the existing registration.
@@ -182,7 +141,7 @@ class ArrowScalarUDFHandlerTests(unittest.TestCase):
         import pyarrow as pa
 
         # The UDF returns int32, but the declared return type is LongType (int64).
-        # post_process must enforce the declared schema onto the output batch.
+        # run must enforce the declared schema onto the output batch.
         def add_one(col):
             return pa.array([v.as_py() + 1 for v in col], type=pa.int32())
 

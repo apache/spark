@@ -18,8 +18,8 @@
 """Verification helpers shared by the eval type handlers and the worker.
 
 These validate a UDF's result before it is written back to the JVM. Handlers
-call them from ``post_process``; the worker still calls them from the eval-type
-branches that have not been migrated yet.
+call them from ``run``; the worker still calls them from the eval-type branches
+that have not been migrated yet.
 """
 
 from typing import Any

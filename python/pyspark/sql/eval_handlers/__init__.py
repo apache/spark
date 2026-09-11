@@ -18,13 +18,13 @@
 # ---------------------------------------------------------------------------
 # Eval type handlers
 #
-# Every Arrow/Pandas UDF eval type runs the same three-stage pipeline inside the
-# worker: prepare the input (argument extraction, conversions), invoke the user
-# code, then validate and normalize the result (schema enforcement, row-count
-# checks). Historically each eval type spelled this out inline in the worker's
+# Every Arrow/Pandas UDF eval type runs the same shape of work inside the worker:
+# prepare the input (argument extraction, conversions), invoke the user code, then
+# validate and normalize the result (schema enforcement, row-count checks).
+# Historically each eval type spelled this out inline in the worker's
 # ``read_udfs``, growing a single central if/elif dispatcher. ``EvalTypeHandler``
-# makes the lifecycle explicit and lets a new eval type attach itself as a
-# self-contained subclass -- no edit to a central branch is required.
+# turns each eval type into a self-contained subclass that owns its ``run`` and
+# ``serializer`` -- a new eval type attaches without editing a central branch.
 #
 # A handler declares its ``eval_type`` and is registered automatically via
 # ``__init_subclass__``; the worker's ``read_udfs`` looks it up in
@@ -57,9 +57,12 @@ from pyspark.sql.pandas.serializers import (
 )
 
 if TYPE_CHECKING:
-    import pyarrow as pa
+    # Referenced only as string forward refs in the category bases' generic
+    # subscripts (e.g. ``EvalTypeHandler["pa.RecordBatch", ...]``); kept for the
+    # type checker to resolve them.
+    import pyarrow as pa  # noqa: F401
 
-    from pyspark.sql.pandas._typing import CoGroupedBatch, GroupedBatch
+    from pyspark.sql.pandas._typing import CoGroupedBatch, GroupedBatch  # noqa: F401
 
 # Registry of concrete handlers keyed by PythonEvalType. Populated at class
 # definition time by ``EvalTypeHandler.__init_subclass__``.
@@ -74,22 +77,23 @@ OutputBatch = TypeVar("OutputBatch")
 
 
 class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=ABCMeta):
-    """Base class for the Arrow/Pandas UDF execution pipeline.
+    """Base class for the Arrow/Pandas UDF execution model.
 
-    A handler splits one eval type's work into three explicit stages that
-    ``run`` chains lazily:
-
-    - ``pre_process``: turn the input stream into a stream of work items
-      (argument extraction, offset handling, Arrow/pandas conversions).
-    - ``process``: invoke the user function only. This maps to the ``func`` /
-      ``grouped_func`` / ``cogrouped_func`` closures the eval types used before.
-    - ``post_process``: validate and normalize the raw results (schema
-      enforcement, row-count checks) into the output stream.
+    A handler owns one eval type's end-to-end execution: it declares the
+    ``serializer`` for the input/output streams and implements ``run``, which
+    consumes the input stream and yields the output stream.
 
     Concrete handlers subclass one of the typed category bases
     (``BatchEvalTypeHandler``, ``GroupedEvalTypeHandler``,
     ``CoGroupedEvalTypeHandler``) rather than this class directly, so the input
     stream type and the default serializer are fixed by the category.
+
+    ``run`` typically does three things -- prepare the input (argument
+    extraction, conversions), invoke the user code, then validate and normalize
+    the result. That structure is a convention, not a requirement: a handler may
+    write ``run`` as one generator, or factor the steps into private helpers, and
+    a family base (e.g. for pandas) may supply shared prepare/verify helpers that
+    its handlers reuse. The base only requires ``run``.
     """
 
     # Set by a concrete subclass to the PythonEvalType it handles. Category
@@ -122,22 +126,11 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=ABCMeta):
         """The serializer used for both the input and output streams."""
 
     @abstractmethod
-    def pre_process(self, data: "Iterator[InputBatch]") -> Iterator[Any]:
-        """Prepare a stream of work items from the input stream."""
-
-    @abstractmethod
-    def process(self, work_items: Iterator[Any]) -> Iterator[Any]:
-        """Invoke the user function over the work items, yielding raw results."""
-
-    @abstractmethod
-    def post_process(self, results: Iterator[Any]) -> "Iterator[OutputBatch]":
-        """Validate and normalize the raw results into the output stream."""
-
     def run(self, split_index: int, data: "Iterator[InputBatch]") -> "Iterator[OutputBatch]":
-        """Chain the three stages. Matches the ``func(split_index, data)`` shape
-        ``read_udfs`` returns; the stages are generators, so the pipeline stays
-        lazy and streams one work item at a time."""
-        return self.post_process(self.process(self.pre_process(data)))
+        """Run the eval type end to end: consume the input stream and yield the
+        output stream. Matches the ``func(split_index, data)`` shape ``read_udfs``
+        returns. Implementations are generators, so the pipeline stays lazy and
+        streams one batch at a time."""
 
 
 class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch], metaclass=ABCMeta):
@@ -148,10 +141,6 @@ class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch], metac
     def serializer(self) -> Any:
         return ArrowStreamSerializer(write_start_stream=True)
 
-    @abstractmethod
-    def pre_process(self, data: "Iterator[pa.RecordBatch]") -> Iterator[Any]:
-        """Prepare a stream of work items from the RecordBatch stream."""
-
 
 class GroupedEvalTypeHandler(EvalTypeHandler["GroupedBatch", OutputBatch], metaclass=ABCMeta):
     """Category base for eval types whose input stream is
@@ -161,10 +150,6 @@ class GroupedEvalTypeHandler(EvalTypeHandler["GroupedBatch", OutputBatch], metac
     def serializer(self) -> Any:
         return ArrowStreamGroupSerializer(write_start_stream=True)
 
-    @abstractmethod
-    def pre_process(self, data: "Iterator[GroupedBatch]") -> Iterator[Any]:
-        """Prepare a stream of work items from the per-group Arrow streams."""
-
 
 class CoGroupedEvalTypeHandler(EvalTypeHandler["CoGroupedBatch", OutputBatch], metaclass=ABCMeta):
     """Category base for eval types whose input stream is
@@ -173,10 +158,6 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler["CoGroupedBatch", OutputBatch], m
     @property
     def serializer(self) -> Any:
         return ArrowStreamCoGroupSerializer(write_start_stream=True)
-
-    @abstractmethod
-    def pre_process(self, data: "Iterator[CoGroupedBatch]") -> Iterator[Any]:
-        """Prepare a stream of work items from the per-co-group Arrow streams."""
 
 
 # Import the per-family handler submodules so their concrete handlers register

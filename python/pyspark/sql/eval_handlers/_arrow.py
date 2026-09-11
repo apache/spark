@@ -19,7 +19,7 @@
 ``pa.RecordBatch`` values directly, without a pandas conversion)."""
 
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any, Tuple
+from typing import TYPE_CHECKING, Any
 
 from pyspark.sql.conversion import ArrowBatchTransformer
 from pyspark.sql.eval_handlers import BatchEvalTypeHandler
@@ -35,10 +35,9 @@ if TYPE_CHECKING:
 class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     """SQL_SCALAR_ARROW_UDF: one user invocation per input RecordBatch.
 
-    The columns each UDF consumes are read straight off the RecordBatch, so
-    there is no up-front argument extraction; ``pre_process`` streams the input
-    batches through unchanged and carries each batch's row count forward for the
-    ``post_process`` row-count check.
+    Each UDF's argument columns are read straight off the RecordBatch, its
+    result is assembled into an output RecordBatch, coerced to the declared
+    schema, and checked against the input row count.
     """
 
     eval_type = PythonEvalType.SQL_SCALAR_ARROW_UDF
@@ -52,15 +51,10 @@ class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             prefers_large_types=runner_conf.use_large_var_types,
         )
 
-    def pre_process(self, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
-        return data
-
-    def process(
-        self, work_items: "Iterator[pa.RecordBatch]"
-    ) -> "Iterator[Tuple[pa.RecordBatch, int]]":
+    def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
         import pyarrow as pa
 
-        for batch in work_items:
+        for batch in data:
             output_batch = pa.RecordBatch.from_arrays(
                 [
                     udf_func(
@@ -71,14 +65,8 @@ class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                 ],
                 self._col_names,
             )
-            yield output_batch, batch.num_rows
-
-    def post_process(
-        self, results: "Iterator[Tuple[pa.RecordBatch, int]]"
-    ) -> "Iterator[pa.RecordBatch]":
-        for output_batch, num_rows in results:
             output_batch = ArrowBatchTransformer.enforce_schema(
                 output_batch, self._combined_arrow_schema
             )
-            verify_scalar_result(output_batch, num_rows)
+            verify_scalar_result(output_batch, batch.num_rows)
             yield output_batch
