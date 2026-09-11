@@ -18,13 +18,14 @@
 package org.apache.spark.sql.hive;
 
 /**
- * Test-only holder for a flag flipped by {@link StaticInitInputFormat}'s static initializer.
- * The flag lives on a separate class on purpose: a test can read it to observe whether the
- * format class was initialized, without initializing the format class itself (which reading a
- * field off it would do).
+ * Test-only holder for flags flipped by the static initializers of {@link StaticInitInputFormat}
+ * and {@link StaticInitOutputFormat}. The flags live on a separate class on purpose: a test can
+ * read them to observe whether a format class was initialized, without initializing the format
+ * class itself (which reading a field off it would do).
  */
 public final class StaticInitFlags {
   public static volatile boolean inputFormatInitialized = false;
+  public static volatile boolean outputFormatInitialized = false;
 
   private StaticInitFlags() {}
 }
