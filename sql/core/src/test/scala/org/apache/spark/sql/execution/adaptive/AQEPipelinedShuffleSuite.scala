@@ -71,7 +71,8 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite
       val expected = (0L until 1000L).groupBy(_ % 7).map { case (k, vs) => (k, vs.size.toLong) }
         .toSeq.sortBy(_._1)
       assert(rows.toSeq === expected)
-      // File cleanup leaves tracker entries behind. A later fetch must recover the prefix.
+      // Local cleanup unregisters the output; the next action recomputes unavailable stages.
+      // This exercises repeated regular execution, not a FetchFailed retry.
       assert(ds.collect().toSeq === expected)
       assert(ds.collect().toSeq === expected)
     }

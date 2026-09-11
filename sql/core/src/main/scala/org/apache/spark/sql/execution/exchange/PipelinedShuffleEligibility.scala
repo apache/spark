@@ -23,7 +23,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager
-import org.apache.spark.sql.execution.{CoalesceExec, CollectLimitExec, CollectTailExec, DeserializeToObjectExec, SparkPlan, TakeOrderedAndProjectExec}
+import org.apache.spark.sql.execution.{CoalesceExec, CollectLimitExec, CollectTailExec, DeserializeToObjectExec, ExternalRDDScanExec, RDDScanExec, SparkPlan, TakeOrderedAndProjectExec}
 import org.apache.spark.sql.execution.adaptive.QueryStageExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.CartesianProductExec
@@ -101,8 +101,10 @@ private[sql] object PipelinedShuffleEligibility extends Logging {
     // Dataset.rdd exposes arbitrary consumers beyond the SQL plan, including RDD shuffles,
     // multi-partition reads and repeated reads of the same partition. Cached inputs also hide
     // shuffle lineage: cache hits skip those readers, while misses may require regular stages.
+    // RDD scans can hide arbitrary shuffle lineage and sharing outside the SQL plan as well.
     def hasUnsupportedBoundary(p: SparkPlan): Boolean = p match {
-      case _: DeserializeToObjectExec | _: InMemoryTableScanExec => true
+      case _: DeserializeToObjectExec | _: InMemoryTableScanExec |
+          _: RDDScanExec | _: ExternalRDDScanExec[_] => true
       case q: QueryStageExec => hasUnsupportedBoundary(q.plan)
       case other => other.children.exists(hasUnsupportedBoundary)
     }

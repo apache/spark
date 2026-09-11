@@ -214,6 +214,59 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
   }
 
   for (aqe <- Seq(false, true)) {
+    test(s"regular fallback is reused and avoids cloning shuffle-free plans with AQE=$aqe") {
+      withPipelinedSession("pipelined-fallback-reuse", aqe) { spark =>
+        val plain = spark.range(10).queryExecution
+        assert(plain.withRegularShuffle eq plain)
+        val qe = spark.range(0, 100, 1, 2).repartition(4).queryExecution
+        val regular = qe.withRegularShuffle
+        assert(regular ne qe)
+        assert(regular.sparkSession ne qe.sparkSession)
+        assert(qe.withRegularShuffle eq regular)
+      }
+    }
+
+    test(s"RDD-backed SQL actions remain regular with AQE=$aqe") {
+      withPipelinedSession("pipelined-rdd-input", aqe) { spark =>
+        val input = spark.sparkContext.parallelize(0 until 1000, 2)
+          .map(i => (i % 4, 1L)).reduceByKey(_ + _)
+        val df = spark.createDataFrame(input).toDF("k", "v").groupBy("k").sum("v")
+        assert(df.collect().map(_.getLong(1)).sum === 1000L)
+        assert(collect(df.queryExecution.executedPlan) {
+          case s: ShuffleExchangeExec if s.pipelined => s
+        }.isEmpty)
+      }
+    }
+
+    test(s"recursive CTE retains regular iteration shuffles with AQE=$aqe") {
+      withPipelinedSession("pipelined-recursive-cte", aqe,
+          channelBatchSize = 8, channelQueueCapacity = 1) { spark =>
+        spark.conf.set("spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation", "0")
+        val df = spark.sql(
+          """WITH RECURSIVE t(n) AS (
+            |  SELECT /*+ REPARTITION(4) */ id FROM range(100)
+            |  UNION ALL
+            |  SELECT /*+ REPARTITION(4) */ n + 100 FROM t WHERE n < 200
+            |) SELECT n FROM t""".stripMargin)
+        assertRegularRDD(df.queryExecution.toRdd)
+        assert(df.collect().map(_.getLong(0)).sorted === (0L until 300L).toArray)
+      }
+    }
+
+    test(s"ordinary file scans retain regular shuffles with AQE=$aqe") {
+      withPipelinedSession("pipelined-file-scan", aqe) { spark =>
+        withTempDir { dir =>
+          val path = new java.io.File(dir, "data")
+          spark.range(100).write.parquet(path.getCanonicalPath)
+          val df = spark.read.parquet(path.getCanonicalPath).repartition(4)
+          assert(df.collect().map(_.getLong(0)).sorted === (0L until 100L).toArray)
+          assert(collect(df.queryExecution.executedPlan) {
+            case s: ShuffleExchangeExec if s.pipelined => s
+          }.isEmpty)
+        }
+      }
+    }
+
     test(s"typed and Python RDD exports retain regular shuffle lineage with AQE=$aqe") {
       withPipelinedSession("pipelined-rdd-exports", aqe) { spark =>
         import spark.implicits._
@@ -302,8 +355,16 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
     }
 
     test(s"cache construction and partial eviction use regular shuffles with AQE=$aqe") {
-      withPipelinedSession("pipelined-cache", aqe) { spark =>
-        val df = spark.range(0, 4000, 1, 2).repartition(4).persist(StorageLevel.MEMORY_ONLY)
+      withPipelinedSession("pipelined-cache", aqe,
+          channelBatchSize = 8, channelQueueCapacity = 1) { spark =>
+        import spark.implicits._
+        val evaluated = spark.sparkContext.longAccumulator("cached rows evaluated")
+        val record = org.apache.spark.sql.functions.udf { id: Long =>
+          evaluated.add(1)
+          id
+        }
+        val df = spark.range(0, 4000, 1, 2).repartition(4)
+          .select(record($"id").as("id")).as[Long].persist(StorageLevel.MEMORY_ONLY)
         try {
           val classicDf = df.asInstanceOf[org.apache.spark.sql.classic.Dataset[_]]
           val cached = spark.sharedState.cacheManager.lookupCachedData(classicDf).get
@@ -313,11 +374,14 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
           }.isEmpty)
           val expected = (0L until 4000L).toArray
           assert(df.collect().sorted === expected)
+          assert(evaluated.value === 4000L)
           val buffers = cached.cachedColumnBuffers
-          assert(buffers.getNumPartitions > 1)
+          assert(buffers.getNumPartitions === 4)
           SparkEnv.get.blockManager.removeBlock(RDDBlockId(buffers.id, 0))
           assert(df.collect().sorted === expected)
+          assert(evaluated.value === 5000L, "only the evicted partition must be recomputed")
           assert(df.collect().sorted === expected)
+          assert(evaluated.value === 5000L)
           val consumer = df.repartition(2)
           assert(consumer.collect().sorted === expected)
           assert(collect(consumer.queryExecution.executedPlan) {
@@ -354,10 +418,10 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
             assert(spark.conf.get("spark.sql.shuffle.localPipelined.enabled") === "true")
             assert(iterator.asScala.toArray.sorted === expected)
             // Four output-partition jobs reuse regular shuffle output: the producer runs once.
-            assert(evaluated.value === (initialRuns + run) * 1000L)
+            assert(evaluated.value === (initialRuns + 1) * 1000L)
           }
           assert(df.collect().sorted === expected)
-          assert(evaluated.value === (initialRuns + 4) * 1000L)
+          assert(evaluated.value === (initialRuns + 2) * 1000L)
           val exchanges = collect(df.queryExecution.executedPlan) {
             case s: ShuffleExchangeExec if s.pipelined => s
           }

@@ -39,7 +39,9 @@ trait PipelinedShuffleTestSession {
   protected def withPipelinedSession(
       appName: String,
       aqe: Boolean,
-      cores: Int = 16)(body: SparkSession => Unit): Unit = {
+      cores: Int = 16,
+      channelBatchSize: Int = 1024,
+      channelQueueCapacity: Int = 64)(body: SparkSession => Unit): Unit = {
     // sql/core suites share a JVM. If an earlier suite left an active/default SparkSession behind,
     // getOrCreate() below would return THAT session and silently ignore every .config() here, so
     // no exchange would be flipped and the assertions would fail pointing nowhere near the cause.
@@ -61,6 +63,8 @@ trait PipelinedShuffleTestSession {
       .appName(appName)
       .config("spark.shuffle.manager.incremental",
         "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager")
+      .config("spark.shuffle.channel.batchSize", channelBatchSize)
+      .config("spark.shuffle.channel.queueCapacity", channelQueueCapacity)
       .config(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, aqe.toString)
       .config(SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED.key, "true")
       .config("spark.speculation", "false")

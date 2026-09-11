@@ -1274,7 +1274,8 @@ object SQLConf {
     .doc("When true in local mode, eligible shuffle exchanges use the in-process channel " +
       "manager configured by spark.shuffle.manager.incremental. Producer and consumer stages " +
       "run concurrently. Plans whose estimated group width exceeds the local task capacity, " +
-      "or whose width cannot be determined, retain regular shuffles. Runtime admission still " +
+      "or whose width cannot be determined, retain regular shuffles. In particular, ordinary " +
+      "non-bucketed file scans report unknown widths and stay regular. Runtime admission still " +
       "checks available slots and can reject a group when other work occupies them. " +
       "Pipelined exchanges do not receive AQE coalescing. Dataset.rdd, toLocalIterator, cache " +
       "construction, cached inputs and mixed AQE plans use regular shuffles. Concurrent " +

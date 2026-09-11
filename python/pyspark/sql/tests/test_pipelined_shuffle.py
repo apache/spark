@@ -95,7 +95,7 @@ class PipelinedShuffleTests(ReusedSQLTestCase):
                     for run in (1, 2):
                         rows = list(df.toLocalIterator(prefetchPartitions=prefetch))
                         self.assertEqual(sorted(r.id for r in rows), list(range(1000)))
-                        self.assertEqual(evaluated.value, (run + 1) * 1000)
+                        self.assertEqual(evaluated.value, 2000)
                     self.assertEqual(
                         self.spark.conf.get("spark.sql.shuffle.localPipelined.enabled"), "true"
                     )

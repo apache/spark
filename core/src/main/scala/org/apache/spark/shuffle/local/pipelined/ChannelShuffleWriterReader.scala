@@ -168,8 +168,8 @@ private[spark] class ChannelShuffleWriter[K, V](
         // Records must already be detached from the producer's reused row buffers by the time
         // they reach here (the producer reuses its output UnsafeRow across iterations, and the
         // consumer reads on another thread). The copy is done in the SQL layer's
-        // ShuffleWriteProcessor for the pipelined path -- where InternalRow.copy() is available
-        // -- rather than here, because this class lives in `core` and cannot reference SQL rows.
+        // ShuffleExchangeExec.prepareShuffleDependency via needToCopyObjectsBeforeShuffle
+        // for the pipelined path. This core class cannot reference SQL rows.
         // `rec` is already a detached (key, value) pair, so batch it directly rather than
         // re-wrapping it in a fresh Tuple2 -- one fewer allocation per record on the hot loop.
         // Product2 is typed as Any; the concrete record is always a reference (a Tuple2 of the
