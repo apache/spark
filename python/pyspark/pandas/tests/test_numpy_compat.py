@@ -702,15 +702,10 @@ class NumPyCompatTestsMixin:
         # low bits: -9007199254740993 // 2 is -4503599627370497, not -4503599627370496.
         pdf = pd.DataFrame(
             {
-                "x1": [9007199254740993, -9007199254740993, 4611686018427387905, 7, -7],
-                "x2": [1, 2, 3, 3, 3],
+                "x1": [9007199254740993, -9007199254740993, 4611686018427387905, 7, -7, -(2**63)],
+                "x2": [1, 2, 3, 3, 3, 2],
             }
         )
-        self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2).astype("float64"))
-
-        # The most negative long divided by -1, whose quotient a long cannot hold. NumPy wraps
-        # around, while Spark's integer division raises.
-        pdf = pd.DataFrame({"x1": [-(2**63), -(2**63)], "x2": [-1, 2]})
         self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2).astype("float64"))
 
         # Finite operands whose quotient overflows to an infinity, which is its own floor.
@@ -718,6 +713,23 @@ class NumPyCompatTestsMixin:
             {"x1": [1e300, -1e300, 1e300, -1e300], "x2": [1e-300, 1e-300, -1e-300, -1e-300]}
         )
         self.assert_eq(floor_divided(pdf), np.floor_divide(pdf.x1, pdf.x2))
+
+    @unittest.skipIf(
+        LooseVersion(np.__version__) < LooseVersion("1.24.0"),
+        "NumPy < 1.24 leaves integer floor division overflow undefined",
+    )
+    def test_floor_divide_func_integer_overflow(self):
+        from pyspark.pandas.utils import _floor_divide_func
+
+        pdf = pd.DataFrame({"x1": [-(2**63)], "x2": [-1]})
+        psdf = ps.from_pandas(pdf)
+        result = (
+            psdf.spark.frame()
+            .select(_floor_divide_func(F.col("x1"), F.col("x2")).alias("result"))
+            .toPandas()["result"]
+            .rename(None)
+        )
+        self.assert_eq(result, np.floor_divide(pdf.x1, pdf.x2).astype("float64"))
 
     def test_np_logaddexp(self):
         for pdf in (
