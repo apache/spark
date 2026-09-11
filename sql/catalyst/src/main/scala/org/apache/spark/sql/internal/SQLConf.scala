@@ -5377,17 +5377,19 @@ object SQLConf {
       .doc("Best-effort byte-size target for a single Arrow RecordBatch produced by an " +
         "Arrow-based Python UDF worker, applied on the worker before the batch is sent to " +
         "the JVM. applyInPandas hands each group to the UDF as one batch, so a large group " +
-        "can build a batch past Arrow's 2GB limit that then fails to transfer. When set, " +
-        "the worker splits a batch estimated larger than this into ceil(nbytes / value) " +
-        "row-balanced, zero-copy pieces to keep each one under the limit; the estimate " +
+        "produces one large output batch; when set, the worker splits a batch estimated " +
+        "larger than this into ceil(nbytes / value) row-balanced, zero-copy pieces so the " +
+        "JVM receives several smaller batches instead of one large one. The estimate " +
         "assumes roughly uniform row size and is not measured per slice, so a skewed, " +
-        "variable-width batch may still exceed the target. It is distinct from " +
-        "spark.sql.execution.arrow.maxBytesPerOutputBatch, which slices JVM-side with a " +
-        "byte-accurate measure but only after a batch has been read back from the worker, " +
-        "so it cannot help a batch too large to transfer in the first place. Currently " +
-        "only applyInPandas (SQL_GROUPED_MAP_PANDAS_UDF) honors this; " +
-        "other Arrow-based Python UDFs ship the value but ignore it. -1 (the default) " +
-        "means no limit.")
+        "variable-width batch may still exceed the target. It does not prevent " +
+        "conversion-time offset overflow: PandasToArrowConversion builds the full batch " +
+        "before it is split, so a column whose data exceeds Arrow's 32-bit offset range " +
+        "overflows during conversion, ahead of this split. It complements " +
+        "spark.sql.execution.arrow.maxBytesPerOutputBatch, which slices JVM-side after the " +
+        "batch is read back; this one pre-splits on the worker so the JVM need not receive " +
+        "and allocate one giant batch first. Currently only applyInPandas " +
+        "(SQL_GROUPED_MAP_PANDAS_UDF) honors this; other Arrow-based Python UDFs ship the " +
+        "value but ignore it. -1 (the default) means no limit.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
