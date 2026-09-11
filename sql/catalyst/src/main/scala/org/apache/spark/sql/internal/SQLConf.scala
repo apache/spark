@@ -7016,6 +7016,8 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  // Kept here with the other `spark.sql.avro.*` entries rather than in `StaticSQLConf`, though it
+  // is static: `buildStaticConf` registers the static key wherever it is declared.
   val AVRO_SCHEMA_URL_ALLOWED_SCHEMES =
     buildStaticConf("spark.sql.avro.schemaUrlAllowedSchemes")
       .internal()
