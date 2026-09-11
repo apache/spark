@@ -88,4 +88,9 @@ SELECT id, data IS NULL FROM (SELECT * EXCEPT (data.a) FROM nullable_struct);
 SELECT id, data IS NULL, data.s2 IS NULL FROM (SELECT * EXCEPT (data.s2.c) FROM nullable_struct);
 SELECT data.* EXCEPT (s2.c) FROM nullable_struct;
 
+-- EXCEPT every field of a STRUCT yields an empty STRUCT for both NULL and non-NULL inputs
+SELECT * EXCEPT (data.a, data.b, data.s2) FROM nullable_struct;
+SELECT id, data IS NULL FROM (SELECT * EXCEPT (data.a, data.b, data.s2) FROM nullable_struct);
+SELECT * EXCEPT (data.s2.c, data.s2.d) FROM nullable_struct;
+
 DROP VIEW nullable_struct;
