@@ -332,6 +332,19 @@ private class HistoryServerDiskManager(
 
   private[history] class Lease(val tmpPath: File, private val leased: Long) {
 
+    // The leased (reserved, uncommitted) usage must be returned exactly once, whether the lease
+    // is committed or rolled back. commit() releases it before moving the store into place, so a
+    // failure after that point (e.g. a failed rename) sends the caller through rollback(); guard
+    // against releasing it a second time there, which would drive the usage tracker negative.
+    private var released = false
+
+    private def releaseLease(): Unit = {
+      if (!released) {
+        updateUsage(-leased)
+        released = true
+      }
+    }
+
     /**
      * Commits a lease to its final location, and update accounting information. This method
      * marks the application as active, so its store is not available for eviction.
@@ -357,7 +370,7 @@ private class HistoryServerDiskManager(
         }
       }
 
-      updateUsage(-leased)
+      releaseLease()
 
       val newSize = sizeOf(tmpPath)
       makeRoom(newSize)
@@ -385,7 +398,7 @@ private class HistoryServerDiskManager(
 
     /** Deletes the temporary directory created for the lease. */
     def rollback(): Unit = {
-      updateUsage(-leased)
+      releaseLease()
       Utils.deleteRecursively(tmpPath)
     }
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.File
+import java.io.{File, IOException}
 import java.util.concurrent.{CountDownLatch, FutureTask, TimeUnit}
 
 import scala.concurrent.duration._
@@ -409,6 +409,35 @@ abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAn
     assert(!dst.exists())
     manager.release("app1", None, delete = true)
     assert(manager.committed() === 0)
+  }
+
+  test("SPARK-59439: a failed commit rename does not double-release the lease") {
+    val manager = mockManager()
+
+    // Reserve space for a store, then make the rename in commit() fail by removing the source
+    // directory. commit() releases the lease reservation before the rename, so a failure there
+    // must not let the caller's rollback() deduct the reservation a second time.
+    val lease = manager.lease(2)
+    doReturn(2L).when(manager).sizeOf(meq(lease.tmpPath))
+    Utils.deleteRecursively(lease.tmpPath)
+
+    intercept[IOException] {
+      lease.commit("app1", None)
+    }
+    // The caller rolls the lease back after the failed commit, as FsHistoryProvider does.
+    lease.rollback()
+
+    // The reservation was returned exactly once: usage is back to zero (not negative) and the
+    // full capacity is free again.
+    assert(manager.committed() === 0)
+    assert(manager.free() === MAX_USAGE)
+
+    // Accounting is intact, so a subsequent lease and commit still succeed.
+    val lease2 = manager.lease(2)
+    doReturn(2L).when(manager).sizeOf(meq(lease2.tmpPath))
+    val dst = lease2.commit("app1", None)
+    assert(dst.isDirectory())
+    assert(manager.committed() === 2)
   }
 
   test("SPARK-38095: appStorePath should use backend extensions") {
