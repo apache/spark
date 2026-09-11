@@ -243,7 +243,7 @@ class RandomForestRegressionModel private[ml] (
       if ($(predictionCol).nonEmpty) {
         val predUDF = udf { features: Vector =>
           val rootNodes = bcRootNodes.value
-          rootNodes.map(_.predictImpl(features).prediction).sum / rootNodes.length
+          TreeEnsembleModel.predictRaw(features, rootNodes) / rootNodes.length
         }
         predColNames :+= $(predictionCol)
         predCols :+= predUDF(col($(featuresCol)))
