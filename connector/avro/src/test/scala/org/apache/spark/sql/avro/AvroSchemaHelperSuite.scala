@@ -33,31 +33,47 @@ class AvroSchemaHelperSuite extends SharedSparkSession {
     assert(SchemaConverters.toSqlType(avroSchema).dataType.isInstanceOf[ArrayType])
   }
 
-  test("a pathologically nested Catalyst type fails as a schema error, not StackOverflowError") {
-    // A backquoted identifier may itself contain '>', so a character scan of the type string
-    // cannot bound the real nesting -- only parsing it can. Parse on a small-stack thread so the
-    // recursive-descent parser overflows deterministically, and assert the overflow surfaces as
-    // an IncompatibleSchemaException instead of escaping as a StackOverflowError.
-    val depth = 6000
-    val deepType = "struct<`>`:" * depth + "int" + ">" * depth
-    val avroSchema = SchemaBuilder.builder().intType()
-    avroSchema.addProp("spark.sql.catalyst.type", deepType)
+  // A type string deep enough to overflow the recursive-descent parser on the small-stack thread
+  // used by the overflow tests below. A backquoted identifier may itself contain '>', so a
+  // character scan of the type string cannot bound the real nesting -- only parsing it can.
+  private def deeplyNestedType(depth: Int): String =
+    "struct<`>`:" * depth + "int" + ">" * depth
 
+  // Runs `f` on a thread with a small (256 KiB) stack so the recursive-descent parser overflows
+  // deterministically, and returns whatever it threw (or null if nothing did).
+  private def runOnSmallStack(f: => Unit): Throwable = {
     @volatile var thrown: Throwable = null
     val runnable = new Runnable {
       override def run(): Unit = {
-        try {
-          SchemaConverters.toSqlType(avroSchema)
-        } catch {
-          case t: Throwable => thrown = t
-        }
+        try f catch { case t: Throwable => thrown = t }
       }
     }
     val t = new Thread(null, runnable, "avro-deep-catalyst-type", 256 * 1024)
     t.start()
     t.join()
+    thrown
+  }
+
+  test("a pathologically nested Catalyst type fails as a schema error, not StackOverflowError") {
+    val avroSchema = SchemaBuilder.builder().intType()
+    avroSchema.addProp("spark.sql.catalyst.type", deeplyNestedType(1000))
+    val thrown = runOnSmallStack(SchemaConverters.toSqlType(avroSchema))
     assert(thrown.isInstanceOf[IncompatibleSchemaException],
       s"expected IncompatibleSchemaException but got: $thrown")
+    // The message names the property the deep type came from.
+    assert(thrown.getMessage.contains("spark.sql.catalyst.type"))
+  }
+
+  test("SPARK-59311: a pathologically nested map-key type names the map-key property on overflow") {
+    // The overflow while parsing the map-key type must be reported against
+    // spark.sql.catalyst.mapKey.type, not the generic spark.sql.catalyst.type property.
+    val mapSchema = SchemaBuilder.builder().map().values(SchemaBuilder.builder().intType())
+    mapSchema.addProp("spark.sql.catalyst.mapKey.type", deeplyNestedType(1000))
+    val thrown = runOnSmallStack(SchemaConverters.toSqlType(mapSchema))
+    assert(thrown.isInstanceOf[IncompatibleSchemaException],
+      s"expected IncompatibleSchemaException but got: $thrown")
+    assert(thrown.getMessage.contains("spark.sql.catalyst.mapKey.type"),
+      s"expected the map-key property name in: ${thrown.getMessage}")
   }
 
   test("ensure schema is a record") {
