@@ -15,21 +15,22 @@
 # limitations under the License.
 #
 
-import unittest
 import logging
+import unittest
 from decimal import Decimal
 
 from pyspark.errors import AnalysisException, PythonException
+from pyspark.sql import Row
 from pyspark.sql import functions as sf
-from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
-from pyspark.sql.window import Window
+from pyspark.sql.functions import PandasUDFType, pandas_udf, udf
 from pyspark.sql.types import (
     DecimalType,
+    DoubleType,
+    FloatType,
     IntegerType,
     LongType,
-    FloatType,
-    DoubleType,
 )
+from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     assertDataFrameEqual,
@@ -38,7 +39,6 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.sql import Row
 from pyspark.util import is_remote_only
 
 if have_pandas:

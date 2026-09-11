@@ -717,6 +717,67 @@ Project [(2020-01-01 19:04:05.123456789 - cast(null as timestamp_ltz(9))) AS (TI
 
 
 -- !query
+SELECT convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    '2022-03-27 03:00:00.123456789 UTC' :: timestamp_ltz(9))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"CAST(2022-03-27 03:00:00.123456789 UTC AS TIMESTAMP_LTZ(9))\"",
+    "inputType" : "\"TIMESTAMP_LTZ(9)\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"(TIMESTAMP_NTZ OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\"",
+    "sqlExpr" : "\"convert_timezone(Europe/Brussels, Europe/Moscow, CAST(2022-03-27 03:00:00.123456789 UTC AS TIMESTAMP_LTZ(9)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 120,
+    "fragment" : "convert_timezone('Europe/Brussels', 'Europe/Moscow',\n    '2022-03-27 03:00:00.123456789 UTC' :: timestamp_ltz(9))"
+  } ]
+}
+
+
+-- !query
+SELECT from_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', 'Asia/Kolkata')
+-- !query analysis
+Project [from_utc_timestamp(2015-07-23 17:00:00.123456789, Asia/Kolkata) AS from_utc_timestamp(TIMESTAMP_LTZ '2015-07-23 17:00:00.123456789', Asia/Kolkata)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', 'Asia/Kolkata')
+-- !query analysis
+Project [to_utc_timestamp(2015-07-23 17:00:00.123456789, Asia/Kolkata) AS to_utc_timestamp(TIMESTAMP_LTZ '2015-07-23 17:00:00.123456789', Asia/Kolkata)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(
+    to_utc_timestamp('2015-07-24 00:00:00.1234567 UTC' :: timestamp_ltz(7), 'Asia/Kolkata'))
+-- !query analysis
+Project [typeof(to_utc_timestamp(cast(2015-07-24 00:00:00.1234567 UTC as timestamp_ltz(7)), Asia/Kolkata)) AS typeof(to_utc_timestamp(CAST(2015-07-24 00:00:00.1234567 UTC AS TIMESTAMP_LTZ(7)), Asia/Kolkata))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT from_utc_timestamp(CAST(NULL AS timestamp_ltz(9)), 'Asia/Kolkata')
+-- !query analysis
+Project [from_utc_timestamp(cast(null as timestamp_ltz(9)), Asia/Kolkata) AS from_utc_timestamp(CAST(NULL AS TIMESTAMP_LTZ(9)), Asia/Kolkata)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', CAST(NULL AS STRING))
+-- !query analysis
+Project [to_utc_timestamp(2015-07-23 17:00:00.123456789, cast(null as string)) AS to_utc_timestamp(TIMESTAMP_LTZ '2015-07-23 17:00:00.123456789', CAST(NULL AS STRING))#x]
++- OneRowRelation
+
+
+-- !query
 SELECT max(c), min(c) FROM VALUES
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
@@ -773,6 +834,18 @@ SELECT sort_array(collect_set(c)) FROM VALUES
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
 -- !query analysis
 Aggregate [sort_array(collect_set(c#x, 0, 0, true), true) AS sort_array(collect_set(c), true)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT sort_array(collect_list(c)) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (CAST(NULL AS timestamp_ltz(9))) AS t(c)
+-- !query analysis
+Aggregate [sort_array(collect_list(c#x, 0, 0, true), true) AS sort_array(collect_list(c), true)#x]
 +- SubqueryAlias t
    +- LocalRelation [c#x]
 

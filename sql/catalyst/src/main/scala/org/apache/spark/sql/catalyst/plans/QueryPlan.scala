@@ -258,13 +258,29 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * query operator based on the mapped expressions.
    */
   def mapExpressions(f: Expression => Expression): this.type = {
+    mapExpressions(f, useFastEquals = true)
+  }
+
+  /**
+   * A variant of [[mapExpressions]] that retains structurally equal replacement expressions.
+   */
+  private[sql] def mapExpressionsWithReferenceEquality(
+      f: Expression => Expression): this.type = {
+    mapExpressions(f, useFastEquals = false)
+  }
+
+  private def mapExpressions(
+      f: Expression => Expression,
+      useFastEquals: Boolean): this.type = {
     var changed = false
 
     @inline def transformExpression(e: Expression): Expression = {
       val newE = CurrentOrigin.withOrigin(e.origin) {
         f(e)
       }
-      if (newE.fastEquals(e)) {
+      // Reference equality preserves fresh stateful copies that fastEquals sees as unchanged.
+      val unchanged = if (useFastEquals) newE.fastEquals(e) else newE.eq(e)
+      if (unchanged) {
         e
       } else {
         changed = true
@@ -575,6 +591,30 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def transformDownWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType = {
     transformDownWithSubqueriesAndPruning(AlwaysProcess.fn, UnknownRuleId)(f)
+  }
+
+  /**
+   * A variant of [[transformDownWithSubqueries]] that retains structurally equal replacement
+   * plans and expressions.
+   */
+  private[sql] def transformDownWithSubqueriesAndReferenceEquality(
+      f: PartialFunction[PlanType, PlanType]): PlanType = {
+    val g: PartialFunction[PlanType, PlanType] = new PartialFunction[PlanType, PlanType] {
+      override def isDefinedAt(x: PlanType): Boolean = true
+
+      override def apply(plan: PlanType): PlanType = {
+        val transformed = f.applyOrElse[PlanType, PlanType](plan, identity)
+        transformed.mapExpressionsWithReferenceEquality(
+          _.transformDownWithReferenceEquality {
+            case planExpression: PlanExpression[PlanType @unchecked] =>
+              val newPlan = planExpression.plan
+                .transformDownWithSubqueriesAndReferenceEquality(f)
+              planExpression.withNewPlan(newPlan)
+          })
+      }
+    }
+
+    transformDownWithReferenceEquality(g)
   }
 
   /**

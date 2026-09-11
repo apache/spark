@@ -1018,6 +1018,19 @@ abstract class SQLViewSuite extends QueryTest {
             s"`$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
             s"`$SESSION_CATALOG_NAME`.`default`.`view1`"))
       )
+
+      // Detect cyclic view references from subqueries nested in larger expressions.
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER VIEW view1 AS SELECT * FROM jt WHERE id = (SELECT id FROM view2)")
+        },
+        condition = "RECURSIVE_VIEW",
+        parameters = Map(
+          "viewIdent" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
+          "newPath" -> (s"`$SESSION_CATALOG_NAME`.`default`.`view1` -> " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`view2` -> " +
+            s"`$SESSION_CATALOG_NAME`.`default`.`view1`"))
+      )
     }
   }
 

@@ -24,51 +24,52 @@ from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union
 import pyspark
 from pyspark.errors import PySparkNotImplementedError, PySparkRuntimeError, PySparkValueError
 from pyspark.sql.pandas.types import (
+    _create_converter_to_pandas,
     _dedup_names,
     _deduplicate_field_names,
-    _create_converter_to_pandas,
-    to_arrow_schema,
     from_arrow_schema,
+    to_arrow_schema,
 )
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import (
+    AnyTimestampNanoType,
     ArrayType,
     BinaryType,
     BooleanType,
     ByteType,
-    ShortType,
+    DataType,
+    DateType,
+    DayTimeIntervalType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    Geography,
+    GeographyType,
+    Geometry,
+    GeometryType,
     IntegerType,
     LongType,
-    DataType,
-    FloatType,
-    DoubleType,
-    DecimalType,
-    GeographyType,
-    Geography,
-    GeometryType,
-    Geometry,
     MapType,
     NullType,
     Row,
+    ShortType,
     StringType,
     StructField,
     StructType,
-    DateType,
-    TimeType,
     TimestampNTZType,
     TimestampType,
-    DayTimeIntervalType,
-    YearMonthIntervalType,
+    TimeType,
     UserDefinedType,
     VariantType,
     VariantVal,
+    YearMonthIntervalType,
     _create_row,
     _has_type,
 )
 
 if TYPE_CHECKING:
-    import pyarrow as pa
     import pandas as pd
+    import pyarrow as pa
 
 
 class ArrowBatchTransformer:
@@ -359,11 +360,11 @@ class PandasToArrowConversion:
         -------
         pa.RecordBatch
         """
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         from pyspark.errors import PySparkTypeError, PySparkValueError
-        from pyspark.sql.pandas.types import to_arrow_type, _create_converter_from_pandas
+        from pyspark.sql.pandas.types import _create_converter_from_pandas, to_arrow_type
 
         # Handle empty schema (0 columns)
         # Use dummy column + select([]) to preserve row count (PyArrow limitation workaround)
@@ -542,6 +543,11 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, (TimestampType, TimestampNTZType)):
             # Always truncate
             return True
+        elif isinstance(dataType, AnyTimestampNanoType):
+            # Needs a converter so _create_converter is built (and eagerly rejects) for every
+            # direct caller -- Arrow UDF return values, Python data-source writes -- not only the
+            # LocalDataToArrowConversion.convert path.
+            return True
         elif isinstance(dataType, DecimalType):
             # Convert Decimal('NaN') to None
             # Rescale Decimal values
@@ -594,6 +600,18 @@ class LocalDataToArrowConversion:
                 return None
             else:
                 return lambda value: value
+
+        if isinstance(dataType, AnyTimestampNanoType):
+            # SPARK-57462: the Arrow-based value path for the nanosecond timestamp types is a
+            # pending follow-up. Reject eagerly, when the converter is built, so building a
+            # DataFrame from Arrow / returning nanoseconds from an Arrow UDF fails deterministically
+            # rather than mis-encoding the value. Consistent with to_arrow_type.
+            from pyspark.errors import PySparkTypeError
+
+            raise PySparkTypeError(
+                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                messageParameters={"data_type": str(dataType)},
+            )
 
         if isinstance(dataType, NullType):
 
@@ -685,6 +703,27 @@ class LocalDataToArrowConversion:
                         assert isinstance(value, (list, array.array))
                         return list(value)
 
+            elif isinstance(dataType.elementType, (StringType, BinaryType)):
+                # Inline the scalar identity fast path so elements that are
+                # already the target Python type skip the per-element converter
+                # call entirely: `convert_string`/`convert_binary` return such
+                # elements unchanged. `str` and immutable `bytes` are the two
+                # element types whose converter is a no-op on a matching value.
+                # Any other element -- including `None` (whose nullability is
+                # enforced by `element_conv`) and values that need coercion (e.g.
+                # a bool to string) -- falls back to `element_conv`, reused
+                # unchanged.
+                fast_type = str if isinstance(dataType.elementType, StringType) else bytes
+
+                def convert_array(value: Any) -> Any:
+                    if value is None:
+                        if not nullable:
+                            raise PySparkValueError(f"input for {dataType} must not be None")
+                        return None
+                    else:
+                        assert isinstance(value, (list, array.array))
+                        return [v if type(v) is fast_type else element_conv(v) for v in value]
+
             else:
 
                 def convert_array(value: Any) -> Any:
@@ -742,6 +781,12 @@ class LocalDataToArrowConversion:
                     if not nullable:
                         raise PySparkValueError(f"input for {dataType} must not be None")
                     return None
+                elif type(value) is bytes:
+                    # Fast path: `bytes(value)` returns `value` itself for a `bytes`
+                    # input (no copy, as `bytes` is immutable), but still pays the
+                    # constructor dispatch per element. Returning it directly skips
+                    # that. `bytearray` falls through and is copied into `bytes`.
+                    return value
                 else:
                     assert isinstance(value, (bytes, bytearray))
                     return bytes(value)
@@ -804,13 +849,19 @@ class LocalDataToArrowConversion:
                     if not nullable:
                         raise PySparkValueError(f"input for {dataType} must not be None")
                     return None
+                elif type(value) is str:
+                    # Fast path: `str(value)` returns `value` itself for a `str`
+                    # input (no copy), but still pays the constructor dispatch per
+                    # element. Returning it directly skips that and the bool check.
+                    return value
+                elif value is True:
+                    # To match the PySpark Classic which convert bool to string in
+                    # the JVM side (python.EvaluatePython.makeFromJava)
+                    return "true"
+                elif value is False:
+                    return "false"
                 else:
-                    if isinstance(value, bool):
-                        # To match the PySpark Classic which convert bool to string in
-                        # the JVM side (python.EvaluatePython.makeFromJava)
-                        return str(value).lower()
-                    else:
-                        return str(value)
+                    return str(value)
 
             return convert_string
 
@@ -1000,6 +1051,7 @@ class ArrowTableToRowsConversion:
         the minimum supported PyArrow version contains the fix.
         """
         import pyarrow as pa
+
         from pyspark.loose_version import LooseVersion
 
         if LooseVersion(pa.__version__) >= LooseVersion("25.0.1"):
@@ -1143,6 +1195,11 @@ class ArrowTableToRowsConversion:
         elif isinstance(dataType, (TimestampType, TimestampNTZType)):
             # Always remove the time zone info for now
             return True
+        elif isinstance(dataType, AnyTimestampNanoType):
+            # Needs a converter so _create_converter is built (and eagerly rejects) for every
+            # direct caller -- Connect collect, batched Arrow UDF inputs, foreachPartition, and
+            # Python data-source reads -- not only the ArrowTableToRowsConversion.convert path.
+            return True
         elif isinstance(dataType, UserDefinedType):
             return True
         elif isinstance(dataType, VariantType):
@@ -1177,6 +1234,19 @@ class ArrowTableToRowsConversion:
                 return None
             else:
                 return lambda value: value
+
+        if isinstance(dataType, AnyTimestampNanoType):
+            # SPARK-57462: the Arrow-based value path for the nanosecond timestamp types is a
+            # pending follow-up. Reject eagerly, when the converter is built (all callers build
+            # converters up front), so it is not data-dependent and cannot leak a raw
+            # Arrow-derived value (a nanosecond-precision, possibly timezone-aware
+            # pandas.Timestamp). Consistent with to_arrow_type, which already rejects these types.
+            from pyspark.errors import PySparkTypeError
+
+            raise PySparkTypeError(
+                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                messageParameters={"data_type": str(dataType)},
+            )
 
         if isinstance(dataType, NullType):
             return lambda value: None
@@ -1619,8 +1689,8 @@ class ArrowArrayConversion:
         doesn't need this conversion.
         """
         import pyarrow as pa
-        import pyarrow.types as types
         import pyarrow.compute as pc
+        import pyarrow.types as types
 
         def check_type_func(pa_type: pa.DataType) -> bool:
             # match timezone-aware TimestampType
@@ -1656,8 +1726,8 @@ class ArrowArrayConversion:
         2, coerce_temporal_nanoseconds: coerce timestamp time units to nanoseconds
         """
         import pyarrow as pa
-        import pyarrow.types as types
         import pyarrow.compute as pc
+        import pyarrow.types as types
 
         def check_type_func(pa_type: pa.DataType) -> bool:
             return types.is_timestamp(pa_type) and (pa_type.unit != "ns" or pa_type.tz is not None)
@@ -1801,8 +1871,8 @@ class ArrowArrayToPandasConversion:
         This method handles date type columns specially to avoid overflow issues with
         datetime64[ns] intermediate representations.
         """
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert isinstance(arr, (pa.Array, pa.ChunkedArray))
 
@@ -1897,8 +1967,8 @@ class ArrowArrayToPandasConversion:
         prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
     ) -> Union["pd.Series", "pd.DataFrame"]:
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         assert isinstance(arr, (pa.Array, pa.ChunkedArray))
 
@@ -2011,4 +2081,6 @@ class ArrowArrayToPandasConversion:
         else:  # pragma: no cover
             assert False, f"Need converter for {spark_type} but failed to find one."
 
-        return series.rename(ser_name)
+        # `series` is created in this method, so naming it in place is safe; rename() copies it.
+        series.name = ser_name
+        return series

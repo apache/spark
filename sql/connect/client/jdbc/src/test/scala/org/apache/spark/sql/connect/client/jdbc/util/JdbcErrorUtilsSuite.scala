@@ -26,38 +26,37 @@ import org.apache.spark.sql.connect.test.ConnectFunSuite
 
 /**
  * Tests for [[JdbcErrorUtils.toSQLException]]. A RuntimeException mixing in
- * [[SparkThrowable]] stands in for converted server errors; a real
- * [[StatusRuntimeException]] cause models transport errors the way
- * GrpcExceptionConverter preserves them.
+ * [[SparkThrowable]] stands in for converted server errors, carrying the sqlState
+ * GrpcExceptionConverter would supply. A real [[StatusRuntimeException]] cause
+ * models transport errors the way GrpcExceptionConverter preserves them.
  */
 class JdbcErrorUtilsSuite extends ConnectFunSuite {
 
   private def sparkError(
       condition: String,
+      sqlState: String,
       msg: String,
       cause: Throwable = null): RuntimeException =
     new RuntimeException(msg, cause) with SparkThrowable {
       override def getCondition: String = condition
+      override def getSqlState: String = sqlState
     }
 
   private def grpcError(status: Status): StatusRuntimeException =
     new StatusRuntimeException(status)
 
-  test("INVALID_HANDLE.SESSION_CLOSED maps to a connection exception with SQLState 08003") {
+  test("a class-08 SQLSTATE maps to a non-transient connection exception") {
     val e = JdbcErrorUtils.toSQLException(
-      sparkError("INVALID_HANDLE.SESSION_CLOSED", "Session was closed"))
+      sparkError("INVALID_HANDLE.SESSION_CLOSED", "08003", "Session was closed"))
     assert(e.isInstanceOf[SQLNonTransientConnectionException])
     assert(e.getSQLState === "08003")
     assert(e.getMessage === "Session was closed")
   }
 
-  test("other session-level INVALID_HANDLE subconditions also map to 08003") {
-    Seq("INVALID_HANDLE.SESSION_NOT_FOUND", "INVALID_HANDLE.SESSION_CHANGED").foreach {
-      condition =>
-        val e = JdbcErrorUtils.toSQLException(sparkError(condition, "gone"))
-        assert(e.isInstanceOf[SQLNonTransientConnectionException], condition)
-        assert(e.getSQLState === "08003", condition)
-    }
+  test("the class-08 mapping does not depend on the condition name") {
+    val e = JdbcErrorUtils.toSQLException(sparkError("SOME_FUTURE_CONDITION", "08004", "gone"))
+    assert(e.isInstanceOf[SQLNonTransientConnectionException])
+    assert(e.getSQLState === "08004")
   }
 
   test("operation-level INVALID_HANDLE subconditions do not map to a connection exception") {
@@ -67,14 +66,14 @@ class JdbcErrorUtilsSuite extends ConnectFunSuite {
       "INVALID_HANDLE.OPERATION_ABANDONED",
       "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
       "INVALID_HANDLE.FORMAT").foreach { condition =>
-      val e = JdbcErrorUtils.toSQLException(sparkError(condition, "operation gone"))
+      val e = JdbcErrorUtils.toSQLException(sparkError(condition, "HY000", "operation gone"))
       assert(!e.isInstanceOf[SQLNonTransientConnectionException], condition)
       assert(!e.isInstanceOf[SQLTransientConnectionException], condition)
     }
   }
 
   test("a non-connection Spark error keeps the server-provided SQLState") {
-    val e = JdbcErrorUtils.toSQLException(sparkError("DIVIDE_BY_ZERO", "boom"))
+    val e = JdbcErrorUtils.toSQLException(sparkError("DIVIDE_BY_ZERO", "22012", "boom"))
     assert(!e.isInstanceOf[SQLNonTransientConnectionException])
     assert(!e.isInstanceOf[SQLTransientConnectionException])
     assert(e.getSQLState === "22012")
@@ -92,6 +91,7 @@ class JdbcErrorUtilsSuite extends ConnectFunSuite {
     // the shape GrpcExceptionConverter produces for transport errors
     val wrapped = sparkError(
       "CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE",
+      "XXKCM",
       "io.grpc.StatusRuntimeException: UNAVAILABLE: io exception",
       cause = grpcError(Status.UNAVAILABLE.withDescription("io exception")))
     val e = JdbcErrorUtils.toSQLException(wrapped)
@@ -104,6 +104,7 @@ class JdbcErrorUtilsSuite extends ConnectFunSuite {
     // server error embedding gRPC text (e.g. from a UDF) is not a transport failure
     val e = JdbcErrorUtils.toSQLException(sparkError(
       "FAILED_EXECUTE_UDF",
+      "39000",
       "Job aborted: io.grpc.StatusRuntimeException: UNAVAILABLE: backend down"))
     assert(!e.isInstanceOf[SQLTransientConnectionException])
     assert(!e.isInstanceOf[SQLNonTransientConnectionException])
@@ -113,6 +114,7 @@ class JdbcErrorUtilsSuite extends ConnectFunSuite {
     // a slow query fires the RPC deadline on a healthy connection: timeout, not class 08
     val wrapped = sparkError(
       "CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE",
+      "XXKCM",
       "io.grpc.StatusRuntimeException: DEADLINE_EXCEEDED: deadline exceeded",
       cause = grpcError(Status.DEADLINE_EXCEEDED.withDescription("deadline exceeded")))
     val e = JdbcErrorUtils.toSQLException(wrapped)
@@ -129,10 +131,11 @@ class JdbcErrorUtilsSuite extends ConnectFunSuite {
     assert(!e.isInstanceOf[SQLTimeoutException])
   }
 
-  test("a closed session takes precedence over a transport code") {
+  test("a class-08 error takes precedence over a transport code") {
     // both signals present: the gone session wins
     val e = JdbcErrorUtils.toSQLException(sparkError(
       "INVALID_HANDLE.SESSION_CLOSED",
+      "08003",
       "closed",
       cause = grpcError(Status.UNAVAILABLE.withDescription("x"))))
     assert(e.isInstanceOf[SQLNonTransientConnectionException])
@@ -140,7 +143,7 @@ class JdbcErrorUtilsSuite extends ConnectFunSuite {
   }
 
   test("the connection error is found through the cause chain") {
-    val root = sparkError("INVALID_HANDLE.SESSION_CLOSED", "closed")
+    val root = sparkError("INVALID_HANDLE.SESSION_CLOSED", "08003", "closed")
     val e = JdbcErrorUtils.toSQLException(new RuntimeException("wrapper", root))
     assert(e.isInstanceOf[SQLNonTransientConnectionException])
     assert(e.getSQLState === "08003")

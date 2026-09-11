@@ -17,20 +17,19 @@
 import os
 import unittest
 
-from pyspark.testing.connectutils import should_test_connect
 from pyspark.sql.functions import lit, udtf
 from pyspark.sql.tests.test_udtf import (
     BaseUDTFTestsMixin,
-    UDTFArrowTestsMixin,
     LegacyUDTFArrowTestsMixin,
+    UDTFArrowTestsMixin,
 )
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 
 if should_test_connect:
     from pyspark.errors.exceptions.connect import (
+        InvalidPlanInput,
         PickleException,
         PythonException,
-        InvalidPlanInput,
     )
 
 

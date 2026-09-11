@@ -24,6 +24,8 @@ import pandas as pd
 import pandas.testing as pdt
 
 from pyspark import SparkConf
+from pyspark.errors import PySparkAssertionError, PySparkValueError
+from pyspark.errors.exceptions.base import IllegalArgumentException
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import split
 from pyspark.sql.streaming import StatefulProcessor, TwsTester
@@ -45,8 +47,6 @@ from pyspark.sql.types import (
     StructField,
     StructType,
 )
-from pyspark.errors import PySparkValueError, PySparkAssertionError
-from pyspark.errors.exceptions.base import IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_pandas,
@@ -585,11 +585,12 @@ class TwsTesterTests(ReusedSQLTestCase):
         self.assertEqual(result["count"].dtype, "int64")
 
     def test_processor_init_called_once(self):
+        from typing import Iterator
+
         from pyspark.sql.streaming.stateful_processor import (
             StatefulProcessor,
             StatefulProcessorHandle,
         )
-        from typing import Iterator
 
         init_call_count = [0]
 

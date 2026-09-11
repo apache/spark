@@ -692,6 +692,10 @@ case class Cast(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  // Parser, Column.cast, and Connect set USER_SPECIFIED_CAST. Analyzer-inserted Casts do not.
+  override protected def truncateCharVarcharOnCast: Boolean =
+    containsTag(Cast.USER_SPECIFIED_CAST)
+
   override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 
   // CAST_TO_TIMESTAMP must be set on a superset of the targets accepted by

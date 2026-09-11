@@ -475,6 +475,9 @@ message PythonUDF {
   string python_ver = 4;
   // (Optional) Additional includes for the Python UDF.
   repeated string additional_includes = 5;
+  // (Optional) Intermediate buffer schema for an incremental Python aggregator
+  // (see PythonAggregate). Set only for the incremental aggregator eval types.
+  optional DataType buffer_type = 6;
 }
 
 message ScalarScalaUDF {

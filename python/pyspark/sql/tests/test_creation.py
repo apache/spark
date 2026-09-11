@@ -15,26 +15,27 @@
 # limitations under the License.
 #
 
-from decimal import Decimal
 import os
 import time
 import unittest
-from pyspark.sql import Row
+from decimal import Decimal
+
 import pyspark.sql.functions as F
-from pyspark.sql.types import (
-    DecimalType,
-    IntegerType,
-    StructType,
-    StructField,
-    StringType,
-    DateType,
-    TimeType,
-    TimestampType,
-    TimestampNTZType,
-)
 from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
+)
+from pyspark.sql import Row
+from pyspark.sql.types import (
+    DateType,
+    DecimalType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampNTZType,
+    TimestampType,
+    TimeType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -85,8 +86,9 @@ class DataFrameCreationTestsMixin:
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_create_dataframe_from_pandas_with_timestamp(self):
-        import pandas as pd
         from datetime import datetime
+
+        import pandas as pd
 
         pdf = pd.DataFrame(
             {"ts": [datetime(2017, 10, 31, 1, 1, 1)], "d": [pd.Timestamp.now().date()]},
@@ -110,8 +112,9 @@ class DataFrameCreationTestsMixin:
             with self.assertRaisesRegex(
                 ImportError, "(Pandas >= .* must be installed|No module named '?pandas'?)"
             ):
-                import pandas as pd
                 from datetime import datetime
+
+                import pandas as pd
 
                 pdf = pd.DataFrame(
                     {"ts": [datetime(2017, 10, 31, 1, 1, 1)], "d": [pd.Timestamp.now().date()]}
@@ -121,9 +124,10 @@ class DataFrameCreationTestsMixin:
     # Regression test for SPARK-23360
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_create_dataframe_from_pandas_with_dst(self):
+        from datetime import datetime
+
         import pandas as pd
         from pandas.testing import assert_frame_equal
-        from datetime import datetime
 
         pdf = pd.DataFrame({"time": [datetime(2015, 10, 31, 22, 30)]})
 
@@ -147,8 +151,9 @@ class DataFrameCreationTestsMixin:
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         # SPARK-37277: Test DayTimeIntervalType in createDataFrame without Arrow.
-        import pandas as pd
         from datetime import timedelta
+
+        import pandas as pd
 
         df = self.spark.createDataFrame(pd.DataFrame({"a": [timedelta(microseconds=123)]}))
         self.assertEqual(df.toPandas().a.iloc[0], timedelta(microseconds=123))

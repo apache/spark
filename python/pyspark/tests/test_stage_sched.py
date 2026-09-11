@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-import os
-import tempfile
-import unittest
-import time
-import shutil
 import json
+import os
+import shutil
+import tempfile
+import time
+import unittest
 
 from pyspark import SparkConf, SparkContext
 from pyspark.resource.profile import ResourceProfileBuilder

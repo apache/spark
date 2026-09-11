@@ -33,8 +33,10 @@ import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{col, length, lit, not, printf, raise_error, trim,
+  unwrap_udt, when, wrap_udt}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.random.BernoulliCellSampler
 
 /**
@@ -319,15 +321,15 @@ object MLUtils extends Logging {
    * Converts vector columns in an input Dataset from the [[org.apache.spark.mllib.linalg.Vector]]
    * type to the new [[org.apache.spark.ml.linalg.Vector]] type under the `spark.ml` package.
    * @param dataset input dataset
-   * @param cols a list of vector columns to be converted. New vector columns will be ignored. If
-   *             unspecified, all old vector columns will be converted except nested ones.
+   * @param cols a list of vector columns to be converted. If unspecified, all old vector columns
+   *             will be converted except nested ones.
    * @return the input `DataFrame` with old vector columns converted to the new vector type
    */
   @Since("2.0.0")
   @varargs
   def convertVectorColumnsToML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
-    val colSet = if (cols.nonEmpty) {
+    val colNames = if (cols.nonEmpty) {
       cols.flatMap { c =>
         val dataType = schema(c).dataType
         if (dataType.getClass == classOf[VectorUDT]) {
@@ -338,49 +340,38 @@ object MLUtils extends Logging {
             s"Column $c must be old Vector type to be converted to new type but got $dataType.")
           None
         }
-      }.toSet
+      }
     } else {
       schema.fields
         .filter(_.dataType.getClass == classOf[VectorUDT])
         .map(_.name)
-        .toSet
+        .toImmutableArraySeq
     }
 
-    if (colSet.isEmpty) {
+    if (colNames.isEmpty) {
       return dataset.toDF()
     }
 
-    logWarning("Vector column conversion has serialization overhead. " +
-      "Please migrate your datasets and workflows to use the spark.ml package.")
-
-    // TODO: This implementation has performance issues due to unnecessary serialization.
-    // TODO: It is better (but trickier) if we can cast the old vector type to new type directly.
-    val convertToML = udf { v: Vector => v.asML }
-    val exprs = schema.fields.map { field =>
-      val c = field.name
-      if (colSet.contains(c)) {
-        convertToML(col(c)).as(c, field.metadata)
-      } else {
-        col(c)
-      }
-    }
-    import org.apache.spark.util.ArrayImplicits._
-    dataset.select(exprs.toImmutableArraySeq: _*)
+    val fields = colNames.map(schema(_))
+    dataset.withColumns(
+      fields.map(_.name),
+      fields.map(field => wrap_udt(unwrap_udt(col(field.name)), new MLVectorUDT)),
+      fields.map(_.metadata))
   }
 
   /**
    * Converts vector columns in an input Dataset to the [[org.apache.spark.mllib.linalg.Vector]]
    * type from the new [[org.apache.spark.ml.linalg.Vector]] type under the `spark.ml` package.
    * @param dataset input dataset
-   * @param cols a list of vector columns to be converted. Old vector columns will be ignored. If
-   *             unspecified, all new vector columns will be converted except nested ones.
+   * @param cols a list of vector columns to be converted. If unspecified, all new vector columns
+   *             will be converted except nested ones.
    * @return the input `DataFrame` with new vector columns converted to the old vector type
    */
   @Since("2.0.0")
   @varargs
   def convertVectorColumnsFromML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
-    val colSet = if (cols.nonEmpty) {
+    val colNames = if (cols.nonEmpty) {
       cols.flatMap { c =>
         val dataType = schema(c).dataType
         if (dataType.getClass == classOf[MLVectorUDT]) {
@@ -391,49 +382,38 @@ object MLUtils extends Logging {
             s"Column $c must be new Vector type to be converted to old type but got $dataType.")
           None
         }
-      }.toSet
+      }
     } else {
       schema.fields
         .filter(_.dataType.getClass == classOf[MLVectorUDT])
         .map(_.name)
-        .toSet
+        .toImmutableArraySeq
     }
 
-    if (colSet.isEmpty) {
+    if (colNames.isEmpty) {
       return dataset.toDF()
     }
 
-    logWarning("Vector column conversion has serialization overhead. " +
-      "Please migrate your datasets and workflows to use the spark.ml package.")
-
-    // TODO: This implementation has performance issues due to unnecessary serialization.
-    // TODO: It is better (but trickier) if we can cast the new vector type to old type directly.
-    val convertFromML = udf { Vectors.fromML _ }
-    val exprs = schema.fields.map { field =>
-      val c = field.name
-      if (colSet.contains(c)) {
-        convertFromML(col(c)).as(c, field.metadata)
-      } else {
-        col(c)
-      }
-    }
-    import org.apache.spark.util.ArrayImplicits._
-    dataset.select(exprs.toImmutableArraySeq: _*)
+    val fields = colNames.map(schema(_))
+    dataset.withColumns(
+      fields.map(_.name),
+      fields.map(field => wrap_udt(unwrap_udt(col(field.name)), new VectorUDT)),
+      fields.map(_.metadata))
   }
 
   /**
    * Converts Matrix columns in an input Dataset from the [[org.apache.spark.mllib.linalg.Matrix]]
    * type to the new [[org.apache.spark.ml.linalg.Matrix]] type under the `spark.ml` package.
    * @param dataset input dataset
-   * @param cols a list of matrix columns to be converted. New matrix columns will be ignored. If
-   *             unspecified, all old matrix columns will be converted except nested ones.
+   * @param cols a list of matrix columns to be converted. If unspecified, all old matrix columns
+   *             will be converted except nested ones.
    * @return the input `DataFrame` with old matrix columns converted to the new matrix type
    */
   @Since("2.0.0")
   @varargs
   def convertMatrixColumnsToML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
-    val colSet = if (cols.nonEmpty) {
+    val colNames = if (cols.nonEmpty) {
       cols.flatMap { c =>
         val dataType = schema(c).dataType
         if (dataType.getClass == classOf[MatrixUDT]) {
@@ -444,47 +424,38 @@ object MLUtils extends Logging {
             s"Column $c must be old Matrix type to be converted to new type but got $dataType.")
           None
         }
-      }.toSet
+      }
     } else {
       schema.fields
         .filter(_.dataType.getClass == classOf[MatrixUDT])
         .map(_.name)
-        .toSet
+        .toImmutableArraySeq
     }
 
-    if (colSet.isEmpty) {
+    if (colNames.isEmpty) {
       return dataset.toDF()
     }
 
-    logWarning("Matrix column conversion has serialization overhead. " +
-      "Please migrate your datasets and workflows to use the spark.ml package.")
-
-    val convertToML = udf { v: Matrix => v.asML }
-    val exprs = schema.fields.map { field =>
-      val c = field.name
-      if (colSet.contains(c)) {
-        convertToML(col(c)).as(c, field.metadata)
-      } else {
-        col(c)
-      }
-    }
-    import org.apache.spark.util.ArrayImplicits._
-    dataset.select(exprs.toImmutableArraySeq: _*)
+    val fields = colNames.map(schema(_))
+    dataset.withColumns(
+      fields.map(_.name),
+      fields.map(field => wrap_udt(unwrap_udt(col(field.name)), new MLMatrixUDT)),
+      fields.map(_.metadata))
   }
 
   /**
    * Converts matrix columns in an input Dataset to the [[org.apache.spark.mllib.linalg.Matrix]]
    * type from the new [[org.apache.spark.ml.linalg.Matrix]] type under the `spark.ml` package.
    * @param dataset input dataset
-   * @param cols a list of matrix columns to be converted. Old matrix columns will be ignored. If
-   *             unspecified, all new matrix columns will be converted except nested ones.
+   * @param cols a list of matrix columns to be converted. If unspecified, all new matrix columns
+   *             will be converted except nested ones.
    * @return the input `DataFrame` with new matrix columns converted to the old matrix type
    */
   @Since("2.0.0")
   @varargs
   def convertMatrixColumnsFromML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
-    val colSet = if (cols.nonEmpty) {
+    val colNames = if (cols.nonEmpty) {
       cols.flatMap { c =>
         val dataType = schema(c).dataType
         if (dataType.getClass == classOf[MLMatrixUDT]) {
@@ -495,34 +466,24 @@ object MLUtils extends Logging {
             s"Column $c must be new Matrix type to be converted to old type but got $dataType.")
           None
         }
-      }.toSet
+      }
     } else {
       schema.fields
         .filter(_.dataType.getClass == classOf[MLMatrixUDT])
         .map(_.name)
-        .toSet
+        .toImmutableArraySeq
     }
 
-    if (colSet.isEmpty) {
+    if (colNames.isEmpty) {
       return dataset.toDF()
     }
 
-    logWarning("Matrix column conversion has serialization overhead. " +
-      "Please migrate your datasets and workflows to use the spark.ml package.")
-
-    val convertFromML = udf { Matrices.fromML _ }
-    val exprs = schema.fields.map { field =>
-      val c = field.name
-      if (colSet.contains(c)) {
-        convertFromML(col(c)).as(c, field.metadata)
-      } else {
-        col(c)
-      }
-    }
-    import org.apache.spark.util.ArrayImplicits._
-    dataset.select(exprs.toImmutableArraySeq: _*)
+    val fields = colNames.map(schema(_))
+    dataset.withColumns(
+      fields.map(_.name),
+      fields.map(field => wrap_udt(unwrap_udt(col(field.name)), new MatrixUDT)),
+      fields.map(_.metadata))
   }
-
 
   /**
    * Returns the squared Euclidean distance between two vectors. The following formula will be used

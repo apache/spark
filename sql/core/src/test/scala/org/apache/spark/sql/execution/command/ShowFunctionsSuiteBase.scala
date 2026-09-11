@@ -118,6 +118,9 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       assert(!systemFuns.filter("function='case'").isEmpty)
       // Built-in functions
       assert(!systemFuns.filter("function='substring'").isEmpty)
+      // sql/core-only builtin registered after FunctionRegistry.builtin is cloned
+      assert(!systemFuns.filter("function='parse_sql'").isEmpty)
+      assert(sql(s"SHOW USER FUNCTIONS IN $ns").filter("function='parse_sql'").isEmpty)
     }
   }
 

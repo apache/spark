@@ -1,0 +1,2 @@
+Project [bitmap_or(bytes#0, bytes#0) AS bitmap_or(bytes, bytes)#0]
++- LocalRelation <empty>, [id#0L, bytes#0]

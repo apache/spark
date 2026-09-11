@@ -205,6 +205,24 @@ SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' - TIMESTAMP_LTZ '1960-0
 -- NULL operand propagates.
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - CAST(NULL AS timestamp_ltz(9));
 
+-- SPARK-57818: convert_timezone is NTZ-only, so a nanosecond LTZ(p) source is rejected rather
+-- than silently reinterpreted as NTZ (the positive TIMESTAMP_NTZ(p) path is covered in
+-- timestamp-ntz-nanos.sql).
+SELECT convert_timezone('Europe/Brussels', 'Europe/Moscow',
+    '2022-03-27 03:00:00.123456789 UTC' :: timestamp_ltz(9));
+
+-- SPARK-59300: from_utc_timestamp / to_utc_timestamp over nanosecond-precision TIMESTAMP_LTZ. A
+-- zone shift moves only the whole-microsecond instant, so the sub-microsecond remainder is carried
+-- through unchanged and the result keeps the source's exact LTZ precision. LTZ values render in
+-- the session time zone (America/Los_Angeles).
+SELECT from_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', 'Asia/Kolkata');
+SELECT to_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', 'Asia/Kolkata');
+SELECT typeof(
+    to_utc_timestamp('2015-07-24 00:00:00.1234567 UTC' :: timestamp_ltz(7), 'Asia/Kolkata'));
+-- NULL nanosecond timestamp and NULL zone both propagate.
+SELECT from_utc_timestamp(CAST(NULL AS timestamp_ltz(9)), 'Asia/Kolkata');
+SELECT to_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', CAST(NULL AS STRING));
+
 -- SPARK-57103: MAX / MIN over nanosecond-precision TIMESTAMP_LTZ. The aggregate preserves the
 -- nanosecond type and orders by the sub-microsecond remainder; NULLs are ignored. Values are
 -- rendered in the session time zone (America/Los_Angeles).
@@ -249,6 +267,17 @@ SELECT sort_array(collect_set(c)) FROM VALUES
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c);
+
+-- SPARK-56822: collect_list over nanosecond-precision TIMESTAMP_LTZ. The buffer holds the full
+-- nanos value, so the sub-microsecond remainder survives and the result element type stays
+-- TIMESTAMP_LTZ(9); values render in the session time zone (America/Los_Angeles). collect_list
+-- order is non-deterministic, so the output is stabilized with sort_array; duplicates are kept and
+-- NULLs are dropped.
+SELECT sort_array(collect_list(c)) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (CAST(NULL AS timestamp_ltz(9))) AS t(c);
 
 -- SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision values. The result is
 -- whole-second BIGINT; the sub-second digits are dropped. A literal without an explicit zone is
