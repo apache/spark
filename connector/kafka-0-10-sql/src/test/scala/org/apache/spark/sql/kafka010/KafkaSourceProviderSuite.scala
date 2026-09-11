@@ -170,18 +170,18 @@ class KafkaSourceProviderSuite extends SparkFunSuite {
     val conf = new SQLConf()
     conf.setConf(SQLConf.KAFKA_DISALLOWED_OPTIONS, Seq("max.poll.records"))
     SQLConf.withExistingConf(conf) {
-      val e = intercept[IllegalArgumentException] {
-        getKafkaDataSourceScan(options).toBatch()
-      }
-      assert(e.getMessage.contains("kafka.max.poll.records"))
+      checkError(
+        exception = intercept[KafkaIllegalArgumentException] {
+          getKafkaDataSourceScan(options).toBatch()
+        },
+        condition = "KAFKA_DISALLOWED_OPTION",
+        parameters = Map(
+          "option" -> "max.poll.records",
+          "config" -> "spark.sql.kafka.disallowedOptions"))
     }
   }
 
   test("SPARK-59328: disallowed Kafka options are rejected on the sink path") {
-    val sparkEnv = mock(classOf[SparkEnv])
-    when(sparkEnv.conf).thenReturn(new SparkConf())
-    SparkEnv.set(sparkEnv)
-
     val params = CaseInsensitiveMap(Map(
       "kafka.bootstrap.servers" -> "dummy",
       "kafka.max.poll.records" -> "1"))
@@ -191,10 +191,14 @@ class KafkaSourceProviderSuite extends SparkFunSuite {
     val conf = new SQLConf()
     conf.setConf(SQLConf.KAFKA_DISALLOWED_OPTIONS, Seq("max.poll.records"))
     SQLConf.withExistingConf(conf) {
-      val e = intercept[IllegalArgumentException] {
-        KafkaSourceProvider.kafkaParamsForProducer(params)
-      }
-      assert(e.getMessage.contains("kafka.max.poll.records"))
+      checkError(
+        exception = intercept[KafkaIllegalArgumentException] {
+          KafkaSourceProvider.kafkaParamsForProducer(params)
+        },
+        condition = "KAFKA_DISALLOWED_OPTION",
+        parameters = Map(
+          "option" -> "max.poll.records",
+          "config" -> "spark.sql.kafka.disallowedOptions"))
     }
   }
 }
