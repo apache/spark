@@ -602,6 +602,37 @@ class SortMergeAsOfJoinSuite extends QueryTest
     )
   }
 
+  test("null-safe equi-key (<=>) in ON matches null keys, unlike EqualTo") {
+    // The AsOfJoinSelection strategy excludes EqualNullSafe from the equi-keys and
+    // routes it to the residual condition, so - unlike the EqualTo case above where
+    // null equi-keys never match - null keys on both sides DO match under <=>.
+    val schema1 = StructType(
+      StructField("grp", IntegerType, nullable = true) ::
+        StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val schema2 = StructType(
+      StructField("grp", IntegerType, nullable = true) ::
+        StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val df1 = spark.createDataFrame(
+      List(Row(null, 5, "a"), Row(1, 5, "b")).asJava, schema1)
+    val df2 = spark.createDataFrame(
+      List(Row(null, 3, "x"), Row(1, 4, "y")).asJava, schema2)
+    checkAnswer(
+      df1.joinAsOf(
+        df2, df1.col("ts"), df2.col("ts"),
+        joinExprs = df1.col("grp") <=> df2.col("grp"),
+        joinType = "inner", tolerance = null,
+        allowExactMatches = true, direction = "backward"),
+      Seq(
+        // grp=null <=> grp=null is true, so this left row matches (EqualTo would drop it)
+        Row(null, 5, "a", null, 3, "x"),
+        // grp=1: right.ts=4 <= left.ts=5 -> match
+        Row(1, 5, "b", 1, 4, "y")
+      )
+    )
+  }
+
   test("residual condition via joinExprs") {
     // Test that pair-correlated residual predicates are routed into the
     // scanner's residualCondition (not a post-join FilterExec).
