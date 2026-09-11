@@ -163,6 +163,28 @@ struct<col:int>
 
 
 -- !query
+INSERT INTO cte_tbl WITH s AS MATERIALIZED (SELECT 47 AS col) SELECT col FROM s UNION ALL SELECT col FROM s
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM cte_tbl
+-- !query schema
+struct<col:int>
+-- !query output
+42
+43
+44
+45
+46
+47
+47
+
+
+-- !query
 DROP TABLE cte_tbl
 -- !query schema
 struct<>

@@ -44,5 +44,10 @@ INSERT INTO cte_tbl2 SELECT col;
 SELECT * FROM cte_tbl;
 SELECT * FROM cte_tbl2;
 
+-- MATERIALIZED CTE in a single INSERT statement
+INSERT INTO cte_tbl WITH s AS MATERIALIZED (SELECT 47 AS col) SELECT col FROM s UNION ALL SELECT col FROM s;
+
+SELECT * FROM cte_tbl;
+
 DROP TABLE cte_tbl;
 DROP TABLE cte_tbl2;

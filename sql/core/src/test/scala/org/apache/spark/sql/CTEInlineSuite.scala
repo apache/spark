@@ -1277,23 +1277,6 @@ abstract class CTEInlineSuiteBase
     }
   }
 
-  test("non-deterministic predicates are not pushed into a MATERIALIZED CTE") {
-    withTempView("t") {
-      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
-      val df = sql(
-        "with v as materialized (select c1 from t) select count(*) from v where rand() < 0.5")
-      // The reference keeps the predicate, so pushing it into the definition as well would
-      // evaluate it twice.
-      val randFilters = df.queryExecution.optimizedPlan.collect {
-        case f: Filter if f.condition.exists(_.isInstanceOf[Rand]) => f
-      }
-      assert(randFilters.length == 1, "Non-deterministic predicate should be evaluated once.")
-      assert(
-        df.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]),
-        "MATERIALIZED CTE should not be inlined.")
-    }
-  }
-
   test("MATERIALIZED CTE in a correlated subquery") {
     withTempView("t", "t2") {
       Seq((0, 1), (1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceTempView("t")

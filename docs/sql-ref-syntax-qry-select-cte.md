@@ -48,10 +48,10 @@ expression_name [ ( column_name [ , ... ] ) ] [ AS ] [ [ NOT ] MATERIALIZED ] ( 
     expressions such as `rand()` may yield different values per reference. A `MATERIALIZED`
     common table expression cannot reference columns of an outer query. `MATERIALIZED` is not
     supported in a statement whose common table expressions are always inlined, such as a
-    multi-insert statement, nor in a subquery whose query, after the WITH clause, references
-    columns of an outer query. `NOT MATERIALIZED` is supported in both. Omit both to let Spark
-    decide whether to inline the common table expression into its references or to evaluate it
-    once and share the result.
+    multi-insert statement, nor in a subquery whose WITH clause or query references columns of
+    an outer query. `NOT MATERIALIZED` is supported in both. Omit both to let Spark decide
+    whether to inline the common table expression into its references or to evaluate it once and
+    share the result.
 
 * **query**
 

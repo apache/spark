@@ -44,24 +44,27 @@ object MaterializedCTECheck extends (LogicalPlan => Unit) {
         case cteDef: CTERelationDef => cteDefs(cteDef.id) = cteDef
         case _ =>
       }
-      cteDefs.values.filter(_.materialized.contains(true)).foreach { cteDef =>
-        (cteDef +: collectReferencedDefs(cteDef, cteDefs)).foreach(checkDefinition)
-      }
-      // Decorrelation stops at a subtree without outer references, so only a `WithCTE` whose
-      // own subtree is correlated is on its path. A correlation above the WITH clause, e.g. on a
-      // derived table holding it, is fine.
-      plan.subqueriesAll.foreach(_.foreach {
-        case withCTE: WithCTE if SubExprUtils.hasOuterReferences(withCTE) =>
-          withCTE.cteDefs.find(_.materialized.contains(true)).foreach { cteDef =>
-            val cteName = cteDef.child match {
-              case alias: SubqueryAlias => alias.alias
-              case _ => cteDef.id.toString
+      val materializedDefs = cteDefs.values.filter(_.materialized.contains(true)).toSeq
+      if (materializedDefs.nonEmpty) {
+        materializedDefs.foreach { cteDef =>
+          (cteDef +: collectReferencedDefs(cteDef, cteDefs)).foreach(checkDefinition)
+        }
+        // Decorrelation stops at a subtree without outer references, so only a `WithCTE` whose
+        // own subtree is correlated is on its path. A correlation above the WITH clause, e.g. on
+        // a derived table holding it, is fine.
+        plan.subqueriesAll.foreach(_.foreach {
+          case withCTE: WithCTE if SubExprUtils.hasOuterReferences(withCTE) =>
+            withCTE.cteDefs.find(_.materialized.contains(true)).foreach { cteDef =>
+              val cteName = cteDef.child match {
+                case alias: SubqueryAlias => alias.alias
+                case _ => cteDef.id.toString
+              }
+              throw QueryCompilationErrors.materializedCTEInCorrelatedSubqueryError(
+                cteName, cteDef.child.origin)
             }
-            throw QueryCompilationErrors.materializedCTEInCorrelatedSubqueryError(
-              cteName, cteDef.child.origin)
-          }
-        case _ =>
-      })
+          case _ =>
+        })
+      }
     }
   }
 
