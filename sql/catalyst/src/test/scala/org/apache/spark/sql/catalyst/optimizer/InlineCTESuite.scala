@@ -121,6 +121,22 @@ class InlineCTESuite extends PlanTest {
       "MATERIALIZED CTE should be inlined in alwaysInline mode")
   }
 
+  test("MATERIALIZED CTE with an outer reference across its boundary fails") {
+    // Analysis rejects this for SQL; the optimizer guard covers plans built programmatically,
+    // like it does for `forceSkipInline`.
+    val relation = TestRelation(Seq($"a".int))
+    val cteDef = CTERelationDef(
+      relation.where(OuterReference($"a".int) === 1), materialized = Some(true))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.select($"a"), Seq(cteDef))
+    val e = intercept[SparkException] {
+      Optimize.execute(plan)
+    }
+    assert(e.getCondition == "INTERNAL_ERROR")
+    assert(e.getMessage.contains(
+      "A force-materialized CTE cannot carry an outer reference across its boundary"))
+  }
+
   test("NOT MATERIALIZED inlines a multi-reference non-deterministic CTE") {
     val cteDef = CTERelationDef(
       OneRowRelation().select(rand(0).as("a")), materialized = Some(false))

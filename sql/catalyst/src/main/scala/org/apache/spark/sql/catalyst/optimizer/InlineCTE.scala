@@ -70,7 +70,8 @@ case class InlineCTE(
       // reference across its boundary, because after the CTE is materialized there is no
       // surrounding operator to resolve that reference against.
       inlined.foreachWithSubqueries {
-        case cteDef: CTERelationDef if cteDef.forceSkipInline =>
+        case cteDef: CTERelationDef
+            if cteDef.forceSkipInline || cteDef.materialized.contains(true) =>
           validateNoOuterReferencesAcrossCTEBoundary(cteDef)
         case _ =>
       }
