@@ -1402,10 +1402,12 @@ class CollectionExpressionsSuite
   }
 
   test("SPARK-57834: sequence of nanosecond-precision timestamps") {
-    // Membership is decided on the microsecond grid (every step is microsecond-granular) and each
-    // generated element carries the start value's sub-microsecond fraction.
+    // The sequence advances on the microsecond grid and every element carries the start value's
+    // sub-microsecond fraction; the endpoints' own fractions decide the bound in full precision.
     val sec = 1000000L // microseconds per second
+    val hour = 3600 * sec
     val day = 86400000000L // microseconds per day
+    val month = 2678400000000L // microseconds in January 1970 (31 days), for the month-step case
     def ntz(micros: Long, frac: Int, p: Int = 9): Literal =
       Literal(TimestampNanosVal.fromParts(micros, frac.toShort), TimestampNTZNanosType(p))
     def ltz(micros: Long, frac: Int, p: Int = 9): Literal =
@@ -1413,17 +1415,26 @@ class CollectionExpressionsSuite
     def tnv(micros: Long, frac: Int): TimestampNanosVal =
       TimestampNanosVal.fromParts(micros, frac.toShort)
 
-    // NTZ(9), day-time interval step; the 123ns fraction is kept on every element.
+    // NTZ(9), calendar-interval step; the 123ns fraction is kept on every element.
     checkEvaluation(new Sequence(
       ntz(0, 123), ntz(2 * sec, 123),
       Literal(stringToInterval("interval 1 second"))),
       Seq(tnv(0, 123), tnv(sec, 123), tnv(2 * sec, 123)))
 
+    // Day-time interval (Duration) step and year-month interval (Period) step, exercising the
+    // Duration/Period sequence implementations for nanos rather than only the calendar path.
+    checkEvaluation(new Sequence(
+      ntz(0, 123), ntz(2 * hour, 123), Literal(Duration.ofHours(1))),
+      Seq(tnv(0, 123), tnv(hour, 123), tnv(2 * hour, 123)))
+    checkEvaluation(new Sequence(
+      ntz(0, 123), ntz(month, 123), Literal(Period.ofMonths(1))),
+      Seq(tnv(0, 123), tnv(month, 123)))
+
     // LTZ(9), hour step (zone-independent since it adds pure microseconds).
     checkEvaluation(new Sequence(
-      ltz(0, 500), ltz(2 * 3600 * sec, 500),
+      ltz(0, 500), ltz(2 * hour, 500),
       Literal(stringToInterval("interval 1 hour"))),
-      Seq(tnv(0, 500), tnv(3600 * sec, 500), tnv(2 * 3600 * sec, 500)))
+      Seq(tnv(0, 500), tnv(hour, 500), tnv(2 * hour, 500)))
 
     // Precision 8 (fraction is a multiple of 10) and precision 7 (multiple of 100).
     checkEvaluation(new Sequence(
@@ -1434,6 +1445,18 @@ class CollectionExpressionsSuite
       ntz(0, 100, 7), ntz(sec, 100, 7),
       Literal(stringToInterval("interval 1 second"))),
       Seq(tnv(0, 100), tnv(sec, 100)))
+
+    // Differing fractions: start.frac > stop.frac drops the element that lands on stop's
+    // microsecond (it would exceed stop), so the result never overshoots stop.
+    checkEvaluation(new Sequence(
+      ntz(0, 900), ntz(2 * sec, 100),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(0, 900), tnv(sec, 900)))
+    // start.frac <= stop.frac keeps the boundary element.
+    checkEvaluation(new Sequence(
+      ntz(0, 100), ntz(2 * sec, 900),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(0, 100), tnv(sec, 100), tnv(2 * sec, 100)))
 
     // Negative step.
     checkEvaluation(new Sequence(
@@ -1447,7 +1470,23 @@ class CollectionExpressionsSuite
       Literal(stringToInterval("interval 1 second"))),
       Seq(tnv(5 * sec, 42)))
 
-    // No explicit step: the default step (+1 day) is chosen from the microsecond comparison.
+    // Endpoints share a microsecond but start > stop in full precision: with a positive step this
+    // is an illegal boundary, matching sequence(2, 1, 1). Codegen-only, like SPARK-58440 (the
+    // interpreted path reports this through `require`, a plain IllegalArgumentException). The
+    // reported bound is nudged one microsecond off stop to trigger the machinery's boundary check.
+    withSQLConf(
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          evaluateWithMutableProjection(Sequence(
+            ntz(sec, 500), ntz(sec, 100),
+            Some(Literal(stringToInterval("interval 1 second"))), UTC_OPT))
+        },
+        condition = "_LEGACY_ERROR_TEMP_3243",
+        parameters = Map("start" -> "1000000", "stop" -> "999999", "step" -> "1000000"))
+    }
+
+    // No explicit step: the default step (+1 day) is chosen from the full-precision comparison.
     checkEvaluation(new Sequence(ntz(0, 7), ntz(day, 7)),
       Seq(tnv(0, 7), tnv(day, 7)))
 

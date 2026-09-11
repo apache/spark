@@ -1017,6 +1017,35 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
       assert(df.selectExpr("localtimestamp() AS c").schema.head.dataType === TimestampNTZType)
     }
   }
+
+  test("SPARK-57834: sequence over nanosecond-precision timestamps") {
+    val schema = new StructType()
+      .add("start", TimestampNTZNanosType(9))
+      .add("stop", TimestampNTZNanosType(9))
+
+    // Every generated element keeps the start value's .000000123 fraction and the array element
+    // type stays TIMESTAMP_NTZ(9).
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(
+      LocalDateTime.parse("2020-01-01T00:00:00.000000123"),
+      LocalDateTime.parse("2020-01-01T00:00:02.000000123")))), schema)
+    val result = df.selectExpr("sequence(start, stop, INTERVAL '1' SECOND) AS s")
+    assert(
+      result.schema.head.dataType === ArrayType(TimestampNTZNanosType(9), containsNull = false))
+    checkAnswer(result, Row(Seq(
+      LocalDateTime.parse("2020-01-01T00:00:00.000000123"),
+      LocalDateTime.parse("2020-01-01T00:00:01.000000123"),
+      LocalDateTime.parse("2020-01-01T00:00:02.000000123"))))
+
+    // stop's smaller fraction drops the final boundary element, so the result never exceeds stop.
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(
+      LocalDateTime.parse("2020-01-01T00:00:00.000000900"),
+      LocalDateTime.parse("2020-01-01T00:00:02.000000100")))), schema)
+    checkAnswer(
+      df2.selectExpr("sequence(start, stop, INTERVAL '1' SECOND) AS s"),
+      Row(Seq(
+        LocalDateTime.parse("2020-01-01T00:00:00.000000900"),
+        LocalDateTime.parse("2020-01-01T00:00:01.000000900"))))
+  }
 }
 
 // Runs the nanosecond timestamp function tests with ANSI mode enabled explicitly.
