@@ -18,10 +18,10 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{Alias, InSubquery, ListQuery, Not}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, EqualTo, InSubquery, ListQuery, Not}
 import org.apache.spark.sql.catalyst.optimizer.ReorderJoin
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -55,8 +55,9 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
   private val rewriteConf = SQLConf.REWRITE_SELF_JOIN_INEQUALITY_TO_AGGREGATE_ENABLED.key
 
-  /** Signature alias produced by the rewrite; presence => rule definitely fired. */
-  private val CountDistinctAlias = "_rewrite_selfjoin_inequality_cnt_distinct"
+  /** Signature aliases produced by the rewrite; presence of both => rule definitely fired. */
+  private val MinNeqAlias = "_rewrite_selfjoin_inequality_min"
+  private val MaxNeqAlias = "_rewrite_selfjoin_inequality_max"
 
   // Descends into subqueries: `QueryPlan.exists` does not, and the rewrite's signature alias lives
   // inside the IN-subquery when the rule runs on an analyzed (not-yet-rewritten) plan.
@@ -68,8 +69,9 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
       }) => ()
     }.isDefined
 
+  /** Require BOTH aliases: a rewrite that emitted MIN but dropped MAX is still a bug. */
   private def ruleFired(plan: LogicalPlan): Boolean =
-    hasAlias(plan, CountDistinctAlias)
+    hasAlias(plan, MinNeqAlias) && hasAlias(plan, MaxNeqAlias)
 
   private def assertRuleFired(sql: String): Unit = {
     withSQLConf(rewriteConf -> "true") {
@@ -137,8 +139,8 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
     // k=4: v={70, NULL}            -> no match (only 1 non-null)
     // k=5: v={NULL, NULL}          -> no match (0 non-null)
     // k=6: v={80, 90, NULL}        -> matches
-    // k=7: v={100,100}             -> no match: duplicate-only. Proves DISTINCT is required;
-    //                                a plain COUNT(v) > 1 would wrongly match this group.
+    // k=7: v={100,100}             -> no match: duplicate-only, min(v)==max(v)==100 so min<>max is
+    //                                false. A plain COUNT(v) > 1 would wrongly match this group.
     createTable(
       "T",
       "k INT, v INT",
@@ -433,7 +435,7 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
       // base tables even when they share a schema and column names. Distinct Parquet tables
       // canonicalize to distinct `rootPaths`, so `left.canonicalized == right.canonicalized` is
       // false and the rewrite must not fire. This pins a real correctness boundary, not just a
-      // missed optimization: rewriting `TLeft JOIN TRight` as COUNT(DISTINCT) over TLeft alone
+      // missed optimization: rewriting `TLeft JOIN TRight` as MIN(v) <> MAX(v) over TLeft alone
       // would drop TRight's rows and change the answer, so removing the guard would make ON diverge
       // from OFF here.
       createTable("TLeft", "k INT, v INT", "  (1, 10), (1, 10), (2, 30)")
@@ -452,32 +454,44 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
   // ==================== Positive: rewritten plan is structurally the aggregate ================
   //
-  // Result parity (ON == OFF) proves the two queries return the same rows; it does not prove the
-  // rewrite produced the specific GROUP BY + HAVING COUNT(DISTINCT) > 1 shape rather than, say,
-  // leaving the self-join and happening to agree. These controls compare the rewritten plan against
-  // a hand-written aggregate SQL that spells out the intended shape, INCLUDING two `IS NOT NULL`
-  // filters: on the equi-key (which the rewrite injects to preserve equi-join NULL semantics) and
-  // on the neq column. `v IS NOT NULL` is semantically redundant for COUNT(DISTINCT v), which
-  // already ignores NULL, but the original `s1.v <> s2.v` lets InferFiltersFromConstraints derive
-  // `isnotnull(v)` and push it below the aggregate, so the equivalent SQL must include it to match
-  // the shape the optimizer actually produces. The comparison itself is `compareCanonicalizedPlans`
-  // (see its doc for why canonicalizing first, and disabling checkAnalysis, is required here).
+  // Result parity (ON == OFF) does not prove the rewrite produced the GROUP BY + HAVING
+  // MIN(v) <> MAX(v) shape rather than leaving the self-join and happening to agree. These controls
+  // assert that shape directly. A full canonicalized-plan comparison against hand-written aggregate
+  // SQL would be wrong here: InferFiltersFromConstraints adds isnotnull(min)/isnotnull(max) to a
+  // hand-written HAVING but not to the rule's own filter (created in a later batch), so it would
+  // fail on redundant null predicates -- and matching it by hardening the rule would be the wrong
+  // fix.
 
   private def optimizedPlanWith(sql: String, rewrite: Boolean): LogicalPlan =
     withSQLConf(rewriteConf -> rewrite.toString) {
       spark.sql(sql).queryExecution.optimizedPlan
     }
 
-  /**
-   * Assert two optimized plans are structurally equal. Canonicalize first: the rewrite creates
-   * fresh aliases, whose names and exprIds are cosmetic for this structural check, while the
-   * Join-vs-Aggregate shape difference this asserts on survives canonicalization. `checkAnalysis`
-   * is disabled because both plans are already analyzed and optimized, and a canonicalized plan is
-   * not re-analyzable (its HAVING references a zeroed exprId), which the default would reject
-   * before any comparison.
-   */
-  private def compareCanonicalizedPlans(actual: LogicalPlan, expected: LogicalPlan): Unit =
-    comparePlans(actual.canonicalized, expected.canonicalized, checkAnalysis = false)
+  // The rewrite shape: an Aggregate emitting both signature aliases, with a Filter on top whose
+  // condition includes Not(EqualTo(min, max)). Match the two operands by ExprId (Catalyst attribute
+  // identity), not by name -- the rule itself never trusts names -- so a same-named attribute from
+  // elsewhere cannot satisfy it. `exists` on the condition, not exact match, because
+  // InferFiltersFromConstraints may fold redundant isnotnull(min/max) into the same Filter.
+  private def assertMinMaxRewriteShape(plan: LogicalPlan): Unit = {
+    val found = plan.collectFirstWithSubqueries {
+      case Filter(cond, agg: Aggregate)
+          if {
+            // Key by alias name so the shape requires exactly one MIN alias AND one MAX alias: two
+            // same-named aliases collapse to a single map key and fail the keySet check, which a
+            // bare `size == 2` on exprIds would not catch.
+            val signatureAttrs = agg.aggregateExpressions.collect {
+              case a: Alias if a.name == MinNeqAlias || a.name == MaxNeqAlias =>
+                a.name -> a.toAttribute
+            }.toMap
+            signatureAttrs.keySet == Set(MinNeqAlias, MaxNeqAlias) && cond.exists {
+              case Not(EqualTo(l: Attribute, r: Attribute)) =>
+                Set(l.exprId, r.exprId) == signatureAttrs.values.map(_.exprId).toSet
+              case _ => false
+            }
+          } => ()
+    }
+    assert(found.isDefined, s"expected a MIN(v) <> MAX(v) aggregate rewrite shape:\n$plan")
+  }
 
   test("Pattern A' rewritten plan is structurally the equivalent aggregate") {
     withTable("T") {
@@ -486,16 +500,10 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
         """SELECT k FROM T outer_t WHERE k IN (
           |  SELECT s1.k FROM T s1 JOIN T s2
           |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
-      val aggregateSql =
-        """SELECT k FROM T outer_t WHERE k IN (
-          |  SELECT k FROM T WHERE k IS NOT NULL AND v IS NOT NULL
-          |  GROUP BY k HAVING count(DISTINCT v) > 1)""".stripMargin
 
       val actual = optimizedPlanWith(selfJoinSql, rewrite = true)
-      val expected = optimizedPlanWith(aggregateSql, rewrite = false)
       assert(ruleFired(actual), s"precondition: rewrite should fire:\n$actual")
-      assert(!ruleFired(expected), s"precondition: expected plan is the hand-written aggregate")
-      compareCanonicalizedPlans(actual, expected)
+      assertMinMaxRewriteShape(actual)
     }
   }
 
@@ -512,18 +520,10 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
             |  FROM D d, (SELECT s1.k FROM T s1 JOIN T s2
             |             ON s1.k = s2.k AND s1.v <> s2.v) sj
             |  WHERE d.k = sj.k)""".stripMargin
-        val aggregateSql =
-          """SELECT k FROM T outer_t WHERE k IN (
-            |  SELECT d.k
-            |  FROM D d, (SELECT k FROM T WHERE k IS NOT NULL AND v IS NOT NULL
-            |             GROUP BY k HAVING count(DISTINCT v) > 1) sj
-            |  WHERE d.k = sj.k)""".stripMargin
 
         val actual = optimizedPlanWith(selfJoinSql, rewrite = true)
-        val expected = optimizedPlanWith(aggregateSql, rewrite = false)
         assert(ruleFired(actual), s"precondition: rewrite should fire:\n$actual")
-        assert(!ruleFired(expected), s"precondition: expected plan is the hand-written aggregate")
-        compareCanonicalizedPlans(actual, expected)
+        assertMinMaxRewriteShape(actual)
       }
     }
   }
@@ -673,8 +673,8 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
   test("Multiple inequality columns are rejected") {
     withTable("T2") {
       // The guard under test is `neqPairs.size != 1`. Two inequalities need "at least two rows
-      // differing in v AND in w", which no count-distinct over a single column can express. The
-      // control is the same query with only the first inequality.
+      // differing in v AND in w", which no MIN/MAX over a single column can express. The control is
+      // the same query with only the first inequality.
       createTable(
         "T2",
         "k INT, v INT, w INT",
@@ -976,20 +976,20 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
     }
   }
 
-  // ==================== Data-type safety: comparison vs grouping/DISTINCT equality ============
+  // ==================== Data-type safety: comparison vs grouping/MIN-MAX equality =============
   //
-  // The rewrite turns `<>` into COUNT(DISTINCT) and `=` into GROUP BY, so it is only sound on
-  // types where SQL comparison equality coincides with grouping/DISTINCT equality.
+  // The rewrite turns `<>` into MIN(v) <> MAX(v) and `=` into GROUP BY, so it is only sound on
+  // types where SQL comparison equality coincides with grouping/MIN-MAX ordering equality.
   // `parseSelfJoinCondition` gates BOTH the neq column and every equi-key through
   // `isSafeComparisonGroupingType` (a positive allowlist, not `RowOrdering.isOrderable`). These
   // tests pin the boundary for the risky types.
 
-  test("Float/Double neq column is rejected (comparison-vs-DISTINCT contract, defensive)") {
+  test("Float/Double neq column is rejected (comparison-vs-MIN-MAX contract, defensive)") {
     withTable("TFloat") {
       // The guard under test is `isSafeComparisonGroupingType` on the NEQ column. Control and
       // negative differ only in which column feeds the inequality: `vi` (Int, allowlisted) fires,
       // `vd` (Double) does not. Double fails closed defensively: the rewrite depends on comparison
-      // equality and grouping/DISTINCT equality agreeing, and for floating point that
+      // equality and grouping/MIN-MAX ordering equality agreeing, and for floating point that
       // agreement on signed zero and NaN rests on normalization details (NormalizeFloatingNumbers)
       // that need not match across Spark versions or native backends. On current Spark, comparison
       // semantics and aggregation normalization are aligned for these cases, so the OFF baseline of

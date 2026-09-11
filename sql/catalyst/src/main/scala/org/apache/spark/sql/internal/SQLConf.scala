@@ -673,9 +673,14 @@ object SQLConf {
     buildConf("spark.sql.optimizer.rewriteSelfJoinInequalityToAggregate.enabled")
       .internal()
       .doc("When true, rewrites a supported existence-only inequality self-join inside an " +
-        "uncorrelated IN subquery into a GROUP BY with HAVING COUNT(DISTINCT) > 1 over a single " +
+        "uncorrelated IN subquery into a GROUP BY with HAVING MIN(v) <> MAX(v) over a single " +
         "copy of the relation, removing the self-join cross-product. The rewrite fails closed " +
-        "unless the self-join sides are proven to be the same repeatable relation.")
+        "unless the self-join sides are proven to read the same repeatable source -- currently " +
+        "stock Parquet scans, Range, and local relations -- so it never changes results for " +
+        "non-repeatable inputs. This is experimental and off by default: there is no cost " +
+        "model, and the benefit depends on per-key multiplicity because the eliminated " +
+        "self-join can generate quadratically many candidate pairs. Enable it only for " +
+        "workloads known to contain such high-multiplicity self-joins.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

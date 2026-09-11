@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 
 /**
  * Rewrites supported uncorrelated IN-subquery inequality self-joins into
- * `GROUP BY + HAVING COUNT(DISTINCT) > 1`, avoiding the self-join cross-product.
+ * `GROUP BY + HAVING MIN(neq) <> MAX(neq)`, avoiding the self-join cross-product.
  *
  * Supports a direct self-join (Pattern A') and a self-join nested under an outer inner join
  * (Pattern A2, where only the self-join child becomes an Aggregate). Unsupported and correlated
@@ -46,7 +46,8 @@ import org.apache.spark.sql.types._
  */
 object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with PredicateHelper {
 
-  private val CountDistinctAliasName = "_rewrite_selfjoin_inequality_cnt_distinct"
+  private val MinNeqAliasName = "_rewrite_selfjoin_inequality_min"
+  private val MaxNeqAliasName = "_rewrite_selfjoin_inequality_max"
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.getConf(SQLConf.REWRITE_SELF_JOIN_INEQUALITY_TO_AGGREGATE_ENABLED)) {
@@ -69,26 +70,31 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
   // ============================================================================
 
   /**
-   * Build `Filter(cnt > 1, Aggregate(equiKeys, child))` with a `COUNT(DISTINCT neqCol)`.
+   * Build `Filter(min <> max, Aggregate(equiKeys, child))`, taking MIN and MAX over the neq column.
+   * `MIN(neqCol) <> MAX(neqCol)` is true exactly when the group holds two or more distinct non-null
+   * values -- the same test as `COUNT(DISTINCT neqCol) > 1`, but avoids the distinct-dedup
+   * aggregation stages and supports partial aggregation.
    *
    * The `IsNotNull(equiKeys)` filter preserves the equi-join's NULL semantics: `=` never matches a
    * NULL key, but GROUP BY would fold all NULL keys into one group that can leak NULL into a
-   * `NOT IN`. The neq column needs no filter -- `COUNT(DISTINCT)` already ignores NULL.
+   * `NOT IN`. The neq column needs no filter -- MIN/MAX ignore NULL, and a group with fewer than
+   * two non-null values has `min = max` (or both NULL, which makes `<>` NULL), so `<>` is never
+   * true for it and the group is dropped.
    */
-  private def buildAggregateHavingDistinctGt1(
+  private def buildAggregateHavingMultipleDistinct(
       equiKeys: Seq[Attribute],
       neqCol: Attribute,
       child: LogicalPlan): LogicalPlan = {
-    val countExpr = Count(Seq(neqCol)).toAggregateExpression(isDistinct = true)
-    val countAlias = Alias(countExpr, CountDistinctAliasName)()
-    val aggExprs: Seq[NamedExpression] = equiKeys :+ countAlias
+    val minAlias = Alias(Min(neqCol).toAggregateExpression(), MinNeqAliasName)()
+    val maxAlias = Alias(Max(neqCol).toAggregateExpression(), MaxNeqAliasName)()
+    val aggExprs: Seq[NamedExpression] = equiKeys :+ minAlias :+ maxAlias
     val nonNullChild = equiKeys
       .map(a => IsNotNull(a): Expression)
       .reduceOption(And)
       .map(Filter(_, child))
       .getOrElse(child)
     val agg = Aggregate(equiKeys, aggExprs, nonNullChild)
-    Filter(GreaterThan(countAlias.toAttribute, Literal(1L, LongType)), agg)
+    Filter(Not(EqualTo(minAlias.toAttribute, maxAlias.toAttribute)), agg)
   }
 
   /**
@@ -198,7 +204,8 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
 
     val innerLeftEquiAttrs: Seq[Attribute] = equiPairs.map(_._1)
     val innerLeftNeqAttr: Attribute = neqPairs.head._1
-    val filtered = buildAggregateHavingDistinctGt1(innerLeftEquiAttrs, innerLeftNeqAttr, innerLeft)
+    val filtered =
+      buildAggregateHavingMultipleDistinct(innerLeftEquiAttrs, innerLeftNeqAttr, innerLeft)
 
     // Fail closed on a bare-Join subquery: with no wrapper Project, replacing the self-join output
     // with `Project(equiKeys, filtered)` shrinks arity and RewritePredicateSubquery's positional
@@ -271,7 +278,7 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
     }
     if (!projectOk) return None
 
-    val filtered = buildAggregateHavingDistinctGt1(sjLeftEquiAttrs, sjLeftNeqAttr, sjLeft)
+    val filtered = buildAggregateHavingMultipleDistinct(sjLeftEquiAttrs, sjLeftNeqAttr, sjLeft)
 
     val (newSelfJoinSide, outputRemap): (LogicalPlan, Map[ExprId, Attribute]) =
       selfJoinProjectOpt match {
@@ -387,58 +394,45 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
     if (totalMatched != predicates.size) return None
     if (equiPairs.isEmpty || neqPairs.isEmpty) return None
 
-    // Only rewrite the single-inequality case. Multiple inequality conjuncts cannot be represented
-    // by COUNT(DISTINCT) over a single column.
+    // A single inequality only: MIN/MAX over one column cannot represent multiple neqs.
     if (neqPairs.size != 1) return None
 
-    // The rewrite swaps SQL comparison equality for grouping/DISTINCT equality: `<>` becomes
-    // COUNT(DISTINCT neqCol) and `=` becomes GROUP BY equiKey. It is only sound on types where
-    // those two notions of equality coincide, so gate every equi-key and the neq column on a
-    // positive `isSafeComparisonGroupingType` allowlist rather than `RowOrdering.isOrderable`:
-    // orderable only proves an order/hash exists, not that comparison and grouping agree. Fail
-    // closed on anything not proven safe (float -0.0/NaN, complex types, non-binary collations,
-    // and future/unknown types).
-    //
-    // Check BOTH ends of every pair, not just the sjLeft attribute. `isSameBaseRelation` proves
-    // the two sides are canonically equal, but `AttributeReference.canonicalized` rewrites the
-    // reference to drop metadata, so canonical equality does NOT prove the sjRight attribute
-    // carries the same CHAR/VARCHAR metadata that `isSafeComparisonGroupingAttribute` reads. Gate
-    // each side independently rather than assume they match.
-    val keyAttrs =
-      (equiPairs ++ neqPairs).flatMap { case (left, right) => Seq(left, right) }
+    // The rewrite swaps comparison equality (`=`/`<>`) for grouping and MIN/MAX ordering equality,
+    // so gate every equi-key and the neq column -- both ends of each pair, since canonicalization
+    // drops the metadata that `isSafeComparisonGroupingAttribute` reads and the two ends may differ
+    // -- on a positive type allowlist. Fail closed on anything not proven safe.
+    val keyAttrs = (equiPairs ++ neqPairs).flatMap { case (l, r) => Seq(l, r) }
     if (!keyAttrs.forall(isSafeComparisonGroupingAttribute)) return None
 
-    // Canonicalization intentionally erases cosmetic Alias names, so name equality cannot prove
-    // that the two predicate ends refer to the same underlying column. Resolve each end by its own
-    // ExprId against its child output and require matching output ordinals instead.
-    val equiValid = equiPairs.forall {
-      case (l, r) => sameOutputPosition(leftPlan, rightPlan, l, r)
-    }
-    val neqValid = neqPairs.forall {
-      case (l, r) => sameOutputPosition(leftPlan, rightPlan, l, r)
-    }
+    // The rewrite expresses "two or more distinct values" as MIN(neq) <> MAX(neq), so the neq
+    // column must be orderable. The allowlist above already implies this, but assert Spark's own
+    // MIN/MAX input contract (RowOrdering.isOrderable, the same check Min/Max run) explicitly, so
+    // the requirement is visible at the rewrite site.
+    if (!RowOrdering.isOrderable(neqPairs.head._1.dataType)) return None
+
+    // Resolve each predicate end by ExprId and require matching output ordinals, not name equality
+    // (canonicalization erases cosmetic Alias names).
+    val equiValid =
+      equiPairs.forall { case (l, r) => sameOutputPosition(leftPlan, rightPlan, l, r) }
+    val neqValid = neqPairs.forall { case (l, r) => sameOutputPosition(leftPlan, rightPlan, l, r) }
     if (!equiValid || !neqValid) return None
 
-    // Equi-key output positions must be distinct across pairs. Keep the same positional identity
-    // here so swapped or duplicate aliases cannot make two different underlying columns look equal.
+    // Equi-key output positions must be distinct, so swapped/duplicate aliases cannot collide.
     val leftEquiOrdinals = equiPairs.map { case (l, _) => outputOrdinal(leftPlan, l) }
     if (leftEquiOrdinals.exists(_ < 0)) return None
     if (leftEquiOrdinals.distinct.size != leftEquiOrdinals.size) return None
 
-    // Defensive: reject when the neq column overlaps an equi-key column
-    // (e.g. `t1.k = t2.k AND t1.k <> t2.k`).
+    // Reject when the neq column overlaps an equi-key column (e.g. `t1.k = t2.k AND t1.k <> t2.k`).
     val neqLeftOrdinal = outputOrdinal(leftPlan, neqPairs.head._1)
     if (neqLeftOrdinal < 0 || leftEquiOrdinals.contains(neqLeftOrdinal)) return None
     Some((equiPairs, neqPairs))
   }
 
   /**
-   * Attribute-aware gate applied to the equi keys and the neq column. A CHAR/VARCHAR column reaches
-   * the optimizer as StringType with its declared type recorded in the attribute metadata
-   * (CharVarcharUtils stamps it when the relation output is built), so checking `attr.dataType`
-   * alone would let it through the StringType branch of [[isSafeComparisonGroupingType]]. Recover
-   * the declared raw type from the metadata (falling back to `dataType` when there is no marker)
-   * and run it through the datatype allowlist, so CHAR/VARCHAR fail closed there in every config.
+   * Type gate applied to each equi-key and the neq column. CHAR/VARCHAR reach the optimizer as
+   * StringType with the declared type recorded in the attribute metadata, so recover the raw type
+   * from metadata (falling back to `dataType`) before running the datatype allowlist -- otherwise
+   * they would slip through the StringType branch.
    */
   private def isSafeComparisonGroupingAttribute(attr: Attribute): Boolean = {
     val rawType = CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType)
@@ -447,7 +441,7 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
 
   /**
    * Positive allowlist of types where comparison equality (`=`/`<>`) provably coincides with
-   * grouping/distinct equality, so a key can move into GROUP BY / COUNT(DISTINCT). Float/Double
+   * grouping and MIN/MAX ordering equality, so a key can move into GROUP BY / MIN-MAX. Float/Double
    * (NaN, signed zero), CHAR/VARCHAR (declared-type/padding), non-binary collated strings, complex
    * types, UDTs / Variant and unknown types fail closed.
    */
