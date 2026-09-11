@@ -18,6 +18,7 @@
 import array
 import ctypes
 import datetime
+import json
 import os
 import pickle
 import sys
@@ -845,6 +846,31 @@ class TypesTestsMixin:
             python_datatype = _parse_datatype_json_string(scala_datatype.json())
             assert schema == python_datatype
             assert schema == _parse_datatype_json_string(schema.json())
+
+    def test_schema_rejects_inline_and_metadata_collations(self):
+        from pyspark.sql.types import _COLLATIONS_METADATA_KEY, _parse_datatype_json_string
+
+        for data_type, metadata_collation in [
+            ("char(4) collate UTF8_LCASE", "spark.UTF8_LCASE"),
+            ("varchar(6) collate UTF8_LCASE", "icu.UNICODE_CI"),
+        ]:
+            schema_json = {
+                "type": "struct",
+                "fields": [
+                    {
+                        "name": "c",
+                        "type": data_type,
+                        "nullable": True,
+                        "metadata": {
+                            _COLLATIONS_METADATA_KEY: {"c": metadata_collation},
+                        },
+                    }
+                ],
+            }
+            self.assertRaises(
+                PySparkTypeError,
+                lambda: _parse_datatype_json_string(json.dumps(schema_json)),
+            )
 
     def test_schema_with_collations_on_non_string_types(self):
         from pyspark.sql.types import _COLLATIONS_METADATA_KEY, _parse_datatype_json_string
@@ -2151,7 +2177,11 @@ class TypesTestsMixin:
             StringType("UNICODE"),
             StringType("UNICODE_CI"),
             CharType(10),
+            CharType(10, "UTF8_BINARY"),
+            CharType(10, "UTF8_LCASE"),
             VarcharType(10),
+            VarcharType(10, "UTF8_BINARY"),
+            VarcharType(10, "UNICODE_CI"),
             BinaryType(),
             BooleanType(),
             DateType(),
