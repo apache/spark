@@ -567,11 +567,13 @@ class TimestampNTZNanosType(AnyTimestampNanoType):
 
     ``datetime.datetime`` is microsecond-resolution, so values crossing the Python boundary as
     ``datetime.datetime`` -- :meth:`DataFrame.collect`, :meth:`DataFrame.toLocalIterator`, and
-    Python UDF arguments -- are truncated to microseconds, as are ``datetime.datetime`` values
-    supplied to :meth:`SparkSession.createDataFrame` from Python lists/rows. The value stored by
-    Spark keeps full precision; only this Python boundary is microsecond-resolution. A ``map``
-    with keys of this type that differ only below a microsecond would collapse to one entry, so
-    that conversion raises rather than silently dropping an entry.
+    classic (``useArrow=False``) Python UDF arguments -- are truncated to microseconds, as are
+    ``datetime.datetime`` values supplied to :meth:`SparkSession.createDataFrame` from Python
+    lists/rows. Arrow-optimized Python UDFs (``useArrow=True``) instead carry the value on the
+    Arrow path described below. The value stored by Spark keeps full precision; only this Python
+    boundary is microsecond-resolution. A ``map`` with keys of this type that differ only below a
+    microsecond would collapse to one entry, so that conversion raises rather than silently
+    dropping an entry.
 
     Arrow-based conversion -- :meth:`DataFrame.toPandas` and
     :meth:`SparkSession.createDataFrame` from a pandas ``DataFrame`` with Arrow enabled
