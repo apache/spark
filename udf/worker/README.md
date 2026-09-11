@@ -34,7 +34,7 @@ provisioning service or daemon).
 ```
 udf/worker/
 ├── proto/                        -- protobuf message classes only (protobuf-java)
-│   └── src/main/protobuf/udf/worker/proto/
+│   └── src/main/protobuf/org/apache/spark/udf/worker/
 │       worker_spec.proto         -- UDFWorkerSpecification protobuf
 │       udf_message.proto         -- UDF execution protocol messages (Init, UdfPayload, ...)
 │       udf_service.proto         -- UdfWorker gRPC service (Execute, Manage)
@@ -82,9 +82,10 @@ Engine -> Worker:  Init -> PayloadChunk* -> (DataRequest)* -> Finish (Cancel)?
 Worker -> Engine:          InitResponse  -> (DataResponse)* -> (ErrorResponse)? -> (FinishResponse | CancelResponse)
 ```
 
-See `udf/worker/proto/src/main/protobuf/udf/worker/proto/udf_message.proto`
+See `udf/worker/proto/src/main/protobuf/org/apache/spark/udf/worker/udf_message.proto`
 for the complete message definitions, ordering invariants, and error contract, and
-`udf/worker/proto/src/main/protobuf/udf/worker/proto/udf_service.proto` for the gRPC service.
+`udf/worker/proto/src/main/protobuf/org/apache/spark/udf/worker/udf_service.proto`
+for the gRPC service.
 
 ### Direct worker creation
 
