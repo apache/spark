@@ -239,6 +239,30 @@
     ],
     "sqlState" : "22023"
   },
+  "AUTOCDC_IGNORE_NULL_CANNOT_SELECT_RESERVED_COLUMN" : {
+    "message" : [
+      "In AutoCDC flow <flowName>, the ignore-null selection names column `<columnName>` which collides with the reserved column name prefix `<reservedColumnNamePrefix>` (<caseSensitivity>). Reserved columns may not appear in an ignore-null selection."
+    ],
+    "sqlState" : "42710"
+  },
+  "AUTOCDC_IGNORE_NULL_COLUMN_NOT_IN_OUTPUT_COLUMNS" : {
+    "message" : [
+      "In AutoCDC flow <flowName>, the ignore-null selection names column `<columnName>` which is not present in the flow's selected output columns (<caseSensitivity>). Only user-data columns surviving the column selection may appear in an ignore-null selection."
+    ],
+    "sqlState" : "42703"
+  },
+  "AUTOCDC_IGNORE_NULL_EMPTY_COLUMN_LIST" : {
+    "message" : [
+      "AutoCDC flow specifies an empty `ignore_null_updates_column_list`. Provide at least one column, or omit the option entirely to disable ignore-null updates. To ignore nulls for every column, specify an empty `ignore_null_updates_except_column_list` instead."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_IGNORE_NULL_SELECTION_CONTAINS_KEY_COLUMN" : {
+    "message" : [
+      "In AutoCDC flow <flowName>, the ignore-null selection names key column `<columnName>` (<caseSensitivity>). Key columns identify rows and may not appear in an ignore-null selection. Key columns: <keyColumnNames>."
+    ],
+    "sqlState" : "22023"
+  },
   "AUTOCDC_INVALID_STATE" : {
     "message" : [
       "Detected an invalid AutoCDC state for target table <tableName>:"
@@ -1838,7 +1862,7 @@
   },
   "CURSOR_OUTSIDE_SCRIPT" : {
     "message" : [
-      "Cursor operations can only be used within SQL scripts."
+      "Cursor <cursorName> can only be used within SQL scripts."
     ],
     "sqlState" : "0A000"
   },
@@ -2290,6 +2314,11 @@
       "CANNOT_RESOLVE" : {
         "message" : [
           "The attribute cannot be resolved."
+        ]
+      },
+      "NOT_IN_FILTER_ATTRIBUTES" : {
+        "message" : [
+          "The attribute must also be returned by `filterAttributes()`."
         ]
       },
       "NOT_TOP_LEVEL" : {
@@ -5125,6 +5154,16 @@
           "<memoryFractionKey> should be between 0 and 1 (was '<memoryFractionValue>')."
         ]
       },
+      "INVALID_PYTHON_WORKER_ENV_VAR_NAME" : {
+        "message" : [
+          "The environment variable name <name>, set under <prefix>, is not valid. Names must match the pattern <pattern> and contain at most <maxLength> characters."
+        ]
+      },
+      "INVALID_PYTHON_WORKER_ENV_VAR_VALUE" : {
+        "message" : [
+          "The value of the environment variable <name>, set under <prefix>, contains a NUL character, which a process environment cannot carry."
+        ]
+      },
       "INVALID_SPARK_SUBMIT_DEPLOY_MODE_KEY" : {
         "message" : [
           "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."
@@ -5133,6 +5172,21 @@
       "NETWORK_AUTH_MUST_BE_ENABLED" : {
         "message" : [
           "<networkAuthEnabledConf> must be enabled when enabling encryption."
+        ]
+      },
+      "PYTHON_WORKER_ENV_TOO_LARGE" : {
+        "message" : [
+          "The environment variables set under <prefix> total <size> bytes, which is more than the maximum of <maxSize> bytes."
+        ]
+      },
+      "PYTHON_WORKER_ENV_TOO_MANY_VARIABLES" : {
+        "message" : [
+          "<count> environment variables are set under <prefix>, which is more than the maximum of <maxCount>."
+        ]
+      },
+      "RESERVED_PYTHON_WORKER_ENV_VAR_NAME" : {
+        "message" : [
+          "The environment variable name <name>, set under <prefix>, is reserved for Spark. Names beginning with <reservedPrefixes>, and the names <reservedNames>, are set by Spark for its own Python workers and cannot be set by a session."
         ]
       }
     },
@@ -6742,6 +6796,14 @@
     ],
     "sqlState" : "0A000"
   },
+  "PIPELINE_NESTED_COMPLEX_TYPE_SCHEMA_EVOLUTION_UNSUPPORTED" : {
+    "message" : [
+      "Schema evolution within a complex type (array or map) whose element is itself a complex type is not supported.",
+      "Column path <columnPath> has element type <currentType> but the target element type is <targetType>.",
+      "Flatten the nesting or apply the change manually."
+    ],
+    "sqlState" : "0A000"
+  },
   "PIPELINE_RUN_FAILED" : {
     "message" : [
       "<message>"
@@ -8163,6 +8225,12 @@
     ],
     "sqlState" : "42K0E"
   },
+  "TIMESTAMP_NANOS_PYTHON_MAP_KEY" : {
+    "message" : [
+      "Cannot convert a map with <type> keys to Python. Python `datetime.datetime` is microsecond-resolution and cannot represent the sub-microsecond digits, so two distinct nanosecond keys can collapse to a single entry. Avoid nanosecond-precision timestamp types as map keys on the Python conversion path."
+    ],
+    "sqlState" : "22000"
+  },
   "TRAILING_COMMA_IN_SELECT" : {
     "message" : [
       "Trailing comma detected in SELECT clause. Remove the trailing comma before the FROM clause."
@@ -8305,6 +8373,12 @@
       "Unable to convert SQL type <toType> to Protobuf type <protobufType>."
     ],
     "sqlState" : "42K0G"
+  },
+  "UNABLE_TO_CREATE_DATABASE_DIRECTORY" : {
+    "message" : [
+      "Unable to create database <name> as failed to create its directory <locationUri>."
+    ],
+    "sqlState" : "58030"
   },
   "UNABLE_TO_FETCH_HIVE_TABLES" : {
     "message" : [
@@ -8943,6 +9017,21 @@
           "Drop the namespace <namespace>."
         ]
       },
+      "EXTERNAL_UDF" : {
+        "message" : [
+          "External UDF expressions are disabled. Set <config> to true to enable planning."
+        ]
+      },
+      "EXTERNAL_UDF_IN_ON_CLAUSE" : {
+        "message" : [
+          "External UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+        ]
+      },
+      "EXTERNAL_UDF_WITH_MULTIPLE_CHILDREN" : {
+        "message" : [
+          "External UDF <funcName> uses columns from more than one input relation. Rewrite the query so the UDF is evaluated after the inputs are combined."
+        ]
+      },
       "GEOSPATIAL_DISABLED" : {
         "message" : [
           "Geospatial feature is disabled."
@@ -8966,6 +9055,12 @@
       "INTERRUPT_TYPE" : {
         "message" : [
           "Unsupported interrupt type: <interruptType>."
+        ]
+      },
+      "LAMBDA_FUNCTION_WITH_EXTERNAL_UDF" : {
+        "message" : [
+          "Cannot evaluate the external UDF <funcName> inside the lambda of a higher-order function.",
+          "This placement is not supported. Rewrite the query so the UDF is applied outside the lambda."
         ]
       },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
@@ -9169,6 +9264,11 @@
       "SQL_CURSOR" : {
         "message" : [
           "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."
+        ]
+      },
+      "SQL_RESTRICTED_MODE" : {
+        "message" : [
+          "<feature> is not allowed because <config> is enabled."
         ]
       },
       "SQL_SCRIPTING" : {
@@ -10870,11 +10970,6 @@
       "<fieldCannotBeNullMsg>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2033" : {
-    "message" : [
-      "Unable to create database <name> as failed to create its directory <locationUri>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2034" : {
     "message" : [
       "Unable to drop database <name> as failed to delete its directory <locationUri>."
@@ -11767,7 +11862,7 @@
   },
   "_LEGACY_ERROR_TEMP_3070" : {
     "message" : [
-      "<internalName> is a reserved column name that cannot be read in combination with <colName> column."
+      "Unrecognized file metadata field: <field>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3071" : {

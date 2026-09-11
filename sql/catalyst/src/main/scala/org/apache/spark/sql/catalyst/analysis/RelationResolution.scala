@@ -286,8 +286,8 @@ class RelationResolution(
             // time-travel and write-privilege loads cannot.
             //
             // Skip the table-side lookup entirely for view-only catalogs (no `TableCatalog`
-            // mixin): `CatalogV2Util.loadTable` would call `asTableCatalog` and throw
-            // MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path.
+            // mixin): `CatalogV2Util.loadTableWithStateOptions` would call `asTableCatalog` and
+            // throw MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path.
             val relation: Option[Relation] = pinnedTable.orElse {
               catalog match {
                 case mc: RelationCatalog
@@ -302,12 +302,12 @@ class RelationResolution(
                   val tableSide: Option[Table] = if (
                     CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
                   ) {
-                    CatalogV2Util.loadTable(
+                    CatalogV2Util.loadTableWithStateOptions(
                       catalog,
                       ident,
+                      tableKey.stateOptions,
                       finalTimeTravelSpec,
-                      Option(writePrivileges),
-                      finalOptions)
+                      Option(writePrivileges))
                   } else {
                     None
                   }
@@ -406,8 +406,9 @@ class RelationResolution(
       catalog: CatalogPlugin,
       ident: Identifier,
       table: Table,
-      options: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
-    CatalogV2Util.lookupCachedRelation(sharedRelationCache, catalog, ident, table, options, conf)
+      stateOptions: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
+    CatalogV2Util.lookupCachedRelationWithStateOptions(
+      sharedRelationCache, catalog, ident, table, stateOptions, conf)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {
@@ -534,7 +535,8 @@ class RelationResolution(
           case Some(pinnedTable) =>
             createRelation(ref, catalog, pinnedTable)
           case None =>
-            val table = CatalogV2Util.getTable(catalog, ref.identifier, options = ref.options)
+            val table = CatalogV2Util.getTableWithStateOptions(
+              catalog, ref.identifier, tableKey.stateOptions)
             val sharedCacheMatch = if (ref.context.sharedCacheable) {
               lookupSharedRelationCache(catalog, ref.identifier, table, tableKey.stateOptions)
             } else {

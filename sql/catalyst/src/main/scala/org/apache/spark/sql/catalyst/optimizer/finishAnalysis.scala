@@ -315,7 +315,7 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
 
   private val specialDatetimeRewrite: PartialFunction[Expression, Expression] = {
     case cast @ Cast(e, dt @ (DateType | TimestampType | TimestampNTZType), _, _)
-      if e.foldable && e.dataType == StringType =>
+      if e.foldable && e.dataType.isInstanceOf[StringType] =>
       Option(e.eval())
         .flatMap(s => conv(dt)(s.toString, cast.zoneId))
         .map(Literal(_, dt))

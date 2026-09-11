@@ -383,7 +383,7 @@ class AsyncProgressTrackingMicroBatchExecution(
 
   // used for testing
   def areWritesPendingOrInProgress(): Boolean = {
-    asyncWritesExecutorService.getQueue.size() > 0 || asyncWritesExecutorService.getActiveCount > 0
+    !asyncWritesExecutorService.getQueue.isEmpty || asyncWritesExecutorService.getActiveCount > 0
   }
 
   override protected def getTrigger(): TriggerExecutor = validateAndGetTrigger()

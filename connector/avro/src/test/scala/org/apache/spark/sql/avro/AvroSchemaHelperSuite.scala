@@ -21,9 +21,44 @@ import org.apache.avro.SchemaBuilder
 import org.apache.spark.sql.avro.AvroUtils.AvroMatchedField
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, StringType, StructField, StructType}
 
 class AvroSchemaHelperSuite extends SharedSparkSession {
+
+  test("Catalyst type carried in the avro property parses normally") {
+    // An INT Avro field carrying a nested Catalyst type in the spark.sql.catalyst.type property.
+    val deepType = "array<" * 8 + "int" + ">" * 8
+    val avroSchema = SchemaBuilder.builder().intType()
+    avroSchema.addProp("spark.sql.catalyst.type", deepType)
+    assert(SchemaConverters.toSqlType(avroSchema).dataType.isInstanceOf[ArrayType])
+  }
+
+  test("a pathologically nested Catalyst type fails as a schema error, not StackOverflowError") {
+    // A backquoted identifier may itself contain '>', so a character scan of the type string
+    // cannot bound the real nesting -- only parsing it can. Parse on a small-stack thread so the
+    // recursive-descent parser overflows deterministically, and assert the overflow surfaces as
+    // an IncompatibleSchemaException instead of escaping as a StackOverflowError.
+    val depth = 6000
+    val deepType = "struct<`>`:" * depth + "int" + ">" * depth
+    val avroSchema = SchemaBuilder.builder().intType()
+    avroSchema.addProp("spark.sql.catalyst.type", deepType)
+
+    @volatile var thrown: Throwable = null
+    val runnable = new Runnable {
+      override def run(): Unit = {
+        try {
+          SchemaConverters.toSqlType(avroSchema)
+        } catch {
+          case t: Throwable => thrown = t
+        }
+      }
+    }
+    val t = new Thread(null, runnable, "avro-deep-catalyst-type", 256 * 1024)
+    t.start()
+    t.join()
+    assert(thrown.isInstanceOf[IncompatibleSchemaException],
+      s"expected IncompatibleSchemaException but got: $thrown")
+  }
 
   test("ensure schema is a record") {
     val avroSchema = SchemaBuilder.builder().intType()
@@ -85,6 +120,49 @@ class AvroSchemaHelperSuite extends SharedSparkSession {
 
     assert(posHelper.getAvroField("nonexist", 1).isDefined)
     assert(nameHelper.getAvroField("nonexist", 1).isEmpty)
+  }
+
+  test("SPARK-59108: positional field match resolves against the data schema positions") {
+    val dataSchema = new StructType()
+      .add("a", IntegerType).add("b", IntegerType).add("c", IntegerType)
+    val avroSchema = SchemaConverters.toAvroType(dataSchema)
+    val projection = new StructType().add("c", IntegerType).add("a", IntegerType)
+
+    val helper = new AvroUtils.AvroSchemaHelper(
+      avroSchema, projection, Seq(""), Seq(""), true, Array(2, 0))
+    assert(helper.getAvroField("c", 0) === Some(avroSchema.getFields.get(2)))
+    assert(helper.getAvroField("a", 1) === Some(avroSchema.getFields.get(0)))
+    assert(helper.matchedFields.map(_.avroField.name()) === Seq("c", "a"))
+
+    // With no positions a field's own position is used, which is what an unprojected match needs.
+    val unprojected =
+      new AvroUtils.AvroSchemaHelper(avroSchema, projection, Seq(""), Seq(""), true)
+    assert(unprojected.getAvroField("c", 0) === Some(avroSchema.getFields.get(0)))
+
+    // The shape both read paths produce is an ascending subsequence of the data schema.
+    val ascending = new StructType().add("a", IntegerType).add("c", IntegerType)
+    val ascendingHelper = new AvroUtils.AvroSchemaHelper(
+      avroSchema, ascending, Seq(""), Seq(""), true, Array(0, 2))
+    assert(ascendingHelper.getAvroField("a", 0) === Some(avroSchema.getFields.get(0)))
+    assert(ascendingHelper.getAvroField("c", 1) === Some(avroSchema.getFields.get(2)))
+    assert(ascendingHelper.matchedFields.map(_.avroField.name()) === Seq("a", "c"))
+
+    val msg = intercept[IllegalArgumentException] {
+      new AvroUtils.AvroSchemaHelper(avroSchema, projection, Seq(""), Seq(""), true, Array(2))
+    }.getMessage
+    assert(msg.contains("Got 1 data schema positions for 2 Catalyst fields"))
+
+    // A missing field is reported by the position that was looked for, not by the position the
+    // field happens to have in the projection.
+    val twoFieldAvro = SchemaConverters.toAvroType(
+      new StructType().add("a", IntegerType).add("b", IntegerType))
+    val pastTheEnd = new AvroUtils.AvroSchemaHelper(
+      twoFieldAvro, new StructType().add("c", IntegerType, nullable = false),
+      Seq(""), Seq(""), true, Array(2))
+    val missing = intercept[IncompatibleSchemaException] {
+      pastTheEnd.validateNoExtraCatalystFields(ignoreNullable = false)
+    }.getMessage
+    assert(missing.contains("Cannot find field at position 2"))
   }
 
   test("properly match fields between Avro and Catalyst schemas") {

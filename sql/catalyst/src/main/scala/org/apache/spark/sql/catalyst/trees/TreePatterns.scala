@@ -94,6 +94,7 @@ object TreePattern extends Enumeration  {
   val PYTHON_UDF: Value = Value
   val REGEXP_EXTRACT_FAMILY: Value = Value
   val REGEXP_REPLACE: Value = Value
+  val RESOLVED_STAR: Value = Value
   val RUNTIME_REPLACEABLE: Value = Value
   val SEMI_STRUCTURED_EXTRACT: Value = Value
   val SCALAR_SUBQUERY: Value = Value
@@ -131,6 +132,11 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_IDENTIFIER: Value = Value
   val UNRESOLVED_ORDINAL: Value = Value
   val UNRESOLVED_PLAN_ID: Value = Value
+  val UNRESOLVED_REGEX: Value = Value
+  val UNRESOLVED_STAR: Value = Value
+  val UNRESOLVED_STAR_EXCEPT_OR_REPLACE: Value = Value
+  val UNRESOLVED_STAR_WITH_COLUMNS: Value = Value
+  val UNRESOLVED_STAR_WITH_COLUMNS_RENAMES: Value = Value
   val UNRESOLVED_WINDOW_EXPRESSION: Value = Value
 
   // Execution expression patterns (alphabetically ordered)
