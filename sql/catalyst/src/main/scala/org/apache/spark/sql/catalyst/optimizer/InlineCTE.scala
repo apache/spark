@@ -22,8 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
 import org.apache.spark.sql.catalyst.expressions.{Alias, OuterReference, OuterScopeReference, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Join, JoinHint, LogicalPlan, Project, Subquery, UnionLoop, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, LogicalPlan, Project, Subquery, UnionLoop, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 
@@ -278,15 +277,7 @@ case class InlineCTE(
             if (ref.outputSet == refInfo.cteDef.outputSet) {
               cteBody
             } else {
-              val ctePlan = DeduplicateRelations(
-                Join(
-                  cteBody,
-                  cteBody,
-                  Inner,
-                  None,
-                  JoinHint(None, None)
-                )
-              ).children(1)
+              val ctePlan = DeduplicateRelations.deduplicateRight(cteBody, cteBody)
               val projectList = ref.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
                 if (srcAttr.semanticEquals(tgtAttr)) {
                   tgtAttr
