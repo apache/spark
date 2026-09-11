@@ -1982,6 +1982,35 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("refresh keeps a captured column bound to its exact name past a folding sibling") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(s"CREATE TABLE $t (s INT) USING foo")
+        sql(s"INSERT INTO $t VALUES (1)")
+
+        spark.table(t).createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1)))
+
+        // U+017F is a distinct name to the duplicate-name check, which folds names with
+        // `toLowerCase`, and equal to `s` for the case-insensitive resolver. The column is added
+        // through the catalog, like the other external changes in this group.
+        val longS = new String(Character.toChars(0x17f))
+        val cat = catalog("testcat")
+        cat.alterTable(
+          testIdent,
+          TableChange.addColumn(
+            Array(longS), IntegerType, true, null, TableChange.ColumnPosition.first(), null))
+        assert(cat.loadTable(testIdent).columns().map(_.name).toSeq == Seq(longS, "s"))
+        externalAppend(cat, testIdent, InternalRow(7, 2))
+
+        // The captured `s` reads the current `s`, not the column that precedes it and matches only
+        // after folding.
+        checkAnswer(spark.table("v"), Seq(Row(1), Row(2)))
+      }
+    }
+  }
+
   test("refresh rebinds every relation of a self-joined partially-pruned table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -3947,6 +3976,31 @@ class DataSourceV2DataFrameSuite
       checkAnswer(
         spark.table(t),
         Seq(Row(1, 10, null), Row(2, 20, null), Row(3, 30, null), Row(4, 40, "40")))
+
+      // a second compatible change now refreshes a cached plan that was already rebound once
+      val secondChange = TableChange.addColumn(Array("extra"), StringType, true)
+      catalog("testcat").alterTable(ident, secondChange)
+
+      // refresh table is supposed to trigger recaching
+      spark.sql(s"REFRESH TABLE $t")
+
+      // recaching is expected to succeed
+      assert(spark.sharedState.cacheManager.numCachedEntries == 1)
+
+      // Rebinding an already rebound plan adds a second projection rather than replacing the first,
+      // so this entry no longer matches the single projection a query rebuilds from its own
+      // captured output and stops being reused. Derived queries must still return the captured
+      // schema and the latest data.
+      checkAnswer(df.filter("id > 0"), Seq(Row(1, 10), Row(2, 20), Row(3, 30), Row(4, 40)))
+
+      // verify latest schema is propagated again
+      checkAnswer(
+        spark.table(t),
+        Seq(
+          Row(1, 10, null, null),
+          Row(2, 20, null, null),
+          Row(3, 30, null, null),
+          Row(4, 40, "40", null)))
     }
   }
 

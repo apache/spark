@@ -459,6 +459,56 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
     }
   }
 
+  test("prefer an exact column name over one that only matches after case folding") {
+    // A table can hold both `s` and U+017F: the duplicate-name check folds names with
+    // `toLowerCase`, which keeps them apart, while the resolver compares with `equalsIgnoreCase`,
+    // which does not. The captured name must still read the column that carries it.
+    val longS = new String(Character.toChars(0x17f))
+    val currentTable = new TestTable(Array(
+      Column.create(longS, IntegerType),
+      Column.create("s", IntegerType)))
+    val relation = DataSourceV2Relation(
+      table = currentTable,
+      output = Seq(AttributeReference("s", IntegerType)()),
+      catalog = None,
+      identifier = None,
+      options = CaseInsensitiveStringMap.empty())
+
+    val rebound = CapturedSchemaProjection.rebindToCapturedSchema(relation).asInstanceOf[Project]
+    assert(rebound.child.output.map(_.name) == Seq(longS, "s"))
+    assert(rebound.output.map(_.name) == Seq("s"))
+    assert(rebound.output.map(_.exprId) == relation.output.map(_.exprId))
+    val read = rebound.projectList.head.references.toSeq
+    assert(read.map(_.name) == Seq("s"), "the captured column must not read the folding sibling")
+    assert(read.map(_.exprId) == Seq(rebound.child.output.last.exprId))
+  }
+
+  test("prefer an exact nested field name over one that only matches after case folding") {
+    val longS = new String(Character.toChars(0x17f))
+    val currentType = StructType(
+      Seq(StructField(longS, IntegerType), StructField("s", IntegerType)))
+    val capturedType = StructType(Seq(StructField("s", IntegerType)))
+
+    val projected = project(Literal(create_row(7, 1), currentType), currentType, capturedType)
+    assert(projected.dataType == capturedType)
+    checkEvaluation(projected, create_row(1))
+  }
+
+  test("reject a captured name that several current names match") {
+    // Neither `S` nor U+017F is the captured name, both are equal to it under the resolver, and
+    // the duplicate-name check keeps them apart, so nothing here can choose between them.
+    val longS = new String(Character.toChars(0x17f))
+    val currentType = StructType(
+      Seq(StructField("S", IntegerType), StructField(longS, IntegerType)))
+    val capturedType = StructType(Seq(StructField("s", IntegerType)))
+
+    checkRejected(
+      Literal(create_row(1, 2), currentType),
+      currentType,
+      capturedType,
+      "captured name s matches multiple current names")
+  }
+
   test("keep the first ordinal when a struct has duplicate field names") {
     // Upstream validation rejects duplicate names, but `projectToType` resolves ordinals and must
     // stay deterministic if it is ever reached without that validation: the first match wins.

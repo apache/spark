@@ -53,23 +53,30 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
       relation.identifier,
       relation.options,
       relation.timeTravelSpec)
+    val currentMetadataOutput = current.metadataOutput
     val currentMetadata = capturedOutput.filter(_.isMetadataCol).map { captured =>
       val logicalName = metadataLogicalName(captured)
-      current.metadataOutput.find { attr =>
-        resolver(metadataLogicalName(attr), logicalName)
-      }.getOrElse {
-        // The connector still reports this metadata column, so it can only be absent here because
-        // a data column has taken its name and the connector suppresses rather than renames the
-        // conflict (`canRenameConflictingMetadataColumns`). Validation owns rejecting that.
-        unexpectedSchemaChange(
-          s"captured metadata column $logicalName is missing from the current relation")
-      }
+      matchName(currentMetadataOutput, logicalName, resolver)(metadataLogicalName)
+        .map(pos => currentMetadataOutput(pos))
+        .getOrElse {
+          // The connector still reports this metadata column, so it can only be absent here
+          // because a data column has taken its name and the connector suppresses rather than
+          // renames the conflict (`canRenameConflictingMetadataColumns`). Validation owns
+          // rejecting that.
+          unexpectedSchemaChange(
+            s"captured metadata column $logicalName is missing from the current relation")
+        }
     }
 
     val currentOutput = current.output ++ currentMetadata
 
     // Refresh may visit an already rebound relation. Preserve its attributes so the projection
     // above it continues to reference valid expression IDs.
+    //
+    // A further schema change on such a relation adds a second projection instead of replacing
+    // the first. Only the cache stores a refreshed plan, so the effect is limited to that entry:
+    // it stops matching the single projection a query rebuilds from its own captured output, and
+    // is no longer reused. Results stay correct.
     if (sameOutputShape(capturedOutput, currentOutput)) {
       return relation
     }
@@ -124,8 +131,7 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
       case (fromStruct: StructType, toStruct: StructType) =>
         val structInput = if (input.nullable) KnownNotNull(input) else input
         val fields = toStruct.fields.iterator.flatMap { targetField =>
-          val index = fromStruct.fields.indexWhere(field => resolver(field.name, targetField.name))
-          if (index < 0) {
+          val index = matchName(fromStruct, targetField.name, resolver)(_.name).getOrElse {
             unexpectedSchemaChange(
               s"captured struct field ${targetField.name} is missing from $fromStruct")
           }
@@ -225,6 +231,32 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
   }
 
   /**
+   * Returns the position of the entry whose name matches `target`, if any.
+   *
+   * An exact match wins so that a name binds to itself even when the resolver cannot tell it apart
+   * from another name in the same schema. Duplicate names are rejected by folding with
+   * `toLowerCase` while resolution compares with `equalsIgnoreCase`, so a schema can legally hold
+   * several names the resolver considers equal. Without an exact match the resolver match has to be
+   * unique: nothing here can decide which of two indistinguishable names the captured plan read.
+   */
+  private def matchName[T](
+      candidates: Seq[T],
+      target: String,
+      resolver: Resolver)(name: T => String): Option[Int] = {
+    val exact = candidates.indexWhere(candidate => name(candidate) == target)
+    if (exact >= 0) {
+      return Some(exact)
+    }
+    val matches = candidates.indices.filter(pos => resolver(name(candidates(pos)), target))
+    if (matches.length > 1) {
+      unexpectedSchemaChange(
+        s"captured name $target matches multiple current names " +
+          matches.map(pos => name(candidates(pos))).mkString("[", ", ", "]"))
+    }
+    matches.headOption
+  }
+
+  /**
    * Indexes attributes by name for the rebinding lookups. Data and metadata attributes are indexed
    * separately because a metadata attribute matches on its logical name, which a data column may
    * also carry.
@@ -243,9 +275,7 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
 
     private def find(attrs: Seq[AttributeReference], targetName: String)(
         name: AttributeReference => String): Option[AttributeReference] = {
-      // Keep the first attribute for a name so the lookup stays deterministic even if a caller
-      // reaches this without the validation that rejects duplicate names.
-      attrs.find(attr => resolver(name(attr), targetName))
+      matchName(attrs, targetName, resolver)(name).map(pos => attrs(pos))
     }
   }
 
