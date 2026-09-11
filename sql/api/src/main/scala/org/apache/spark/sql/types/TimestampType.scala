@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.internal.SqlApiConf
 
 /**
  * The timestamp type represents a time instant in microsecond precision. Valid range is
@@ -34,6 +35,11 @@ class TimestampType private () extends DatetimeType {
    * The default size of a value of the TimestampType is 8 bytes.
    */
   override def defaultSize: Int = 8
+
+  // A bare `TIMESTAMP` resolves to the session default timestamp type, so render this type
+  // explicitly when that default is not this type, keeping the generated DDL round-trippable.
+  override def sql: String =
+    if (SqlApiConf.get.timestampType == TimestampNTZType) "TIMESTAMP_LTZ" else "TIMESTAMP"
 
   override def equals(obj: Any): Boolean = obj.isInstanceOf[TimestampType]
 

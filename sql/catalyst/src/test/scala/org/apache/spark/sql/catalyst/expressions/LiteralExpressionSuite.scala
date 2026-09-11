@@ -528,6 +528,18 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-59433: format timestamp literal respects the default timestamp type") {
+    withTimeZones(sessionTimeZone = "GMT+01:00", systemTimeZone = "GMT-08:00") {
+      val timestamp = LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000)
+        .atZone(ZoneOffset.UTC)
+        .toInstant
+      assert(Literal.create(timestamp).sql === "TIMESTAMP '2019-03-21 01:02:03.456'")
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+        assert(Literal.create(timestamp).sql === "TIMESTAMP_LTZ '2019-03-21 01:02:03.456'")
+      }
+    }
+  }
+
   test("format date literal independently from time zone") {
     withTimeZones(sessionTimeZone = "GMT-11:00", systemTimeZone = "GMT-10:00") {
       val date = LocalDate.of(2019, 3, 21)
