@@ -566,3 +566,18 @@ ALTER VIEW identifier_p2a_view AS SELECT IDENTIFIER(identifier_p2a_col) FROM VAL
 DROP VIEW identifier_p2a_view;
 DROP TEMPORARY VARIABLE identifier_p2a_col;
 SET spark.sql.legacy.allowSessionVariableInPersistedView=false;
+
+-- Nested temporary views lock in the `withAnalysisContext` accumulator reset: creating the outer
+-- view (which selects the inner view) resolves the inner view along the way, and the inner view's
+-- IDENTIFIER-clause variable must be attributed to the inner view only -- it must never be recorded
+-- as a referred variable of the outer view. The inner `CreateViewCommand` records
+-- `identifier_nested_col`; the outer `CreateViewCommand` must record nothing.
+DECLARE OR REPLACE VARIABLE identifier_nested_col STRING DEFAULT 'c1';
+CREATE OR REPLACE TEMPORARY VIEW identifier_nested_inner AS
+SELECT IDENTIFIER(identifier_nested_col) AS x FROM VALUES(1) AS t(c1);
+CREATE OR REPLACE TEMPORARY VIEW identifier_nested_outer AS
+SELECT x FROM identifier_nested_inner;
+SELECT * FROM identifier_nested_outer;
+DROP VIEW identifier_nested_outer;
+DROP VIEW identifier_nested_inner;
+DROP TEMPORARY VARIABLE identifier_nested_col;

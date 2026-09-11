@@ -3397,3 +3397,69 @@ DropVariable false
 SET spark.sql.legacy.allowSessionVariableInPersistedView=false
 -- !query analysis
 SetCommand (spark.sql.legacy.allowSessionVariableInPersistedView,Some(false))
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_nested_col STRING DEFAULT 'c1'
+-- !query analysis
+CreateVariable default(cast(c1 as string), sql=''c1''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_nested_col
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_nested_inner AS
+SELECT IDENTIFIER(identifier_nested_col) AS x FROM VALUES(1) AS t(c1)
+-- !query analysis
+CreateViewCommand `identifier_nested_inner`, SELECT IDENTIFIER(identifier_nested_col) AS x FROM VALUES(1) AS t(c1), false, true, LocalTempView, UNSUPPORTED, true, [[identifier_nested_col]]
+   +- Project [c1#x AS x#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x]
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_nested_outer AS
+SELECT x FROM identifier_nested_inner
+-- !query analysis
+CreateViewCommand `identifier_nested_outer`, SELECT x FROM identifier_nested_inner, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [x#x]
+      +- SubqueryAlias identifier_nested_inner
+         +- View (`identifier_nested_inner`, [x#x])
+            +- Project [cast(x#x as int) AS x#x]
+               +- Project [c1#x AS x#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [c1#x]
+
+
+-- !query
+SELECT * FROM identifier_nested_outer
+-- !query analysis
+Project [x#x]
++- SubqueryAlias identifier_nested_outer
+   +- View (`identifier_nested_outer`, [x#x])
+      +- Project [cast(x#x as int) AS x#x]
+         +- Project [x#x]
+            +- SubqueryAlias identifier_nested_inner
+               +- View (`identifier_nested_inner`, [x#x])
+                  +- Project [cast(x#x as int) AS x#x]
+                     +- Project [c1#x AS x#x]
+                        +- SubqueryAlias t
+                           +- LocalRelation [c1#x]
+
+
+-- !query
+DROP VIEW identifier_nested_outer
+-- !query analysis
+DropTempViewCommand identifier_nested_outer, false
+
+
+-- !query
+DROP VIEW identifier_nested_inner
+-- !query analysis
+DropTempViewCommand identifier_nested_inner, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_nested_col
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_nested_col

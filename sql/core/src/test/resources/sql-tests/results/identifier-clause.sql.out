@@ -3725,3 +3725,61 @@ SET spark.sql.legacy.allowSessionVariableInPersistedView=false
 struct<key:string,value:string>
 -- !query output
 spark.sql.legacy.allowSessionVariableInPersistedView	false
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_nested_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_nested_inner AS
+SELECT IDENTIFIER(identifier_nested_col) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_nested_outer AS
+SELECT x FROM identifier_nested_inner
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_nested_outer
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_nested_outer
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW identifier_nested_inner
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_nested_col
+-- !query schema
+struct<>
+-- !query output
+
