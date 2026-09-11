@@ -959,7 +959,7 @@ private[hive] trait HiveInspectors {
   def unwrapperFor(
       field: HiveStructField,
       dataType: DataType): (Any, InternalRow, Int) => Unit = dataType match {
-    case _: CharType | _: VarcharType =>
+    case dt if CharVarcharUtils.hasCharVarchar(dt) =>
       val unwrapper = unwrapperFor(field.getFieldObjectInspector, dataType)
       (value: Any, row: InternalRow, ordinal: Int) => row(ordinal) = unwrapper(value)
     case _ =>

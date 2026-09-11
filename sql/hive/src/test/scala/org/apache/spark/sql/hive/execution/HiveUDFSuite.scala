@@ -943,19 +943,31 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("SPARK-59277: persisted views use their captured Hive conversion types") {
-    withUserDefinedFunction("hive_upper" -> false, "hive_max" -> false) {
-      withView("first_class_hive_view", "legacy_hive_view") {
+    withUserDefinedFunction(
+        "hive_upper" -> false,
+        "hive_max" -> false,
+        "hive_explode" -> false) {
+      withView("first_class_hive_view", "first_class_hive_udtf_view", "legacy_hive_view") {
         sql(s"CREATE FUNCTION hive_upper AS '${classOf[GenericUDFUpper].getName}'")
         sql(s"CREATE FUNCTION hive_max AS '${classOf[GenericUDAFMax].getName}'")
+        sql(s"CREATE FUNCTION hive_explode AS '${classOf[GenericUDTFExplode].getName}'")
         val query =
           """SELECT
             |  hive_upper(CAST('Ab' AS CHAR(5))) AS scalar_value,
             |  hive_max(CAST('cd' AS CHAR(4))) AS aggregate_value""".stripMargin
+        val udtfQuery =
+          """SELECT value
+            |FROM (
+            |  SELECT array(CAST('xy' AS CHAR(5))) AS values
+            |) input
+            |LATERAL VIEW hive_explode(values) exploded AS value
+            |""".stripMargin
 
         withSQLConf(
             SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
             SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
           sql(s"CREATE VIEW first_class_hive_view AS $query")
+          sql(s"CREATE VIEW first_class_hive_udtf_view AS $udtfQuery")
         }
         withSQLConf(
             SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
@@ -963,6 +975,10 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
           val result = sql("SELECT * FROM first_class_hive_view")
           assert(result.schema.map(_.dataType) === Seq(StringType, StringType))
           checkAnswer(result, Row("AB   ", "cd  "))
+
+          val udtfResult = sql("SELECT * FROM first_class_hive_udtf_view")
+          assert(udtfResult.schema.head.dataType === StringType)
+          checkAnswer(udtfResult, Row("xy   "))
         }
 
         withSQLConf(

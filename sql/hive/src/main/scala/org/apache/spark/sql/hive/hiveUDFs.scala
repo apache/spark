@@ -212,7 +212,8 @@ private[hive] case class HiveGenericUDF(
 private[hive] case class HiveGenericUDTF(
     name: String,
     funcWrapper: HiveFunctionWrapper,
-    children: Seq[Expression])
+    children: Seq[Expression],
+    resolvedElementSchema: Option[StructType] = None)
   extends Generator with HiveInspectors with CodegenFallback with UserDefinedExpression {
 
   @transient
@@ -238,10 +239,12 @@ private[hive] case class HiveGenericUDTF(
   @transient
   protected lazy val collector = new UDTFCollector
 
-  override lazy val elementSchema = StructType(outputInspector.getAllStructFieldRefs.asScala.map {
-    field => StructField(field.getFieldName, inspectorToDataType(field.getFieldObjectInspector),
-      nullable = true)
-  }.toArray)
+  override lazy val elementSchema = resolvedElementSchema.getOrElse {
+    StructType(outputInspector.getAllStructFieldRefs.asScala.map {
+      field => StructField(field.getFieldName, inspectorToDataType(field.getFieldObjectInspector),
+        nullable = true)
+    }.toArray)
+  }
 
   @transient
   private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
@@ -291,7 +294,7 @@ private[hive] case class HiveGenericUDTF(
   override def prettyName: String = name
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(children = newChildren)
+    copy(children = newChildren, resolvedElementSchema = Some(elementSchema))
 }
 
 /**

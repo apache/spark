@@ -30,7 +30,7 @@ import org.apache.hadoop.io.LongWritable
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row, TestUserClassUDT}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Literal, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -356,6 +356,16 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
         wrap(input, inspector, dataType)).asInstanceOf[InternalRow]
       assert(result.getArray(0).getUTF8String(0) === UTF8String.fromString("a   "))
       assert(result.getMap(1).valueArray().getUTF8String(0) === UTF8String.fromString("value"))
+
+      val outerType = StructType(Seq(StructField("nested", dataType)))
+      val outerInspector = toInspector(outerType).asInstanceOf[StructObjectInspector]
+      val field = outerInspector.getAllStructFieldRefs.get(0)
+      val targetRow = new SpecificInternalRow(Seq(dataType))
+      unwrapperFor(field, dataType)(wrap(input, inspector, dataType), targetRow, 0)
+      val nestedResult = targetRow.getStruct(0, dataType.length)
+      assert(nestedResult.getArray(0).getUTF8String(0) === UTF8String.fromString("a   "))
+      assert(
+        nestedResult.getMap(1).valueArray().getUTF8String(0) === UTF8String.fromString("value"))
     }
   }
 
