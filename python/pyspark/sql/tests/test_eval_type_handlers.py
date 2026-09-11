@@ -19,12 +19,12 @@ import unittest
 
 from pyspark.sql.eval_handlers import (
     EVAL_TYPE_HANDLERS,
-    ArrowScalarUDFHandler,
     BatchEvalTypeHandler,
     CoGroupedEvalTypeHandler,
     EvalTypeHandler,
     GroupedEvalTypeHandler,
 )
+from pyspark.sql.eval_handlers._arrow import ArrowScalarUDFHandler
 from pyspark.sql.pandas.serializers import (
     ArrowStreamCoGroupSerializer,
     ArrowStreamGroupSerializer,
