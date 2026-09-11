@@ -20,6 +20,8 @@ package org.apache.spark.unsafe.map;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Iterator;
 import java.util.LinkedList;
 
@@ -103,9 +105,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private final TaskMemoryManager taskMemoryManager;
 
   /**
-   * A linked list for tracking all allocated data pages so that we can free all of our memory.
+   * A deque for tracking all allocated data pages so that we can free all of our memory.
    */
-  private final LinkedList<MemoryBlock> dataPages = new LinkedList<>();
+  private final Deque<MemoryBlock> dataPages = new ArrayDeque<>();
 
   /**
    * The data page that will be used to store keys and values for new hashtable entries. When this
@@ -299,6 +301,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private boolean destructive = false;
     private UnsafeSorterSpillReader reader = null;
 
+    // Used only for non-destructive iteration to walk the data pages in order (a deque has no
+    // random access). The destructive path instead consumes pages from the head of `dataPages`.
+    private Iterator<MemoryBlock> pageIterator = null;
+
     private MapIterator(int numRecords, Location loc, boolean destructive) {
       this.numRecords = numRecords;
       this.loc = loc;
@@ -310,6 +316,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
           freeArray(longArray);
           longArray = null;
         }
+      } else {
+        pageIterator = dataPages.iterator();
       }
     }
 
@@ -323,14 +331,19 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
       try {
         synchronized (this) {
-          int nextIdx = dataPages.indexOf(currentPage) + 1;
-          if (destructive && currentPage != null) {
-            dataPages.remove(currentPage);
-            pageToFree = currentPage;
-            nextIdx--;
+          final MemoryBlock nextPage;
+          if (destructive) {
+            if (currentPage != null) {
+              assert dataPages.peekFirst() == currentPage;
+              dataPages.removeFirst();
+              pageToFree = currentPage;
+            }
+            nextPage = dataPages.peekFirst();
+          } else {
+            nextPage = pageIterator.hasNext() ? pageIterator.next() : null;
           }
-          if (dataPages.size() > nextIdx) {
-            currentPage = dataPages.get(nextIdx);
+          if (nextPage != null) {
+            currentPage = nextPage;
             pageBaseObject = currentPage.getBaseObject();
             offsetInPage = currentPage.getBaseOffset();
             recordsInPage = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
@@ -413,7 +426,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
       long released = 0L;
       while (dataPages.size() > 0) {
-        MemoryBlock block = dataPages.getLast();
+        MemoryBlock block = dataPages.peekLast();
         // The currentPage is used, cannot be released
         if (block == currentPage) {
           break;
@@ -435,7 +448,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         writer.close();
         spillWriters.add(writer);
 
-        dataPages.removeLast();
+        dataPages.pollLast();
         released += block.size();
         freePage(block);
 
@@ -1030,10 +1043,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       freeArray(longArray);
       longArray = null;
     }
-    Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
-    while (dataPagesIterator.hasNext()) {
-      MemoryBlock dataPage = dataPagesIterator.next();
-      dataPagesIterator.remove();
+    while (!dataPages.isEmpty()) {
+      MemoryBlock dataPage = dataPages.removeFirst();
       freePage(dataPage);
     }
     assert(dataPages.isEmpty());
