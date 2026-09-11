@@ -17,7 +17,7 @@
 
 syntax = "proto3";
 
-import "common.proto";
+import "udf/worker/proto/common.proto";
 
 package org.apache.spark.udf.worker;
 
