@@ -309,15 +309,20 @@ package object config extends Logging {
         "the YARN RM web proxy to sign it (a Hadoop-side change), so this option is an interim " +
         "workaround until then. The AM always installs its own filter first, so this option is " +
         "meant for client mode, where a separate authentication filter set in spark.ui.filters " +
-        "runs after it: the last request wrapper in the chain determines the user, so that " +
-        "authentication filter already establishes the request's user regardless of this " +
-        "option, and setting this to false additionally makes the AM ignore the forwarded " +
-        "cookie. If this is set to false without such an authentication filter (for example in " +
-        "cluster mode, where the AM sets the UI filters and no filter can precede it), proxy " +
-        "requests are treated as having no user, and a request with no user passes every view " +
-        "and modify ACL check, exposing the AM UI regardless of spark.ui.view.acls / " +
-        "spark.modify.acls. Only set it to false in client mode together with such an " +
-        "authentication filter.")
+        "runs after it. The last request wrapper in the chain determines the user: an " +
+        "authentication filter that wraps the request overrides the cookie principal on its own, " +
+        "so this option changes nothing there; but a filter that authenticates without wrapping " +
+        "the request (for example an IP or network allowlist, a token/header check that only " +
+        "accepts or rejects, or an SSO filter that passes whitelisted paths straight through) " +
+        "leaves the AM's own request wrapper outermost, so getRemoteUser() is still the " +
+        "unverified cookie value. That is the case this option is for: setting it to false makes " +
+        "the AM stop trusting the cookie, so the request reaches the ACL check with no forged " +
+        "user. If this is set to false without such an authentication filter (for example in " +
+        "cluster mode, where the AM replaces spark.ui.filters with its own filter, so no other " +
+        "filter runs), proxy requests are treated as having no user, and a request with no user " +
+        "passes every view and modify ACL check, exposing the AM UI regardless of " +
+        "spark.ui.view.acls / spark.modify.acls. Only set it to false in client mode together " +
+        "with such an authentication filter.")
       .version("4.3.0")
       .booleanConf
       .createWithDefault(true)

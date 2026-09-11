@@ -696,13 +696,19 @@ private[spark] class ApplicationMaster(
   private def addAmIpFilter(driver: Option[RpcEndpointRef], proxyBase: String) = {
     val amFilter = classOf[AmIpFilter].getName
     val baseParams = client.getAmIpFilterParams(yarnConf, proxyBase)
+    val trustProxyUserCookie = sparkConf.get(AM_TRUST_PROXY_USER_COOKIE)
+    // Refuse to arm the option silently: when the cookie is not trusted and no other UI filter
+    // will run to establish the user (cluster mode replaces spark.ui.filters with the AM's own
+    // filter; client mode may also have no other filter), proxied requests carry no user and pass
+    // every view and modify ACL check.
+    if (!trustProxyUserCookie && (driver.isEmpty || sparkConf.get(UI_FILTERS).isEmpty)) {
+      logWarning(log"${MDC(LogKeys.CONFIG, AM_TRUST_PROXY_USER_COOKIE.key)} is false and no " +
+        log"other UI filter will run, so proxied requests carry no user and pass every view " +
+        log"and modify ACL check.")
+    }
     // Only pass the init parameter when the cookie is not trusted; when trusted (the default) the
     // filter parameters stay unchanged from the original behavior.
-    val params = if (sparkConf.get(AM_TRUST_PROXY_USER_COOKIE)) {
-      baseParams
-    } else {
-      baseParams + (AmIpFilter.TRUST_PROXY_USER_PARAM -> "false")
-    }
+    val params = ApplicationMaster.amIpFilterParams(baseParams, trustProxyUserCookie)
     driver match {
       case Some(d) =>
         d.send(AddWebUIFilter(amFilter, params, proxyBase))
@@ -956,6 +962,21 @@ object ApplicationMaster extends Logging {
 
   private[spark] def getAttemptId(): ApplicationAttemptId = {
     master.appAttemptId
+  }
+
+  /**
+   * Builds the AM IP filter init parameters. When the proxy-user cookie is not trusted, adds the
+   * TRUST_PROXY_USER_COOKIE=false init parameter so `AmIpFilter` ignores the cookie; otherwise the
+   * base parameters are returned unchanged, preserving the original behavior.
+   */
+  private[spark] def amIpFilterParams(
+      baseParams: Map[String, String],
+      trustProxyUserCookie: Boolean): Map[String, String] = {
+    if (trustProxyUserCookie) {
+      baseParams
+    } else {
+      baseParams + (AmIpFilter.TRUST_PROXY_USER_PARAM -> "false")
+    }
   }
 
   private[spark] def getHistoryServerAddress(
