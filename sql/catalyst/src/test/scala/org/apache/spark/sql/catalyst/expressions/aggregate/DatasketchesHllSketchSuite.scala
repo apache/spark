@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.time.LocalTime
+
 import scala.collection.immutable.NumericRange
 import scala.util.Random
 
@@ -26,7 +28,7 @@ import org.apache.datasketches.memory.Memory
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, HllSketchEstimate, HllUnion, Literal}
-import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, StringType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -86,6 +88,42 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
     val (binaryEstimate, binaryEstimateRange) = simulateUpdateMerge(BinaryType, binaryRange)
     assert(binaryEstimate == binaryRange.size ||
       binaryEstimateRange.contains(binaryRange.size.toLong))
+  }
+
+  test("Test hll_sketch_agg and hll_union_agg over the TIME type") {
+    // The analyzer admits TIME as a value to sketch.
+    assert(
+      new HllSketchAgg(BoundReference(0, TimeType(6), nullable = true), 12)
+        .checkInputDataTypes().isSuccess)
+
+    // TIME is physically a long of nanos-of-day, so distinct-counting a TIME column behaves
+    // exactly like counting the underlying longs.
+    val timeRange = (0 until 1000).map(_.toLong * 1000000000L) // 0s..999s of the day, in nanos
+    val (estimate, estimateRange) = simulateUpdateMerge(TimeType(), timeRange)
+    assert(estimate == timeRange.size || estimateRange.contains(timeRange.size.toLong))
+
+    // Equal times (even written at different precisions) share the same nanos-of-day and are
+    // counted once.
+    val nineAm = LocalTime.of(9, 0, 0).toNanoOfDay
+    val noon = LocalTime.of(12, 0, 0).toNanoOfDay
+    val fivePm = LocalTime.of(17, 0, 0).toNanoOfDay
+    val aggFunc = new HllSketchAgg(BoundReference(0, TimeType(9), nullable = true), 12)
+    val buffer = Seq(noon, noon, noon, nineAm, nineAm)
+      .foldLeft(aggFunc.createAggregationBuffer())((buf, t) => aggFunc.update(buf, InternalRow(t)))
+    assert(estimateOf(aggFunc.eval(buffer).asInstanceOf[Array[Byte]]) == 2L)
+
+    // A sketch built from a TIME column round-trips through hll_union_agg, which only ever sees the
+    // serialized BINARY sketch and so needs no TIME-specific handling of its own.
+    def timeSketch(values: Seq[Long]): Array[Byte] = {
+      val agg = new HllSketchAgg(BoundReference(0, TimeType(), nullable = true), 12)
+      val buf = values.foldLeft(agg.createAggregationBuffer())((b, v) =>
+        agg.update(b, InternalRow(v)))
+      agg.eval(buf).asInstanceOf[Array[Byte]]
+    }
+    val merged = unionAgg(
+      Seq[Any](timeSketch(Seq(nineAm, noon)), timeSketch(Seq(noon, fivePm))),
+      allowDifferentLgConfigK = false)
+    assert(estimateOf(merged) == 3L) // distinct {09:00, 12:00, 17:00}
   }
 
   test("Test lgMaxK results in downsampling sketches with larger lgConfigK") {
