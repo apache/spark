@@ -3702,6 +3702,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ALLOW_EXCEPT_ON_STREAMING_DATAFRAME =
+    buildConf("spark.sql.streaming.allowExceptOnStreamingDataFrame")
+      .internal()
+      .doc("When true, allows EXCEPT operations with a streaming DataFrame on the left and a " +
+        "batch DataFrame on the right. " +
+        "Such operations may produce incorrect results and are retained only for compatibility " +
+        "with existing streaming queries.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val ENABLE_STREAMING_SINK_EVOLUTION =
     buildConf("spark.sql.streaming.queryEvolution.enableSinkEvolution")
       .internal()
