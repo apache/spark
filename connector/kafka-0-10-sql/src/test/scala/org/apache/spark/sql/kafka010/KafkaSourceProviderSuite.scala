@@ -23,10 +23,10 @@ import scala.jdk.CollectionConverters._
 
 import org.mockito.Mockito.{mock, when}
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.Scan
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class KafkaSourceProviderSuite extends SparkFunSuite {
@@ -168,7 +168,7 @@ class KafkaSourceProviderSuite extends SparkFunSuite {
     getKafkaDataSourceScan(options).toBatch()
     // When the option name is denylisted, building the batch scan is rejected.
     val conf = new SQLConf()
-    conf.setConf(SQLConf.KAFKA_DISALLOWED_OPTIONS, Seq("max.poll.records"))
+    conf.setConf(StaticSQLConf.KAFKA_DISALLOWED_OPTIONS, Seq("max.poll.records"))
     SQLConf.withExistingConf(conf) {
       checkError(
         exception = intercept[KafkaIllegalArgumentException] {
@@ -189,7 +189,7 @@ class KafkaSourceProviderSuite extends SparkFunSuite {
     KafkaSourceProvider.kafkaParamsForProducer(params)
     // When the option name is denylisted, building the producer params is rejected.
     val conf = new SQLConf()
-    conf.setConf(SQLConf.KAFKA_DISALLOWED_OPTIONS, Seq("max.poll.records"))
+    conf.setConf(StaticSQLConf.KAFKA_DISALLOWED_OPTIONS, Seq("max.poll.records"))
     SQLConf.withExistingConf(conf) {
       checkError(
         exception = intercept[KafkaIllegalArgumentException] {
@@ -200,5 +200,23 @@ class KafkaSourceProviderSuite extends SparkFunSuite {
           "option" -> "max.poll.records",
           "config" -> "spark.sql.kafka.disallowedOptions"))
     }
+  }
+
+  test("SPARK-59328: the disallowed-options denylist is an operator boundary") {
+    // Static, so an application cannot SET it away at runtime.
+    assert(!new SQLConf().isModifiable(StaticSQLConf.KAFKA_DISALLOWED_OPTIONS.key))
+    // Entries carrying the "kafka." prefix are rejected, so the denylist cannot silently fail
+    // open (a "kafka." prefixed name would never match the stripped option names it is checked
+    // against). setConfString is the path that runs the value converter and its checkValue.
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        new SQLConf().setConfString(
+          StaticSQLConf.KAFKA_DISALLOWED_OPTIONS.key, "kafka.max.poll.records")
+      },
+      condition = "INVALID_CONF_VALUE.REQUIREMENT",
+      parameters = Map(
+        "confName" -> "spark.sql.kafka.disallowedOptions",
+        "confValue" -> "kafka.max.poll.records",
+        "confRequirement" -> "Kafka option names must be listed without the 'kafka.' prefix."))
   }
 }

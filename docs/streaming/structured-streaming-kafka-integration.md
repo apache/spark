@@ -1049,7 +1049,9 @@ DataFrame operations to explicitly serialize the values into either strings or b
 
 In addition, an operator can reject further Kafka params by listing their names, without the
 `kafka.` prefix, in the `spark.sql.kafka.disallowedOptions` configuration; setting any listed
-param through a Kafka source or sink option will then throw an exception.
+param through a Kafka source or sink option will then throw an exception. This is a static
+configuration. It must be set when the SparkSession is created, for example with
+`--conf spark.sql.kafka.disallowedOptions=...`, and an application cannot change it at runtime.
 
 ## Deploying
 
