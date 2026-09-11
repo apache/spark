@@ -21,10 +21,10 @@ import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState}
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState, VersionedCredentials}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.deploy.security.{HadoopDelegationTokenManager, UserCredentialManager}
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
@@ -120,6 +120,12 @@ private[spark] class LocalSchedulerBackend(
   private var localEndpoint: RpcEndpointRef = null
   private val userClassPath = getUserClasspath(conf)
   private val listenerBus = scheduler.sc.listenerBus
+
+  // UserCredentialManager for OIDC credential propagation (if enabled). Started in start() and
+  // stopped in stop(), mirroring CoarseGrainedSchedulerBackend so that OIDC credentials are
+  // acquired and renewed in local mode too, for parity with HadoopDelegationTokenManager (which
+  // this backend already runs via createTokenManager()).
+  private var userCredentialManager: Option[UserCredentialManager] = None
   private val launcherBackend = new LauncherBackend() {
     override def conf: SparkConf = LocalSchedulerBackend.this.conf
     override def onStopRequest(): Unit = stop(SparkAppHandle.State.KILLED)
@@ -135,6 +141,41 @@ private[spark] class LocalSchedulerBackend(
 
   override protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
     SparkHadoopUtil.get.addDelegationTokens(tokens, conf)
+  }
+
+  /**
+   * Start the UserCredentialManager if OIDC credential propagation is enabled, mirroring
+   * CoarseGrainedSchedulerBackend. Runs independently of Kerberos/HadoopDelegationTokenManager.
+   *
+   * In local mode the driver and the single executor share this JVM and the same
+   * `SparkEnv.get.userCredentials`, so the propagation callback simply updates that reference
+   * (there is no remote executor to message); the in-JVM Executor picks up credentials from the
+   * same store via TaskDescription. Driver-side filesystem access uses the provider wiring that
+   * the selection phase (UserCredentialManager.applyProviderProperties) already applied to the
+   * driver's Hadoop Configuration.
+   */
+  private def setupUserCredentialManager(): Unit = {
+    // Reuse the loader from SparkContext's selection phase (Some when OIDC is enabled, None
+    // otherwise). Passing the Option straight through keeps SparkContext as the single owner of
+    // the loader: create() enforces that an enabled configuration has a loader rather than
+    // silently allocating one here that no one would close.
+    userCredentialManager = UserCredentialManager.create(conf, { (version, credentials) =>
+      // No remote executors in local mode; update the shared credential store directly so that
+      // subsequently dispatched tasks (and driver-side access) observe the new credentials.
+      VersionedCredentials.updateIfNewer(SparkEnv.get.userCredentials, version, credentials)
+    }, scheduler.sc.userCredentialProviderLoader)
+    userCredentialManager.foreach { manager =>
+      val (version, initialCredentials) = manager.start()
+      // Store initial credentials synchronously so they are available for TaskDescription
+      // (task dispatch) immediately. The onCredentialsUpdate callback above also runs the same
+      // updateIfNewer, so this is idempotent.
+      VersionedCredentials.updateIfNewer(
+        SparkEnv.get.userCredentials, version, initialCredentials)
+    }
+  }
+
+  private def stopUserCredentialManager(): Unit = {
+    userCredentialManager.foreach(_.stop())
   }
 
   /**
@@ -156,6 +197,7 @@ private[spark] class LocalSchedulerBackend(
 
     // call this after localEndpoint is assigned
     setupTokenManager()
+    setupUserCredentialManager()
 
     listenerBus.post(SparkListenerExecutorAdded(
       System.currentTimeMillis,
@@ -197,8 +239,20 @@ private[spark] class LocalSchedulerBackend(
   }
 
   private def stop(finalState: SparkAppHandle.State): Unit = {
-    localEndpoint.ask(StopExecutor)
-    stopTokenManager()
+    // Ensure both managers are always stopped, even if stopping the executor endpoint throws.
+    // The UserCredentialManager renewal thread must be shut down before SparkContext.stop()
+    // closes the shared CredentialProviderLoader, otherwise a renewal task could race against an
+    // already-closed loader. Each step is isolated so that a failure in one does not skip the
+    // others (mirrors CoarseGrainedSchedulerBackend.stop, which stops the managers in a finally).
+    Utils.tryLogNonFatalError {
+      localEndpoint.ask(StopExecutor)
+    }
+    Utils.tryLogNonFatalError {
+      stopTokenManager()
+    }
+    Utils.tryLogNonFatalError {
+      stopUserCredentialManager()
+    }
     try {
       launcherBackend.setState(finalState)
     } finally {
