@@ -123,9 +123,10 @@ case class Scd2BatchProcessor(
    * consume.
    *
    * Step ordering is load-bearing: the row-extension steps reference user data columns that
-   * target-column selection is allowed to drop, so selection runs last. Unlike SCD1, no per-key
-   * deduplication step is performed here - SCD2 preserves every event as part of the row's
-   * history, including byte-identical full-event duplicates.
+   * target-column selection is allowed to drop. Selection therefore runs after those extensions,
+   * followed by target-schema alignment. Unlike SCD1, no per-key deduplication step is performed
+   * here - SCD2 preserves every event as part of the row's history, including byte-identical
+   * full-event duplicates.
    *
    * Duplicate event elimination (e.g., collapsing two identical events at the same sequence),
    * whether across microbatches or within the same microbatch, is the responsibility of
@@ -133,22 +134,23 @@ case class Scd2BatchProcessor(
    *
    * @param microbatchDf
    *   the incoming CDC microbatch.
+   * @param targetTableDf
+   *   the current persisted target table.
    * @return
    *   a dataframe that retains every input row 1:1 - no rows added, dropped, reordered, or
-   *   merged - with the following schema, in column order:
-   *     1. The user columns of `microbatchDf` that survive [[ChangeArgs.columnSelection]], in
-   *        the order they appeared in the input.
-   *     2. [[startAtColName]], populated with the sequence value of the row.
-   *     3. [[endAtColName]], populated with the sequence value of the row IFF it's a delete
-   *        event, null otherwise.
-   *     4. [[cdcMetadataColName]], conforming to [[cdcMetadataColSchema]].
+   *   merged. Its fields use `targetTableDf` as the authority for order and spelling.
+   *   [[startAtColName]], [[endAtColName]], and [[cdcMetadataColName]] are populated according
+   *   to their documented contracts.
    */
-  private[autocdc] def preprocessMicrobatch(microbatchDf: DataFrame): DataFrame = {
+  private[autocdc] def preprocessMicrobatch(
+      microbatchDf: DataFrame,
+      targetTableDf: DataFrame): DataFrame = {
     microbatchDf
       .transform(extendMicrobatchRowsWithStartAt)
       .transform(extendMicrobatchRowsWithEndAt)
       .transform(extendMicrobatchRowsWithCdcMetadata)
       .transform(projectTargetColumnsOntoMicrobatch)
+      .transform(alignMicrobatchToTargetSchema(_, targetTableDf))
   }
 
   /**
@@ -245,6 +247,19 @@ case class Scd2BatchProcessor(
       )
     microbatch.select(finalColumnsToSelect: _*)
   }
+
+  /**
+   * Align the selected incoming rows to the current persisted target schema. The target-shaped
+   * side is empty, so this retains exactly the microbatch's rows while [[DataFrame.unionByName]]
+   * supplies nulls for target columns omitted by the source, including nested struct/array fields.
+   *
+   * Keeping the target as the left schema authority also preserves its column order and exact
+   * case-spelling.
+   */
+  private def alignMicrobatchToTargetSchema(
+      projectedDf: DataFrame,
+      targetTableDf: DataFrame): DataFrame =
+    targetTableDf.limit(0).unionByName(projectedDf, allowMissingColumns = true)
 
   /**
    * For each key in the preprocessed microbatch, compute the earliest [[recordStartAtFieldName]]
