@@ -39,7 +39,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
+import org.apache.spark.scheduler.{MapStatus, MapStatusChecksum, MergeStatus, ShuffleOutputStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util._
@@ -1981,6 +1981,35 @@ private[spark] object MapOutputTracker extends Logging {
       // scalastyle:on
       logError(errorMessage)
       throw new MetadataFetchFailedException(shuffleId, partition, errorMessage.message)
+    } else {
+      val checksumConf = Option(SparkEnv.get).map(_.conf).orNull
+      val checksumEnabled =
+        checksumConf != null && checksumConf.get(SHUFFLE_MAP_STATUS_CHECKSUM_ENABLED)
+      val checksumAlgorithm = if (checksumEnabled) {
+        checksumConf.get(SHUFFLE_MAP_STATUS_CHECKSUM_ALGORITHM)
+      } else {
+        null
+      }
+      if (checksumEnabled) {
+        status match {
+          case mapStatus: MapStatus =>
+            mapStatus.nonEmptyChecksum.foreach { stored =>
+              val actual = MapStatusChecksum.recompute(mapStatus, checksumAlgorithm)
+              if (!actual.contains(stored)) {
+                val errorMessage =
+                  log"MapStatus checksum verification failed: " +
+                  log"shuffleId=${MDC(SHUFFLE_ID, shuffleId)} " +
+                  log"mapId=${MDC(MAP_ID, mapStatus.mapId)} " +
+                  log"mapper=${MDC(BLOCK_MANAGER_ID, mapStatus.location)} " +
+                  log"numPartitions=${MDC(NUM_PARTITIONS, mapStatus.numPartitions)}. " +
+                  log"This indicates MapStatus was corrupted between the mapper and this reducer."
+                logError(errorMessage)
+                throw new MetadataFetchFailedException(shuffleId, partition, errorMessage.message)
+              }
+            }
+          case _ =>
+        }
+      }
     }
   }
 }
