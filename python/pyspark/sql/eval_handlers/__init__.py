@@ -56,13 +56,19 @@ from pyspark.sql.pandas.serializers import (
 )
 
 if TYPE_CHECKING:
-    # Referenced only as string forward refs in the category bases' generic
-    # subscripts (e.g. ``EvalTypeHandler["pa.RecordBatch", ...]``); kept for the
-    # type checker to resolve them.
-    import pyarrow as pa  # noqa: F401
+    # pyarrow is a TYPE_CHECKING-only import: it is referenced only as string
+    # forward refs (in the type aliases below and the batch category's subscript),
+    # so pyarrow stays lazily imported at runtime as elsewhere in the worker.
+    import pyarrow as pa
 
-    from pyspark.sql.pandas._typing import CoGroupedBatch, GroupedBatch  # noqa: F401
     from pyspark.worker_util import EvalConf, RunnerConf
+
+# Arrow stream element types for the grouped categories, as forward refs so
+# pyarrow need not be imported at runtime. ``GroupedBatch`` is one group of Arrow
+# batches (e.g. one key group in groupBy); ``CoGroupedBatch`` is the pair of
+# groups a cogroup UDF receives.
+GroupedBatch = Iterator["pa.RecordBatch"]
+CoGroupedBatch = tuple[Iterator["pa.RecordBatch"], Iterator["pa.RecordBatch"]]
 
 # Registry of concrete handlers keyed by PythonEvalType. Populated at class
 # definition time by ``EvalTypeHandler.__init_subclass__``.
@@ -144,7 +150,7 @@ class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch], metac
         return ArrowStreamSerializer(write_start_stream=True)
 
 
-class GroupedEvalTypeHandler(EvalTypeHandler["GroupedBatch", OutputBatch], metaclass=ABCMeta):
+class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch], metaclass=ABCMeta):
     """Category base for eval types whose input stream is
     ``Iterator[GroupedBatch]`` -- one Arrow stream (group) at a time."""
 
@@ -153,7 +159,7 @@ class GroupedEvalTypeHandler(EvalTypeHandler["GroupedBatch", OutputBatch], metac
         return ArrowStreamGroupSerializer(write_start_stream=True)
 
 
-class CoGroupedEvalTypeHandler(EvalTypeHandler["CoGroupedBatch", OutputBatch], metaclass=ABCMeta):
+class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch], metaclass=ABCMeta):
     """Category base for eval types whose input stream is
     ``Iterator[CoGroupedBatch]`` -- a pair of Arrow streams per co-group."""
 
