@@ -414,13 +414,15 @@ class StaxXmlParser(
         case _ => // do nothing
       }
     }
-    mapKeyException.foreach(throw _)
     keyType match {
       case _: CharType | _: VarcharType =>
         val mapBuilder = new ArrayBasedMapBuilder(keyType, valueType)
         kvPairs.foreach { case (key, value) => mapBuilder.put(key, value) }
-        mapBuilder.build()
+        val mapData = mapBuilder.build()
+        mapKeyException.foreach(throw _)
+        mapData
       case _ =>
+        mapKeyException.foreach(throw _)
         // Preserve the historical last-wins behavior for ordinary string keys.
         ArrayBasedMapData(kvPairs.toMap)
     }

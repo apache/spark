@@ -845,7 +845,7 @@ trait CharVarcharTestSuite extends QueryTest {
 class BasicCharVarcharTestSuite extends SharedSparkSession {
   import testImplicits._
 
-  private def assertParseExceedLimit(query: String): Unit = {
+  private def assertParseExceedLimit(query: String, expectedLimit: String = "5"): Unit = {
     val e = intercept[SparkException] { sql(query).collect() }
     val cause = e.getCause match {
       case r: SparkRuntimeException => r
@@ -858,15 +858,15 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     checkError(
       exception = cause,
       condition = "EXCEED_LIMIT_LENGTH",
-      parameters = Map("limit" -> "5"))
+      parameters = Map("limit" -> expectedLimit))
   }
 
-  private def assertDuplicateMapKey(query: String): Unit = {
+  private def assertDuplicateMapKey(query: String, expectedKey: String = "a "): Unit = {
     checkError(
       exception = intercept[SparkRuntimeException] { sql(query).collect() },
       condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
-        "key" -> "a ",
+        "key" -> expectedKey,
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
   }
 
@@ -2308,6 +2308,17 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(
         sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(4), INT>')"),
         Row(Row(Map("ab  " -> 1))))
+      withTempPath { path =>
+        Seq("<ROW><m><a>1</a></m></ROW>").toDS().write.text(path.getCanonicalPath)
+        val xmlDataFrame = spark.read
+          .option("rowTag", "ROW")
+          .schema("m MAP<CHAR(2), INT>")
+          .xml(path.getCanonicalPath)
+        assert(
+          xmlDataFrame.schema("m").dataType ===
+            MapType(CharType(2), IntegerType, valueContainsNull = true))
+        checkAnswer(xmlDataFrame, Row(Map("a " -> 1)))
+      }
 
       checkAnswer(
         sql("""SELECT schema_of_json(CAST('{"a":1}' AS VARCHAR(20)))"""),
@@ -2327,6 +2338,20 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
       val jsonQuery =
         """SELECT from_json('{"a":1,"a ":2}', 'MAP<CHAR(2), INT>')"""
+      val jsonFailfastQuery =
+        """SELECT from_json(
+          |  '{"a":1,"a ":2}',
+          |  'MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin
+      val varcharJsonQuery =
+        """SELECT from_json('{"ab":1,"ab ":2}', 'MAP<VARCHAR(2), INT>')"""
+      val varcharOverflowQuery =
+        """SELECT from_json('{"abc":1}', 'MAP<VARCHAR(2), INT>')"""
+      val varcharOverflowFailfastQuery =
+        """SELECT from_json(
+          |  '{"abc":1}',
+          |  'MAP<VARCHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin
       val nestedJsonQuery =
         """SELECT from_json(
           |  '{"outer":{"a":1,"a ":2}}',
@@ -2345,25 +2370,41 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           |  'm MAP<CHAR(2), INT>, tail INT').tail""".stripMargin
       val badValueBeforeDuplicateQuery =
         """SELECT from_json('{"bad":"not-an-int","a":1,"a ":2}', 'MAP<CHAR(2), INT>')"""
+      val malformedValueBeforeDuplicateQuery =
+        """SELECT from_json('{"a":"bad","a ":2}', 'MAP<CHAR(2), INT>')"""
       val xmlQuery =
         """SELECT from_xml(
           |  '<ROW><m><a>1</a>9</m></ROW>',
           |  'm MAP<CHAR(2), INT>',
           |  map('valueTag', 'a ')).m""".stripMargin
+      val badXmlKeyBeforeDuplicateQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><abc>0</abc><a>1</a>2</m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('valueTag', 'a ')).m""".stripMargin
 
       assertDuplicateMapKey(jsonQuery)
+      assertDuplicateMapKey(jsonFailfastQuery)
+      assertDuplicateMapKey(varcharJsonQuery, expectedKey = "ab")
+      checkAnswer(sql(varcharOverflowQuery), Row(null))
+      assertParseExceedLimit(varcharOverflowFailfastQuery, expectedLimit = "2")
       assertDuplicateMapKey(nestedJsonQuery)
       assertDuplicateMapKey(badFieldBeforeDuplicateQuery)
       assertDuplicateMapKey(badValueBeforeDuplicateQuery)
+      assertDuplicateMapKey(malformedValueBeforeDuplicateQuery)
       assertDuplicateMapKey(xmlQuery)
+      assertDuplicateMapKey(badXmlKeyBeforeDuplicateQuery)
       checkAnswer(sql(badKeyThenSiblingQuery), Row(2))
       checkAnswer(sql(badXmlKeyThenSiblingQuery), Row(2))
 
       withSQLConf(
           SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
         checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(jsonFailfastQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(varcharJsonQuery), Row(Map("ab" -> 2)))
         checkAnswer(sql(nestedJsonQuery), Row(Map("outer" -> Map("a " -> 2))))
         checkAnswer(sql(badValueBeforeDuplicateQuery), Row(null))
+        checkAnswer(sql(malformedValueBeforeDuplicateQuery), Row(null))
         checkAnswer(sql(xmlQuery), Row(Map("a " -> 9)))
       }
     }

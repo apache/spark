@@ -634,6 +634,8 @@ class JacksonParser(
       valueType: DataType): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
+    val normalizedKeys = ArrayBuffer.empty[UTF8String]
+    val hasConstrainedKeys = keyType.isInstanceOf[CharType] || keyType.isInstanceOf[VarcharType]
     var partialResultException: Option[Throwable] = None
     var badMapException: Option[Throwable] = None
 
@@ -651,23 +653,31 @@ class JacksonParser(
           parser.skipChildren()
           None
       }
-      value.foreach { parsedValue =>
-        try {
-          val key = CharVarcharUtils.applyTextParseSemantics(rawKey, keyType)
+      try {
+        val key = CharVarcharUtils.applyTextParseSemantics(rawKey, keyType)
+        if (hasConstrainedKeys) {
+          normalizedKeys += key
+        }
+        value.foreach { parsedValue =>
           keys += key
           values += parsedValue
-        } catch {
-          case DuplicateMapKeyException(e) => throw e
-          case NonFatal(e) if enablePartialResults =>
-            badMapException = badMapException.orElse(Some(e))
         }
+      } catch {
+        case DuplicateMapKeyException(e) => throw e
+        case NonFatal(e) if enablePartialResults =>
+          badMapException = badMapException.orElse(Some(e))
       }
     }
 
     val mapData = keyType match {
       case _: CharType | _: VarcharType =>
-        new ArrayBasedMapBuilder(keyType, valueType).from(
-          new GenericArrayData(keys.toArray), new GenericArrayData(values.toArray))
+        // Apply the duplicate policy to every normalized key, including entries whose malformed
+        // values are omitted from the partial map.
+        new ArrayBasedMapBuilder(keyType, NullType).from(
+          new GenericArrayData(normalizedKeys.toArray),
+          new GenericArrayData(Array.fill[Any](normalizedKeys.length)(null)))
+        new ArrayBasedMapBuilder(keyType, valueType)
+          .from(new GenericArrayData(keys.toArray), new GenericArrayData(values.toArray))
       case _ =>
         // Preserve the historical behavior for ordinary string keys.
         ArrayBasedMapData(keys.toArray, values.toArray)
