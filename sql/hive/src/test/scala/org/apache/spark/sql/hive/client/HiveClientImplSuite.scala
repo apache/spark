@@ -20,8 +20,40 @@ package org.apache.spark.sql.hive.client
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 
 import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.hive.{HiveUtils, StaticInitFlags, StaticInitInputFormat}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 
 class HiveClientImplSuite extends SparkFunSuite {
+
+  test("SPARK-59330: toHiveTable skips the format class static initializer when " +
+    "spark.sql.hive.initializeMetastoreFormatClasses is false") {
+    val table = CatalogTable(
+      identifier = TableIdentifier("t", Some("default")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty.copy(
+        inputFormat = Some(classOf[StaticInitInputFormat].getName)),
+      schema = new StructType().add("a", "int"))
+
+    def toHiveTableWith(initialize: Boolean): Unit = {
+      val conf = new SQLConf()
+      conf.setConf(HiveUtils.INITIALIZE_METASTORE_FORMAT_CLASSES, initialize)
+      SQLConf.withExistingConf(conf) {
+        HiveClientImpl.toHiveTable(table)
+      }
+    }
+
+    // The false half must run first: class initialization is one-way per JVM. Resolving the
+    // format class name without initializing it must not run the static initializer.
+    toHiveTableWith(initialize = false)
+    assert(!StaticInitFlags.inputFormatInitialized)
+
+    // With initialization enabled (the default), resolving the class name runs the initializer.
+    toHiveTableWith(initialize = true)
+    assert(StaticInitFlags.inputFormatInitialized)
+  }
 
   test("SPARK-21529: a clear error is raised for an unsupported Hive union type") {
     val column = new FieldSchema("c", "uniontype<int,string>", null)

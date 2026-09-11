@@ -1163,10 +1163,13 @@ private[hive] object HiveClientImpl extends Logging {
     Option(hc.getComment).map(field.withComment).getOrElse(field)
   }
 
-  // Only the class name is needed when converting metastore metadata (Hive stores it via
-  // getName), so when spark.sql.hive.initializeMetastoreFormatClasses is false the class is
-  // resolved without running its static initializer here; the initializer then runs when the
-  // format is actually instantiated for a scan/write. Defaults to true (the previous behavior).
+  // Converting metastore metadata does not need the format class initialized: the resolved
+  // Class is only stored (via setInputFormatClass/setOutputFormatClass, which read getName),
+  // compared by identity, or tested with isAssignableFrom downstream, and it is instantiated
+  // through ReflectionUtils, which initializes it there. So when
+  // spark.sql.hive.initializeMetastoreFormatClasses is false the class is resolved without
+  // running its static initializer here; the initializer then runs when the format is actually
+  // instantiated for a scan/write. Defaults to true (the previous behavior).
   private def initializeFormatClasses: Boolean =
     SQLConf.get.getConf(HiveUtils.INITIALIZE_METASTORE_FORMAT_CLASSES)
 
