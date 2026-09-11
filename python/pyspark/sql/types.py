@@ -331,7 +331,8 @@ class CharType(AtomicType):
     length : int
         the length limitation.
     collation : str, optional
-        name of the collation.
+        name of the collation. Defaults to ``None``, which is distinct from explicitly specifying
+        ``UTF8_BINARY``.
     """
 
     def __init__(self, length: int, collation: Optional[str] = None):
@@ -365,7 +366,8 @@ class VarcharType(AtomicType):
     length : int
         the length limitation.
     collation : str, optional
-        name of the collation.
+        name of the collation. Defaults to ``None``, which is distinct from explicitly specifying
+        ``UTF8_BINARY``.
     """
 
     def __init__(self, length: int, collation: Optional[str] = None):
@@ -2708,10 +2710,12 @@ def _parse_datatype_json_value(  # type: ignore[return]
 def _assert_valid_type_for_collation(
     fieldPath: str, fieldType: Any, collationMap: Dict[str, str]
 ) -> None:
+    char_match = _LENGTH_CHAR.fullmatch(fieldType) if isinstance(fieldType, str) else None
+    varchar_match = _LENGTH_VARCHAR.fullmatch(fieldType) if isinstance(fieldType, str) else None
     is_string_type = (
         fieldType == "string"
-        or (isinstance(fieldType, str) and _LENGTH_CHAR.fullmatch(fieldType) is not None)
-        or (isinstance(fieldType, str) and _LENGTH_VARCHAR.fullmatch(fieldType) is not None)
+        or (char_match is not None and char_match.group(2) is None)
+        or (varchar_match is not None and varchar_match.group(2) is None)
     )
     if fieldPath in collationMap and not is_string_type:
         raise PySparkTypeError(

@@ -1647,9 +1647,34 @@ class SparkConnectPlanner(
           .asInstanceOf[Project]
 
         val proj = UnsafeProjection.create(project.projectList, project.child.output)
-        logical.LocalRelation(
-          DataTypeUtils.toAttributes(schema),
-          data.map(proj).map(_.copy()).toSeq)
+        def restoreFieldNames(actual: DataType, requested: DataType): DataType =
+          (actual, requested) match {
+            case (StructType(actualFields), StructType(requestedFields)) =>
+              StructType(
+                actualFields.zip(requestedFields).map { case (actualField, requestedField) =>
+                  actualField.copy(
+                    name = requestedField.name,
+                    dataType = restoreFieldNames(actualField.dataType, requestedField.dataType))
+                })
+            case (ArrayType(actualElement, containsNull), ArrayType(requestedElement, _)) =>
+              ArrayType(restoreFieldNames(actualElement, requestedElement), containsNull)
+            case (
+                  MapType(actualKey, actualValue, valueContainsNull),
+                  MapType(requestedKey, requestedValue, _)) =>
+              MapType(
+                restoreFieldNames(actualKey, requestedKey),
+                restoreFieldNames(actualValue, requestedValue),
+                valueContainsNull)
+            case _ => actual
+          }
+        val output = project.output.zip(schema.fields).map { case (attribute, field) =>
+          AttributeReference(
+            field.name,
+            restoreFieldNames(attribute.dataType, field.dataType),
+            attribute.nullable,
+            field.metadata)()
+        }
+        logical.LocalRelation(output, data.map(proj).map(_.copy()).toSeq)
     }
   }
 
