@@ -25,13 +25,13 @@ import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 
 /**
- * Applies an element-wise affine transformation to SQL struct representations of MLlib vectors:
+ * Applies element-wise scaling and shifting to SQL struct representations of MLlib vectors:
  * `vector(i) * scale(i) + shift(i)`. This expression is dedicated only for Spark ML and should be
  * used together with `unwrap_udt` and `wrap_udt`. A null scale is treated as an identity scale, and
  * a null shift is treated as a zero shift. If both are null, the input vector is returned
  * unchanged.
  */
-case class VectorAffineTransform(
+case class VectorScaleShift(
     vector: Expression,
     scale: Expression,
     shift: Expression)
@@ -41,14 +41,14 @@ case class VectorAffineTransform(
   override def second: Expression = scale
   override def third: Expression = shift
 
-  override def prettyName: String = "ml_vector_affine_transform"
+  override def prettyName: String = "ml_vector_scale_shift"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    VectorAffineTransform.vectorSqlType,
-    VectorAffineTransform.NonNullableDoubleArrayType,
-    VectorAffineTransform.NonNullableDoubleArrayType)
+    VectorScaleShift.vectorSqlType,
+    VectorScaleShift.NonNullableDoubleArrayType,
+    VectorScaleShift.NonNullableDoubleArrayType)
 
-  override def dataType: DataType = VectorAffineTransform.vectorSqlType
+  override def dataType: DataType = VectorScaleShift.vectorSqlType
 
   override def nullable: Boolean = vector.nullable
 
@@ -57,7 +57,7 @@ case class VectorAffineTransform(
     if (vectorInput == null) {
       null
     } else {
-      MLExpressionUtils.affineTransform(
+      MLExpressionUtils.scaleShift(
         vectorInput.asInstanceOf[InternalRow],
         scale.eval(input).asInstanceOf[ArrayData],
         shift.eval(input).asInstanceOf[ArrayData])
@@ -67,7 +67,7 @@ case class VectorAffineTransform(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val utils = classOf[MLExpressionUtils].getName
     val vectorJavaType = CodeGenerator.javaType(dataType)
-    val arrayJavaType = CodeGenerator.javaType(VectorAffineTransform.doubleArraySqlType)
+    val arrayJavaType = CodeGenerator.javaType(VectorScaleShift.doubleArraySqlType)
     val vectorGen = vector.genCode(ctx)
     val scaleInput = ctx.freshName("scaleInput")
     val shiftInput = ctx.freshName("shiftInput")
@@ -101,7 +101,7 @@ case class VectorAffineTransform(
       if (!${ev.isNull}) {
         $scaleCode
         $shiftCode
-        ${ev.value} = $utils.affineTransform(
+        ${ev.value} = $utils.scaleShift(
           ${vectorGen.value}, $scaleInput, $shiftInput, $cachedScale, $cachedShift);
       }
     """)
@@ -110,12 +110,12 @@ case class VectorAffineTransform(
   override protected def withNewChildrenInternal(
       newVector: Expression,
       newScale: Expression,
-      newShift: Expression): VectorAffineTransform = {
+      newShift: Expression): VectorScaleShift = {
     copy(vector = newVector, scale = newScale, shift = newShift)
   }
 }
 
-object VectorAffineTransform {
+object VectorScaleShift {
   private[ml] val vectorSqlType = StructType(Array(
     StructField("type", ByteType, nullable = false),
     StructField("size", IntegerType, nullable = true),

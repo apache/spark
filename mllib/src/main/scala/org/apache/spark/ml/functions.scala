@@ -71,24 +71,24 @@ object functions {
       vectorToStruct(right))
   }
 
-  private[ml] def vector_affine_transform(
+  private[ml] def vector_scale_shift(
       vector: Column,
       scale: Column,
       shift: Column): Column = {
     val transformed = Column.internalFn(
-      "ml_vector_affine_transform",
+      "ml_vector_scale_shift",
       sf.unwrap_udt(vector),
       scale,
       shift)
     sf.wrap_udt(transformed, new VectorUDT)
   }
 
-  private[ml] def vector_affine_transform(
+  private[ml] def vector_scale_shift(
       vector: Column,
       scale: Array[Double],
       shift: Array[Double]): Column = {
     val transformed = Column.internalFn(
-      "ml_vector_affine_transform",
+      "ml_vector_scale_shift",
       sf.unwrap_udt(vector),
       doubleArrayLiteral(scale),
       doubleArrayLiteral(shift))

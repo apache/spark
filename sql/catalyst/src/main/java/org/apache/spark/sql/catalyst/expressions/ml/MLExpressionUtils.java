@@ -28,14 +28,14 @@ public class MLExpressionUtils {
 
   private MLExpressionUtils() {}
 
-  public static InternalRow affineTransform(
+  public static InternalRow scaleShift(
       InternalRow vector,
       ArrayData scale,
       ArrayData shift) {
-    return affineTransform(vector, scale, shift, null, null);
+    return scaleShift(vector, scale, shift, null, null);
   }
 
-  public static InternalRow affineTransform(
+  public static InternalRow scaleShift(
       InternalRow vector,
       ArrayData scale,
       ArrayData shift,
@@ -64,7 +64,7 @@ public class MLExpressionUtils {
       (cachedShift == null ? shift.numElements() : cachedShift.length);
     if (size != scaleSize || size != shiftSize) {
       throw new IllegalArgumentException(
-        "requirement failed: VectorAffineTransform was given inputs with non-matching sizes: " +
+        "requirement failed: VectorScaleShift was given inputs with non-matching sizes: " +
           "vector.size = " + size + ", scale.size = " + scaleSize +
           ", shift.size = " + shiftSize);
     }
