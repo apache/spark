@@ -39,6 +39,7 @@ import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundF
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
@@ -327,6 +328,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.BIN_BY",
       messageParameters = Map.empty)
+  }
+
+  def restrictedModeFeatureError(feature: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SQL_RESTRICTED_MODE",
+      messageParameters = Map(
+        "feature" -> feature,
+        "config" -> toSQLConf(StaticSQLConf.RESTRICTED_MODE_ENABLED.key)))
   }
 
   def binByRequiresTopLevelColumnError(reference: Expression): Throwable = {
@@ -3010,6 +3019,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("joinType" -> toSQLStmt(joinType.sql)))
   }
 
+  def useExternalUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.EXTERNAL_UDF_IN_ON_CLAUSE",
+      messageParameters = Map("joinType" -> toSQLStmt(joinType.sql)))
+  }
+
+  def externalUDFsDisabledError(config: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.EXTERNAL_UDF",
+      messageParameters = Map("config" -> toSQLConf(config)))
+  }
+
+  def externalUDFWithMultipleChildrenUnsupportedError(udf: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.EXTERNAL_UDF_WITH_MULTIPLE_CHILDREN",
+      messageParameters = Map("funcName" -> toSQLExpr(udf)))
+  }
+
   def conflictingAttributesInJoinConditionError(
       conflictingAttrs: AttributeSet, outerPlan: LogicalPlan, subplan: LogicalPlan): Throwable = {
     new AnalysisException(
@@ -4680,6 +4707,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       None)
   }
 
+  def fullyPushedDataSourceRuntimeFilterAttributeNotFilterableError(
+      attribute: Array[String],
+      scanClass: String,
+      relationOutput: StructType): AnalysisException = {
+    invalidDataSourceRuntimeFilterAttributeError(
+      attribute,
+      "fullyPushedFilterAttributes()",
+      scanClass,
+      relationOutput,
+      "NOT_IN_FILTER_ATTRIBUTES",
+      None)
+  }
+
   private def invalidDataSourceRuntimeFilterAttributeError(
       attribute: Array[String],
       method: String,
@@ -4718,7 +4758,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def invalidUDFClassError(invalidClass: String): Throwable = {
     new InvalidUDFClassException(
       errorClass = "_LEGACY_ERROR_TEMP_2450",
-      messageParameters = Map("invalidClass" -> invalidClass))
+      messageParameters = Map("clazz" -> invalidClass))
   }
 
   def cannotInstantiateHiveFunctionError(clazz: String, e: Throwable): Throwable = {

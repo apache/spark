@@ -570,6 +570,56 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
+  test("getMessageTemplate and getMessageParameters allow a bare main class with sub-classes") {
+    withTempDir { dir =>
+      val json = new File(dir, "errors.json")
+      Files.writeString(json.toPath(),
+        """
+          |{
+          |  "MAIN_NO_SUBCLASS" : {
+          |    "message" : [
+          |      "abc <p1>"
+          |    ]
+          |  },
+          |  "MAIN_WITH_SUBCLASS" : {
+          |    "message" : [
+          |      "abc <p1>"
+          |    ],
+          |    "subClass" : {
+          |      "VALID_SUB" : {
+          |        "message" : [
+          |          "def <p2>"
+          |        ]
+          |      }
+          |    }
+          |  }
+          |}
+          |""".stripMargin, StandardCharsets.UTF_8)
+      val reader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+
+      assert(reader.getMessageTemplate("MAIN_NO_SUBCLASS") == "abc <p1>")
+      assert(reader.getMessageTemplate("MAIN_WITH_SUBCLASS") == "abc <p1>")
+      assert(reader.getMessageTemplate("MAIN_WITH_SUBCLASS.VALID_SUB") == "abc <p1> def <p2>")
+
+      assert(reader.getMessageParameters("MAIN_NO_SUBCLASS") == Seq("p1"))
+      assert(reader.getMessageParameters("MAIN_WITH_SUBCLASS") == Seq("p1"))
+      assert(reader.getMessageParameters("MAIN_WITH_SUBCLASS.VALID_SUB") == Seq("p1", "p2"))
+
+      val noSubClasses = intercept[SparkException] {
+        reader.getMessageTemplate("MAIN_NO_SUBCLASS.NON_EXISTENT")
+      }
+      assert(noSubClasses.getMessage.contains(
+        "Error class 'MAIN_NO_SUBCLASS' has no subclasses, " +
+          "but subclass 'NON_EXISTENT' was requested."))
+
+      val unknownSubClass = intercept[SparkException] {
+        reader.getMessageTemplate("MAIN_WITH_SUBCLASS.NON_EXISTENT_SUB")
+      }
+      assert(unknownSubClass.getMessage.contains(
+        "Error class 'MAIN_WITH_SUBCLASS' has no 'NON_EXISTENT_SUB' subclass."))
+    }
+  }
+
   test("breaking changes info") {
     assert(SparkThrowableHelper.getBreakingChangeInfo(null).isEmpty)
 

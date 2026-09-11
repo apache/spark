@@ -90,8 +90,10 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       .endVolumeMount()
     .build()
 
-  private val KEY_TO_PATH =
-    new KeyToPath(SPARK_CONF_FILE_NAME, 420, SPARK_CONF_FILE_NAME)
+  private def keyToPath(key: String): KeyToPath =
+    new KeyToPathBuilder().withKey(key).withMode(420).withPath(key).build()
+
+  private val KEY_TO_PATH = keyToPath(SPARK_CONF_FILE_NAME)
 
   private def fullExpectedPod(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
     new PodBuilder(BUILT_DRIVER_POD)
@@ -306,7 +308,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
     val (sparkConf: SparkConf, expectedConfFiles: Seq[String]) = testSetup
 
-    val expectedKeyToPaths = (expectedConfFiles.map(x => new KeyToPath(x, 420, x)).toList ++
+    val expectedKeyToPaths = (expectedConfFiles.map(keyToPath).toList ++
       List(KEY_TO_PATH)).sortBy(x => x.getKey)
 
     when(podsWithNamespace.resource(fullExpectedPod(expectedKeyToPaths)))

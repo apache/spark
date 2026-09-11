@@ -1353,7 +1353,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       }.nonEmpty)
 
       val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
-      assert(exchanges.size == 0)
+      assert(exchanges.isEmpty)
     }
   }
 
@@ -1373,7 +1373,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       }.nonEmpty)
 
       val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
-      assert(exchanges.size == 0)
+      assert(exchanges.isEmpty)
     }
   }
 

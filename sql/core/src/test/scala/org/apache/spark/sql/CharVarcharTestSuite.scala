@@ -23,7 +23,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, Spark
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
-  ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, Literal, ScalarSubquery,
+  ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, InSet, Literal, ScalarSubquery,
   StringRPad, StringToMap, Upper
 }
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
@@ -508,6 +508,106 @@ trait CharVarcharTestSuite extends QueryTest {
     }
   }
 
+  test("SPARK-59278: char type IN list with a NULL ahead of the matching literal") {
+    // A NULL element must not shift the literals that follow it. `c IN (null, 'a')` is TRUE
+    // because one of the comparisons is TRUE, and NULL OR TRUE is TRUE. Both spellings of NULL
+    // are covered: an untyped NULL goes through InConversion, which casts only that NULL to the
+    // wider common type, while a pre-typed STRING NULL needs no coercion at all. The CHAR-backed
+    // value stays unchanged in both cases.
+    val nulls = Seq("null", "cast(null as string)")
+    val trueConditions = nulls.flatMap { n =>
+      Seq(
+        (s"c IN ($n, 'a')", true),
+        (s"c IN ($n, 'a  ')", true),
+        (s"c IN ('a', $n)", true),
+        (s"c IN ($n, 'x', $n, 'a')", true),
+        // 'bcd' widens the comparison to 3 characters, so the padded 'a' has to match 'a  '.
+        (s"c IN ($n, 'a', 'bcd')", true))
+    }
+    val nullConditions = nulls.flatMap { n =>
+      Seq(s"c IN ($n, 'b')", s"c IN ($n, 'abc')")
+    }
+
+    def checkTable(): Unit = {
+      testConditions(spark.table("t"), trueConditions)
+      testNullConditions(spark.table("t"), nullConditions)
+    }
+
+    withTable("t") {
+      sql(s"CREATE TABLE t(c CHAR(2)) USING $format")
+      sql("INSERT INTO t VALUES ('a')")
+      checkTable()
+    }
+
+    withTable("t") {
+      sql(s"CREATE TABLE t(i INT, c CHAR(2)) USING $format PARTITIONED BY (c)")
+      sql("INSERT INTO t VALUES (1, 'a')")
+      checkTable()
+    }
+
+    // Without read-side padding the column is padded in the predicate instead of at scan.
+    withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(c CHAR(2)) USING $format")
+        sql("INSERT INTO t VALUES ('a')")
+        checkTable()
+      }
+    }
+
+    // Once the list is long enough, OptimizeIn freezes it into an InSet whose HashSet is built
+    // by evaluating the elements, so a list corrupted at analysis time cannot be recovered from
+    // later. The NULL has to reach the set as a NULL instead of displacing the literals after it.
+    withSQLConf(SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "1") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(c CHAR(2)) USING $format")
+        sql("INSERT INTO t VALUES ('a')")
+        val df = sql("SELECT c IN (null, 'a', 'b'), c IN (null, 'x', 'y') FROM t")
+        assert(
+          df.queryExecution.optimizedPlan.exists(
+            _.expressions.exists(_.exists(_.isInstanceOf[InSet]))),
+          "the IN list was expected to be converted to an InSet")
+        checkAnswer(df, Row(true, null))
+      }
+      // The InSet path looks the padded value up in a CollationAwareSet, so a collated column
+      // has to keep its collation through both padding and the set conversion.
+      withTable("t") {
+        sql(s"CREATE TABLE t(c CHAR(2) COLLATE UTF8_LCASE) USING $format")
+        sql("INSERT INTO t VALUES ('a')")
+        checkAnswer(
+          sql("SELECT c IN (null, 'A', 'b'), c IN (null, 'x', 'y') FROM t"),
+          Row(true, null))
+      }
+    }
+
+    // NOT IN, and a correlated subquery where the value is an OuterReference.
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(c CHAR(2)) USING $format")
+      sql(s"CREATE TABLE t2(c CHAR(5)) USING $format")
+      sql("INSERT INTO t1 VALUES ('a')")
+      sql("INSERT INTO t2 VALUES ('a')")
+      checkAnswer(
+        sql("SELECT c NOT IN (null, 'a'), c NOT IN (null, 'b') FROM t1"),
+        Row(false, null))
+      checkAnswer(
+        sql("SELECT c FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t1.c IN (null, 'a'))"),
+        Row("a "))
+      checkAnswer(
+        sql("SELECT c FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t1.c IN (null, 'zz'))"),
+        Nil)
+    }
+
+    // A collated CHAR column used to fail analysis with DATA_DIFF_TYPES, because the NULL
+    // elements were rebuilt as default-collation StringType literals while the padded ones
+    // kept the column's collation.
+    withTable("t") {
+      sql(s"CREATE TABLE t(c CHAR(2) COLLATE UTF8_LCASE) USING $format")
+      sql("INSERT INTO t VALUES ('a')")
+      checkAnswer(
+        sql("SELECT c IN (null, 'A'), c IN ('A', null), c IN (null, 'zz') FROM t"),
+        Row(true, true, null))
+    }
+  }
+
   test("char type comparison: partition pruning") {
     withTable("t") {
       sql(s"CREATE TABLE t(i INT, c1 CHAR(2), c2 VARCHAR(5)) USING $format PARTITIONED BY (c1, c2)")
@@ -546,6 +646,81 @@ trait CharVarcharTestSuite extends QueryTest {
         ("c1 = c2", true),
         ("c1 < c2", false),
         ("c1 IN (c2)", true)))
+    }
+  }
+
+  test("SPARK-59278: char type comparison: struct nullability is preserved") {
+    // Padding rebuilds a struct field by field, which must not turn a NULL struct into a
+    // non-NULL struct of NULL fields. Single-field (s*) and multi-field (m*) structs agree.
+    withTable("t") {
+      sql("CREATE TABLE t(id INT, " +
+        "m1 STRUCT<c: CHAR(2), i: INT>, m2 STRUCT<c: CHAR(5), i: INT>, " +
+        s"s1 STRUCT<c: CHAR(2)>, s2 STRUCT<c: CHAR(5)>) USING $format")
+      sql("INSERT INTO t VALUES (1, null, null, null, null)")
+      sql("INSERT INTO t VALUES (2, struct('a', 1), null, struct('a'), null)")
+      sql("INSERT INTO t VALUES (3, null, struct('a', 1), null, struct('a'))")
+      checkAnswer(
+        sql("SELECT m1 = m2, s1 = s2, m1 <=> m2, s1 <=> s2 FROM t ORDER BY id"),
+        Seq(
+          // Both sides NULL: `=` is NULL, null-safe `<=>` is true.
+          Row(null, null, true, true),
+          // Exactly one side NULL: `=` is NULL, `<=>` is false.
+          Row(null, null, false, false),
+          Row(null, null, false, false)))
+    }
+
+    // Arrays keep their nullability through ArrayTransform, NULL elements included.
+    withTable("t") {
+      sql("CREATE TABLE t(id INT, a1 ARRAY<STRUCT<c: CHAR(2), i: INT>>, " +
+        s"a2 ARRAY<STRUCT<c: CHAR(5), i: INT>>) USING $format")
+      sql("INSERT INTO t VALUES (1, null, null)")
+      sql("INSERT INTO t VALUES (2, array(null, struct('a', 1)), array(null, struct('a', 1)))")
+      checkAnswer(
+        sql("SELECT a1 = a2, a1 <=> a2 FROM t ORDER BY id"),
+        Seq(Row(null, true), Row(true, true)))
+    }
+  }
+
+  test("SPARK-59278: char type comparison: non-orderable struct keeps its original error") {
+    // A struct holding a MAP is not comparable. Padding must leave the comparison alone so
+    // CheckAnalysis reports the attribute the user wrote, not the rewritten struct.
+    withTable("t") {
+      sql("CREATE TABLE t(s1 STRUCT<c: CHAR(2), m: MAP<STRING, STRING>>, " +
+        s"s2 STRUCT<c: CHAR(5), m: MAP<STRING, STRING>>) USING $format")
+      val e = intercept[AnalysisException](sql("SELECT s1 = s2 FROM t").collect())
+      assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE")
+      assert(e.getMessageParameters.get("sqlExpr") == "\"(s1 = s2)\"")
+    }
+  }
+
+  test("SPARK-59278: char type comparison: multi-field struct") {
+    // Padding is decided per field, but a struct that needs padding in any field has to be
+    // rebuilt as a whole. A field that needs no padding must not discard the padding computed
+    // for the fields before it, whatever its position in the struct or its nesting depth.
+    Seq(
+      // CHAR field first, non-char field last.
+      ("STRUCT<c: CHAR(2), i: INT>", "STRUCT<c: CHAR(5), i: INT>", "struct('a', 1)"),
+      // Non-char field first, CHAR field last. This order already worked.
+      ("STRUCT<i: INT, c: CHAR(2)>", "STRUCT<i: INT, c: CHAR(5)>", "struct(1, 'a')"),
+      // Both fields are CHAR, but only the first one needs padding.
+      ("STRUCT<a: CHAR(2), b: CHAR(5)>", "STRUCT<a: CHAR(5), b: CHAR(5)>", "struct('a', 'b')"),
+      // Multi-field struct nested one level down.
+      ("STRUCT<s: STRUCT<c: CHAR(2), i: INT>>", "STRUCT<s: STRUCT<c: CHAR(5), i: INT>>",
+        "struct(struct('a', 1))"),
+      // Multi-field struct inside an array.
+      ("ARRAY<STRUCT<c: CHAR(2), i: INT>>", "ARRAY<STRUCT<c: CHAR(5), i: INT>>",
+        "array(struct('a', 1))")
+    ).foreach { case (type1, type2, value) =>
+      withClue(s"$type1 vs $type2: ") {
+        withTable("t") {
+          sql(s"CREATE TABLE t(c1 $type1, c2 $type2) USING $format")
+          sql(s"INSERT INTO t VALUES ($value, $value)")
+          testConditions(spark.table("t"), Seq(
+            ("c1 = c2", true),
+            ("c1 < c2", false),
+            ("c1 IN (c2)", true)))
+        }
+      }
     }
   }
 

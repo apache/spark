@@ -78,9 +78,10 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * Implementations may use the expressions to prune initially planned
    * [[org.apache.spark.sql.connector.read.InputPartition]]s.
    *
-   * Spark tracks runtime-filter eligibility by root attribute. If [[filterAttributes]] returns a
-   * nested reference, an expression may access another nested field under the same root. The scan
-   * must match each access against its own partition layout and use only expressions it can apply.
+   * Spark currently tracks runtime-filter eligibility by root attribute. If [[filterAttributes]]
+   * returns a nested reference, an expression may access another nested field under the same root.
+   * The scan must match each access against its own partition layout and use only expressions it
+   * can apply.
    *
    * Spark may call this method more than once for the same scan instance: a plan can hold several
    * scan nodes sharing one scan (e.g. the two branches of a group-based UPDATE), and each pushes

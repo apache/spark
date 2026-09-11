@@ -38,7 +38,7 @@ class AutoCdcScd2TargetTableDurabilitySuite
   import testImplicits._
 
   /** The SCD2 target's `_cdc_metadata` struct value for a given recordStartAt. */
-  private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt)
+  private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt, null)
 
   /** Create an SCD2 target with user columns `(id, name, version)` plus the framework columns. */
   private def createScd2Target(table: String): Unit = {
@@ -61,10 +61,12 @@ class AutoCdcScd2TargetTableDurabilitySuite
   private def insertPreloadedCurrentRecord(
       table: String, colValues: String, sequence: Long): Unit = {
     val recordStartAt = Scd2BatchProcessor.recordStartAtFieldName
+    val versionMap = Scd2BatchProcessor.versionMapFieldName
     spark.sql(
       s"INSERT INTO $table SELECT $colValues, " +
       s"CAST($sequence AS BIGINT), CAST(NULL AS BIGINT), " +
-      s"named_struct('$recordStartAt', CAST($sequence AS BIGINT))"
+      s"named_struct('$recordStartAt', CAST($sequence AS BIGINT), " +
+      s"'$versionMap', CAST(NULL AS MAP<STRING, BOOLEAN>))"
     )
   }
 
@@ -83,10 +85,12 @@ class AutoCdcScd2TargetTableDurabilitySuite
   private def insertPreloadedClosedRecord(
       table: String, colValues: String, startAt: Long, endAt: Long): Unit = {
     val recordStartAt = Scd2BatchProcessor.recordStartAtFieldName
+    val versionMap = Scd2BatchProcessor.versionMapFieldName
     spark.sql(
       s"INSERT INTO $table SELECT $colValues, " +
       s"CAST($startAt AS BIGINT), CAST($endAt AS BIGINT), " +
-      s"named_struct('$recordStartAt', CAST($startAt AS BIGINT))"
+      s"named_struct('$recordStartAt', CAST($startAt AS BIGINT), " +
+      s"'$versionMap', CAST(NULL AS MAP<STRING, BOOLEAN>))"
     )
   }
 

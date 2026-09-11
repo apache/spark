@@ -22,7 +22,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.ml.linalg.{BLAS, Vector}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
@@ -274,17 +274,23 @@ class GBTRegressionModel private[ml](
     if ($(predictionCol).nonEmpty || $(leafCol).nonEmpty) {
       var predColNames = Seq.empty[String]
       var predCols = Seq.empty[Column]
-      val bcModel = dataset.sparkSession.sparkContext.broadcast(this)
+      val bcTreeData = dataset.sparkSession.sparkContext.broadcast(
+        (_trees.map(_.rootNode), _treeWeights.clone()))
 
       if ($(predictionCol).nonEmpty) {
-        val predUDF = udf { features: Vector => bcModel.value.predict(features) }
+        val predUDF = udf { features: Vector =>
+          val (rootNodes, treeWeights) = bcTreeData.value
+          TreeEnsembleModel.predictRaw(features, rootNodes, treeWeights)
+        }
         predColNames :+= $(predictionCol)
         predCols :+= predUDF(col($(featuresCol)))
           .as($(predictionCol), outputSchema($(predictionCol)).metadata)
       }
 
       if ($(leafCol).nonEmpty) {
-        val leafUDF = udf { features: Vector => bcModel.value.predictLeaf(features) }
+        val leafUDF = udf { features: Vector =>
+          TreeEnsembleModel.predictLeaf(features, bcTreeData.value._1)
+        }
         predColNames :+= $(leafCol)
         predCols :+= leafUDF(col($(featuresCol)))
           .as($(leafCol), outputSchema($(leafCol)).metadata)
@@ -298,12 +304,8 @@ class GBTRegressionModel private[ml](
     }
   }
 
-  override def predict(features: Vector): Double = {
-    // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
-    // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
-    BLAS.nativeBLAS.ddot(getNumTrees, treePredictions, 1, _treeWeights, 1)
-  }
+  override def predict(features: Vector): Double =
+    TreeEnsembleModel.predictRaw(features, _trees, _treeWeights)
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): GBTRegressionModel = {

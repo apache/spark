@@ -43,11 +43,11 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
+import org.apache.spark.sql.catalyst.plans.physical.KeyReducer
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, IntervalUtils, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -582,7 +582,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def unableToCreateDatabaseAsFailedToCreateDirectoryError(
       dbDefinition: CatalogDatabase, e: IOException): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2033",
+      errorClass = "UNABLE_TO_CREATE_DATABASE_DIRECTORY",
       messageParameters = Map(
         "name" -> dbDefinition.name,
         "locationUri" -> dbDefinition.locationUri.toString()),
@@ -3234,8 +3234,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "parameter" -> toSQLId("extension"),
-        "fileExtension" -> toSQLId(extension),
-        "acceptable" -> "Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"))
+        "invalidValue" -> toSQLId(extension)))
   }
 
   def invalidCharsetError(functionName: String, charset: String): RuntimeException = {
@@ -3259,7 +3258,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def invalidWriterCommitMessageError(details: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "INVALID_WRITER_COMMIT_MESSAGE",
-      messageParameters = Map("details" -> details))
+      messageParameters = Map("detail" -> details))
   }
 
   def codecNotAvailableError(codecName: String, availableCodecs: String): Throwable = {
@@ -3376,12 +3375,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def storagePartitionJoinIncompatibleReducedTypesError(
-      leftReducers: Option[Seq[Option[Reducer[_, _]]]],
+      leftReducers: Option[Seq[Option[KeyReducer]]],
       leftReducedDataTypes: Seq[DataType],
-      rightReducers: Option[Seq[Option[Reducer[_, _]]]],
+      rightReducers: Option[Seq[Option[KeyReducer]]],
       rightReducedDataTypes: Seq[DataType]): Throwable = {
-    def reducersNames(reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
-      reducers.toSeq.flatMap(_.map(_.map(_.displayName()).getOrElse("identity")))
+    def reducersNames(reducers: Option[Seq[Option[KeyReducer]]]) = {
+      reducers.toSeq.flatMap(_.map(_.map(_.reducer.displayName()).getOrElse("identity")))
         .mkString("[", ", ", "]")
     }
 

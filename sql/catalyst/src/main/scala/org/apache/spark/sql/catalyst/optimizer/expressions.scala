@@ -830,13 +830,30 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
         case endsWith(postfix) =>
           Some(EndsWith(input, Literal.create(postfix, input.dataType)))
         // 'a%a' pattern is basically same with 'a%' && '%a'.
-        // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
+        // However, the additional length condition is required to prevent 'a' match 'a%a'.
         case startsAndEndsWith(prefix, postfix) =>
-          Some(And(GreaterThanOrEqual(Length(input),
-            Literal.create(prefix.codePointCount(0, prefix.length)
-              + postfix.codePointCount(0, postfix.length))),
-          And(StartsWith(input, Literal.create(prefix, input.dataType)),
-            EndsWith(input, Literal.create(postfix, input.dataType)))))
+          // The length guard only rejects inputs too short to hold both the prefix and the
+          // suffix. When the collation matches raw bytes (supportsBinaryEquality),
+          // StartsWith/EndsWith pin the literal bytes of the prefix and suffix, so a
+          // byte-length guard (OctetLength, O(1) via the stored numBytes) accepts exactly the
+          // same inputs as the code-point guard and is cheaper. Otherwise the anchors are
+          // collation-aware (LIKE reaches this only for UTF8_LCASE) and can match a code point
+          // whose UTF-8 length differs from the pattern's -- a single multibyte code point
+          // could then satisfy both anchors and clear the byte guard -- so the code-point
+          // (Length) guard must be kept for correctness.
+          val lengthGuard = input.dataType match {
+            case st: StringType if st.supportsBinaryEquality =>
+              GreaterThanOrEqual(OctetLength(input),
+                Literal.create(UTF8String.fromString(prefix).numBytes
+                  + UTF8String.fromString(postfix).numBytes))
+            case _ =>
+              GreaterThanOrEqual(Length(input),
+                Literal.create(prefix.codePointCount(0, prefix.length)
+                  + postfix.codePointCount(0, postfix.length)))
+          }
+          Some(And(lengthGuard,
+            And(StartsWith(input, Literal.create(prefix, input.dataType)),
+              EndsWith(input, Literal.create(postfix, input.dataType)))))
         case contains(infix) =>
           Some(Contains(input, Literal.create(infix, input.dataType)))
         case equalTo(str) =>
