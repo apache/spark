@@ -665,6 +665,38 @@ The following SQL properties enable Storage Partition Join in different join que
       <td>3.4.0</td>
     </tr>
     <tr>
+      <td><code>spark.sql.sources.v2.bucketing.skewJoin.enabled</code></td>
+      <td>false</td>
+      <td>
+        During a storage-partitioned join, whether to split skewed key groups instead of coalescing each key's input partitions into a single partition. A key group is skewed when its combined input partition count over both join sides is larger than the maximum of <code>spark.sql.sources.v2.bucketing.skewJoin.skewedPartitionsPerGroupThreshold</code> and the median group count times <code>spark.sql.sources.v2.bucketing.skewJoin.skewedGroupFactor</code>. A skewed key's side holding more of its input partitions spreads them over output partitions holding about <code>spark.sql.sources.v2.bucketing.skewJoin.advisoryInputPartitionsPerOutputPartition</code> of them each, and the other side replicates its group to each of those; if the join type forbids replicating that side the roles swap where they can. The counts are the only evidence, so a key spread over many small input partitions is split like a large one, and a key held in one huge input partition is not split at all; the other side's group is read once per output partition. The distributing side's own count must also exceed the threshold and its spread land on more than one partition, else the key stays coalesced. When <code>spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled</code> is also enabled, a skewed key takes the per-key split and the remaining keys keep the partially clustered layout. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code>, and either <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> or <code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code> to be true.
+      </td>
+      <td>4.4.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.skewJoin.skewedPartitionsPerGroupThreshold</code></td>
+      <td>5</td>
+      <td>
+        A key group of a storage-partitioned join is considered skewed when its combined input partition count over both sides is larger than the maximum of this threshold and the median group count times <code>spark.sql.sources.v2.bucketing.skewJoin.skewedGroupFactor</code>. The partition-count counterpart of <code>spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes</code>, with a different consequence: a key held in one huge input partition is not skewed here, while a key spread over many small ones can be. Takes effect only when <code>spark.sql.sources.v2.bucketing.skewJoin.enabled</code> is true.
+      </td>
+      <td>4.4.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.skewJoin.skewedGroupFactor</code></td>
+      <td>5.0</td>
+      <td>
+        A key group of a storage-partitioned join is considered skewed when its combined input partition count over both sides is larger than the maximum of <code>spark.sql.sources.v2.bucketing.skewJoin.skewedPartitionsPerGroupThreshold</code> and the median group count times this factor. The partition-count counterpart of <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Takes effect only when <code>spark.sql.sources.v2.bucketing.skewJoin.enabled</code> is true.
+      </td>
+      <td>4.4.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.skewJoin.advisoryInputPartitionsPerOutputPartition</code></td>
+      <td>1</td>
+      <td>
+        When a skewed key group of a storage-partitioned join is split, the number of input partitions each output partition holds: the distributing side's n splits are spread over ceil(n / advisory) output partitions in contiguous chunks, and the other side's group is replicated that many times. The partition-count counterpart of <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>. The default of 1 spreads one input partition per output partition; raise it to trade split parallelism for fewer replicated reads. Takes effect only when <code>spark.sql.sources.v2.bucketing.skewJoin.enabled</code> is true.
+      </td>
+      <td>4.4.0</td>
+    </tr>
+    <tr>
       <td><code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code></td>
       <td>false</td>
       <td>

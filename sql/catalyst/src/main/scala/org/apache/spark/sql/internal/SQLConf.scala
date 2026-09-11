@@ -2615,6 +2615,81 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val V2_BUCKETING_SKEW_JOIN_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.skewJoin.enabled")
+      .doc("During a storage-partitioned join, whether to split skewed key groups instead of " +
+        "coalescing each key's input partitions into a single partition. A key group is skewed " +
+        "when its combined input partition count over both sides is larger than the maximum of " +
+        "spark.sql.sources.v2.bucketing.skewJoin.skewedPartitionsPerGroupThreshold and " +
+        "the median group count times " +
+        "spark.sql.sources.v2.bucketing.skewJoin.skewedGroupFactor. A skewed key's side " +
+        "holding more of its input partitions spreads them over output partitions holding " +
+        "about spark.sql.sources.v2.bucketing.skewJoin.advisoryInputPartitionsPerOutputPartition " +
+        "of them each, and the other side replicates its group to each of those; if the join " +
+        "type forbids replicating that side the roles swap where they can. The counts are the " +
+        "only evidence, so a key spread over many small input partitions is split like a large " +
+        "one, and a key held in one huge input partition is not split at all; the other side's " +
+        "group is read once per output partition. The distributing side's own count must also " +
+        "exceed the threshold and its spread land on more than one partition, else the key " +
+        "stays coalesced. When " +
+        s"${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} is also enabled, a " +
+        "skewed key takes the per-key split and the remaining keys keep the partially " +
+        "clustered layout. This config requires " +
+        s"${V2_BUCKETING_ENABLED.key}, and either ${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} " +
+        s"or ${V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key} to be enabled")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR =
+    buildConf("spark.sql.sources.v2.bucketing.skewJoin.skewedGroupFactor")
+      .doc("A key group of a storage-partitioned join is considered skewed when its combined " +
+        "input partition count over both sides is larger than the maximum of " +
+        "spark.sql.sources.v2.bucketing.skewJoin.skewedPartitionsPerGroupThreshold " +
+        s"and the median group count times this factor, when " +
+        s"${V2_BUCKETING_SKEW_JOIN_ENABLED.key} is enabled. The partition-count " +
+        s"counterpart of ${SKEW_JOIN_SKEWED_PARTITION_FACTOR.key}.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doubleConf
+      .checkValue(_ > 0, "The value of spark.sql.sources.v2.bucketing.skewJoin." +
+        "skewedGroupFactor must be positive")
+      .createWithDefault(5.0)
+
+  val V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD =
+    buildConf("spark.sql.sources.v2.bucketing.skewJoin.skewedPartitionsPerGroupThreshold")
+      .doc("A key group of a storage-partitioned join is considered skewed when its combined " +
+        "input partition count over both sides is larger than the maximum of this threshold " +
+        s"and the median group count times ${V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key}, " +
+        s"when ${V2_BUCKETING_SKEW_JOIN_ENABLED.key} is enabled. The partition-count " +
+        s"counterpart of ${SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key}, with a different " +
+        "consequence: a key held in one huge input partition is not skewed here, while a key " +
+        "spread over many small ones can be.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(_ > 0, "The value of spark.sql.sources.v2.bucketing.skewJoin." +
+        "skewedPartitionsPerGroupThreshold must be positive")
+      .createWithDefault(5)
+
+  val V2_BUCKETING_SKEW_JOIN_ADVISORY_INPUT_PARTITIONS_PER_OUTPUT_PARTITION =
+    buildConf("spark.sql.sources.v2.bucketing.skewJoin.advisoryInputPartitionsPerOutputPartition")
+      .doc("When a skewed key group of a storage-partitioned join is split, the number of " +
+        "input partitions each output partition holds: the distributing side's n " +
+        "splits are spread over ceil(n / advisory) output partitions in contiguous chunks, " +
+        "and the other side's group is replicated that many times, when " +
+        s"${V2_BUCKETING_SKEW_JOIN_ENABLED.key} is enabled. The partition-count " +
+        s"counterpart of ${ADVISORY_PARTITION_SIZE_IN_BYTES.key}. The default of 1 spreads " +
+        "one input partition per output partition; raise it to trade split parallelism for " +
+        "fewer replicated reads.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(_ > 0, "The value of spark.sql.sources.v2.bucketing.skewJoin." +
+        "advisoryInputPartitionsPerOutputPartition must be positive")
+      .createWithDefault(1)
+
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed.")
     .version("2.4.0")
@@ -9333,6 +9408,18 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingPreserveOrderingOnCoalesceEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED)
+
+  def v2BucketingSkewJoinEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED)
+
+  def v2BucketingSkewJoinSkewedPartitionsPerGroupThreshold: Int =
+    getConf(SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD)
+
+  def v2BucketingSkewJoinSkewedGroupFactor: Double =
+    getConf(SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR)
+
+  def v2BucketingSkewJoinAdvisoryInputPartitionsPerOutputPartition: Int =
+    getConf(SQLConf.V2_BUCKETING_SKEW_JOIN_ADVISORY_INPUT_PARTITIONS_PER_OUTPUT_PARTITION)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
