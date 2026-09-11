@@ -898,8 +898,8 @@ object functions {
    * configured with lgConfigK arg.
    *
    * @param e
-   *   the column to compute the sketch on. A column that evaluates to an integral, a string or a
-   *   binary.
+   *   the column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or a binary.
    * @param lgConfigK
    *   the log-base-2 of K, where K is the number of buckets or slots for the HllSketch. A column
    *   that evaluates to an integral. Must be a constant.
@@ -916,8 +916,8 @@ object functions {
    * configured with lgConfigK arg.
    *
    * @param e
-   *   the column to compute the sketch on. A column that evaluates to an integral, a string or a
-   *   binary.
+   *   the column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or a binary.
    * @param lgConfigK
    *   the log-base-2 of K, where K is the number of buckets or slots for the HllSketch. A column
    *   that evaluates to an integral. Must be a constant.
@@ -935,7 +935,7 @@ object functions {
    *
    * @param columnName
    *   the name of the column to compute the sketch on. A column that evaluates to an integral, a
-   *   string or a binary.
+   *   time, a string or a binary.
    * @param lgConfigK
    *   the log-base-2 of K, where K is the number of buckets or slots for the HllSketch. A column
    *   that evaluates to an integral. Must be a constant.
@@ -953,8 +953,8 @@ object functions {
    * configured with default lgConfigK value.
    *
    * @param e
-   *   the column to compute the sketch on. A column that evaluates to an integral, a string or a
-   *   binary.
+   *   the column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or a binary.
    * @group agg_funcs
    * @since 3.5.0
    * @return
@@ -969,7 +969,7 @@ object functions {
    *
    * @param columnName
    *   the name of the column to compute the sketch on. A column that evaluates to an integral, a
-   *   string or a binary.
+   *   time, a string or a binary.
    * @group agg_funcs
    * @since 3.5.0
    * @return

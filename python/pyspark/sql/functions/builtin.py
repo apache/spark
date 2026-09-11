@@ -30008,6 +30008,9 @@ def hll_sketch_agg(
 
     .. versionadded:: 3.5.0
 
+    .. versionchanged:: 4.4.0
+        Supports the TIME type for the ``col`` argument.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name

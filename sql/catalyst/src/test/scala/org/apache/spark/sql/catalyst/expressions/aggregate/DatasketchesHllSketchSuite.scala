@@ -102,26 +102,28 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
     val (estimate, estimateRange) = simulateUpdateMerge(TimeType(), timeRange)
     assert(estimate == timeRange.size || estimateRange.contains(timeRange.size.toLong))
 
-    // Equal times (even written at different precisions) share the same nanos-of-day and are
-    // counted once.
     val nineAm = LocalTime.of(9, 0, 0).toNanoOfDay
     val noon = LocalTime.of(12, 0, 0).toNanoOfDay
     val fivePm = LocalTime.of(17, 0, 0).toNanoOfDay
-    val aggFunc = new HllSketchAgg(BoundReference(0, TimeType(9), nullable = true), 12)
-    val buffer = Seq(noon, noon, noon, nineAm, nineAm)
-      .foldLeft(aggFunc.createAggregationBuffer())((buf, t) => aggFunc.update(buf, InternalRow(t)))
-    assert(estimateOf(aggFunc.eval(buffer).asInstanceOf[Array[Byte]]) == 2L)
 
-    // A sketch built from a TIME column round-trips through hll_union_agg, which only ever sees the
-    // serialized BINARY sketch and so needs no TIME-specific handling of its own.
-    def timeSketch(values: Seq[Long]): Array[Byte] = {
-      val agg = new HllSketchAgg(BoundReference(0, TimeType(), nullable = true), 12)
+    def timeSketch(precision: Int, values: Seq[Long]): Array[Byte] = {
+      val agg = new HllSketchAgg(BoundReference(0, TimeType(precision), nullable = true), 12)
       val buf = values.foldLeft(agg.createAggregationBuffer())((b, v) =>
         agg.update(b, InternalRow(v)))
       agg.eval(buf).asInstanceOf[Array[Byte]]
     }
+
+    // Repeated values are counted once (deduplication).
+    assert(estimateOf(timeSketch(9, Seq(noon, noon, noon, nineAm, nineAm))) == 2L)
+
+    // The full nanos-of-day is hashed: times that differ only in sub-microsecond digits are
+    // distinct. A regression that truncated to micros before hashing would under-count these.
+    assert(estimateOf(timeSketch(9, Seq(noon, noon + 1L, noon + 2L))) == 3L)
+
+    // Sketches built from TIME columns of different precisions round-trip through hll_union_agg,
+    // which only ever sees the serialized BINARY sketch and so needs no TIME-specific handling.
     val merged = unionAgg(
-      Seq[Any](timeSketch(Seq(nineAm, noon)), timeSketch(Seq(noon, fivePm))),
+      Seq[Any](timeSketch(3, Seq(nineAm, noon)), timeSketch(9, Seq(noon, fivePm))),
       allowDifferentLgConfigK = false)
     assert(estimateOf(merged) == 3L) // distinct {09:00, 12:00, 17:00}
   }
