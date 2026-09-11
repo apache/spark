@@ -43,13 +43,12 @@ from typing import (
     TYPE_CHECKING,
     Any,
     ClassVar,
-    Dict,
     Generic,
     Optional,
-    Type,
     TypeVar,
 )
 
+from pyspark.serializers import Serializer
 from pyspark.sql.pandas.serializers import (
     ArrowStreamCoGroupSerializer,
     ArrowStreamGroupSerializer,
@@ -63,10 +62,11 @@ if TYPE_CHECKING:
     import pyarrow as pa  # noqa: F401
 
     from pyspark.sql.pandas._typing import CoGroupedBatch, GroupedBatch  # noqa: F401
+    from pyspark.worker import EvalConf, RunnerConf
 
 # Registry of concrete handlers keyed by PythonEvalType. Populated at class
 # definition time by ``EvalTypeHandler.__init_subclass__``.
-EVAL_TYPE_HANDLERS: "Dict[int, Type[EvalTypeHandler]]" = {}
+EVAL_TYPE_HANDLERS: "dict[int, type[EvalTypeHandler]]" = {}
 
 # Input/output stream element types. ``InputBatch`` is the element type of the
 # stream the JVM sends (a plain ``pa.RecordBatch`` for batch handlers, a
@@ -115,14 +115,16 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=ABCMeta):
                 )
             EVAL_TYPE_HANDLERS[eval_type] = cls
 
-    def __init__(self, udfs: list, runner_conf: Any, eval_conf: Any) -> None:
+    def __init__(
+        self, udfs: "list[tuple[Any, ...]]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
+    ) -> None:
         self._udfs = udfs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
 
     @property
     @abstractmethod
-    def serializer(self) -> Any:
+    def serializer(self) -> Serializer:
         """The serializer used for both the input and output streams."""
 
     @abstractmethod
@@ -138,7 +140,7 @@ class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch], metac
     ``Iterator[pa.RecordBatch]`` -- one flat RecordBatch at a time."""
 
     @property
-    def serializer(self) -> Any:
+    def serializer(self) -> Serializer:
         return ArrowStreamSerializer(write_start_stream=True)
 
 
@@ -147,7 +149,7 @@ class GroupedEvalTypeHandler(EvalTypeHandler["GroupedBatch", OutputBatch], metac
     ``Iterator[GroupedBatch]`` -- one Arrow stream (group) at a time."""
 
     @property
-    def serializer(self) -> Any:
+    def serializer(self) -> Serializer:
         return ArrowStreamGroupSerializer(write_start_stream=True)
 
 
@@ -156,7 +158,7 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler["CoGroupedBatch", OutputBatch], m
     ``Iterator[CoGroupedBatch]`` -- a pair of Arrow streams per co-group."""
 
     @property
-    def serializer(self) -> Any:
+    def serializer(self) -> Serializer:
         return ArrowStreamCoGroupSerializer(write_start_stream=True)
 
 
@@ -164,4 +166,4 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler["CoGroupedBatch", OutputBatch], m
 # in ``EVAL_TYPE_HANDLERS`` and are re-exported from the package. Kept at the
 # bottom to avoid a circular import: the submodules import the base classes
 # defined above.
-from pyspark.sql.eval_handlers._arrow import ArrowScalarUDFHandler  # noqa: F401
+from pyspark.sql.eval_handlers._arrow import ArrowScalarUDFHandler as ArrowScalarUDFHandler

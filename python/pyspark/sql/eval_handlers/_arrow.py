@@ -31,6 +31,8 @@ from pyspark.util import PythonEvalType
 if TYPE_CHECKING:
     import pyarrow as pa
 
+    from pyspark.worker import EvalConf, RunnerConf
+
 
 class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     """SQL_SCALAR_ARROW_UDF: one user invocation per input RecordBatch.
@@ -42,7 +44,9 @@ class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_SCALAR_ARROW_UDF
 
-    def __init__(self, udfs: list, runner_conf: Any, eval_conf: Any) -> None:
+    def __init__(
+        self, udfs: "list[tuple[Any, ...]]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
+    ) -> None:
         super().__init__(udfs, runner_conf, eval_conf)
         self._col_names = ["_%d" % i for i in range(len(udfs))]
         self._combined_arrow_schema = to_arrow_schema(
