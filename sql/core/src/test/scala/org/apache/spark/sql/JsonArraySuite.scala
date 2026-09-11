@@ -158,9 +158,12 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   }
 
   test("a function-style string() cast detaches implicit FORMAT JSON like CAST(... AS STRING)") {
-    // A user cast to STRING quotes the fragment (detaches implicit FORMAT JSON). The function-style
-    // alias string(x) is exactly CAST(x AS STRING) and must behave identically: `isImplicitlyJson`
-    // does not look through a `Cast`, so the element is quoted, not spliced.
+    // A user CAST to STRING quotes the fragment (detaches implicit FORMAT JSON): `isImplicitlyJson`
+    // does not look through the `Cast`, so the element is quoted, not spliced. The function-style
+    // alias string(x) means CAST(x AS STRING) and ends up identical, but for a different reason at
+    // the parse-time routing decision, where it is still an `UnresolvedFunction` (it only becomes a
+    // `Cast` once the alias resolves): `isImplicitlyJson` recognizes only a grammar-built nested
+    // constructor, so the outer call sees no implicit-JSON element, routes, and quotes it.
     checkAnswer(sql("SELECT JSON_ARRAY(CAST(JSON_ARRAY(1) AS STRING))"), Row("""["[1]"]"""))
     checkAnswer(sql("SELECT JSON_ARRAY(string(JSON_ARRAY(1)))"), Row("""["[1]"]"""))
     // The equivalence also holds through the routed path for other JSON-producing children.
@@ -544,14 +547,15 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SELECT system.builtin.json_array(1, 'x')"), Row("""[1,"x"]"""))
   }
 
-  test("a nested JSON constructor through a routed JSON_ARRAY call is quoted, not spliced") {
-    // A routed call carries no lexical FORMAT JSON, so a nested JSON constructor argument is
-    // quoted as a plain value, unlike the JSON_ARRAY(...) grammar which splices it (see the
-    // unqualified `json_array(json_array(1))` -> `[[1]]` cases above). The outer call routes
-    // whenever it sees no lexical implicit-JSON element: `JsonArray.isImplicitlyJson` recognizes
-    // only a grammar-built nested constructor, so a qualified outer call and an unqualified call
-    // over a qualified nested constructor (whose child is still unresolved) both route and quote.
-    // Only a fully unqualified nested constructor stays on the direct grammar path; splicing
+  test("a nested JSON-producing argument through a routed JSON_ARRAY call is quoted, not spliced") {
+    // A routed call carries no lexical FORMAT JSON, so a nested JSON-producing argument (a JSON
+    // constructor like json_array or a path function like json_query) is quoted as a plain value,
+    // unlike the JSON_ARRAY(...) grammar which splices it (see the unqualified
+    // `json_array(json_array(1))` -> `[[1]]` cases above). The outer call routes whenever it sees
+    // no lexical implicit-JSON element: `JsonArray.isImplicitlyJson` recognizes only a
+    // grammar-built nested JSON expression, so a qualified outer call and an unqualified call over
+    // a qualified nested JSON expression (whose child is still unresolved) both route and quote.
+    // Only a fully unqualified nested JSON expression stays on the direct grammar path; splicing
     // through a routed call is left as a follow-up.
     checkAnswer(sql("SELECT builtin.json_array(json_array(1))"), Row("""["[1]"]"""))
     checkAnswer(sql("SELECT system.builtin.json_array(json_array(1))"), Row("""["[1]"]"""))
