@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.physical
 
 import scala.annotation.tailrec
+import scala.collection.immutable.BitSet
 import scala.collection.mutable
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
@@ -121,6 +122,32 @@ case class ClusteredDistribution(
         case (l, r) => l.semanticEquals(r)
       }
   }
+
+  /** Whether `e` is one of the cluster keys. */
+  def isClusterKey(e: Expression): Boolean = clustering.exists(_.semanticEquals(e))
+
+  /**
+   * Whether `expressions` are all cluster keys, so that rows agreeing on them agree on every
+   * cluster key too and therefore belong on one partition. This is the question a
+   * [[Partitioning]]'s `satisfies0` asks, and it reads `requireAllClusterKeys` itself: with the
+   * flag the keys have to match one for one, without it partitioning on a subset is enough. Call
+   * this rather than branching on the flag at the call site.
+   */
+  def matchesClusterKeys(expressions: Seq[Expression]): Boolean = {
+    if (requireAllClusterKeys) {
+      areAllClusterKeysMatched(expressions)
+    } else {
+      expressions.forall(isClusterKey)
+    }
+  }
+
+  /** Whether every cluster key is named by one of `expressions`. */
+  def allClusterKeysAmong(expressions: Iterable[Expression]): Boolean =
+    clustering.forall(key => expressions.exists(_.semanticEquals(key)))
+
+  /** Whether some cluster key is named by one of `expressions`. */
+  def anyClusterKeyAmong(expressions: Iterable[Expression]): Boolean =
+    clustering.exists(key => expressions.exists(_.semanticEquals(key)))
 }
 
 /**
@@ -291,14 +318,10 @@ trait HashPartitioningLike extends Expression with Partitioning with Unevaluable
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
             case (l, r) => l.semanticEquals(r)
           }
-        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
-          if (requireAllClusterKeys) {
-            // Checks `HashPartitioning` is partitioned on exactly same clustering keys of
-            // `ClusteredDistribution`.
-            c.areAllClusterKeysMatched(expressions)
-          } else {
-            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-          }
+        case c: ClusteredDistribution =>
+          // Partitioned on the clustering keys, exactly or on a subset of them, see
+          // `matchesClusterKeys`.
+          c.matchesClusterKeys(expressions)
         case _ => false
       }
     }
@@ -351,14 +374,8 @@ case class NullAwareHashPartitioning(expressions: Seq[Expression], numPartitions
       // Stateful operators require strict NULL-key co-location and therefore cannot consume
       // null-aware hash partitioning as a compatible clustered layout.
       required match {
-        case c @ ClusteredDistribution(
-            requiredClustering, requireAllClusterKeys, _, allowNullKeySpreading)
-            if allowNullKeySpreading =>
-          if (requireAllClusterKeys) {
-            c.areAllClusterKeysMatched(expressions)
-          } else {
-            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-          }
+        case c: ClusteredDistribution if c.allowNullKeySpreading =>
+          c.matchesClusterKeys(expressions)
         case _ => false
       }
     }
@@ -411,14 +428,8 @@ case class CoalescedNullAwareHashPartitioning(
       case _ => false
     }) || {
       required match {
-        case c @ ClusteredDistribution(
-            requiredClustering, requireAllClusterKeys, _, allowNullKeySpreading)
-            if allowNullKeySpreading =>
-          if (requireAllClusterKeys) {
-            c.areAllClusterKeysMatched(expressions)
-          } else {
-            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-          }
+        case c: ClusteredDistribution if c.allowNullKeySpreading =>
+          c.matchesClusterKeys(expressions)
         case _ => false
       }
     }
@@ -565,24 +576,23 @@ case class KeyLayout(
  *   or a `GroupPartitionsExec` can coalesce the partitions that share a key.
  *
  * == Distribution Satisfaction and Grouping ==
- * Besides the default `satisfies()`, `KeyedPartitioning` answers four questions. They differ in
- * what they let happen to the data before the distribution counts as met. Only `keysMaySatisfy()`
- * is asked from outside the class. The other three build it and `satisfies()` up.
+ * Besides the default `satisfies()`, `KeyedPartitioning` answers a family of questions. They differ
+ * in what they let happen to the data before the distribution counts as met. Only
+ * `keysMaySatisfy()` is asked from outside the class. The rest build it and `satisfies()` up.
  *
- * - `nonGroupedSatisfies()`: is the distribution met by the partitioning as it stands, with no node
- *   inserted? It is the default `Partitioning` implementation, so for a `ClusteredDistribution` it
- *   is always false.
- * - `keysSatisfy()`: do the partition keys match what the distribution asks for? Duplicate keys are
- *   ignored, so this asks about the key expressions alone. `satisfies()` is this plus `isGrouped`,
- *   and nothing more.
+ * - `keysSatisfy()`: do the keys as they stand co-locate every operation key, with nothing left for
+ *   a node to project away? This is the strict question, and `satisfies()` is it plus `isGrouped`.
+ * - `keysCanSatisfy()`: `keysSatisfy()`, or the keys co-locate them after a node has projected
+ *   away the expressions that carry none. Only
+ *   `spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys` admits the second half.
  * - `mayGroupToSatisfy()`: may `EnsureRequirements` insert a `GroupPartitionsExec` to meet the
  *   distribution? It is asked of non-grouped partitionings only, where such a node coalesces the
- *   duplicate keys. So the answer is `keysSatisfy()`, plus whether that coalescing is allowed.
+ *   duplicate keys. So the answer is `keysCanSatisfy()`, plus whether that coalescing is allowed.
  *   "Key Collapse" below says when it is not.
  * - `keysMaySatisfy()`: the same question for a partitioning that may already be grouped, which is
  *   what `EnsureRequirements` asks. It is `mayGroupToSatisfy()` for a non-grouped one, and
- *   `keysSatisfy()` for a grouped one, which has no duplicate keys left for the node to coalesce,
- *   and so nothing for the permission to govern.
+ *   `keysCanSatisfy()` for a grouped one, which has no duplicate keys left for the node to
+ *   coalesce, and so nothing for the permission to govern.
  *
  * For `OrderedDistribution`, `GroupPartitionsExec` must also sort the partition keys to meet the
  * ordering requirement.
@@ -834,13 +844,64 @@ case class KeyedPartitioning(
     KeyedPartitioning.reduceKeys(partitionKeys, keyDataTypes, reducers)
 
   override def satisfies0(required: Distribution): Boolean = {
-    nonGroupedSatisfies(required) || (isGrouped && keysSatisfy(required))
+    super.satisfies0(required) || (isGrouped && keysSatisfy(required))
   }
 
-  /** The first of the four questions the class doc lists. */
-  private def nonGroupedSatisfies(required: Distribution): Boolean = super.satisfies0(required)
+  /**
+   * The positions of the partition expressions that cover an operation key of `clustering`, and so
+   * have to survive a projection. An expression covers one in two ways:
+   *
+   *  - one of its *references* is an operation key, as a `bucket(4, a)` covers `a`;
+   *  - the expression *itself* is an operation key, as a `years(ts)` under a clustering that names
+   *    `years(ts)` rather than `ts`.
+   *
+   * `EnsureRequirements.resolveKeyedPartitioning` and `keysSatisfy` both read this, so the
+   * predicate deciding whether a projection is needed and the one choosing the positions to
+   * project onto cannot drift apart.
+   *
+   * Not the same question as `KeyedShuffleSpec.keyPositions`, and the two must not be merged. That
+   * one answers, per expression, which clustering key the expression is a function *of*. That is
+   * what `KeyedShuffleSpec.createPartitioning` needs, since it rebuilds the expression over the
+   * other side's clustering with `te.copy(children = ... clustering(positionSet.head))`. Handing it
+   * the second form above would rebuild a `years(ts)` clustered on `years(ts)` as
+   * `years(years(ts))`.
+   * The two coincide exactly where every expression has a single reference and no expression is
+   * itself an operation key. Where they diverge, `createShuffleSpec` refuses to project rather than
+   * projecting onto nothing.
+   */
+  def operationKeyPositions(required: ClusteredDistribution): BitSet =
+    expressions.zipWithIndex.collect {
+      case (e, i) if required.isClusterKey(e) || e.references.exists(required.isClusterKey) => i
+    }.to(BitSet)
 
-  /** The second of the four questions the class doc lists. */
+  /**
+   * Whether every partition expression is a function of operation keys alone, so that rows sharing
+   * an operation key share a partition and nothing needs projecting.
+   *
+   * The sibling of `operationKeyPositions`, and the two differ in one word: this quantifies over an
+   * expression's references with `forall`, that one with `exists`. Both are right for what they are
+   * asked. A `bucket(4, b, c)` over a clustering naming `b` alone *carries* an operation key, so
+   * its position survives a projection, yet two rows sharing `b` land in different buckets when
+   * their `c` differs, so it is not a function of the operation keys. Deliberately not
+   * `operationKeyPositions(required).size == expressions.length`.
+   */
+  private def isFunctionOfOperationKeys(required: ClusteredDistribution): Boolean =
+    expressions.forall { e =>
+      required.isClusterKey(e) || e.references.forall(required.isClusterKey)
+    }
+
+  /**
+   * The strict question of the family the class doc lists. `true` only when the
+   * keys as they stand co-locate every operation key, with nothing left for a
+   * `GroupPartitionsExec` to do about it.
+   *
+   * Two ways to be true. Every partition expression is a function of operation keys alone, so
+   * nothing needs projecting. Or one is not, in which case the projection that drops it may still
+   * merge no partition, and then rows sharing an operation key already sit on one partition. The
+   * second is the only branch that reads a partition key, and only
+   * `spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys` admits it, so the ordinary
+   * configuration answers structurally.
+   */
   private def keysSatisfy(required: Distribution): Boolean = {
     required match {
       case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
@@ -849,25 +910,22 @@ case class KeyedPartitioning(
           // `ClusteredDistribution`.
           c.areAllClusterKeysMatched(expressions)
         } else {
-          // We'll need to find leaf attributes from the partition expressions first.
-          val attributes = AttributeSet.fromAttributeSets(expressions.map(_.references))
-
-          if (mayContainUnknownPartitionKeys) {
-            // Whole keys co-locate, subsets do not (see the `@param`): a window or aggregate
-            // keyed on a strict subset of the partition columns must still shuffle.
-            attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-          } else if (SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
-            // The operation keys may be a subset of the partition keys, so one partition expression
-            // covering one of them is enough. Partitions can then still hold rows that share an
-            // operation key. What makes the distribution true is the projection onto the covering
-            // positions, plus the grouping that follows it. Given the single reference per
-            // expression that `supportsExpressions` enforces, the test below is exactly
-            // `KeyedShuffleSpec.keyPositions.exists(_.nonEmpty)`, where `createShuffleSpec` takes
-            // its `joinKeyPositions` from. Consolidating the two is left to a follow-up.
-            requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
-              expressions.forall(_.references.size == 1)
+          if (isFunctionOfOperationKeys(c)) {
+            true
+          } else if (mayContainUnknownPartitionKeys ||
+              !SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys ||
+              !expressions.forall(_.references.size == 1)) {
+            // Nothing to project onto, or projecting is not permitted. A marked layout is refused
+            // because the projection coarsens the declared set the out-of-set routing speaks for
+            // (see the `@param`). Whole keys co-locate there and subsets do not, so a window or
+            // aggregate keyed on a strict subset of the partition columns must still shuffle.
+            false
           } else {
-            attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+            // Keeping a position is only sound because of the single-reference requirement above.
+            // A kept expression is then a function of one operation key, so coalescing on the
+            // projected keys cannot put rows that share an operation key on different partitions.
+            val positions = operationKeyPositions(c)
+            positions.nonEmpty && numPartitionsProjectedOn(positions.toSeq) == numPartitions
           }
         }
 
@@ -888,8 +946,34 @@ case class KeyedPartitioning(
   }
 
   /**
-   * The third of the four questions the class doc lists. Ask it only of a partitioning that is not
-   * grouped, since a grouped one has nothing to coalesce and `keysMaySatisfy` covers both.
+   * Either way of co-locating the operation keys, with or without a projection.
+   *
+   * The first case is the projecting one, and it is asked first because it is structural, while
+   * `keysSatisfy` may read the partition keys to decide whether a projection would merge anything.
+   * Only `spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys` permits a projection,
+   * and a marked layout cannot survive one, since it coarsens the declared set the out-of-set
+   * routing speaks for (see the `@param`).
+   *
+   * Given the single reference per expression that `supportsExpressions` enforces, that case
+   * coincides with `KeyedShuffleSpec.keyPositions.exists(_.nonEmpty)`, where `createShuffleSpec`
+   * takes its `joinKeyPositions` from. They cannot be merged into one derivation, see
+   * `operationKeyPositions`.
+   */
+  private def keysCanSatisfy(required: Distribution): Boolean = {
+    val satisfiesAfterProjection = required match {
+      case c: ClusteredDistribution
+          if !c.requireAllClusterKeys && !mayContainUnknownPartitionKeys &&
+            SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys =>
+        val attributes = AttributeSet.fromAttributeSets(expressions.map(_.references))
+        c.anyClusterKeyAmong(attributes) && expressions.forall(_.references.size == 1)
+      case _ => false
+    }
+    satisfiesAfterProjection || keysSatisfy(required)
+  }
+
+  /**
+   * Ask this only of a partitioning that is not grouped, since a grouped one has nothing to
+   * coalesce and `keysMaySatisfy` covers both. See the class doc.
    */
   private[sql] def mayGroupToSatisfy(required: Distribution): Boolean = {
     val mayCoalesce = required match {
@@ -898,12 +982,12 @@ case class KeyedPartitioning(
       case _ => true
     }
     // The permission is the cheap half, so it is asked first.
-    mayCoalesce && keysSatisfy(required)
+    mayCoalesce && keysCanSatisfy(required)
   }
 
-  /** The fourth of the four questions the class doc lists. */
+  /** What `EnsureRequirements` asks. See the class doc. */
   private[sql] def keysMaySatisfy(required: Distribution): Boolean = {
-    if (isGrouped) keysSatisfy(required) else mayGroupToSatisfy(required)
+    if (isGrouped) keysCanSatisfy(required) else mayGroupToSatisfy(required)
   }
 
   override def createShuffleSpec(distribution: ClusteredDistribution): KeyedShuffleSpec = {
@@ -915,6 +999,15 @@ case class KeyedPartitioning(
       // so `areKeysCompatible` refuses it as a partner and `canCreatePartitioning` refuses it as
       // a shuffle template, and the child falls back to the ordinary shuffle.
       if (mayContainUnknownPartitionKeys && joinKeyPositions.length < expressions.length) {
+        return result
+      }
+      // No position covers an operation key, so there is nothing to project onto. Projecting onto
+      // none would coalesce every partition into one, which is never the answer, and it is the
+      // same refusal `EnsureRequirements.resolveKeyedPartitioning` makes for its own caller.
+      // `keyPositions` maps an expression's single *reference* onto the clustering, so this is
+      // reachable for a clustering that names the partition expression itself, where `keysSatisfy`
+      // says yes and this finds nothing. Return the unprojected spec, as above.
+      if (joinKeyPositions.isEmpty && expressions.nonEmpty) {
         return result
       }
       // If allowing operation keys to be a subset of partition keys, create a new
@@ -1134,14 +1227,9 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
         case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
-          val expressions = ordering.map(_.child)
-          if (requireAllClusterKeys) {
-            // Checks `RangePartitioning` is partitioned on exactly same clustering keys of
-            // `ClusteredDistribution`.
-            c.areAllClusterKeysMatched(expressions)
-          } else {
-            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-          }
+          // Ordered by the clustering keys, exactly or by a subset of them, see
+          // `matchesClusterKeys`.
+          c.matchesClusterKeys(ordering.map(_.child))
         case _ => false
       }
     }
@@ -1252,7 +1340,20 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
     partitionings.exists(_.satisfies(required))
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
-    val filtered = partitionings.filter(_.satisfies(distribution))
+    // `maySatisfyAfterGrouping`, not `satisfies`. A spec says what its partitioning could
+    // co-partition on, and a `KeyedPartitioning` that needs a `GroupPartitionsExec` first still
+    // can. Filtering on the strict question would drop every member of a layout whose keys are
+    // coarser than the operation's and leave an empty collection.
+    //
+    // Every admitted member has to stay, because `isCompatibleWith` answers for any of them and
+    // the collection cannot know which one the other side matched. That has a cost worth knowing:
+    // `KeyedShuffleSpec.canCreatePartitioning` is false without `v2BucketingShuffleEnabled` and
+    // `ShuffleSpecCollection.canCreatePartitioning` is a `forall`, so a groupable keyed member
+    // beside a usable non-keyed one would cost the collection its role as a shuffle template. No
+    // operator is known to report that mixture, since `EnsureRequirements` groups a keyed child
+    // before it can reach a join's output.
+    val filtered =
+      partitionings.filter(PartitioningCollection.maySatisfyAfterGrouping(_, distribution))
     ShuffleSpecCollection(filtered.map(_.createShuffleSpec(distribution)))
   }
 
@@ -1266,6 +1367,26 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
 }
 
 object PartitioningCollection {
+  /**
+   * Whether `p` can serve `required`, if necessary after a [[GroupPartitionsExec]] that groups or
+   * projects a [[KeyedPartitioning]]'s keys. `satisfies` asks whether it does so as it stands, and
+   * only a keyed partitioning answers the two differently.
+   *
+   * A required partition count still has to match. A node changes the count, so what it will be is
+   * not known here, and this is the strictest honest answer. It is also the one `satisfies` gives
+   * every other partitioning, so the two do not disagree on that.
+   */
+  private[sql] def maySatisfyAfterGrouping(p: Partitioning, required: Distribution): Boolean =
+    p match {
+      case k: KeyedPartitioning =>
+        k.satisfies(required) ||
+          (required.requiredNumPartitions.forall(_ == k.numPartitions) &&
+            k.keysMaySatisfy(required))
+      case pc: PartitioningCollection =>
+        pc.partitionings.exists(maySatisfyAfterGrouping(_, required))
+      case other => other.satisfies(required)
+    }
+
   /**
    * One [[KeyedPartitioning]] standing for every one in this partitioning, if there is any. By the
    * invariant in the class doc, any of them describes the layout.
@@ -1408,12 +1529,7 @@ case class ShufflePartitionIdPassThrough(
       required match {
         // TODO(SPARK-53428): Support Direct Passthrough Partitioning in the Streaming Joins
         case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
-          val partitioningExpressions = expr.child :: Nil
-          if (requireAllClusterKeys) {
-            c.areAllClusterKeysMatched(partitioningExpressions)
-          } else {
-            partitioningExpressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-          }
+          c.matchesClusterKeys(expr.child :: Nil)
         case _ => false
       }
     }
@@ -1779,12 +1895,20 @@ case class KeyedShuffleSpec(
     joinKeyPositions: Option[Seq[Int]] = None) extends LeafShuffleSpec {
 
   /**
-   * A sequence where each element is a set of positions of the partition expression to the cluster
-   * keys. For instance, if cluster keys are [a, b, b] and partition expressions are
-   * [bucket(4, a), years(b)], the result will be [(0), (1, 2)].
+   * Per partition expression, the positions of the clustering keys it is a function *of*. For
+   * cluster keys [a, b, b] and partition expressions [bucket(4, a), years(b)], the result is
+   * [(0), (1, 2)]. The mapping is very similar to `HashShuffleSpec`'s.
    *
-   * Note that we only allow each partition expression to contain a single partition key.
-   * Therefore the mapping here is very similar to that from `HashShuffleSpec`.
+   * `createPartitioning` rebuilds the expression over another clustering from this, and
+   * `areKeysCompatible` reads an overlap as "these two expressions are functions of a common
+   * operation key". Both readings need the clustering key the expression consumes, which is why
+   * this looks at the expression's reference and not at the expression itself. An expression that
+   * *is* an operation key therefore maps to nothing here, while
+   * `KeyedPartitioning.operationKeyPositions` counts it. See that method for why the two stay
+   * apart.
+   *
+   * The assertion is what makes the reference reading sound. With one reference per expression,
+   * "some reference is an operation key" and "every reference is" are the same statement.
    */
   lazy val keyPositions: Seq[mutable.BitSet] = {
     val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]

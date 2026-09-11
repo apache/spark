@@ -1341,7 +1341,13 @@ class KeyGroupedPartitioningSuite
         attr: AttributeReference,
         otherAttr: AttributeReference,
         reducer: Reducer[_, _]): GroupPartitionsExec = {
-      val child = new LocalTableScanExec(Seq(attr), Nil, None, false)
+      // A `GroupPartitionsExec` is only built over a child that reports a `KeyedPartitioning`,
+      // and it derives its grouping from that child at construction, so the scan is wrapped in
+      // one. The key list is empty, which keeps the grouping trivial: this test is about the
+      // reducers' exprIds, not about what the node does to any partition.
+      val child = ShuffleExchangeExec(
+        KeyedPartitioning(Seq(attr), Nil),
+        new LocalTableScanExec(Seq(attr), Nil, None, false))
       val reduced = TransformExpression(BucketFunction, Seq(otherAttr), Some(2))
       GroupPartitionsExec(child,
         reducers = Some(Seq(Some(physical.KeyReducer(reducer, reduced)))))
@@ -1366,7 +1372,9 @@ class KeyGroupedPartitioningSuite
         attr: AttributeReference,
         dt: AttributeReference,
         otherAttr: AttributeReference): GroupPartitionsExec = {
-      val child = new LocalTableScanExec(Seq(attr, dt), Nil, None, false)
+      val child = ShuffleExchangeExec(
+        KeyedPartitioning(Seq(attr, dt), Nil),
+        new LocalTableScanExec(Seq(attr, dt), Nil, None, false))
       val reduced = TransformExpression(BucketFunction, Seq(otherAttr), Some(2))
       GroupPartitionsExec(child,
         reducers = Some(Seq(None, Some(physical.KeyReducer(BucketReducer(2), reduced)))))
@@ -8247,13 +8255,25 @@ class KeyGroupedPartitioningSuite
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         val df = sql(query)
         checkAnswer(df, expected)
-        // The regrouped marked side can no longer claim the hash-routing contract, so the final
-        // join re-shuffles it instead of storage-partitioning. Three one-side shuffles, all keyed
-        // with unknown partition keys: rt onto the union, rt2 onto ra2, and the final join's
-        // re-shuffle of the regrouped side. Before the fix the final join storage-partitioned
-        // (only the first two shuffles) and silently lost the id=5 row.
+        // The regrouped marked side can no longer claim the hash-routing contract. Four one-side
+        // shuffles, all keyed with unknown partition keys: rt onto the union, rs onto the marked
+        // side once the second join declines, rt2 onto ra2, and the final join's re-shuffle of the
+        // side that was regrouped. Before SPARK-59050 the final join storage-partitioned (only the
+        // first, third and fourth shuffles) and silently lost the id=5 row.
+        //
+        // The second join's shuffle is SPARK-59289's: the give-up happens inside the node, so it
+        // used to arrive after that join had already committed to the pairing and skipped both
+        // shuffles, leaving a plan `ValidateRequirements` rejects. The join now asks its two built
+        // children whether they still declare the same aligned keys, and declines when they do not.
+        // One keyed one-side shuffle is the price of a plan the AQE rules will touch.
+        // SPARK-59289: the second join declines rather than committing to a pairing whose child
+        // then gives up its keyed claim. This assertion comes first because it names the reason the
+        // shuffle below exists. Without the gate the plan is one AQE will not touch, since every
+        // AQEShuffleReadRule and OptimizeSkewedJoin drop their result when validation fails.
+        assert(ValidateRequirements.validate(df.queryExecution.executedPlan),
+          "the executed plan must satisfy every operator's required distribution")
         assertShuffleMayContainUnknownPartitionKeys(df.queryExecution.executedPlan,
-          Seq(true, true, true))
+          Seq(true, true, true, true))
       }
     }
   }

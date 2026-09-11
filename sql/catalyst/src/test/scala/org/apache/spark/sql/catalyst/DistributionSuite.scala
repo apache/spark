@@ -413,6 +413,30 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     checkSatisfied(groupedKP, ClusteredDistribution(Seq(x)), true)
   }
 
+  test("SPARK-59289: satisfies is strict about a projection that merges partitions") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val clustered = ClusteredDistribution(Seq(a))
+
+    // Partitioned by [a, b], clustered on [a] alone. Both are grouped, so the only question is
+    // whether rows sharing `a` share a partition.
+    val merging = KeyedPartitioning(Seq(a, b), Seq(InternalRow(1, 1), InternalRow(1, 2)))
+    val notMerging = KeyedPartitioning(Seq(a, b), Seq(InternalRow(1, 1), InternalRow(2, 2)))
+    assert(merging.isGrouped && notMerging.isGrouped)
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      // a = 1 sits on two partitions, so this satisfies nothing until a GroupPartitionsExec
+      // projects the keys onto [a]. `keysMaySatisfy` is the question that says so.
+      checkSatisfied(merging, clustered, false)
+      assert(merging.keysMaySatisfy(clustered))
+
+      // Projecting here would merge no partition, so every `a` already sits on one and the
+      // partitioning satisfies as it stands. Keeping it beats projecting, since it still names `b`
+      // for a downstream operator to co-partition on.
+      checkSatisfied(notMerging, clustered, true)
+    }
+  }
+
   test("SPARK-56877: fromPartitionings reuses already-consistent nested collections") {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()
