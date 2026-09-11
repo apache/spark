@@ -17,6 +17,14 @@
 
 import unittest
 
+from pyspark.sql.pandas.eval_type_handlers import (
+    _EVAL_TYPE_HANDLERS,
+    ArrowScalarUDFHandler,
+    BatchEvalTypeHandler,
+    CoGroupedEvalTypeHandler,
+    EvalTypeHandler,
+    GroupedEvalTypeHandler,
+)
 from pyspark.sql.pandas.serializers import (
     ArrowStreamCoGroupSerializer,
     ArrowStreamGroupSerializer,
@@ -25,14 +33,6 @@ from pyspark.sql.pandas.serializers import (
 from pyspark.sql.types import LongType
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
 from pyspark.util import PythonEvalType
-from pyspark.worker import (
-    _EVAL_TYPE_HANDLERS,
-    ArrowScalarUDFHandler,
-    BatchEvalTypeHandler,
-    CoGroupedEvalTypeHandler,
-    EvalTypeHandler,
-    GroupedEvalTypeHandler,
-)
 
 
 class _RunnerConf:
