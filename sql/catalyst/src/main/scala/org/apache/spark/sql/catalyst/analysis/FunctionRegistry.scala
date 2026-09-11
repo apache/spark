@@ -965,12 +965,14 @@ object FunctionRegistry {
    * function resolution. This is the shared list backing the star guard in
    * [[FunctionResolution.resolvesToStarDisallowedJsonConstructor]], which derives its set from here
    * so a newly routed constructor/path function is covered automatically. It is NOT a single source
-   * of truth for the whole feature: two sibling lists still need a matching manual entry when a
+   * of truth for the whole feature: three sibling lists still need a matching manual entry when a
    * constructor/path function is added or removed --
    *   1. the `expressionBuilder(...)` registrations in [[jsonExpressions]] above (each needs its
    *      concrete builder's `ClassTag` to read the `ExpressionInfo` annotation, so it can't be
-   *      generated from this set), and
-   *   2. the routed grammar branches in `AstBuilder`.
+   *      generated from this set),
+   *   2. the routed grammar branches in `AstBuilder`, and
+   *   3. the `ResolverGuard.isGenerallySupportedExpression` allowlist (keyed on the concrete
+   *      expression classes), so the single-pass resolver accepts the routed expression.
    */
   val routedJsonConstructorNames: Set[String] =
     Set("json_value", "json_query", "json_exists", "json_array")

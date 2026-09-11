@@ -70,9 +70,9 @@ trait FunctionResolverUtils {
 
     if (functionContainsDirectStarInArguments &&
         functionResolution.resolvesToStarDisallowedJsonConstructor(unresolvedFunction.nameParts)) {
-      // Only a bare `*` argument is rejected in a routed SQL/JSON function; a star nested in
-      // another expression (json_array(array(*))) is expanded there and count(*) is rewritten to
-      // count(1), so both stay valid arguments.
+      // A direct star argument -- a bare `*` or a qualified `t.*` -- is rejected in a routed
+      // SQL/JSON function; a star nested in another expression (json_array(array(*))) is expanded
+      // there and count(*) is rewritten to count(1), so both stay valid arguments.
       throw QueryCompilationErrors.invalidStarUsageError(
         s"expression `${unresolvedFunction.prettyName}`", extractStar(unresolvedFunction.arguments))
     } else if (!functionContainsDirectStarInArguments) {

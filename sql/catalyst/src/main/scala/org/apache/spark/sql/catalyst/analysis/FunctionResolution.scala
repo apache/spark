@@ -392,10 +392,16 @@ class FunctionResolution(
    * Returns whether an unqualified function name reaches `system.builtin` before any temp or
    * persistent function in the effective SQL PATH. When a temp or persistent function shadows the
    * builtin, special-syntax handling that only applies to Spark's builtins must not fire, since the
-   * name no longer refers to the builtin -- e.g. rejecting a bare `*` in a routed SQL/JSON function
-   * or the `count(tbl.*)` guard. Parser-built `count(*)` is normalized to `count(1)` in
-   * `AstBuilder` so it skips this probe, but a DataFrame `count("*")` keeps its star and does reach
-   * the probe during analyzer normalization.
+   * name no longer refers to the builtin -- e.g. rejecting a direct star (bare `*` or qualified
+   * `t.*`) in a routed SQL/JSON function or the `count(tbl.*)` guard. Parser-built `count(*)` is
+   * normalized to `count(1)` in `AstBuilder` so it skips this probe, but a DataFrame `count("*")`
+   * keeps its star and does reach the probe during analyzer normalization.
+   *
+   * Precondition: `functionName` must already be known to be a stock built-in name (as
+   * `functionNameResolvesToBuiltin` ensures by checking `FunctionRegistry.functionSet` first). This
+   * returns true as soon as the PATH reaches `system.builtin`, without verifying that
+   * `system.builtin` actually defines a function of this name, so calling it for a non-builtin name
+   * would wrongly report builtin ownership.
    */
   def unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(functionName: String): Boolean = {
     // Walk the PATH in order and stop at the first entry that owns the name. The default order puts
