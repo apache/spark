@@ -616,6 +616,25 @@ class CollationAggregationSuite
     }
   }
 
+  test("SPARK-48701: pandas_mode handles NULL nested in a collated struct field") {
+    withTable("t") {
+      sql("CREATE TABLE t (c STRUCT<f: STRING COLLATE UTF8_LCASE>) USING parquet")
+      sql(
+        """INSERT INTO t VALUES (named_struct('f', 'a')), (named_struct('f', 'a')),
+          |  (named_struct('f', 'b')), (named_struct('f', 'B')),
+          |  (named_struct('f', CAST(NULL AS STRING))),
+          |  (named_struct('f', CAST(NULL AS STRING))),
+          |  (named_struct('f', CAST(NULL AS STRING)))""".stripMargin)
+      // A NULL string nested inside the collated struct field must fold like any other value
+      // rather than throwing while computing its collation key. {a}=2, {b,B}=2, {NULL}=3, so
+      // the struct whose field is NULL is the sole mode.
+      val modes = pandasMode(spark.table("t").repartition(4), "c", ignoreNA = true)
+        .map(_.asInstanceOf[Row])
+      assert(modes.length == 1)
+      assert(modes.head.isNullAt(0))
+    }
+  }
+
   // `mode` (the public aggregate) is already collation-aware; these tests guard that
   // behavior, which currently has no coverage (the original tests were removed with
   // CollationSQLExpressionsSuite by SPARK-51067). Unlike pandas_mode, `mode` returns a

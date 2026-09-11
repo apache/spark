@@ -70,17 +70,22 @@ private[aggregate] trait ModeCollationAware { self: Expression =>
         childDataType: DataType): Option[AnyRef => _] = {
       childDataType match {
         case _ if UnsafeRowUtils.isBinaryStable(child.dataType) => None
-        // A null key is kept as its own group: PandasMode may store one when `ignoreNA`
-        // is false, and passing null to collationAwareTransform would throw. Mode never
-        // stores a null key, so its behavior is unchanged.
-        case _ => Some((key: AnyRef) =>
-          if (key == null) null else collationAwareTransform(key, childDataType))
+        // PandasMode may store a null key when `ignoreNA` is false, and a collated complex
+        // type may hold nested nulls; collationAwareTransform maps every null to null so it
+        // forms its own group. Mode never stores a null key, so its behavior is unchanged.
+        case _ => Some((key: AnyRef) => collationAwareTransform(key, childDataType))
       }
     }
     determineBufferingFunction(childDataType).map(groupAndReduceBuffer).getOrElse(buffer)
   }
 
   protected[sql] def collationAwareTransform(data: AnyRef, dataType: DataType): AnyRef = {
+    // A null has no collation key. Return it unchanged so that a null -- whether the top-level
+    // key or one nested inside a collated struct/array/map -- folds into its own group instead
+    // of throwing when we would otherwise compute a collation key for it.
+    if (data == null) {
+      return null
+    }
     dataType match {
       case _ if UnsafeRowUtils.isBinaryStable(dataType) => data
       case st: StructType =>
