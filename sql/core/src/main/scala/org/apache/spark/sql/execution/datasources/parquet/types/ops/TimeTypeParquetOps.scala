@@ -138,23 +138,45 @@ private[ops] object TimeTypeParquetOps {
 
   /**
    * Parquet filter-pushdown ops for TimeType, registered in [[ParquetTypeOps.filterOpsList]].
-   * Filter dispatch is keyed on the file's on-disk encoding (not the Spark precision), so this
-   * single instance targets only the MICROS encoding: TimeType is stored as INT64
-   * TIME(MICROS, isAdjustedToUTC=false) for precision 0..6 and TIME(NANOS) for precision 7..9,
-   * and only MICROS is pushed down here (filter values are java.time.LocalTime converted to
-   * micros-of-day Longs). A TIME(NANOS) column resolves to no framework ops and falls through
-   * to no pushdown. This matches the inline TimeType handling in ParquetFilters before filter
-   * pushdown was routed through the framework, so pushdown behavior is unchanged.
+   * Filter dispatch is keyed on the file's on-disk encoding (not the Spark precision), so these
+   * instances target only the MICROS encoding: TimeType is stored as INT64 TIME(MICROS) for
+   * precision 0..6 and TIME(NANOS) for precision 7..9, and only MICROS is pushed down here (filter
+   * values are java.time.LocalTime converted to micros-of-day Longs). A TIME(NANOS) column
+   * resolves to no framework ops and falls through to no pushdown.
+   *
+   * Both isAdjustedToUTC encodings are registered: `false` is what Spark writes, and `true`
+   * (SPARK-53368) is what writers such as Apache Arrow emit. Spark's TimeType is zone-less, so the
+   * raw micros-of-day is pushed identically for either flag; registering both here keeps
+   * ParquetFilters free of any TIME-specific case (it dispatches through the framework extractor).
    */
-  private[ops] val filterOps: ParquetFilterOps = new LongParquetFilterOps {
-    override val logicalTypeAnnotation: LogicalTypeAnnotation =
-      LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS)
+  private[ops] val filterOps: ParquetFilterOps = microsFilterOps(isAdjustedToUTC = false)
 
-    override def acceptsValue(value: Any): Boolean = value.isInstanceOf[LocalTime]
+  /** The isAdjustedToUTC=true counterpart of [[filterOps]] (SPARK-53368). See [[filterOps]]. */
+  private[ops] val filterOpsAdjustedToUtc: ParquetFilterOps =
+    microsFilterOps(isAdjustedToUTC = true)
 
-    override protected def toLong(value: Any): JLong =
-      value.asInstanceOf[LocalTime].getLong(MICRO_OF_DAY)
-  }
+  private def microsFilterOps(isAdjustedToUTC: Boolean): ParquetFilterOps =
+    new LongParquetFilterOps {
+      override val logicalTypeAnnotation: LogicalTypeAnnotation =
+        LogicalTypeAnnotation.timeType(isAdjustedToUTC, TimeUnit.MICROS)
+
+      override def acceptsValue(value: Any): Boolean =
+        value.isInstanceOf[LocalTime] && isMicrosResolution(value.asInstanceOf[LocalTime])
+
+      override protected def toLong(value: Any): JLong =
+        value.asInstanceOf[LocalTime].getLong(MICRO_OF_DAY)
+    }
+
+  /**
+   * Whether a LocalTime filter literal is exactly representable in the on-disk MICROS unit, i.e.
+   * it has no sub-microsecond (nanosecond) component. TimeType is held internally as nanos-of-day,
+   * so a filter literal can be finer-grained than a TIME(MICROS) column; [[filterOps]] would
+   * truncate it to micros and push a bound that skips matching rows (e.g. `t < 12:00:00.000000001`
+   * truncates to `t < 12:00:00`, wrongly pruning a row at exactly 12:00:00; `!=` has the symmetric
+   * false-negative). Sub-microsecond literals are therefore not pushed down; the read falls back to
+   * a full scan, which is always correct.
+   */
+  private def isMicrosResolution(value: LocalTime): Boolean = value.getNano % 1000 == 0
 
   /**
    * Whether the Parquet field is an INT64 TIME(NANOS) column. The isAdjustedToUTC flag is
