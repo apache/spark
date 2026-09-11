@@ -116,7 +116,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=ABCMeta):
             EVAL_TYPE_HANDLERS[eval_type] = cls
 
     def __init__(
-        self, udfs: "list[tuple[Any, ...]]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
+        self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"
     ) -> None:
         self._udfs = udfs
         self._runner_conf = runner_conf
@@ -128,7 +128,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=ABCMeta):
         """The serializer used for both the input and output streams."""
 
     @abstractmethod
-    def run(self, split_index: int, data: "Iterator[InputBatch]") -> "Iterator[OutputBatch]":
+    def run(self, split_index: int, data: Iterator[InputBatch]) -> Iterator[OutputBatch]:
         """Run the eval type end to end: consume the input stream and yield the
         output stream. Matches the ``func(split_index, data)`` shape ``read_udfs``
         returns. Implementations are generators, so the pipeline stays lazy and
@@ -163,7 +163,16 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler["CoGroupedBatch", OutputBatch], m
 
 
 # Import the per-family handler submodules so their concrete handlers register
-# in ``EVAL_TYPE_HANDLERS`` and are re-exported from the package. Kept at the
-# bottom to avoid a circular import: the submodules import the base classes
-# defined above.
-from pyspark.sql.eval_handlers._arrow import ArrowScalarUDFHandler as ArrowScalarUDFHandler
+# in ``EVAL_TYPE_HANDLERS`` and are re-exported from the package (see __all__).
+# Kept at the bottom to avoid a circular import: the submodules import the base
+# classes defined above.
+from pyspark.sql.eval_handlers._arrow import ArrowScalarUDFHandler
+
+__all__ = [
+    "EVAL_TYPE_HANDLERS",
+    "EvalTypeHandler",
+    "BatchEvalTypeHandler",
+    "GroupedEvalTypeHandler",
+    "CoGroupedEvalTypeHandler",
+    "ArrowScalarUDFHandler",
+]

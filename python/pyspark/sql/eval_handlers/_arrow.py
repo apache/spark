@@ -45,7 +45,7 @@ class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     eval_type = PythonEvalType.SQL_SCALAR_ARROW_UDF
 
     def __init__(
-        self, udfs: "list[tuple[Any, ...]]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
+        self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"
     ) -> None:
         super().__init__(udfs, runner_conf, eval_conf)
         self._col_names = ["_%d" % i for i in range(len(udfs))]
