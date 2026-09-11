@@ -43,11 +43,7 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem](
       "org.apache.spark.ml.classification.DecisionTreeClassificationModel.numLeave"),
     ProblemFilters.exclude[DirectMissingMethodProblem](
-      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.numLeave")
-  )
-
-  // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
-  lazy val v44excludes: Seq[Problem => Boolean] = v43excludes ++ Seq(
+      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.numLeave"),
     // [SPARK-59154] Remove unused prediction variance helper after inlining its implementation.
     ProblemFilters.exclude[DirectMissingMethodProblem](
       "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance")
