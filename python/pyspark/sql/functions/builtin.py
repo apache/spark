@@ -14339,7 +14339,8 @@ def time_bucket(
         A day-time or year-month interval defining the bucket size. Must be positive
         and foldable.
     ts : :class:`~pyspark.sql.Column` or column name
-        A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+        A TIMESTAMP, TIMESTAMP_NTZ, or nanosecond-precision
+        (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p in [7, 9]) value to bucket.
     origin : :class:`~pyspark.sql.Column`, optional
         Alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as
         ``ts`` and must be foldable.
