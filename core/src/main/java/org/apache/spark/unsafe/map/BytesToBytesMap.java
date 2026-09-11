@@ -323,11 +323,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
       try {
         synchronized (this) {
-          int nextIdx = dataPages.indexOf(currentPage) + 1;
-          if (destructive && currentPage != null) {
-            dataPages.remove(currentPage);
+          final int idx = dataPages.indexOf(currentPage);
+          final int nextIdx;
+          if (destructive && idx >= 0) {
+            dataPages.remove(idx);
             pageToFree = currentPage;
-            nextIdx--;
+            nextIdx = idx;
+          } else {
+            nextIdx = idx + 1;
           }
           if (dataPages.size() > nextIdx) {
             currentPage = dataPages.get(nextIdx);
