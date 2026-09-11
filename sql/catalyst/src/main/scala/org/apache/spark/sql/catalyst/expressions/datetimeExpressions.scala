@@ -2737,25 +2737,53 @@ sealed trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes {
   val funcName: String
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TimestampType, StringTypeWithCollation(supportsTrimCollation = true))
-  override def dataType: DataType = TimestampType
+    Seq(
+      TypeCollection(TimestampType, AnyTimestampNanoType),
+      StringTypeWithCollation(supportsTrimCollation = true))
+
+  // Preserves the exact input type: a nanosecond source (TIMESTAMP_LTZ(p)/TIMESTAMP_NTZ(p),
+  // p in [7, 9]) yields the same nanosecond type/family, while the microsecond TimestampType path
+  // is unchanged. Matching left.dataType (rather than AnyTimestampNanoType.defaultConcreteType) is
+  // deliberate: defaultConcreteType is TimestampNTZNanosType(9), which would both widen the
+  // precision to 9 and flip a TimestampLTZNanosType source to the NTZ family. Preserving an NTZ(p)
+  // source as NTZ(p) -- while a microsecond TimestampNTZType argument is still implicitly cast to
+  // LTZ TimestampType before it reaches here -- matches date_trunc (SPARK-57821), the established
+  // convention for these TimestampType-typed functions gaining nanosecond support.
+  override def dataType: DataType = left.dataType match {
+    case _: AnyTimestampNanoType => left.dataType
+    case _ => TimestampType
+  }
+
+  // A zone shift moves only the whole-microsecond instant -- zone offsets are whole seconds -- so
+  // a nanosecond value converts its epochMicros with the exact same code as a microsecond value
+  // and carries nanosWithinMicro through unchanged. NTZ vs LTZ needs no special casing here: the
+  // shift is a pure arithmetic offset on epochMicros, independent of the zone family.
+  private def isTsNanos: Boolean = left.dataType.isInstanceOf[AnyTimestampNanoType]
 
   override def nullSafeEval(time: Any, timezone: Any): Any = {
-    func(time.asInstanceOf[Long], timezone.asInstanceOf[UTF8String].toString)
+    val tz = timezone.asInstanceOf[UTF8String].toString
+    if (isTsNanos) {
+      val v = time.asInstanceOf[TimestampNanosVal]
+      TimestampNanosVal.fromParts(func(v.epochMicros, tz), v.nanosWithinMicro)
+    } else {
+      func(time.asInstanceOf[Long], tz)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val tnv = classOf[TimestampNanosVal].getName
+    val javaType = CodeGenerator.javaType(dataType)
+    val defaultValue = CodeGenerator.defaultValue(dataType)
     if (right.foldable) {
       val tz = right.eval().asInstanceOf[UTF8String]
       if (tz == null) {
         ev.copy(code = code"""
            |boolean ${ev.isNull} = true;
-           |long ${ev.value} = 0;
+           |$javaType ${ev.value} = $defaultValue;
          """.stripMargin)
       } else {
         val tzClass = classOf[ZoneId].getName
-        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
         val tzTerm = ctx.addMutableState(tzClass, "tz",
           v => s"""$v = $dtu.getZoneId("$escapedTz");""")
@@ -2765,15 +2793,27 @@ sealed trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes {
           case _: ToUTCTimestamp => (tzTerm, utcTerm)
         }
         val eval = left.genCode(ctx)
+        val convert = if (isTsNanos) {
+          s"$tnv.fromParts(" +
+            s"$dtu.convertTz(${eval.value}.epochMicros, $fromTz, $toTz), " +
+            s"${eval.value}.nanosWithinMicro)"
+        } else {
+          s"$dtu.convertTz(${eval.value}, $fromTz, $toTz)"
+        }
         ev.copy(code = code"""
            |${eval.code}
            |boolean ${ev.isNull} = ${eval.isNull};
-           |long ${ev.value} = 0;
+           |$javaType ${ev.value} = $defaultValue;
            |if (!${ev.isNull}) {
-           |  ${ev.value} = $dtu.convertTz(${eval.value}, $fromTz, $toTz);
+           |  ${ev.value} = $convert;
            |}
          """.stripMargin)
       }
+    } else if (isTsNanos) {
+      defineCodeGen(ctx, ev, (timestamp, format) =>
+        s"$tnv.fromParts(" +
+          s"$dtu.$funcName($timestamp.epochMicros, $format.toString()), " +
+          s"$timestamp.nanosWithinMicro)")
     } else {
       defineCodeGen(ctx, ev, (timestamp, format) => {
         s"""$dtu.$funcName($timestamp, $format.toString())"""
@@ -4894,20 +4934,64 @@ case class ConvertTimezone(
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
       StringTypeWithCollation(supportsTrimCollation = true),
-      TimestampNTZType)
-  override def dataType: DataType = TimestampNTZType
+      TypeCollection(TimestampNTZType, AnyTimestampNanoType))
 
-  override def nullSafeEval(srcTz: Any, tgtTz: Any, micros: Any): Any = {
-    DateTimeUtils.convertTimestampNtzToAnotherTz(
+  // sourceTs's requiredType, as actually enforced by this method: TypeCollection includes
+  // AnyTimestampNanoType (rather than an NTZ-only nanos type) only so that an LTZ(p) input is
+  // accepted here and rejected below with the friendly message, instead of being silently
+  // widened to TimestampNTZType by the generic datetime-to-datetime implicit cast rule. That
+  // makes AnyTimestampNanoType.simpleString (which lists timestamp_ltz(p)) leak into the
+  // generic super.checkInputDataTypes() mismatch message for this param when sourceTs is some
+  // unrelated type (e.g. an int), even though LTZ(p) is never actually accepted. Route both the
+  // generic mismatch and the explicit LTZ rejection through the same message so they agree.
+  private def wrongSourceTsType: DataTypeMismatch = DataTypeMismatch(
+    errorSubClass = "UNEXPECTED_INPUT_TYPE",
+    messageParameters = Map(
+      "paramIndex" -> ordinalNumber(2),
+      "requiredType" -> toSQLType("(timestamp_ntz or timestamp_ntz(p) with p in [7, 9])"),
+      "inputSql" -> toSQLExpr(sourceTs),
+      "inputType" -> toSQLType(sourceTs.dataType)))
+
+  override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
+    case TypeCheckSuccess if sourceTs.dataType.isInstanceOf[TimestampLTZNanosType] =>
+      wrongSourceTsType
+    case DataTypeMismatch("UNEXPECTED_INPUT_TYPE", params)
+        if params.get("paramIndex").contains(ordinalNumber(2)) =>
+      wrongSourceTsType
+    case result => result
+  }
+
+  private def isTsNanos: Boolean = sourceTs.dataType.isInstanceOf[AnyTimestampNanoType]
+
+  // Preserves the exact source precision (7/8/9); AnyTimestampNanoType.defaultConcreteType would
+  // always widen the result to precision 9.
+  override def dataType: DataType = if (isTsNanos) sourceTs.dataType else TimestampNTZType
+
+  override def nullSafeEval(srcTz: Any, tgtTz: Any, ts: Any): Any = {
+    val micros = if (isTsNanos) ts.asInstanceOf[TimestampNanosVal].epochMicros else ts
+    val convertedTs = DateTimeUtils.convertTimestampNtzToAnotherTz(
       srcTz.asInstanceOf[UTF8String].toString,
       tgtTz.asInstanceOf[UTF8String].toString,
       micros.asInstanceOf[Long])
+    if (isTsNanos) {
+      TimestampNanosVal.fromParts(
+        convertedTs, ts.asInstanceOf[TimestampNanosVal].nanosWithinMicro)
+    } else convertedTs
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (srcTz, tgtTz, micros) =>
-      s"""$dtu.convertTimestampNtzToAnotherTz($srcTz.toString(), $tgtTz.toString(), $micros)""")
+    if (isTsNanos) {
+      defineCodeGen(ctx, ev, (srcTz, tgtTz, ts) => {
+        val convertedMicros = s"$dtu.convertTimestampNtzToAnotherTz(" +
+          s"$srcTz.toString(), $tgtTz.toString(), $ts.epochMicros)"
+        s"org.apache.spark.unsafe.types.TimestampNanosVal.fromParts(" +
+          s"$convertedMicros, $ts.nanosWithinMicro)"
+      })
+    } else {
+      defineCodeGen(ctx, ev, (srcTz, tgtTz, micros) =>
+        s"""$dtu.convertTimestampNtzToAnotherTz($srcTz.toString(), $tgtTz.toString(), $micros)""")
+    }
   }
 
   override def prettyName: String = "convert_timezone"
@@ -5133,8 +5217,8 @@ case class TimeBucket(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
     TypeCollection(DayTimeIntervalType, YearMonthIntervalType),
-    AnyTimestampType,
-    AnyTimestampType)
+    TypeCollection(AnyTimestampType, AnyTimestampNanoType),
+    TypeCollection(AnyTimestampType, AnyTimestampNanoType))
 
   override def dataType: DataType = ts.dataType
 
@@ -5192,16 +5276,24 @@ case class TimeBucket(
   }
 
   override def nullSafeEval(bucketSizeVal: Any, tsVal: Any, originVal: Any): Any = {
-    first.dataType match {
-      case _: DayTimeIntervalType =>
+    (first.dataType, ts.dataType) match {
+      case (_: DayTimeIntervalType, _: AnyTimestampNanoType) =>
+        DateTimeUtils.timeBucketDTIntervalNanos(
+          bucketSizeVal.asInstanceOf[Long], tsVal.asInstanceOf[TimestampNanosVal],
+          originVal.asInstanceOf[TimestampNanosVal], zoneIdInEval)
+      case (_: DayTimeIntervalType, _) =>
         DateTimeUtils.timeBucketDTInterval(
           bucketSizeVal.asInstanceOf[Long], tsVal.asInstanceOf[Long],
           originVal.asInstanceOf[Long], zoneIdInEval)
-      case _: YearMonthIntervalType =>
+      case (_: YearMonthIntervalType, _: AnyTimestampNanoType) =>
+        DateTimeUtils.timeBucketYMIntervalNanos(
+          bucketSizeVal.asInstanceOf[Int], tsVal.asInstanceOf[TimestampNanosVal],
+          originVal.asInstanceOf[TimestampNanosVal], zoneIdInEval)
+      case (_: YearMonthIntervalType, _) =>
         DateTimeUtils.timeBucketYMInterval(
           bucketSizeVal.asInstanceOf[Int], tsVal.asInstanceOf[Long],
           originVal.asInstanceOf[Long], zoneIdInEval)
-      case other => throw SparkException.internalError(
+      case (other, _) => throw SparkException.internalError(
         s"Unexpected bucketSize type: $other")
     }
   }
@@ -5209,14 +5301,20 @@ case class TimeBucket(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
-    first.dataType match {
-      case _: DayTimeIntervalType =>
+    (first.dataType, ts.dataType) match {
+      case (_: DayTimeIntervalType, _: AnyTimestampNanoType) =>
+        defineCodeGen(ctx, ev, (bucketSizeCode, tsCode, originCode) =>
+          s"$dtu.timeBucketDTIntervalNanos($bucketSizeCode, $tsCode, $originCode, $zid)")
+      case (_: DayTimeIntervalType, _) =>
         defineCodeGen(ctx, ev, (bucketSizeCode, tsCode, originCode) =>
           s"$dtu.timeBucketDTInterval($bucketSizeCode, $tsCode, $originCode, $zid)")
-      case _: YearMonthIntervalType =>
+      case (_: YearMonthIntervalType, _: AnyTimestampNanoType) =>
+        defineCodeGen(ctx, ev, (bucketSizeCode, tsCode, originCode) =>
+          s"$dtu.timeBucketYMIntervalNanos($bucketSizeCode, $tsCode, $originCode, $zid)")
+      case (_: YearMonthIntervalType, _) =>
         defineCodeGen(ctx, ev, (bucketSizeCode, tsCode, originCode) =>
           s"$dtu.timeBucketYMInterval($bucketSizeCode, $tsCode, $originCode, $zid)")
-      case other => throw SparkException.internalError(
+      case (other, _) => throw SparkException.internalError(
         s"Unexpected bucketSize type: $other")
     }
   }
@@ -5240,8 +5338,8 @@ case class TimeBucket(
   arguments = """
     Arguments:
       * bucketSize - A day-time or year-month interval defining the bucket size. Must be positive and foldable.
-      * ts - A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
-      * origin - Optional TIMESTAMP or TIMESTAMP_NTZ alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as ts and must be foldable.
+      * ts - A TIMESTAMP, TIMESTAMP_NTZ, or nanosecond-precision (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p in [7, 9]) value to bucket.
+      * origin - Optional alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as ts and must be foldable.
   """,
   examples = """
     Examples:
@@ -5261,14 +5359,22 @@ object TimeBucketExpressionBuilder extends ExpressionBuilder {
     case _ => e
   }
 
-  // Default origin: 1970-01-01 00:00:00 in the session time zone for TIMESTAMP, and
-  // EPOCH (1970-01-01 00:00:00 UTC) for TIMESTAMP_NTZ.
+  // Default origin: 1970-01-01 00:00:00 in the session time zone for TIMESTAMP / TIMESTAMP_LTZ(p),
+  // and EPOCH (1970-01-01 00:00:00 UTC) for TIMESTAMP_NTZ / TIMESTAMP_NTZ(p).
   private def defaultOrigin(tsType: DataType): Literal = tsType match {
     case TimestampType =>
       val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
       Literal(DateTimeUtils.daysToMicros(0, zoneId), TimestampType)
+    case _: TimestampLTZNanosType =>
+      val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+      Literal(TimestampNanosVal.fromParts(DateTimeUtils.daysToMicros(0, zoneId), 0.toShort), tsType)
+    case _: AnyTimestampNanoType =>
+      Literal(TimestampNanosVal.ZERO, tsType)
     case _ => Literal(0L, tsType)
   }
+
+  private def acceptsTsType(dt: DataType): Boolean =
+    AnyTimestampType.acceptsType(dt) || dt.isInstanceOf[AnyTimestampNanoType]
 
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     expressions match {
@@ -5276,7 +5382,7 @@ object TimeBucketExpressionBuilder extends ExpressionBuilder {
         val bucketSize = retypeNull(rawBucketSize, DayTimeIntervalType())
         // Fall back to TimestampType for bad ts types; ExpectsInputTypes will report it.
         val tsType = rawTs.dataType match {
-          case t if AnyTimestampType.acceptsType(t) => t
+          case t if acceptsTsType(t) => t
           case _ => TimestampType
         }
         val ts = retypeNull(rawTs, tsType)
@@ -5284,7 +5390,7 @@ object TimeBucketExpressionBuilder extends ExpressionBuilder {
       case Seq(rawBucketSize, rawTs, rawOrigin) =>
         val bucketSize = retypeNull(rawBucketSize, DayTimeIntervalType())
         val tsType = (rawTs.dataType, rawOrigin.dataType) match {
-          case (NullType, t) if AnyTimestampType.acceptsType(t) => t
+          case (NullType, t) if acceptsTsType(t) => t
           case (NullType, _) => TimestampType
           case (t, _) => t
         }

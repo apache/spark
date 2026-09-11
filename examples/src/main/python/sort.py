@@ -21,7 +21,6 @@ from typing import Tuple
 from pyspark import RDD
 from pyspark.sql import SparkSession
 
-
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: sort <file>", file=sys.stderr)

@@ -23,10 +23,8 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F, Column as PySparkColumn
-from pyspark.sql.types import BooleanType, DateType, StringType
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
-from pyspark.pandas.base import column_op, IndexOpsMixin
+from pyspark.pandas.base import IndexOpsMixin, column_op
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     _as_categorical_type,
@@ -35,6 +33,9 @@ from pyspark.pandas.data_type_ops.base import (
     _sanitize_list_like,
 )
 from pyspark.pandas.typedef import pandas_on_spark_type
+from pyspark.sql import Column as PySparkColumn
+from pyspark.sql import functions as F
+from pyspark.sql.types import BooleanType, DateType, StringType
 
 
 class DateOps(DataTypeOps):

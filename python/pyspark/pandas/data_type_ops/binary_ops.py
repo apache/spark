@@ -19,8 +19,8 @@ from typing import Any, Union, cast
 
 from pandas.api.types import CategoricalDtype
 
-from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
+from pyspark.pandas.base import IndexOpsMixin, column_op
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     _as_categorical_type,

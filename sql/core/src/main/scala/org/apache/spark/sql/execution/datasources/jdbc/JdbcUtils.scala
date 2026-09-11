@@ -55,6 +55,11 @@ import org.apache.spark.util.ArrayImplicits._
  */
 object JdbcUtils extends Logging with SQLConfHelper {
 
+  // Marks an NTZ column to read (resp. write) as wall-clock. Distinct keys so a read marker on the
+  // resolved schema can't force wall-clock on a later write to a different dialect.
+  private[sql] val READ_TIMESTAMP_NTZ_WALL_CLOCK = "read_timestamp_ntz_wall_clock"
+  private[sql] val WRITE_TIMESTAMP_NTZ_WALL_CLOCK = "write_timestamp_ntz_wall_clock"
+
   /**
    * Returns true if the table already exists in the JDBC database.
    */
@@ -208,7 +213,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.BIT => BooleanType // @see JdbcDialect for quirks
     case java.sql.Types.BLOB => BinaryType
     case java.sql.Types.BOOLEAN => BooleanType
-    case java.sql.Types.CHAR if conf.charVarcharAsString => StringType
+    case java.sql.Types.CHAR
+        if conf.charVarcharAsString && !conf.charVarcharFirstClassTypes => StringType
     case java.sql.Types.CHAR => CharType(precision)
     case java.sql.Types.CLOB => StringType
     case java.sql.Types.DATE => DateType
@@ -256,7 +262,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       } else getTimestampType(isTimestampNTZ)
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
-    case java.sql.Types.VARCHAR if conf.charVarcharAsString => StringType
+    case java.sql.Types.VARCHAR
+        if conf.charVarcharAsString && !conf.charVarcharFirstClassTypes => StringType
     case java.sql.Types.VARCHAR => VarcharType(precision)
     case java.sql.Types.NULL => NullType
     case _ =>
@@ -464,13 +471,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case LongType => JDBCValueGetter.LongGetter
     case ShortType => JDBCValueGetter.ShortGetter
     case ByteType => JDBCValueGetter.ByteGetter
-    case StringType if metadata.contains("rowid") => JDBCValueGetter.RowIdGetter
-    case StringType => JDBCValueGetter.StringGetter
+    case _: StringType if metadata.contains("rowid") => JDBCValueGetter.RowIdGetter
+    case _: StringType => JDBCValueGetter.StringGetter
     case TimestampType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeGetter
     case TimestampType => JDBCValueGetter.TimestampGetter(dialect)
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeNTZGetter(dialect)
+    case TimestampNTZType if metadata.contains(READ_TIMESTAMP_NTZ_WALL_CLOCK) =>
+      JDBCValueGetter.TimestampNTZWallClockGetter
     case TimestampNTZType => JDBCValueGetter.TimestampNTZGetter(dialect)
     case t: TimestampNTZNanosType => JDBCValueGetter.TimestampNTZNanosGetter(t.precision)
     case t: TimestampLTZNanosType => JDBCValueGetter.TimestampLTZNanosGetter(dialect, t.precision)
@@ -493,7 +502,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
   private def makeSetter(
       conn: Connection,
       dialect: JdbcDialect,
-      dataType: DataType): JDBCValueSetter = dataType match {
+      dataType: DataType,
+      metadata: Metadata): JDBCValueSetter = dataType match {
     case IntegerType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setInt(pos + 1, row.getInt(pos))
@@ -522,7 +532,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setBoolean(pos + 1, row.getBoolean(pos))
 
-    case StringType =>
+    case _: StringType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setString(pos + 1, row.getString(pos))
 
@@ -539,6 +549,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
           stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
       }
 
+    case TimestampNTZType if metadata.contains(WRITE_TIMESTAMP_NTZ_WALL_CLOCK) =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setObject(pos + 1, row.getAs[java.time.LocalDateTime](pos))
     case TimestampNTZType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setTimestamp(pos + 1,
@@ -710,7 +723,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         conn.setTransactionIsolation(finalIsolationLevel)
       }
       val stmt = conn.prepareStatement(insertStmt)
-      val setters = rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType))
+      val setters = rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType, f.metadata))
       val nullTypes = rddSchema.fields.map(f => getJdbcType(f.dataType, dialect).jdbcNullType)
       val numFields = rddSchema.fields.length
 
@@ -907,7 +920,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val url = options.url
     val table = options.table
     val dialect = JdbcDialects.get(url)
-    val rddSchema = df.schema
+    val rddSchema = StructType(df.schema.map { field =>
+      val builder = new MetadataBuilder().withMetadata(field.metadata)
+      dialect.updateExtraColumnMetaForWrite(field.dataType, builder)
+      field.copy(metadata = builder.build())
+    })
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
 

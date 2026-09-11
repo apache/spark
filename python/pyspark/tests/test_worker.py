@@ -31,7 +31,7 @@ except ImportError:
 from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkConf, SparkContext
-from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest, eventually
+from pyspark.testing.utils import PySparkTestCase, QuietTest, ReusedPySparkTestCase, eventually
 
 
 class WorkerTests(ReusedPySparkTestCase):

@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.{PythonArrowInput, PythonArrowOutput, PythonUDFRunner}
+import org.apache.spark.sql.execution.python.{PythonArrowInput, PythonArrowOutput, PythonUDFRunner, PythonWorkerEnvironment}
 import org.apache.spark.sql.execution.python.streaming.ApplyInPandasWithStatePythonRunner.{COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER, InType, OutType, OutTypeForState, STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER}
 import org.apache.spark.sql.execution.python.streaming.ApplyInPandasWithStateWriter.STATE_METADATA_SCHEMA
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl
@@ -71,6 +71,13 @@ class ApplyInPandasWithStatePythonRunner(
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
   ArrowUtils.failDuplicatedFieldNames(inputSchema)
+
+  // Installed at worker launch. This runner is constructed per task, so each launch reads the
+  // configuration that task carries. A running streaming query carries a snapshot:
+  // `StreamExecution` runs its batches on `sparkSession.cloneSession()`, whose conf is copied at
+  // query start, so a change made while the query runs is not seen until it restarts.
+  override val envVars: java.util.Map[String, String] =
+    PythonWorkerEnvironment.mergeValidated(funcs.head._1.funcs.head.envVars, SQLConf.get)
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(

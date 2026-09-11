@@ -19,13 +19,13 @@
 Infrastructure of options for pandas-on-Spark.
 """
 
-from contextlib import contextmanager
 import json
-from typing import Any, Callable, Dict, Iterator, List, Tuple, Union, Optional
+from contextlib import contextmanager
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 from pyspark._globals import _NoValue, _NoValueType
-from pyspark.sql.session import SparkSession
 from pyspark.pandas.utils import default_session
+from pyspark.sql.session import SparkSession
 
 __all__ = ["get_option", "set_option", "reset_option", "options", "option_context"]
 
@@ -554,11 +554,12 @@ options = DictWrapper(_options_dict)
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.config
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

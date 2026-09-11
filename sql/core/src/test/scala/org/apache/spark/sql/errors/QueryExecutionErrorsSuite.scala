@@ -48,7 +48,9 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProv
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.execution.streaming.checkpointing.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.{
+  FileSystemBasedCheckpointFileManager,
+  HDFSMetadataLog}
 import org.apache.spark.sql.execution.vectorized.{
   ColumnVectorUtils,
   ConstantColumnVector,
@@ -225,6 +227,31 @@ class QueryExecutionErrorsSuite
       "ECB", "None")
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'CBC', 'NoPadding')"),
       "CBC", "NoPadding")
+  }
+
+  test("SPARK-58945: invalid file extension reports invalidValue") {
+    withTempDir { dir =>
+      val path = new File(dir, "data").getCanonicalPath
+      // Use a value that is unambiguously invalid so this test focuses on the
+      // rendered error message rather than the full extension validation matrix.
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          spark.range(1).write.option("extension", "12").csv(path)
+        },
+        condition = "INVALID_PARAMETER_VALUE.EXTENSION",
+        parameters = Map(
+          "functionName" -> "`csv`",
+          "parameter" -> "`extension`",
+          "invalidValue" -> "`12`"))
+    }
+  }
+
+  test("SPARK-58945: invalid writer commit message reports detail") {
+    checkError(
+      exception = QueryExecutionErrors.invalidWriterCommitMessageError("zero")
+        .asInstanceOf[SparkRuntimeException],
+      condition = "INVALID_WRITER_COMMIT_MESSAGE",
+      parameters = Map("detail" -> "zero"))
   }
 
   test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
@@ -994,6 +1021,22 @@ class QueryExecutionErrorsSuite
           parameters = Map("sourcePath" -> s"$expectedPath.+")
         )
       }
+    }
+  }
+
+  test("SPARK-43940: BATCH_METADATA_NOT_FOUND") {
+    withTempDir { dir =>
+      val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
+      val e = intercept[SparkFileNotFoundException] {
+        metadataLog.applyFnToBatchByStream(0L) { _ => () }
+      }
+
+      val batchMetadataFile = new Path(dir.getAbsolutePath, "0").toString
+      checkError(
+        exception = e,
+        condition = "BATCH_METADATA_NOT_FOUND",
+        parameters = Map("batchMetadataFile" -> batchMetadataFile),
+        sqlState = "42K03")
     }
   }
 

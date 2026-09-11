@@ -177,7 +177,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
 
-              (catalog.loadTable(ident), Some(catalog), Some(ident))
+              val table = CatalogV2Util.loadTableForV2Write(
+                catalog, ident, getWritePrivileges, dsOptions)
+              (table, Some(catalog), Some(ident))
             case _: TableProvider =>
               val t = getTable
               if (t.supports(BATCH_WRITE)) {
@@ -315,7 +317,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
    *    +---+---+
    * }}}
    *
-   * Because it inserts data to an existing table, format or options will be ignored.
+   * Because it inserts data to an existing table, the format is ignored. For data source V2
+   * tables, catalog-declared table-state options are forwarded to the table load and all options
+   * are forwarded to the write; for V1 tables the options are ignored.
    *
    * @since 1.4.0
    */
@@ -354,13 +358,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
   }
 
   private def insertIntoCommand(catalog: CatalogPlugin, ident: Identifier): LogicalPlan = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-    val table = catalog.asTableCatalog.loadTable(ident, getWritePrivileges.toSet.asJava) match {
+    val tableOptions = new CaseInsensitiveStringMap(extraOptions.toMap.asJava)
+    val table = CatalogV2Util.loadTableForWrite(
+      catalog, ident, getWritePrivileges, tableOptions) match {
       case _: V1Table =>
         return insertIntoCommand(TableIdentifier(ident.name(), ident.namespace().headOption))
       case t =>
-        DataSourceV2Relation.create(t, Some(catalog), Some(ident))
+        CatalogV2Util.rejectTimeTravelOptionsForWrite(catalog, ident, tableOptions)
+        DataSourceV2Relation.create(t, Some(catalog), Some(ident), tableOptions)
     }
 
     curmode match {
@@ -486,18 +491,27 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
       v2ProviderOpt: Option[TableProvider],
       ident: Identifier,
       nameParts: Seq[String]): LogicalPlan = {
-    val tableOpt = try Option(catalog.loadTable(ident, getWritePrivileges.toSet.asJava)) catch {
+    val tableOptions = new CaseInsensitiveStringMap(extraOptions.toMap.asJava)
+    val tableOpt = try {
+      Option(CatalogV2Util.loadTableForWrite(catalog, ident, getWritePrivileges, tableOptions))
+    } catch {
       case _: NoSuchTableException => None
     }
 
-    (curmode, tableOpt) match {
-      case (_, Some(_: V1Table)) =>
+    tableOpt match {
+      case Some(_: V1Table) =>
         assertSchemaEvolutionNotEnabledForV1Write()
-        saveAsV1TableCommand(TableIdentifier(ident.name(), ident.namespace().headOption))
+        return saveAsV1TableCommand(TableIdentifier(ident.name(), ident.namespace().headOption))
+      case _ => ()
+    }
 
+    CatalogV2Util.rejectTimeTravelOptionsForWrite(catalog, ident, tableOptions)
+
+    (curmode, tableOpt) match {
       case (SaveMode.Append, Some(table)) =>
         checkPartitioningMatchesV2Table(table)
-        val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+        val v2Relation =
+          DataSourceV2Relation.create(table, Some(catalog), Some(ident), tableOptions)
         AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap, _withSchemaEvolution)
 
       case (SaveMode.Overwrite, _) =>

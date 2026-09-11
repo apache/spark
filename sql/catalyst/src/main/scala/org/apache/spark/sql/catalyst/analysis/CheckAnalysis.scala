@@ -264,6 +264,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     )
   }
 
+  private object ResolvedHigherOrderFunctionWithExternalUDF {
+    def unapply(expression: Expression): Option[(HigherOrderFunction, Expression)] = {
+      expression match {
+        case hof: HigherOrderFunction if hof.resolved =>
+          hof.functions.iterator.flatMap(_.collectFirst {
+            case udf: ExternalUserDefinedFunction => udf
+          }).take(1).toSeq.headOption.map(udf => (hof, udf))
+        case _ => None
+      }
+    }
+  }
+
   private def containsUnsupportedLCA(e: Expression, operator: LogicalPlan): Boolean = {
     e.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) && operator.expressions.exists {
       case a: Alias
@@ -307,7 +319,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
     // in the original `WithCTE` node, as we need to perform analysis check for them as well.
-    val inlineCTE = InlineCTE(alwaysInline = true, keepDanglingRelations = true)
+    val inlineCTE = InlineCTE(alwaysInline = true, keepDanglingRelations = true, isAnalysis = true)
     val inlinedPlan: LogicalPlan = try {
       inlineCTE(plan)
     } catch {
@@ -316,6 +328,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     }
     preemptedError.clear()
     try {
+      if (SQLConf.get.restrictedModeEnabled) {
+        checkRestrictedMode(inlinedPlan)
+      }
       checkAnalysis0(inlinedPlan)
       preemptedError.getErrorOpt().foreach(throw _) // throw preempted error if any
     } catch {
@@ -325,6 +340,50 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       preemptedError.clear()
     }
     plan.setAnalyzed()
+  }
+
+  /**
+   * Rejects SQL features that load or execute externally provided code or scripts when the
+   * restricted execution mode is enabled. Unlike `checkAnalysis0`, which skips already-analyzed
+   * sub-plans (`case p if p.analyzed`), this walks the whole plan -- including analyzed sub-plans
+   * reused from a temporary view or a cached Dataset, and the bodies of analysis-only commands
+   * (CTAS, `CACHE TABLE ... AS SELECT`, `CREATE`/`ALTER VIEW`) which move into `innerChildren`
+   * once analyzed -- and descends into subquery plans, so these features cannot slip through.
+   */
+  private def checkRestrictedMode(plan: LogicalPlan): Unit = {
+    def checkExpression(expr: Expression): Unit = expr.foreach {
+      // A try_reflect call stays a RuntimeReplaceable wrapper until optimization, so match it
+      // before its CallMethodViaReflection replacement to report the right function name.
+      case t: TryReflect =>
+        throw QueryCompilationErrors.restrictedModeFeatureError(
+          s"The ${toSQLId(t.prettyName)} function")
+      case c: CallMethodViaReflection =>
+        throw QueryCompilationErrors.restrictedModeFeatureError(
+          s"The ${toSQLId(c.prettyName)} function")
+      case s: SubqueryExpression =>
+        checkPlan(s.plan)
+      case _ =>
+    }
+    def checkPlan(p: LogicalPlan): Unit = p.foreach {
+      case _: ScriptTransformation =>
+        throw QueryCompilationErrors.restrictedModeFeatureError(
+          "The TRANSFORM ... USING clause")
+      case node =>
+        node.expressions.foreach(checkExpression)
+        // `checkExpression` already descends into the node's subquery plans (via
+        // `SubqueryExpression`), which are also part of `innerChildren`. Recurse only into the
+        // inner plans that are not those subqueries -- the analyzed body of an analysis-only
+        // command (CTAS, `CACHE TABLE ... AS SELECT`, `CREATE`/`ALTER VIEW`) that moves from
+        // `children` into `innerChildren` once analyzed, which `foreach` (following `children`)
+        // would not otherwise reach. This keeps each subquery traversed exactly once, so
+        // validation stays linear instead of doubling at every nesting level.
+        val subqueryPlans = node.subqueries
+        node.innerChildren.foreach {
+          case inner: LogicalPlan if !subqueryPlans.exists(_ eq inner) => checkPlan(inner)
+          case _ =>
+        }
+    }
+    checkPlan(plan)
   }
 
   def checkAnalysis0(plan: LogicalPlan): Unit = {
@@ -363,11 +422,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     plan.foreachUp {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
-      case leaf: LeafNode if !SQLConf.get.preserveCharVarcharTypeInfo &&
-        leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
+      case leaf: LeafNode
+          if !SQLConf.get.charVarcharFirstClassTypes &&
+            leaf.output.exists(attr => CharVarcharUtils.hasCharVarchar(attr.dataType)) =>
         throw SparkException.internalError(
           s"Logical plan should not have output of char/varchar type when " +
-            s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is false: " + leaf)
+            s"${SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key} and " +
+            s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} are both false: " + leaf)
 
       case u: UnresolvedNamespace =>
         u.schemaNotFound(u.multipartIdentifier)
@@ -525,6 +586,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             hof.failAnalysis(
               errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
               messageParameters = Map("funcName" -> toSQLExpr(u)))
+
+          case ResolvedHigherOrderFunctionWithExternalUDF(hof, udf) =>
+            hof.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_EXTERNAL_UDF",
+              messageParameters = Map("funcName" -> toSQLExpr(udf)))
 
           // If an attribute can't be resolved as a map key of string type, either the key should be
           // surrounded with single quotes, or there is a typo in the attribute name.

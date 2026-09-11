@@ -18,9 +18,12 @@
 import os
 import unittest
 
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.connectutils import (
+    ReusedConnectTestCase,
+    connect_requirement_message,
+    should_test_connect,
+)
 from pyspark.testing.utils import have_sklearn, sklearn_requirement_message
-from pyspark.testing.connectutils import ReusedConnectTestCase
 
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_feature import FeatureTestsMixin

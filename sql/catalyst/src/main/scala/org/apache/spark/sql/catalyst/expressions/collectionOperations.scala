@@ -23,7 +23,6 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
-import org.apache.spark.SparkException.internalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -1430,6 +1429,8 @@ case class Reverse(child: Expression)
       BinaryType,
       ArrayType))
 
+  // Reversing a string transforms its content, so ImplicitTypeCasts promotes CHAR/VARCHAR to
+  // STRING. Array and binary inputs are unaffected.
   override def dataType: DataType = child.dataType
 
   private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
@@ -2227,6 +2228,91 @@ case class Slice(x: Expression, start: Expression, length: Expression)
 }
 
 /**
+ * Removes the last `n` elements from the given array, per the ANSI SQL `TRIM_ARRAY` function.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, n) - Returns the given array with the last `n` elements removed. Raises an error
+      if `n` is negative or greater than the number of elements in the array.""",
+  arguments = """
+    Arguments:
+      * array - the array to trim.
+      * n - the number of elements to remove from the end of the array. Must be between 0 and the
+          number of elements in the array (inclusive).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3, 4, 5), 2);
+       [1,2,3]
+      > SELECT _FUNC_(array('a', 'b', 'c'), 0);
+       ["a","b","c"]
+      > SELECT _FUNC_(array(1, 2, 3), 3);
+       []
+  """,
+  group = "array_funcs",
+  since = "4.4.0")
+case class TrimArray(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+
+  override def prettyName: String = "trim_array"
+
+  override def dataType: DataType = left.dataType
+
+  private def resultArrayElementNullable = dataType.asInstanceOf[ArrayType].containsNull
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType)
+
+  @transient private lazy val elementType: DataType =
+    left.dataType.asInstanceOf[ArrayType].elementType
+
+  override def nullSafeEval(arrayVal: Any, nVal: Any): Any = {
+    val arr = arrayVal.asInstanceOf[ArrayData]
+    val n = nVal.asInstanceOf[Int]
+    val numElements = arr.numElements()
+    if (n < 0 || n > numElements) {
+      throw QueryExecutionErrors.invalidElementCountForTrimArrayError(prettyName, numElements, n)
+    }
+    val retainCount = numElements - n
+    val values = new Array[Any](retainCount)
+    for (i <- 0 until retainCount) {
+      if (!arr.isNullAt(i)) values(i) = arr.get(i, elementType)
+    }
+    new GenericArrayData(values)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (array, n) => {
+      val numElements = ctx.freshName("numElements")
+      val resLength = ctx.freshName("resLength")
+      val values = ctx.freshName("values")
+      val i = ctx.freshName("i")
+      val allocation = CodeGenerator.createArrayData(
+        values, elementType, resLength, s" $prettyName failed.")
+      val assignment = CodeGenerator.createArrayAssignment(
+        values, elementType, array, i, i, resultArrayElementNullable)
+      s"""
+         |${CodeGenerator.JAVA_INT} $numElements = $array.numElements();
+         |if ($n < 0 || $n > $numElements) {
+         |  throw QueryExecutionErrors.invalidElementCountForTrimArrayError(
+         |    "$prettyName", $numElements, $n);
+         |}
+         |${CodeGenerator.JAVA_INT} $resLength = $numElements - $n;
+         |$allocation
+         |for (int $i = 0; $i < $resLength; $i ++) {
+         |  $assignment
+         |}
+         |${ev.value} = $values;
+       """.stripMargin
+    })
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): TrimArray =
+    copy(left = newLeft, right = newRight)
+}
+
+/**
  * Creates a String containing all the elements of the input array separated by the delimiter.
  */
 @ExpressionDescription(
@@ -2424,7 +2510,9 @@ case class ArrayJoin(
     }
   }
 
-  override def dataType: DataType = array.dataType.asInstanceOf[ArrayType].elementType
+  // After ImplicitTypeCasts, array elements that were CHAR/VARCHAR are STRING.
+  override def dataType: DataType =
+    array.dataType.asInstanceOf[ArrayType].elementType
 
   override def prettyName: String = "array_join"
 
@@ -3338,7 +3426,7 @@ case class Flatten(child: Expression) extends UnaryExpression
         throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
           prettyName, numberOfElements)
       }
-      val flattenedData = new Array(numberOfElements.toInt)
+      val flattenedData = new Array[Any](numberOfElements.toInt)
       var position = 0
       for (ad <- arrayData) {
         val arr = ad.toObjectArray(elementType)
@@ -3481,8 +3569,8 @@ case class Sequence(
 
   override def nullable: Boolean = children.exists(_.nullable)
 
-  // If step is defined, then an error will be thrown if the start and stop do not satisfy the step.
-  override lazy val throwable: Boolean = stepOpt.isDefined
+  // Can throw if step is defined and start and stop don't match or any of the children can throw.
+  override lazy val throwable: Boolean = stepOpt.isDefined || children.exists(_.throwable)
 
   override def dataType: ArrayType = ArrayType(start.dataType, containsNull = false)
 
@@ -3539,7 +3627,7 @@ case class Sequence(
       val physicalDataType = PhysicalDataType(iType)
       type T = physicalDataType.InternalType
       val integral = PhysicalIntegralType.integral(iType)
-      val ct = ClassTag[T](physicalDataType.tag.mirror.runtimeClass(physicalDataType.tag.tpe))
+      val ct = physicalDataType.tag
       new IntegralSequenceImpl[T](iType)(ct, integral.asInstanceOf[Integral[T]])
 
     case TimestampType | TimestampNTZType =>
@@ -3640,14 +3728,20 @@ object Sequence {
       }
       len.toInt
     } catch {
-      // We handle overflows in the previous try block by raising an appropriate exception.
+      // An overflow in the previous try block does not by itself mean the sequence is too long:
+      // `stop - start` can exceed the `Long` range while a large `step` still yields only a few
+      // elements. Recompute the length exactly and reject it only if it really cannot be
+      // allocated, otherwise return it.
       case _: ArithmeticException =>
         val safeLen =
           BigInt(1) + (BigInt(stop) - BigInt(start)) / BigInt(step)
         if (safeLen > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
           throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(prettyName, safeLen)
         }
-        throw internalError("Unreachable code reached.")
+        // The check above bounds `safeLen` by `MAX_ROUNDED_ARRAY_LENGTH`, and the caller has
+        // already rejected boundaries whose step points the wrong way, so `safeLen` is positive
+        // and `toInt` is exact.
+        safeLen.toInt
       case e: Exception => throw e
     }
   }
@@ -4141,8 +4235,14 @@ case class ArrayRepeat(left: Expression, right: Expression)
 
   private def genCodeForNumberOfElements(ctx: CodegenContext, count: String): (String, String) = {
     val numElements = ctx.freshName("numElements")
+    // The upper bound is checked here rather than left to the array allocation so that this path
+    // reports the same error as `eval`. Without it the allocation fails with an internal error.
     val numElementsCode =
       s"""
+         |if ($count > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+         |  throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(
+         |    "$prettyName", $count);
+         |}
          |int $numElements = 0;
          |if ($count > 0) {
          |  $numElements = $count;
@@ -5542,7 +5642,7 @@ case class ArrayInsert(
            |
            |  $resLength = java.lang.Math.max($arr.numElements() + 1, $itemInsertionIndex + 1);
            |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-           |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(
+           |    throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
            |      "$prettyName", $resLength);
            |  }
            |

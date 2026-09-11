@@ -3034,3 +3034,67 @@ DROP TABLE time_narrow_tbl
 struct<>
 -- !query output
 
+
+
+-- !query
+select width_bucket(TIME'12:00:00', TIME'09:00:00', TIME'17:00:00', 8)
+-- !query schema
+struct<width_bucket(TIME '12:00:00', TIME '09:00:00', TIME '17:00:00', 8):bigint>
+-- !query output
+4
+
+
+-- !query
+select width_bucket(TIME'09:00:00', TIME'09:00:00', TIME'17:00:00', 8)
+-- !query schema
+struct<width_bucket(TIME '09:00:00', TIME '09:00:00', TIME '17:00:00', 8):bigint>
+-- !query output
+1
+
+
+-- !query
+select width_bucket(TIME'17:00:00', TIME'09:00:00', TIME'17:00:00', 8)
+-- !query schema
+struct<width_bucket(TIME '17:00:00', TIME '09:00:00', TIME '17:00:00', 8):bigint>
+-- !query output
+9
+
+
+-- !query
+select width_bucket(TIME'08:00:00', TIME'09:00:00', TIME'17:00:00', 8)
+-- !query schema
+struct<width_bucket(TIME '08:00:00', TIME '09:00:00', TIME '17:00:00', 8):bigint>
+-- !query output
+0
+
+
+-- !query
+select width_bucket(TIME'12:00:00', TIME'17:00:00', TIME'09:00:00', 8)
+-- !query schema
+struct<width_bucket(TIME '12:00:00', TIME '17:00:00', TIME '09:00:00', 8):bigint>
+-- !query output
+6
+
+
+-- !query
+select width_bucket(TIME'12:00:00', CAST(TIME'09:00:00' AS TIME(3)), CAST(TIME'17:00:00' AS TIME(9)), 8)
+-- !query schema
+struct<width_bucket(TIME '12:00:00', CAST(TIME '09:00:00' AS TIME(3)), CAST(TIME '17:00:00' AS TIME(9)), 8):bigint>
+-- !query output
+4
+
+
+-- !query
+select width_bucket(CAST(null AS TIME), TIME'09:00:00', TIME'17:00:00', 8)
+-- !query schema
+struct<width_bucket(CAST(NULL AS TIME(6)), TIME '09:00:00', TIME '17:00:00', 8):bigint>
+-- !query output
+NULL
+
+
+-- !query
+select width_bucket(TIME'12:00:00', TIME'09:00:00', TIME'09:00:00', 8)
+-- !query schema
+struct<width_bucket(TIME '12:00:00', TIME '09:00:00', TIME '09:00:00', 8):bigint>
+-- !query output
+NULL

@@ -14,12 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import re
 import functools
 import inspect
 import itertools
 import os
+import re
 import threading
+from types import FrameType
 from typing import (
     Any,
     Callable,
@@ -27,14 +28,13 @@ from typing import (
     Iterator,
     List,
     Match,
-    TypeVar,
-    Type,
     Optional,
+    Type,
+    TypeVar,
     Union,
-    overload,
     cast,
+    overload,
 )
-from types import FrameType
 
 import pyspark
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
@@ -264,10 +264,9 @@ def _capture_call_site(depth: int) -> str:
 
     # We try import here since IPython is not a required dependency
     try:
-        import IPython
-
         # ipykernel is required for IPython
         import ipykernel
+        import IPython
 
         ipython = IPython.get_ipython()
         # Filtering out IPython related frames

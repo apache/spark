@@ -1345,7 +1345,7 @@ package object config {
         "like YARN and event logs.")
       .version("2.1.2")
       .regexConf
-      .createWithDefault("(?i)secret|password|token|access[.]?key".r)
+      .createWithDefault("(?i)secret|password|token|access[.]?key|credential".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -1935,6 +1935,18 @@ package object config {
       .longConf
       .createWithDefault(50)
 
+  private[spark] val STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT_MS =
+    ConfigBuilder("spark.shuffle.streaming.writerConnectionTimeout")
+      .doc("Maximum time a streaming shuffle writer waits for each reader to connect. " +
+        "Set to -1 to wait indefinitely.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(
+        timeoutMs => timeoutMs == -1 || timeoutMs > 0,
+        "The reader connection timeout must be positive or -1 to wait indefinitely.")
+      .createWithDefaultString("1h")
+
   private[spark] val STREAMING_SHUFFLE_WRITER_MAX_MEMORY =
     ConfigBuilder("spark.shuffle.streaming.writerMaxMemory")
       .doc("Best-effort memory limit in bytes for in-flight data buffers in a streaming " +
@@ -2150,13 +2162,27 @@ package object config {
 
   private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
 
+  // A map from the short class names of built-in plugins to their fully-qualified class names.
+  private val BUILTIN_PLUGINS: Map[String, String] = Seq(
+    "org.apache.spark.deploy.DriverTimeoutPlugin",
+    "org.apache.spark.deploy.RedirectConsolePlugin",
+    "org.apache.spark.profiler.ProfilerPlugin",
+    "org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin",
+    "org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin",
+    "org.apache.spark.scheduler.cluster.k8s.ExecutorRollPlugin",
+    "org.apache.spark.sql.connect.SparkConnectPlugin"
+  ).map(name => name.substring(name.lastIndexOf('.') + 1) -> name).toMap
+
   private[spark] val PLUGINS =
     ConfigBuilder("spark.plugins")
       .withPrepended(DEFAULT_PLUGINS_LIST, separator = ",")
       .doc("Comma-separated list of class names implementing " +
-        "org.apache.spark.api.plugin.SparkPlugin to load into the application.")
+        "org.apache.spark.api.plugin.SparkPlugin to load into the application. " +
+        "Built-in plugins can also be specified by their short class names, " +
+        "e.g. `DriverTimeoutPlugin`.")
       .version("3.0.0")
       .stringConf
+      .transform(name => BUILTIN_PLUGINS.getOrElse(name, name))
       .toSequence
       .createWithDefault(Nil)
 

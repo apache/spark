@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.timestamp_seconds
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.tags.SlowSQLTest
 
@@ -162,6 +163,50 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
       CheckNewAnswer("d" -> 25),
       assertNumStateRows(total = 2, updated = 1)
     )
+  }
+
+  test("incremental cleanup factor does not change dropDuplicatesWithinWatermark output") {
+    // dropDuplicatesWithinWatermark deliberately does not participate in incremental cleanup
+    // (its dedup key excludes the event time, so mid-batch eviction of a shared key could change
+    // the output). Setting a non-zero incrementalCleanupFactor must therefore leave the output and
+    // per-batch state counts identical to the default -- this is the same sequence as
+    // "deduplicate with subset of columns which event time column is not in subset".
+    withSQLConf(SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> "10") {
+      val inputData = MemoryStream[(String, Int)]
+      val result = inputData.toDS()
+        .withColumn("eventTime", timestamp_seconds($"_2"))
+        .withWatermark("eventTime", "2 seconds")
+        .dropDuplicatesWithinWatermark("_1")
+        .select($"_1", $"eventTime".cast("long").as[Long])
+
+      testStream(result, Append)(
+        AddData(inputData, "a" -> 17),
+        CheckNewAnswer("a" -> 17),
+        assertNumStateRows(total = 1, updated = 1),
+
+        AddData(inputData, "a" -> 16),
+        CheckNewAnswer(),
+        assertNumStateRows(total = 1, updated = 0),
+
+        AddData(inputData, "a" -> 13),
+        CheckNewAnswer(),
+        assertNumStateRows(total = 1, updated = 0, droppedByWatermark = 1),
+
+        AddData(inputData, "b" -> 22, "c" -> 21),
+        CheckNewAnswer("b" -> 22, "c" -> 21),
+        assertNumStateRows(total = 2, updated = 2),
+
+        // "a" -> 21 is emitted as new because the earlier "a" state expired and was evicted at the
+        // previous batch end -- unchanged from the factor-0 path.
+        AddData(inputData, "a" -> 21),
+        CheckNewAnswer("a" -> 21),
+        assertNumStateRows(total = 3, updated = 1),
+
+        AddData(inputData, "d" -> 25),
+        CheckNewAnswer("d" -> 25),
+        assertNumStateRows(total = 2, updated = 1)
+      )
+    }
   }
 
   test("SPARK-39650: duplicate with specific keys should allow input to change schema") {

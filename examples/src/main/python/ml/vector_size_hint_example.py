@@ -16,8 +16,9 @@
 #
 
 # $example on$
+from pyspark.ml.feature import VectorAssembler, VectorSizeHint
 from pyspark.ml.linalg import Vectors
-from pyspark.ml.feature import (VectorSizeHint, VectorAssembler)
+
 # $example off$
 from pyspark.sql import SparkSession
 
