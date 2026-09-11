@@ -33,6 +33,20 @@ import org.apache.spark.util.Utils
 class OffsetSeqLogSuite extends SharedSparkSession {
   import testImplicits._
 
+  test("streaming EXCEPT compatibility defaults to legacy behavior for old checkpoints") {
+    val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
+    val metadata = offsetSeq.metadataOpt.get
+    assert(!metadata.conf.contains(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key))
+    assert(OffsetSeqMetadata.readValue(
+      metadata, SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME).toBoolean)
+  }
+
+  test("streaming EXCEPT compatibility is disabled for new checkpoints") {
+    val metadata = OffsetSeqMetadata(
+      batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
+    assert(metadata.conf.get(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key).contains("false"))
+  }
+
   /** test string offset type */
   case class StringOffset(override val json: String) extends Offset
 
