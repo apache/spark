@@ -35,12 +35,8 @@ if TYPE_CHECKING:
 
 
 class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
-    """SQL_SCALAR_ARROW_UDF: one user invocation per input RecordBatch.
-
-    Each UDF's argument columns are read straight off the RecordBatch, its
-    result is assembled into an output RecordBatch, coerced to the declared
-    schema, and checked against the input row count.
-    """
+    """SQL_SCALAR_ARROW_UDF: invoke each UDF once per input RecordBatch, coerce
+    the result to the declared schema, and check the row count."""
 
     eval_type = PythonEvalType.SQL_SCALAR_ARROW_UDF
 
