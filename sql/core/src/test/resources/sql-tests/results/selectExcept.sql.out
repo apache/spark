@@ -549,6 +549,36 @@ NULL	NULL	NULL
 
 
 -- !query
+SELECT * EXCEPT (data.a, data.b, data.s2) FROM nullable_struct
+-- !query schema
+struct<id:int,data:struct<>>
+-- !query output
+0	{}
+1	{}
+2	{}
+
+
+-- !query
+SELECT id, data IS NULL FROM (SELECT * EXCEPT (data.a, data.b, data.s2) FROM nullable_struct)
+-- !query schema
+struct<id:int,(data IS NULL):boolean>
+-- !query output
+0	false
+1	false
+2	false
+
+
+-- !query
+SELECT * EXCEPT (data.s2.c, data.s2.d) FROM nullable_struct
+-- !query schema
+struct<id:int,data:struct<a:int,b:int,s2:struct<>>>
+-- !query output
+0	NULL
+1	{"a":1,"b":11,"s2":{}}
+2	{"a":2,"b":22,"s2":{}}
+
+
+-- !query
 DROP VIEW nullable_struct
 -- !query schema
 struct<>
