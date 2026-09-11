@@ -73,7 +73,10 @@ class ArrowPythonUDTFRunner(
   }
 
   override val envVars: util.Map[String, String] = {
-    val envVars = new util.HashMap(funcs.head.funcs.head.envVars)
+    // Installed at worker launch, so a cached plan cannot pin an older environment.
+    val envVars =
+      PythonWorkerEnvironment.mergeValidated(funcs.head.funcs.head.envVars, SQLConf.get)
+    // Applied after the session's environment, so a session cannot override a Spark-owned name.
     sessionUUID.foreach { uuid =>
       envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
     }

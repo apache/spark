@@ -1747,10 +1747,10 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1))),
       In(Literal("test"), Seq(UnresolvedAttribute("a"), Literal(1)))
     )
+    // Only the children that are not already of the common type are cast.
     ruleTest(inConversion,
       In(Literal("a"), Seq(Literal(1), Literal("b"))),
-      In(Cast(Literal("a"), StringType),
-        Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
+      In(Literal("a"), Seq(Cast(Literal(1), StringType), Literal("b")))
     )
   }
 

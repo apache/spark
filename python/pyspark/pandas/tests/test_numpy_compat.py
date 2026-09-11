@@ -219,6 +219,59 @@ class NumPyCompatTestsMixin:
             np.fmax(psdf["string"], psdf["string"]), np.fmax(pdf["string"], pdf["string"])
         )
 
+    def test_np_boolean_operand(self):
+        from pyspark.pandas.numpy_compat import _np_spark_accepted_types
+
+        pdf = pd.DataFrame({"b": [True, False, True], "i": [7, 8, 9]})
+        psdf = ps.from_pandas(pdf)
+        # The reference is pandas on the same values as int64, where its float loops are float64 as
+        # Spark's math always is; on a boolean or an int8 pandas runs coarser float16 loops.
+        as_int64 = pdf.b.astype("int64")
+        # Skipped: np.sign rejects a boolean; np.log and np.log10 answer nan for a zero where pandas
+        # answers -inf; np.reciprocal divides in int8; np.invert and np.negative are logical.
+        skip = {"sign", "log", "log10", "reciprocal", "invert", "negative"}
+
+        for op_name, accepted_per_operand in _np_spark_accepted_types.items():
+            if op_name in skip:
+                continue
+            np_func = getattr(np, op_name)
+            with self.subTest(name=op_name):
+                result = np_func(*[psdf.b] * len(accepted_per_operand))
+                expected = np_func(*[as_int64] * len(accepted_per_operand))
+                if isinstance(expected, tuple):
+                    for one_result, one_expected in zip(result, expected):
+                        self.assert_eq(one_result, one_expected, almost=True)
+                else:
+                    self.assert_eq(result, expected, almost=True)
+
+        # A boolean scalar operand takes the same promotion as a column.
+        self.assert_eq(np.ldexp(psdf.i, True), np.ldexp(pdf.i, True), almost=True)
+
+        # A nullable boolean keeps an extension dtype and propagates <NA>.
+        nullable_pser = pd.Series(pd.array([True, None, False], dtype="boolean"))
+        nullable = ps.from_pandas(nullable_pser)
+        self.assertIsInstance(np.sqrt(nullable).dtype, pd.Float64Dtype)
+        self.assert_eq(np.sqrt(nullable), np.sqrt(nullable_pser.astype("Int64")), almost=True)
+
+    def test_np_boolean_operand_logical(self):
+        # NumPy applies these logically rather than promoting: np.invert on a boolean is
+        # np.logical_not and pandas reads np.negative the same way; promoting would answer -2, -1.
+        pdf = pd.DataFrame(
+            {
+                "b": [True, False, True],
+                "nullable": pd.array([True, None, False], dtype="boolean"),
+                "i": [-2, 0, 3],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        for np_func in (np.invert, np.negative):
+            with self.subTest(name=np_func.__name__):
+                self.assert_eq(np_func(psdf.b), np_func(pdf.b))
+                self.assert_eq(np_func(psdf.nullable), np_func(pdf.nullable))
+                # An integer column keeps the arithmetic meaning.
+                self.assert_eq(np_func(psdf.i), np_func(pdf.i))
+
     def test_np_math_functions(self):
         for np_func, values in (
             (np.arccosh, [-np.inf, -1.0, 0.0, 1.0, 2.0, 64.0, np.inf, np.nan]),

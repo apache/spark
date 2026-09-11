@@ -651,6 +651,14 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("`c`.a[b]", UnresolvedAttribute("c.a").getItem($"b"))
   }
 
+  test("invalid semi-structured extract path") {
+    checkError(
+      exception = parseException("c:['']"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'['']'", "hint" -> ""),
+      queryContext = Array(ExpectedContext("c:['']", 0, 5)))
+  }
+
   test("parenthesis") {
     assertEqual("(a)", $"a")
     assertEqual("r * (a + b)", $"r" * ($"a" + $"b"))

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -24,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.{BooleanType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class LikeSimplificationSuite extends PlanTest {
 
@@ -69,7 +71,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where(($"a" like "abc\\%def") ||
-        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
+        (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -142,7 +144,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized3 = Optimize.execute(originalQuery3.analyze)
     val correctAnswer3 = testRelation
       .where(($"a" like ("@bc%def", '@')) ||
-        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
+        (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
       .analyze
     comparePlans(optimized3, correctAnswer3)
 
@@ -190,7 +192,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized3 = Optimize.execute(originalQuery3.analyze)
     val correctAnswer3 = testRelation
       .where(
-        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
+        (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
       .analyze
     comparePlans(optimized3, correctAnswer3)
 
@@ -222,7 +224,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where((((((StartsWith($"a", "abc") && EndsWith($"a", "xyz")) &&
-        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) &&
+        (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) &&
         Contains($"a", "mn")) && ($"a" === "")) && ($"a" === "abc")) &&
         ($"a" likeAll("abc\\%", "abc\\%def", "%mn\\%")))
       .analyze
@@ -239,7 +241,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where((((((Not(StartsWith($"a", "abc")) && Not(EndsWith($"a", "xyz"))) &&
-        Not(Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) &&
+        Not(OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")))) &&
         Not(Contains($"a", "mn"))) && Not($"a" === "")) && Not($"a" === "abc")) &&
         ($"a" notLikeAll("abc\\%", "abc\\%def", "%mn\\%")))
       .analyze
@@ -256,7 +258,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where(((StartsWith($"a", "abc") || EndsWith($"a", "xyz")) ||
-        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")) ||
+        (OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def")) ||
           Contains($"a", "mn")) || (($"a" === "") || ($"a" === "abc")) ||
         ($"a" likeAny("abc\\%", "abc\\%def", "%mn\\%"))))
       .analyze
@@ -273,7 +275,7 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where((((Not(StartsWith($"a", "abc")) || Not(EndsWith($"a", "xyz"))) ||
-        (Not(Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))) ||
+        (Not(OctetLength($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))) ||
           Not(Contains($"a", "mn")))) || (Not($"a" === "") || Not($"a" === "abc"))) ||
         ($"a" notLikeAny("abc\\%", "abc\\%def", "%mn\\%")))
       .analyze
@@ -311,6 +313,63 @@ class LikeSimplificationSuite extends PlanTest {
   }
 
   // scalastyle:off nonascii
+  test("SPARK-59063: LikeSimplification preserves LIKE semantics under non-binary collation") {
+    // Under UTF8_LCASE, StartsWith/EndsWith are collation-aware, so a single code point
+    // whose case-folded form equals the anchor satisfies BOTH StartsWith(prefix) and
+    // EndsWith(suffix). The Kelvin sign (U+212A) is one code point of three UTF-8 bytes
+    // that folds to 'k'. LIKE 'k%k' is false for it -- the pattern requires two 'k's --
+    // so the rewrite's length guard must reject it. A byte-length guard (OctetLength >=
+    // numBytes("k") + numBytes("k") = 2) is satisfied by the 3-byte Kelvin sign and would
+    // wrongly accept it; the code-point guard kept for non-binary collations rejects it.
+    val lcase = StringType("UTF8_LCASE")
+    val relation = LocalRelation(AttributeReference("a", lcase)())
+    val attr = relation.output.head
+    val like = Like(attr, Literal.create("k%k", lcase), '\\')
+
+    val optimized = Optimize.execute(relation.where(like).analyze)
+    val simplified = optimized.asInstanceOf[Filter].condition
+
+    // A single Kelvin sign: one code point, three UTF-8 bytes.
+    val row = InternalRow(UTF8String.fromString("\u212a"))
+    val likeResult = BindReferences.bindReference(like, relation.output).eval(row)
+    val simplifiedResult = BindReferences.bindReference(simplified, relation.output).eval(row)
+
+    assert(likeResult === false,
+      "LIKE 'k%k' should not match a single Kelvin sign under UTF8_LCASE")
+    // The rewrite must be behavior-preserving: it must reject the single Kelvin sign too.
+    assert(simplifiedResult === likeResult,
+      s"LikeSimplification changed the LIKE 'k%k' result under UTF8_LCASE: expected " +
+        s"$likeResult but the rewritten predicate returned $simplifiedResult")
+  }
+
+  test("SPARK-59063: LikeSimplification preserves LIKE semantics for multibyte UTF8_BINARY") {
+    // The byte-length guard exists to reject inputs too short to hold both the prefix and
+    // the suffix (a single code point must not match 'x%x'). Confirm the rewrite evaluates
+    // exactly like LIKE for a multibyte UTF8_BINARY pattern: the a-umlaut U+00E4 is one code
+    // point of two UTF-8 bytes, so 'a-umlaut % a-umlaut' rewrites to OctetLength >= 4 guarded
+    // by StartsWith/EndsWith.
+    val relation = LocalRelation($"a".string) // default StringType is UTF8_BINARY
+    val attr = relation.output.head
+    val like = Like(attr, Literal.create("\u00e4%\u00e4", StringType), '\\')
+
+    val optimized = Optimize.execute(relation.where(like).analyze)
+    val simplified = optimized.asInstanceOf[Filter].condition
+    val boundLike = BindReferences.bindReference(like, relation.output)
+    val boundSimplified = BindReferences.bindReference(simplified, relation.output)
+
+    // A single a-umlaut: one code point, two UTF-8 bytes -- too short to match the pattern.
+    val single = InternalRow(UTF8String.fromString("\u00e4"))
+    assert(boundLike.eval(single) === false)
+    assert(boundSimplified.eval(single) === boundLike.eval(single),
+      "the rewrite must reject a single a-umlaut, matching LIKE")
+
+    // Two a-umlauts: two code points, four UTF-8 bytes -- long enough to match.
+    val pair = InternalRow(UTF8String.fromString("\u00e4\u00e4"))
+    assert(boundLike.eval(pair) === true)
+    assert(boundSimplified.eval(pair) === boundLike.eval(pair),
+      "the rewrite must accept two a-umlauts, matching LIKE")
+  }
+
   test("LikeSimplification with emojis") {
     val originalQuery =
       testRelation
@@ -319,7 +378,10 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
-      .where(Length($"a") >= 2 && (StartsWith($"a", "😀") && EndsWith($"a", "🥑")))
+      // Byte-length guard: '😀' and '🥑' are 4 UTF-8 bytes each, so the threshold is 8
+      // bytes rather than 2 code points. This is equivalent to the char-length guard
+      // because StartsWith/EndsWith already pin the prefix and suffix at byte boundaries.
+      .where(OctetLength($"a") >= 8 && (StartsWith($"a", "😀") && EndsWith($"a", "🥑")))
       .analyze
     comparePlans(optimized, correctAnswer)
   }

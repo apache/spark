@@ -411,10 +411,9 @@ object ShuffleExchangeExec {
         // wrapped through the same `InternalRowComparableWrapper` factory over this
         // partitioning's expression data types, so map lookups share the exact equivalence
         // (`RowOrdering`, e.g. binary keys by content, -0.0 == 0.0, NaNs equal) that grouped and
-        // de-duplicated `partitionKeys`. Re-wrapping the stored keys matters: `KeyedShuffleSpec
-        // .createPartitioning` substitutes this side's expressions but retains the other side's
-        // `partitionKeys`, whose wrappers may carry a schema that differs in struct field names,
-        // which wrapper equality would reject.
+        // de-duplicated `partitionKeys`. Re-wrapping the stored keys, which were built at
+        // `keyDataTypes`, is what makes the two type lists agree, and a mismatch is silent:
+        // `KeyGroupedPartitioner.getPartition` answers a miss with the key's hash (SPARK-59054).
         val wrapperFactory = InternalRowComparableWrapper
           .getInternalRowComparableWrapperFactory(k.expressionDataTypes)
         val valueMap = k.partitionKeys.map(key => wrapperFactory(key.row)).zipWithIndex

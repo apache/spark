@@ -812,6 +812,88 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.9.0</td>
 </tr>
 <tr>
+  <td><code>spark.pythonWorkerEnv.[EnvironmentVariableName]</code></td>
+  <td>(none)</td>
+  <td>
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Python
+    worker processes that run the session's Python UDFs, making it visible to
+    <code>os.environ</code> inside a UDF. Multiple of these may be set to add several environment
+    variables. Supported on both classic Spark and Spark Connect.
+    <br /><br />
+    Unlike <code>spark.executorEnv.[EnvironmentVariableName]</code>, which is scoped to the whole
+    application and fixed before it starts, this is a session configuration: each session carries
+    its own environment, may change it while running, and a change takes effect on the next action.
+    Where both set the same variable, this one wins. An environment variable that Spark sets for a
+    Python worker itself takes precedence over both.
+    <br /><br />
+    Applied to every Python worker the session launches for a Python function it supplied: scalar
+    UDFs in each of their forms, including Arrow-optimized, non-Arrow, pandas, iterator and the
+    element-wise form a UDF takes inside the lambda of a higher-order function such as
+    <code>transform</code>; <code>mapInPandas</code> and <code>mapInArrow</code>; grouped-map,
+    cogrouped-map, grouped-aggregate and window functions; Python UDTFs, both row and Arrow;
+    <code>applyInPandasWithState</code> and <code>transformWithState</code>;
+    <code>writeStream.foreach</code>; and Python data sources, including the workers that plan them
+    and read a streaming source.
+    <br /><br />
+    A running streaming query holds a configuration snapshot, because its batches run on a cloned
+    session whose configurations are copied when the query starts. A change made while a query is
+    running therefore reaches it only when the query restarts.
+    <br /><br />
+    A dynamic Python UDTF's <code>analyze</code> method and a Python data source's schema and
+    partition planning run in a worker while a query is being planned. Those results are resolved
+    once for a given DataFrame and are not recomputed if the environment changes afterwards; a new
+    read picks up the current values.
+    <br /><br />
+    Some Python code a session supplies does not run in a worker Spark launches, and no session
+    environment applies to it. <code>foreachBatch</code> receives the environment on Spark Connect,
+    where the function runs in a worker the server starts, but not on classic Spark, where it is a
+    callback into the client's own Python process. A streaming query listener added with
+    <code>addListener</code> likewise runs its callbacks in the client process on both classic Spark
+    and Spark Connect. In each of those cases the client process's own environment is what the
+    callback observes.
+    <br /><br />
+    Names Spark reserves for itself are rejected: any name beginning with <code>SPARK_</code>,
+    <code>PYSPARK_</code> or <code>PYTHON_WORKER_FACTORY_</code>, together with
+    <code>OMP_NUM_THREADS</code> and the <code>PYTHON_*</code> variables Spark sets only under a
+    condition (<code>PYTHON_FAULTHANDLER_DIR</code>,
+    <code>PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS</code>,
+    <code>PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE</code> and
+    <code>PYTHON_UNIX_DOMAIN_ENABLED</code>).
+    Where Spark sets a variable unconditionally, such as <code>PYTHONUNBUFFERED</code> or
+    <code>PYTHON_UDF_BATCH_SIZE</code>, a session may still set it and Spark's value wins.
+    <code>PYTHONPATH</code> is the one name that is neither reserved nor simply overridden: Spark
+    merges the session's value into the path it computes for the worker, so a session adds to the
+    worker's import path. The relative order is not guaranteed -- Spark contributes no entries of
+    its own when <code>SPARK_HOME</code> is unset and its classes did not come from a jar, which can
+    leave the session's path first -- so do not rely on a session entry being shadowed by Spark's.
+    <br /><br />
+    Each variable is a separate configuration, so setting several is not atomic: a client that sets
+    a batch may have some applied and then one rejected, leaving the earlier ones in place. Read the
+    configurations back to confirm what the session holds.
+    <br /><br />
+    On Spark Connect a variable cannot be read back through <code>spark.conf.get</code> when
+    <em>either</em> its name or its value matches <code>spark.redaction.regex</code> -- which by
+    default covers <code>secret</code>, <code>password</code>, <code>token</code> and
+    <code>access key</code> -- because the Spark Connect configuration RPC withholds such entries on
+    every read. So a variable named <code>MY_TOKEN</code> is hidden, and so is one whose value
+    merely contains <code>password</code>. The variable still reaches the worker. Classic Spark
+    returns the value.
+    <br /><br />
+    A variable name must match <code>[A-Za-z_][A-Za-z0-9_]*</code>, and a value must not contain a
+    NUL character, which a process environment cannot carry. The number of variables and the total
+    size of the environment are also bounded. Setting one fails immediately and stores nothing if
+    the result would be invalid -- through <code>spark.conf.set</code> or SQL <code>SET</code>, on
+    both classic Spark and Spark Connect. A configuration passed to
+    <code>SparkSession.builder</code> and merged into the session does not pass through that check,
+    so such a value is stored and instead fails the queries that would install it in a worker; unset
+    it to recover.
+    <br /><br />
+    Values are not redacted from the worker environment, so a session that puts a secret here is
+    responsible for keeping the Python code it runs from disclosing it.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.redaction.regex</code></td>
   <td>(?i)secret|password|token|access[.]?key|credential</td>
   <td>

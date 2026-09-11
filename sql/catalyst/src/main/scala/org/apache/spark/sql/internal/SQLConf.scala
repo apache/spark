@@ -2357,7 +2357,7 @@ object SQLConf {
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val DATA_SOURCE_DONT_ASSERT_ON_PREDICATE =
     buildConf("spark.sql.dataSource.skipAssertOnPredicatePushdown")
@@ -3699,6 +3699,18 @@ object SQLConf {
         "the .name() API. This enables streaming source evolution, allowing sources to be " +
         "added, removed, or reordered without losing state.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val ALLOW_EXCEPT_ON_STREAMING_DATAFRAME =
+    buildConf("spark.sql.streaming.allowExceptOnStreamingDataFrame")
+      .internal()
+      .doc("When true, allows EXCEPT operations with a streaming DataFrame on the left and a " +
+        "batch DataFrame on the right. " +
+        "Such operations may produce incorrect results and are retained only for compatibility " +
+        "with existing streaming queries.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -5454,17 +5466,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val UNIFIED_UDF_EXECUTION_ENABLED =
-    buildConf("spark.sql.execution.udf.unified.execution.enabled")
-      .doc("When true, UDFs that support the language-agnostic " +
-        "UDF worker protocol are executed via the unified, " +
-        "external UDF worker framework instead of the " +
-        "language-specific runners. Experimental.")
-      .version("4.2.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .booleanConf
-      .createWithDefault(false)
-
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
       .doc("Enable Arrow optimization in regular Python UDFs. This optimization " +
@@ -6926,6 +6927,26 @@ object SQLConf {
       .doc("When true, TimestampType maps to TIMESTAMP in Oracle; otherwise, " +
         "TIMESTAMP WITH LOCAL TIME ZONE.")
       .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.oracle.timestampNTZMapping.enabled")
+      .internal()
+      .doc("When true, Oracle TIMESTAMP (and Oracle DATE when the driver default " +
+        "oracle.jdbc.mapDateToTimestamp surfaces it as TIMESTAMP) is read per the JDBC read " +
+        "option preferTimestampNTZ (TimestampType by default), preserving pre-Spark-4.4 " +
+        "behavior. When false (default), it is read as TimestampNTZType, which faithfully " +
+        "represents these zoneless Oracle types. The same flag governs the write path: when " +
+        "false a TimestampNTZType column is written to Oracle zoneless via setObject, and when " +
+        "true via a JVM-default-zone java.sql.Timestamp; these can differ for wall-clocks in a " +
+        "DST gap. The flag is read at schema-resolution and write time, so a JDBC relation " +
+        "whose schema was already resolved (e.g. a cached or metastore-registered table) must " +
+        "be re-resolved for a change to take effect. Oracle DATE read as JDBC DATE " +
+        "(oracle.jdbc.mapDateToTimestamp=false, mapped to DateType), TIMESTAMP WITH TIME ZONE, " +
+        "and TIMESTAMP WITH LOCAL TIME ZONE are unaffected.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -9122,6 +9143,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyOracleTimestampMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
 
+  def legacyOracleTimestampNTZMappingEnabled: Boolean =
+    getConf(LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED)
+
   def legacyDB2numericMappingEnabled: Boolean =
     getConf(LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED)
 
@@ -9352,6 +9376,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def dropTableOnView: Boolean = getConf(DROP_TABLE_VIEW_ENABLED)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
+
+  def restrictedModeEnabled: Boolean = getConf(StaticSQLConf.RESTRICTED_MODE_ENABLED)
 
   override def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 

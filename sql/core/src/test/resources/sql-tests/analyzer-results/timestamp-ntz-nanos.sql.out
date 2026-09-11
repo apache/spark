@@ -668,6 +668,42 @@ Project [convert_timezone(America/Los_Angeles, UTC, cast(null as timestamp_ntz(9
 
 
 -- !query
+SELECT from_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', 'America/Los_Angeles')
+-- !query analysis
+Project [from_utc_timestamp(2015-07-24 00:00:00.123456789, America/Los_Angeles) AS from_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', America/Los_Angeles)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', 'America/Los_Angeles')
+-- !query analysis
+Project [to_utc_timestamp(2015-07-24 00:00:00.123456789, America/Los_Angeles) AS to_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', America/Los_Angeles)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(
+    to_utc_timestamp('2015-07-24 00:00:00.1234567' :: timestamp_ntz(7), 'America/Los_Angeles'))
+-- !query analysis
+Project [typeof(to_utc_timestamp(cast(2015-07-24 00:00:00.1234567 as timestamp_ntz(7)), America/Los_Angeles)) AS typeof(to_utc_timestamp(CAST(2015-07-24 00:00:00.1234567 AS TIMESTAMP_NTZ(7)), America/Los_Angeles))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT from_utc_timestamp(CAST(NULL AS timestamp_ntz(9)), 'America/Los_Angeles')
+-- !query analysis
+Project [from_utc_timestamp(cast(null as timestamp_ntz(9)), America/Los_Angeles) AS from_utc_timestamp(CAST(NULL AS TIMESTAMP_NTZ(9)), America/Los_Angeles)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', CAST(NULL AS STRING))
+-- !query analysis
+Project [to_utc_timestamp(2015-07-24 00:00:00.123456789, cast(null as string)) AS to_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', CAST(NULL AS STRING))#x]
++- OneRowRelation
+
+
+-- !query
 SELECT max(c), min(c) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
