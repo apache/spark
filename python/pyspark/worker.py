@@ -2026,7 +2026,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             for udf_index, udf_info in enumerate(udf_info_list)
         ]
         handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
-        ser = handler.select_serializer()
+        ser = handler.serializer
         # profiling is not supported for UDF
         return handler.run, None, ser, ser
 

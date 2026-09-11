@@ -116,9 +116,10 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=ABCMeta):
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
 
+    @property
     @abstractmethod
-    def select_serializer(self) -> Any:
-        """Return the serializer used for both the input and output streams."""
+    def serializer(self) -> Any:
+        """The serializer used for both the input and output streams."""
 
     @abstractmethod
     def pre_process(self, data: "Iterator[InputBatch]") -> Iterator[Any]:
@@ -143,7 +144,8 @@ class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch], metac
     """Category base for eval types whose input stream is
     ``Iterator[pa.RecordBatch]`` -- one flat RecordBatch at a time."""
 
-    def select_serializer(self) -> Any:
+    @property
+    def serializer(self) -> Any:
         return ArrowStreamSerializer(write_start_stream=True)
 
     @abstractmethod
@@ -155,7 +157,8 @@ class GroupedEvalTypeHandler(EvalTypeHandler["GroupedBatch", OutputBatch], metac
     """Category base for eval types whose input stream is
     ``Iterator[GroupedBatch]`` -- one Arrow stream (group) at a time."""
 
-    def select_serializer(self) -> Any:
+    @property
+    def serializer(self) -> Any:
         return ArrowStreamGroupSerializer(write_start_stream=True)
 
     @abstractmethod
@@ -167,7 +170,8 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler["CoGroupedBatch", OutputBatch], m
     """Category base for eval types whose input stream is
     ``Iterator[CoGroupedBatch]`` -- a pair of Arrow streams per co-group."""
 
-    def select_serializer(self) -> Any:
+    @property
+    def serializer(self) -> Any:
         return ArrowStreamCoGroupSerializer(write_start_stream=True)
 
     @abstractmethod

@@ -103,15 +103,12 @@ class EvalTypeHandlerTests(unittest.TestCase):
             def post_process(self, results):
                 return results
 
+        self.assertIsInstance(_Batch([], _RunnerConf(), None).serializer, ArrowStreamSerializer)
         self.assertIsInstance(
-            _Batch([], _RunnerConf(), None).select_serializer(), ArrowStreamSerializer
+            _Grouped([], _RunnerConf(), None).serializer, ArrowStreamGroupSerializer
         )
         self.assertIsInstance(
-            _Grouped([], _RunnerConf(), None).select_serializer(), ArrowStreamGroupSerializer
-        )
-        self.assertIsInstance(
-            _CoGrouped([], _RunnerConf(), None).select_serializer(),
-            ArrowStreamCoGroupSerializer,
+            _CoGrouped([], _RunnerConf(), None).serializer, ArrowStreamCoGroupSerializer
         )
 
     def test_run_chains_stages_in_order(self):
