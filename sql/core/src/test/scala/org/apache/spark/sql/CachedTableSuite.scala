@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.catalyst.util.{CharVarcharScanMode, DateTimeConstants}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.CatalogPlugin
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
@@ -57,7 +57,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.util.PartitionKeyedAccumulator
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
-import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
+import org.apache.spark.storage.StorageLevel.{DISK_ONLY, MEMORY_AND_DISK_2, MEMORY_ONLY}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.{AccumulatorContext, Utils}
@@ -2348,53 +2348,123 @@ class CachedTableSuite extends SharedSparkSession
   }
 
   test("RENAME TABLE manages cache with time travel plans correctly") {
+    val t = "testcat.tbl"
+    val tRenamed = "testcat.tbl_renamed"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
     val boundModes = Seq(
-      Seq(
+      (Seq(
         SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
-      Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"))
-    boundModes.foreach { modeConf =>
-      withSQLConf(modeConf: _*) {
-        val t = "testcat.tbl"
-        val tRenamed = "testcat.tbl_renamed"
-        val ident = Identifier.of(Array(), "tbl")
-        val version1 = "v1"
-        val version2 = "v2"
-        withTable(t, tRenamed, "cached_tt1", "cached_tt2") {
-          sql(s"CREATE TABLE $t (id int, data string) USING foo")
-          sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"), MEMORY_ONLY, "MEMORY_ONLY"),
+      (Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"), DISK_ONLY, "DISK_ONLY"))
+    withTable(t, tRenamed, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
 
-          // pin v1
-          pinTable("testcat", ident, version1)
+      // pin v1
+      pinTable("testcat", ident, version1)
 
-          sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
 
-          // pin v2
-          pinTable("testcat", ident, version2)
+      // pin v2
+      pinTable("testcat", ident, version2)
 
-          sql(s"INSERT INTO $t VALUES (4, 'e'), (5, 'f')")
+      sql(s"INSERT INTO $t VALUES (4, 'e'), (5, 'f')")
 
-          // cache base and both versions
-          sql(s"CACHE TABLE $t")
+      // Cache both mode-specific variants of the base table at once.
+      boundModes.foreach { case (modeConf, storageLevel, storageLevelName) =>
+        withSQLConf(modeConf: _*) {
+          sql(s"CACHE TABLE $t OPTIONS('storageLevel' '$storageLevelName')")
           assertCached(sql(s"SELECT * FROM $t"))
-          val storageLevel = spark.table(t).storageLevel
-          sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
-          assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
-          sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
-          assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+          assert(spark.table(t).storageLevel === storageLevel)
+        }
+      }
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
 
-          // must have 3 cache entries
-          assert(cacheManager.numCachedEntries == 3)
+      assert(cacheManager.numCachedEntries == 4)
 
-          // rename base table
-          sql(s"ALTER TABLE $t RENAME TO tbl_renamed")
+      sql(s"ALTER TABLE $t RENAME TO tbl_renamed")
 
-          // assert cache was cleared and renamed table (current version) was cached again
-          assert(cacheManager.numCachedEntries == 1)
+      // Time-travel and dependent caches are invalidated; both direct mode variants are restored.
+      assert(cacheManager.numCachedEntries == 2)
+      boundModes.foreach { case (modeConf, storageLevel, _) =>
+        withSQLConf(modeConf: _*) {
           assertCached(sql(s"SELECT * FROM $tRenamed"))
           assert(spark.table(tRenamed).storageLevel === storageLevel)
         }
       }
+    }
+  }
+
+  test("RENAME TABLE does not promote a dependent query cache to a table cache") {
+    val t = "testcat.tbl"
+    val tRenamed = "testcat.tbl_renamed"
+    withTable(t, tRenamed, "cached_query") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a')")
+      sql(s"CACHE TABLE cached_query AS SELECT * FROM $t")
+      assertCached(sql("SELECT * FROM cached_query"))
+
+      sql(s"ALTER TABLE $t RENAME TO tbl_renamed")
+
+      assert(!spark.catalog.isCached(tRenamed))
+      assert(cacheManager.numCachedEntries == 0)
+    }
+  }
+
+  test("catalog V2 recache preserves all bound CHAR/VARCHAR scan modes") {
+    val t = "testcat.tbl"
+    val preserveConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
+    val standardConf = Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
+
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a')")
+
+      def cachedData(modeConf: Seq[(String, String)]) = {
+        withSQLConf(modeConf: _*) {
+          cacheManager.lookupCachedData(sql(s"SELECT * FROM $t")).getOrElse {
+            fail(s"Expected $t to be cached for $modeConf")
+          }
+        }
+      }
+
+      def scanMode(modeConf: Seq[(String, String)]): Option[CharVarcharScanMode] = {
+        cachedData(modeConf).plan.collectFirst {
+          case relation: DataSourceV2Relation => relation.charVarcharScanMode
+        }.flatten
+      }
+
+      withSQLConf(preserveConf: _*) {
+        sql(s"CACHE TABLE $t OPTIONS('storageLevel' 'MEMORY_ONLY')")
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a"))
+      }
+      withSQLConf(standardConf: _*) {
+        sql(s"CACHE TABLE $t OPTIONS('storageLevel' 'DISK_ONLY')")
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a"))
+      }
+
+      withSQLConf(preserveConf: _*) {
+        sql(s"INSERT INTO $t VALUES (2, 'b')")
+      }
+
+      withSQLConf(preserveConf: _*) {
+        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
+      }
+      withSQLConf(standardConf: _*) {
+        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
+      }
+      assert(scanMode(preserveConf).contains(CharVarcharScanMode.PreserveNative))
+      assert(scanMode(standardConf).contains(CharVarcharScanMode.SparkStandard))
+      assert(
+        cachedData(preserveConf).cachedRepresentation.cacheBuilder.storageLevel === MEMORY_ONLY)
+      assert(cachedData(standardConf).cachedRepresentation.cacheBuilder.storageLevel === DISK_ONLY)
     }
   }
 

@@ -376,16 +376,18 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Looks up a cache entry for a V2 table mutation while ignoring only its analyzed CHAR/VARCHAR
-   * scan mode. Normal cache substitution remains mode-sensitive.
+   * Looks up direct cache entries for a V2 table mutation while ignoring only their analyzed
+   * CHAR/VARCHAR scan mode. Normal cache substitution remains mode-sensitive.
    */
-  def lookupCachedDataByV2Relation(relation: DataSourceV2Relation): Option[CachedData] = {
+  def lookupCachedDataByV2Relation(relation: DataSourceV2Relation): Seq[CachedData] = {
     val unboundRelation = relation.copy(charVarcharScanMode = None)
-    cachedData.find(_.plan.exists {
-      case cached: DataSourceV2Relation =>
-        cached.copy(charVarcharScanMode = None).sameResult(unboundRelation)
-      case _ => false
-    })
+    cachedData.filter { cd =>
+      EliminateSubqueryAliases(cd.plan) match {
+        case cached: DataSourceV2Relation =>
+          cached.copy(charVarcharScanMode = None).sameResult(unboundRelation)
+        case _ => false
+      }
+    }
   }
 
   /**
@@ -462,7 +464,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
           val table = CatalogV2Util.getTable(catalog, ident, options = r.options)
           if (r.table.id == table.id) {
-            Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), r.options))
+            Some(DataSourceV2Relation
+              .create(table, Some(catalog), Some(ident), r.options)
+              .copy(charVarcharScanMode = r.charVarcharScanMode))
           } else {
             None
           }

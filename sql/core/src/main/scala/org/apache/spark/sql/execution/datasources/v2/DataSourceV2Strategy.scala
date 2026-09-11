@@ -82,13 +82,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   // Invalidates the cache associated with the given table. If the invalidated cache matches the
-  // given table, the cache's storage level is returned.
+  // given table, each cache's storage level and scan mode are returned.
   private def invalidateTableCache(
-      r: ResolvedTable)(): Option[(StorageLevel, Option[CharVarcharScanMode])] = {
+      r: ResolvedTable)(): Seq[(StorageLevel, Option[CharVarcharScanMode])] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
-    val cache = cacheManager.lookupCachedDataByV2Relation(v2Relation)
+    val caches = cacheManager.lookupCachedDataByV2Relation(v2Relation)
     invalidateCache(r.catalog, r.identifier)
-    cache.map { entry =>
+    caches.map { entry =>
       val scanMode = entry.plan.collectFirst {
         case relation: DataSourceV2Relation => relation.charVarcharScanMode
       }.flatten

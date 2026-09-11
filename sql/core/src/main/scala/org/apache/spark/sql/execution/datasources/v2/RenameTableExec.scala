@@ -33,14 +33,14 @@ case class RenameTableExec(
     catalog: TableCatalog,
     oldIdent: Identifier,
     newIdent: Identifier,
-    invalidateCache: () => Option[(StorageLevel, Option[CharVarcharScanMode])],
+    invalidateCache: () => Seq[(StorageLevel, Option[CharVarcharScanMode])],
     cacheTable: (SparkSession, LogicalPlan, Option[String], StorageLevel) => Unit)
   extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val optOldStorageLevel = invalidateCache()
+    val oldCaches = invalidateCache()
     catalog.invalidateTable(oldIdent)
 
     // If new identifier consists of a table name only, the table should be renamed in place.
@@ -50,7 +50,7 @@ case class RenameTableExec(
     } else newIdent
     catalog.renameTable(oldIdent, qualifiedNewIdent)
 
-    optOldStorageLevel.foreach { case (oldStorageLevel, scanMode) =>
+    oldCaches.foreach { case (oldStorageLevel, scanMode) =>
       val tbl = catalog.loadTable(qualifiedNewIdent)
       val newRelation = DataSourceV2Relation
         .create(tbl, Some(catalog), Some(qualifiedNewIdent))
