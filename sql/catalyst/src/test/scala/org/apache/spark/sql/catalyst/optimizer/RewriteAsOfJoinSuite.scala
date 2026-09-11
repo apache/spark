@@ -30,15 +30,10 @@ class RewriteAsOfJoinSuite extends PlanTest {
   private val left = LocalRelation($"a".int, $"b".int, $"c".int)
   private val right = LocalRelation($"a".int, $"b".int, $"d".int)
 
-  // Builds the plan RewriteAsOfJoin is expected to produce. For each left row it runs a
-  // correlated scalar subquery that picks the nearest matching right row via
-  // MIN_BY(struct(right.*), orderExpression) over the right rows satisfying `filter`, then
-  // projects the right columns back out. INNER drops left rows with no match through
-  // `__right__ IS NOT NULL`; LEFT OUTER keeps them, so it omits that Filter.
-  //
-  // `filter` and `orderExpression` are the only parts that vary with
-  // (direction, tolerance, allowExactMatches): they mirror AsOfJoin.makeAsOfCond and
-  // makeOrderingExpr, so each test spells just those out and shares the rest of the shape here.
+  // Builds the plan RewriteAsOfJoin should produce: per left row, a correlated scalar subquery
+  // picks the nearest matching right row via MIN_BY(struct(right.*), orderExpression), then
+  // projects the right columns back out. INNER drops non-matches via `__right__ IS NOT NULL`;
+  // LEFT OUTER keeps them. Only `filter` and `orderExpression` vary per test.
   private def expectedRewrite(
       filter: Expression,
       orderExpression: Expression,
@@ -97,8 +92,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
-    // LEFT OUTER keeps left rows with no match, so the rewrite omits the `IS NOT NULL` filter
-    // that INNER applies. The condition and ordering are the same as the `simple` case.
+    // LEFT OUTER keeps non-matching left rows, so the `IS NOT NULL` filter is omitted.
     val correctAnswer = expectedRewrite(
       filter = OuterReference(left.output(0)) >= right.output(0),
       orderExpression = OuterReference(left.output(0)) - right.output(0),
@@ -216,9 +210,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
 
     val rewritten = RewriteAsOfJoin(query.analyze)
 
-    // nearest + allowExactMatches with no tolerance places no constraint on the match, so the
-    // as-of condition collapses to the literal true. The ordering picks the smallest absolute
-    // distance in either direction.
+    // nearest + allowExactMatches + no tolerance: no match constraint, so the condition is
+    // `true`. The ordering picks the smallest absolute distance in either direction.
     val correctAnswer = expectedRewrite(
       filter = Literal.TrueLiteral,
       orderExpression = If(OuterReference(left.output(0)) > right.output(0),
@@ -285,16 +278,14 @@ class RewriteAsOfJoinSuite extends PlanTest {
   }
 
   test("no rewrite when the node requires the sort-merge as-of join operator") {
-    // The rule only fires when `!conf.useSortMergeAsOfJoinOperator(requiresSortMergeAsOfJoin)`.
-    // A node flagged `requiresSortMergeAsOfJoin = true` (e.g. from a SQL `MATCH_CONDITION`
-    // clause) must be left untouched so the sort-merge physical operator handles it instead.
+    // A node flagged `requiresSortMergeAsOfJoin = true` (e.g. from a SQL MATCH_CONDITION) is
+    // left untouched so the sort-merge physical operator handles it instead.
     val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
       .copy(requiresSortMergeAsOfJoin = true)
     val analyzed = query.analyze
 
-    // Precondition: the flag survives analysis, so it is the guard -- not a dropped flag --
-    // that makes this a no-op.
+    // The flag must survive analysis, so it, not a dropped flag, is what makes this a no-op.
     assert(analyzed.collectFirst { case a: AsOfJoin => a }.exists(_.requiresSortMergeAsOfJoin),
       "expected the analyzed plan to still carry requiresSortMergeAsOfJoin = true")
 
@@ -304,9 +295,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   }
 
   test("no rewrite when the sort-merge as-of join operator is enabled by config") {
-    // The guard is `sortMergeAsOfJoinEnabled || requiresSortMergeAsOfJoin`. This is the other
-    // trigger: with the config on, the sort-merge operator is enabled globally, so even a plain
-    // node (flag off) is left intact for that operator rather than rewritten to a subquery.
+    // With the config on, the sort-merge operator is enabled globally, so even a plain node
+    // (flag off) is left intact rather than rewritten to a subquery.
     withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
       val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
         tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
@@ -317,11 +307,9 @@ class RewriteAsOfJoinSuite extends PlanTest {
   }
 
   test("references above the join are remapped to the rewritten output") {
-    // Every other test roots the query at AsOfJoin, so the attribute remapping that
-    // `transformUpWithNewOutput` returns (the `project -> attrMapping` pair) never has an
-    // ancestor to fix up. Put a Project above the join that selects a right-side column: the
-    // rewrite gives that column a fresh exprId (a GetStructField alias), so the parent
-    // reference must be remapped onto it, otherwise the plan is left with a dangling reference.
+    // A Project above the join selects a right-side column, which the rewrite gives a fresh
+    // exprId (a GetStructField alias). The parent reference must be remapped onto it, or the
+    // plan is left with a dangling reference. Other tests root at AsOfJoin and never hit this.
     val join = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
     val originalRightExprId = join.output.last.exprId

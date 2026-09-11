@@ -166,11 +166,10 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
   }
 
   test("array operands with empty struct elements are invalid") {
-    // An array whose element type contains an empty struct is not a valid operand, even though
-    // the array itself is orderable (exercises the ArrayType arm of containsEmptyStructType).
+    // An array whose element contains an empty struct is invalid even though the array itself
+    // is orderable (the ArrayType arm of containsEmptyStructType).
     val arrayOfEmptyStruct = ArrayType(StructType(Nil))
-    // Pin that the array itself is orderable, so the rejection is attributable to the empty
-    // struct rather than to non-orderability.
+    // Pin orderability so the rejection is due to the empty struct, not non-orderability.
     assert(RowOrdering.isOrderable(arrayOfEmptyStruct))
     assert(!MatchConditionTypes.isValidOperandType(arrayOfEmptyStruct))
     assert(!MatchConditionTypes.areOperandsCompatible(arrayOfEmptyStruct, arrayOfEmptyStruct))

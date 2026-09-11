@@ -25,11 +25,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
- * Unit tests for the fixed-point analyzer rule [[ResolveAsOfJoin]], which materializes a SQL
- * `MATCH_CONDITION` clause into an [[AsOfJoin]]'s executable fields and expands `USING` column
- * lists into equi-join predicates. Operand resolution itself is done by the generic
- * `ResolveReferences` rule, so these tests feed already-resolved operands and exercise
- * `ResolveAsOfJoin` directly, mirroring `ResolveBinBySuite`.
+ * Unit tests for the analyzer rule [[ResolveAsOfJoin]], which materializes a SQL
+ * `MATCH_CONDITION` into an [[AsOfJoin]]'s executable fields and expands `USING` into equi-join
+ * predicates. Operands are resolved by the generic `ResolveReferences`, so these tests feed
+ * already-resolved operands, mirroring `ResolveBinBySuite`.
  */
 class ResolveAsOfJoinSuite extends AnalysisTest {
 
