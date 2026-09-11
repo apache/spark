@@ -762,79 +762,69 @@ class JacksonParser(
       options.singleVariantColumn.isEmpty && options.explodeEmbeddedArray.isEmpty
     val elementConverter = if (streamArray) makeConverter(schema) else null
     val jsonParser = createParser(factory, record)
-    new Iterator[InternalRow] {
-      private var delegate: Iterator[InternalRow] = Iterator.empty
-      private var nextRow: InternalRow = _
-      private var prepared = false
-      private var finished = false
-      private var started = false
-      private var array = false
-
-      override def hasNext: Boolean = {
-        prepare()
-        !finished
+    def fail(error: Throwable): Nothing = {
+      try jsonParser.close() catch {
+        case NonFatal(closeError) => error.addSuppressed(closeError)
       }
-
-      override def next(): InternalRow = {
-        prepare()
-        if (finished) throw new NoSuchElementException("next on empty iterator")
-        prepared = false
-        nextRow
+      throw badRecord(error, () => recordLiteral(record))
+    }
+    def handleFailure[T](operation: => T): T = {
+      try operation catch {
+        case e: SparkUpgradeException => fail(e)
+        case e: CharConversionException if options.encoding.isEmpty => fail(e)
+        case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
+            _: PartialResultException | _: PartialResultArrayException |
+            _: PartialArrayDataResultException | _: PartialMapDataResultException) => fail(e)
       }
+    }
 
-      private def prepare(): Unit = {
-        if (prepared || finished) return
-        try {
-          if (!started) {
-            started = true
-            val token = jsonParser.nextToken()
-            if (token == null) {
-              finish()
-            } else if (streamArray && token == START_ARRAY) {
-              array = true
-            } else {
-              val rows = rootConverter(jsonParser)
-              if (rows == null) throw QueryExecutionErrors.rootConverterReturnNullError()
-              delegate = rows.iterator
-            }
-          }
-          if (!finished && array) {
-            jsonParser.nextToken() match {
-              case END_ARRAY => finish()
-              case null =>
-                throw new JsonParseException(jsonParser, "Unexpected end of top-level array")
-              case _ =>
-                nextRow = elementConverter(jsonParser).asInstanceOf[InternalRow]
-                if (nextRow == null) throw QueryExecutionErrors.rootConverterReturnNullError()
-                prepared = true
-            }
-          } else if (!finished && delegate.hasNext) {
-            nextRow = delegate.next()
-            prepared = true
-          } else if (!finished) {
-            finish()
-          }
-        } catch {
-          case e: SparkUpgradeException => fail(e)
-          case e: CharConversionException if options.encoding.isEmpty => fail(e)
-          case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
-              _: PartialResultException | _: PartialResultArrayException |
-              _: PartialArrayDataResultException | _: PartialMapDataResultException) => fail(e)
-        }
-      }
-
-      private def finish(): Unit = {
-        finished = true
+    handleFailure(jsonParser.nextToken()) match {
+      case null =>
         jsonParser.close()
-      }
+        Iterator.empty
+      case START_ARRAY if streamArray =>
+        new Iterator[InternalRow] {
+          private var nextRow: InternalRow = _
+          private var prepared = false
+          private var finished = false
 
-      private def fail(error: Throwable): Nothing = {
-        finished = true
-        try jsonParser.close() catch {
-          case NonFatal(closeError) => error.addSuppressed(closeError)
+          override def hasNext: Boolean = {
+            prepare()
+            !finished
+          }
+
+          override def next(): InternalRow = {
+            prepare()
+            if (finished) throw new NoSuchElementException("next on empty iterator")
+            prepared = false
+            nextRow
+          }
+
+          private def prepare(): Unit = {
+            if (prepared || finished) return
+            handleFailure {
+              jsonParser.nextToken() match {
+                case END_ARRAY => finish()
+                case null =>
+                  throw new JsonParseException(jsonParser, "Unexpected end of top-level array")
+                case _ =>
+                  nextRow = elementConverter(jsonParser).asInstanceOf[InternalRow]
+                  if (nextRow == null) throw QueryExecutionErrors.rootConverterReturnNullError()
+                  prepared = true
+              }
+            }
+          }
+
+          private def finish(): Unit = {
+            finished = true
+            jsonParser.close()
+          }
         }
-        throw badRecord(error, () => recordLiteral(record))
-      }
+      case _ =>
+        val rows = handleFailure(rootConverter(jsonParser))
+        if (rows == null) fail(QueryExecutionErrors.rootConverterReturnNullError())
+        jsonParser.close()
+        rows.iterator
     }
   }
 }
