@@ -910,6 +910,59 @@ struct<a:int,a:int,z2:int>
 
 
 -- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select t.a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select a, t.a, t.b
+-- !query schema
+struct<a:int,a:int,b:int>
+-- !query output
+2	1	10
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select *
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+2	10
+
+
+-- !query
+table t
+|> as u
+|> set x = x + 1
+|> select x, u.x
+-- !query schema
+struct<x:int,x:int>
+-- !query output
+1	0
+2	1
+
+
+-- !query
+values (1) as t(a)
+|> set a = a + 1
+|> set a = a + 1
+|> select a, t.a
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+3	1
+
+
+-- !query
 table t
 |> set z = 1
 -- !query schema
