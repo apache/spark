@@ -44,6 +44,13 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
+ *
+ * @param dataSchema The schema `rootCatalystType` was projected from, for a read that prunes
+ *                   columns. A positional field match pairs a Catalyst field with the Avro field
+ *                   at the same position, and that position is the one in the full schema rather
+ *                   than in the projection: without this, reading only the third column would take
+ *                   the first Avro field. `None` when the Catalyst type is not a projection;
+ *                   unused when field matching is by name.
  */
 private[sql] class AvroDeserializer(
     rootAvroType: Schema,
@@ -53,7 +60,8 @@ private[sql] class AvroDeserializer(
     filters: StructFilters,
     useStableIdForUnionType: Boolean,
     stableIdPrefixForUnionType: String,
-    recursiveFieldMaxDepth: Int) {
+    recursiveFieldMaxDepth: Int,
+    dataSchema: Option[StructType]) {
 
   def this(
       rootAvroType: Schema,
@@ -70,7 +78,8 @@ private[sql] class AvroDeserializer(
       new NoopFilters,
       useStableIdForUnionType,
       stableIdPrefixForUnionType,
-      recursiveFieldMaxDepth)
+      recursiveFieldMaxDepth,
+      dataSchema = None)
   }
 
   private lazy val decimalConversions = new DecimalConversion()
@@ -91,7 +100,8 @@ private[sql] class AvroDeserializer(
         val resultRow = new SpecificInternalRow(st.map(_.dataType))
         val fieldUpdater = new RowUpdater(resultRow)
         val applyFilters = filters.skipRow(resultRow, _)
-        val writer = getRecordWriter(rootAvroType, st, Nil, Nil, applyFilters)
+        val writer =
+          getRecordWriter(rootAvroType, st, Nil, Nil, applyFilters, positionsInDataSchema(st))
         (data: Any) => {
           val record = data.asInstanceOf[GenericRecord]
           val skipRow = writer(fieldUpdater, record)
@@ -275,8 +285,8 @@ private[sql] class AvroDeserializer(
       case (RECORD, st: StructType) =>
         // Avro datasource doesn't accept filters with nested attributes. See SPARK-32328.
         // We can always return `false` from `applyFilters` for nested records.
-        val writeRecord =
-          getRecordWriter(avroType, st, avroPath, catalystPath, applyFilters = _ => false)
+        val writeRecord = getRecordWriter(
+          avroType, st, avroPath, catalystPath, applyFilters = _ => false, Array.empty)
         (updater, ordinal, value) =>
           val row = new SpecificInternalRow(st)
           writeRecord(new RowUpdater(row), value.asInstanceOf[GenericRecord])
@@ -416,15 +426,44 @@ private[sql] class AvroDeserializer(
     }
   }
 
+  /**
+   * The position of each `projection` field in `dataSchema`, which is what a positional field match
+   * resolves against. Empty when there is no data schema to resolve against, or when field matching
+   * is by name and the positions are unused.
+   *
+   * This takes a data schema position for an Avro field position, which `recursiveFieldMaxDepth`
+   * can break: `SchemaConverters` drops a field it will not recurse into, so the data schema is a
+   * gapped view of the Avro schema and every field after the gap resolves one position early.
+   * Positional matching is already wrong for such a schema without this method, because the fields
+   * after the gap shift by one whatever the projection is.
+   */
+  private def positionsInDataSchema(projection: StructType): Array[Int] = dataSchema match {
+    case Some(schema) if positionalFieldMatch =>
+      projection.map(field => schema.fieldIndex(field.name)).toArray
+    case _ => Array.empty
+  }
+
+  /**
+   * Creates a writer that reads a record's fields into `catalystType`'s fields.
+   *
+   * @param dataSchemaPositions The positions a positional field match resolves `catalystType`'s
+   *                            fields against, empty to use each field's own position. Only the
+   *                            root record passes them: a nested record is never a projection,
+   *                            because V1 nested pruning is limited to Parquet and ORC
+   *                            (`SchemaPruning.canPruneDataSchema`) and V2's
+   *                            `FileScanBuilder.supportsNestedSchemaPruning` is false for Avro.
+   */
   private def getRecordWriter(
       avroType: Schema,
       catalystType: StructType,
       avroPath: Seq[String],
       catalystPath: Seq[String],
-      applyFilters: Int => Boolean): (CatalystDataUpdater, GenericRecord) => Boolean = {
+      applyFilters: Int => Boolean,
+      dataSchemaPositions: Array[Int])
+      : (CatalystDataUpdater, GenericRecord) => Boolean = {
 
     val avroSchemaHelper = new AvroUtils.AvroSchemaHelper(
-      avroType, catalystType, avroPath, catalystPath, positionalFieldMatch)
+      avroType, catalystType, avroPath, catalystPath, positionalFieldMatch, dataSchemaPositions)
 
     avroSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = true)
     // no need to validateNoExtraAvroFields since extra Avro fields are ignored
