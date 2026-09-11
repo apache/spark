@@ -68,10 +68,12 @@ case class InlineCTE(
       val inlined = inlineCTE(plan, cteMap)
       // A CTE that opts out of inlining must be self-contained: it cannot carry an outer
       // reference across its boundary, because after the CTE is materialized there is no
-      // surrounding operator to resolve that reference against.
+      // surrounding operator to resolve that reference against. A MATERIALIZED definition is
+      // checked by the optimizer only: during analysis `MaterializedCTECheck` reports the outer
+      // reference as an analysis error, which this internal error would otherwise preempt.
       inlined.foreachWithSubqueries {
         case cteDef: CTERelationDef
-            if cteDef.forceSkipInline || cteDef.materialized.contains(true) =>
+            if cteDef.forceSkipInline || (!isAnalysis && cteDef.materialized.contains(true)) =>
           validateNoOuterReferencesAcrossCTEBoundary(cteDef)
         case _ =>
       }
