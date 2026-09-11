@@ -504,15 +504,15 @@ public class VariantBuilder {
   }
 
   private void appendVariantImpl(byte[] value, byte[] metadata, int pos) {
-    appendVariantImpl(value, metadata, pos, /* needNormalization */ false);
+    appendVariantImpl(value, metadata, pos, /* needCanonicalization */ false);
   }
 
   // Shared re-emit walk for `appendVariant` and `canonicalize`. Object/array structure is rebuilt
-  // identically in both modes. When `needNormalization` is true, scalar values are canonicalized as
-  // they are re-emitted (see `appendCanonicalizedScalar`); otherwise they are copied byte-for-byte,
-  // which is the behavior `appendVariant` and its callers rely on.
+  // identically in both modes. When `needCanonicalization` is true, scalar values are
+  // canonicalized as they are re-emitted (see `appendCanonicalizedScalar`); otherwise they are
+  // copied byte-for-byte, which is the behavior `appendVariant` and its callers rely on.
   private void appendVariantImpl(
-      byte[] value, byte[] metadata, int pos, boolean needNormalization) {
+      byte[] value, byte[] metadata, int pos, boolean needCanonicalization) {
     checkIndex(pos, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
     switch (basicType) {
@@ -527,7 +527,7 @@ public class VariantBuilder {
             String key = getMetadataKey(metadata, id);
             int newId = addKey(key);
             fields.add(new FieldEntry(key, newId, writePos - start));
-            appendVariantImpl(value, metadata, elementPos, needNormalization);
+            appendVariantImpl(value, metadata, elementPos, needCanonicalization);
           }
           finishWritingObject(start, fields);
           return null;
@@ -541,14 +541,14 @@ public class VariantBuilder {
             int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
             int elementPos = dataStart + offset;
             offsets.add(writePos - start);
-            appendVariantImpl(value, metadata, elementPos, needNormalization);
+            appendVariantImpl(value, metadata, elementPos, needCanonicalization);
           }
           finishWritingArray(start, offsets);
           return null;
         });
         break;
       default:
-        if (needNormalization) {
+        if (needCanonicalization) {
           appendCanonicalizedScalar(value, pos);
         } else {
           shallowAppendVariantImpl(value, pos);
@@ -560,7 +560,7 @@ public class VariantBuilder {
   // Canonicalize and append a single scalar value: integers re-emitted at the smallest int width,
   // integer-valued decimals promoted to the integer encoding, decimal trailing zeros stripped,
   // -0.0 mapped to +0.0, and short strings short-encoded -- so e.g. `1.0`, `1`, and a wide-encoded
-  // `1` all produce byte-equal output. The scalar normalization rules that the read-side check
+  // `1` all produce byte-equal output. The scalar canonicalization rules that the read-side check
   // (`isValueCanonical`) must mirror are factored into shared helpers so the two cannot drift.
   private void appendCanonicalizedScalar(byte[] value, int pos) {
     switch (VariantUtil.getType(value, pos)) {
@@ -626,7 +626,7 @@ public class VariantBuilder {
     for (byte[] key : keys) {
       addKey(new String(key, StandardCharsets.UTF_8));
     }
-    appendVariantImpl(value, metadata, pos, /* needNormalization */ true);
+    appendVariantImpl(value, metadata, pos, /* needCanonicalization */ true);
   }
 
   private void collectAllObjectKeys(
