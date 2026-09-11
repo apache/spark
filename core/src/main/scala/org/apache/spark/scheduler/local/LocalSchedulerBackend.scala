@@ -155,6 +155,14 @@ private[spark] class LocalSchedulerBackend(
    * driver's Hadoop Configuration.
    */
   private def setupUserCredentialManager(): Unit = {
+    // Capture this backend's SparkEnv once, rather than looking up the global SparkEnv.get on
+    // every callback. stop() only waits a bounded time for the renewal thread, so a renewal that
+    // outlives this SparkContext must not write into a *different* SparkContext's credential
+    // store (e.g. a new context created in the same JVM by a notebook, test, or Spark Connect
+    // session). Binding to this env ensures a late renewal updates only this application's store,
+    // which is harmless once this env is stopped. (CoarseGrainedSchedulerBackend avoids the issue
+    // differently, by routing updates through its own already-stopped driverEndpoint.)
+    val env = SparkEnv.get
     // Reuse the loader from SparkContext's selection phase (Some when OIDC is enabled, None
     // otherwise). Passing the Option straight through keeps SparkContext as the single owner of
     // the loader: create() enforces that an enabled configuration has a loader rather than
@@ -162,15 +170,14 @@ private[spark] class LocalSchedulerBackend(
     userCredentialManager = UserCredentialManager.create(conf, { (version, credentials) =>
       // No remote executors in local mode; update the shared credential store directly so that
       // subsequently dispatched tasks (and driver-side access) observe the new credentials.
-      VersionedCredentials.updateIfNewer(SparkEnv.get.userCredentials, version, credentials)
+      VersionedCredentials.updateIfNewer(env.userCredentials, version, credentials)
     }, scheduler.sc.userCredentialProviderLoader)
     userCredentialManager.foreach { manager =>
       val (version, initialCredentials) = manager.start()
       // Store initial credentials synchronously so they are available for TaskDescription
       // (task dispatch) immediately. The onCredentialsUpdate callback above also runs the same
       // updateIfNewer, so this is idempotent.
-      VersionedCredentials.updateIfNewer(
-        SparkEnv.get.userCredentials, version, initialCredentials)
+      VersionedCredentials.updateIfNewer(env.userCredentials, version, initialCredentials)
     }
   }
 
