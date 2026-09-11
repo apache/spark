@@ -76,6 +76,7 @@ private[sql] class AvroOptions(
     parameters.get(AVRO_SCHEMA).map(AvroUtils.parseAvroSchema).orElse({
       val avroUrlSchema = parameters.get(AVRO_SCHEMA_URL).map(url => {
         log.debug("loading avro schema from url: " + url)
+        val uri = new URI(url)
         // Optional operator-configured allowlist of URI schemes for avroSchemaUrl. Empty by
         // default, which permits any scheme and leaves the file-system resolution below unchanged.
         // When set, the scheme is resolved and checked before the file system for the URL is
@@ -85,9 +86,11 @@ private[sql] class AvroOptions(
         val allowedSchemes = SQLConf.get.getConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES)
           .map(_.toLowerCase(Locale.ROOT))
         if (allowedSchemes.nonEmpty) {
-          val scheme = Option(new URI(url).getScheme)
-            .orElse(Option(FileSystem.getDefaultUri(conf).getScheme))
-            .map(_.toLowerCase(Locale.ROOT)).getOrElse("")
+          // FileSystem.getDefaultUri always carries a scheme (it throws otherwise), so a
+          // scheme-less URL resolves to the default file system's scheme.
+          val scheme = Option(uri.getScheme)
+            .getOrElse(FileSystem.getDefaultUri(conf).getScheme)
+            .toLowerCase(Locale.ROOT)
           if (!allowedSchemes.contains(scheme)) {
             throw QueryCompilationErrors.avroOptionsException(
               AVRO_SCHEMA_URL,
@@ -95,7 +98,7 @@ private[sql] class AvroOptions(
                 s"configured by ${SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key}.")
           }
         }
-        val fs = FileSystem.get(new URI(url), conf)
+        val fs = FileSystem.get(uri, conf)
         val in = fs.open(new Path(url))
         try {
           new Schema.Parser().setValidateDefaults(false).parse(in)

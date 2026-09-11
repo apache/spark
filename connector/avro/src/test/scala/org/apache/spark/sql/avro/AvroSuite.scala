@@ -1255,46 +1255,31 @@ abstract class AvroSuite
     assertExceptionMsg[FileNotFoundException](e, "File not_exists.avsc does not exist")
   }
 
+  // spark.sql.avro.schemaUrlAllowedSchemes is a static SQL config, so it cannot be set with
+  // withSQLConf; these drive AvroOptions directly under a SQLConf provided via withExistingConf.
+  // A scheme-less local path resolves to the default file system ("file").
   test("SPARK-59329: avroSchemaUrl scheme allowlist permits an allowed scheme") {
     val avroSchemaUrl = testFile("test_sub.avsc")
-    // A scheme-less local path resolves to the default file system ("file"), so allowing
-    // "file" lets it through.
-    withSQLConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key -> "file") {
-      val result = spark.read.option("avroSchemaUrl", avroSchemaUrl)
-        .format("avro")
-        .load(testAvro)
-        .collect()
-      val expected = spark.read.format("avro").load(testAvro).select("string").collect()
-      assert(result.sameElements(expected))
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val conf = new SQLConf()
+    conf.setConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
+    SQLConf.withExistingConf(conf) {
+      val options = new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
+      assert(options.schema.isDefined)
     }
   }
 
-  test("SPARK-59329: avroSchemaUrl scheme allowlist rejects a scheme not listed") {
-    val avroSchemaUrl = testFile("test_sub.avsc")
-    withSQLConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key -> "s3a") {
-      val e = intercept[AnalysisException] {
-        spark.read.option("avroSchemaUrl", avroSchemaUrl)
-          .format("avro")
-          .load(testAvro)
-          .collect()
-      }
-      assert(e.getCondition == "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
-      assert(e.getMessage.contains("avroSchemaUrl"))
-      assert(e.getMessage.contains("not in the allowlist"))
-    }
-  }
-
-  test("SPARK-59329: avroSchemaUrl allowlist rejects an explicit disallowed scheme " +
+  test("SPARK-59329: avroSchemaUrl allowlist rejects a disallowed scheme " +
     "before opening the file system") {
     // An explicit non-"file" scheme is rejected by the allowlist check, which runs before the
     // file system for the URL is instantiated -- so this surfaces the clean allowlist error
     // rather than a lower-level failure from trying to load the s3a file system.
-    withSQLConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key -> "file") {
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val conf = new SQLConf()
+    conf.setConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
+    SQLConf.withExistingConf(conf) {
       val e = intercept[AnalysisException] {
-        spark.read.option("avroSchemaUrl", "s3a://bucket/user.avsc")
-          .format("avro")
-          .load(testAvro)
-          .collect()
+        new AvroOptions(Map("avroSchemaUrl" -> "s3a://bucket/user.avsc"), hadoopConf)
       }
       assert(e.getCondition == "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
       assert(e.getMessage.contains("avroSchemaUrl"))
@@ -1305,13 +1290,27 @@ abstract class AvroSuite
 
   test("SPARK-59329: avroSchemaUrl scheme allowlist is disabled by default") {
     val avroSchemaUrl = testFile("test_sub.avsc")
-    // Empty default: any scheme is permitted, preserving the previous behavior.
-    val result = spark.read.option("avroSchemaUrl", avroSchemaUrl)
-      .format("avro")
-      .load(testAvro)
-      .collect()
-    val expected = spark.read.format("avro").load(testAvro).select("string").collect()
-    assert(result.sameElements(expected))
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    // The empty default skips the scheme check entirely, preserving the previous behavior.
+    val conf = new SQLConf()
+    SQLConf.withExistingConf(conf) {
+      assert(conf.getConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES).isEmpty)
+      val options = new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
+      assert(options.schema.isDefined)
+    }
+  }
+
+  test("SPARK-59329: avroSchemaUrl scheme allowlist is case-insensitive") {
+    val avroSchemaUrl = testFile("test_sub.avsc")
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    // Allowlist entries and the URL scheme are compared case-insensitively: an upper-case "FILE"
+    // entry still permits the "file" scheme. Dropping the allowlist's case folding fails this.
+    val conf = new SQLConf()
+    conf.setConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("FILE"))
+    SQLConf.withExistingConf(conf) {
+      val options = new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
+      assert(options.schema.isDefined)
+    }
   }
 
   test("support user provided avro schema with defaults for missing fields") {

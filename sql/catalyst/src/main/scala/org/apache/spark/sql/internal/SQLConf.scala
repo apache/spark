@@ -7017,12 +7017,13 @@ object SQLConf {
     .createWithDefault(true)
 
   val AVRO_SCHEMA_URL_ALLOWED_SCHEMES =
-    buildConf("spark.sql.avro.schemaUrlAllowedSchemes")
+    buildStaticConf("spark.sql.avro.schemaUrlAllowedSchemes")
       .internal()
       .doc("A comma-separated allowlist of URI schemes permitted for the 'avroSchemaUrl' Avro " +
         "option. Empty by default, which permits any scheme and preserves the previous behavior; " +
         "when non-empty, an avroSchemaUrl whose scheme is not listed is rejected before it is " +
-        "opened.")
+        "opened. This is a static configuration fixed when the SparkSession is created and not " +
+        "modifiable at runtime, so it is an operator-level boundary that a session cannot relax.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
