@@ -1344,7 +1344,13 @@ class KeyGroupedPartitioningSuite
         attr: AttributeReference,
         otherAttr: AttributeReference,
         reducer: Reducer[_, _]): GroupPartitionsExec = {
-      val child = new LocalTableScanExec(Seq(attr), Nil, None, false)
+      // A `GroupPartitionsExec` is only built over a child that reports a `KeyedPartitioning`,
+      // and it derives its grouping from that child at construction, so the scan is wrapped in
+      // one. The key list is empty, which keeps the grouping trivial: this test is about the
+      // reducers' exprIds, not about what the node does to any partition.
+      val child = ShuffleExchangeExec(
+        KeyedPartitioning(Seq(attr), Nil),
+        new LocalTableScanExec(Seq(attr), Nil, None, false))
       val reduced = TransformExpression(BucketFunction, Seq(otherAttr), Some(2))
       GroupPartitionsExec(child,
         reducers = Some(Seq(Some(physical.KeyReducer(reducer, reduced)))))
@@ -1369,7 +1375,9 @@ class KeyGroupedPartitioningSuite
         attr: AttributeReference,
         dt: AttributeReference,
         otherAttr: AttributeReference): GroupPartitionsExec = {
-      val child = new LocalTableScanExec(Seq(attr, dt), Nil, None, false)
+      val child = ShuffleExchangeExec(
+        KeyedPartitioning(Seq(attr, dt), Nil),
+        new LocalTableScanExec(Seq(attr, dt), Nil, None, false))
       val reduced = TransformExpression(BucketFunction, Seq(otherAttr), Some(2))
       GroupPartitionsExec(child,
         reducers = Some(Seq(None, Some(physical.KeyReducer(BucketReducer(2), reduced)))))
@@ -6131,7 +6139,7 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-58988: v2 bucketed table with subset join keys joining v1 table") {
     // The v2 table is partitioned by an extra identity key `dt` plus `bucket(16, c1)`, while the
-    // join is only on `c1`. allowKeysSubsetOfPartitionKeys lets the operation key `c1` be a subset
+    // join is only on `c1`. allowKeysSubsetOfPartitionKeys lets the cluster key `c1` be a subset
     // of the partition keys `[dt, bucket(16, c1)]`, so EnsureRequirements projects the keyed side
     // to `[bucket(16, c1)]`. v2BucketingShuffleEnabled then re-shuffles only the v1 side using that
     // projected KeyedPartitioning. ShuffledJoin wraps the two output partitionings into a
@@ -6221,7 +6229,7 @@ class KeyGroupedPartitioningSuite
     // Every partition holds a distinct k1, so rows sharing (k1, k2, k3) share a partition and the
     // left member satisfies the window's distribution as it is. Projecting the right member to
     // (k2, k3) would merge the two partitions holding (9, 9) instead, for nothing. The member that
-    // needs no node has to win even though the other one covers more operation keys.
+    // needs no node has to win even though the other one covers more cluster keys.
     val cols = Array(
       Column.create("k1", IntegerType),
       Column.create("k2", IntegerType),
@@ -6624,12 +6632,12 @@ class KeyGroupedPartitioningSuite
       val groupPartitions =
         collectAllGroupPartitions(sql(query).queryExecution.executedPlan)
       assert(groupPartitions.map(_.joinKeyPositions) == Seq(Some(Seq(0))),
-        "the GroupPartitionsExec must project to the operation key [id], not only coalesce the " +
+        "the GroupPartitionsExec must project to the cluster key [id], not only coalesce the " +
           "duplicate (id, name) splits")
     }
   }
 
-  test("SPARK-58968: no GroupPartitionsExec when projecting to the operation keys coalesces " +
+  test("SPARK-58968: no GroupPartitionsExec when projecting to the cluster keys coalesces " +
       "nothing") {
     // Every id has exactly one name, so projecting KeyedPartitioning([id, name]) down to [id]
     // leaves the same number of partitions. Every id already lives on a single partition, so the
