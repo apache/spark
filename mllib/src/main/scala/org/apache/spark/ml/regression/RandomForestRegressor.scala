@@ -262,12 +262,8 @@ class RandomForestRegressionModel private[ml] (
     }
   }
 
-  override def predict(features: Vector): Double = {
-    // TODO: When we add a generic Bagging class, handle transform there.  SPARK-7128
-    // Predict average of tree predictions.
-    // Ignore the weights since all are 1.0 for now.
-    _trees.map(_.rootNode.predictImpl(features).prediction).sum / getNumTrees
-  }
+  override def predict(features: Vector): Double =
+    TreeEnsembleModel.predictRaw(features, _trees) / getNumTrees
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestRegressionModel = {
