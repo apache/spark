@@ -297,11 +297,25 @@ class FunctionsSuite extends MLTest {
       .getAs[Vector](0)
     assert(cachedScaleResult === Vectors.dense(6.0, 11.0))
 
+    val cachedScaleWithNullShiftResult = df
+      .where($"scale".isNotNull && $"shift".isNull)
+      .select(vector_affine_transform($"vector", typedLit(Array(2.0, 3.0)), $"shift"))
+      .first()
+      .getAs[Vector](0)
+    assert(cachedScaleWithNullShiftResult === Vectors.sparse(2, Seq((0, 2.0))))
+
     val cachedShiftResult = df.limit(1)
       .select(vector_affine_transform($"vector", $"scale", typedLit(Array(4.0, 5.0))))
       .first()
       .getAs[Vector](0)
     assert(cachedShiftResult === Vectors.dense(6.0, 11.0))
+
+    val nullScaleWithCachedShiftResult = df
+      .where($"scale".isNull && $"shift".isNotNull)
+      .select(vector_affine_transform($"vector", $"scale", typedLit(Array(4.0, 5.0))))
+      .first()
+      .getAs[Vector](0)
+    assert(nullScaleWithCachedShiftResult === Vectors.dense(5.0, 7.0))
 
     val scaleOnlyConstantResult = df.limit(1)
       .select(vector_affine_transform(
