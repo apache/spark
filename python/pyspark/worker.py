@@ -76,8 +76,8 @@ from pyspark.sql.conversion import (
     LocalDataToArrowConversion,
     PandasToArrowConversion,
 )
+from pyspark.sql.eval_handlers import _EVAL_TYPE_HANDLERS
 from pyspark.sql.functions import SkipRestOfInputTableException
-from pyspark.sql.pandas.eval_type_handlers import _EVAL_TYPE_HANDLERS
 from pyspark.sql.pandas.serializers import (
     ArrowStreamCoGroupSerializer,
     ArrowStreamGroupSerializer,

@@ -17,7 +17,7 @@
 
 import unittest
 
-from pyspark.sql.pandas.eval_type_handlers import (
+from pyspark.sql.eval_handlers import (
     _EVAL_TYPE_HANDLERS,
     ArrowScalarUDFHandler,
     BatchEvalTypeHandler,

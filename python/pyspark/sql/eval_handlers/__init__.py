@@ -30,6 +30,10 @@
 # ``__init_subclass__``; the worker's ``read_udfs`` looks it up in
 # ``_EVAL_TYPE_HANDLERS`` and, when present, delegates to ``handler.run`` instead
 # of walking the if/elif chain.
+#
+# This package holds the base classes here in ``__init__`` and the concrete
+# handlers in per-family submodules (``arrow``, ``pandas``), imported at the
+# bottom so their handlers self-register.
 # ---------------------------------------------------------------------------
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
@@ -40,20 +44,15 @@ from typing import (
     Dict,
     Generic,
     Optional,
-    Tuple,
     Type,
     TypeVar,
 )
 
-from pyspark.sql.conversion import ArrowBatchTransformer
 from pyspark.sql.pandas.serializers import (
     ArrowStreamCoGroupSerializer,
     ArrowStreamGroupSerializer,
     ArrowStreamSerializer,
 )
-from pyspark.sql.pandas.types import to_arrow_schema
-from pyspark.sql.types import StructField, StructType
-from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -174,57 +173,8 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler["CoGroupedBatch", OutputBatch], m
         """Prepare a stream of work items from the per-co-group Arrow streams."""
 
 
-class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
-    """SQL_SCALAR_ARROW_UDF: one user invocation per input RecordBatch.
-
-    The columns each UDF consumes are read straight off the RecordBatch, so
-    there is no up-front argument extraction; ``pre_process`` streams the input
-    batches through unchanged and carries each batch's row count forward for the
-    ``post_process`` row-count check.
-    """
-
-    eval_type = PythonEvalType.SQL_SCALAR_ARROW_UDF
-
-    def __init__(self, udfs: list, runner_conf: Any, eval_conf: Any) -> None:
-        super().__init__(udfs, runner_conf, eval_conf)
-        self._col_names = ["_%d" % i for i in range(len(udfs))]
-        self._combined_arrow_schema = to_arrow_schema(
-            StructType([StructField(n, rt) for n, (_, _, _, rt) in zip(self._col_names, udfs)]),
-            timezone="UTC",
-            prefers_large_types=runner_conf.use_large_var_types,
-        )
-
-    def pre_process(self, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
-        return data
-
-    def process(
-        self, work_items: "Iterator[pa.RecordBatch]"
-    ) -> "Iterator[Tuple[pa.RecordBatch, int]]":
-        import pyarrow as pa
-
-        for batch in work_items:
-            output_batch = pa.RecordBatch.from_arrays(
-                [
-                    udf_func(
-                        *[batch.column(o) for o in args_offsets],
-                        **{k: batch.column(v) for k, v in kwargs_offsets.items()},
-                    )
-                    for udf_func, args_offsets, kwargs_offsets, _ in self._udfs
-                ],
-                self._col_names,
-            )
-            yield output_batch, batch.num_rows
-
-    def post_process(
-        self, results: "Iterator[Tuple[pa.RecordBatch, int]]"
-    ) -> "Iterator[pa.RecordBatch]":
-        # Imported lazily to avoid a circular import: the worker module imports
-        # this module to build the handler registry.
-        from pyspark.worker import verify_scalar_result
-
-        for output_batch, num_rows in results:
-            output_batch = ArrowBatchTransformer.enforce_schema(
-                output_batch, self._combined_arrow_schema
-            )
-            verify_scalar_result(output_batch, num_rows)
-            yield output_batch
+# Import the per-family handler submodules so their concrete handlers register
+# in ``_EVAL_TYPE_HANDLERS``. Kept at the bottom to avoid a circular import: the
+# submodules import the base classes defined above.
+from pyspark.sql.eval_handlers import arrow, pandas  # noqa: F401
+from pyspark.sql.eval_handlers.arrow import ArrowScalarUDFHandler  # noqa: F401
