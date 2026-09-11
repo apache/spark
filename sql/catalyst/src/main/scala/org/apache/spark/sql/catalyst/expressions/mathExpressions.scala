@@ -345,6 +345,8 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
         An expression that evaluates to a numeric.
       * scale - The number of decimal places to round to.
         An expression that evaluates to an integer. Must be a constant.
+        When `scale` is specified the result is a decimal, whatever the type of `expr`.
+        When it is omitted the result is a long, or a decimal if `expr` is a decimal.
   """,
   examples = """
     Examples:
@@ -356,10 +358,6 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
        3.142
       > SELECT _FUNC_(3.1411, -3);
        1000
-  """,
-  note = """
-    When `scale` is given the result is a decimal, whatever the type of `expr`; without
-    it the result is a long, or a decimal when `expr` is a decimal.
   """,
   since = "3.3.0",
   group = "math_funcs")
@@ -650,6 +648,8 @@ case class Floor(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabl
         An expression that evaluates to a numeric.
       * scale - The number of decimal places to round to.
         An expression that evaluates to an integer. Must be a constant.
+        When `scale` is specified the result is a decimal, whatever the type of `expr`.
+        When it is omitted the result is a long, or a decimal if `expr` is a decimal.
   """,
   examples = """
     Examples:
@@ -661,10 +661,6 @@ case class Floor(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabl
        3.141
       > SELECT _FUNC_(3.1411, -3);
        0
-  """,
-  note = """
-    When `scale` is given the result is a decimal, whatever the type of `expr`; without
-    it the result is a long, or a decimal when `expr` is a decimal.
   """,
   since = "3.3.0",
   group = "math_funcs")
