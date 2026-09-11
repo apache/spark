@@ -17,7 +17,13 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.sql.types.{BooleanType, MapType, StringType}
+import org.json4s.JsonAST.{JArray, JString}
+import org.json4s.jackson.JsonMethods.compact
+
+import org.apache.spark.sql.{functions => F, Column}
+import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.util.QuotingUtils
+import org.apache.spark.sql.types.{BooleanType, MapType, StringType, StructType}
 
 /**
  * Per-row column authorship tracker for SCD2 ignore-null semantics.
@@ -77,15 +83,69 @@ private[pipelines] object Scd2VersionMap {
   /**
    * Schema of the version map: `Map(String, Boolean)`.
    *
-   * Keys are dot-delimited paths to *leaf* columns that received a null value in their
-   * corresponding upsert event (e.g. `"address.city"`, `` "`has space`.city" ``). Paths
-   * must be formatted by [[org.apache.spark.sql.catalyst.util.QuotingUtils.quoted]] to
-   * ensure segments that need quoting are back-tick escaped.
+   * Keys are compact JSON arrays of the name parts of *leaf* columns that received a null
+   * value in their upsert event (e.g. `["address","city"]`). Keeping
+   * name parts separate distinguishes a nested path from a column whose name contains dots
+   * and keeps persisted keys independent of SQL identifier quoting rules. Name parts use the
+   * persisted target schema's canonical spelling.
    *
-   * Values indicate authorship. I.e, `true` => authored-null, `false` => unauthored-null.
+   * Values indicate authorship: `true` means authored-null, `false` means unauthored-null.
+   * Null values never appear in the map.
    *
    * Lack of entry in the map for a null-valued leaf column implies the column was
    * schema-evolved with an unauthored-null.
    */
   def mapType: MapType = MapType(StringType, BooleanType, valueContainsNull = false)
+
+  /** Encodes a leaf path as the compact JSON string persisted as its version map key. */
+  private[autocdc] def encodePath(path: Seq[String]): String =
+    compact(JArray(path.map(JString(_)).toList))
+
+  /**
+   * Builds the ingest-time version map column for a microbatch. Each row's map records which
+   * null leaves are authored vs declined, based on the active ignore-null selection.
+   *
+   * @param schema The schema whose leaves the version map covers. Null-authorship is tracked
+   *   for every leaf column in this schema, as per the version map contract.
+   * @param ignoreNullSelection The ignore-null column selection this schema is being ingested
+   *   under.
+   * @param resolver Case-sensitivity resolver for column name matching.
+   * @return A [[Column]] of [[mapType]] schema.
+   */
+  def buildVersionMap(
+      schema: StructType,
+      ignoreNullSelection: ColumnSelection,
+      resolver: Resolver): Column = {
+    val ignoreNullColumns = ColumnSelection.applyToSchema(
+      schemaName = "ignoreNullSelection",
+      schema = schema,
+      columnSelection = Some(ignoreNullSelection),
+      resolver = resolver
+    )
+    val ignoreNullLeafPaths = AutoCdcSchemaUtils.extractLeafPaths(ignoreNullColumns).toSet
+
+    // For each leaf, build a nullable struct (key, value). The struct is non-null only when
+    // the leaf column's runtime value is null (meaning the leaf needs a version map entry).
+    // The value is a non-nullable BooleanType literal indicating authorship: true if the null
+    // is authored, false if declined.
+    val candidateEntries = AutoCdcSchemaUtils.extractLeafPaths(schema).map { path =>
+      val encodedPath = encodePath(path)
+      val isIgnoreNullLeaf = ignoreNullLeafPaths.contains(path)
+      val leafIsNull = F.col(QuotingUtils.quoteNameParts(path)).isNull
+
+      // If the leaf is not null, this candidate entry will simply resolve to null and will not be
+      // added to the version map during construction below.
+      F.when(leafIsNull, F.struct(
+        F.lit(encodedPath).as("key"),
+        F.lit(!isIgnoreNullLeaf).as("value")
+      ))
+    }
+
+    if (candidateEntries.isEmpty) {
+      F.map().cast(mapType)
+    } else {
+      val nonNullEntries = F.filter(F.array(candidateEntries: _*), (e: Column) => e.isNotNull)
+      F.map_from_entries(nonNullEntries)
+    }
+  }
 }

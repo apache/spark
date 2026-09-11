@@ -123,9 +123,10 @@ case class Scd2BatchProcessor(
    * consume.
    *
    * Step ordering is load-bearing: the row-extension steps reference user data columns that
-   * target-column selection is allowed to drop, so selection runs last. Unlike SCD1, no per-key
-   * deduplication step is performed here - SCD2 preserves every event as part of the row's
-   * history, including byte-identical full-event duplicates.
+   * target-column selection is allowed to drop. Selection therefore runs after those extensions,
+   * followed by target-schema alignment and version-map population. Unlike SCD1, no per-key
+   * deduplication step is performed here - SCD2 preserves every event as part of the row's history,
+   * including byte-identical full-event duplicates.
    *
    * Duplicate event elimination (e.g., collapsing two identical events at the same sequence),
    * whether across microbatches or within the same microbatch, is the responsibility of
@@ -133,22 +134,24 @@ case class Scd2BatchProcessor(
    *
    * @param microbatchDf
    *   the incoming CDC microbatch.
+   * @param targetTableDf
+   *   the current persisted target table.
    * @return
    *   a dataframe that retains every input row 1:1 - no rows added, dropped, reordered, or
-   *   merged - with the following schema, in column order:
-   *     1. The user columns of `microbatchDf` that survive [[ChangeArgs.columnSelection]], in
-   *        the order they appeared in the input.
-   *     2. [[startAtColName]], populated with the sequence value of the row.
-   *     3. [[endAtColName]], populated with the sequence value of the row IFF it's a delete
-   *        event, null otherwise.
-   *     4. [[cdcMetadataColName]], conforming to [[cdcMetadataColSchema]].
+   *   merged. Its fields use `targetTableDf` as the authority for order and spelling.
+   *   [[startAtColName]], [[endAtColName]], and [[cdcMetadataColName]] are populated according
+   *   to their documented contracts.
    */
-  private[autocdc] def preprocessMicrobatch(microbatchDf: DataFrame): DataFrame = {
+  private[autocdc] def preprocessMicrobatch(
+      microbatchDf: DataFrame,
+      targetTableDf: DataFrame): DataFrame = {
     microbatchDf
       .transform(extendMicrobatchRowsWithStartAt)
       .transform(extendMicrobatchRowsWithEndAt)
       .transform(extendMicrobatchRowsWithCdcMetadata)
       .transform(projectTargetColumnsOntoMicrobatch)
+      .transform(alignMicrobatchToTargetSchema(_, targetTableDf))
+      .transform(extendMicrobatchRowsWithVersionMap)
   }
 
   /**
@@ -187,20 +190,67 @@ case class Scd2BatchProcessor(
   /**
    * Project the operational CDC metadata column carrying the literal event sequence. Downstream
    * merges rely on it to preserve original event lineage regardless of how rows start/end-at are
-   * coalesced.
+   * coalesced. The version map is initially null; [[extendMicrobatchRowsWithVersionMap]] populates
+   * it after column selection runs.
    */
   private def extendMicrobatchRowsWithCdcMetadata(microbatchDf: DataFrame): DataFrame = {
     microbatchDf.withColumn(
       colName = AutoCdcReservedNames.cdcMetadataColName,
       col = Scd2BatchProcessor.constructCdcMetadataCol(
         recordStartAt = changeArgs.sequencing,
-        // TODO (SPARK-59183): actually populate version map according to ignore-null selection and
-        // actual authorship in microbatch.
         versionMap = F.lit(null),
         sequencingType = resolvedSequencingType
       )
     )
   }
+
+  /**
+   * Populates the version map on each microbatch row, recording which leaves the event authored.
+   * Null leaves in ignore-null columns get a `false` entry (declined); null leaves in other
+   * columns get `true` (authored null); non-null leaves need no entry. No-op when ignore-null
+   * is off.
+   *
+   * Delete-encoded rows (those matching [[ChangeArgs.deleteCondition]]) receive a null version
+   * map: their data-column values are not part of the SCD2 contract, so authorship tracking
+   * is not applicable.
+   *
+   * Must run after [[projectTargetColumnsOntoMicrobatch]] and
+   * [[alignMicrobatchToTargetSchema]], because the eligible schema is computed from the selected,
+   * target-aligned schema.
+   *
+   * TODO(SPARK-59343): decide how to handle the ignore-null selection changing between
+   * partial-retry attempts of the same microbatch.
+   */
+  private def extendMicrobatchRowsWithVersionMap(alignedDf: DataFrame): DataFrame =
+    changeArgs.ignoreNullSelection match {
+      case None => alignedDf
+      case Some(ignoreNullSelection) =>
+        val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)
+        val resolver = alignedDf.sparkSession.sessionState.conf.resolver
+        val schemaEligibleForNullAuthorshipTracking =
+          Scd2BatchProcessor.computeUserDataSchema(
+            schema = alignedDf.schema,
+            changeArgs = changeArgs,
+            resolver = resolver
+          )
+
+        // Only upsert rows get a populated version map. By convention, delete-encoded
+        // rows always maintain a null version map. We detect deletes via endAt rather
+        // than changeArgs.deleteCondition because column selection may have already
+        // dropped the column the delete condition references.
+        val isUpsertRow = F.col(Scd2BatchProcessor.endAtColName).isNull
+        val versionMap = F.when(isUpsertRow, Scd2VersionMap.buildVersionMap(
+          schema = schemaEligibleForNullAuthorshipTracking,
+          ignoreNullSelection = ignoreNullSelection,
+          resolver = resolver
+        ))
+
+        alignedDf.withColumn(
+          colName = AutoCdcReservedNames.cdcMetadataColName,
+          col = cdcMetadataCol
+            .withField(Scd2BatchProcessor.versionMapFieldName, versionMap)
+        )
+    }
 
   /**
    * Apply the user's target column selection while preserving the SCD2 framework columns; the
@@ -245,6 +295,19 @@ case class Scd2BatchProcessor(
       )
     microbatch.select(finalColumnsToSelect: _*)
   }
+
+  /**
+   * Align the selected incoming rows to the current persisted target schema. The target-shaped
+   * side is empty, so this retains exactly the microbatch's rows while [[DataFrame.unionByName]]
+   * supplies nulls for target columns omitted by the source, including nested struct/array fields.
+   *
+   * Keeping the target as the left schema authority also preserves its column order and exact
+   * case-spelling.
+   */
+  private def alignMicrobatchToTargetSchema(
+      projectedDf: DataFrame,
+      targetTableDf: DataFrame): DataFrame =
+    targetTableDf.limit(0).unionByName(projectedDf, allowMissingColumns = true)
 
   /**
    * For each key in the preprocessed microbatch, compute the earliest [[recordStartAtFieldName]]
@@ -1445,23 +1508,37 @@ object Scd2BatchProcessor {
   private[pipelines] def computeTrackedHistoryColumns(
       schema: StructType,
       changeArgs: ChangeArgs,
-      resolver: Resolver): Seq[String] = {
-    val keyColNames = changeArgs.keys.map(_.name)
-
-    val eligibleSchema = StructType(schema.fields.filterNot { field =>
-      reservedFrameworkColNames.exists(resolver(_, field.name)) ||
-        keyColNames.exists(resolver(_, field.name))
-    })
-
+      resolver: Resolver): Seq[String] =
     ColumnSelection
       .applyToSchema(
         schemaName = "trackHistorySelection",
-        schema = eligibleSchema,
+        schema = computeUserDataSchema(schema, changeArgs, resolver),
         columnSelection = changeArgs.trackHistorySelection,
         resolver = resolver
       )
       .fieldNames
       .toImmutableArraySeq
+
+  /**
+   * The subset of `schema` that is user data a column selection may act on: every field that is
+   * neither a framework reserved column nor one of [[ChangeArgs.keys]]. Field order is preserved.
+   *
+   * Both [[ChangeArgs.trackHistorySelection]] and [[ChangeArgs.ignoreNullSelection]] resolve
+   * against this, so an exclude-list in either cannot pick up a key or a framework column, and
+   * an include-list naming one fails as not found.
+   *
+   * `schema` is expected to have already been narrowed by [[ChangeArgs.columnSelection]] and then
+   * aligned to the persisted target schema. This method does not re-apply the selection.
+   */
+  private[pipelines] def computeUserDataSchema(
+      schema: StructType,
+      changeArgs: ChangeArgs,
+      resolver: Resolver): StructType = {
+    val keyColNames = changeArgs.keys.map(_.name)
+    StructType(schema.fields.filterNot { field =>
+      reservedFrameworkColNames.exists(resolver(_, field.name)) ||
+        keyColNames.exists(resolver(_, field.name))
+    })
   }
 
   /**

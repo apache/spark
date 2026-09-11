@@ -31,6 +31,28 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
 
   /**
+   * Preprocess a microbatch against either an explicit persisted user schema or, by default, the
+   * microbatch's user-selected schema. The latter keeps tests unrelated to cross-run evolution
+   * focused on their existing axis.
+   */
+  private def preprocessMicrobatch(
+      processor: Scd2BatchProcessor,
+      microbatch: DataFrame,
+      targetUserSchema: Option[StructType] = None): DataFrame = {
+    val selectedMicrobatchSchema = ColumnSelection.applyToSchema(
+      schemaName = "microbatch",
+      schema = microbatch.schema,
+      columnSelection = processor.changeArgs.columnSelection,
+      resolver = spark.sessionState.conf.resolver
+    )
+    val targetTableDf = targetTableOf(
+      targetUserSchema.getOrElse(selectedMicrobatchSchema),
+      processor.resolvedSequencingType
+    )()
+    processor.preprocessMicrobatch(microbatch, targetTableDf)
+  }
+
+  /**
    * Build an mock aux-table [[DataFrame]] from explicit user rows + framework column values.
    */
   private def auxTableOf(
@@ -270,7 +292,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.schema.fieldNames.toSeq == Seq(
       "id", "seq", "value",
@@ -309,7 +331,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.collect().isEmpty)
     assert(result.schema.fieldNames.toSeq == Seq(
@@ -353,7 +375,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     //   - __RECORD_START_AT = sequencing for every row, regardless of delete vs upsert
     //                        (lineage preserved into the merge step)
     checkAnswer(
-      df = processor.preprocessMicrobatch(batch),
+      df = preprocessMicrobatch(processor, batch),
       expectedAnswer = Seq(
         Row(1, 10L, "first-upsert", false, 10L, null, Row(10L, null)),
         Row(1, 20L, "second-upsert", false, 20L, null, Row(20L, null)),
@@ -391,7 +413,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     // Both rows must survive verbatim.
     checkAnswer(
-      df = processor.preprocessMicrobatch(batch),
+      df = preprocessMicrobatch(processor, batch),
       expectedAnswer = Seq(
         Row(1, 10L, "alice", false, 10L, null, Row(10L, null)),
         Row(1, 10L, "alice", false, 10L, null, Row(10L, null))
@@ -421,7 +443,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
 
     checkAnswer(
-      df = processor.preprocessMicrobatch(batch).select(
+      df = preprocessMicrobatch(processor, batch).select(
         F.col(Scd2BatchProcessor.endAtColName)
       ),
       expectedAnswer = Seq(Row(null), Row(null))
@@ -452,7 +474,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
 
     checkAnswer(
-      df = processor.preprocessMicrobatch(batch).select(
+      df = preprocessMicrobatch(processor, batch).select(
         F.col(Scd2BatchProcessor.endAtColName)
       ),
       expectedAnswer = Row(null)
@@ -485,7 +507,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     checkAnswer(
       df = result.select(
@@ -522,7 +544,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.schema.fieldNames.toSeq == Seq(
       "id", "name", "age", "seq",
@@ -549,7 +571,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.schema.fieldNames.toSeq == Seq(
       "id", "age",
@@ -581,7 +603,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.schema.fieldNames.toSeq == Seq(
       "id", "age", "seq",
@@ -614,7 +636,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     // Output column order follows the microbatch schema (id before age), not the user's listing
     // order in IncludeColumns. Framework columns are always appended last.
@@ -646,7 +668,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
         resolvedSequencingType = LongType
       )
 
-      val result = processor.preprocessMicrobatch(batch)
+      val result = preprocessMicrobatch(processor, batch)
 
       // Output column names follow the microbatch schema's casing, not the user's casing.
       assert(result.schema.fieldNames.toSeq == Seq(
@@ -685,7 +707,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.schema.fieldNames.toSeq == Seq(
       "id", "user.id",
@@ -729,7 +751,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     // The orchestrator runs row-extension steps before column selection, so the framework
     // columns reference seq / is_delete fully even though the final projection drops them.
-    val result = processor.preprocessMicrobatch(batch)
+    val result = preprocessMicrobatch(processor, batch)
 
     assert(result.schema.fieldNames.toSeq == Seq(
       "id", "value",
@@ -743,6 +765,327 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
         Row(1, "alice", 10L, null, Row(10L, null)),
         Row(1, null, 20L, 20L, Row(20L, null))
       )
+    )
+  }
+
+  gridTest("preprocessMicrobatch keeps divergent target spelling under case-insensitive analysis")(
+    Seq(
+      ("id", "Value", "ID", "value"),
+      ("ID", "value", "id", "Value")
+    )
+  ) { case (sourceKey, sourceValue, targetKey, targetValue) =>
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val batchSchema = new StructType()
+        .add(sourceKey, IntegerType)
+        .add(sourceValue, StringType)
+        .add("seq", LongType)
+      val targetUserSchema = new StructType()
+        .add(targetKey, IntegerType)
+        .add(targetValue, StringType)
+      val batch = microbatchOf(batchSchema)(Row(1, "a", 10L))
+      val processor = Scd2BatchProcessor(
+        changeArgs = ChangeArgs(
+          keys = Seq(UnqualifiedColumnName(sourceKey)),
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type2,
+          columnSelection = Some(ColumnSelection.ExcludeColumns(
+            Seq(UnqualifiedColumnName("seq"))))
+        ),
+        resolvedSequencingType = LongType
+      )
+
+      val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+      assert(result.schema.fieldNames.take(2).toSeq == Seq(targetKey, targetValue))
+      checkAnswer(result.select(F.col(targetKey), F.col(targetValue)), Row(1, "a"))
+    }
+  }
+
+  test("preprocessMicrobatch keeps distinct case-sensitive columns between target " +
+    "and microbatch") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val batchSchema = new StructType()
+        .add("id", IntegerType)
+        .add("Value", StringType)
+        .add("seq", LongType)
+      val targetUserSchema = new StructType()
+        .add("id", IntegerType)
+        .add("value", StringType)
+        .add("Value", StringType)
+      val batch = microbatchOf(batchSchema)(Row(1, "a", 10L))
+      val processor = Scd2BatchProcessor(
+        changeArgs = ChangeArgs(
+          keys = Seq(UnqualifiedColumnName("id")),
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type2,
+          columnSelection = Some(ColumnSelection.ExcludeColumns(
+            Seq(UnqualifiedColumnName("seq"))))
+        ),
+        resolvedSequencingType = LongType
+      )
+
+      val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+      assert(result.schema.fieldNames.take(3).toSeq == Seq("id", "value", "Value"))
+      checkAnswer(result.select(F.col("value"), F.col("Value")), Row(null, "a"))
+    }
+  }
+
+  test("preprocessMicrobatch keeps nested target field spelling recursively under " +
+    "case-insensitive analysis") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val batchSchema = new StructType()
+        .add("ID", IntegerType)
+        .add("Value", new StructType().add("City", IntegerType))
+        .add("seq", LongType)
+      val targetUserSchema = new StructType()
+        .add("id", IntegerType)
+        .add("value", new StructType()
+          .add("city", IntegerType)
+          .add("removedNested", StringType))
+        .add("removedTopLevel", StringType)
+      val batch = microbatchOf(batchSchema)(Row(1, Row(2), 10L))
+      val processor = Scd2BatchProcessor(
+        changeArgs = ChangeArgs(
+          keys = Seq(UnqualifiedColumnName("id")),
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type2,
+          columnSelection = Some(ColumnSelection.ExcludeColumns(
+            Seq(UnqualifiedColumnName("seq"))))
+        ),
+        resolvedSequencingType = LongType
+      )
+
+      val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+      assert(result.schema.fieldNames.toSeq == Seq(
+        "id",
+        "value",
+        "removedTopLevel",
+        Scd2BatchProcessor.startAtColName,
+        Scd2BatchProcessor.endAtColName,
+        AutoCdcReservedNames.cdcMetadataColName
+      ))
+      assert(result.schema("value").dataType.asInstanceOf[StructType].fieldNames.toSeq ==
+        Seq("city", "removedNested"))
+      checkAnswer(
+        df = result,
+        expectedAnswer = Row(1, Row(2, null), null, 10L, null, Row(10L, null))
+      )
+    }
+  }
+
+  gridTest("preprocessMicrobatch leaves delete-representing rows with a null version map")(
+    Seq(
+      // Delete condition is specified; all non-matching rows should be treated as upsert.
+      Some(F.col("is_delete")),
+      // Delete condition is unspecified; all microbatch rows should be treated as upsert.
+      None
+    )
+  ) { case (deleteCondition) =>
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("seq", LongType)
+      .add("is_delete", BooleanType)
+
+    val batch = microbatchOf(schema)(
+      Row(1, null, 10L, false), // upsert with null value
+      Row(1, "a", 20L, false), // upsert with non-null value
+      Row(1, null, 30L, true) // delete iff deleteCondition is set
+    )
+
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        deleteCondition = deleteCondition,
+        // Even if we drop `is_delete` from the output schema, delete-row detection should still
+        // work and the row should still receive a null version map.
+        columnSelection = Some(ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName("is_delete")))),
+        ignoreNullSelection =
+          Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value"))))
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = preprocessMicrobatch(processor, batch)
+
+    val versionMaps = result.select(
+      F.col("seq"),
+      Scd2BatchProcessor.versionMapOf(
+        F.col(AutoCdcReservedNames.cdcMetadataColName)
+      ).as("vm")
+    )
+
+    // Upsert rows always get a populated version map. The third row is a delete (null
+    // version map) only when deleteCondition is set; otherwise it is an upsert too.
+    val valueVersionMapKey = Scd2VersionMap.encodePath(Seq("value"))
+    val expectedDeleteRowMap: Any =
+      if (deleteCondition.isDefined) null else Map(valueVersionMapKey -> false)
+
+    checkAnswer(
+      df = versionMaps,
+      expectedAnswer = Seq(
+        Row(10L, Map(valueVersionMapKey -> false)),
+        Row(20L, Map.empty[String, Boolean]),
+        Row(30L, expectedDeleteRowMap)
+      )
+    )
+  }
+
+  gridTest("preprocessMicrobatch applies ignore-null selection to reductively removed columns")(
+    Seq(
+      // Include only value: removed is outside ignore-null and its padded null is authored.
+      (ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value"))), true),
+      // Exclude value: removed is inside ignore-null and its padded null is declined.
+      (ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("value"))), false)
+    )
+  ) { case (ignoreNullSelection, expectedAuthorship) =>
+    val batchSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("seq", LongType)
+    val targetUserSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("removed", StringType)
+    val batch = microbatchOf(batchSchema)(Row(1, "a", 10L))
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        columnSelection = Some(ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName("seq")))),
+        ignoreNullSelection = Some(ignoreNullSelection)
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+    checkAnswer(
+      df = result.select(
+        F.col("removed"),
+        Scd2BatchProcessor.versionMapOf(
+          F.col(AutoCdcReservedNames.cdcMetadataColName)).as("vm")),
+      expectedAnswer = Row(
+        null,
+        Map(Scd2VersionMap.encodePath(Seq("removed")) -> expectedAuthorship))
+    )
+  }
+
+  test("preprocessMicrobatch applies ignore-null to a reductively removed nested field") {
+    val batchSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", new StructType().add("a", IntegerType))
+      .add("seq", LongType)
+    val targetUserSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", new StructType()
+        .add("a", IntegerType)
+        .add("removed", StringType))
+    val batch = microbatchOf(batchSchema)(Row(1, Row(1), 10L))
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        columnSelection = Some(ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName("seq")))),
+        ignoreNullSelection =
+          Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value"))))
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+    checkAnswer(
+      df = result.select(
+        F.col("value"),
+        Scd2BatchProcessor.versionMapOf(
+          F.col(AutoCdcReservedNames.cdcMetadataColName)).as("vm")),
+      expectedAnswer = Row(
+        Row(1, null),
+        Map(Scd2VersionMap.encodePath(Seq("value", "removed")) -> false))
+    )
+  }
+
+  test("version-map key spelling matches the preprocessed microbatch and target") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val batchSchema = new StructType()
+        .add("id", IntegerType)
+        .add("Value", StringType)
+        .add("seq", LongType)
+      val targetUserSchema = new StructType()
+        .add("id", IntegerType)
+        .add("value", StringType)
+      val batch = microbatchOf(batchSchema)(Row(1, null, 10L))
+      val processor = Scd2BatchProcessor(
+        changeArgs = ChangeArgs(
+          keys = Seq(UnqualifiedColumnName("id")),
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type2,
+          columnSelection = Some(ColumnSelection.ExcludeColumns(
+            Seq(UnqualifiedColumnName("seq")))),
+          ignoreNullSelection =
+            Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("Value"))))
+        ),
+        resolvedSequencingType = LongType
+      )
+
+      val result = preprocessMicrobatch(processor, batch, Some(targetUserSchema))
+      val sourceValueName = batchSchema.fields(1).name
+      val preprocessedValueName = result.schema.fields(1).name
+      val targetValueName = targetUserSchema.fields(1).name
+      assert(sourceValueName == "Value")
+      assert(preprocessedValueName == targetValueName)
+      assert(preprocessedValueName == "value")
+
+      val expectedVersionMapKey = Scd2VersionMap.encodePath(Seq(preprocessedValueName))
+      checkAnswer(
+        df = result.select(Scd2BatchProcessor.versionMapOf(
+          F.col(AutoCdcReservedNames.cdcMetadataColName)).as("vm")),
+        expectedAnswer = Row(Map(expectedVersionMapKey -> false))
+      )
+    }
+  }
+
+  test("preprocessMicrobatch leaves version map null for all rows when ignore null is off") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("seq", LongType)
+      .add("is_delete", BooleanType)
+
+    val batch = microbatchOf(schema)(
+      Row(1, null, 10L, false),
+      Row(1, null, 20L, true)
+    )
+
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        deleteCondition = Some(F.col("is_delete")),
+        // None ignore-null selection should be treated as ignore-null off.
+        ignoreNullSelection = None
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = preprocessMicrobatch(processor, batch)
+
+    val versionMaps = result.select(
+      Scd2BatchProcessor.versionMapOf(
+        F.col(AutoCdcReservedNames.cdcMetadataColName)
+      ).as("vm")
+    )
+
+    // ignoreNullSelection is None -> version map is null on every row.
+    checkAnswer(
+      df = versionMaps,
+      expectedAnswer = Seq(Row(null), Row(null))
     )
   }
 
@@ -774,7 +1117,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(2, 40L, true)    // delete - smallest sequence for key=2
     )
 
-    val preprocessed = processor.preprocessMicrobatch(raw)
+    val preprocessed = preprocessMicrobatch(processor, raw)
     val result = processor.computeMinimumSequencePerKey(preprocessed)
 
     assert(result.schema.fieldNames.toSeq == Seq(
@@ -808,7 +1151,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row("EU", 1, 30L)
     )
 
-    val preprocessed = processor.preprocessMicrobatch(raw)
+    val preprocessed = preprocessMicrobatch(processor, raw)
     val result = processor.computeMinimumSequencePerKey(preprocessed)
 
     assert(result.schema.fieldNames.toSeq == Seq(
@@ -832,7 +1175,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val processor = processorWithKeys(keys = Seq("id"))
 
     val raw = microbatchOf(schema)()
-    val preprocessed = processor.preprocessMicrobatch(raw)
+    val preprocessed = preprocessMicrobatch(processor, raw)
     val result = processor.computeMinimumSequencePerKey(preprocessed)
 
     assert(result.collect().isEmpty)
@@ -853,7 +1196,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 30L),
       Row(1, 10L)
     )
-    val preprocessed = processor.preprocessMicrobatch(raw)
+    val preprocessed = preprocessMicrobatch(processor, raw)
     val result = processor.computeMinimumSequencePerKey(preprocessed)
 
     assert(result.schema.fieldNames.toSeq == Seq(
@@ -2175,7 +2518,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       Row(1, 10L, "alice", "inactive")
     )
 
-    val result = processor.reconcileStartAndEndAt(processor.preprocessMicrobatch(df))
+    val result = processor.reconcileStartAndEndAt(preprocessMicrobatch(processor, df))
 
     checkAnswer(
       df = result,
@@ -2209,7 +2552,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
 
     val ex = intercept[AnalysisException] {
-      processor.reconcileStartAndEndAt(processor.preprocessMicrobatch(df))
+      processor.reconcileStartAndEndAt(preprocessMicrobatch(processor, df))
     }
     assert(ex.getCondition == "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA")
   }
