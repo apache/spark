@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types.{IntegerType, LongType, _}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
 class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with ExpressionEvalHelper {
@@ -71,6 +71,35 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with Expressio
     assert(unsafeRow2.getLong(0) === 0)
     assert(unsafeRow2.getLong(1) === 1)
     assert(unsafeRow2.getInt(2) === 2)
+  }
+
+  testBothCodegenAndInterpreted(
+      "null nanosecond timestamp keys are byte-identical regardless of prior rows") {
+    // The nanosecond timestamp types occupy a 16-byte variable-length payload. The projection
+    // reuses its output buffer across rows, so a null value must zero that payload; otherwise it
+    // inherits the previous non-null value's bytes and two null rows compare unequal -- which
+    // splits a nullable nanosecond GROUP BY / join key into several null groups.
+    Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9)).foreach { dt =>
+      val fieldTypes: Array[DataType] = Array(dt)
+      val converter = UnsafeProjection.create(fieldTypes)
+      val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
+
+      // Dirty the reused buffer with one non-null value, then project a null.
+      row.update(0, TimestampNanosVal.fromParts(1234567L, 111.toShort))
+      converter.apply(row)
+      row.setNullAt(0)
+      val nullAfterA = converter.apply(row).copy()
+
+      // Dirty the buffer with a *different* non-null value, then project a null again.
+      row.update(0, TimestampNanosVal.fromParts(987654321L, 222.toShort))
+      converter.apply(row)
+      row.setNullAt(0)
+      val nullAfterB = converter.apply(row).copy()
+
+      assert(nullAfterA.isNullAt(0) && nullAfterB.isNullAt(0))
+      assert(nullAfterA == nullAfterB,
+        s"two null $dt projections must be byte-identical but differed (stale payload)")
+    }
   }
 
   testBothCodegenAndInterpreted("basic conversion with primitive, string and binary types") {
