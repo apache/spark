@@ -166,7 +166,8 @@ public abstract class UnsafeWriter {
       // Zero the reserved payload so that a null value is byte-identical no matter what stale bytes
       // the reused buffer holds. The buffer is not cleared between rows, so without this two null
       // keys can carry different bytes and split into separate groups (a nullable nanosecond
-      // GROUP BY / join key produced several null groups). Mirrors UnsafeRow#setTimestampNanos.
+      // GROUP BY / join key produced several null groups). Mirrors the in-place null-update path
+      // UnsafeRow#setTimestampNanosPayload, which zeroes the payload the same way.
       TimestampNanosRowValues.zeroPayload(getBuffer(), 0, (int) cursor());
     } else {
       TimestampNanosRowValues.writePayload(
