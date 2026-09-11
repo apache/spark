@@ -19,6 +19,7 @@ import unittest
 import uuid
 from collections.abc import Generator
 from typing import Any, Optional, Union
+from unittest import mock
 
 from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 from pyspark.testing.utils import eventually
@@ -34,7 +35,10 @@ if should_test_connect:
 
     import pyspark.sql.connect.proto as proto
     from pyspark.errors import PySparkRuntimeError
-    from pyspark.errors.exceptions.connect import SparkConnectGrpcException
+    from pyspark.errors.exceptions.connect import (
+        SparkConnectException,
+        SparkConnectGrpcException,
+    )
     from pyspark.sql.connect.client import DefaultChannelBuilder, SparkConnectClient
     from pyspark.sql.connect.client.core import RpcDeadlines
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
@@ -1010,6 +1014,73 @@ class SparkConnectClientTestCase(unittest.TestCase):
         rel, captured = make_relation(RpcDeadlines.disabled())
         rel.__del__()
         self.assertIsNone(captured["timeout"])
+
+    def _unsupported_api_error(self):
+        # Mirrors what an older server raises for an extension API it does not implement,
+        # i.e. InvalidInputErrors.noHandlerFoundForExtension on the server side.
+        return SparkConnectGrpcException(
+            message="No handler found for extension type: foo.Bar",
+            errorClass="CONNECT_INVALID_PLAN.NO_HANDLER_FOR_EXTENSION",
+        )
+
+    def test_execute_command_skip_if_unsupported_skips_unsupported_api(self):
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        self.addCleanup(client.close)
+        command = proto.Command()
+
+        def _raise(*args, **kwargs):
+            raise self._unsupported_api_error()
+
+        # _set_command_in_plan is stubbed out because it issues a config RPC that would block
+        # against the fake endpoint; the request payload is irrelevant to the tested behavior.
+        with (
+            mock.patch.object(client, "_set_command_in_plan"),
+            mock.patch.object(client, "_execute_and_fetch", side_effect=_raise),
+        ):
+            # skip_if_unsupported=True downgrades the unsupported-API failure to a warning + no-op.
+            with self.assertWarns(RuntimeWarning):
+                data, properties, _ = client.execute_command(command, skip_if_unsupported=True)
+            self.assertIsNone(data)
+            self.assertEqual(properties, {})
+            # The default (skip_if_unsupported=False) still surfaces the failure.
+            with self.assertRaises(SparkConnectException):
+                client.execute_command(command)
+
+    def test_execute_command_skip_if_unsupported_reraises_other_errors(self):
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        self.addCleanup(client.close)
+        command = proto.Command()
+
+        def _raise(*args, **kwargs):
+            raise SparkConnectGrpcException(message="boom", errorClass="DIVIDE_BY_ZERO")
+
+        with (
+            mock.patch.object(client, "_set_command_in_plan"),
+            mock.patch.object(client, "_execute_and_fetch", side_effect=_raise),
+        ):
+            # skip_if_unsupported must not swallow failures that are not unsupported-API rejections.
+            with self.assertRaises(SparkConnectException):
+                client.execute_command(command, skip_if_unsupported=True)
+
+    def test_execute_command_as_iterator_skip_if_unsupported_skips_unsupported_api(self):
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        self.addCleanup(client.close)
+        command = proto.Command()
+
+        def _raise(*args, **kwargs):
+            raise self._unsupported_api_error()
+
+        with (
+            mock.patch.object(client, "_set_command_in_plan"),
+            mock.patch.object(client, "_execute_and_fetch_as_iterator", side_effect=_raise),
+        ):
+            with self.assertWarns(RuntimeWarning):
+                results = list(
+                    client.execute_command_as_iterator(command, skip_if_unsupported=True)
+                )
+            self.assertEqual(results, [])
+            with self.assertRaises(SparkConnectException):
+                list(client.execute_command_as_iterator(command))
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
