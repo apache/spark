@@ -32,8 +32,10 @@
 # of walking the if/elif chain.
 #
 # This package holds the base classes here in ``__init__`` and the concrete
-# handlers in per-family submodules (``arrow``, ``pandas``), imported at the
-# bottom so their handlers self-register.
+# handlers in private per-family submodules (``_arrow``; a ``_pandas`` module
+# will follow as pandas eval types are migrated), imported at the bottom so
+# their handlers self-register. Import handlers from the package, not the
+# submodules.
 # ---------------------------------------------------------------------------
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
@@ -174,7 +176,7 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler["CoGroupedBatch", OutputBatch], m
 
 
 # Import the per-family handler submodules so their concrete handlers register
-# in ``_EVAL_TYPE_HANDLERS``. Kept at the bottom to avoid a circular import: the
-# submodules import the base classes defined above.
-from pyspark.sql.eval_handlers import arrow, pandas  # noqa: F401
-from pyspark.sql.eval_handlers.arrow import ArrowScalarUDFHandler  # noqa: F401
+# in ``_EVAL_TYPE_HANDLERS`` and are re-exported from the package. Kept at the
+# bottom to avoid a circular import: the submodules import the base classes
+# defined above.
+from pyspark.sql.eval_handlers._arrow import ArrowScalarUDFHandler  # noqa: F401
