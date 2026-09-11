@@ -158,9 +158,9 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
-   * Applies CHAR padding and VARCHAR length checks when parsing text into a typed schema.
-   * Null stays null. Unbounded STRING is unchanged. This is assignment semantics
-   * (overflow raises EXCEED_LIMIT_LENGTH), not explicit CAST truncation.
+   * Applies assignment semantics when parsing text into a typed schema. CHAR values are padded,
+   * and excess trailing spaces are trimmed when the remaining value fits. Non-space overflow
+   * raises EXCEED_LIMIT_LENGTH. Null stays null, and unbounded STRING is unchanged.
    */
   def applyTextParseSemantics(value: UTF8String, dt: DataType): UTF8String = {
     if (value == null) {
