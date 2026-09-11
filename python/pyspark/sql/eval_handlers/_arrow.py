@@ -31,7 +31,7 @@ from pyspark.util import PythonEvalType
 if TYPE_CHECKING:
     import pyarrow as pa
 
-    from pyspark.worker import EvalConf, RunnerConf
+    from pyspark.worker_util import EvalConf, RunnerConf
 
 
 class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):

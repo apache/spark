@@ -114,7 +114,8 @@ from pyspark.util import (
 )
 from pyspark.worker_message import WorkerInitInfo
 from pyspark.worker_util import (
-    Conf,
+    EvalConf,
+    RunnerConf,
     check_python_version,
     get_sock_file_to_executor,
     pickleSer,
@@ -124,142 +125,6 @@ from pyspark.worker_util import (
     setup_memory_limits,
     setup_spark_files,
 )
-
-
-class RunnerConf(Conf):
-    @property
-    def assign_cols_by_name(self) -> bool:
-        return (
-            self.get("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true")
-            == "true"
-        )
-
-    @property
-    def use_large_var_types(self) -> bool:
-        return self.get("spark.sql.execution.arrow.useLargeVarTypes", "false") == "true"
-
-    @property
-    def use_legacy_pandas_udf_conversion(self) -> bool:
-        return (
-            self.get("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false")
-            == "true"
-        )
-
-    @property
-    def use_legacy_pandas_udtf_conversion(self) -> bool:
-        return (
-            self.get("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false")
-            == "true"
-        )
-
-    @property
-    def map_in_batch_legacy_accept_any_iterable(self) -> bool:
-        return (
-            self.get(
-                "spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled",
-                "true",
-            )
-            == "true"
-        )
-
-    @property
-    def binary_as_bytes(self) -> bool:
-        return self.get("spark.sql.execution.pyspark.binaryAsBytes", "true") == "true"
-
-    @property
-    def safecheck(self) -> bool:
-        return self.get("spark.sql.execution.pandas.convertToArrowArraySafely", "false") == "true"
-
-    @property
-    def int_to_decimal_coercion_enabled(self) -> bool:
-        return (
-            self.get("spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled", "false")
-            == "true"
-        )
-
-    @property
-    def prefer_int_ext_dtype(self) -> bool:
-        return (
-            self.get("spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype", "false")
-            == "true"
-        )
-
-    @property
-    def timezone(self) -> Optional[str]:
-        return self.get("spark.sql.session.timeZone", None, lower_str=False)
-
-    @property
-    def arrow_max_records_per_batch(self) -> int:
-        return int(self.get("spark.sql.execution.arrow.maxRecordsPerBatch", 10000))
-
-    @property
-    def arrow_max_bytes_per_batch(self) -> int:
-        return int(self.get("spark.sql.execution.arrow.maxBytesPerBatch", 2**31 - 1))
-
-    @property
-    def arrow_concurrency_level(self) -> int:
-        return int(self.get("spark.sql.execution.pythonUDF.arrow.concurrency.level", -1))
-
-    @property
-    def udf_profiler(self) -> Optional[str]:
-        return self.get("spark.sql.pyspark.udf.profiler", None)
-
-    @property
-    def data_source_profiler(self) -> Optional[str]:
-        return self.get("spark.sql.pyspark.dataSource.profiler", None)
-
-
-class EvalConf(Conf):
-    @property
-    def state_value_schema(self) -> Optional[StructType]:
-        schema = self.get("state_value_schema", None)
-        if schema is None:
-            return None
-        return StructType.fromJson(json.loads(schema))
-
-    @property
-    def grouping_key_schema(self) -> Optional[StructType]:
-        schema = self.get("grouping_key_schema", None)
-        if schema is None:
-            return None
-        return StructType.fromJson(json.loads(schema))
-
-    @property
-    def state_server_socket_port(self) -> Optional[int | str]:
-        port = self.get("state_server_socket_port", None)
-        try:
-            return int(port)
-        except ValueError:
-            return port
-
-    @property
-    def state_server_auth_secret(self) -> Optional[str]:
-        return self.get("state_server_auth_secret", None, lower_str=False)
-
-    @property
-    def input_type(self) -> Optional[DataType]:
-        input_type = self.get("input_type", None, lower_str=False)
-        if input_type is None:
-            return None
-        return _parse_datatype_json_string(input_type)
-
-    @property
-    def elementwise_nesting(self) -> Optional[list]:
-        # Per-UDF nesting depth (parallel to the UDF list) for the element-wise lift: how many
-        # ``array`` levels the worker flattens off each argument and re-nests onto the result. A UDF
-        # in a single lambda is depth 1; one lifted out of nested lambdas is deeper. Absent/empty
-        # means depth 1 for every UDF. See ExtractPythonUDFFromLambda.
-        raw = self.get("elementwise_nesting", None)
-        if raw is None or raw == "":
-            return None
-        return [int(x) for x in raw.split(",")]
-
-    @property
-    def table_arg_offsets(self) -> Optional[list[int]]:
-        offsets = self.get("table_arg_offsets", None)
-        if offsets is None:
-            return None
-        return [int(x) for x in offsets.split(",") if x]
 
 
 def report_times(outfile, boot, init, finish, processing_time_ms):

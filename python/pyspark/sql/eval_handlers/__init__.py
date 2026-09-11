@@ -62,7 +62,7 @@ if TYPE_CHECKING:
     import pyarrow as pa  # noqa: F401
 
     from pyspark.sql.pandas._typing import CoGroupedBatch, GroupedBatch  # noqa: F401
-    from pyspark.worker import EvalConf, RunnerConf
+    from pyspark.worker_util import EvalConf, RunnerConf
 
 # Registry of concrete handlers keyed by PythonEvalType. Populated at class
 # definition time by ``EvalTypeHandler.__init_subclass__``.
