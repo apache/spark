@@ -541,10 +541,16 @@ private[spark] object UserCredentialManager extends Logging {
    *
    * This phase runs in local mode as well: `LocalSchedulerBackend` starts a
    * [[UserCredentialManager]] (for parity with `HadoopDelegationTokenManager`, which also runs
-   * in `LocalSchedulerBackend`), so a resolution phase follows and the wiring applied here
-   * points at credentials that are actually populated. (Before SPARK-59296's follow-up, local
-   * mode had no resolution phase, so this selection phase was skipped there to avoid wiring a
-   * provider whose credentials would never be resolved.)
+   * in `LocalSchedulerBackend`), so a resolution phase follows and populates the credentials the
+   * wiring points at. As in cluster mode, the resolution phase runs later than this selection
+   * phase (at scheduler-backend start), so there is a driver-side early-startup window: any
+   * driver-side access to a wired scheme during `SparkContext` construction -- for example
+   * fetching `spark.jars` / `spark.files` / `spark.archives`, or a `spark.checkpoint.dir` on such
+   * a scheme -- happens before the credentials exist and therefore cannot use them. This is the
+   * same driver-side window that exists in cluster mode; prefer `local://` for such resources.
+   * (Before SPARK-59296's follow-up, local mode had no resolution phase; the wiring applied here
+   * would never have been backed by resolved credentials, so this phase returned early in local
+   * mode.)
    *
    * Scheme selection is limited to schemes for which a provider is UNAMBIGUOUSLY selected:
    * either an explicitly-configured scheme (`spark.security.oidc.provider.<scheme>`) or a
