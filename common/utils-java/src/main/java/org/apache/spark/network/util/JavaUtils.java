@@ -761,12 +761,53 @@ public class JavaUtils {
   }
 
   /**
+   * Throws an {@link IllegalArgumentException} with the given message if {@code check} is
+   * {@code false}.
+   *
+   * <p>Unlike {@link #checkArgument(boolean, String, Object...)}, {@code msg} is used verbatim and
+   * is <b>not</b> passed through {@link String#format(String, Object...)}. Prefer this overload
+   * whenever the message is a fixed string or is assembled by the caller (for example by
+   * concatenation): the message may then contain {@code %} characters without risking a
+   * {@link java.util.IllegalFormatException} that would mask the intended error, and no format
+   * arguments array is allocated. Use the varargs overload only when there are values to
+   * interpolate, passing them as arguments (e.g. {@code checkArgument(cond, "bad key: %s", key)})
+   * rather than concatenating them into {@code msg}.
+   *
+   * @param check the condition that must hold; an exception is thrown when it is {@code false}
+   * @param msg   the failure message, used exactly as given
+   * @throws IllegalArgumentException if {@code check} is {@code false}
+   */
+  public static void checkArgument(boolean check, String msg) {
+    if (!check) {
+      throw new IllegalArgumentException(msg);
+    }
+  }
+
+  /**
    * Throws IllegalStateException with the given message if the check is false.
    * Keep this clone of CommandBuilderUtils.checkState synced with the original.
    */
   public static void checkState(boolean check, String msg, Object... args) {
     if (!check) {
       throw new IllegalStateException(String.format(msg, args));
+    }
+  }
+
+  /**
+   * Throws an {@link IllegalStateException} with the given message if {@code check} is
+   * {@code false}.
+   *
+   * <p>Unlike {@link #checkState(boolean, String, Object...)}, {@code msg} is used verbatim and is
+   * <b>not</b> passed through {@link String#format(String, Object...)}; see
+   * {@link #checkArgument(boolean, String)} for when to prefer this form over the varargs one.
+   *
+   * @param check the condition that must hold; an exception is thrown when it is {@code false}
+   * @param msg   the failure message, used exactly as given
+   * @throws IllegalStateException if {@code check} is {@code false}
+   */
+  public static void checkState(boolean check, String msg) {
+    if (!check) {
+      throw new IllegalStateException(msg);
     }
   }
 
