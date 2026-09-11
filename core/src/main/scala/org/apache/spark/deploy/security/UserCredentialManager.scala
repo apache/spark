@@ -482,11 +482,12 @@ private[spark] object UserCredentialManager extends Logging {
    * @param onCredentialsUpdate Callback to propagate credentials to executors
    * @param loader The [[CredentialProviderLoader]] from the selection phase
    *               ([[applyProviderProperties]]), passed as an `Option`. When OIDC is enabled it
-   *               must be `Some` (the selection phase, which runs earlier and is skipped only
-   *               when OIDC is disabled or in local mode, produced it); reusing that same
-   *               instance ensures providers are discovered and initialized exactly once, so the
-   *               resolution phase reuses the already-selected providers. It is an error for the
-   *               loader to be `None` while OIDC is enabled and a resolution phase is expected.
+   *               must be `Some` (the selection phase, which runs earlier whenever OIDC is
+   *               enabled -- in local mode as well -- and is skipped only when OIDC is disabled,
+   *               produced it); reusing that same instance ensures providers are discovered and
+   *               initialized exactly once, so the resolution phase reuses the already-selected
+   *               providers. It is an error for the loader to be `None` while OIDC is enabled and
+   *               a resolution phase is expected.
    * @return Some(manager) if enabled, None otherwise
    */
   def create(
@@ -503,7 +504,7 @@ private[spark] object UserCredentialManager extends Logging {
           "OIDC credential propagation is enabled but no CredentialProviderLoader was produced " +
             "by the selection phase. This indicates the selection phase " +
             "(UserCredentialManager.applyProviderProperties) did not run before the resolution " +
-            "phase, which should not happen outside local mode.")
+            "phase, which should not happen.")
       }
       val tokenFile = sparkConf.get(SECURITY_OIDC_IDENTITY_TOKEN_FILE).getOrElse {
         throw new IllegalArgumentException(
@@ -538,13 +539,12 @@ private[spark] object UserCredentialManager extends Logging {
    * renewal) happen later in [[start]] on the scheduler backend. This separation of provider
    * SELECTION from credential RESOLUTION is intentional.
    *
-   * The phase is skipped entirely when `isLocal` is true: `LocalSchedulerBackend` does not start
-   * a [[UserCredentialManager]], so no resolution phase follows and no credentials are ever
-   * populated. Wiring a provider class into the driver's Hadoop `Configuration` in that case
-   * would make driver-side access fail (the provider would find no credentials) instead of
-   * falling back to the default chain. (Running credential resolution in local mode -- for
-   * parity with `HadoopDelegationTokenManager`, which does run in `LocalSchedulerBackend` -- is
-   * left to a follow-up.)
+   * This phase runs in local mode as well: `LocalSchedulerBackend` starts a
+   * [[UserCredentialManager]] (for parity with `HadoopDelegationTokenManager`, which also runs
+   * in `LocalSchedulerBackend`), so a resolution phase follows and the wiring applied here
+   * points at credentials that are actually populated. (Before SPARK-59296's follow-up, local
+   * mode had no resolution phase, so this selection phase was skipped there to avoid wiring a
+   * provider whose credentials would never be resolved.)
    *
    * Scheme selection is limited to schemes for which a provider is UNAMBIGUOUSLY selected:
    * either an explicitly-configured scheme (`spark.security.oidc.provider.<scheme>`) or a
@@ -554,17 +554,14 @@ private[spark] object UserCredentialManager extends Logging {
    * raises a clear error prompting explicit configuration.
    *
    * @param sparkConf The Spark configuration to apply properties into. Not modified when OIDC
-   *                  credential propagation is disabled or when `isLocal` is true.
-   * @param isLocal Whether the application runs in local mode (no scheduler backend that starts
-   *                a resolution phase).
+   *                  credential propagation is disabled.
    * @return `Some(loader)` with the [[CredentialProviderLoader]] used, to be passed to
    *         [[create]] so the resolution phase reuses the same loader; `None` when OIDC is
-   *         disabled or when `isLocal` is true (no loader is allocated in those cases).
+   *         disabled (no loader is allocated in that case).
    */
   def applyProviderProperties(
-      sparkConf: SparkConf,
-      isLocal: Boolean): Option[CredentialProviderLoader] = {
-    if (!sparkConf.get(SECURITY_OIDC_ENABLED) || isLocal) {
+      sparkConf: SparkConf): Option[CredentialProviderLoader] = {
+    if (!sparkConf.get(SECURITY_OIDC_ENABLED)) {
       return None
     }
 

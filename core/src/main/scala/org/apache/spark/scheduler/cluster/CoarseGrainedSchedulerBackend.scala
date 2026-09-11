@@ -1263,10 +1263,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Called from start(), independently of Kerberos/HadoopDelegationTokenManager.
    */
   private def setupUserCredentialManager(): Unit = {
-    // Reuse the loader from SparkContext's selection phase (Some when OIDC is enabled and not
-    // in local mode; None otherwise). Passing the Option straight through keeps SparkContext as
-    // the single owner of the loader: create() enforces that an enabled configuration has a
-    // loader, rather than silently allocating one here that no one would close.
+    // Reuse the loader from SparkContext's selection phase (Some when OIDC is enabled, None
+    // otherwise). Passing the Option straight through keeps SparkContext as the single owner of
+    // the loader: create() enforces that an enabled configuration has a loader, rather than
+    // silently allocating one here that no one would close.
     userCredentialManager = UserCredentialManager.create(conf, { (version, credentials) =>
       // Send to DriverEndpoint to ensure thread-safe access to executorDataMap.
       // This mirrors HadoopDelegationTokenManager's pattern of sending
