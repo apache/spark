@@ -681,12 +681,21 @@ trait StateStoreInstanceMetric extends Serializable {
    */
   def combine(originalMetric: SQLMetric, value: Long): Long
 
+  /**
+   * Defines how to merge metric values from different task attempts or executors for the same
+   * state store instance (e.g. speculative execution, retries, or multiple stores within the
+   * same task).
+   *
+   * By default, this delegates to [[combine(SQLMetric, Long)]] to preserve the contract for
+   * existing custom StateStoreInstanceMetric implementations. Subclasses may override this
+   * method to provide a direct primitive-value combination without allocating a SQLMetric.
+   */
   def combine(originalValue: Long, value: Long): Long = {
-    if (originalValue == initValue) {
-      value
-    } else {
-      Math.max(originalValue, value)
+    val metric = new SQLMetric("instanceMetric", math.min(initValue, 0L))
+    if (originalValue != initValue) {
+      metric.set(originalValue)
     }
+    combine(metric, value)
   }
 
   def name: String = {
