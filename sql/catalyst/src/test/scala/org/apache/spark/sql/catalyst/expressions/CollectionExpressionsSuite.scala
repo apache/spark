@@ -1457,12 +1457,28 @@ class CollectionExpressionsSuite
       ntz(0, 100), ntz(2 * sec, 900),
       Literal(stringToInterval("interval 1 second"))),
       Seq(tnv(0, 100), tnv(sec, 100), tnv(2 * sec, 100)))
+    // stop on a whole second, start with a larger fraction: the element landing on stop's
+    // microsecond is dropped rather than overshooting stop (only start is in [start, stop]).
+    checkEvaluation(new Sequence(
+      ntz(0, 500), ntz(sec, 0),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(0, 500)))
 
-    // Negative step.
+    // Negative step, equal fractions.
     checkEvaluation(new Sequence(
       ntz(2 * sec, 999), ntz(0, 999),
       Literal(negateExact(stringToInterval("interval 1 second")))),
       Seq(tnv(2 * sec, 999), tnv(sec, 999), tnv(0, 999)))
+    // Negative step, differing fractions: an element on stop's microsecond is kept only when it
+    // stays >= stop. startFrac < stopFrac drops it; startFrac >= stopFrac keeps it.
+    checkEvaluation(new Sequence(
+      ntz(2 * sec, 100), ntz(0, 900),
+      Literal(negateExact(stringToInterval("interval 1 second")))),
+      Seq(tnv(2 * sec, 100), tnv(sec, 100)))
+    checkEvaluation(new Sequence(
+      ntz(2 * sec, 900), ntz(0, 100),
+      Literal(negateExact(stringToInterval("interval 1 second")))),
+      Seq(tnv(2 * sec, 900), tnv(sec, 900), tnv(0, 900)))
 
     // start == stop yields a single element that still carries the fraction.
     checkEvaluation(new Sequence(
@@ -1489,6 +1505,11 @@ class CollectionExpressionsSuite
     // No explicit step: the default step (+1 day) is chosen from the full-precision comparison.
     checkEvaluation(new Sequence(ntz(0, 7), ntz(day, 7)),
       Seq(tnv(0, 7), tnv(day, 7)))
+    // Equal microseconds, differing fractions, no explicit step: the default step direction comes
+    // from the full-precision comparison, so the single in-range element is start itself (never an
+    // out-of-order pair). Ascending when start < stop, descending when start > stop.
+    checkEvaluation(new Sequence(ntz(5 * sec, 100), ntz(5 * sec, 500)), Seq(tnv(5 * sec, 100)))
+    checkEvaluation(new Sequence(ntz(5 * sec, 500), ntz(5 * sec, 100)), Seq(tnv(5 * sec, 500)))
 
     // Null propagation.
     checkEvaluation(new Sequence(
