@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Callable, Iterable, Iterator, List, Tuple, Union
+from unittest import mock
 
 from pyspark.errors import AnalysisException, PythonException
 from pyspark.memory_profiler_ext import has_memory_profiler
@@ -64,6 +65,92 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.util import is_remote_only
+
+
+class PythonDataSourceWorkerUtilsTests(unittest.TestCase):
+    def test_profiler_accumulators_are_created_only_when_profiling_is_enabled(self):
+        from pyspark.accumulators import (
+            INT_ACCUMULATOR_PARAM,
+            SpecialAccumulatorIds,
+            _accumulatorRegistry,
+            _deserialize_accumulator,
+        )
+        from pyspark.serializers import SpecialLengths
+        from pyspark.serializers import read_int as read_serialized_int
+
+        with mock.patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+            from pyspark.sql.worker import utils as worker_utils
+
+        self.addCleanup(_accumulatorRegistry.clear)
+
+        def run_worker(profiler, regular_accumulator_id=None):
+            infile = io.BytesIO()
+            outfile = io.BytesIO()
+            main_call_count = 0
+
+            def main(_infile, _outfile):
+                nonlocal main_call_count
+                main_call_count += 1
+                if regular_accumulator_id is not None:
+                    _deserialize_accumulator(
+                        regular_accumulator_id,
+                        0,
+                        INT_ACCUMULATOR_PARAM,
+                    )
+
+            with mock.patch.multiple(
+                worker_utils,
+                check_python_version=mock.DEFAULT,
+                start_faulthandler_periodic_traceback=mock.DEFAULT,
+                setup_memory_limits=mock.DEFAULT,
+                setup_spark_files=mock.DEFAULT,
+                setup_broadcasts=mock.DEFAULT,
+                RunnerConf=mock.DEFAULT,
+                read_int=mock.DEFAULT,
+                WorkerPerfProfiler=mock.DEFAULT,
+                WorkerMemoryProfiler=mock.DEFAULT,
+            ) as patched:
+                patched["RunnerConf"].return_value.profiler = profiler
+                patched["read_int"].return_value = SpecialLengths.END_OF_STREAM
+                patched["WorkerPerfProfiler"].return_value = contextlib.nullcontext()
+                patched["WorkerMemoryProfiler"].return_value = contextlib.nullcontext()
+
+                worker_utils.worker_run(main, infile, outfile)
+
+                profiler_calls = (
+                    patched["WorkerPerfProfiler"].call_count,
+                    patched["WorkerMemoryProfiler"].call_count,
+                )
+
+            outfile.seek(0)
+            return (
+                read_serialized_int(outfile),
+                set(_accumulatorRegistry),
+                profiler_calls,
+                main_call_count,
+            )
+
+        profiler_accumulator_ids = {
+            SpecialAccumulatorIds.SQL_UDF_PROFIER,
+            SpecialAccumulatorIds.SQL_UDF_PROFIER_V2,
+        }
+        test_cases = [
+            (None, 0, set(), (0, 0)),
+            ("unsupported", 0, set(), (0, 0)),
+            ("perf", 2, profiler_accumulator_ids, (1, 0)),
+            ("memory", 2, profiler_accumulator_ids, (0, 1)),
+        ]
+        for profiler, update_count, accumulator_ids, profiler_calls in test_cases:
+            with self.subTest(profiler=profiler):
+                self.assertEqual(
+                    run_worker(profiler),
+                    (update_count, accumulator_ids, profiler_calls, 1),
+                )
+
+        self.assertEqual(
+            run_worker(None, regular_accumulator_id=1),
+            (1, {1}, (0, 0), 1),
+        )
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
