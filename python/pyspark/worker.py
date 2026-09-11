@@ -5115,14 +5115,14 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         eval_type = init_info.eval_type
         runner_conf = RunnerConf(init_info.runner_conf)
         eval_conf = EvalConf(init_info.eval_conf)
+        # UDF and UDTF runners fold profiling into func at construction time (see
+        # read_single_udf); only the classic RDD command carries a profiler of its own.
+        profiler = None
         if eval_type == PythonEvalType.NON_UDF:
-            # The classic RDD command carries its own profiler in the pickled command.
             assert isinstance(init_info.udf_info, (bytes, memoryview))
             func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf_info)
         else:
-            # UDF and UDTF runners fold profiling into func at construction time
-            # (see read_single_udf), so no profiler is returned separately here, and they
-            # read input and write output through a single serializer.
+            # UDF and UDTF runners read input and write output through a single serializer.
             is_udtf = eval_type in (
                 PythonEvalType.SQL_TABLE_UDF,
                 PythonEvalType.SQL_ARROW_TABLE_UDF,
@@ -5132,7 +5132,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             func, serializer = read(
                 pickleSer, init_info.udf_info, eval_type, runner_conf, eval_conf
             )
-            profiler, deserializer = None, serializer
+            deserializer = serializer
 
         init_time = time.time()
 
