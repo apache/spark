@@ -711,6 +711,7 @@ public class VariantBuilder {
     if (metadata.length != 1 + (numKeys + 2) * metaOffsetSize + lastOffset) {
       return false;
     }
+    // numKeys > lastOffset is possible if we have an empty key.
     long maxSize = Math.max(lastOffset, numKeys);
     if ((metadata[0] & 0xFF) != (VERSION | ((minIntWidth(maxSize) - 1) << 6))) {
       return false;
