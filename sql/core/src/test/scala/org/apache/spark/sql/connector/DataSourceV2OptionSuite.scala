@@ -71,10 +71,17 @@ class LoadCountingInMemoryCatalog extends InMemoryCatalog {
 }
 
 class StateAwareInMemoryCatalog extends LoadCountingInMemoryCatalog {
+  private val _tableStateOptionKeyCalls = new AtomicInteger(0)
+
+  def tableStateOptionKeyCalls: Int = _tableStateOptionKeyCalls.get()
+  def resetTableStateOptionKeyCalls(): Unit = _tableStateOptionKeyCalls.set(0)
+
   // Include Spark's internal marker so the write-context test detects if it leaks before state
   // option projection. Production catalogs should declare only raw user option keys.
-  override def tableStateOptionKeys(): util.Set[String] =
+  override def tableStateOptionKeys(): util.Set[String] = {
+    _tableStateOptionKeyCalls.incrementAndGet()
     util.Set.of("snapshot", UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+  }
 }
 
 class NullReturningInMemoryCatalog extends InMemoryCatalog {
@@ -142,8 +149,12 @@ class StateAwareV2InMemoryRelationCatalog extends V2InMemoryRelationCatalog {
   private val _loadTableCalls =
     mutable.ArrayBuffer.empty[(Identifier, TableContext, CaseInsensitiveStringMap)]
   private val _loadViewCalls = mutable.ArrayBuffer.empty[Identifier]
+  private val _tableStateOptionKeyCalls = new AtomicInteger(0)
 
-  override def tableStateOptionKeys(): util.Set[String] = util.Set.of("snapshot")
+  override def tableStateOptionKeys(): util.Set[String] = {
+    _tableStateOptionKeyCalls.incrementAndGet()
+    util.Set.of("snapshot")
+  }
 
   override def loadTable(
       ident: Identifier,
@@ -168,11 +179,13 @@ class StateAwareV2InMemoryRelationCatalog extends V2InMemoryRelationCatalog {
   def loadTableCalls: Seq[(Identifier, TableContext, CaseInsensitiveStringMap)] =
     _loadTableCalls.toSeq
   def loadViewCalls: Seq[Identifier] = _loadViewCalls.toSeq
+  def tableStateOptionKeyCalls: Int = _tableStateOptionKeyCalls.get()
 
   def resetDispatchCalls(): Unit = {
     resetLoadRelationCalls()
     _loadTableCalls.clear()
     _loadViewCalls.clear()
+    _tableStateOptionKeyCalls.set(0)
   }
 }
 
@@ -1032,13 +1045,24 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
       relCatalog.resetDispatchCalls()
 
-      spark.read
+      val df = spark.read
         .option("snapshot", "s1")
         .option("split-size", "5")
         .table(t1)
-        .collect()
+      df.queryExecution.analyzed
 
-      assertOnlySnapshotTableOptions(relCatalog, "s1", expectedCalls = 2)
+      assertOnlySnapshotTableOptions(relCatalog, "s1", expectedCalls = 1)
+      assert(
+        relCatalog.tableStateOptionKeyCalls == 1,
+        s"expected one analysis projection, got: ${relCatalog.tableStateOptionKeyCalls}")
+
+      relCatalog.resetDispatchCalls()
+      df.collect()
+
+      assertOnlySnapshotTableOptions(relCatalog, "s1", expectedCalls = 1)
+      assert(
+        relCatalog.tableStateOptionKeyCalls == 1,
+        s"expected one refresh projection, got: ${relCatalog.tableStateOptionKeyCalls}")
       assert(relCatalog.loadRelationCalls.isEmpty)
     }
   }
@@ -1703,12 +1727,28 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       stateCatalog.resetLoadTableCalls()
       stateCatalog.singleArgLoads.set(0)
       AnalysisContext.withNewAnalysisContext {
+        stateCatalog.resetTableStateOptionKeyCalls()
         val initialRelation =
           resolver.resolveReference(initialRef).asInstanceOf[DataSourceV2Relation]
+        assert(
+          stateCatalog.tableStateOptionKeyCalls == 1,
+          s"expected one initial projection, got: ${stateCatalog.tableStateOptionKeyCalls}")
+
+        stateCatalog.resetTableStateOptionKeyCalls()
         val cachedRelation =
           resolver.resolveReference(initialRef).asInstanceOf[DataSourceV2Relation]
+        assert(
+          stateCatalog.tableStateOptionKeyCalls == 0,
+          s"expected no projection on a relation-cache hit, got: " +
+            stateCatalog.tableStateOptionKeyCalls)
+
+        stateCatalog.resetTableStateOptionKeyCalls()
         val otherOptionsRelation =
           resolver.resolveReference(otherOptionsRef).asInstanceOf[DataSourceV2Relation]
+        assert(
+          stateCatalog.tableStateOptionKeyCalls == 1,
+          s"expected one table-cache lookup projection, got: " +
+            stateCatalog.tableStateOptionKeyCalls)
 
         assert(initialRelation.table eq cached.table)
         assert(cachedRelation.table eq cached.table)

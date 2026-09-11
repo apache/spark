@@ -2082,6 +2082,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ =
+    buildConf("spark.sql.parquet.timeType.allowIsAdjustedToUtcRead")
+      .doc("When true, Spark infers Parquet TIME columns with isAdjustedToUTC=true as TimeType " +
+        "during schema inference, for compatibility with writers such as Apache Arrow. " +
+        "When false (default), schema inference rejects such columns with an error. This only " +
+        "affects schema inference: a read with an explicit user-specified TimeType schema " +
+        "succeeds regardless of this flag, since Spark's zone-less TimeType decodes the same " +
+        "time-of-day either way.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
@@ -2357,7 +2370,7 @@ object SQLConf {
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val DATA_SOURCE_DONT_ASSERT_ON_PREDICATE =
     buildConf("spark.sql.dataSource.skipAssertOnPredicatePushdown")
@@ -3699,6 +3712,18 @@ object SQLConf {
         "the .name() API. This enables streaming source evolution, allowing sources to be " +
         "added, removed, or reordered without losing state.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val ALLOW_EXCEPT_ON_STREAMING_DATAFRAME =
+    buildConf("spark.sql.streaming.allowExceptOnStreamingDataFrame")
+      .internal()
+      .doc("When true, allows EXCEPT operations with a streaming DataFrame on the left and a " +
+        "batch DataFrame on the right. " +
+        "Such operations may produce incorrect results and are retained only for compatibility " +
+        "with existing streaming queries.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -9237,6 +9262,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def parquetOutputTimestampType: ParquetOutputTimestampType.Value =
     getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE)
 
+  def parquetTimeTypeAllowIsAdjustedToUtcRead: Boolean =
+    getConf(PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ)
+
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
   def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
@@ -9363,6 +9391,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def dropTableOnView: Boolean = getConf(DROP_TABLE_VIEW_ENABLED)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
+
+  def restrictedModeEnabled: Boolean = getConf(StaticSQLConf.RESTRICTED_MODE_ENABLED)
 
   override def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 

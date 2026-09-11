@@ -2127,4 +2127,198 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         StringType),
       null)
   }
+
+  test("variant_pick") {
+    def checkPick(input: String, paths: Seq[String], expected: String): Unit = {
+      val pathLits: Seq[Expression] = paths.map(p => Literal.create(p, StringType))
+      val expr = VariantPick(Literal(parseJson(input)) +: pathLits)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+        expected)
+    }
+
+    // Keep a subset of object fields, and union paths under the same parent (parent preserved).
+    checkPick("""{"a": 1, "b": 2, "c": 3}""", Seq("$.a", "$.c"), """{"a":1,"c":3}""")
+    checkPick("""{"a": {"b": 1, "c": 2}, "d": 3}""", Seq("$.a.b"), """{"a":{"b":1}}""")
+    checkPick(
+      """{"a": {"b": 1, "c": 2, "d": 3}}""", Seq("$.a.b", "$.a.c"), """{"a":{"b":1,"c":2}}""")
+
+    // A broader path subsumes a narrower one.
+    checkPick("""{"a": {"b": 1, "c": 2}}""", Seq("$.a", "$.a.b"), """{"a":{"b":1,"c":2}}""")
+    checkPick("""{"a": {"b": 1, "c": 2}}""", Seq("$.a.b", "$.a"), """{"a":{"b":1,"c":2}}""")
+
+    // Arrays are compacted in original order; out-of-range indices are skipped.
+    checkPick("[10, 20, 30, 40]", Seq("$[2]", "$[0]"), "[10,30]")
+    checkPick("[10, 20, 30]", Seq("$[5]"), "[]")
+    checkPick("""{"a": [10, 20, 30]}""", Seq("$.a[1]"), """{"a":[20]}""")
+
+    // Array elements that are containers recurse and compact; an element that picks nothing drops.
+    checkPick("""[{"x": 1, "y": 2}, {"z": 3}]""", Seq("$[0].x"), """[{"x":1}]""")
+    checkPick("""[{"x": 1}]""", Seq("$[0].y"), "[]")
+    checkPick("[[10, 20, 30]]", Seq("$[0][1]"), "[[20]]")
+
+    // Missing keys are skipped; a parent whose picks all miss is dropped.
+    checkPick("""{"a": 1, "b": 2}""", Seq("$.a", "$.missing"), """{"a":1}""")
+    checkPick("""{"a": {"b": 1}}""", Seq("$.a.x"), "{}")
+
+    // Root path is identity; a scalar or variant-null input is returned unchanged. The variant
+    // null is compared directly, since casting it to a string yields SQL NULL, not the text "null".
+    checkPick("""{"a": 1}""", Seq("$"), """{"a":1}""")
+    checkPick("42", Seq("$.a"), "42")
+    checkEvaluation(
+      VariantPick(Seq(Literal(parseJson("null")), Literal("$.a"))),
+      parseJson("null"))
+
+    // Type mismatch matches nothing, but the top-level shape is preserved (object -> {}, array
+    // -> []); descending into a scalar, or into a container of the wrong kind, drops the parent.
+    checkPick("[1, 2, 3]", Seq("$.a"), "[]")
+    checkPick("""{"a": 1}""", Seq("$[0]"), "{}")
+    checkPick("""{"a": 1}""", Seq("$.a.b"), "{}")
+    checkPick("""{"a": [1, 2]}""", Seq("$.a.b"), "{}")
+    checkPick("""{"a": {"b": 1}}""", Seq("$.a[0]"), "{}")
+
+    // Both-maps node uses only the matching branch.
+    checkPick("""{"a": 1, "b": 2}""", Seq("$.a", "$[0]"), """{"a":1}""")
+    checkPick("[10, 20, 30]", Seq("$.a", "$[0]"), "[10]")
+    checkPick("""{"a": {"b": 1}}""", Seq("$.a.b", "$.a[0]", "$.a"), """{"a":{"b":1}}""")
+
+    // Duplicate paths are deduplicated, and bracket notation resolves like dot notation.
+    checkPick("""{"a": 1, "b": 2}""", Seq("$.a", "$.a"), """{"a":1}""")
+    checkPick("""{"a": 1, "b": 2}""", Seq("$['a']"), """{"a":1}""")
+
+    // Non-ASCII field names are matched and preserved, in both dot and bracket notation.
+    // scalastyle:off nonascii
+    checkPick("""{"café": 1, "naïve": 2}""", Seq("$.café"), """{"café":1}""")
+    checkPick(
+      """{"日本語": {"x": 1, "y": 2}}""", Seq("$['日本語'].x"), """{"日本語":{"x":1}}""")
+    checkPick("""{"ключ": [10, 20, 30]}""", Seq("$.ключ[1]"), """{"ключ":[20]}""")
+    // scalastyle:on nonascii
+
+    // Larger object trees built from several paths.
+    // Many sibling keys unioned under one parent.
+    checkPick(
+      """{"a": {"b": 1, "c": 2, "d": 3, "e": 4, "f": 5, "g": 6, "h": 7}}""",
+      Seq("$.a.b", "$.a.c", "$.a.e", "$.a.g", "$.a.h"),
+      """{"a":{"b":1,"c":2,"e":4,"g":6,"h":7}}""")
+    // Several top-level parents, each keeping a different subset of children.
+    checkPick(
+      """{"a": {"x": 1, "y": 2}, "b": {"p": 3, "q": 4}, "c": 5, "d": {"m": 6, "n": 7}}""",
+      Seq("$.a.x", "$.b.p", "$.b.q", "$.c", "$.d.m"),
+      """{"a":{"x":1},"b":{"p":3,"q":4},"c":5,"d":{"m":6}}""")
+    // A broader path subsumes a narrower sibling while other branches are kept partially.
+    checkPick(
+      """{"a": {"b": {"c": 1, "d": 2}, "e": 3}, "f": {"g": 4, "h": 5}}""",
+      Seq("$.a.b.c", "$.a.b", "$.a.e", "$.f.g"),
+      """{"a":{"b":{"c":1,"d":2},"e":3},"f":{"g":4}}""")
+    // Deep branch: multiple paths share a long prefix; an unpicked sibling is dropped.
+    checkPick(
+      """{"a": {"b": {"c": {"d": 1, "e": 2}, "f": 3, "g": 4}}}""",
+      Seq("$.a.b.c.d", "$.a.b.c.e", "$.a.b.f"),
+      """{"a":{"b":{"c":{"d":1,"e":2},"f":3}}}""")
+    // A path terminating at a genuinely empty container keeps it as-is (not dropped).
+    checkPick("""{"a": {}, "b": 1}""", Seq("$.a"), """{"a":{}}""")
+    // A picked field that matches nothing is rewound.
+    checkPick(
+      """{"a": 1, "b": {"m": 1}, "c": 2}""",
+      Seq("$.a", "$.b.x", "$.c"),
+      """{"a":1,"c":2}""")
+
+    // Larger array trees.
+    // Indices given out of order are compacted into original array order, not path order.
+    checkPick(
+      "[0, 10, 20, 30, 40, 50, 60, 70]",
+      Seq("$[5]", "$[0]", "$[7]", "$[3]"),
+      "[0,30,50,70]")
+    // A picked element that matches nothing is dropped; survivors compact around the hole.
+    checkPick(
+      """[{"x": 1}, {"y": 2}, {"z": 3}]""",
+      Seq("$[0].x", "$[1].w", "$[2].z"),
+      """[{"x":1},{"z":3}]""")
+    // Nested arrays: picks descend into multiple sub-arrays, compacting at each level.
+    checkPick(
+      "[[10, 20], [30, 40], [50, 60]]",
+      Seq("$[0][1]", "$[2][0]"),
+      "[[20],[50]]")
+    // A path ending at an array index keeps the whole element; unpicked siblings drop.
+    checkPick(
+      """[{"x": 1, "y": 2}, {"z": 3}]""",
+      Seq("$[0]"),
+      """[{"x":1,"y":2}]""")
+
+    // Mixed object/array variant with paths at different depths.
+    checkPick(
+      """{"a": [{"p": 1, "q": 2, "r": 3}, {"p": 4, "q": 5, "r": 6}], "b": {"s": 7, "t": 8}}""",
+      Seq("$.a[0].p", "$.a[0].q", "$.a[1].r", "$.b.s"),
+      """{"a":[{"p":1,"q":2},{"r":6}],"b":{"s":7}}""")
+
+    // A large variant with many paths at once.
+    checkPick(
+      """{"a": {"b": 1, "c": 2, "d": 3},
+         "e": [{"f": 10, "g": 20}, {"f": 30, "g": 40}, {"f": 50}],
+         "h": {"i": {"j": 5, "k": 6}}, "l": 7}""",
+      Seq("$.a.b", "$.a.c", "$.e[0].f", "$.e[2]", "$.h.i.j", "$.h.i", "$.l", "$.x"),
+      """{"a":{"b":1,"c":2},"e":[{"f":10},{"f":50}],"h":{"i":{"j":5,"k":6}},"l":7}""")
+
+    // Deep, branchy trie exercising many branches at once.
+    checkPick(
+      """{"a": {"b": [{"c": 1, "d": [10, 11, 12], "e": {"f": 1, "g": 2}}, {"c": 2},
+         {"e": {"f": 5}}], "h": {"i": {"j": 9}, "l": 8}}}""",
+      Seq("$.a.b[0].c", "$.a.b[0].d[1]", "$.a.b[0].e.f", "$.a.b[2].e", "$.a.b[1].z", "$.a.b.x",
+        "$.a.h.i", "$.a.h.i.j"),
+      """{"a":{"b":[{"c":1,"d":[11],"e":{"f":1}},{"e":{"f":5}}],"h":{"i":{"j":9}}}}""")
+
+    // A NULL path is skipped; the remaining paths still apply.
+    checkPick("""{"a": 1, "b": 2}""", Seq(null, "$.a"), """{"a":1}""")
+
+    // Dynamic (non-foldable) path mixed with a literal.
+    val mixedLitDyn = VariantPick(Seq(
+      Literal(parseJson("""{"a": 1, "b": 2, "c": 3}""")),
+      Literal("$.a"),
+      BoundReference(0, StringType, nullable = true)))
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(mixedLitDyn, StringType)),
+      """{"a":1,"c":3}""",
+      InternalRow(UTF8String.fromString("$.c")))
+
+    // A dynamic path that evaluates to NULL is skipped at runtime (unlike a constant NULL, which is
+    // dropped when the tree is built); the remaining literal path still applies.
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(mixedLitDyn, StringType)),
+      """{"a":1}""",
+      InternalRow(null))
+
+    // NULL variant input yields NULL.
+    checkEvaluation(
+      VariantPick(Seq(Literal.create(null, VariantType), Literal("$.a"))),
+      null)
+
+    // Malformed paths are rejected.
+    checkErrorInExpression[SparkRuntimeException](
+      VariantPick(Seq(Literal(parseJson("""{"a": 1}""")), Literal("garbage"))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "garbage", "functionName" -> "`variant_pick`"))
+
+    // A malformed constant path is rejected in both interpreted and codegen modes even when the
+    // input variant is NULL: the path is parsed before the NULL short-circuit.
+    checkErrorInExpression[SparkRuntimeException](
+      VariantPick(Seq(BoundReference(0, VariantType, nullable = true), Literal("garbage"))),
+      InternalRow(null),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "garbage", "functionName" -> "`variant_pick`"))
+
+    // A malformed dynamic path is rejected at runtime (via `parsePickPath`), in both modes.
+    checkErrorInExpression[SparkRuntimeException](
+      VariantPick(Seq(
+        Literal(parseJson("""{"a": 1}""")),
+        BoundReference(0, StringType, nullable = true))),
+      InternalRow(UTF8String.fromString("garbage")),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "garbage", "functionName" -> "`variant_pick`"))
+
+    // At least one path is required.
+    val noPaths = VariantPick(Seq(Literal(parseJson("""{"a": 1}"""))))
+    intercept[org.apache.spark.sql.AnalysisException] {
+      noPaths.checkInputDataTypes()
+    }
+  }
 }

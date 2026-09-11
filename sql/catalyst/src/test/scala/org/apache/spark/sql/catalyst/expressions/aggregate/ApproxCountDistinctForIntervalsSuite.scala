@@ -75,7 +75,8 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> "`endpointsExpression`",
-          "inputType" -> "\"ARRAY<DOUBLE>\"")))
+          "inputType" -> "\"ARRAY<DOUBLE>\"",
+          "inputExpr" -> "\"array(b)\"")))
 
     wrongEndpoints = ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),

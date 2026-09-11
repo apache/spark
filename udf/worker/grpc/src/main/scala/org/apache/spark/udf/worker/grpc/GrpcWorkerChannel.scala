@@ -77,6 +77,7 @@ class GrpcWorkerChannel(
       .channelType(transport.channelType)
       .eventLoopGroup(eventLoopGroup)
       .maxInboundMessageSize(GrpcWorkerChannel.MAX_INBOUND_MESSAGE_SIZE)
+      .overrideAuthority(GrpcWorkerChannel.UDS_AUTHORITY)
       .usePlaintext()
       .build()
   } catch {
@@ -131,6 +132,23 @@ class GrpcWorkerChannel(
 object GrpcWorkerChannel {
   /** Matches Spark Connect's default and accommodates normal Arrow batches. */
   private[grpc] val MAX_INBOUND_MESSAGE_SIZE: Int = 128 * 1024 * 1024
+
+  /**
+   * Authority sent in the HTTP/2 `:authority` pseudo-header.
+   *
+   * Without an override, gRPC derives the authority from the target address, which for a
+   * Unix domain socket is the socket path (percent-encoded where the path needs escaping,
+   * e.g. `var%2Ffolders%2F...%2Frw.sock`). Either form is an invalid HTTP authority. A
+   * conforming HTTP/2 server rejects such a HEADERS frame with PROTOCOL_ERROR while
+   * decoding it, so the RPC fails before any worker code -- service method or interceptor
+   * -- runs, and the worker cannot report why. grpc-java's own server accepts it, which is
+   * why the in-tree grpc-java test worker does not surface this.
+   *
+   * A placeholder is the right value rather than a workaround: the authority carries no
+   * information for a Unix socket peer, because the socket path already identifies it
+   * completely. There is no name to resolve and no virtual host to select.
+   */
+  private[grpc] val UDS_AUTHORITY: String = "localhost"
 
   private val SHUTDOWN_PHASE_TIMEOUT_MS: Long = 5000L
 }

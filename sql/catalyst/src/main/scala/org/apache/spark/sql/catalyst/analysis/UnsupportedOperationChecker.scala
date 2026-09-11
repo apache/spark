@@ -574,8 +574,12 @@ object UnsupportedOperationChecker extends Logging {
         case u: Union if u.children.map(_.isStreaming).distinct.size == 2 =>
           throwError("Union between streaming and batch DataFrames/Datasets is not supported")
 
-        case Except(left, right, _) if right.isStreaming =>
+        case Except(_, right, _) if right.isStreaming =>
           throwError("Except on a streaming DataFrame/Dataset on the right is not supported")
+
+        case Except(left, _, _) if left.isStreaming &&
+            !SQLConf.get.getConf(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME) =>
+          throwError("Except on a streaming DataFrame/Dataset on the left is not supported")
 
         case Intersect(left, right, _) if left.isStreaming || right.isStreaming =>
           throwError("Intersect of streaming DataFrames/Datasets is not supported")

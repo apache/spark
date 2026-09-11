@@ -836,6 +836,47 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT from_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', 'Asia/Kolkata')
+-- !query schema
+struct<from_utc_timestamp(TIMESTAMP_LTZ '2015-07-23 17:00:00.123456789', Asia/Kolkata):timestamp_ltz(9)>
+-- !query output
+2015-07-23 22:30:00.123456789
+
+
+-- !query
+SELECT to_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', 'Asia/Kolkata')
+-- !query schema
+struct<to_utc_timestamp(TIMESTAMP_LTZ '2015-07-23 17:00:00.123456789', Asia/Kolkata):timestamp_ltz(9)>
+-- !query output
+2015-07-23 11:30:00.123456789
+
+
+-- !query
+SELECT typeof(
+    to_utc_timestamp('2015-07-24 00:00:00.1234567 UTC' :: timestamp_ltz(7), 'Asia/Kolkata'))
+-- !query schema
+struct<typeof(to_utc_timestamp(CAST(2015-07-24 00:00:00.1234567 UTC AS TIMESTAMP_LTZ(7)), Asia/Kolkata)):string>
+-- !query output
+timestamp_ltz(7)
+
+
+-- !query
+SELECT from_utc_timestamp(CAST(NULL AS timestamp_ltz(9)), 'Asia/Kolkata')
+-- !query schema
+struct<from_utc_timestamp(CAST(NULL AS TIMESTAMP_LTZ(9)), Asia/Kolkata):timestamp_ltz(9)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT to_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', CAST(NULL AS STRING))
+-- !query schema
+struct<to_utc_timestamp(TIMESTAMP_LTZ '2015-07-23 17:00:00.123456789', CAST(NULL AS STRING)):timestamp_ltz(9)>
+-- !query output
+NULL
+
+
+-- !query
 SELECT max(c), min(c) FROM VALUES
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
