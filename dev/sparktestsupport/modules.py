@@ -136,7 +136,6 @@ ignored_file_patterns = (
     "/dev/spark_jira_utils.py",
     "/dev/spark_merge_footer.py",
     "/dev/spark-test-image/connect-gen-protos/",
-    "/dev/spark-test-image/python-*/Dockerfile",
     "/sql/create-docs.sh",
     # Cluster admin scripts, CLI wrappers, and other user executables.
     # These scripts are currently not covered by any existing test suite
@@ -150,7 +149,6 @@ ignored_file_patterns = (
     "/sbin/decommission-worker.sh",
     "/sbin/spark-daemons.sh",
     "/sbin/start-all.sh",
-    "/sbin/start-connect-server.sh",
     "/sbin/start-history-server.sh",
     "/sbin/start-master.sh",
     "/sbin/start-worker*",
