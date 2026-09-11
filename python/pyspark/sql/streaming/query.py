@@ -16,9 +16,9 @@
 #
 
 import json
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from pyspark.errors import StreamingQueryException, PySparkValueError
+from pyspark.errors import PySparkValueError, StreamingQueryException
 from pyspark.errors.exceptions.captured import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
@@ -672,6 +672,7 @@ class StreamingQueryManager:
         >>> spark.streams.removeListener(test_listener)
         """
         from py4j.java_gateway import java_import
+
         from pyspark import SparkContext
         from pyspark.java_gateway import ensure_callback_server_started
 
@@ -781,10 +782,12 @@ def _test() -> None:
     import doctest
     import os
     import sys
+
+    from py4j.protocol import Py4JError
+
+    import pyspark.sql.streaming.query
     from pyspark.core.context import SparkContext
     from pyspark.sql import SparkSession
-    import pyspark.sql.streaming.query
-    from py4j.protocol import Py4JError
 
     os.chdir(os.environ["SPARK_HOME"])
 

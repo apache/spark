@@ -36,6 +36,13 @@
       "Specified: <specifiedPartitions> Assigned: <assignedPartitions>"
     ]
   },
+  "KAFKA_TOPIC_OFFSET_DOES_NOT_MATCH_ASSIGNED" : {
+    "message" : [
+      "Topics specified with a topic-level offset for Kafka offsets don't have any assigned partition. Maybe the topics are misspelled, ",
+      "or they are not part of the topics being subscribed.",
+      "Specified: <specifiedTopics> Assigned: <assignedTopics>"
+    ]
+  },
   "KAFKA_TIMESTAMP_OFFSET_DOES_NOT_MATCH_ASSIGNED" : {
     "message" : [
       "Partitions specified for Kafka timestamp based <position> offsets don't match what are assigned. Maybe topic partitions are created ",

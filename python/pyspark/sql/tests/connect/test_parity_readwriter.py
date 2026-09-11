@@ -16,7 +16,7 @@
 #
 
 from pyspark.sql.tests.test_readwriter import ReadwriterTestsMixin, ReadwriterV2TestsMixin
-from pyspark.testing.connectutils import should_test_connect, ReusedConnectTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 
 if should_test_connect:
     from pyspark.sql.connect.readwriter import DataFrameWriterV2

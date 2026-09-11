@@ -18,24 +18,24 @@
 import array as pyarray
 import unittest
 
-from numpy import array, array_equal, zeros, arange, tile, ones, inf
+from numpy import arange, array, array_equal, inf, ones, tile, zeros
 
 import pyspark.ml.linalg as newlinalg
-from pyspark.serializers import CPickleSerializer
 from pyspark.mllib.linalg import (
-    Vector,
-    SparseVector,
-    DenseVector,
-    VectorUDT,
-    _convert_to_vector,
     DenseMatrix,
-    SparseMatrix,
-    Vectors,
+    DenseVector,
     Matrices,
     MatrixUDT,
+    SparseMatrix,
+    SparseVector,
+    Vector,
+    Vectors,
+    VectorUDT,
+    _convert_to_vector,
 )
-from pyspark.mllib.linalg.distributed import RowMatrix, IndexedRowMatrix, IndexedRow
+from pyspark.mllib.linalg.distributed import IndexedRow, IndexedRowMatrix, RowMatrix
 from pyspark.mllib.regression import LabeledPoint
+from pyspark.serializers import CPickleSerializer
 from pyspark.sql import Row
 from pyspark.testing.mllibutils import MLlibTestCase
 from pyspark.testing.utils import have_scipy
@@ -591,7 +591,7 @@ class SciPyTests(MLlibTestCase):
         self.assertEqual(clusters.predict(data[2]), clusters.predict(data[3]))
 
     def test_classification(self):
-        from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
+        from pyspark.mllib.classification import LogisticRegressionWithSGD, NaiveBayes, SVMWithSGD
         from pyspark.mllib.tree import DecisionTree
 
         data = [
@@ -632,8 +632,8 @@ class SciPyTests(MLlibTestCase):
 
     def test_regression(self):
         from pyspark.mllib.regression import (
-            LinearRegressionWithSGD,
             LassoWithSGD,
+            LinearRegressionWithSGD,
             RidgeRegressionWithSGD,
         )
         from pyspark.mllib.tree import DecisionTree

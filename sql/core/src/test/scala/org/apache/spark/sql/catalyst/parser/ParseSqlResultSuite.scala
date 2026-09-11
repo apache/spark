@@ -117,6 +117,16 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(sourceTableRefs("DROP TABLE t").isEmpty)
   }
 
+  test("dynamic INSERT targets retain query metadata") {
+    val sql = "INSERT INTO IDENTIFIER(lower('T')) SELECT a AS result FROM src"
+    val insert = obj(sql)
+    assert(insert \ "statement_identifier" === JString("INSERT"))
+    assert(insert \ "statement_code" === JInt(50))
+    assert(sourceTableRefs(sql) === Set(Seq("src")))
+    assert(insert \ "select_list" === JArray(List(
+      JObject("name" -> JArray(List(JString("result")))))))
+  }
+
   test("CTE aliases only shadow references within their own scope") {
     // The inner CTE named real_t must not hide the outer real table real_t.
     assert(sourceTableRefs(
@@ -127,6 +137,20 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(sourceTableRefs(
       "WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a") ===
       Set(Seq("b")))
+
+    val insert = "WITH t AS (SELECT * FROM src) INSERT INTO t SELECT * FROM t"
+    assert(targetTableRefs(insert) === Set(Seq("t")))
+    assert(sourceTableRefs(insert) === Set(Seq("src")))
+
+    val otherDml = Seq(
+      "WITH t AS (SELECT * FROM src) DELETE FROM t WHERE a = 1",
+      "WITH t AS (SELECT * FROM src) UPDATE t SET a = 1",
+      "WITH t AS (SELECT * FROM src) " +
+        "MERGE INTO t USING t AS s ON t.a = s.a WHEN MATCHED THEN DELETE")
+    otherDml.foreach { sql =>
+      assert(targetTableRefs(sql).isEmpty, sql)
+      assert(sourceTableRefs(sql) === Set(Seq("src")), sql)
+    }
   }
 
   test("positional markers inside BEGIN END are counted once") {

@@ -39,6 +39,7 @@ line-length = 100
 
 [tool.ruff.lint]
 extend-select = [
+    "I",  # isort
     "G010",  # logging-warn
     # ambiguous unicode character
     "RUF001",  # string

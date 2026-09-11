@@ -55,7 +55,8 @@ class ParquetTypeWideningSuite
       toType: DataType,
       expectError: => Boolean): Unit = {
     val timestampRebaseModes = toType match {
-      case _: TimestampNTZType | _: DateType =>
+      case _: TimestampNTZType | _: DateType |
+           _: TimestampLTZNanosType | _: TimestampNTZNanosType =>
         Seq(LegacyBehaviorPolicy.CORRECTED, LegacyBehaviorPolicy.LEGACY)
       case _ =>
         Seq(LegacyBehaviorPolicy.CORRECTED)
@@ -198,6 +199,70 @@ class ParquetTypeWideningSuite
   test(s"parquet widening conversion $fromType -> $toType") {
     checkAllParquetReaders(values, fromType, toType, expectError = false)
   }
+
+  // Widening TIMESTAMP(6) to nanosecond precision: INT64 TIMESTAMP(MICROS) files are read as nanos
+  // by promoting each micros value to (epochMicros, 0). Source must be TIMESTAMP(MICROS) (what
+  // Delta writes), hence the explicit output type; INT96/MILLIS aren't supported (see below).
+  // Values stay on the micros grid and include a pre-1582 date (LTZ Julian rebase, LEGACY mode) and
+  // a far-future date past the int64 epoch-nanos range (~2262). Requires the nanos preview flag.
+  for {
+    (fromType: DataType, toType: DataType) <- Seq(
+      TimestampType -> TimestampLTZNanosType(TimestampLTZNanosType.NANOS_PRECISION),
+      TimestampType -> TimestampLTZNanosType(7),
+      TimestampNTZType -> TimestampNTZNanosType(TimestampNTZNanosType.NANOS_PRECISION))
+  }
+  test(s"parquet widening conversion $fromType (micros) -> $toType") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
+        ParquetOutputTimestampType.TIMESTAMP_MICROS.toString) {
+      checkAllParquetReaders(
+        values = Seq(
+          "2020-01-01 12:34:56.123456", "1312-02-27 01:02:03.654321", "5138-11-16 09:46:40"),
+        fromType = fromType,
+        toType = toType,
+        expectError = false)
+    }
+  }
+
+  for {
+    outputTimestampType <-
+      Seq(ParquetOutputTimestampType.INT96, ParquetOutputTimestampType.TIMESTAMP_MILLIS)
+  }
+  test(s"unsupported parquet conversion TimestampType ($outputTimestampType) -> nanos") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outputTimestampType.toString,
+      SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LegacyBehaviorPolicy.CORRECTED.toString) {
+      checkAllParquetReaders(
+        values = Seq("2020-01-01 12:34:56.123456"),
+        fromType = TimestampType,
+        toType = TimestampLTZNanosType(TimestampLTZNanosType.NANOS_PRECISION),
+        expectError = true)
+    }
+  }
+
+  // Cross-family reads must fail loudly, not reinterpret the values: the micros->nanos read matches
+  // the file's isAdjustedToUTC to the requested LTZ/NTZ family. Widening is same-family, so this
+  // only guards a deliberately mismatched explicit read schema.
+  for {
+    (fromType: DataType, toType: DataType) <- Seq(
+      TimestampNTZType -> TimestampLTZNanosType(TimestampLTZNanosType.NANOS_PRECISION),
+      TimestampType -> TimestampNTZNanosType(TimestampNTZNanosType.NANOS_PRECISION))
+  }
+  test(s"unsupported cross-family parquet conversion $fromType (micros) -> $toType") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
+        ParquetOutputTimestampType.TIMESTAMP_MICROS.toString) {
+      checkAllParquetReaders(
+        values = Seq("2020-01-01 12:34:56.123456"),
+        fromType = fromType,
+        toType = toType,
+        expectError = true)
+    }
+  }
+
 
   for {
     (values: Seq[String], fromType: DataType, toType: DataType) <- Seq(

@@ -20,7 +20,7 @@ from typing import Any, Union, cast
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
-from pyspark.pandas.base import column_op, IndexOpsMixin
+from pyspark.pandas.base import IndexOpsMixin, column_op
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     _as_bool_type,
@@ -30,7 +30,8 @@ from pyspark.pandas.data_type_ops.base import (
     _sanitize_list_like,
 )
 from pyspark.pandas.typedef import pandas_on_spark_type
-from pyspark.sql import functions as F, Column
+from pyspark.sql import Column
+from pyspark.sql import functions as F
 from pyspark.sql.types import ArrayType, BooleanType, NumericType, StringType
 
 

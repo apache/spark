@@ -16,10 +16,11 @@
 #
 
 import time
+
+from pyspark.errors import PySparkPicklingError
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.utils import eventually, timeout
-from pyspark.errors import PySparkPicklingError
 
 if should_test_connect:
     from pyspark.errors.exceptions.connect import StreamingPythonRunnerInitializationException

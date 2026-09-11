@@ -16,17 +16,17 @@
 #
 
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
     extension_object_dtypes_available,
 )
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class AsTypeTestsMixin:

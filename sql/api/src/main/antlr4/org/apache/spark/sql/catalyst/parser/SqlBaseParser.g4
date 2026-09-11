@@ -1474,6 +1474,11 @@ primaryExpression
       quotes=jsonQueryQuotes?
       (emptyBehavior=jsonQueryBehavior ON EMPTY)?
       (errorBehavior=jsonQueryBehavior ON ERROR)? RIGHT_PAREN                                  #jsonQuery
+    | JSON_ARRAY LEFT_PAREN
+      (values+=jsonArrayValue (COMMA values+=jsonArrayValue)*)?
+      (nullBehavior=jsonConstructorNullBehavior ON NULL)?
+      (RETURNING returning=dataType)?
+      RIGHT_PAREN                                  #jsonArray
     | constant                                                                                 #constantDefault
     | ASTERISK exceptClause?                                                                   #star
     | qualifiedName DOT ASTERISK exceptClause?                                                 #star
@@ -1538,6 +1543,20 @@ jsonQueryBehavior
     | ERROR                                                                                     #jsonQueryBehaviorError
     | EMPTY ARRAY                                                                              #jsonQueryBehaviorEmptyArray
     | EMPTY OBJECT                                                                             #jsonQueryBehaviorEmptyObject
+    ;
+
+// The behavior selected by JSON_ARRAY/JSON_OBJECT `... ON NULL` clause: NULL keeps nulls, ABSENT
+// drops null elements/pairs.
+jsonConstructorNullBehavior
+    : NULL                                                                                     #jsonConstructorNullBehaviorNull
+    | ABSENT                                                                                   #jsonConstructorNullBehaviorAbsent
+    ;
+
+// A JSON_ARRAY element. The optional `FORMAT JSON` clause marks a string argument as already-JSON
+// text, so it is spliced into the array verbatim instead of being quoted as a JSON string. A
+// lexically-nested JSON constructor (e.g. JSON_ARRAY(JSON_ARRAY(1))) carries this implicitly.
+jsonArrayValue
+    : value=expression (FORMAT JSON)?
     ;
 
 semiStructuredExtractionPath
@@ -2121,7 +2140,8 @@ operatorPipeSetAssignmentSeq
 // The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
 ansiNonReserved
 //--ANSI-NON-RESERVED-START
-    : ADD
+    : ABSENT
+    | ADD
     | AFTER
     | AGGREGATE
     | ALIGN
@@ -2285,6 +2305,7 @@ ansiNonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_ARRAY
     | JSON_EXISTS
     | JSON_QUERY
     | JSON_TABLE
@@ -2531,7 +2552,8 @@ strictNonReserved
 
 nonReserved
 //--DEFAULT-NON-RESERVED-START
-    : ADD
+    : ABSENT
+    | ADD
     | AFTER
     | AGGREGATE
     | ALIGN
@@ -2733,6 +2755,7 @@ nonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_ARRAY
     | JSON_EXISTS
     | JSON_QUERY
     | JSON_TABLE
