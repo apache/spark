@@ -28,7 +28,7 @@
 #
 # A handler declares its ``eval_type`` and is registered automatically via
 # ``__init_subclass__``; the worker's ``read_udfs`` looks it up in
-# ``_EVAL_TYPE_HANDLERS`` and, when present, delegates to ``handler.run`` instead
+# ``EVAL_TYPE_HANDLERS`` and, when present, delegates to ``handler.run`` instead
 # of walking the if/elif chain.
 #
 # This package holds the base classes here in ``__init__`` and the concrete
@@ -63,7 +63,7 @@ if TYPE_CHECKING:
 
 # Registry of concrete handlers keyed by PythonEvalType. Populated at class
 # definition time by ``EvalTypeHandler.__init_subclass__``.
-_EVAL_TYPE_HANDLERS: "Dict[int, Type[EvalTypeHandler]]" = {}
+EVAL_TYPE_HANDLERS: "Dict[int, Type[EvalTypeHandler]]" = {}
 
 # Input/output stream element types. ``InputBatch`` is the element type of the
 # stream the JVM sends (a plain ``pa.RecordBatch`` for batch handlers, a
@@ -103,13 +103,13 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=ABCMeta):
         # soon as its subclass is defined, with no central table to edit.
         eval_type = cls.__dict__.get("eval_type")
         if eval_type is not None:
-            if eval_type in _EVAL_TYPE_HANDLERS:
+            if eval_type in EVAL_TYPE_HANDLERS:
                 raise AssertionError(
                     "Duplicate eval type handler for {}: {} and {}".format(
-                        eval_type, _EVAL_TYPE_HANDLERS[eval_type].__name__, cls.__name__
+                        eval_type, EVAL_TYPE_HANDLERS[eval_type].__name__, cls.__name__
                     )
                 )
-            _EVAL_TYPE_HANDLERS[eval_type] = cls
+            EVAL_TYPE_HANDLERS[eval_type] = cls
 
     def __init__(self, udfs: list, runner_conf: Any, eval_conf: Any) -> None:
         self._udfs = udfs
@@ -176,7 +176,7 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler["CoGroupedBatch", OutputBatch], m
 
 
 # Import the per-family handler submodules so their concrete handlers register
-# in ``_EVAL_TYPE_HANDLERS`` and are re-exported from the package. Kept at the
+# in ``EVAL_TYPE_HANDLERS`` and are re-exported from the package. Kept at the
 # bottom to avoid a circular import: the submodules import the base classes
 # defined above.
 from pyspark.sql.eval_handlers._arrow import ArrowScalarUDFHandler  # noqa: F401

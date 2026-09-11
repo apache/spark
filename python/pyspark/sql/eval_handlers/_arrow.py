@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Tuple
 
 from pyspark.sql.conversion import ArrowBatchTransformer
 from pyspark.sql.eval_handlers import BatchEvalTypeHandler
+from pyspark.sql.eval_handlers.verification import verify_scalar_result
 from pyspark.sql.pandas.types import to_arrow_schema
 from pyspark.sql.types import StructField, StructType
 from pyspark.util import PythonEvalType
@@ -75,10 +76,6 @@ class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     def post_process(
         self, results: "Iterator[Tuple[pa.RecordBatch, int]]"
     ) -> "Iterator[pa.RecordBatch]":
-        # Imported lazily to avoid a circular import: the worker module imports
-        # the handler package to build the registry.
-        from pyspark.worker import verify_scalar_result
-
         for output_batch, num_rows in results:
             output_batch = ArrowBatchTransformer.enforce_schema(
                 output_batch, self._combined_arrow_schema

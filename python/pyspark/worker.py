@@ -76,7 +76,11 @@ from pyspark.sql.conversion import (
     LocalDataToArrowConversion,
     PandasToArrowConversion,
 )
-from pyspark.sql.eval_handlers import _EVAL_TYPE_HANDLERS
+from pyspark.sql.eval_handlers import EVAL_TYPE_HANDLERS
+from pyspark.sql.eval_handlers.verification import (
+    verify_result_row_count,
+    verify_scalar_result,
+)
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
     ArrowStreamCoGroupSerializer,
@@ -352,43 +356,6 @@ def verify_return_type(result: T, expected_type: Type[T]) -> T:
 def _top_level_package(t: type) -> str:
     """Return the top-level package of ``t`` (``pandas`` for ``pd.DataFrame``)."""
     return (t.__module__ or "").split(".", 1)[0]
-
-
-def verify_result_row_count(result_length: int, expected: int) -> None:
-    """Raise if the result row count doesn't match the expected input row count."""
-    if result_length != expected:
-        raise PySparkRuntimeError(
-            errorClass="RESULT_ROWS_MISMATCH",
-            messageParameters={
-                "output_length": str(result_length),
-                "input_length": str(expected),
-            },
-        )
-
-
-def verify_scalar_result(result: Any, num_rows: int) -> Any:
-    """
-    Verify a scalar UDF result is array-like and has the expected number of rows.
-
-    Parameters
-    ----------
-    result : Any
-        The UDF result to verify.
-    num_rows : int
-        Expected number of rows (must match input batch size).
-    """
-    try:
-        result_length = len(result)
-    except TypeError:
-        raise PySparkTypeError(
-            errorClass="UDF_RETURN_TYPE",
-            messageParameters={
-                "expected": "array-like object",
-                "actual": type(result).__name__,
-            },
-        )
-    verify_result_row_count(result_length, num_rows)
-    return result
 
 
 def verify_iterator_exhausted(iterator: Iterator) -> None:
@@ -2052,7 +2019,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
     # Eval types that have been migrated to a handler are dispatched here without
     # walking the if/elif chain below. The handler owns the whole lifecycle,
     # including serializer selection.
-    handler_cls = _EVAL_TYPE_HANDLERS.get(eval_type)
+    handler_cls = EVAL_TYPE_HANDLERS.get(eval_type)
     if handler_cls is not None:
         udfs = [
             read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index=udf_index)
