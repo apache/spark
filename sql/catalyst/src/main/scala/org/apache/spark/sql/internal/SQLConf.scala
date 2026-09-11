@@ -4843,8 +4843,10 @@ object SQLConf {
   val WINDOW_MONOTONIC_DEQUE_ENABLED =
     buildConf("spark.sql.window.monotonicDeque.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .doc("Use O(N) monotonic deque for sliding window MIN/MAX. It replaces the O(N * W) " +
-        "naive loop and O(N log W) segment tree with an optimized ring-buffer deque.")
+      .doc("Use O(N) monotonic deque for sliding window MIN/MAX. Applies only when the " +
+        "moving frame contains exclusively Min/Max aggregates with no FILTER clauses. " +
+        "It replaces the O(N * W) naive loop and O(N log W) segment tree with an " +
+        "optimized ring-buffer deque.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(false)

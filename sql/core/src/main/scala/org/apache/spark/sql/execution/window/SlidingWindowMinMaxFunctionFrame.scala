@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.window
 
+import java.io.Closeable
+
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -40,7 +43,7 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     functions: Array[Expression],
     inputSchema: Seq[Attribute],
     numMonotonicDequeFrames: Option[SQLMetric] = None)
-    extends WindowFunctionFrame {
+    extends WindowFunctionFrame with AutoCloseable {
 
   /** Rows of the partition currently being processed. */
   private[this] var input: ExternalAppendOnlyUnsafeRowArray = null
@@ -98,7 +101,23 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
       TypeUtils.getInterpretedOrdering(child.dataType))
   }
 
+  private def closeIterator(it: Iterator[UnsafeRow]): Unit = it match {
+    case c: Closeable => c.close()
+    case _ => // in-memory iterator: no-op
+  }
+
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    // Close prior-partition cursors before replacing them so spill readers are
+    // released at partition boundary, not deferred to task completion.
+    if (needsLowerRow && lowerIterator != null) {
+      closeIterator(lowerIterator)
+      lowerIterator = null
+    }
+    if (inputIterator != null) {
+      closeIterator(inputIterator)
+      inputIterator = null
+    }
+
     numMonotonicDequeFrames.foreach(_ += 1)
     input = rows
     if (needsLowerRow) {
@@ -163,6 +182,24 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
   override def currentLowerBound(): Int = lowerBound
 
   override def currentUpperBound(): Int = upperBound
+
+  // Register close() to release any open spill readers when the task completes.
+  // Covers exceptional exits and cancellation where prepare() is never called again.
+  {
+    val tc = TaskContext.get()
+    if (tc != null) tc.addTaskCompletionListener[Unit](_ => close())
+  }
+
+  override def close(): Unit = {
+    if (needsLowerRow && lowerIterator != null) {
+      closeIterator(lowerIterator)
+      lowerIterator = null
+    }
+    if (inputIterator != null) {
+      closeIterator(inputIterator)
+      inputIterator = null
+    }
+  }
 
   // MinMaxDeque fields are plain constructor params (not vals) since this is a private inner
   // class and nothing outside reads them.
