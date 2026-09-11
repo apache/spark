@@ -27,11 +27,11 @@ import org.apache.spark.sql.internal.SQLConf
  * Benchmark for window functions with bounded ROWS frames.
  *
  * Matrix (see PR description for rationale):
- *   - A: 5 aggregates x 4 cells (naive / segtree default / segtree bs=256 / monotonic deque
- *     [MIN/MAX only]) @ W=1001. Per-case N so naive ~3-5s/iter; STDDEV_SAMP pinned @ N=2M
- *     (multi-buffer stress).
- *   - B: SUM-over-INT, W sweep {10, 50, 201, 4001}; W=10/50 Pareto-loss stress, W=4001 also runs
- *     bs=256.
+ *   - A: 6 aggregates (MIN/MAX: naive/segtree-default/segtree-bs256/deque; others:
+ *     naive/segtree-default/segtree-bs256) @ W=1001. Per-case N so naive ~3-5s/iter;
+ *     STDDEV_SAMP pinned @ N=2M (multi-buffer stress).
+ *   - B: SUM-over-INT, W sweep {W=11, W=51, W=201, W=4001}; W=11/W=51 Pareto-loss stress,
+ *     W=4001 also runs bs=256.
  *   - F: Spill guard, 1M String x MAX x W=1001 (stress).
  *   - C: N-sweep {2M, 8M, 16M} segtree-only @ W=1001 (memory-pressure invariance).
  *   - G: MIN deque vs segtree, W=100001, 2M rows; Increasing/Decreasing/Random.
@@ -48,9 +48,9 @@ object WindowBenchmark extends SqlBasedBenchmark {
   private val A_N_AVG: Long = 192L * 1024              // AVG  @ W=1001
   private val A_N_STDDEV: Long = 2L * 1000L * 1000L    // STDDEV stress
 
-  // Section B: W-sweep (W=10/50 stress: Pareto loss zone; W=4001 stress: O(W) cliff).
-  private val B_N_W10: Long = 2L * 1000L * 1000L
-  private val B_N_W50: Long = 2L * 1000L * 1000L
+  // Section B: W-sweep (W=11/51 stress: Pareto loss zone; W=4001 stress: O(W) cliff).
+  private val B_N_W11: Long = 2L * 1000L * 1000L
+  private val B_N_W51: Long = 2L * 1000L * 1000L
   private val B_N_W201: Long = 1L * 1000L * 1000L
   private val B_N_W4001: Long = 2L * 1000L * 1000L
 
@@ -429,13 +429,13 @@ object WindowBenchmark extends SqlBasedBenchmark {
           runSectionA("STDDEV_SAMP", ITERS_STRESS, A_N_STDDEV, MAIN_HALF_W, " (stress)")
         }
 
-        setupIntTable(B_N_W10)
-        runBenchmark("Section B - W=10 scaling (stress: Pareto loss zone)") {
-          runSectionB(5, stressBs = false, B_N_W10, ITERS_STRESS, " (stress)")
+        setupIntTable(B_N_W11)
+        runBenchmark("Section B - W=11 scaling (stress: Pareto loss zone)") {
+          runSectionB(5, stressBs = false, B_N_W11, ITERS_STRESS, " (stress)")
         }
-        setupIntTable(B_N_W50)
-        runBenchmark("Section B - W=50 scaling (stress: Pareto loss zone)") {
-          runSectionB(25, stressBs = false, B_N_W50, ITERS_STRESS, " (stress)")
+        setupIntTable(B_N_W51)
+        runBenchmark("Section B - W=51 scaling (stress: Pareto loss zone)") {
+          runSectionB(25, stressBs = false, B_N_W51, ITERS_STRESS, " (stress)")
         }
         setupIntTable(B_N_W201)
         runBenchmark("Section B - W=201 scaling") {

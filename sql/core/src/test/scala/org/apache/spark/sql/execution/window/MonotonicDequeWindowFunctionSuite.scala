@@ -51,7 +51,10 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
     SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false")
 
   /** Build `df` thrice (Deque, SegTree, Naive) and assert equal results. */
-  private def checkEquivalence(build: () => DataFrame, expectDeque: Boolean = true): Unit = {
+  private def checkEquivalence(
+      build: () => DataFrame,
+      expectDeque: Boolean = true,
+      expectedDequeCount: Int = 3): Unit = {
     val naiveResult: Seq[Row] = withSQLConf(disableDequeNaive.toSeq: _*) {
       build().collect().toSeq
     }
@@ -73,6 +76,10 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
 
       if (expectDeque) {
         assert(dequeCount > 0, "Monotonic deque was enabled but no frames were routed to it")
+        if (expectedDequeCount >= 0) {
+          assert(dequeCount == expectedDequeCount,
+            s"Expected $expectedDequeCount deque frames, got $dequeCount")
+        }
       } else {
         assert(dequeCount == 0, "Monotonic deque was used but expected to fallback")
       }
@@ -143,6 +150,39 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
     }
   }
 
+  // Deque takes precedence over segment tree when both flags are enabled.
+  // baseDF has pk in {0, 1, 2} => 3 window partitions => exactly 3 deque frames,
+  // pinning the one-frame-per-partition metric contract.
+  test("SPARK-58201: deque takes precedence over seg-tree; metric pins frame-per-partition") {
+    withSQLConf(
+      SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "true",
+      SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
+      SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-3, 2)
+      val df = baseDF.select($"id", min($"v_int").over(winSpec))
+      val naiveResult = withSQLConf(
+        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
+        SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false") {
+        baseDF.select($"id", min($"v_int").over(winSpec)).collect().toSeq
+      }
+      QueryTest.sameRows(naiveResult, df.collect().toSeq, isSorted = false).foreach { err =>
+        fail(s"Deque output differs from naive baseline.\n$err")
+      }
+      val windowNodes = df.queryExecution.executedPlan.collect { case w: WindowExec => w }
+      assert(windowNodes.nonEmpty, "No WindowExec found in plan")
+      val dequeCount =
+        windowNodes.flatMap(_.metrics.get("numMonotonicDequeFrames").map(_.value)).sum
+      val segCount =
+        windowNodes.flatMap(_.metrics.get("numSegmentTreeFrames").map(_.value)).sum
+      // One SlidingWindowMinMaxFunctionFrame per window partition (pk=0, pk=1, pk=2).
+      assert(dequeCount == 3,
+        s"Expected 3 deque frames (one per window partition), got $dequeCount")
+      assert(segCount == 0,
+        s"Deque should take precedence over seg-tree; got segCount=$segCount")
+    }
+  }
+
   test("SPARK-58201: Moving rows frame: MIN/MAX on reference types (String)") {
     val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-2, 3)
     checkEquivalence(() =>
@@ -192,7 +232,9 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
   test("SPARK-58201: MIN/MAX on all-null partition") {
     val df = spark.range(0, 20).selectExpr("id", "1 AS pk", "CAST(null AS INT) AS v")
     val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-2, 2)
-    checkEquivalence(() => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)))
+    checkEquivalence(
+      () => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)),
+      expectedDequeCount = 1)
   }
 
   test("SPARK-58201: Range-based moving frame: MIN/MAX on primitive types") {
@@ -290,7 +332,9 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
   test("SPARK-58201: wide window on ascending data forces ring-buffer expand") {
     val df = spark.range(0, 300).selectExpr("id", "1 AS pk", "CAST(id AS INT) AS v")
     val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-70, 0)
-    checkEquivalence(() => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)))
+    checkEquivalence(
+      () => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)),
+      expectedDequeCount = 1)
   }
 
   // Both-PRECEDING frame: first rows have an empty window.
@@ -300,17 +344,25 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
       baseDF.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
   }
 
-  // Wide random data: exercises the normal sliding path at scale.
+  // Wide random data: exercises non-monotonic admission/eviction on the sliding path.
+  // rand(42) produces non-monotone values so both admit and evict paths are exercised
+  // at each step, unlike the strictly-increasing default data.
   test("SPARK-58201: wide random rows frame") {
+    val df = spark.range(0, 300)
+      .selectExpr("id", "(id % 3) AS pk", "CAST(rand(42) * 10000 AS INT) AS v_int")
     val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-60, 40)
     checkEquivalence(() =>
-      baseDF.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
+      df.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
   }
 
-  // Range frame on tied order key.
+  // RANGE frame with tied order keys: peer rows share the same ord value, so the
+  // frame boundary spans the full peer group rather than splitting it.
   test("SPARK-58201: range frame on tied order key") {
-    val df = baseDF.selectExpr("id", "pk", "CAST(id / 3 AS INT) AS ord", "v_int")
-    val winSpec = Window.partitionBy($"pk").orderBy($"ord").rangeBetween(1, 3)
+    // Within each pk group, id/6 repeats every 2 rows creating genuine peer groups.
+    val df = spark.range(0, 90)
+      .selectExpr(
+        "id", "(id % 3) AS pk", "CAST(id / 6 AS INT) AS ord", "CAST(id AS INT) AS v_int")
+    val winSpec = Window.partitionBy($"pk").orderBy($"ord").rangeBetween(-1, 1)
     checkEquivalence(() =>
       df.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
   }
@@ -355,6 +407,24 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
       val winSpec = Window.partitionBy($"pk").orderBy($"ord_val").rangeBetween(-2, 2)
       checkEquivalence(() =>
         df.select($"id", min($"v_int").over(winSpec), max($"v_int").over(winSpec)))
+    }
+  }
+
+  // Multi-partition RANGE with forced spill: verifies cursor cleanup at partition
+  // boundary. With 9 keys each spilling, retaining one reader per key would exhaust
+  // file descriptors; correctness equivalence fails first if cleanup breaks ordering.
+  test("SPARK-58201: multi-partition RANGE with spill closes cursors at partition boundary") {
+    val df = spark.range(0, 200)
+      .selectExpr(
+        "id", "(id % 9) AS pk", "CAST(id / 3 AS INT) AS ord_val", "CAST(id AS INT) AS v")
+    withSQLConf(
+      SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "4",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "8") {
+      val winSpec = Window.partitionBy($"pk").orderBy($"ord_val").rangeBetween(-1, 1)
+      checkEquivalence(
+        () =>
+        df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)),
+        expectedDequeCount = 9)
     }
   }
 }
