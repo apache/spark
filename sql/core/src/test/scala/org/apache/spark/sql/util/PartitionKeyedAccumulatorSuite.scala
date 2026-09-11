@@ -17,11 +17,17 @@
 
 package org.apache.spark.sql.util
 
+import org.apache.spark.SparkContext
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{
   StateStoreInstanceMetricAccumulator
 }
-import org.apache.spark.sql.execution.streaming.state.StateStoreSnapshotLastUploadInstanceMetric
+import org.apache.spark.sql.execution.streaming.state.{
+  StateStoreId,
+  StateStoreInstanceMetric,
+  StateStoreSnapshotLastUploadInstanceMetric
+}
 
 class PartitionKeyedAccumulatorSuite extends SparkFunSuite {
 
@@ -170,5 +176,95 @@ class PartitionKeyedAccumulatorSuite extends SparkFunSuite {
     assert(accA.accumulatedNumPartitions == 2)
     assert(accA.value.get(0).get(metric0) === Some(105L))
     assert(accA.value.get(1).get(metric1) === Some(200L))
+  }
+
+  test("SPARK-59174: StateStoreInstanceMetric supports non-max combine policies " +
+    "with backwards compatibility") {
+    // 1. A legacy metric implementing only combine(SQLMetric, Long) with min policy
+    case class CustomLegacyMinInstanceMetric(
+        partitionId: Option[Int] = None,
+        storeName: String = StateStoreId.DEFAULT_STORE_NAME)
+      extends StateStoreInstanceMetric {
+      override def metricPrefix: String = "CustomLegacyMin"
+      override def descPrefix: String = "Custom legacy min metric"
+      override def initValue: Long = Long.MaxValue
+      override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
+        SQLMetrics.createSizeMetric(sparkContext, desc, 0L)
+      override def ordering: Ordering[Long] = Ordering.Long
+      override def ignoreIfUnchanged: Boolean = false
+      override def withNewId(partitionId: Int, storeName: String): StateStoreInstanceMetric =
+        copy(partitionId = Some(partitionId), storeName = storeName)
+
+      // Only implement the legacy combine(SQLMetric, Long) overload with Math.min
+      override def combine(originalMetric: SQLMetric, value: Long): Long = {
+        if (originalMetric.isZero) {
+          value
+        } else {
+          Math.min(originalMetric.value, value)
+        }
+      }
+    }
+
+    val minMetric0 = CustomLegacyMinInstanceMetric(Some(0))
+
+    val minAcc = new StateStoreInstanceMetricAccumulator
+    minAcc.add((0, Map(minMetric0 -> 100L)))
+    minAcc.add((0, Map(minMetric0 -> 50L)))
+    // Must preserve min policy (50L), not silently default to max (100L)
+    assert(minAcc.value.get(0).get(minMetric0) === Some(50L))
+
+    minAcc.add((0, Map(minMetric0 -> 80L)))
+    assert(minAcc.value.get(0).get(minMetric0) === Some(50L))
+
+    // Merge between accumulators with legacy min metric
+    val minAccA = new StateStoreInstanceMetricAccumulator
+    minAccA.add((0, Map(minMetric0 -> 100L)))
+    val minAccB = new StateStoreInstanceMetricAccumulator
+    minAccB.add((0, Map(minMetric0 -> 30L)))
+    minAccA.merge(minAccB)
+    assert(minAccA.value.get(0).get(minMetric0) === Some(30L))
+
+    // 2. A metric implementing combine(SQLMetric, Long) with delegation to an optimized
+    // primitive combine(Long, Long) overload using sum policy
+    case class CustomSumInstanceMetric(
+        partitionId: Option[Int] = None,
+        storeName: String = StateStoreId.DEFAULT_STORE_NAME)
+      extends StateStoreInstanceMetric {
+      override def metricPrefix: String = "CustomSum"
+      override def descPrefix: String = "Custom sum metric"
+      override def initValue: Long = 0L
+      override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
+        SQLMetrics.createSizeMetric(sparkContext, desc, 0L)
+      override def ordering: Ordering[Long] = Ordering.Long
+      override def ignoreIfUnchanged: Boolean = false
+      override def withNewId(partitionId: Int, storeName: String): StateStoreInstanceMetric =
+        copy(partitionId = Some(partitionId), storeName = storeName)
+
+      override def combine(originalMetric: SQLMetric, value: Long): Long = {
+        val originalValue = if (originalMetric.isZero) initValue else originalMetric.value
+        combine(originalValue, value)
+      }
+
+      // Optimized direct primitive combine overload
+      override def combine(originalValue: Long, value: Long): Long = {
+        if (originalValue == initValue) {
+          value
+        } else {
+          originalValue + value
+        }
+      }
+    }
+
+    val sumMetric0 = CustomSumInstanceMetric(Some(0))
+
+    val sumAcc = new StateStoreInstanceMetricAccumulator
+    sumAcc.add((0, Map(sumMetric0 -> 10L)))
+    sumAcc.add((0, Map(sumMetric0 -> 25L)))
+    assert(sumAcc.value.get(0).get(sumMetric0) === Some(35L))
+
+    // Legacy callers calling combine(SQLMetric, Long) delegate to combine(Long, Long)
+    val dummySQLMetric = new SQLMetric("size", 0L)
+    dummySQLMetric.set(20L)
+    assert(sumMetric0.combine(dummySQLMetric, 15L) === 35L)
   }
 }
