@@ -19,6 +19,8 @@ package org.apache.spark.types.variant
 
 import java.util.Arrays
 
+import scala.util.Random
+
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 /**
@@ -704,6 +706,64 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
           VariantUtil.getMetadataKeyBytes(meta, id),
           VariantUtil.encodeKey(VariantUtil.getMetadataKey(meta, id))),
         s"getMetadataKeyBytes must equal encodeKey(getMetadataKey) at id $id")
+    }
+  }
+
+  // ----- fuzz: random legal-but-non-canonical variants -----
+  //
+  // Build a random value, render it to JSON two ways (object keys shuffled, and numbers spelled
+  // equivalently, e.g. 5 / 5.0), parse both into byte-different-but-equal Variants, and check:
+  //   equivalence  -- the two encodings canonicalize to identical bytes
+  //   completeness -- canonicalize's output is recognized as canonical
+  //   soundness    -- canonicalizing an already-canonical value is a no-op (via doCanonicalize)
+
+  private sealed trait Node
+  private case class Obj(fields: Seq[(String, Node)]) extends Node
+  private case class Arr(elems: Seq[Node]) extends Node
+  private case class Scalar(spellings: Seq[String]) extends Node
+
+  private val fuzzKeys = Seq("", "a", "b", "z", "key")
+  private val fuzzStrings = Seq("", "x", "hello", "y" * 70)   // incl. a >63-byte long_str
+
+  // one roll: leaf 1/6, array 2/6, object 3/6. Recurses until the depth budget is spent, so
+  // arrays and objects nest (arrays of objects, objects of arrays, and so on).
+  private def gen(rand: Random, depth: Int): Node =
+    if (depth <= 0) genLeaf(rand)
+    else rand.nextInt(6) match {
+      case 0     => genLeaf(rand)
+      case 1 | 2 => Arr(Seq.fill(1 + rand.nextInt(3))(gen(rand, depth - 1)))
+      case _     =>
+        Obj(rand.shuffle(fuzzKeys.toList).take(1 + rand.nextInt(3)).map(_ -> gen(rand, depth - 1)))
+    }
+
+  private def genLeaf(rand: Random): Node = rand.nextInt(7) match {
+    case 0 => Scalar(Seq(if (rand.nextBoolean()) "true" else "false"))
+    case 1 => Scalar(Seq("null"))
+    case 2 => Scalar(Seq("\"" + fuzzStrings(rand.nextInt(fuzzStrings.size)) + "\""))
+    case 3 => val n = rand.nextInt(200) - 100; Scalar(Seq(s"$n", s"$n.0", s"$n.00"))
+    case 4 => val w = rand.nextInt(99) + 1;    Scalar(Seq(s"$w.5", s"$w.50"))
+    case 5 => Obj(Nil)
+    case _ => Arr(Nil)
+  }
+
+  // two calls => two legal encodings of one value (keys shuffled + equivalent number spellings)
+  private def render(n: Node, rand: Random): String = n match {
+    case Obj(fs)    => rand.shuffle(fs.toList).map(f => "\"" + f._1 + "\":" + render(f._2, rand))
+                         .mkString("{", ",", "}")
+    case Arr(es)    => es.map(render(_, rand)).mkString("[", ",", "]")
+    case Scalar(sp) => sp(rand.nextInt(sp.size))
+  }
+
+  test("fuzz: canonicalize is consistent and complete over random variants") {
+    (0 until 300).foreach { i =>
+      val rand = new Random(0xC0FFEEL + i)
+      val tree = gen(rand, 2 + rand.nextInt(4))    // max depth 2..5
+      val v1 = parse(render(tree, rand))
+      val v2 = parse(render(tree, rand))
+      val clue = s"seed=${0xC0FFEEL + i}"
+      assert(bytesEqual(canon(v1), canon(v2)), s"equivalence: $clue")
+      assert(isCanon(canon(v1)), s"completeness: $clue")
+      if (isCanon(v1)) assert(bytesEqual(v1, VariantBuilder.doCanonicalize(v1)), s"soundness: $clue")
     }
   }
 }
