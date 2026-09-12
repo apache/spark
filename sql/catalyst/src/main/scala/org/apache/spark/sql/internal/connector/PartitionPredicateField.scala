@@ -29,9 +29,9 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
  *                    description (e.g. `Seq("bucket(4, id)")`) otherwise.
  * @param attrRef  the [[AttributeReference]] a filter can reference, for an identity transform.
  *                 Created from the resolved partition field so it carries the flattened dotted
- *                 name (e.g. `"s.tz"`) for nested fields. None for any other transform: Spark
- *                 cannot evaluate a filter against its partition value, so no filter references
- *                 it, but the field keeps its ordinal.
+ *                 name (e.g. `"s.tz"`) for nested fields. None for any other transform: for now
+ *                 Spark does not evaluate a filter against its partition value, so no filter
+ *                 references it, but the field keeps its ordinal.
  */
 case class PartitionPredicateField(
     fieldNames: Seq[String],

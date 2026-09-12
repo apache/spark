@@ -412,6 +412,62 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
     }
   }
 
+  // A mixed partitioning: the bucket field keeps its ordinal but is never referenced, so the
+  // IN on the identity column still becomes a PartitionPredicate over the full partition key.
+  test("SPARK-59410: group-based UPDATE prunes by the identity field of a mixed partitioning") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk)) " +
+        "TBLPROPERTIES('iterative-row-level-pushdown' = 'true')")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+
+      val plan = executeAndKeepPlan {
+        sql(s"UPDATE $deleteTableName SET salary = salary + 1 WHERE dep IN ('hr', 'software')")
+      }
+      assertRowLevelScanPrunedByPartitionPredicate(plan,
+        expectedOrdinals = Array(0),
+        expectedPartitionFieldNames = Array("dep", "bucket(4, pk)"),
+        expectedReplacedDeps = Set("hr", "software"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "hr", 101), Row(2, "software", 201), Row(3, "marketing", 300)))
+    }
+  }
+
+  test("SPARK-59410: group-based MERGE prunes by the identity field of a mixed partitioning") {
+    withTable(deleteTableName) {
+      withTempView("source") {
+        sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+          s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk)) " +
+          "TBLPROPERTIES('iterative-row-level-pushdown' = 'true')")
+        sql(s"INSERT INTO $deleteTableName VALUES " +
+          "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+        Seq((1, 1000), (3, 3000)).toDF("pk", "salary").createOrReplaceTempView("source")
+
+        val plan = executeAndKeepPlan {
+          sql(
+            s"""MERGE INTO $deleteTableName t
+               |USING source s
+               |ON t.pk = s.pk AND t.dep IN ('hr', 'software')
+               |WHEN MATCHED THEN
+               | UPDATE SET salary = s.salary
+               |""".stripMargin)
+        }
+        assertRowLevelScanPrunedByPartitionPredicate(plan,
+          expectedOrdinals = Array(0),
+          expectedPartitionFieldNames = Array("dep", "bucket(4, pk)"),
+          expectedReplacedDeps = Set("hr", "software"))
+
+        // Row 3 is in a pruned partition, so it is never read and stays unchanged.
+        checkAnswer(
+          sql(s"SELECT * FROM $deleteTableName"),
+          Seq(Row(1, "hr", 1000), Row(2, "software", 200), Row(3, "marketing", 300)))
+      }
+    }
+  }
+
   private def executeAndKeepPlan(func: => Unit): SparkPlan = keepingPlan(func)._2
 
   /**
