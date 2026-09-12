@@ -903,6 +903,31 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-58442: IN subquery under a null-observing operator keeps three-valued result") {
+    withTempView("tn58442", "t58442") {
+      Seq(Some(1), Some(2), None).toDF("c").createOrReplaceTempView("tn58442")
+      Seq(Some(3), None).toDF("c").createOrReplaceTempView("t58442")
+
+      // c = NULL never matches, and t58442 contains NULL, so `c IN (...)` is NULL for every row.
+      checkAnswer(
+        sql("SELECT c FROM tn58442 WHERE (c IN (SELECT c FROM t58442)) IS NULL"),
+        Row(1) :: Row(2) :: Row(null) :: Nil)
+      checkAnswer(
+        sql("SELECT c FROM tn58442 WHERE (c NOT IN (SELECT c FROM t58442)) IS NULL"),
+        Row(1) :: Row(2) :: Row(null) :: Nil)
+      checkAnswer(
+        sql("SELECT c FROM tn58442 WHERE (c IN (SELECT c FROM t58442)) <=> true"),
+        Nil)
+      checkAnswer(
+        sql("SELECT c FROM tn58442 WHERE (c NOT IN (SELECT c FROM t58442)) <=> true"),
+        Nil)
+      // The rewrite is still sound below AND/OR, so those keep the ExistenceJoin plan.
+      checkAnswer(
+        sql("SELECT c FROM tn58442 WHERE c = 1 OR c IN (SELECT c FROM t58442)"),
+        Row(1) :: Nil)
+    }
+  }
+
   test("SPARK-36124: Correlated subqueries with union") {
     withTempView("t0", "t1", "t2") {
       Seq((1, 1), (2, 0)).toDF("t0a", "t0b").createOrReplaceTempView("t0")
@@ -2202,9 +2227,12 @@ class SubquerySuite extends SharedSparkSession
       checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) != false"), Seq.empty)
       checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) != false"),
         Row(4, null) :: Nil)
-      checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t)) <=> false)"), Seq.empty)
+      // SPARK-58442: NOT IN evaluates to NULL for these rows, and NOT(NULL <=> false) is TRUE,
+      // so they are returned. Before that fix NULL was collapsed to FALSE and they were not.
+      checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t)) <=> false)"),
+        Row(4, null) :: Row(null, 0) :: Nil)
       checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) <=> false)"),
-        Row(4, null) :: Nil)
+        Row(4, null) :: Row(null, 0) :: Nil)
     }
   }
 
