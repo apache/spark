@@ -50,7 +50,7 @@ trait ReadOnlySparkConf {
    * Retrieves the value of a pre-defined configuration entry.
    *
    * - This is an internal Spark API.
-   * - The return type if defined by the configuration entry.
+   * - The return type is defined by the configuration entry.
    * - This will throw an exception is the config is not optional and the value is not set.
    */
   private[spark] def get[T](entry: ConfigEntry[T]): T
@@ -507,8 +507,9 @@ class SparkConf(loadDefaults: Boolean)
    * Get all parameters that start with `prefix`
    */
   def getAllWithPrefix(prefix: String): Array[(String, String)] = {
-    getAll.filter { case (k, v) => k.startsWith(prefix) }
-      .map { case (k, v) => (k.substring(prefix.length), v) }
+    getAll.collect {
+      case (key, value) if key.startsWith(prefix) => (key.substring(prefix.length), value)
+    }
   }
 
   /**
