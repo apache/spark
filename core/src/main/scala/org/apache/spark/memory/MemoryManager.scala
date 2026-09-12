@@ -143,7 +143,8 @@ private[spark] abstract class MemoryManager(
   }
 
   /**
-   * Release all memory for the given task and mark it as inactive (e.g. when a task ends).
+   * Release all memory for the given task. A task with a waiting acquisition remains active
+   * until that acquisition completes or is interrupted.
    *
    * @return the number of bytes freed.
    */
