@@ -414,8 +414,15 @@ object MultiLineJsonDataSource extends JsonDataSource {
       schema,
       parser.options.columnNameOfCorruptRecord)
 
-    safeParser.parse(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.toPath))
+    val input = CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => input.close()))
+    if (parser.options.streamMultilineTopLevelArray) {
+      safeParser.parseIterator(
+        input,
+        input => parser.parseIterator[InputStream](input, streamParser, partitionedFileString))
+    } else {
+      safeParser.parse(input)
+    }
   }
 
   override protected def readStream(
@@ -435,6 +442,14 @@ object MultiLineJsonDataSource extends JsonDataSource {
       schema,
       parser.options.columnNameOfCorruptRecord)
 
-    safeParser.parse(new ByteArrayInputStream(bytes))
+    val input = new ByteArrayInputStream(bytes)
+    if (parser.options.streamMultilineTopLevelArray) {
+      safeParser.parseIterator(
+        input,
+        input => parser.parseIterator[InputStream](
+          input, streamParser, _ => UTF8String.fromBytes(bytes)))
+    } else {
+      safeParser.parse(input)
+    }
   }
 }

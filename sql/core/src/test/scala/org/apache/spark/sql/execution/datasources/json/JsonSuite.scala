@@ -33,9 +33,11 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.io.ZStdCompressionCodec
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.{functions => F, _}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.{CharsetProvider, DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
@@ -44,7 +46,7 @@ import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPr
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.execution.ExternalRDD
-import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
+import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -54,6 +56,7 @@ import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.TestUDT.{MyDenseVector, MyDenseVectorUDT}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -1066,6 +1069,97 @@ abstract class JsonSuite
     }
   }
 
+  gridTest("SPARK-3308 Read multiline top level JSON arrays")(
+      Seq(false, true)) { enabled =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> enabled.toString) {
+      withTempPath { file =>
+        Files.write(file.toPath, """[{"a":1},{"a":2}]""".getBytes(StandardCharsets.UTF_8))
+        checkAnswer(
+          spark.read.option("multiLine", true).schema("a int").json(file.getCanonicalPath),
+          Seq(Row(1), Row(2)))
+      }
+    }
+  }
+
+  test("multiline top level JSON arrays are parsed lazily") {
+    val schema = StructType(Seq(StructField("a", IntegerType)))
+    val options = new JSONOptions(Map("multiLine" -> "true"), SQLConf.get.sessionLocalTimeZone)
+    val parser = new JacksonParser(schema, options, allowArrayAsStructs = true)
+    val input = new ByteArrayInputStream(
+      s"""[{"a":1},{"a":2,"payload":"${"x" * 200000}"}]""".getBytes(StandardCharsets.UTF_8))
+    val rows = parser.parseIterator[InputStream](
+      input,
+      CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream),
+      stream => UTF8String.fromBytes(stream.readAllBytes()))
+
+    assert(rows.next().getInt(0) === 1)
+    assert(input.available() > 0)
+  }
+
+  test("non-array JSON is parsed eagerly by parseIterator") {
+    val schema = StructType(Seq(StructField("a", IntegerType)))
+    val options = new JSONOptions(Map("multiLine" -> "true"), SQLConf.get.sessionLocalTimeZone)
+    val parser = new JacksonParser(schema, options, allowArrayAsStructs = true)
+    var closed = false
+    val input = new ByteArrayInputStream("""{"a":1}""".getBytes(StandardCharsets.UTF_8)) {
+      override def close(): Unit = {
+        closed = true
+        super.close()
+      }
+    }
+
+    val rows = parser.parseIterator[InputStream](
+      input,
+      CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream),
+      stream => UTF8String.fromBytes(stream.readAllBytes()))
+
+    assert(closed)
+    assert(rows.next().getInt(0) === 1)
+    assert(!rows.hasNext)
+  }
+
+  gridTest("multiline top level JSON array keeps rows emitted before malformed input")(
+      Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST")) { mode =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      withTempPath { file =>
+        val document = """[{"a":1} {"a":2}]"""
+        Files.write(file.toPath, document.getBytes(StandardCharsets.UTF_8))
+        val actualSchema = StructType(Seq(StructField("a", IntegerType)))
+        val schema = StructType(Seq(
+          actualSchema.head,
+          StructField("_corrupt_record", StringType)))
+        val options = new JSONOptions(
+          Map("multiLine" -> "true", "mode" -> mode),
+          SQLConf.get.sessionLocalTimeZone,
+          SQLConf.get.columnNameOfCorruptRecord)
+        val parser = new JacksonParser(actualSchema, options, allowArrayAsStructs = true)
+        val partitionedFile = PartitionedFile(
+          InternalRow.empty,
+          SparkPath.fromPathString(file.getCanonicalPath),
+          0,
+          file.length())
+        val rows = MultiLineJsonDataSource.readFile(
+          spark.sessionState.newHadoopConf(), partitionedFile, parser, schema)
+
+        assert(rows.next().getInt(0) === 1)
+        mode match {
+          case "PERMISSIVE" =>
+            val corruptRow = rows.next()
+            assert(corruptRow.isNullAt(0))
+            val corruptRecord = corruptRow.getUTF8String(1)
+            assert(corruptRecord != null, corruptRow.toString)
+            assert(corruptRecord.toString === document)
+            assert(!rows.hasNext)
+          case "DROPMALFORMED" =>
+            assert(!rows.hasNext)
+          case "FAILFAST" =>
+            val error = intercept[SparkException](rows.hasNext)
+            assert(error.getCondition === "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+        }
+      }
+    }
+  }
+
   test("Corrupt records: FAILFAST mode") {
     // `FAILFAST` mode should throw an exception for corrupt records.
     checkError(
@@ -2008,100 +2102,112 @@ abstract class JsonSuite
     }
   }
 
-  test("SPARK-18352: Handle multi-line corrupt documents (PERMISSIVE)") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      val corruptRecordCount = additionalCorruptRecords.count().toInt
-      assert(corruptRecordCount === 5)
+  gridTest("SPARK-18352: Handle multi-line corrupt documents (PERMISSIVE)")(
+      Seq(false, true)) { enabled =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> enabled.toString) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val corruptRecordCount = additionalCorruptRecords.count().toInt
+        assert(corruptRecordCount === 5)
 
-      additionalCorruptRecords
-        .toDF("value")
-        // this is the minimum partition count that avoids hash collisions
-        .repartition(corruptRecordCount * 4, F.hash($"value"))
-        .write
-        .text(path)
+        additionalCorruptRecords
+          .toDF("value")
+          // this is the minimum partition count that avoids hash collisions
+          .repartition(corruptRecordCount * 4, F.hash($"value"))
+          .write
+          .text(path)
 
-      val jsonDF = spark.read.option("multiLine", true).option("mode", "PERMISSIVE").json(path)
-      assert(jsonDF.count() === corruptRecordCount)
-      assert(jsonDF.schema === new StructType()
-        .add("_corrupt_record", StringType)
-        .add("dummy", StringType))
-      val counts = jsonDF
-        .join(
-          additionalCorruptRecords.toDF("value"),
-          F.regexp_replace($"_corrupt_record", "(^\\s+|\\s+$)", "") === F.trim($"value"),
-          "outer")
-        .agg(
-          F.count($"dummy").as("valid"),
-          F.count($"_corrupt_record").as("corrupt"),
-          F.count("*").as("count"))
-      checkAnswer(counts, Row(1, 4, 6))
+        val jsonDF = spark.read.option("multiLine", true).option("mode", "PERMISSIVE").json(path)
+        assert(jsonDF.count() === corruptRecordCount)
+        assert(jsonDF.schema === new StructType()
+          .add("_corrupt_record", StringType)
+          .add("dummy", StringType))
+        val counts = jsonDF
+          .join(
+            additionalCorruptRecords.toDF("value"),
+            F.regexp_replace($"_corrupt_record", "(^\\s+|\\s+$)", "") === F.trim($"value"),
+            "outer")
+          .agg(
+            F.count($"dummy").as("valid"),
+            F.count($"_corrupt_record").as("corrupt"),
+            F.count("*").as("count"))
+        checkAnswer(counts, Row(1, 4, 6))
+      }
     }
   }
 
-  test("SPARK-19641: Handle multi-line corrupt documents (DROPMALFORMED)") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      val corruptRecordCount = additionalCorruptRecords.count().toInt
-      assert(corruptRecordCount === 5)
+  gridTest("SPARK-19641: Handle multi-line corrupt documents (DROPMALFORMED)")(
+      Seq(false, true)) { enabled =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> enabled.toString) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val corruptRecordCount = additionalCorruptRecords.count().toInt
+        assert(corruptRecordCount === 5)
 
-      additionalCorruptRecords
-        .toDF("value")
-        // this is the minimum partition count that avoids hash collisions
-        .repartition(corruptRecordCount * 4, F.hash($"value"))
-        .write
-        .text(path)
+        additionalCorruptRecords
+          .toDF("value")
+          // this is the minimum partition count that avoids hash collisions
+          .repartition(corruptRecordCount * 4, F.hash($"value"))
+          .write
+          .text(path)
 
-      val jsonDF = spark.read.option("multiLine", true).option("mode", "DROPMALFORMED").json(path)
-      checkAnswer(jsonDF, Seq(Row("test")))
+        val jsonDF = spark.read
+          .option("multiLine", true)
+          .option("mode", "DROPMALFORMED")
+          .json(path)
+        checkAnswer(jsonDF, Seq(Row("test")))
+      }
     }
   }
 
-  test("SPARK-18352: Handle multi-line corrupt documents (FAILFAST)") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      val corruptRecordCount = additionalCorruptRecords.count().toInt
-      assert(corruptRecordCount === 5)
+  gridTest("SPARK-18352: Handle multi-line corrupt documents (FAILFAST)")(
+      Seq(false, true)) { enabled =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> enabled.toString) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val corruptRecordCount = additionalCorruptRecords.count().toInt
+        assert(corruptRecordCount === 5)
 
-      additionalCorruptRecords
-        .toDF("value")
-        // this is the minimum partition count that avoids hash collisions
-        .repartition(corruptRecordCount * 4, F.hash($"value"))
-        .write
-        .text(path)
+        additionalCorruptRecords
+          .toDF("value")
+          // this is the minimum partition count that avoids hash collisions
+          .repartition(corruptRecordCount * 4, F.hash($"value"))
+          .write
+          .text(path)
 
-      val schema = new StructType().add("dummy", StringType)
+        val schema = new StructType().add("dummy", StringType)
 
-      // `FAILFAST` mode should throw an exception for corrupt records.
-      checkErrorMatchPVals(
-        exception = intercept[SparkException] {
+        // `FAILFAST` mode should throw an exception for corrupt records.
+        checkErrorMatchPVals(
+          exception = intercept[SparkException] {
+            spark.read
+              .option("multiLine", true)
+              .option("mode", "FAILFAST")
+              .json(path)
+          },
+          condition = "INVALID_JSON_RECORD_TYPE",
+          parameters = Map("failFastMode" -> "FAILFAST", "invalidType" -> "\"STRING\"|\"BIGINT\""))
+
+        val ex = intercept[SparkException] {
           spark.read
             .option("multiLine", true)
             .option("mode", "FAILFAST")
+            .schema(schema)
             .json(path)
-        },
-        condition = "INVALID_JSON_RECORD_TYPE",
-        parameters = Map("failFastMode" -> "FAILFAST", "invalidType" -> "\"STRING\"|\"BIGINT\""))
-
-      val ex = intercept[SparkException] {
-        spark.read
-          .option("multiLine", true)
-          .option("mode", "FAILFAST")
-          .schema(schema)
-          .json(path)
-          .collect()
+            .collect()
+        }
+        checkErrorMatchPVals(
+          exception = ex,
+          condition = "FAILED_READ_FILE.NO_HINT",
+          parameters = Map("path" -> s".*$path.*"))
+        checkError(
+          exception = ex.getCause.asInstanceOf[SparkException],
+          condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map(
+            "badRecord" -> "[null]",
+            "failFastMode" -> "FAILFAST")
+        )
       }
-      checkErrorMatchPVals(
-        exception = ex,
-        condition = "FAILED_READ_FILE.NO_HINT",
-        parameters = Map("path" -> s".*$path.*"))
-      checkError(
-        exception = ex.getCause.asInstanceOf[SparkException],
-        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-        parameters = Map(
-          "badRecord" -> "[null]",
-          "failFastMode" -> "FAILFAST")
-      )
     }
   }
 

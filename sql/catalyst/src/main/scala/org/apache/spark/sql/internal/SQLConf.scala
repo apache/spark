@@ -7059,6 +7059,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY =
+    buildConf("spark.sql.json.enableStreamingTopLevelArray")
+      .internal()
+      .doc("When true, multiline JSON reads stream the elements of a top-level array one at a " +
+        "time instead of materializing the entire array before returning rows.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val JSON_USE_UNSAFE_ROW =
     buildConf("spark.sql.json.useUnsafeRow")
       .doc("When set to true, use UnsafeRow to represent struct result in the JSON parser. It " +

@@ -693,6 +693,34 @@ class JacksonParser(
     case _ => err
   }
 
+  private def badRecord(error: Throwable, recordLiteral: () => UTF8String): BadRecordException =
+    error match {
+      case e: SparkUpgradeException => throw e
+      case e: CharConversionException if options.encoding.isEmpty =>
+        val msg =
+          """JSON parser cannot handle a character in its input.
+            |Specifying encoding as an input option explicitly might help to resolve the issue.
+            |""".stripMargin + e.getMessage
+        val wrappedCharException = new CharConversionException(msg)
+        wrappedCharException.initCause(e)
+        BadRecordException(recordLiteral, () => Array.empty, wrappedCharException)
+      case PartialResultException(row, cause) =>
+        BadRecordException(recordLiteral, () => Array(row), convertCauseForPartialResult(cause))
+      case PartialResultArrayException(rows, cause) =>
+        BadRecordException(recordLiteral, () => rows, cause)
+      case PartialArrayDataResultException(arrayData, cause) =>
+        BadRecordException(
+          recordLiteral,
+          () => Array(InternalRow(arrayData)),
+          convertCauseForPartialResult(cause))
+      case PartialMapDataResultException(mapData, cause) =>
+        BadRecordException(
+          recordLiteral,
+          () => Array(InternalRow(mapData)),
+          convertCauseForPartialResult(cause))
+      case e => BadRecordException(recordLiteral, () => Array.empty, e)
+    }
+
   /**
    * Parse the JSON input to the set of [[InternalRow]]s.
    *
@@ -717,43 +745,86 @@ class JacksonParser(
       }
     } catch {
       case e: SparkUpgradeException => throw e
-      case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
-        // JSON parser currently doesn't support partial results for corrupted records.
-        // For such records, all fields other than the field configured by
-        // `columnNameOfCorruptRecord` are set to `null`.
-        throw BadRecordException(() => recordLiteral(record), () => Array.empty, e)
       case e: CharConversionException if options.encoding.isEmpty =>
-        val msg =
-          """JSON parser cannot handle a character in its input.
-            |Specifying encoding as an input option explicitly might help to resolve the issue.
-            |""".stripMargin + e.getMessage
-        val wrappedCharException = new CharConversionException(msg)
-        wrappedCharException.initCause(e)
-        throw BadRecordException(() => recordLiteral(record), () => Array.empty,
-          wrappedCharException)
-      case PartialResultException(row, cause) =>
-        throw BadRecordException(
-          record = () => recordLiteral(record),
-          partialResults = () => Array(row),
-          convertCauseForPartialResult(cause))
-      case PartialResultArrayException(rows, cause) =>
-        throw BadRecordException(
-          record = () => recordLiteral(record),
-          partialResults = () => rows,
-          cause)
-      // These exceptions should never be thrown outside of JacksonParser.
-      // They are used for the control flow in the parser. We add them here for completeness
-      // since they also indicate a bad record.
-      case PartialArrayDataResultException(arrayData, cause) =>
-        throw BadRecordException(
-          record = () => recordLiteral(record),
-          partialResults = () => Array(InternalRow(arrayData)),
-          convertCauseForPartialResult(cause))
-      case PartialMapDataResultException(mapData, cause) =>
-        throw BadRecordException(
-          record = () => recordLiteral(record),
-          partialResults = () => Array(InternalRow(mapData)),
-          convertCauseForPartialResult(cause))
+        throw badRecord(e, () => recordLiteral(record))
+      case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
+          _: PartialResultException | _: PartialResultArrayException |
+          _: PartialArrayDataResultException | _: PartialMapDataResultException) =>
+        throw badRecord(e, () => recordLiteral(record))
+    }
+  }
+
+  private[sql] def parseIterator[T](
+      record: T,
+      createParser: (JsonFactory, T) => JsonParser,
+      recordLiteral: T => UTF8String): Iterator[InternalRow] = {
+    val streamArray = allowArrayAsStructs && schema.isInstanceOf[StructType] &&
+      options.singleVariantColumn.isEmpty && options.explodeEmbeddedArray.isEmpty
+    val elementConverter = if (streamArray) makeConverter(schema) else null
+    val jsonParser = createParser(factory, record)
+    def fail(error: Throwable): Nothing = {
+      try jsonParser.close() catch {
+        case NonFatal(closeError) => error.addSuppressed(closeError)
+      }
+      throw badRecord(error, () => recordLiteral(record))
+    }
+    def handleFailure[T](operation: => T): T = {
+      try operation catch {
+        case e: SparkUpgradeException => fail(e)
+        case e: CharConversionException if options.encoding.isEmpty => fail(e)
+        case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
+            _: PartialResultException | _: PartialResultArrayException |
+            _: PartialArrayDataResultException | _: PartialMapDataResultException) => fail(e)
+      }
+    }
+
+    handleFailure(jsonParser.nextToken()) match {
+      case null =>
+        jsonParser.close()
+        Iterator.empty
+      case START_ARRAY if streamArray =>
+        new Iterator[InternalRow] {
+          private var nextRow: InternalRow = _
+          private var prepared = false
+          private var finished = false
+
+          override def hasNext: Boolean = {
+            prepare()
+            !finished
+          }
+
+          override def next(): InternalRow = {
+            prepare()
+            if (finished) throw new NoSuchElementException("next on empty iterator")
+            prepared = false
+            nextRow
+          }
+
+          private def prepare(): Unit = {
+            if (prepared || finished) return
+            handleFailure {
+              jsonParser.nextToken() match {
+                case END_ARRAY => finish()
+                case null =>
+                  throw new JsonParseException(jsonParser, "Unexpected end of top-level array")
+                case _ =>
+                  nextRow = elementConverter(jsonParser).asInstanceOf[InternalRow]
+                  if (nextRow == null) throw QueryExecutionErrors.rootConverterReturnNullError()
+                  prepared = true
+              }
+            }
+          }
+
+          private def finish(): Unit = {
+            finished = true
+            jsonParser.close()
+          }
+        }
+      case _ =>
+        val rows = handleFailure(rootConverter(jsonParser))
+        if (rows == null) fail(QueryExecutionErrors.rootConverterReturnNullError())
+        jsonParser.close()
+        rows.iterator
     }
   }
 }
