@@ -124,6 +124,18 @@ parseSqlBatchPartialCompoundStatement
 
 parseSqlBatchCompoundStatement
     : BEGIN (NOT ATOMIC)? parseSqlBatchCompoundBody? END
+      parseSqlBatchMalformedEndSuffix?
+    | BEGIN (NOT ATOMIC)? parseSqlBatchCompoundBody?
+      parseSqlBatchFinalBodyLeafStatement END parseSqlBatchMalformedEndSuffix?
+    ;
+
+parseSqlBatchFinalBodyLeafStatement
+    : {_input.LA(1) != BEGIN && _input.LA(1) != END}?
+      (~(END | SEMICOLON | PARSE_SQL_BATCH_DELIMITER))+
+    ;
+
+parseSqlBatchMalformedEndSuffix
+    : (~(SEMICOLON | PARSE_SQL_BATCH_DELIMITER))+
     ;
 
 parseSqlBatchBeginEndCompoundBlock
@@ -175,8 +187,13 @@ parseSqlBatchDeclareHandlerStatement
     ;
 
 parseSqlBatchWhileStatement
-    : beginLabel? WHILE booleanExpression DO parseSqlBatchCompoundBody
+    : beginLabel? WHILE parseSqlBatchWhileCondition DO parseSqlBatchCompoundBody
       parseSqlBatchPrematureEnds? END WHILE endLabel?
+    ;
+
+parseSqlBatchWhileCondition
+    : booleanExpression
+    | (~(DO | SEMICOLON | PARSE_SQL_BATCH_DELIMITER))*
     ;
 
 parseSqlBatchIfElseStatement
@@ -206,7 +223,12 @@ parseSqlBatchConditionalBodyLeafStatement
 
 parseSqlBatchRepeatStatement
     : beginLabel? REPEAT parseSqlBatchCompoundBody parseSqlBatchPrematureEnds?
-      UNTIL booleanExpression END REPEAT endLabel?
+      UNTIL parseSqlBatchRepeatCondition END REPEAT endLabel?
+    ;
+
+parseSqlBatchRepeatCondition
+    : booleanExpression
+    | (~(END | SEMICOLON | PARSE_SQL_BATCH_DELIMITER))*
     ;
 
 parseSqlBatchCaseStatement
@@ -246,8 +268,13 @@ parseSqlBatchLoopStatement
     ;
 
 parseSqlBatchForStatement
-    : beginLabel? FOR (strictIdentifier AS)? query DO
+    : beginLabel? FOR parseSqlBatchForHeader DO
       parseSqlBatchCompoundBody parseSqlBatchPrematureEnds? END FOR endLabel?
+    ;
+
+parseSqlBatchForHeader
+    : (strictIdentifier AS)? query
+    | (~(DO | SEMICOLON | PARSE_SQL_BATCH_DELIMITER))*
     ;
 
 parseSqlBatchPrematureEnds

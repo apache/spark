@@ -125,8 +125,8 @@ private[sql] case class PositionedSqlStatementSplitResult(
  * O(n), but Spark's `setResetStatement` has `SET .*?` / `RESET .*?` wildcards
  * that need an EOF anchor to terminate deterministically, so such a
  * single-statement rule-rewrite does not drop in cleanly. Tracked as a
- * follow-up. The parse_sql-only path uses [[splitForParseSql]] and performs one
- * linear boundary parse instead.
+ * follow-up. The normal parse_sql-only path uses [[splitForParseSql]] and performs
+ * one linear boundary parse instead; a parser stack overflow falls back to the generic path.
  */
 object SqlStatementSplitter {
 

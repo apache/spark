@@ -159,7 +159,13 @@ class ParseSqlResultSuite extends SparkFunSuite {
         "SELECT 9" -> true),
       "BEGIN WHILE TRUE DO SELECT 1; END; END WHILE; END; SELECT 9" -> Seq(
         "BEGIN WHILE TRUE DO SELECT 1; END; END WHILE; END" -> false,
-        "SELECT 9" -> true))
+        "SELECT 9" -> true),
+      "BEGIN SELECT 1; END bad; SELECT 2" -> Seq(
+        "BEGIN SELECT 1; END bad" -> false,
+        "SELECT 2" -> true),
+      "BEGIN SELECT 1 END; SELECT 2" -> Seq(
+        "BEGIN SELECT 1 END" -> false,
+        "SELECT 2" -> true))
 
     cases.foreach { case (sql, expected) =>
       val statements = objs(sql)
@@ -218,6 +224,26 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(statements.map(_ \ "length") === Seq(JInt(29), JInt(8)))
     assert(statements.map(_ \ "statement_identifier") ===
       Seq(JString("BEGIN END"), JString("SELECT")))
+  }
+
+  test("loop boundary parsing preserves raw variable references for stock parsing") {
+    SQLConf.withExistingConf(new SQLConf) {
+      SQLConf.get.setConfString("flag", "TRUE")
+      SQLConf.get.setConfString("query", "SELECT 1")
+      val blocks = Seq(
+        "BEGIN WHILE ${flag} DO SELECT 1; END WHILE; END",
+        "BEGIN REPEAT SELECT 1; UNTIL ${flag} END REPEAT; END",
+        "BEGIN FOR x AS ${query} DO SELECT x; END FOR; END")
+
+      blocks.foreach { block =>
+        val sql = s"$block; SELECT 2"
+        val statements = objs(sql)
+        assert(statements.size === 2, block)
+        assert(statements.map(_ \ "parse_success") === Seq(JBool(true), JBool(true)), block)
+        assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(block.length + 3)), block)
+        assert(statements.map(_ \ "length") === Seq(JInt(block.length), JInt(8)), block)
+      }
+    }
   }
 
   test("empty and closed-comment-only batches contain no statements") {

@@ -602,6 +602,9 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
       "BEGIN FOR x AS SELECT 1 DO SELEC 1; END FOR; END",
       "BEGIN lbl: BEGIN SELEC 1; END lbl; END",
       "BEGIN IF ${flag} THEN BEGIN SELEC 1; END; SELECT 1; END IF; END",
+      "BEGIN WHILE ${flag} DO BEGIN SELEC 1; END; END WHILE; END",
+      "BEGIN REPEAT BEGIN SELEC 1; END; UNTIL ${flag} END REPEAT; END",
+      "BEGIN FOR x AS SELECT * FROM ${table} DO BEGIN SELEC 1; END; END FOR; END",
       "BEGIN DECLARE CONTINUE HANDLER FOR SQLEXCEPTION BEGIN SELEC 1; END; END",
       "BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN SELEC 1; END; SELECT 1; END")
 
@@ -698,6 +701,17 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
       }
       assert(result.completeStatements == Seq(statement(block)), block)
       assert(result.partialStatement == "SELECT 9", block)
+    }
+
+    val malformedBalanced = Seq(
+      "BEGIN SELECT 1; END bad",
+      "BEGIN SELECT 1 END")
+    malformedBalanced.foreach { block =>
+      val result = SqlStatementSplitter
+        .splitForParseSql(s"$block; SELECT 2")
+        .withoutPositions
+      assert(result.completeStatements == Seq(statement(block)), block)
+      assert(result.partialStatement == "SELECT 2", block)
     }
   }
 
