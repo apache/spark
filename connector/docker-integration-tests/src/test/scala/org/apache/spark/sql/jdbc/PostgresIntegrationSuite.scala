@@ -172,6 +172,11 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
     conn.prepareStatement("INSERT INTO test_bit_array VALUES (ARRAY[B'1', B'0'], " +
       "ARRAY[B'00001', B'00010'])").executeUpdate()
 
+    conn.prepareStatement("CREATE TABLE time_array_table (id integer, times time[])").
+      executeUpdate()
+    conn.prepareStatement("INSERT INTO time_array_table VALUES " +
+      "(1, ARRAY[TIME '08:30:00', TIME '17:22:31.123456'])").executeUpdate()
+
     conn.prepareStatement(
       """
         |CREATE TYPE complex AS (
@@ -619,6 +624,171 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
       val df6 = spark.read.option("preferTimestampNTZ", true)
         .jdbc(jdbcUrl, "ts_with_timezone_copy_true", new Properties)
       checkAnswer(df6, Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33)))
+    }
+  }
+
+  test("SPARK-57555: Read TIME column as TimeType when timeType.enabled is true") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val df = spark.read.jdbc(jdbcUrl, "bar", new Properties)
+      val rows = df.collect().sortBy(_.toString())
+      // c36 is TIME column with value '17:22:31.123'
+      val timeField = df.schema("c36")
+      assert(timeField.dataType.isInstanceOf[TimeType])
+      val localTime = rows(0).getAs[java.time.LocalTime](df.schema.fieldIndex("c36"))
+      assert(localTime == java.time.LocalTime.of(17, 22, 31, 123000000))
+    }
+  }
+
+  test("SPARK-57555: Write and read TIME column round-trip") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val schema = StructType(Seq(StructField("t", TimeType(TimeType.DEFAULT_PRECISION))))
+      val times = Seq(
+        java.time.LocalTime.of(0, 0, 0),
+        java.time.LocalTime.of(12, 30, 45, 123456000),
+        java.time.LocalTime.of(23, 59, 59, 999999000)
+      )
+      val data = times.map(t => Row(t))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.jdbc(jdbcUrl, "time_roundtrip", new Properties)
+      val result = spark.read.jdbc(jdbcUrl, "time_roundtrip", new Properties)
+      assert(result.schema("t").dataType.isInstanceOf[TimeType])
+      val collected = result.collect().map(_.getAs[java.time.LocalTime](0)).sorted
+      assert(collected.toSeq == times.sorted)
+    }
+  }
+
+  test("SPARK-57555: Read time[] array column as ArrayType(TimeType)") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val df = spark.read.jdbc(jdbcUrl, "time_array_table", new Properties)
+      val schema = df.schema("times")
+      assert(schema.dataType == ArrayType(TimeType(TimeType.DEFAULT_PRECISION), true))
+      val row = df.collect()(0)
+      val times = row.getSeq[java.time.LocalTime](df.schema.fieldIndex("times"))
+      assert(times == Seq(
+        java.time.LocalTime.of(8, 30, 0),
+        java.time.LocalTime.of(17, 22, 31, 123456000)))
+    }
+  }
+
+  test("SPARK-57555: Write TIME preserves precision for p<=6") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val schema = StructType(Seq(StructField("t", TimeType(3))))
+      val data = Seq(
+        Row(java.time.LocalTime.of(10, 30, 45, 123000000)),
+        Row(java.time.LocalTime.of(22, 15, 0, 456000000))
+      )
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.jdbc(jdbcUrl, "time_precision_test", new Properties)
+      val result = spark.read.jdbc(jdbcUrl, "time_precision_test", new Properties)
+      assert(result.schema("t").dataType == TimeType(3))
+      val collected = result.collect().map(_.getAs[java.time.LocalTime](0)).sorted
+      assert(collected(0) == java.time.LocalTime.of(10, 30, 45, 123000000))
+      assert(collected(1) == java.time.LocalTime.of(22, 15, 0, 456000000))
+    }
+  }
+
+  test("SPARK-57555: End-to-end TIME type with PostgreSQL") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      // 1. Create and populate a TIME table directly via JDBC
+      val conn = java.sql.DriverManager.getConnection(jdbcUrl)
+      try {
+        conn.prepareStatement(
+          "CREATE TABLE time_e2e (id integer, wake_up time, lunch time(3))").executeUpdate()
+        conn.prepareStatement(
+          "INSERT INTO time_e2e VALUES " +
+            "(1, TIME '06:30:00', TIME '12:00:00.000'), " +
+            "(2, TIME '07:45:30.123456', TIME '13:15:30.500')").executeUpdate()
+      } finally {
+        conn.close()
+      }
+
+      // 2. Read with Spark - verify schema inference
+      val df = spark.read.jdbc(jdbcUrl, "time_e2e", new Properties)
+      assert(df.schema("wake_up").dataType == TimeType(6))
+      assert(df.schema("lunch").dataType == TimeType(3))
+
+      // 3. Verify values
+      val rows = df.collect().sortBy(_.getInt(0))
+      assert(rows(0).getAs[java.time.LocalTime](1) == java.time.LocalTime.of(6, 30, 0))
+      assert(rows(0).getAs[java.time.LocalTime](2) == java.time.LocalTime.of(12, 0, 0))
+      assert(rows(1).getAs[java.time.LocalTime](1) ==
+        java.time.LocalTime.of(7, 45, 30, 123456000))
+      assert(rows(1).getAs[java.time.LocalTime](2) ==
+        java.time.LocalTime.of(13, 15, 30, 500000000))
+
+      // 4. Write back to a new table and read again
+      df.write.jdbc(jdbcUrl, "time_e2e_copy", new Properties)
+      val result = spark.read.jdbc(jdbcUrl, "time_e2e_copy", new Properties)
+      assert(result.schema("wake_up").dataType == TimeType(6))
+      assert(result.schema("lunch").dataType == TimeType(3))
+      checkAnswer(result.orderBy("id"), df.orderBy("id"))
+    }
+  }
+
+  test("SPARK-57555: Write and read time[] array column round-trip") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val schema = StructType(Seq(
+        StructField("id", IntegerType),
+        StructField("times", ArrayType(TimeType(TimeType.DEFAULT_PRECISION)))))
+      val data = Seq(
+        Row(1, Seq(
+          java.time.LocalTime.of(8, 0, 0),
+          java.time.LocalTime.of(12, 30, 0),
+          java.time.LocalTime.of(17, 45, 30, 123456000))),
+        Row(2, Seq(
+          java.time.LocalTime.of(0, 0, 0),
+          java.time.LocalTime.of(23, 59, 59, 999999000))))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.jdbc(jdbcUrl, "time_array_roundtrip", new Properties)
+
+      val result = spark.read.jdbc(jdbcUrl, "time_array_roundtrip", new Properties)
+      assert(result.schema("times").dataType ==
+        ArrayType(TimeType(TimeType.DEFAULT_PRECISION), true))
+      checkAnswer(result.orderBy("id"), df.orderBy("id"))
+    }
+  }
+
+  test("SPARK-57555: Legacy mode reads time/time[] as TimestampType") {
+    withSQLConf(
+        SQLConf.TIME_TYPE_ENABLED.key -> "true",
+        SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "true") {
+      // Scalar time column
+      val df = spark.read.jdbc(jdbcUrl, "bar", new Properties)
+      val timeField = df.schema("c36")
+      assert(timeField.dataType == TimestampType || timeField.dataType == TimestampNTZType,
+        s"Expected timestamp type in legacy mode, got ${timeField.dataType}")
+
+      // time[] array column
+      val arrDf = spark.read.jdbc(jdbcUrl, "time_array_table", new Properties)
+      val arrField = arrDf.schema("times")
+      arrField.dataType match {
+        case ArrayType(elementType, _) =>
+          assert(elementType == TimestampType || elementType == TimestampNTZType,
+            s"Expected timestamp element type in legacy mode, got $elementType")
+        case other => fail(s"Expected ArrayType, got $other")
+      }
+    }
+  }
+
+  test("SPARK-57555: Nanosecond TimeType(9) write falls back to bare TIME, reads as TimeType(6)") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      // Write a TimeType(9) column - should emit bare TIME (not invalid TIME(9))
+      val schema = StructType(Seq(StructField("t", TimeType(9))))
+      val data = Seq(
+        Row(java.time.LocalTime.of(10, 30, 45, 123456789)),
+        Row(java.time.LocalTime.of(22, 15, 0, 987654321))
+      )
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.jdbc(jdbcUrl, "time_nanos_test", new Properties)
+
+      // Read back - PostgreSQL TIME max precision is 6, so reads as TimeType(6)
+      val result = spark.read.jdbc(jdbcUrl, "time_nanos_test", new Properties)
+      assert(result.schema("t").dataType == TimeType(6))
+
+      // Values are rounded to microseconds by PostgreSQL (not truncated)
+      val collected = result.collect().map(_.getAs[java.time.LocalTime](0)).sorted
+      assert(collected(0) == java.time.LocalTime.of(10, 30, 45, 123457000))
+      assert(collected(1) == java.time.LocalTime.of(22, 15, 0, 987654000))
     }
   }
 }
