@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 case class FilterEstimation(plan: Filter) extends Logging {
 
@@ -214,10 +215,20 @@ case class FilterEstimation(plan: Filter) extends Logging {
       case op @ GreaterThanOrEqual(attrLeft: Attribute, attrRight: Attribute) =>
         evaluateBinaryForTwoColumns(op, attrLeft, attrRight, update)
 
+      // StartsWith/EndsWith/Contains are null-intolerant, so only non-null rows can match; and a
+      // value must be at least as long as the operand. We can bound their selectivity from
+      // `nullCount` and `maxLen` even without distribution statistics. `Like` still falls through
+      // (its common prefix/suffix/infix forms are already rewritten to the operators below).
+      case StartsWith(ar: Attribute, l @ Literal(v, StringType)) if v != null =>
+        evaluateStringPredicate(ar, l, update)
+      case EndsWith(ar: Attribute, l @ Literal(v, StringType)) if v != null =>
+        evaluateStringPredicate(ar, l, update)
+      case Contains(ar: Attribute, l @ Literal(v, StringType)) if v != null =>
+        evaluateStringPredicate(ar, l, update)
+
       case _ =>
         // TODO: it's difficult to support string operators without advanced statistics.
-        // Hence, these string operators Like(_, _) | Contains(_, _) | StartsWith(_, _)
-        // | EndsWith(_, _) are not supported yet
+        // Hence, the string operator Like(_, _) is not supported yet.
         logDebug("[CBO] Unsupported filter condition: " + condition)
         None
     }
@@ -264,6 +275,59 @@ case class FilterEstimation(plan: Filter) extends Logging {
       nullPercent
     } else {
       1.0 - nullPercent
+    }
+
+    Some(percent)
+  }
+
+  /**
+   * Returns a percentage of rows meeting a null-intolerant string predicate
+   * (StartsWith / EndsWith / Contains) with a string literal operand.
+   *
+   * These predicates never match a null input, so at most the non-null rows can match, giving an
+   * upper bound of `1 - nullPercent`. In addition, a value must have at least as many characters
+   * as the operand, so if the operand is longer than the column's `maxLen` no row can match. Both
+   * bounds reuse statistics already collected (`nullCount`, `maxLen`) and hold under any collation
+   * (`maxLen` is a code-point count). This is a conservative estimate -- it never under-estimates
+   * -- and improves on the default of 1.0 (all rows) used for unsupported predicates.
+   *
+   * @param attr an Attribute (or a column)
+   * @param literal the non-null string literal operand
+   * @param update a boolean flag to specify if we need to update ColumnStat of a given column
+   *               for subsequent conditions
+   * @return an optional double value to show the percentage of rows meeting a given condition.
+   *         It returns None if no statistics are collected for a given column.
+   */
+  def evaluateStringPredicate(
+      attr: Attribute,
+      literal: Literal,
+      update: Boolean): Option[Double] = {
+    if (!colStatsMap.contains(attr) || colStatsMap(attr).nullCount.isEmpty) {
+      logDebug("[CBO] No statistics for " + attr)
+      return None
+    }
+    val colStat = colStatsMap(attr)
+    val rowCountValue = childStats.rowCount.get
+    val nullPercent: Double = if (rowCountValue == 0) {
+      0
+    } else if (colStat.nullCount.get > rowCountValue) {
+      1
+    } else {
+      (BigDecimal(colStat.nullCount.get) / BigDecimal(rowCountValue)).toDouble
+    }
+
+    // A value must have at least as many characters as the operand to start with / end with /
+    // contain it. `maxLen` is the maximum code-point length, so this holds under any collation.
+    val operandLength = literal.value.asInstanceOf[UTF8String].numChars()
+    val percent = if (colStat.maxLen.exists(_ < operandLength)) {
+      0.0
+    } else {
+      1.0 - nullPercent
+    }
+
+    if (update && percent > 0) {
+      // Surviving rows are non-null (the predicate is null-intolerant).
+      colStatsMap.update(attr, colStat.copy(nullCount = Some(0)))
     }
 
     Some(percent)
