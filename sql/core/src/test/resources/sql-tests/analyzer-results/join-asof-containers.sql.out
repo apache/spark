@@ -201,7 +201,8 @@ CREATE OR REPLACE FUNCTION asof_match_count() RETURNS INT RETURN (
     ON t.symbol = q.symbol
 )
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.asof_match_count, INT, (
+CreateSQLFunctionCommand INT, (
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.asof_match_count
   SELECT count(*)
   FROM asof_perm_trades t ASOF JOIN asof_perm_quotes q
     MATCH_CONDITION (t.trade_time >= q.quote_time)
@@ -234,7 +235,8 @@ RETURN
     MATCH_CONDITION (t.trade_time >= q.quote_time)
     ON t.symbol = q.symbol
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.asof_matches, trade_time TIMESTAMP, bid_price DOUBLE, SELECT t.trade_time, q.bid_price
+CreateSQLFunctionCommand trade_time TIMESTAMP, bid_price DOUBLE, SELECT t.trade_time, q.bid_price
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.asof_matches
   FROM asof_perm_trades t ASOF JOIN asof_perm_quotes q
     MATCH_CONDITION (t.trade_time >= q.quote_time)
     ON t.symbol = q.symbol, true, false, false, true

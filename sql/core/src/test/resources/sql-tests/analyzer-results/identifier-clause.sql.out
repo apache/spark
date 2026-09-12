@@ -461,7 +461,8 @@ CREATE TEMPORARY FUNCTION identifier_name()
 RETURNS STRING
 RETURN 'c1'
 -- !query analysis
-CreateSQLFunctionCommand identifier_name, STRING, 'c1', false, true, false, false
+CreateSQLFunctionCommand STRING, 'c1', false, true, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.identifier_name
 
 
 -- !query
@@ -496,7 +497,8 @@ CREATE FUNCTION persistent_identifier_name()
 RETURNS STRING
 RETURN 'c1'
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.persistent_identifier_name, STRING, 'c1', false, false, false, false
+CreateSQLFunctionCommand STRING, 'c1', false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.persistent_identifier_name
 
 
 -- !query
@@ -531,7 +533,8 @@ CREATE FUNCTION persistent_identifier_function(value INT)
 RETURNS INT
 RETURN value + 1
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.persistent_identifier_function, value INT, INT, value + 1, false, false, false, false
+CreateSQLFunctionCommand value INT, INT, value + 1, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.persistent_identifier_function
 
 
 -- !query
@@ -553,7 +556,8 @@ CREATE FUNCTION persistent_identifier_base_name()
 RETURNS STRING
 RETURN 'c1'
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.persistent_identifier_base_name, STRING, 'c1', false, false, false, false
+CreateSQLFunctionCommand STRING, 'c1', false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.persistent_identifier_base_name
 
 
 -- !query
@@ -561,7 +565,8 @@ CREATE FUNCTION persistent_identifier_nested_name()
 RETURNS STRING
 RETURN persistent_identifier_base_name()
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.persistent_identifier_nested_name, STRING, persistent_identifier_base_name(), false, false, false, false
+CreateSQLFunctionCommand STRING, persistent_identifier_base_name(), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.persistent_identifier_nested_name
 
 
 -- !query
@@ -602,7 +607,8 @@ CREATE TEMPORARY FUNCTION identifier_relation_name()
 RETURNS STRING
 RETURN 'identifier_function_table'
 -- !query analysis
-CreateSQLFunctionCommand identifier_relation_name, STRING, 'identifier_function_table', false, true, false, false
+CreateSQLFunctionCommand STRING, 'identifier_function_table', false, true, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.identifier_relation_name
 
 
 -- !query
@@ -637,7 +643,8 @@ CREATE TEMPORARY FUNCTION identifier_relation_count()
 RETURNS BIGINT
 RETURN SELECT count(*) FROM IDENTIFIER(concat('identifier_function_', 'table'))
 -- !query analysis
-CreateSQLFunctionCommand identifier_relation_count, BIGINT, SELECT count(*) FROM IDENTIFIER(concat('identifier_function_', 'table')), false, true, false, false
+CreateSQLFunctionCommand BIGINT, SELECT count(*) FROM IDENTIFIER(concat('identifier_function_', 'table')), false, true, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.identifier_relation_count
 
 
 -- !query
@@ -662,7 +669,8 @@ CREATE FUNCTION persistent_identifier_relation_name()
 RETURNS STRING
 RETURN 'identifier_function_table'
 -- !query analysis
-CreateSQLFunctionCommand spark_catalog.default.persistent_identifier_relation_name, STRING, 'identifier_function_table', false, false, false, false
+CreateSQLFunctionCommand STRING, 'identifier_function_table', false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.persistent_identifier_relation_name
 
 
 -- !query
@@ -2320,7 +2328,8 @@ CREATE TEMPORARY FUNCTION test_udf(IDENTIFIER('param1') INT, IDENTIFIER('param2'
 RETURNS INT
 RETURN IDENTIFIER('param1') + length(IDENTIFIER('param2'))
 -- !query analysis
-CreateSQLFunctionCommand test_udf, IDENTIFIER('param1') INT, IDENTIFIER('param2') STRING, INT, IDENTIFIER('param1') + length(IDENTIFIER('param2')), false, true, false, false
+CreateSQLFunctionCommand IDENTIFIER('param1') INT, IDENTIFIER('param2') STRING, INT, IDENTIFIER('param1') + length(IDENTIFIER('param2')), false, true, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_udf
 
 
 -- !query
@@ -2342,7 +2351,8 @@ CREATE TEMPORARY FUNCTION test_table_udf(IDENTIFIER('input_val') INT)
 RETURNS TABLE(IDENTIFIER('col1') INT, IDENTIFIER('col2') STRING)
 RETURN SELECT IDENTIFIER('input_val'), 'result'
 -- !query analysis
-CreateSQLFunctionCommand test_table_udf, IDENTIFIER('input_val') INT, IDENTIFIER('col1') INT, IDENTIFIER('col2') STRING, SELECT IDENTIFIER('input_val'), 'result', true, true, false, false
+CreateSQLFunctionCommand IDENTIFIER('input_val') INT, IDENTIFIER('col1') INT, IDENTIFIER('col2') STRING, SELECT IDENTIFIER('input_val'), 'result', true, true, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_table_udf
 
 
 -- !query

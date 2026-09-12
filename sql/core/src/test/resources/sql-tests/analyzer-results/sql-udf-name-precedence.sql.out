@@ -10,7 +10,8 @@ CreateViewCommand `v1`, SELECT 1 AS x, false, true, LocalTempView, UNSUPPORTED, 
 -- !query
 CREATE OR REPLACE TEMPORARY FUNCTION identity_fn(x INT) RETURNS INT RETURN x
 -- !query analysis
-CreateSQLFunctionCommand identity_fn, x INT, INT, x, false, true, false, true
+CreateSQLFunctionCommand x INT, INT, x, false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.identity_fn
 
 
 -- !query
@@ -24,7 +25,8 @@ Project [identity_fn(x#x) AS identity_fn(42)#x]
 -- !query
 CREATE OR REPLACE TEMPORARY FUNCTION col_vs_param(x INT) RETURNS INT RETURN (SELECT x FROM v1)
 -- !query analysis
-CreateSQLFunctionCommand col_vs_param, x INT, INT, (SELECT x FROM v1), false, true, false, true
+CreateSQLFunctionCommand x INT, INT, (SELECT x FROM v1), false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.col_vs_param
 
 
 -- !query
@@ -45,7 +47,8 @@ Project [col_vs_param(x#x) AS col_vs_param(42)#x]
 CREATE OR REPLACE TEMPORARY FUNCTION paramless_vs_param(current_user STRING)
 RETURNS STRING RETURN current_user
 -- !query analysis
-CreateSQLFunctionCommand paramless_vs_param, current_user STRING, STRING, current_user, false, true, false, true
+CreateSQLFunctionCommand current_user STRING, STRING, current_user, false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.paramless_vs_param
 
 
 -- !query
@@ -58,7 +61,8 @@ SELECT paramless_vs_param('should_be_ignored') = current_user() AS function_won
 CREATE OR REPLACE TEMPORARY FUNCTION paramless_vs_param_date(current_date INT)
 RETURNS STRING RETURN typeof(current_date)
 -- !query analysis
-CreateSQLFunctionCommand paramless_vs_param_date, current_date INT, STRING, typeof(current_date), false, true, false, true
+CreateSQLFunctionCommand current_date INT, STRING, typeof(current_date), false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.paramless_vs_param_date
 
 
 -- !query
@@ -71,7 +75,8 @@ SELECT paramless_vs_param_date(42)
 CREATE OR REPLACE TEMPORARY FUNCTION paramless_vs_param_time(current_time INT)
 RETURNS STRING RETURN typeof(current_time)
 -- !query analysis
-CreateSQLFunctionCommand paramless_vs_param_time, current_time INT, STRING, typeof(current_time), false, true, false, true
+CreateSQLFunctionCommand current_time INT, STRING, typeof(current_time), false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.paramless_vs_param_time
 
 
 -- !query
@@ -123,7 +128,8 @@ org.apache.spark.sql.AnalysisException
 CREATE OR REPLACE TEMPORARY FUNCTION lca_vs_param(x INT)
 RETURNS INT RETURN (SELECT y FROM (SELECT 999 AS x, x + 1 AS y))
 -- !query analysis
-CreateSQLFunctionCommand lca_vs_param, x INT, INT, (SELECT y FROM (SELECT 999 AS x, x + 1 AS y)), false, true, false, true
+CreateSQLFunctionCommand x INT, INT, (SELECT y FROM (SELECT 999 AS x, x + 1 AS y)), false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.lca_vs_param
 
 
 -- !query
@@ -143,7 +149,8 @@ Project [lca_vs_param(x#x) AS lca_vs_param(42)#x]
 CREATE OR REPLACE TEMPORARY FUNCTION outer_vs_param(x INT)
 RETURNS INT RETURN (SELECT (SELECT x) FROM v1)
 -- !query analysis
-CreateSQLFunctionCommand outer_vs_param, x INT, INT, (SELECT (SELECT x) FROM v1), false, true, false, true
+CreateSQLFunctionCommand x INT, INT, (SELECT (SELECT x) FROM v1), false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.outer_vs_param
 
 
 -- !query
@@ -166,7 +173,8 @@ Project [outer_vs_param(x#x) AS outer_vs_param(42)#x]
 CREATE OR REPLACE TEMPORARY FUNCTION outer_param_pure(x INT)
 RETURNS INT RETURN (SELECT (SELECT x))
 -- !query analysis
-CreateSQLFunctionCommand outer_param_pure, x INT, INT, (SELECT (SELECT x)), false, true, false, true
+CreateSQLFunctionCommand x INT, INT, (SELECT (SELECT x)), false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.outer_param_pure
 
 
 -- !query
@@ -197,13 +205,15 @@ Project [identity_fn(x#x) AS identity_fn(42)#x]
 -- !query
 CREATE OR REPLACE TEMPORARY FUNCTION inner_fn(y INT) RETURNS INT RETURN x
 -- !query analysis
-CreateSQLFunctionCommand inner_fn, y INT, INT, x, false, true, false, true
+CreateSQLFunctionCommand y INT, INT, x, false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.inner_fn
 
 
 -- !query
 CREATE OR REPLACE TEMPORARY FUNCTION outer_fn(x INT) RETURNS INT RETURN inner_fn(x)
 -- !query analysis
-CreateSQLFunctionCommand outer_fn, x INT, INT, inner_fn(x), false, true, false, true
+CreateSQLFunctionCommand x INT, INT, inner_fn(x), false, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.outer_fn
 
 
 -- !query
@@ -219,7 +229,8 @@ Project [outer_fn(x#x) AS outer_fn(42)#x]
 CREATE OR REPLACE TEMPORARY FUNCTION tvf_paramless_vs_param(current_user STRING)
 RETURNS TABLE(c STRING) RETURN SELECT current_user AS c
 -- !query analysis
-CreateSQLFunctionCommand tvf_paramless_vs_param, current_user STRING, c STRING, SELECT current_user AS c, true, true, false, true
+CreateSQLFunctionCommand current_user STRING, c STRING, SELECT current_user AS c, true, true, false, true
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tvf_paramless_vs_param
 
 
 -- !query
