@@ -20,7 +20,7 @@ license: |
 ---
 
 ## Isotonic regression
-[Isotonic regression](http://en.wikipedia.org/wiki/Isotonic_regression)
+[Isotonic regression](https://en.wikipedia.org/wiki/Isotonic_regression)
 belongs to the family of regression algorithms. Formally isotonic regression is a problem where
 given a finite set of real numbers `$Y = {y_1, y_2, ..., y_n}$` representing observed responses
 and `$X = {x_1, x_2, ..., x_n}$` the unknown response values to be fitted
@@ -35,7 +35,7 @@ with respect to complete order subject to
 The resulting function is called isotonic regression and it is unique.
 It can be viewed as least squares problem under order restriction.
 Essentially isotonic regression is a
-[monotonic function](http://en.wikipedia.org/wiki/Monotonic_function)
+[monotonic function](https://en.wikipedia.org/wiki/Monotonic_function)
 best fitting the original data points.
 
 `spark.mllib` supports a
