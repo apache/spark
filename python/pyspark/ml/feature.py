@@ -2508,6 +2508,7 @@ class MinHashLSH(
     HasInputCol,
     HasOutputCol,
     HasSeed,
+    HasHandleInvalid,
     JavaMLReadable["MinHashLSH"],
     JavaMLWritable,
 ):
@@ -2584,12 +2585,14 @@ class MinHashLSH(
         outputCol: Optional[str] = None,
         seed: Optional[int] = None,
         numHashTables: int = 1,
+        handleInvalid: str = "error",
     ):
         """
-        __init__(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1)
+        __init__(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1, handleInvalid="error")
         """
         super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinHashLSH", self.uid)
+        self._setDefault(handleInvalid="error")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -2602,9 +2605,10 @@ class MinHashLSH(
         outputCol: Optional[str] = None,
         seed: Optional[int] = None,
         numHashTables: int = 1,
+        handleInvalid: str = "error",
     ) -> "MinHashLSH":
         """
-        setParams(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1)
+        setParams(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1, handleInvalid="error")
         Sets params for this MinHashLSH.
         """
         kwargs = self._input_kwargs
@@ -2616,11 +2620,18 @@ class MinHashLSH(
         """
         return self._set(seed=value)
 
+    @since("5.0.0")
+    def setHandleInvalid(self, value: str) -> "MinHashLSH":
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
     def _create_model(self, java_model: "JavaObject") -> "MinHashLSHModel":
         return MinHashLSHModel(java_model)
 
 
-class MinHashLSHModel(_LSHModel, JavaMLReadable, JavaMLWritable):
+class MinHashLSHModel(_LSHModel, HasHandleInvalid, JavaMLReadable, JavaMLWritable):
     r"""
     Model produced by :py:class:`MinHashLSH`, where where multiple hash functions are stored. Each
     hash function is picked from the following family of hash functions, where :math:`a_i` and
@@ -2635,6 +2646,13 @@ class MinHashLSHModel(_LSHModel, JavaMLReadable, JavaMLWritable):
     See Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear permutations."
     Electronic Journal of Combinatorics 7 (2000): R26.
     """
+
+    @since("5.0.0")
+    def setHandleInvalid(self, value: str) -> "MinHashLSHModel":
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
 
 
 class _MinMaxScalerParams(HasInputCol, HasOutputCol):
