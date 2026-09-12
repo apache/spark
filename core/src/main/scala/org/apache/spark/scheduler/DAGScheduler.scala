@@ -4324,10 +4324,10 @@ private[spark] class DAGScheduler(
               log"(epoch ${MDC(EPOCH, currentEpoch)})")
             mapOutputTracker.removeOutputsOnExecutor(execId, respectReliablyStored)
         }
-        // Record the lost epoch only for a complete cleanup. When reliable output was preserved the
-        // loss was partial, so a later same-epoch FetchFailed for a preserved-but-gone output must
+        // Record the lost epoch only for a complete cleanup. A cleanup that preserved reliable
+        // output is partial, so a later same-epoch FetchFailed for a preserved-but-gone output must
         // still be processed. Match prior behavior: don't stamp under ignoreShuffleFileLostEpoch.
-        if (!ignoreShuffleFileLostEpoch && !outcome.preservedReliable) {
+        if (!ignoreShuffleFileLostEpoch && outcome.isCompleteCleanup) {
           shuffleFileLostEpoch(execId) = currentEpoch
         }
       }
