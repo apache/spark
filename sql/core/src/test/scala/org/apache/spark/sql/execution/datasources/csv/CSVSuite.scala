@@ -4193,6 +4193,109 @@ abstract class CSVSuite
       }
     }
   }
+
+  test("SPARK-58458: a quoted line break splits the record when multiLine is disabled") {
+    // A line break inside a quoted value is valid CSV (RFC 4180 section 2.6) and occurs in
+    // published datasets. In the default non-multiLine mode the input is split on the line
+    // separator before the CSV tokenizer runs -- HadoopFileLinesReader feeds
+    // UnivocityParser.parseLine one physical line at a time -- so the record cannot be
+    // reassembled: the leading value is truncated and the remainder starts a new record.
+    //
+    // Whether a resulting half is *malformed* is a separate question from the split, and is
+    // decided mainly by token count: univocity's default STOP_AT_DELIMITER does not fail on
+    // an unclosed quote. The two cases below differ in exactly that, they behave differently
+    // under DROPMALFORMED, and the difference is the part worth pinning.
+    val threeCols = new StructType()
+      .add("id", StringType)
+      .add("nome", StringType)
+      .add("uf", StringType)
+
+    // Case 1 -- both halves carry 2 tokens against a 3-column schema, so both are malformed.
+    withTempPath { path =>
+      Files.write(
+        path.toPath,
+        ("1,ACME LTDA,SP\n" +
+          "2,\"EMPRESA COM\nQUEBRA DE LINHA\",RJ\n" +
+          "3,OUTRA EMPRESA,MG\n").getBytes(StandardCharsets.UTF_8))
+
+      // Three records in, four rows out: record 2 is cut at the line break.
+      checkAnswer(
+        spark.read.schema(threeCols).csv(path.getAbsolutePath),
+        Row("1", "ACME LTDA", "SP") ::
+          Row("2", "EMPRESA COM", null) ::
+          Row("QUEBRA DE LINHA\"", "RJ", null) ::
+          Row("3", "OUTRA EMPRESA", "MG") :: Nil)
+
+      // multiLine reassembles the record, so the break survives inside the value.
+      checkAnswer(
+        spark.read.schema(threeCols).option("multiLine", true).csv(path.getAbsolutePath),
+        Row("1", "ACME LTDA", "SP") ::
+          Row("2", "EMPRESA COM\nQUEBRA DE LINHA", "RJ") ::
+          Row("3", "OUTRA EMPRESA", "MG") :: Nil)
+
+      // Both halves being malformed, DROPMALFORMED discards the pair and the whole source
+      // record is lost -- not just the damaged half.
+      checkAnswer(
+        spark.read.schema(threeCols).option("mode", "DROPMALFORMED").csv(path.getAbsolutePath),
+        Row("1", "ACME LTDA", "SP") ::
+          Row("3", "OUTRA EMPRESA", "MG") :: Nil)
+
+      // FAILFAST refuses the file rather than returning a split record.
+      val e = intercept[SparkException] {
+        spark.read
+          .schema(threeCols)
+          .option("mode", "FAILFAST")
+          .csv(path.getAbsolutePath)
+          .collect()
+      }
+      checkErrorMatchPVals(
+        exception = e,
+        condition = "FAILED_READ_FILE.NO_HINT",
+        parameters = Map("path" -> s".*${path.getName}.*"))
+
+      // Only with columnNameOfCorruptRecord declared does the split leave a trace.
+      checkAnswer(
+        spark.read
+          .schema(threeCols.add("_corrupt", StringType))
+          .option("columnNameOfCorruptRecord", "_corrupt")
+          .csv(path.getAbsolutePath),
+        Row("1", "ACME LTDA", "SP", null) ::
+          Row("2", "EMPRESA COM", null, "2,\"EMPRESA COM") ::
+          Row("QUEBRA DE LINHA\"", "RJ", null, "QUEBRA DE LINHA\",RJ") ::
+          Row("3", "OUTRA EMPRESA", "MG", null) :: Nil)
+    }
+
+    // Case 2 -- the leading half's token count matches the schema, so it is NOT malformed.
+    // It is a clean row carrying a silently truncated value, and DROPMALFORMED keeps it,
+    // which is the opposite of what the mode's name suggests for a damaged record.
+    val twoCols = new StructType()
+      .add("id", StringType)
+      .add("valor", StringType)
+
+    withTempPath { path =>
+      Files.write(
+        path.toPath, "1,\"hello\nworld\"\n".getBytes(StandardCharsets.UTF_8))
+
+      checkAnswer(
+        spark.read.schema(twoCols).csv(path.getAbsolutePath),
+        Row("1", "hello") ::
+          Row("world\"", null) :: Nil)
+
+      // The truncated row survives; only the trailing fragment is dropped.
+      checkAnswer(
+        spark.read.schema(twoCols).option("mode", "DROPMALFORMED").csv(path.getAbsolutePath),
+        Row("1", "hello") :: Nil)
+
+      // And nothing flags it: the corrupt-record column stays null on the truncated row.
+      checkAnswer(
+        spark.read
+          .schema(twoCols.add("_corrupt", StringType))
+          .option("columnNameOfCorruptRecord", "_corrupt")
+          .csv(path.getAbsolutePath),
+        Row("1", "hello", null) ::
+          Row("world\"", null, "world\"") :: Nil)
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
