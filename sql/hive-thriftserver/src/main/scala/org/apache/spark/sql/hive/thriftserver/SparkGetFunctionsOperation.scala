@@ -60,7 +60,7 @@ private[hive] class SparkGetFunctionsOperation(
     // get databases for schema pattern
     val schemaPattern = convertSchemaPattern(schemaName)
     val matchingDbs = catalog.listDatabases(schemaPattern)
-    val functionPattern = CLIServiceUtils.patternToRegex(functionName)
+    val functionPattern = functionName
 
     if (isAuthV2Enabled) {
       // authorize this call on the schema objects
