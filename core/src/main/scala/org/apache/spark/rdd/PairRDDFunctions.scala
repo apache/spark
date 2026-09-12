@@ -526,9 +526,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Return a copy of the RDD partitioned using the specified partitioner.
    */
   def partitionBy(partitioner: Partitioner): RDD[(K, V)] = self.withScope {
-    if (keyClass.isArray && partitioner.isInstanceOf[HashPartitioner]) {
-      throw SparkCoreErrors.hashPartitionerCannotPartitionArrayKeyError()
-    }
+    failOnHashPartitionerWithArrayKey(partitioner)
     if (self.partitioner == Some(partitioner)) {
       self
     } else {
@@ -778,9 +776,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       other3: RDD[(K, W3)],
       partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = self.withScope {
-    if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
-      throw SparkCoreErrors.hashPartitionerCannotPartitionArrayKeyError()
-    }
+    failOnHashPartitionerWithArrayKey(partitioner)
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2, other3), partitioner)
     cg.mapValues { case Array(vs, w1s, w2s, w3s) =>
        (vs.asInstanceOf[Iterable[V]],
@@ -796,9 +792,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W]))] = self.withScope {
-    if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
-      throw SparkCoreErrors.hashPartitionerCannotPartitionArrayKeyError()
-    }
+    failOnHashPartitionerWithArrayKey(partitioner)
     val cg = new CoGroupedRDD[K](Seq(self, other), partitioner)
     cg.mapValues { case Array(vs, w1s) =>
       (vs.asInstanceOf[Iterable[V]], w1s.asInstanceOf[Iterable[W]])
@@ -811,9 +805,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = self.withScope {
-    if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
-      throw SparkCoreErrors.hashPartitionerCannotPartitionArrayKeyError()
-    }
+    failOnHashPartitionerWithArrayKey(partitioner)
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2), partitioner)
     cg.mapValues { case Array(vs, w1s, w2s) =>
       (vs.asInstanceOf[Iterable[V]],
@@ -1111,4 +1103,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   private[spark] def valueClass: Class[_] = vt.runtimeClass
 
   private[spark] def keyOrdering: Option[Ordering[K]] = Option(ord)
+
+  private def failOnHashPartitionerWithArrayKey(partitioner: Partitioner): Unit = {
+    if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
+      throw SparkCoreErrors.hashPartitionerCannotPartitionArrayKeyError()
+    }
+  }
 }
