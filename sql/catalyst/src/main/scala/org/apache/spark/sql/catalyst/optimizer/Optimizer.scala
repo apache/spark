@@ -1677,6 +1677,10 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       }
     // Alias and ExtractValue are very cheap.
     case _: Alias | _: ExtractValue => e.children.forall(isCheap)
+    // `Collate` only re-tags the collation in the type; at runtime it is a pass-through
+    // (eval/genCode delegate to the child) and never evaluates its collation argument, so it is
+    // as cheap to duplicate as its value child.
+    case c: Collate => isCheap(c.child)
     case _ => false
   }
 
