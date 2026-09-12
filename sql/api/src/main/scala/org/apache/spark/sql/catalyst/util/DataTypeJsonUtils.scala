@@ -17,25 +17,42 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import com.fasterxml.jackson.core.{JsonGenerator, JsonParser}
+import java.io.StringWriter
+
+import com.fasterxml.jackson.core.{JsonFactory, JsonGenerator, JsonParser}
 import com.fasterxml.jackson.databind.{DeserializationContext, JsonDeserializer, JsonSerializer, SerializerProvider}
 import org.json4s.JsonAST.JValue
-import org.json4s.jackson.{JValueDeserializer, JValueSerializer}
+import org.json4s.jackson.JValueDeserializer
 
 import org.apache.spark.sql.types.DataType
 
 object DataTypeJsonUtils {
+  private val jsonFactory = new JsonFactory()
+
+  def toJson(dataType: DataType): String = {
+    val writer = new StringWriter
+    val generator = jsonFactory.createGenerator(writer)
+    try {
+      writeDataType(dataType, generator)
+    } finally {
+      generator.close()
+    }
+    writer.toString
+  }
+
+  private[sql] def writeDataType(dataType: DataType, generator: JsonGenerator): Unit = {
+    dataType.writeJsonTo(generator)
+  }
 
   /**
-   * Jackson serializer for [[DataType]]. Internally this delegates to json4s based serialization.
+   * Jackson serializer for [[DataType]].
    */
   class DataTypeJsonSerializer extends JsonSerializer[DataType] {
-    private val delegate = new JValueSerializer
     override def serialize(
         value: DataType,
         gen: JsonGenerator,
         provider: SerializerProvider): Unit = {
-      delegate.serialize(value.jsonValue, gen, provider)
+      writeDataType(value, gen)
     }
   }
 
