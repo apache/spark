@@ -143,6 +143,24 @@ class KubernetesClusterManagerSuite extends SparkFunSuite with BeforeAndAfter {
     manager.makeExecutorPodsAllocator(sc, kubernetesClient, null)
   }
 
+  test("makeSnapshotSources selects legacy watch and polling sources by default") {
+    val conf = new SparkConf(false)
+    val manager = new KubernetesClusterManager()
+    val sources = manager.makeSnapshotSources(conf, kubernetesClient, null)
+    assert(sources.length == 2)
+    assert(sources(0).isInstanceOf[ExecutorPodsWatchSnapshotSource])
+    assert(sources(1).isInstanceOf[ExecutorPodsPollingSnapshotSource])
+  }
+
+  test("makeSnapshotSources selects informer + lister sources when enableInformer is true") {
+    val conf = new SparkConf(false).set(KUBERNETES_EXECUTOR_ENABLE_INFORMER, true)
+    val manager = new KubernetesClusterManager()
+    val sources = manager.makeSnapshotSources(conf, kubernetesClient, null)
+    assert(sources.length == 2)
+    assert(sources(0).isInstanceOf[ExecutorPodsInformerSnapshotSource])
+    assert(sources(1).isInstanceOf[ExecutorPodsListerSnapshotSource])
+  }
+
   private def resetDynamicAllocatorConfig(): Unit = {
     sparkConf.remove(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)
     sparkConf.remove(DYN_ALLOCATION_ENABLED.key)
