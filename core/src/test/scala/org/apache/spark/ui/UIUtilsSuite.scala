@@ -225,4 +225,20 @@ class UIUtilsSuite extends SparkFunSuite {
     assert(cell4 === <td>{"java.lang.RuntimeException"}{UIUtils.detailsUINode(isMultiline = true, e4)}</td>)
   }
   // scalastyle:on line.size.limit
+
+  test("SPARK-58893: prependBaseUri slash handling") {
+    try {
+      System.setProperty("spark.ui.proxyBase", "http://localhost:8080/foo/")
+      assert(UIUtils.prependBaseUri(null, "bar", "baz") ===
+        "http://localhost:8080/foo/bar/baz")
+      assert(UIUtils.prependBaseUri(null, "/bar", "/baz") ===
+        "http://localhost:8080/foo/bar/baz")
+      assert(UIUtils.prependBaseUri(null, "", "baz") ===
+        "http://localhost:8080/foo/baz")
+      assert(UIUtils.prependBaseUri(null, "", "") ===
+        "http://localhost:8080/foo")
+    } finally {
+      System.clearProperty("spark.ui.proxyBase")
+    }
+  }
 }

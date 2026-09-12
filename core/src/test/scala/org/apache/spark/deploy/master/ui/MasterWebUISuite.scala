@@ -32,7 +32,7 @@ import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, KillD
 import org.apache.spark.deploy.DeployTestUtils._
 import org.apache.spark.deploy.master._
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
-import org.apache.spark.internal.config.UI.MASTER_UI_DECOMMISSION_ALLOW_MODE
+import org.apache.spark.internal.config.UI.{MASTER_UI_DECOMMISSION_ALLOW_MODE, UI_REVERSE_PROXY, UI_REVERSE_PROXY_URL}
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
 
@@ -126,6 +126,80 @@ class MasterWebUISuite extends SparkFunSuite {
       assert(sendHttpRequest(url, "POST", body).getResponseCode === SC_FORBIDDEN)
     } finally {
       denyWebUI.stop()
+    }
+  }
+
+  test("SPARK-58893: kill application redirect location with reverse proxy") {
+    val reverseProxyConf = new SparkConf()
+      .set(DECOMMISSION_ENABLED, true)
+      .set(UI_REVERSE_PROXY, true)
+      .set(UI_REVERSE_PROXY_URL, "http://proxyhost:8080/myproxy")
+    val mockMaster = mock(classOf[Master])
+    when(mockMaster.securityMgr).thenReturn(securityMgr)
+    when(mockMaster.conf).thenReturn(reverseProxyConf)
+    when(mockMaster.rpcEnv).thenReturn(rpcEnv)
+    when(mockMaster.self).thenReturn(masterEndpointRef)
+
+    val activeApp = new ApplicationInfo(
+      new Date().getTime, "app-proxy-0", createAppDesc(), new Date(), null, Int.MaxValue)
+    val appMap = HashMap[String, ApplicationInfo]((activeApp.id, activeApp))
+    when(mockMaster.idToApp).thenReturn(appMap)
+
+    val webUI = new MasterWebUI(mockMaster, 0)
+    try {
+      webUI.bind()
+      val url = s"http://${Utils.localHostNameForURI()}:${webUI.boundPort}/app/kill/"
+      val body = convPostDataToString(Map(("id", activeApp.id), ("terminate", "true")))
+      val conn = new URI(url).toURL.openConnection().asInstanceOf[HttpURLConnection]
+      conn.setInstanceFollowRedirects(false)
+      conn.setRequestMethod("POST")
+      conn.setDoOutput(true)
+      conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+      val out = new DataOutputStream(conn.getOutputStream)
+      out.write(body.getBytes(StandardCharsets.UTF_8))
+      out.close()
+      val expectedLocation = s"http://${Utils.localHostNameForURI()}:${webUI.boundPort}/"
+      assert(conn.getResponseCode === 302)
+      assert(conn.getHeaderField("Location") === expectedLocation)
+    } finally {
+      webUI.stop()
+    }
+  }
+
+  test("SPARK-58893: honor reverseProxy=false when choosing kill redirect") {
+    val noProxyConf = new SparkConf()
+      .set(DECOMMISSION_ENABLED, true)
+      .set(UI_REVERSE_PROXY, false)
+      .set(UI_REVERSE_PROXY_URL, "http://proxyhost:8080/myproxy")
+    val mockMaster = mock(classOf[Master])
+    when(mockMaster.securityMgr).thenReturn(securityMgr)
+    when(mockMaster.conf).thenReturn(noProxyConf)
+    when(mockMaster.rpcEnv).thenReturn(rpcEnv)
+    when(mockMaster.self).thenReturn(masterEndpointRef)
+
+    val activeApp = new ApplicationInfo(
+      new Date().getTime, "app-proxy-1", createAppDesc(), new Date(), null, Int.MaxValue)
+    val appMap = HashMap[String, ApplicationInfo]((activeApp.id, activeApp))
+    when(mockMaster.idToApp).thenReturn(appMap)
+
+    val webUI = new MasterWebUI(mockMaster, 0)
+    try {
+      webUI.bind()
+      val url = s"http://${Utils.localHostNameForURI()}:${webUI.boundPort}/app/kill/"
+      val body = convPostDataToString(Map(("id", activeApp.id), ("terminate", "true")))
+      val conn = new URI(url).toURL.openConnection().asInstanceOf[HttpURLConnection]
+      conn.setInstanceFollowRedirects(false)
+      conn.setRequestMethod("POST")
+      conn.setDoOutput(true)
+      conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+      val out = new DataOutputStream(conn.getOutputStream)
+      out.write(body.getBytes(StandardCharsets.UTF_8))
+      out.close()
+      val expectedLocation = s"http://${Utils.localHostNameForURI()}:${webUI.boundPort}/"
+      assert(conn.getResponseCode === 302)
+      assert(conn.getHeaderField("Location") === expectedLocation)
+    } finally {
+      webUI.stop()
     }
   }
 }

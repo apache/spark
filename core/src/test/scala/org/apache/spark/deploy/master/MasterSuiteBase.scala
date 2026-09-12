@@ -444,6 +444,8 @@ trait MasterSuiteBase extends SparkFunSuite
   protected val _newApplicationId = PrivateMethod[String](Symbol("newApplicationId"))
   protected val _maybeUpdateAppName =
     PrivateMethod[DriverDescription](Symbol("maybeUpdateAppName"))
+  protected val _maybeAddReverseProxyConfig =
+    PrivateMethod[DriverDescription](Symbol("maybeAddReverseProxyConfig"))
   protected val _createApplication = PrivateMethod[ApplicationInfo](Symbol("createApplication"))
 
   protected val workerInfo = makeWorkerInfo(512, 10)
