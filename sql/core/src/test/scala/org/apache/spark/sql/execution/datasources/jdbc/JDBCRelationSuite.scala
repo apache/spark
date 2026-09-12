@@ -45,7 +45,7 @@ class JDBCRelationSuite extends SparkFunSuite {
             new StructType().add("t", dataType), caseSensitiveResolution, "UTC", jdbcOptions)
         },
         condition = "INVALID_JDBC_PARTITION_BOUND",
-        sqlState = Some("22023"),
+        sqlState = Some("42616"),
         parameters = Map(
           "option" -> s""""$bound"""",
           "value" -> s""""$value"""",

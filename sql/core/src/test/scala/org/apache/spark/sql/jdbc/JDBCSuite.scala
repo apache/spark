@@ -540,7 +540,7 @@ class JDBCSuite extends SharedSparkSession {
     checkError(
       exception = e,
       condition = "INVALID_JDBC_PARTITION_BOUND",
-      sqlState = Some("22023"),
+      sqlState = Some("42616"),
       parameters = Map(
         "option" -> "\"lowerBound\"",
         "value" -> "\"2018-07-06 10:00:00+05:00\"",
