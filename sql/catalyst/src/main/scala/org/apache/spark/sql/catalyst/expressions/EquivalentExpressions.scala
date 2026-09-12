@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.Objects
-
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
@@ -263,11 +261,19 @@ case class ExpressionEquals(e: Expression) {
   def height: Int = e.height
 
   override def equals(o: Any): Boolean = o match {
-    case other: ExpressionEquals => e.semanticEquals(other.e) && height == other.height
+    // Check the cheap `height` before the recursive `semanticEquals` (which implies equal height).
+    case other: ExpressionEquals => height == other.height && e.semanticEquals(other.e)
     case _ => false
   }
 
-  override def hashCode: Int = Objects.hash(e.semanticHash(): Integer, height: Integer)
+  override def hashCode: Int = {
+    // Allocation-free equivalent of Objects.hash(e.semanticHash(), height).
+    val prime = 31
+    var result = 1
+    result = prime * result + e.semanticHash()
+    result = prime * result + height
+    result
+  }
 }
 
 /**

@@ -596,6 +596,19 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       }
     }
   }
+
+  test("SPARK-59426: ExpressionEquals.hashCode matches the previous Objects.hash implementation") {
+    Seq[Expression](
+      Literal(1),
+      Literal("abc"),
+      Add(Literal(1), Literal(2)),
+      Coalesce(Seq(Literal(1), Literal(2), Literal(3)))
+    ).foreach { e =>
+      val wrapper = ExpressionEquals(e)
+      val expected = java.util.Objects.hash(e.semanticHash(): Integer, wrapper.height: Integer)
+      assert(wrapper.hashCode == expected, s"hashCode mismatch for $e")
+    }
+  }
 }
 
 case class CodegenFallbackExpression(child: Expression)
