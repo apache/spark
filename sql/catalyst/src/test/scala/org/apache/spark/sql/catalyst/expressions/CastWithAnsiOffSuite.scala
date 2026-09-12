@@ -942,4 +942,81 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(largeTime1, ShortType), null)
     checkEvaluation(cast(largeTime1, ByteType), null)
   }
+
+  test("SPARK-58217: cast decimal to timestamp overflow with ansi off") {
+    def decimal(value: String, precision: Int, scale: Int): Literal = {
+      Literal(Decimal(new java.math.BigDecimal(value), precision, scale))
+    }
+
+    Seq(
+      ("99999999999999999999", 38, 0),
+      ("-99999999999999999999", 38, 0),
+      ("99999999999999999999.999999", 38, 6),
+      ("9223372036854.775808", 19, 6),
+      ("-9223372036854.775809", 19, 6)
+    ).foreach { case (value, precision, scale) =>
+      checkEvaluation(cast(decimal(value, precision, scale), TimestampType, UTC_OPT), null)
+    }
+
+    Seq(
+      // The unscaled boundary values have 19 digits, so precision is 19 at scale 6.
+      ("9223372036854.775807", Long.MaxValue),
+      ("-9223372036854.775808", Long.MinValue)
+    ).foreach { case (value, expected) =>
+      checkEvaluation(cast(decimal(value, 19, 6), TimestampType, UTC_OPT), expected)
+    }
+
+    Seq(
+      ("9223372036854.7758069", Long.MaxValue - 1),
+      ("-9223372036854.7758079", Long.MinValue + 1),
+      ("9223372036854.7758075", Long.MaxValue),
+      ("-9223372036854.7758085", Long.MinValue)
+    ).foreach { case (value, expected) =>
+      checkEvaluation(cast(decimal(value, 20, 7), TimestampType, UTC_OPT), expected)
+    }
+
+    checkEvaluation(
+      cast(decimal("1.0000009", 8, 7), TimestampType, UTC_OPT), MICROS_PER_SECOND)
+    checkEvaluation(
+      cast(decimal("-1.0000009", 8, 7), TimestampType, UTC_OPT), -MICROS_PER_SECOND)
+    checkEvaluation(cast(decimal("0.0000009", 7, 7), TimestampType, UTC_OPT), 0L)
+    checkEvaluation(cast(decimal("-0.0000009", 7, 7), TimestampType, UTC_OPT), 0L)
+    checkEvaluation(cast(decimal("-1", 10, 0), TimestampType, UTC_OPT), -MICROS_PER_SECOND)
+    checkEvaluation(cast(decimal("0", 10, 0), TimestampType, UTC_OPT), 0L)
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val extremeScale = -500000000
+      val extremeType = DecimalType(1, extremeScale)
+      Seq(1L, -1L).foreach { unscaled =>
+        val extremeDecimal = Literal(Decimal(unscaled, 1, extremeScale), extremeType)
+        checkEvaluation(cast(extremeDecimal, TimestampType, UTC_OPT), null)
+      }
+      val zero = Literal(Decimal(0L, 1, extremeScale), extremeType)
+      checkEvaluation(cast(zero, TimestampType, UTC_OPT), 0L)
+    }
+
+    assert(!cast(decimal("1", 10, 0), TimestampType, UTC_OPT).nullable)
+    assert(cast(decimal("1", 20, 0), TimestampType, UTC_OPT).nullable)
+  }
+
+  test("SPARK-58217: decimal to timestamp nullability tracks the source type") {
+    val safeDecimal = DecimalType(10, 0)
+    val overflowingDecimal = DecimalType(20, 0)
+    assert(!Cast.forceNullable(safeDecimal, TimestampType))
+    assert(Cast.forceNullable(overflowingDecimal, TimestampType))
+
+    val safeMap = MapType(safeDecimal, StringType, valueContainsNull = false)
+    val overflowingMap = MapType(overflowingDecimal, StringType, valueContainsNull = false)
+    val timestampMap = MapType(TimestampType, StringType, valueContainsNull = false)
+    assert(Cast.canCast(safeMap, timestampMap))
+    assert(Cast.canTryCast(safeMap, timestampMap))
+    assert(!Cast.canCast(overflowingMap, timestampMap))
+    assert(!Cast.canTryCast(overflowingMap, timestampMap))
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      assert(!Cast.forceNullable(DecimalType(1, -12), TimestampType))
+      assert(Cast.forceNullable(DecimalType(2, -11), TimestampType))
+      assert(Cast.forceNullable(DecimalType(1, Int.MinValue + 6), TimestampType))
+    }
+  }
 }

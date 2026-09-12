@@ -376,6 +376,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testVariantGet("2147483647.999", "$", IntegerType, 2147483647)
     testInvalidVariantGet("9223372036854775808", "$", LongType)
     testVariantGet("-9223372036854775808.0", "$", LongType, -9223372036854775808L)
+    testVariantGet("9223372036854.7758075", "$", TimestampType, Long.MaxValue)
+    testVariantGet("-9223372036854.7758085", "$", TimestampType, Long.MinValue)
     testVariantGet("123.0", "$", DecimalType(6, 3), Decimal(123000, 6, 3))
     testVariantGet("1.14", "$", DecimalType(2, 1), Decimal(11, 2, 1))
     testVariantGet("1.15", "$", DecimalType(2, 1), Decimal(12, 2, 1))
