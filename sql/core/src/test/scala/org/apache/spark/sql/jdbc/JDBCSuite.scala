@@ -526,7 +526,7 @@ class JDBCSuite extends SharedSparkSession {
     ))
     // allowTimeZone = false: a bound carrying a zone offset is rejected rather than silently
     // shifted, so NTZ bounds stay zoneless.
-    val e = intercept[IllegalArgumentException] {
+    val e = intercept[SparkIllegalArgumentException] {
       JDBCRelation.columnPartition(
         schema,
         analysis.caseInsensitiveResolution,
@@ -537,8 +537,14 @@ class JDBCSuite extends SharedSparkSession {
           "numPartitions" -> "2",
           "partitionColumn" -> "PartitionColumn")))
     }
-    assert(e.getMessage.contains("Cannot parse the bound value"))
-    assert(e.getMessage.contains("2018-07-06 10:00:00+05:00"))
+    checkError(
+      exception = e,
+      condition = "INVALID_JDBC_PARTITION_BOUND",
+      sqlState = Some("22023"),
+      parameters = Map(
+        "option" -> "\"lowerBound\"",
+        "value" -> "\"2018-07-06 10:00:00+05:00\"",
+        "dataType" -> "\"TIMESTAMP_NTZ\""))
   }
 
   test("overflow of partition bound difference does not give negative stride") {
