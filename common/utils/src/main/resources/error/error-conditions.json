@@ -4542,6 +4542,12 @@
     ],
     "sqlState" : "46121"
   },
+  "INVALID_JDBC_PARTITION_BOUND" : {
+    "message" : [
+      "Cannot parse the value <value> for JDBC option <option> as <dataType>."
+    ],
+    "sqlState" : "42616"
+  },
   "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
     "message" : [
       "Invalid join type in joinWith: <joinType>."
