@@ -54,7 +54,21 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  * @param preservedReliable whether a reliably-stored shuffle was skipped, so the cleanup was
  *   selective rather than complete.
  */
-private[spark] case class CleanupOutcome(metadataChanged: Boolean, preservedReliable: Boolean)
+private[spark] case class CleanupOutcome(metadataChanged: Boolean, preservedReliable: Boolean) {
+  /**
+   * Whether to invalidate every executor's cached statuses. We skip this only when the pass changed
+   * nothing and merely preserved reliable output; a non-reliable no-op loss still bumps, because
+   * executor-failure epoch fencing relies on the epoch advancing.
+   */
+  def shouldBumpEpoch: Boolean = metadataChanged || !preservedReliable
+
+  /**
+   * Whether the executor was fully cleaned, so a later same-epoch FetchFailed for it is redundant.
+   * Any preserved reliable shuffle makes the cleanup partial: that output was assumed to survive
+   * but may actually be gone, so a FetchFailed for it must still be processed, not deduped away.
+   */
+  def isCompleteCleanup: Boolean = !preservedReliable
+}
 
 /**
  * Helper class used by the [[MapOutputTrackerMaster]] to perform bookkeeping for a single
@@ -1098,7 +1112,7 @@ private[spark] class MapOutputTrackerMaster(
    */
   def removeOutputsOnHost(host: String, respectReliablyStored: Boolean): CleanupOutcome = {
     val outcome = removeSelectively(respectReliablyStored)(_.removeOutputsOnHost(host))
-    if (outcome.metadataChanged || !outcome.preservedReliable) incrementEpoch()
+    if (outcome.shouldBumpEpoch) incrementEpoch()
     outcome
   }
 
@@ -1120,16 +1134,15 @@ private[spark] class MapOutputTrackerMaster(
    */
   def removeOutputsOnExecutor(execId: String, respectReliablyStored: Boolean): CleanupOutcome = {
     val outcome = removeSelectively(respectReliablyStored)(_.removeOutputsOnExecutor(execId))
-    if (outcome.metadataChanged || !outcome.preservedReliable) incrementEpoch()
+    if (outcome.shouldBumpEpoch) incrementEpoch()
     outcome
   }
 
   /**
    * Applies `remove` to each shuffle, skipping reliably-stored shuffles when
-   * `respectReliablyStored` is set. Aggregates whether any metadata actually changed and whether
-   * any reliable output was preserved. Does not bump the epoch; callers bump unless the pass was a
-   * pure no-op that only preserved reliable output (a real removal, or any pass that could have
-   * removed, must invalidate cached statuses to keep executor-failure epoch fencing correct).
+   * `respectReliablyStored` is set. Aggregates the outcome: `metadataChanged` if any removal
+   * actually changed state, and `preservedReliable` if any (one or more) reliable shuffle was
+   * skipped. Does not bump the epoch; see `CleanupOutcome.shouldBumpEpoch`.
    */
   private def removeSelectively(respectReliablyStored: Boolean)(
       remove: ShuffleStatus => Boolean): CleanupOutcome = {
