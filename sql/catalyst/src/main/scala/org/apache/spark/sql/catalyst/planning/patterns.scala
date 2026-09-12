@@ -404,11 +404,12 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
    * But if it's a single column case O(M*N) calculation could be optimized into O(M)
    * using hash lookup instead of loop lookup.
    */
-  private[sql] def extract(join: Join): Option[ReturnType] = join match {
+  def unapply(join: Join): Option[ReturnType] = join match {
     case Join(left, right, LeftAnti,
       Some(Or(e @ EqualTo(leftAttr: Expression, rightAttr: Expression),
         IsNull(e2 @ EqualTo(_, _)))), _)
-        if e.semanticEquals(e2) =>
+        if SQLConf.get.optimizeNullAwareAntiJoin &&
+          e.semanticEquals(e2) =>
       if (canEvaluate(leftAttr, left) && canEvaluate(rightAttr, right)) {
         Some(Seq(leftAttr), Seq(rightAttr))
       } else if (canEvaluate(leftAttr, right) && canEvaluate(rightAttr, left)) {
@@ -417,10 +418,6 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
         None
       }
     case _ => None
-  }
-
-  def unapply(join: Join): Option[ReturnType] = {
-    if (SQLConf.get.optimizeNullAwareAntiJoin) extract(join) else None
   }
 }
 

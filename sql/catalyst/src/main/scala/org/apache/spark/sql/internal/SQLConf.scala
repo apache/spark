@@ -7391,14 +7391,33 @@ object SQLConf {
   val OPTIMIZE_NULL_AWARE_ANTI_JOIN =
     buildConf("spark.sql.optimizeNullAwareAntiJoin")
       .internal()
-      .doc("When true, NULL-aware anti join execution will be planed into " +
+      .doc("When true, NULL-aware anti join execution can be planned as " +
         "BroadcastHashJoinExec with flag isNullAwareAntiJoin enabled, " +
         "optimized from O(M*N) calculation into O(M) calculation " +
         "using Hash lookup instead of Looping lookup. " +
-        "Only support for singleColumn NAAJ for now.")
+        "Only support for singleColumn NAAJ for now. The optimization is also controlled by " +
+        "spark.sql.optimizeNullAwareAntiJoin.broadcastThreshold.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD =
+    buildConf("spark.sql.optimizeNullAwareAntiJoin.broadcastThreshold")
+      .internal()
+      .doc("Configures the maximum estimated size in bytes of the right side of a " +
+        "single-column null-aware anti join for which Spark uses the broadcast hash join " +
+        "optimization. This configuration takes effect only when " +
+        "spark.sql.optimizeNullAwareAntiJoin is enabled. A negative value allows the " +
+        "optimization regardless of the estimated size, while zero disables it. If the " +
+        "estimated size exceeds a positive value, Spark falls back to regular join planning. " +
+        "The fallback may still broadcast the right side with a nested-loop representation " +
+        "that uses more memory and runs in O(M * N) time. Join hints do not override this " +
+        "configuration when the broadcast hash optimization is selected. This configuration " +
+        "also controls whether a null-aware anti join can be pushed below an aggregate.")
+      .version("4.2.1")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(-1)
 
   val LEGACY_DUPLICATE_BETWEEN_INPUT =
     buildConf("spark.sql.legacy.duplicateBetweenInput")
@@ -9770,6 +9789,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
+
+  def nullAwareAntiJoinBroadcastThreshold: Long =
+    getConf(SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD)
 
   def legacyDuplicateBetweenInput: Boolean =
     getConf(SQLConf.LEGACY_DUPLICATE_BETWEEN_INPUT)
