@@ -200,6 +200,26 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(false)
 
+  val INITIALIZE_METASTORE_FORMAT_CLASSES =
+    buildConf("spark.sql.hive.initializeMetastoreFormatClasses")
+      .doc("When true, an InputFormat/OutputFormat class name stored in the Hive metastore is " +
+        "resolved with its static initializer run at resolution time. When false, the class is " +
+        "still loaded, so a missing class still fails here, but its static initializer is not " +
+        "run. Only the class name is needed when converting metastore metadata, so setting " +
+        "this to false avoids running a format class's static initializer during a metadata " +
+        "operation. Note that the conversion also runs when planning a scan or write and when " +
+        "inferring the schema of a Hive serde table, so with false a format class whose static " +
+        "initializer fails no longer fails fast at resolution time. It fails when the format " +
+        "is instantiated instead (as NoClassDefFoundError: Could not initialize class ...), " +
+        "which for a Hive serde scan is on the driver when the input splits are computed, and " +
+        "for a Hive serde write is on an executor. A table read through the built-in " +
+        "Parquet/ORC reader never instantiates the format, so there the initializer never " +
+        "runs. Keep this true (the default) to preserve the fail-fast behavior.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val HIVE_METASTORE_SHARED_PREFIXES = buildStaticConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
       "that is shared between Spark SQL and a specific version of Hive. An example of classes " +
