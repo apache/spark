@@ -431,4 +431,21 @@ object StaticSQLConf {
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= 0, "The maximum total size must not be negative.")
       .createWithDefault(128 * 1024) // 128 KiB
+
+  val KAFKA_DISALLOWED_OPTIONS =
+    buildStaticConf("spark.sql.kafka.disallowedOptions")
+      .internal()
+      .doc("A comma-separated list of Kafka client option names (without the 'kafka.' prefix) " +
+        "that are not allowed to be set through Kafka source/sink options. Empty by default, " +
+        "which allows all options and preserves the previous behavior; when non-empty, setting a " +
+        "listed option raises an error. This is a static configuration fixed when the " +
+        "SparkSession is created and cannot be changed at runtime, so it acts as an operator " +
+        "boundary that a session cannot turn off.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .checkValue(_.forall(!_.toLowerCase(Locale.ROOT).startsWith("kafka.")),
+        "Kafka option names must be listed without the 'kafka.' prefix.")
+      .createWithDefault(Nil)
 }
