@@ -18,6 +18,10 @@ package org.apache.spark.sql.connect
 
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.connect.config.Connect
+import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
+
 /**
  * Test suite showcasing the APIs provided by SparkConnectServerTest trait.
  *
@@ -28,6 +32,111 @@ import org.scalatest.time.SpanSugar._
  *   - Assertion helpers for execution state
  */
 class SparkConnectServerTestSuite extends SparkConnectServerTest {
+
+  private def withTestTable(clientSession: SparkSession)(f: String => Unit): Unit = {
+    val table = "testcat.ns.tbl"
+    clientSession.conf.set(
+      "spark.sql.catalog.testcat",
+      classOf[InMemoryTableCatalog].getName)
+    clientSession.conf.set("spark.sql.catalog.testcat.copyOnLoad", "true")
+    clientSession.sql(s"CREATE TABLE $table (id INT) USING foo").collect()
+    clientSession.sql(s"INSERT INTO $table VALUES (1)").collect()
+
+    try {
+      f(table)
+    } finally {
+      clientSession.sql(s"DROP TABLE IF EXISTS $table").collect()
+    }
+  }
+
+  test("Spark Connect cached plan sees changes to a DSv2 table") {
+    withSession { clientSession =>
+      withTestTable(clientSession) { table =>
+        val cachedPlan = clientSession.table(table).drop("missing")
+        assert(cachedPlan.collect().toSeq == Seq(Row(1)))
+
+        getServerSession(clientSession).sql(s"INSERT INTO $table VALUES (2)").collect()
+
+        assert(cachedPlan.collect().toSet == Set(Row(1), Row(2)))
+      }
+    }
+  }
+
+  test("Spark Connect plan cached by analysis sees changes to a DSv2 table") {
+    withSession { clientSession =>
+      withTestTable(clientSession) { table =>
+        val cachedPlan = clientSession.table(table).drop("missing")
+        assert(cachedPlan.schema.fieldNames.toSeq == Seq("id"))
+
+        getServerSession(clientSession).sql(s"INSERT INTO $table VALUES (2)").collect()
+
+        assert(cachedPlan.collect().toSet == Set(Row(1), Row(2)))
+      }
+    }
+  }
+
+  test("Spark Connect cached DSv2 plan reused as a subtree sees table changes") {
+    withSession { clientSession =>
+      withTestTable(clientSession) { table =>
+        val cachedPlan = clientSession.table(table)
+        assert(cachedPlan.collect().toSeq == Seq(Row(1)))
+
+        getServerSession(clientSession).sql(s"INSERT INTO $table VALUES (2)").collect()
+
+        assert(cachedPlan.filter("id > 0").collect().toSet == Set(Row(1), Row(2)))
+      }
+    }
+  }
+
+  test("Spark Connect DSv2 plan sees table changes when the plan cache is disabled") {
+    withSession { clientSession =>
+      withTestTable(clientSession) { table =>
+        val cachedPlan = clientSession.table(table).drop("missing")
+        assert(cachedPlan.collect().toSeq == Seq(Row(1)))
+
+        val serverSession = getServerSession(clientSession)
+        serverSession.sql(s"INSERT INTO $table VALUES (2)").collect()
+        serverSession.sessionState.conf.setConf(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, false)
+
+        try {
+          assert(cachedPlan.collect().toSet == Set(Row(1), Row(2)))
+        } finally {
+          serverSession.sessionState.conf.setConf(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, true)
+        }
+      }
+    }
+  }
+
+  test("Spark Connect cached DSv2 plan sees a recreated table") {
+    withSession { clientSession =>
+      withTestTable(clientSession) { table =>
+        val cachedPlan = clientSession.table(table).drop("missing")
+        assert(cachedPlan.collect().toSeq == Seq(Row(1)))
+
+        val serverSession = getServerSession(clientSession)
+        serverSession.sql(s"DROP TABLE $table").collect()
+        serverSession.sql(s"CREATE TABLE $table (id INT) USING foo").collect()
+        serverSession.sql(s"INSERT INTO $table VALUES (2)").collect()
+
+        assert(cachedPlan.collect().toSeq == Seq(Row(2)))
+      }
+    }
+  }
+
+  test("Spark Connect cached DSv2 plan sees compatible schema evolution") {
+    withSession { clientSession =>
+      withTestTable(clientSession) { table =>
+        val cachedPlan = clientSession.table(table).drop("missing")
+        assert(cachedPlan.collect().toSeq == Seq(Row(1)))
+
+        val serverSession = getServerSession(clientSession)
+        serverSession.sql(s"ALTER TABLE $table ADD COLUMN value INT").collect()
+        serverSession.sql(s"INSERT INTO $table VALUES (2, 20)").collect()
+
+        assert(cachedPlan.collect().toSet == Set(Row(1, null), Row(2, 20)))
+      }
+    }
+  }
 
   test("withSession: execute SQL and collect results") {
     withSession { session =>

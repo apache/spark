@@ -70,7 +70,7 @@ class QueryExecution(
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None,
-    val refreshPhaseEnabled: Boolean = true,
+    val refreshPhaseEnabled: Boolean = false,
     val queryId: UUID = UUIDv7Generator.generate(),
     // When a transaction is active, callers creating nested QueryExecution instances MUST pass
     // the enclosing QueryExecution's analyzer here to propagate the transaction context.
