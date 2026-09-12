@@ -350,9 +350,10 @@ public abstract class AbstractBytesToBytesMapSuite {
     }
   }
 
-  private void iteratorTestBase(boolean destructive, boolean isWithKeyIndex) throws Exception {
+  private int iteratorTestBase(boolean destructive, boolean isWithKeyIndex, long pageSizeBytes)
+      throws Exception {
     final int size = 4096;
-    BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, size / 2, PAGE_SIZE_BYTES);
+    BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, size / 2, pageSizeBytes);
     Assertions.assertEquals(size / 2, map.maxNumKeysIndex());
     try {
       for (long i = 0; i < size; i++) {
@@ -390,7 +391,8 @@ public abstract class AbstractBytesToBytesMapSuite {
       } else {
         iter = map.iterator();
       }
-      int numPages = map.getNumDataPages();
+      final int totalPages = map.getNumDataPages();
+      int numPages = totalPages;
       int countFreedPages = 0;
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
@@ -403,6 +405,8 @@ public abstract class AbstractBytesToBytesMapSuite {
           final long key = Platform.getLong(loc.getKeyBase(), loc.getKeyOffset());
           Assertions.assertEquals(value, key);
         }
+        Assertions.assertFalse(valuesSeen.get((int) value),
+          "value " + value + " was seen more than once");
         valuesSeen.set((int) value);
         if (destructive) {
           // The iterator moves onto next page and frees previous page
@@ -419,10 +423,12 @@ public abstract class AbstractBytesToBytesMapSuite {
         }
       }
       if (destructive) {
-        // Latest page is not freed by iterator but by map itself
-        Assertions.assertEquals(countFreedPages, numPages - 1);
+        // The iterator frees each page as it advances except the last, which map.free() releases.
+        Assertions.assertEquals(totalPages - 1, countFreedPages);
+        Assertions.assertEquals(1, map.getNumDataPages());
       }
       Assertions.assertEquals(size, valuesSeen.cardinality());
+      return totalPages;
     } finally {
       map.free();
     }
@@ -430,17 +436,26 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void iteratorTest() throws Exception {
-    iteratorTestBase(false, false);
+    iteratorTestBase(false, false, PAGE_SIZE_BYTES);
   }
 
   @Test
   public void destructiveIteratorTest() throws Exception {
-    iteratorTestBase(true, false);
+    iteratorTestBase(true, false, PAGE_SIZE_BYTES);
+  }
+
+  @Test
+  public void destructiveIteratorManyPagesTest() throws Exception {
+    // A small page size makes records span many data pages, so the destructive iterator
+    // repeatedly removes the head page. The 64 MiB default fits everything in one page.
+    final int totalPages = iteratorTestBase(true, false, 4096);
+    Assertions.assertTrue(totalPages > 1,
+      "expected the records to span multiple data pages, but got " + totalPages);
   }
 
   @Test
   public void iteratorWithKeyIndexTest() throws Exception {
-    iteratorTestBase(false, true);
+    iteratorTestBase(false, true, PAGE_SIZE_BYTES);
   }
 
   @Test
