@@ -631,9 +631,8 @@ trait FileSourceAggregatePushDownSuite
   test("SPARK-57568: aggregate push down - TIME over an empty file") {
     // Aggregating a TIME column over zero rows: MIN/MAX return NULL and COUNT returns 0 on every
     // engine. This pins the no-data path, which the precision test above (always >= 1 row) does
-    // not reach. An all-null but non-empty file is intentionally not asserted here: that is
-    // pre-existing, type-agnostic behavior shared by all push-down types (Parquet rejects MIN/MAX
-    // push-down on an all-null block while ORC returns NULL), unchanged by this PR.
+    // not reach. The all-null but non-empty case is type-agnostic and covered by the
+    // SPARK-57739 tests below.
     Seq(6, 9).foreach { precision =>
       val schema = StructType(Seq(StructField("TimeCol", TimeType(precision))))
       val rdd = sparkContext.parallelize(Seq.empty[Row])
@@ -651,6 +650,61 @@ trait FileSourceAggregatePushDownSuite
                 "PushedAggregation: [MIN(TimeCol), MAX(TimeCol), COUNT(TimeCol), COUNT(*)]")
               checkAnswer(df, Seq(Row(null, null, 0, 0)))
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57739: aggregate push down - MIN/MAX of an all-null column return NULL") {
+    val schema = StructType(Seq(
+      StructField("i", IntegerType),
+      StructField("j", LongType)))
+    // Column `i` contains only nulls while column `j` has values, so a single query aggregates
+    // an all-null column and a non-null column side by side.
+    val rows = Seq(Row(null, 2L), Row(null, 7L), Row(null, 5L))
+    val rdd = sparkContext.parallelize(rows)
+    withTempPath { file =>
+      spark.createDataFrame(rdd, schema).coalesce(1)
+        .write.format(format).save(file.getCanonicalPath)
+      withTempView("all_null_test") {
+        spark.read.format(format).load(file.getCanonicalPath)
+          .createOrReplaceTempView("all_null_test")
+        Seq("false", "true").foreach { enableVectorizedReader =>
+          withSQLConf(aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            val df = sql("SELECT min(i), max(i), min(j), max(j), count(i), count(*) " +
+              "FROM all_null_test")
+            checkPushedInfo(df,
+              "PushedAggregation: [MIN(i), MAX(i), MIN(j), MAX(j), COUNT(i), COUNT(*)]")
+            checkAnswer(df, Seq(Row(null, null, 2L, 7L, 0, 3)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57739: aggregate push down - all-null and non-null splits combine") {
+    val schema = StructType(Seq(StructField("i", IntegerType)))
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      // Two files in the same directory: one whose column is entirely null and one with values.
+      // The all-null file must contribute NULL partial MIN/MAX that the final aggregation skips.
+      spark.createDataFrame(
+          sparkContext.parallelize(Seq(Row(null), Row(null))), schema)
+        .coalesce(1).write.format(format).save(path)
+      spark.createDataFrame(
+          sparkContext.parallelize(Seq(Row(5), Row(9))), schema)
+        .coalesce(1).write.mode("append").format(format).save(path)
+      withTempView("mixed_null_test") {
+        spark.read.format(format).load(path).createOrReplaceTempView("mixed_null_test")
+        Seq("false", "true").foreach { enableVectorizedReader =>
+          withSQLConf(aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            val df = sql("SELECT min(i), max(i), count(i), count(*) FROM mixed_null_test")
+            checkPushedInfo(df,
+              "PushedAggregation: [MIN(i), MAX(i), COUNT(i), COUNT(*)]")
+            checkAnswer(df, Seq(Row(5, 9, 2, 4)))
           }
         }
       }
