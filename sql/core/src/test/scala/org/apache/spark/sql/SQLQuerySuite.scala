@@ -4068,6 +4068,21 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  test("SPARK-58385: pushing a limit down does not strip a non-literal global limit") {
+    withTable("la", "lb") {
+      sql("CREATE TABLE la USING parquet AS SELECT 1 AS id")
+      sql("CREATE TABLE lb USING parquet AS SELECT id FROM range(0, 40, 1, 4)")
+      // `LIMIT 2+3` is a foldable non-literal expression, so the inner global limit reports no
+      // statically known cap. The outer limit must not strip it: the inner limit caps the whole
+      // subquery at 5 rows, not 5 rows per partition.
+      checkAnswer(
+        sql(
+          """SELECT count(*) FROM
+            |(SELECT * FROM la CROSS JOIN (SELECT * FROM lb LIMIT 2+3) LIMIT 100)""".stripMargin),
+        Row(5))
+    }
+  }
+
   test("SPARK-34514: Push down limit through LEFT SEMI and LEFT ANTI join") {
     withTable("left_table", "nonempty_right_table", "empty_right_table") {
       spark.range(5).toDF().repartition(1).write.saveAsTable("left_table")
