@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.Cast.{ordinalNumber, toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, WINDOW_TIME}
 import org.apache.spark.sql.types._
 
@@ -50,6 +53,31 @@ case class WindowTime(windowColumn: Expression)
 
   override def child: Expression = windowColumn
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val dataTypeCheck = super.checkInputDataTypes()
+    if (dataTypeCheck.isFailure) {
+      dataTypeCheck
+    } else {
+      child.dataType match {
+        case StructType(fields) if fields.exists(_.dataType.isInstanceOf[TimeType]) =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> ordinalNumber(0),
+              "requiredType" -> toSQLType(TypeCollection(
+                new StructType()
+                  .add(StructField("start", TimestampType))
+                  .add(StructField("end", TimestampType)),
+                new StructType()
+                  .add(StructField("start", TimestampNTZType))
+                  .add(StructField("end", TimestampNTZType)))),
+              "inputSql" -> toSQLExpr(child),
+              "inputType" -> toSQLType(child.dataType)))
+        case _ => TypeCheckSuccess
+      }
+    }
+  }
 
   override def dataType: DataType = child.dataType.asInstanceOf[StructType].head.dataType
 
