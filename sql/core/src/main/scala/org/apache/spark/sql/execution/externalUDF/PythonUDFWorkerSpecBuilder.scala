@@ -19,15 +19,17 @@ package org.apache.spark.sql.execution.externalUDF
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkConf
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.python.{PythonFunction, PythonUtils}
+import org.apache.spark.internal.config.OptionalConfigEntry
 import org.apache.spark.internal.config.Python.PYTHON_WORKER_MODULE
+import org.apache.spark.sql.execution.python.ArrowPythonRunner
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.udf.worker._
 
 /**
- * :: Experimental ::
- * Builds a [[UDFWorkerSpecification]] for Python UDFs from a
- * [[PythonFunction]] and [[SparkConf]].
+ * Builds a [[UDFWorkerSpecification]] for Python UDFs from a [[PythonFunction]] and
+ * [[SparkConf]]. This helper adapts Python launch metadata without adding Python-specific
+ * behavior to the language-neutral worker protocol.
  *
  * Reuses the same information the existing
  * [[org.apache.spark.api.python.PythonWorkerFactory]] uses:
@@ -37,13 +39,13 @@ import org.apache.spark.udf.worker._
  *    Spark's built-in Python path and the system `PYTHONPATH`
  *  - Worker module from `spark.python.worker.module`
  *
- * Note: `pythonIncludes` are not added to the process
- * environment. They are sent over the data channel to the
- * already-running worker by the runner (see
- * [[org.apache.spark.api.python.PythonRunner]]).
+ * Note: `pythonIncludes` are not added to the process environment.
+ * Unified execution serializes them in the per-UDF payload delivered
+ * to the already-running worker during Init.
  */
-@Experimental
-object PythonUDFWorkerSpecification {
+private[externalUDF] object PythonUDFWorkerSpecBuilder {
+
+  private[externalUDF] val ARTIFACTS_RESOURCE_DIRECTORY: String = "artifacts"
 
   /**
    * Creates a [[UDFWorkerSpecification]] from a [[PythonFunction]].
@@ -53,7 +55,7 @@ object PythonUDFWorkerSpecification {
    * @param conf the SparkConf for reading the worker module config
    * @return a fully populated [[UDFWorkerSpecification]]
    */
-  def fromPythonFunction(
+  def build(
       func: PythonFunction,
       conf: SparkConf): UDFWorkerSpecification = {
 
@@ -77,7 +79,7 @@ object PythonUDFWorkerSpecification {
     envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
     // Enable the execution mode supporting the new UDF execution
     // framework.
-    // TODO [SPARK-55278]: Enable this on the python code
+    // TODO(SPARK-59368): Enable this in the Python worker.
     envVars.put("PYTHON_WORKER_UNIFIED_EXECUTION_ENABLED", "YES")
 
     // Build the ProcessCallable:
@@ -86,8 +88,8 @@ object PythonUDFWorkerSpecification {
     callable.addCommand(func.pythonExec)
     callable.addCommand("-m")
     callable.addCommand(workerModule)
-    // TODO [SPARK-55278]: Add additional, python specific env vars
-    // or transform them into init-message fields
+    // TODO(SPARK-59368): Add Python-specific environment variables or expose them as
+    // Init fields.
     envVars.forEach((k, v) => callable.putEnvironmentVariables(k, v))
 
     // Capabilities: ARROW data format, bidirectional streaming
@@ -107,10 +109,30 @@ object PythonUDFWorkerSpecification {
       .setRunner(callable)
       .setProperties(props)
 
+    val session = WorkerSessionSpecification.newBuilder()
+      .addRequiredResourceDirectories(ARTIFACTS_RESOURCE_DIRECTORY)
+    val pythonSqlConfEntries = ArrowPythonRunner.getPythonRunnerConfEntries
+      .filterNot(_.key == SQLConf.SESSION_LOCAL_TIMEZONE.key)
+      .groupBy(_.key)
+      .values
+      .map(_.head)
+      .toSeq
+      .sortBy(_.key)
+    pythonSqlConfEntries.foreach { entry =>
+      session.putDynamicConfig(
+        entry.key,
+        dynamicConfigRequirement(!entry.isInstanceOf[OptionalConfigEntry[_]]))
+    }
+
     UDFWorkerSpecification.newBuilder()
       .setEnvironment(WorkerEnvironment.newBuilder())
       .setCapabilities(caps)
+      .setSession(session)
       .setDirect(direct)
       .build()
+  }
+
+  private def dynamicConfigRequirement(isRequired: Boolean): DynamicConfigRequirement = {
+    DynamicConfigRequirement.newBuilder().setIsRequired(isRequired).build()
   }
 }

@@ -63,7 +63,7 @@ private class ConnectingTestDispatcher(spec: UDFWorkerSpecification)
 }
 
 /**
- * Tests that [[PythonUDFWorkerSpecification#fromPythonFunction]]
+ * Tests that [[PythonUDFWorkerSpecBuilder#build]]
  * produces a valid [[org.apache.spark.udf.worker.UDFWorkerSpecification]]
  * that can be used by a
  * [[org.apache.spark.udf.worker.core.WorkerDispatcher]]
@@ -80,7 +80,7 @@ private class ConnectingTestDispatcher(spec: UDFWorkerSpecification)
  * socket, it does not host a gRPC server, so a full gRPC session is not
  * exercised here.
  */
-class PythonUDFWorkerSpecificationSuite
+class PythonUDFWorkerSpecBuilderSuite
     extends SharedSparkSession {
 
   import IntegratedUDFTestUtils.{
@@ -142,7 +142,7 @@ class PythonUDFWorkerSpecificationSuite
     (moduleDir, moduleName)
   }
 
-  test("PythonUDFWorkerSpecification.fromPythonFunction" +
+  test("PythonUDFWorkerSpecBuilder.build" +
       " produces a spec that spawns a Python worker") {
     assume(isPySparkAvailable,
       "Python and PySpark must be available")
@@ -170,7 +170,7 @@ class PythonUDFWorkerSpecificationSuite
 
     // Build the spec via the function under test
     val workerSpec =
-      PythonUDFWorkerSpecification.fromPythonFunction(func, conf)
+      PythonUDFWorkerSpecBuilder.build(func, conf)
 
     // Verify the spec works end-to-end: the dispatcher spawns the Python
     // worker, waits for the socket, and opens a real UDS connection to it
