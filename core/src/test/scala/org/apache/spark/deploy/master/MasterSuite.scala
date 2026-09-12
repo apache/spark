@@ -30,6 +30,8 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEnv}
+import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.util.Utils
 
 class MasterSuite extends MasterSuiteBase {
   test("basic scheduling - spread out") {
@@ -292,5 +294,107 @@ class MasterSuite extends MasterSuiteBase {
     noException should be thrownBy {
       makeMaster(conf)
     }
+  }
+
+  test("SPARK-58592: redactedCopy redacts secrets in ApplicationInfo and DriverInfo") {
+    val conf = new SparkConf()
+    val secretEnv = Map(
+      "PASSWORD" -> "topsecret",
+      "JAVA_HOME" -> "/usr/lib/jvm/default")
+    val secretJavaOpts = Seq(
+      "-Dspark.executorEnv.TOKEN=env-token",
+      "-Xmx2g")
+    val cmd = Command("mainClass", List("arg1"), secretEnv, Seq(), Seq(), secretJavaOpts)
+
+    val appDesc = ApplicationDescription(
+      "name", Some(4), cmd, "appUiUrl", DeployTestUtils.defaultResourceProfile)
+    val appInfo = new ApplicationInfo(0, "app-1", appDesc, new Date(0), null, Int.MaxValue)
+    val redactedApp = appInfo.redactedCopy(conf)
+    assert(!redactedApp.desc.command.environment.contains("topsecret"))
+    assert(redactedApp.desc.command.environment("PASSWORD") == Utils.REDACTION_REPLACEMENT_TEXT)
+    assert(redactedApp.desc.command.environment("JAVA_HOME") == "/usr/lib/jvm/default")
+    assert(!redactedApp.desc.command.javaOpts.contains("env-token"))
+    assert(redactedApp.desc.command.javaOpts.contains("-Xmx2g"))
+
+    val driverDesc = DriverDescription("hdfs://some.jar", 100, 3, false, cmd)
+    val driverInfo = new DriverInfo(0, "driver-1", driverDesc, new Date(0))
+    val redactedDriver = driverInfo.redactedCopy(conf)
+    assert(!redactedDriver.desc.command.environment.contains("topsecret"))
+    assert(redactedDriver.desc.command.environment("PASSWORD") == Utils.REDACTION_REPLACEMENT_TEXT)
+    assert(redactedDriver.desc.command.environment("JAVA_HOME") == "/usr/lib/jvm/default")
+    assert(!redactedDriver.desc.command.javaOpts.contains("env-token"))
+    assert(redactedDriver.desc.command.javaOpts.contains("-Xmx2g"))
+  }
+
+  test("SPARK-58592: writeReplace redacts secrets during RPC serialization") {
+    val conf = new SparkConf()
+    val secretEnv = Map("PASSWORD" -> "topsecret", "JAVA_HOME" -> "/usr/lib/jvm/default")
+    val secretJavaOpts = Seq("-Dspark.executorEnv.TOKEN=env-token", "-Xmx2g")
+    val cmd = Command("mainClass", List("arg1"), secretEnv, Seq(), Seq(), secretJavaOpts)
+    val appDesc = ApplicationDescription(
+      "name", Some(4), cmd, "appUiUrl", DeployTestUtils.defaultResourceProfile)
+    val appInfo = new ApplicationInfo(0, "app-1", appDesc, new Date(0), null, Int.MaxValue)
+    val driverDesc = DriverDescription("hdfs://some.jar", 100, 3, false, cmd)
+    val driverInfo = new DriverInfo(0, "driver-1", driverDesc, new Date(0))
+
+    val stateResponse = new MasterStateResponse(
+      "host", 8080, None, Array.empty[WorkerInfo], Array(appInfo),
+      Array.empty[ApplicationInfo], Array(driverInfo),
+      Array.empty[DriverInfo], RecoveryState.ALIVE).withConf(conf)
+
+    val serializer = new JavaSerializer(conf).newInstance()
+    val serialized = serializer.serialize(stateResponse)
+    val deserialized = serializer.deserialize[MasterStateResponse](serialized)
+
+    val deserializedApp = deserialized.activeApps.head
+    assert(!deserializedApp.desc.command.environment.contains("topsecret"))
+    assert(deserializedApp.desc.command.environment("PASSWORD") == Utils.REDACTION_REPLACEMENT_TEXT)
+    assert(deserializedApp.desc.command.environment("JAVA_HOME") == "/usr/lib/jvm/default")
+    assert(!deserializedApp.desc.command.javaOpts.contains("env-token"))
+    assert(deserializedApp.desc.command.javaOpts.contains("-Xmx2g"))
+
+    val deserializedDriver = deserialized.activeDrivers.head
+    assert(!deserializedDriver.desc.command.environment.contains("topsecret"))
+    assert(deserializedDriver.desc.command.environment("PASSWORD") ==
+      Utils.REDACTION_REPLACEMENT_TEXT)
+    assert(deserializedDriver.desc.command.environment("JAVA_HOME") == "/usr/lib/jvm/default")
+    assert(!deserializedDriver.desc.command.javaOpts.contains("env-token"))
+    assert(deserializedDriver.desc.command.javaOpts.contains("-Xmx2g"))
+  }
+
+  test("SPARK-58592: MasterStateResponse without withConf keeps secrets unredacted") {
+    val conf = new SparkConf()
+    val secretEnv = Map("PASSWORD" -> "topsecret", "JAVA_HOME" -> "/usr/lib/jvm/default")
+    val secretJavaOpts = Seq("-Dspark.executorEnv.TOKEN=env-token", "-Xmx2g")
+    val cmd = Command("mainClass", List("arg1"), secretEnv, Seq(), Seq(), secretJavaOpts)
+    val appDesc = ApplicationDescription(
+      "name", Some(4), cmd, "appUiUrl", DeployTestUtils.defaultResourceProfile)
+    val appInfo = new ApplicationInfo(0, "app-1", appDesc, new Date(0), null, Int.MaxValue)
+    val driverDesc = DriverDescription("hdfs://some.jar", 100, 3, false, cmd)
+    val driverInfo = new DriverInfo(0, "driver-1", driverDesc, new Date(0))
+
+    // Without withConf, writeReplace returns this unredacted. The persistence/recovery
+    // path relies on this contract to preserve original secrets on disk.
+    val stateResponse = new MasterStateResponse(
+      "host", 8080, None, Array.empty[WorkerInfo], Array(appInfo),
+      Array.empty[ApplicationInfo], Array(driverInfo),
+      Array.empty[DriverInfo], RecoveryState.ALIVE)
+
+    val serializer = new JavaSerializer(conf).newInstance()
+    val serialized = serializer.serialize(stateResponse)
+    val deserialized = serializer.deserialize[MasterStateResponse](serialized)
+
+    val deserializedApp = deserialized.activeApps.head
+    assert(deserializedApp.desc.command.environment("PASSWORD") == "topsecret")
+    assert(deserializedApp.desc.command.environment("JAVA_HOME") == "/usr/lib/jvm/default")
+    assert(deserializedApp.desc.command.javaOpts.contains("-Dspark.executorEnv.TOKEN=env-token"))
+    assert(deserializedApp.desc.command.javaOpts.contains("-Xmx2g"))
+
+    val deserializedDriver = deserialized.activeDrivers.head
+    assert(deserializedDriver.desc.command.environment("PASSWORD") == "topsecret")
+    assert(deserializedDriver.desc.command.environment("JAVA_HOME") == "/usr/lib/jvm/default")
+    assert(deserializedDriver.desc.command.javaOpts.contains(
+      "-Dspark.executorEnv.TOKEN=env-token"))
+    assert(deserializedDriver.desc.command.javaOpts.contains("-Xmx2g"))
   }
 }
