@@ -1150,6 +1150,49 @@ class Column(TableValuedFunctionArgument):
         """
         ...
 
+    @property
+    def col_name(self) -> str:
+        """
+        Returns the column's name, alias, or expression as a string, in the same
+        form shown by the column's :func:`repr`.
+
+        This is handy for reusing or inspecting a column's name, for example to
+        re-alias an expression with the source column's name. The ``col_name``
+        spelling avoids a collision with the existing :func:`name` method (an
+        alias for :func:`alias`).
+
+        .. versionadded:: 4.3.0
+
+        Returns
+        -------
+        str
+            The name, alias, or string form of the column expression.
+
+        Notes
+        -----
+        The returned string mirrors the column's :func:`repr`. For compound
+        expressions the rendering may differ between the Spark Classic and Spark
+        Connect backends, so use this for display, names, and simple aliases
+        rather than as a stable key to branch on.
+
+        Examples
+        --------
+        >>> from pyspark.sql import functions as sf
+        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], ["age", "name"])
+        >>> df.age.col_name
+        'age'
+        >>> sf.col("value").col_name
+        'value'
+
+        It also reflects an alias or cast, mirroring the column's representation.
+
+        >>> sf.col("a").alias("b").col_name
+        'a AS b'
+        >>> sf.col("a").cast("int").col_name
+        'CAST(a AS INT)'
+        """
+        ...
+
     @dispatch_col_method
     def cast(self, dataType: Union[DataType, str]) -> "Column":
         """
