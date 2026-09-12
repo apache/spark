@@ -47,9 +47,9 @@ class JDBCRelationSuite extends SparkFunSuite {
         condition = "INVALID_JDBC_PARTITION_BOUND",
         sqlState = Some("22023"),
         parameters = Map(
-          "option" -> s"\"$bound\"",
-          "value" -> s"\"$value\"",
-          "dataType" -> s"\"${dataType.sql}\""))
+          "option" -> s""""$bound"""",
+          "value" -> s""""$value"""",
+          "dataType" -> s""""${dataType.sql}""""))
     }
   }
 
@@ -62,8 +62,8 @@ class JDBCRelationSuite extends SparkFunSuite {
         new JDBCOptions(options))
       val midpoint = if (dataType == DateType) "2020-01-02" else "2020-01-02 00:00:00"
       assert(partitions.map(_.asInstanceOf[JDBCPartition].whereClause).toSeq === Seq(
-        s"\"t\" < '$midpoint' or \"t\" is null",
-        s"\"t\" >= '$midpoint'"))
+        s""""t" < '$midpoint' or "t" is null""",
+        s""""t" >= '$midpoint'"""))
     }
   }
 }
