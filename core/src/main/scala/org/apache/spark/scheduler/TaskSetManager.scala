@@ -1228,8 +1228,13 @@ private[spark] class TaskSetManager(
     // pipelined set and aborts the whole group. Note isZombie already skips a fully-complete
     // producer's set; this guard also covers a PARTIALLY-complete producer losing an executor on
     // decommission.
+
+    // The tracker's stored value already folds the app-global flag and the per-shuffle handle
+    // together at registration (see DAGScheduler.createShuffleMapStage), and a shuffle map task set
+    // always has its shuffle registered before it is submitted. Read it as the single source.
+    val reliablyStored = taskSet.shuffleId.exists(sched.mapOutputTracker.isReliablyStored)
     val maybeShuffleMapOutputLoss = isShuffleMapTasks && !taskSet.isPipelined &&
-      !sched.sc.shuffleDriverComponents.supportsReliableStorage() &&
+      !reliablyStored &&
       (reason.isInstanceOf[ExecutorDecommission] || !env.blockManager.externalShuffleServiceEnabled)
     if (maybeShuffleMapOutputLoss && !isZombie) {
       val iter1 = taskIdsOnExec.iterator
