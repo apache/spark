@@ -39,7 +39,6 @@ class MissingPandasLikeSeries:
     convert_dtypes = _unsupported_function("convert_dtypes")
     infer_objects = _unsupported_function("infer_objects")
     reorder_levels = _unsupported_function("reorder_levels")
-    set_axis = _unsupported_function("set_axis")
     to_period = _unsupported_function("to_period")
     to_sql = _unsupported_function("to_sql")
     to_timestamp = _unsupported_function("to_timestamp")
