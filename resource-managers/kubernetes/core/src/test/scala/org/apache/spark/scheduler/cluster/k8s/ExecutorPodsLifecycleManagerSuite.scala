@@ -23,8 +23,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import io.fabric8.kubernetes.client.dsl.base.PatchContext
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
-import org.mockito.ArgumentMatchers.any
-import org.mockito.ArgumentMatchers.anyString
+import org.mockito.ArgumentMatchers.{any, anyString, eq => meq}
 import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -229,6 +228,35 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     val msg = exitReasonMessage(1, failedPod, 1)
     val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
     verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
+  }
+
+  for ((name, exitCode, executorReason, sidecarReason, deleted, expectedOom) <- Seq(
+      ("executor OOMKilled", 137, "OOMKilled", "Error", false, true),
+      ("JVM OOM exit", SparkExitCode.OOM, "Error", "Error", false, true),
+      ("unclassified SIGKILL", 137, "Error", "Error", false, false),
+      ("sidecar OOMKilled", 137, "Error", "OOMKilled", false, false),
+      ("deleted executor OOMKilled", 137, "OOMKilled", "Error", true, false),
+      ("deleted JVM OOM exit", SparkExitCode.OOM, "Error", "Error", true, false))) {
+    test(s"OOM classification uses the executor termination: $name") {
+      // This fixture uses a custom executor container name and lists the sidecar first.
+      val failedPod = failedExecutorWithSidecarStatusListedFirst(1)
+      val statuses = failedPod.getStatus.getContainerStatuses
+      statuses.get(0).getState.getTerminated.setReason(sidecarReason)
+      statuses.get(1).getState.getTerminated.setExitCode(exitCode)
+      statuses.get(1).getState.getTerminated.setReason(executorReason)
+      // A pod-level reason must not override the executor container's actual termination.
+      failedPod.getStatus.setReason("OOMKilled")
+      if (deleted) {
+        failedPod.getMetadata.setDeletionTimestamp("2026-08-25T00:00:00Z")
+      }
+      snapshotsStore.updatePod(failedPod)
+      snapshotsStore.notifySubscribers()
+      val lossReason = ArgumentCaptor.forClass(classOf[ExecutorExited])
+      verify(schedulerBackend).doRemoveExecutor(meq("1"), lossReason.capture())
+      assert(lossReason.getValue.exitCode == exitCode)
+      assert(lossReason.getValue.exitCausedByApp == !deleted)
+      assert(lossReason.getValue.isOutOfMemoryError == expectedOom)
+    }
   }
 
   test("Don't delete pod from K8s if deletionTimestamp is already set.") {

@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 import java.util.{Properties, TimerTask}
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
@@ -120,6 +120,26 @@ private[spark] class TaskSchedulerImpl(
   // values (e.g. 0.2) are accounted exactly. spark.task.cpus is a decimalConf, so conf.get returns
   // the exact BigDecimal the user configured.
   val CPUS_PER_TASK = conf.get(config.CPUS_PER_TASK)
+
+  private[scheduler] val oomRetryEnabled = conf.get(SCHEDULER_OOM_RETRY_ENABLED)
+  private[scheduler] val oomRetryIsolationTimeoutMs =
+    conf.get(SCHEDULER_OOM_RETRY_ISOLATION_TIMEOUT)
+
+  // One application-wide reservation, held across offer rounds while an executor drains and
+  // until the isolated attempt exits. CPU accounting and TaskContext.cpus remain unchanged.
+  private case class OomRetryReservation(
+      taskSet: TaskSetManager,
+      index: Int,
+      executorId: String,
+      taskId: Option[Long] = None)
+
+  private var oomRetryReservation: Option[OomRetryReservation] = None
+  private var oomRetryWakeup: Option[ScheduledFuture[_]] = None
+
+  @volatile private var oomRetryReservationSnapshot: Option[OomRetryReservationInfo] = None
+
+  override def oomRetryReservationInfo: Option[OomRetryReservationInfo] =
+    oomRetryReservationSnapshot
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.  Protected by `this`
@@ -400,6 +420,9 @@ private[spark] class TaskSchedulerImpl(
           log"${MDC(LogKeys.STAGE_ATTEMPT_ID, tsm.taskSet.stageAttemptId)} was cancelled")
       }
     }
+    if (refreshOomRetryReservation()) {
+      backend.reviveOffers()
+    }
   }
 
   override def killTaskAttempt(
@@ -428,6 +451,8 @@ private[spark] class TaskSchedulerImpl(
    * cleaned up.
    */
   def taskSetFinished(manager: TaskSetManager): Unit = synchronized {
+    val releasedOomReservation = oomRetryReservation.exists(_.taskSet == manager)
+    setOomRetryReservation(oomRetryReservation.filterNot(_.taskSet == manager))
     taskSetsByStageIdAndAttempt.get(manager.taskSet.stageId).foreach { taskSetsForStage =>
       taskSetsForStage -= manager.taskSet.stageAttemptId
       if (taskSetsForStage.isEmpty) {
@@ -439,6 +464,185 @@ private[spark] class TaskSchedulerImpl(
     logInfo(log"Removed TaskSet " + manager.taskSet.logId +
       log" whose tasks have all completed, from pool ${MDC(LogKeys.POOL_NAME, manager.parent.name)}"
     )
+    if (releasedOomReservation) {
+      // A cancelled pending retry has no task exit to wake work held behind its reservation.
+      backend.reviveOffers()
+    }
+  }
+
+  private def setOomRetryReservation(reservation: Option[OomRetryReservation]): Unit = {
+    oomRetryReservation = reservation
+    // Publish an immutable snapshot without calling into the allocation manager: it can already
+    // hold its lock while acquiring the scheduler lock through the backend.
+    oomRetryReservationSnapshot = reservation.map { r =>
+      val taskSet = r.taskSet.taskSet
+      OomRetryReservationInfo(taskSet.resourceProfileId, r.executorId,
+        taskSet.stageId, taskSet.stageAttemptId, r.index)
+    }
+  }
+
+  private def refreshOomRetryReservation(): Boolean = {
+    val hadReservation = oomRetryReservation.nonEmpty
+    setOomRetryReservation(oomRetryReservation.filter { reservation =>
+      reservation.taskId match {
+        // Cancellation or another attempt's success can precede the task's exit. Keep its
+        // executor isolated until the terminal status update releases the running task.
+        case Some(tid) => taskIdToExecutorId.get(tid).contains(reservation.executorId)
+        case None =>
+          isExecutorAlive(reservation.executorId) &&
+            executorIdToHost.get(reservation.executorId).exists { host =>
+              !healthTrackerOpt.exists { tracker =>
+                tracker.isExecutorExcluded(reservation.executorId) || tracker.isNodeExcluded(host)
+              } && reservation.taskSet.canRunOomRetry(
+                reservation.index, reservation.executorId, host)
+            } && reservation.taskSet.oomRetryNeedsIsolation(reservation.index)
+      }
+    })
+    hadReservation && oomRetryReservation.isEmpty
+  }
+
+  /**
+   * Give OOM retries idle capacity before ordinary placement. Repeated OOMs reserve at most one
+   * executor across offer rounds, allowing existing tasks to drain without backfilling it. Only
+   * this recovery pass ignores locality preferences; resource requirements and exclusions remain
+   * mandatory. A bounded wait in TaskSetManager makes an unavailable reservation fall back to
+   * ordinary scheduling instead of turning an OOM into an indefinitely pending retry.
+   */
+  private def scheduleOomRetries(
+      taskSets: ArrayBuffer[TaskSetManager],
+      offers: IndexedSeq[WorkerOffer],
+      availableCpus: Array[BigDecimal],
+      availableResources: Array[ExecutorResourcesAmounts],
+      tasks: IndexedSeq[ArrayBuffer[TaskDescription]]): Set[TaskSetManager] = {
+    refreshOomRetryReservation()
+    val launchedTaskSets = new HashSet[TaskSetManager]
+    def taskCpusFor(taskSet: TaskSetManager): BigDecimal = {
+      val profile = sc.resourceProfileManager
+        .resourceProfileFromId(taskSet.taskSet.resourceProfileId)
+      ResourceProfile.getTaskCpusOrDefaultForProfile(profile, conf)
+    }
+
+    // A compatible profile does not guarantee that every executor has enough total resources.
+    // Once a reserved executor is idle, its offer tells us whether the retry can actually fit.
+    setOomRetryReservation(oomRetryReservation.filterNot { reservation =>
+      reservation.taskId.isEmpty && offers.indices.exists { i =>
+        offers(i).executorId == reservation.executorId &&
+          !isExecutorBusy(reservation.executorId) &&
+          resourcesMeetTaskRequirements(
+            reservation.taskSet, taskCpusFor(reservation.taskSet),
+            availableCpus(i), availableResources(i)).isEmpty
+      }
+    })
+
+    def eligible(taskSet: TaskSetManager, index: Int, i: Int): Boolean = {
+      val offer = offers(i)
+      isExecutorAlive(offer.executorId) &&
+        sc.resourceProfileManager.canBeScheduled(
+          taskSet.taskSet.resourceProfileId, offer.resourceProfileId) &&
+        taskSet.canRunOomRetry(index, offer.executorId, offer.host)
+    }
+
+    def launch(taskSet: TaskSetManager, index: Int, i: Int): Option[Long] = {
+      val offer = offers(i)
+      if (!eligible(taskSet, index, i) || isExecutorBusy(offer.executorId)) {
+        return None
+      }
+      resourcesMeetTaskRequirements(
+        taskSet, taskCpusFor(taskSet), availableCpus(i), availableResources(i)).flatMap {
+        assignments =>
+          val taskCpus = taskCpusFor(taskSet)
+          try {
+            taskSet.resourceOfferOomRetry(
+              index, offer.executorId, offer.host, taskCpus, assignments)
+              .map { task =>
+                tasks(i) += task
+                addRunningTask(task.taskId, offer.executorId, taskSet)
+                launchedTaskSets += taskSet
+                availableCpus(i) -= task.cpus
+                availableResources(i).acquire(task.resources)
+                task.taskId
+              }
+          } catch {
+            case e: TaskNotSerializableException =>
+              // prepareLaunchingTask already aborts the task set on serialization failure.
+              logError("Failed to serialize an OOM retry", e)
+              None
+          }
+      }
+    }
+
+    if (oomRetryReservation.isEmpty) {
+      for {
+        taskSet <- taskSets
+        index <- taskSet.pendingOomRetries
+        if oomRetryReservation.isEmpty && taskSet.oomRetryNeedsIsolation(index)
+      } {
+        val candidates = offers.indices.filter { i =>
+          eligible(taskSet, index, i) &&
+            (isExecutorBusy(offers(i).executorId) ||
+              resourcesMeetTaskRequirements(
+                taskSet, taskCpusFor(taskSet), availableCpus(i), availableResources(i))
+                .isDefined)
+        }
+        // A busy executor may currently offer no CPUs or custom resources. Check its profile
+        // now and its actual free resources again after it drains, before launching anything.
+        candidates.sortBy(i => executorIdToRunningTaskIds(offers(i).executorId).size)
+          .headOption.foreach { i =>
+            setOomRetryReservation(Some(
+              OomRetryReservation(taskSet, index, offers(i).executorId)))
+            logInfo(log"Reserving executor ${MDC(LogKeys.EXECUTOR_ID, offers(i).executorId)} for " +
+              log"OOM retry of task ${MDC(TASK_INDEX, index)} in stage " + taskSet.taskSet.logId)
+          }
+      }
+    }
+
+    oomRetryReservation.filter(_.taskId.isEmpty).foreach { reservation =>
+      offers.indices.find(i => offers(i).executorId == reservation.executorId).foreach { i =>
+        launch(reservation.taskSet, reservation.index, i).foreach { tid =>
+          setOomRetryReservation(Some(reservation.copy(taskId = Some(tid))))
+        }
+      }
+    }
+
+    for {
+      taskSet <- taskSets
+      index <- taskSet.pendingOomRetries
+      if !taskSet.oomRetryNeedsIsolation(index)
+    } {
+      offers.indices.iterator.filter { i =>
+        !isExecutorBusy(offers(i).executorId) &&
+          !oomRetryReservation.exists(_.executorId == offers(i).executorId)
+      }.exists(i => launch(taskSet, index, i).isDefined)
+    }
+
+    // Capture deadlines before refreshing and masking: if one expires during this pass, either
+    // its reservation is released below or the captured delay still guarantees another offer.
+    val nextDelay = taskSets.iterator.flatMap { taskSet =>
+      taskSet.pendingOomRetries.iterator.map(taskSet.oomRetryIsolationTimeRemaining)
+    }.filter(_ > 0).reduceOption(_ min _)
+
+    // A failed launch may have aborted its task set. Missing partial offers must not release an
+    // otherwise valid reservation. Mask it for every task set, including barrier slot counting.
+    refreshOomRetryReservation()
+    oomRetryReservation.foreach { reservation =>
+      offers.indices.filter(i => offers(i).executorId == reservation.executorId)
+        .foreach { i =>
+          availableCpus(i) = 0
+          availableResources(i) = ExecutorResourcesAmounts.empty
+        }
+    }
+
+    // Local backends do not periodically revive offers. Keep one wakeup for the earliest
+    // pending deadline, including retries waiting behind another task's reservation.
+    oomRetryWakeup.foreach(_.cancel(false))
+    oomRetryWakeup = nextDelay.map { delay =>
+      starvationTimer.schedule(new Runnable {
+        override def run(): Unit = Utils.tryLogNonFatalError {
+          backend.reviveOffers()
+        }
+      }, delay, TimeUnit.MILLISECONDS)
+    }
+    launchedTaskSets.toSet
   }
 
   /**
@@ -619,6 +823,12 @@ private[spark] class TaskSchedulerImpl(
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
     val resourceProfileIds = shuffledOffers.map(o => o.resourceProfileId).toArray
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
+    val oomRetryTaskSets = if (oomRetryEnabled) {
+      scheduleOomRetries(
+        sortedTaskSets, shuffledOffers, availableCpus, availableResources, tasks)
+    } else {
+      Set.empty[TaskSetManager]
+    }
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
@@ -635,8 +845,16 @@ private[spark] class TaskSchedulerImpl(
       // value is -1
       val numBarrierSlotsAvailable = if (taskSet.isBarrier) {
         val rpId = taskSet.taskSet.resourceProfileId
-        val resAmounts = availableResources.map(_.resourceAddressAmount)
-        calculateAvailableSlots(this, conf, rpId, resourceProfileIds, availableCpus, resAmounts)
+        val profile = sc.resourceProfileManager.resourceProfileFromId(rpId)
+        val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(profile, conf)
+        shuffledOffers.indices.iterator
+          .filter(i => sc.resourceProfileManager.canBeScheduled(rpId, resourceProfileIds(i)))
+          .map { i =>
+            // Recovery may already have consumed whole or fractional custom resources.
+            val maxTasks = math.min(
+              ResourceProfile.numTasksBasedOnCores(availableCpus(i), taskCpus), taskSet.numTasks)
+            availableResources(i).availableTaskSlots(profile, maxTasks)
+          }.foldLeft(0L)(_ + _).min(taskSet.numTasks.toLong).toInt
       } else {
         -1
       }
@@ -650,7 +868,8 @@ private[spark] class TaskSchedulerImpl(
           log"${MDC(LogKeys.TASK_SET_NAME, taskSet.numTasks)} slots, while the total " +
           log"number of available slots is ${MDC(LogKeys.NUM_SLOTS, numBarrierSlotsAvailable)}.")
       } else {
-        var launchedAnyTask = false
+        // Recovery launches also clear unschedulable-task-set timers, without advancing locality.
+        var launchedAnyTask = oomRetryTaskSets.contains(taskSet)
         var noDelaySchedulingRejects = true
         var globalMinLocality: Option[TaskLocality] = None
         for (currentMaxLocality <- taskSet.myLocalityLevels) {
@@ -742,6 +961,12 @@ private[spark] class TaskSchedulerImpl(
 
         if (launchedAnyTask && taskSet.isBarrier) {
           val barrierPendingLaunchTasks = taskSet.barrierPendingLaunchTasks.values.toArray
+          def releaseAssignedResources(): Unit = {
+            barrierPendingLaunchTasks.foreach { task =>
+              availableCpus(task.assignedOfferIndex) += task.assignedCores
+              availableResources(task.assignedOfferIndex).release(task.assignedResources)
+            }
+          }
           // Check whether the barrier tasks are partially launched.
           if (barrierPendingLaunchTasks.length != taskSet.numTasks) {
             if (legacyLocalityWaitReset) {
@@ -761,7 +986,6 @@ private[spark] class TaskSchedulerImpl(
                 log"to get rid of this error."
               logWarning(logMsg)
               taskSet.abort(logMsg.message)
-              throw SparkCoreErrors.sparkError(logMsg.message)
             } else {
               val curTime = clock.getTimeMillis()
               if (curTime - taskSet.lastResourceOfferFailLogTime >
@@ -771,47 +995,64 @@ private[spark] class TaskSchedulerImpl(
                 taskSet.lastResourceOfferFailLogTime = curTime
               }
               barrierPendingLaunchTasks.foreach { task =>
-                // revert all assigned resources
-                availableCpus(task.assignedOfferIndex) =
-                  availableCpus(task.assignedOfferIndex) + task.assignedCores
-                availableResources(task.assignedOfferIndex).release(
-                  task.assignedResources)
                 // re-add the task to the schedule pending list
                 taskSet.addPendingTask(task.index)
               }
             }
+            releaseAssignedResources()
           } else {
             // All tasks are able to launch in this barrier task set. Let's do
             // some preparation work before launching them.
             val launchTime = clock.getTimeMillis()
-            val addressesWithDescs = barrierPendingLaunchTasks.map { task =>
-              val taskDesc = taskSet.prepareLaunchingTask(
-                task.execId,
-                task.host,
-                task.index,
-                task.taskLocality,
-                false,
-                task.assignedCores,
-                task.assignedResources,
-                launchTime)
-              addRunningTask(taskDesc.taskId, taskDesc.executorId, taskSet)
-              tasks(task.assignedOfferIndex) += taskDesc
-              shuffledOffers(task.assignedOfferIndex).address.get -> taskDesc
+            val addressesWithDescs = new ArrayBuffer[(String, TaskDescription)]
+            try {
+              barrierPendingLaunchTasks.foreach { task =>
+                val taskDesc = taskSet.prepareLaunchingTask(
+                  task.execId,
+                  task.host,
+                  task.index,
+                  task.taskLocality,
+                  false,
+                  task.assignedCores,
+                  task.assignedResources,
+                  launchTime)
+                addressesWithDescs +=
+                  shuffledOffers(task.assignedOfferIndex).address.get -> taskDesc
+              }
+
+              // materialize the barrier coordinator.
+              maybeInitBarrierCoordinator()
+
+              // Update the taskInfos into all the barrier task properties.
+              val addressesStr = addressesWithDescs
+                // Addresses ordered by partitionId
+                .sortBy(_._2.partitionId)
+                .map(_._1)
+                .mkString(",")
+              addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
+
+              // Publish the group only after every task is prepared. A serialization failure
+              // must not launch a partial barrier group or discard earlier ordinary/OOM tasks.
+              barrierPendingLaunchTasks.zip(addressesWithDescs).foreach {
+                case (task, (_, taskDesc)) =>
+                  addRunningTask(taskDesc.taskId, taskDesc.executorId, taskSet)
+                  tasks(task.assignedOfferIndex) += taskDesc
+              }
+              logInfo(log"Successfully scheduled all the " +
+                log"${MDC(LogKeys.NUM_TASKS, addressesWithDescs.length)} " +
+                log"tasks for barrier stage ${MDC(LogKeys.STAGE_ID, taskSet.stageId)}.")
+            } catch {
+              case e: TaskNotSerializableException =>
+                // prepareLaunchingTask already aborted this task set. Balance the task-start
+                // bookkeeping of earlier preparations without sending them to an executor.
+                releaseAssignedResources()
+                addressesWithDescs.foreach { case (_, taskDesc) =>
+                  taskSet.handleFailedTask(taskDesc.taskId, TaskState.KILLED,
+                    TaskKilled("Barrier task serialization failed"))
+                }
+                logError(log"Failed to serialize barrier task set " +
+                  log"${MDC(TASK_SET_NAME, taskSet.name)}", e)
             }
-
-            // materialize the barrier coordinator.
-            maybeInitBarrierCoordinator()
-
-            // Update the taskInfos into all the barrier task properties.
-            val addressesStr = addressesWithDescs
-              // Addresses ordered by partitionId
-              .sortBy(_._2.partitionId)
-              .map(_._1)
-              .mkString(",")
-            addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
-
-            logInfo(log"Successfully scheduled all the ${MDC(LogKeys.NUM_TASKS, addressesWithDescs.length)} " +
-              log"tasks for barrier stage ${MDC(LogKeys.STAGE_ID, taskSet.stageId)}.")
           }
           taskSet.barrierPendingLaunchTasks.clear()
         }
@@ -990,6 +1231,9 @@ private[spark] class TaskSchedulerImpl(
     taskSetsByStageIdAndAttempt.get(stageId).foreach(_.values.filter(!_.isZombie).foreach { tsm =>
       tsm.markPartitionCompleted(partitionId)
     })
+    if (refreshOomRetryReservation()) {
+      backend.reviveOffers()
+    }
   }
 
   def error(message: String): Unit = {
@@ -1033,6 +1277,11 @@ private[spark] class TaskSchedulerImpl(
       Utils.tryLogNonFatalError {
         barrierCoordinator.stop()
       }
+    }
+    synchronized {
+      oomRetryWakeup.foreach(_.cancel(false))
+      oomRetryWakeup = None
+      setOomRetryReservation(None)
     }
     ThreadUtils.shutdown(starvationTimer)
     ThreadUtils.shutdown(abortTimer)
@@ -1144,6 +1393,7 @@ private[spark] class TaskSchedulerImpl(
     taskIdToExecutorId.remove(tid).foreach { executorId =>
       executorIdToRunningTaskIds.get(executorId).foreach { _.remove(tid) }
     }
+    setOomRetryReservation(oomRetryReservation.filterNot(_.taskId.contains(tid)))
   }
 
   /**
@@ -1152,6 +1402,7 @@ private[spark] class TaskSchedulerImpl(
    * of any running tasks, since the loss reason defines whether we'll fail those tasks.
    */
   private def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
+    setOomRetryReservation(oomRetryReservation.filterNot(_.executorId == executorId))
     // The tasks on the lost executor may not send any more status updates (because the executor
     // has been lost), so they should be cleaned up here.
     executorIdToRunningTaskIds.remove(executorId).foreach { taskIds =>

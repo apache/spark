@@ -2639,6 +2639,29 @@ package object config {
       .intConf
       .createWithDefault(5)
 
+  private[spark] val SCHEDULER_OOM_RETRY_ENABLED =
+    ConfigBuilder("spark.scheduler.oomRetry.enabled")
+      .doc("Prefer idle executors for tasks retried after an out-of-memory failure. After two " +
+        "OOM failures of a task, temporarily reserve an executor so its retry can run alone. " +
+        "At most one executor per application is reserved, and existing tasks are allowed to " +
+        "finish before the retry starts. OOM retries may ignore preferred locations, but still " +
+        "respect exclusions and resource requirements. Task CPUs and executor memory are " +
+        "unchanged. Barrier and pipelined tasks are excluded and OOM retries are not speculated.")
+      .version("5.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SCHEDULER_OOM_RETRY_ISOLATION_TIMEOUT =
+    ConfigBuilder("spark.scheduler.oomRetry.isolationTimeout")
+      .doc("Maximum wait for an isolated retry after an OOM failure when " +
+        "spark.scheduler.oomRetry.enabled is true. After this time the pending retry falls " +
+        "back to ordinary placement; another OOM failure starts a new wait. This does not " +
+        "limit the running time of a retry that has already started in isolation.")
+      .version("5.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "OOM retry isolation timeout must be positive")
+      .createWithDefaultString("60s")
+
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
     ConfigBuilder("spark.scheduler.revive.interval")
       .version("0.8.1")

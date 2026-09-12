@@ -726,10 +726,12 @@ class SparkContext(config: SparkConf) extends Logging {
       if (dynamicAllocationEnabled) {
         schedulerBackend match {
           case b: ExecutorAllocationClient =>
+            val taskScheduler = _taskScheduler
             Some(new ExecutorAllocationManager(
               schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf,
               cleaner = cleaner, resourceProfileManager = resourceProfileManager,
-              reliableShuffleStorage = _shuffleDriverComponents.supportsReliableStorage()))
+              reliableShuffleStorage = _shuffleDriverComponents.supportsReliableStorage(),
+              oomRetryReservationInfo = () => taskScheduler.oomRetryReservationInfo))
           case _ =>
             None
         }
