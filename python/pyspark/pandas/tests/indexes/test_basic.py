@@ -233,6 +233,65 @@ class IndexBasicMixin:
         # Index vs MultiIndex (different type) -> not equal
         self.assert_eq(pidx.equals(pmidx), psidx.equals(psmidx))
 
+    def test_identical(self):
+        # Single Index
+        pidx = pd.Index(["a", "b", "c"], name="x")
+        psidx = ps.from_pandas(pidx)
+        self.assert_eq(pidx.identical(pidx), psidx.identical(psidx))
+
+        with option_context("compute.ops_on_diff_frames", True):
+            # same elements and same name -> True
+            self.assert_eq(
+                pidx.identical(pd.Index(["a", "b", "c"], name="x")),
+                psidx.identical(ps.Index(["a", "b", "c"], name="x")),
+            )
+            # same elements but different name -> False (unlike equals)
+            self.assert_eq(
+                pidx.identical(pd.Index(["a", "b", "c"], name="y")),
+                psidx.identical(ps.Index(["a", "b", "c"], name="y")),
+            )
+            # different elements -> False
+            self.assert_eq(
+                pidx.identical(pd.Index(["b", "b", "a"], name="x")),
+                psidx.identical(ps.Index(["b", "b", "a"], name="x")),
+            )
+
+        # MultiIndex
+        pmidx = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")], names=["n1", "n2"])
+        psmidx = ps.from_pandas(pmidx)
+        self.assert_eq(pmidx.identical(pmidx), psmidx.identical(psmidx))
+
+        with option_context("compute.ops_on_diff_frames", True):
+            # same tuples and same names -> True
+            self.assert_eq(
+                pmidx.identical(
+                    pd.MultiIndex.from_tuples(
+                        [("a", "x"), ("b", "y"), ("c", "z")], names=["n1", "n2"]
+                    )
+                ),
+                psmidx.identical(
+                    ps.MultiIndex.from_tuples(
+                        [("a", "x"), ("b", "y"), ("c", "z")], names=["n1", "n2"]
+                    )
+                ),
+            )
+            # same tuples but different names -> False
+            self.assert_eq(
+                pmidx.identical(
+                    pd.MultiIndex.from_tuples(
+                        [("a", "x"), ("b", "y"), ("c", "z")], names=["m1", "m2"]
+                    )
+                ),
+                psmidx.identical(
+                    ps.MultiIndex.from_tuples(
+                        [("a", "x"), ("b", "y"), ("c", "z")], names=["m1", "m2"]
+                    )
+                ),
+            )
+
+        # Index vs MultiIndex (different type) -> not identical
+        self.assert_eq(pidx.identical(pmidx), psidx.identical(psmidx))
+
 
 class IndexBasicTests(
     IndexBasicMixin,
