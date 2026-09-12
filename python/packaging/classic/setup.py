@@ -298,6 +298,7 @@ try:
             "pyspark.sql.connect.shell",
             "pyspark.sql.connect.streaming",
             "pyspark.sql.connect.streaming.worker",
+            "pyspark.sql.eval_handlers",
             "pyspark.sql.functions",
             "pyspark.sql.pandas",
             "pyspark.sql.plot",

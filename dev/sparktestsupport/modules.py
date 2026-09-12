@@ -725,6 +725,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_geographytype",
         "pyspark.sql.tests.test_geometrytype",
+        "pyspark.sql.tests.test_eval_type_handlers",
         "pyspark.sql.tests.test_python_worker_env",
         "pyspark.sql.tests.test_udf",
         "pyspark.sql.tests.test_udf_combinations",
