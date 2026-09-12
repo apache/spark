@@ -19,20 +19,24 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.InMemoryPartitionPredicateDeleteCatalog
+import org.apache.spark.sql.connector.catalog.{InMemoryPartitionPredicateDeleteCatalog, InMemoryPartitionPredicateDeleteTable}
 import org.apache.spark.sql.connector.expressions.PartitionFieldReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
+import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
-import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.QueryExecutionListener
 
 /**
  * Tests for metadata-only delete optimization using second-pass
- * PartitionPredicate (see SPARK-55596).
+ * PartitionPredicate (see SPARK-55596), and for the second pass in the scan of a
+ * group-based UPDATE or MERGE (GroupBasedRowLevelOperationScanPlanning).
  */
-class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
+class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
+  with AdaptiveSparkPlanHelper {
 
   private val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   private val catalogName = "ppd_cat"
@@ -241,6 +245,31 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
     }
   }
 
+  // A group-based UPDATE reads the table through RowLevelOperationTable. The wrapper reports
+  // the table's partitioning, so the row-level scan, which pushes V2 predicates iteratively,
+  // receives the IN on the partition column as a second-pass PartitionPredicate, and only the
+  // matching partitions are read and replaced.
+  test("SPARK-59457: group-based UPDATE receives a second-pass PartitionPredicate") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep)")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+
+      val plan = executeAndKeepPlan {
+        sql(s"UPDATE $deleteTableName SET salary = salary + 1 WHERE dep IN ('hr', 'software')")
+      }
+      assertRowLevelScanPrunedByPartitionPredicate(plan,
+        expectedOrdinals = Array(0),
+        expectedPartitionFieldNames = Array("dep"),
+        expectedReplacedDeps = Set("hr", "software"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "hr", 101), Row(2, "software", 201), Row(3, "marketing", 300)))
+    }
+  }
+
   private def executeAndKeepPlan(func: => Unit): SparkPlan = {
     var executedPlan: SparkPlan = null
 
@@ -355,6 +384,35 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
               s"'$expected', got '$actual'")
         }
     }
+  }
+
+  /**
+   * Asserts that the group-based plan's row-level scan was pruned by one PartitionPredicate with
+   * the given references, and that only the partitions with the given `dep` values, the first
+   * partition field, were replaced.
+   */
+  private def assertRowLevelScanPrunedByPartitionPredicate(
+      plan: SparkPlan,
+      expectedOrdinals: Array[Int],
+      expectedPartitionFieldNames: Array[String],
+      expectedReplacedDeps: Set[String]): Unit = {
+    assert(plan.isInstanceOf[ReplaceDataExec],
+      s"Expected ReplaceDataExec but got: ${plan.getClass.getSimpleName}")
+    val scans = collect(plan) { case s: BatchScanExec => s }
+    val scan = scans.map(_.scan).collectFirst {
+      case s: InMemoryPartitionPredicateDeleteTable#PartitionPredicateRowLevelBatchScan => s
+    }.getOrElse(fail("Expected the row-level scan of the in-memory table"))
+    assertPartitionFieldReferences(
+      scan.pushedPartitionPredicates.toArray, Seq(expectedOrdinals), expectedPartitionFieldNames)
+
+    val table = scans.map(_.table).collectFirst {
+      case RowLevelOperationTable(t: InMemoryPartitionPredicateDeleteTable, _) => t
+    }.getOrElse(fail("Expected the row-level operation table"))
+    val replacedDeps = table.replacedPartitions.map(_.head.toString)
+    assert(
+      replacedDeps.toSet === expectedReplacedDeps &&
+        replacedDeps.size === expectedReplacedDeps.size,
+      s"Expected replaced partitions for $expectedReplacedDeps, got ${table.replacedPartitions}")
   }
 
   private def assertDeleteWithRowLevel(query: String): Unit = {
