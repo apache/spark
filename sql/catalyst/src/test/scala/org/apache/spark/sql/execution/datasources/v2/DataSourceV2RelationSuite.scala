@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util
 import java.util.OptionalLong
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUti
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.INTERNAL_METADATA_KEYS
-import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Column, SupportsReportCatalogStatistics, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
@@ -473,6 +473,47 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
       assert(sizeStats.sizeInBytes === BigInt(1000))
       assert(sizeStats.rowCount.isEmpty)
       assert(sizeStats.attributeStats.isEmpty)
+    }
+  }
+
+  private def baseRel(table: Table): DataSourceV2Relation =
+    DataSourceV2Relation(table, Seq.empty, None, None, CaseInsensitiveStringMap.empty())
+
+  test("DataSourceV2Relation.computeStats returns catalog stats when supported") {
+    val table = new FakeTableWithSchema() with SupportsReportCatalogStatistics {
+      override def estimateCatalogStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.of(128L)
+        override def numRows(): OptionalLong = OptionalLong.of(10L)
+      }
+    }
+    withSQLConf(SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "99999") {
+      val stats = baseRel(table).computeStats()
+      assert(stats.sizeInBytes === BigInt(128))
+    }
+  }
+
+  test("DataSourceV2Relation.computeStats throws before pushdown when no catalog stats") {
+    // A table that does not report catalog statistics must preserve the pre-existing guard: stats
+    // should not be accessed before pushdown, so computeStats fails loudly under testing (rather
+    // than silently returning inaccurate full-table stats).
+    val table = new FakeTableWithSchema()
+    val e = intercept[SparkException] {
+      baseRel(table).computeStats()
+    }
+    assert(e.getMessage.contains("BUG: computeStats called before pushdown on DSv2 relation"))
+  }
+
+  test("DataSourceV2Relation.computeStats returns default size when catalog stats are empty") {
+    val table = new FakeTableWithSchema() with SupportsReportCatalogStatistics {
+      override def estimateCatalogStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.empty()
+      }
+    }
+    withSQLConf(SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "77777") {
+      val stats = baseRel(table).computeStats()
+      assert(stats.sizeInBytes === BigInt(77777))
+      assert(stats.rowCount.isEmpty)
     }
   }
 
