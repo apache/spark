@@ -89,22 +89,23 @@ case class CollectFrequentItems(
     mutable.Map.empty[Any, Long]
 
   private def add(map: mutable.Map[Any, Long], key: Any, count: Long): mutable.Map[Any, Long] = {
-    if (map.contains(key)) {
-      map(key) += count
-    } else {
-      if (map.size < size) {
-        map += key -> count
-      } else {
-        val minCount = if (map.values.isEmpty) 0 else map.values.min
-        val remainder = count - minCount
-        if (remainder >= 0) {
-          map += key -> count // something will get kicked out, so we can add this
-          map.filterInPlace((k, v) => v > minCount)
-          map.mapValuesInPlace((k, v) => v - minCount)
+    map.get(key) match {
+      case Some(existing) =>
+        map(key) = existing + count
+      case None =>
+        if (map.size < size) {
+          map += key -> count
         } else {
-          map.mapValuesInPlace((k, v) => v - count)
+          val minCount = if (map.values.isEmpty) 0 else map.values.min
+          val remainder = count - minCount
+          if (remainder >= 0) {
+            map += key -> count // something will get kicked out, so we can add this
+            map.filterInPlace((k, v) => v > minCount)
+            map.mapValuesInPlace((k, v) => v - minCount)
+          } else {
+            map.mapValuesInPlace((k, v) => v - count)
+          }
         }
-      }
     }
     map
   }
