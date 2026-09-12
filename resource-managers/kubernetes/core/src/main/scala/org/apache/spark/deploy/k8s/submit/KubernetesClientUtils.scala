@@ -51,7 +51,31 @@ object KubernetesClientUtils extends Logging {
   @Since("3.3.0")
   def configMapName(prefix: String): String = {
     val suffix = "-conf-map"
-    s"${prefix.take(KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH - suffix.length)}$suffix"
+    configMapName(prefix, suffix)
+  }
+
+  /**
+   * Generate a ConfigMap name from a prefix and suffix, truncating or falling back to a
+   * unique name if the combination exceeds the DNS subdomain length limit.
+   *
+   * @param prefix The resource name prefix (typically derived from spark.app.name)
+   * @param suffix The ConfigMap suffix (e.g., "-hadoop-config", "-krb5-file")
+   * @return A valid ConfigMap name that fits within Kubernetes DNS subdomain limits
+   * @since 4.2.0
+   */
+  @Since("4.2.0")
+  def configMapName(prefix: String, suffix: String): String = {
+    val combined = s"$prefix$suffix"
+    if (combined.length <= KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH) {
+      combined
+    } else {
+      // Fall back to spark-<uniqueID><suffix> when prefix+suffix exceeds the limit
+      val fallback = s"spark-${KubernetesUtils.uniqueID()}$suffix"
+      logWarning(s"ConfigMap name '$combined' exceeds the maximum length of " +
+        s"$KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH characters. " +
+        s"Using fallback name: $fallback")
+      fallback
+    }
   }
 
   @Since("3.1.0")
