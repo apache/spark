@@ -858,6 +858,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .toPandas(),
         )
 
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .selectExpr(("id * 2", "cast(name as long) as name"))
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .selectExpr(("id * 2", "cast(name as long) as name"))
+            .toPandas(),
+        )
+
     def test_select_star(self):
         data = [Row(a=1, b=Row(c=2, d=Row(e=3)))]
 
