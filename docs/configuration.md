@@ -450,6 +450,17 @@ of the most common options to set are:
   <td>3.5.0</td>
 </tr>
 <tr>
+  <td><code>spark.log.level.&lt;logger&gt;</code></td>
+  <td>(none)</td>
+  <td>
+    When set, overrides the level of the named logger on the driver and the executors, for example
+    <code>spark.log.level.org.apache.spark.sql.execution=DEBUG</code>. Applied after
+    <code>spark.log.level</code>, which sets the root logger, so it wins for that logger. Valid log
+    levels include: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN".
+  </td>
+  <td>5.0.0</td>
+</tr>
+<tr>
   <td><code>spark.driver.supervise</code></td>
   <td>false</td>
   <td>
