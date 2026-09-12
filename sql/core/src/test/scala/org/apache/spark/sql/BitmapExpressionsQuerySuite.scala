@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkArithmeticException
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.functions.{
   bitmap_and,
@@ -25,6 +26,7 @@ import org.apache.spark.sql.functions.{
   bitmap_bit_position,
   bitmap_bucket_number,
   bitmap_construct_agg,
+  bitmap_contains,
   bitmap_count,
   bitmap_or,
   bitmap_or_agg,
@@ -214,6 +216,141 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
       df.select(bitmap_count(to_binary(col("a"), lit("hex")))),
       Seq(Row(16))
     )
+  }
+
+  test("bitmap_contains basic") {
+    val df = Seq("01").toDF("a")
+    checkAnswer(
+      df.selectExpr("bitmap_contains(to_binary(a, 'hex'), 0L)"),
+      Seq(Row(true)))
+    checkAnswer(
+      df.selectExpr("bitmap_contains(to_binary(a, 'hex'), 1L)"),
+      Seq(Row(false)))
+    checkAnswer(
+      df.select(bitmap_contains(to_binary(col("a"), lit("hex")), lit(0L))),
+      Seq(Row(true)))
+    checkAnswer(
+      spark.sql("SELECT bitmap_contains(X'01', -1L)"),
+      Seq(Row(false)))
+    checkAnswer(
+      spark.sql("SELECT bitmap_contains(X'01', 8L)"),
+      Seq(Row(false)))
+    checkAnswer(
+      spark.sql("SELECT bitmap_contains(X'01', 32768L)"),
+      Seq(Row(false)))
+  }
+
+  test("bitmap_contains with bitmap_construct_agg and predicates") {
+    val df = Seq(1, 2, 4).toDF("value")
+    val bitmap = df.select(
+      bitmap_construct_agg(bitmap_bit_position(col("value"))).alias("bitmap"))
+
+    checkAnswer(
+      bitmap.select(bitmap_contains(col("bitmap"), lit(1L))),
+      Seq(Row(true)))
+    checkAnswer(
+      bitmap.where(bitmap_contains(col("bitmap"), lit(3L))).selectExpr("1"),
+      Seq(Row(1)))
+    checkAnswer(
+      bitmap.where(bitmap_contains(col("bitmap"), lit(2L))).selectExpr("1"),
+      Seq.empty)
+
+    val result = spark.sql(
+      """
+        |SELECT CASE
+        |  WHEN bitmap_contains(bitmap_construct_agg(bitmap_bit_position(value)), 0L)
+        |  THEN 'set' ELSE 'unset' END
+        |FROM VALUES (1), (2), (4) AS tab(value)
+        |""".stripMargin)
+    checkAnswer(result, Seq(Row("set")))
+  }
+
+  test("bitmap_contains in a bucketed join condition") {
+    val result = spark.sql(
+      """
+        |WITH bitmaps AS (
+        |  SELECT bitmap_bucket_number(value) AS bucket,
+        |    bitmap_construct_agg(bitmap_bit_position(value)) AS bitmap
+        |  FROM VALUES (1L), (32769L) AS src(value)
+        |  GROUP BY bitmap_bucket_number(value)
+        |)
+        |SELECT probe.value
+        |FROM bitmaps
+        |JOIN VALUES (1L), (2L), (32769L), (32770L) AS probe(value)
+        |  ON bitmaps.bucket = bitmap_bucket_number(probe.value)
+        |  AND bitmap_contains(bitmaps.bitmap, bitmap_bit_position(probe.value))
+        |ORDER BY probe.value
+        |""".stripMargin)
+    checkAnswer(result, Seq(Row(1L), Row(32769L)))
+  }
+
+  test("bitmap_contains with NULL inputs and codegen") {
+    val query =
+      """
+        |SELECT bitmap_contains(
+        |  CASE WHEN id = 1 THEN CAST(NULL AS BINARY) ELSE X'01' END,
+        |  CASE WHEN id = 2 THEN CAST(NULL AS BIGINT) ELSE 0L END)
+        |FROM range(3)
+        |""".stripMargin
+
+    Seq(true, false).foreach { wholeStageCodegenEnabled =>
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageCodegenEnabled.toString) {
+        checkAnswer(spark.sql(query), Seq(Row(true), Row(null), Row(null)))
+      }
+    }
+
+    checkAnswer(
+      spark.sql(
+        "SELECT bitmap_contains(X'01', NULL), bitmap_contains(NULL, 0L), " +
+          "bitmap_contains(NULL, NULL)"),
+      Seq(Row(null, null, null)))
+  }
+
+  test("bitmap_contains with numeric positions") {
+    val bitmap = to_binary(lit("01"), lit("hex"))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      // Non-ANSI casts truncate finite fractions and convert NaN to zero.
+      checkAnswer(
+        spark.range(1).select(bitmap_contains(bitmap, lit(0.9F))),
+        Seq(Row(true)))
+      checkAnswer(
+        spark.range(1).select(bitmap_contains(bitmap, lit(Double.NaN))),
+        Seq(Row(true)))
+      checkAnswer(
+        spark.sql("SELECT bitmap_contains(X'01', CAST(0.9 AS DECIMAL(2, 1)))"),
+        Seq(Row(true)))
+      checkAnswer(
+        spark.sql("SELECT bitmap_contains(X'01', 18446744073709551617)"),
+        Seq(Row(false)))
+      checkAnswer(
+        spark.range(1).select(bitmap_contains(bitmap, lit(Float.PositiveInfinity))),
+        Seq(Row(false)))
+      checkAnswer(
+        spark.range(1).select(bitmap_contains(bitmap, lit(Double.NegativeInfinity))),
+        Seq(Row(false)))
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkAnswer(
+        spark.sql("SELECT bitmap_contains(X'01', CAST(0.9 AS DECIMAL(2, 1)))"),
+        Seq(Row(true)))
+      Seq(
+        bitmap_contains(bitmap, lit(Float.NaN)),
+        bitmap_contains(bitmap, lit(Float.PositiveInfinity)),
+        bitmap_contains(bitmap, lit(Double.NaN)),
+        bitmap_contains(bitmap, lit(Double.NegativeInfinity))
+      ).foreach { expression =>
+        val error = intercept[SparkArithmeticException] {
+          spark.range(1).select(expression).collect()
+        }
+        assert(error.getCondition == "CAST_OVERFLOW")
+      }
+      val decimalOverflow = intercept[SparkArithmeticException] {
+        spark.sql("SELECT bitmap_contains(X'01', 18446744073709551617)").collect()
+      }
+      assert(decimalOverflow.getCondition == "CAST_OVERFLOW")
+    }
   }
 
   test("bitmap_or_agg") {
@@ -536,6 +673,49 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
         "inputSql" -> "\"a\"",
         "inputType" -> "\"INT\""),
       context = ExpectedContext(fragment = "bitmap_and_agg(a)", start = 0, stop = 16))
+  }
+
+  test("bitmap_contains called with non-binary type") {
+    val df = Seq(12).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("bitmap_contains(a, 0)")
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"bitmap_contains(a, 0)\"",
+        "paramIndex" -> "first",
+        "requiredType" -> "\"BINARY\"",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\""
+      ),
+      context = ExpectedContext(
+        fragment = "bitmap_contains(a, 0)",
+        start = 0,
+        stop = 20
+      )
+    )
+  }
+
+  test("bitmap_contains called with non-numeric position") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("SELECT bitmap_contains(X'01', '0')")
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"bitmap_contains(X'01', 0)\"",
+        "paramIndex" -> "second",
+        "requiredType" -> "\"BIGINT\"",
+        "inputSql" -> "\"0\"",
+        "inputType" -> "\"STRING\""
+      ),
+      context = ExpectedContext(
+        fragment = "bitmap_contains(X'01', '0')",
+        start = 7,
+        stop = 33
+      )
+    )
   }
 
   test("bitmap_xor_agg") {
