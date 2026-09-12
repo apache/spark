@@ -2009,6 +2009,31 @@ package object config {
       .checkValue(v => v > 0, "The value should be a positive integer.")
       .createWithDefault(2000)
 
+  private[spark] val SHUFFLE_MAP_STATUS_CHECKSUM_ENABLED =
+    ConfigBuilder("spark.shuffle.mapStatus.checksum.enabled")
+      .doc("When true, the mapper computes an integrity checksum over the non-empty partition " +
+        "indices of each MapStatus. Each reducer verifies the checksum on receipt; a mismatch " +
+        "raises a FetchFailedException that triggers stage retry via Spark's standard fetch-" +
+        "failure recovery path.")
+      .version("4.4.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SHUFFLE_MAP_STATUS_CHECKSUM_ALGORITHM =
+    ConfigBuilder("spark.shuffle.mapStatus.checksum.algorithm")
+      .doc("The algorithm used to compute the MapStatus checksum. Currently, ADLER32 and CRC32 " +
+        "are supported. The default is CRC32. Only meaningful when " +
+        s"${SHUFFLE_MAP_STATUS_CHECKSUM_ENABLED.key} is true.")
+      .version("4.4.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .transform(_.toUpperCase(java.util.Locale.ROOT))
+      .checkValues(Set("ADLER32", "CRC32"))
+      .createWithDefault("CRC32")
+
   private[spark] val SHUFFLE_USE_OLD_FETCH_PROTOCOL =
     ConfigBuilder("spark.shuffle.useOldFetchProtocol")
       .doc("Whether to use the old protocol while doing the shuffle block fetching. " +
