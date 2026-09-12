@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.execution.window.{Final, WindowGroupLimitExec}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructField, StructType}
@@ -3329,5 +3330,111 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "SELECT :p = 'HELLO', :p = 'HELLO' COLLATE UTF8_LCASE",
         Map("p" -> "hello")),
       Row(false, true))
+  }
+
+  test("RANK/DENSE_RANK/ROW_NUMBER with collated PARTITION BY via WindowGroupLimitExec") {
+    // threshold=1 forces InferWindowGroupLimit -> WindowGroupLimitExec for WHERE r <= 1
+    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "1") {
+      withTable("t") {
+        sql("CREATE TABLE t (s STRING COLLATE UTF8_LCASE, i INT) USING PARQUET")
+        sql("INSERT INTO t VALUES ('foo', 1), ('FOO', 2), ('bar', 3), ('BAR', 4)")
+
+        // 'foo'/'FOO' and 'bar'/'BAR' collapse to one partition each under UTF8_LCASE.
+        val rankDf = sql("""SELECT s, i, r FROM (
+                           |  SELECT s, i, RANK() OVER (PARTITION BY s ORDER BY i) AS r
+                           |  FROM t) WHERE r <= 1""".stripMargin)
+        assert(collectFirst(rankDf.queryExecution.executedPlan) {
+          case _: WindowGroupLimitExec => ()
+        }.isDefined, "expected WindowGroupLimitExec in plan")
+        checkAnswer(rankDf, Row("foo", 1, 1) :: Row("bar", 3, 1) :: Nil)
+
+        val denseDf = sql("""SELECT s, i, r FROM (
+                            |  SELECT s, i, DENSE_RANK() OVER (PARTITION BY s ORDER BY i) AS r
+                            |  FROM t) WHERE r <= 1""".stripMargin)
+        assert(collectFirst(denseDf.queryExecution.executedPlan) {
+          case _: WindowGroupLimitExec => ()
+        }.isDefined, "expected WindowGroupLimitExec in plan for DENSE_RANK")
+        checkAnswer(denseDf, Row("foo", 1, 1) :: Row("bar", 3, 1) :: Nil)
+
+        val rnDf = sql("""SELECT s, i, r FROM (
+                         |  SELECT s, i, ROW_NUMBER() OVER (PARTITION BY s ORDER BY i) AS r
+                         |  FROM t) WHERE r <= 1""".stripMargin)
+        assert(collectFirst(rnDf.queryExecution.executedPlan) {
+          case _: WindowGroupLimitExec => ()
+        }.isDefined, "expected WindowGroupLimitExec in plan for ROW_NUMBER")
+        checkAnswer(rnDf, Row("foo", 1, 1) :: Row("bar", 3, 1) :: Nil)
+      }
+
+      // UTF8_BINARY: 'foo' and 'FOO' are distinct partitions, so all four rows get rank 1.
+      withTable("t2") {
+        sql("CREATE TABLE t2 (s STRING, i INT) USING PARQUET")
+        sql("INSERT INTO t2 VALUES ('foo', 1), ('FOO', 2), ('bar', 3), ('BAR', 4)")
+
+        checkAnswer(
+          sql("""SELECT s, i, r FROM (
+                |  SELECT s, i, RANK() OVER (PARTITION BY s ORDER BY i) AS r
+                |  FROM t2) WHERE r <= 1""".stripMargin),
+          Row("FOO", 2, 1) :: Row("BAR", 4, 1) :: Row("bar", 3, 1) :: Row("foo", 1, 1) :: Nil)
+      }
+    }
+  }
+
+  test("WindowGroupLimitExec collapses collated partitions (forwarded-row regression)") {
+    // The final query result is identical with or without collation-aware grouping -- the
+    // downstream WindowExec + Filter always recompute it -- so checkAnswer alone cannot
+    // catch a regression to binary grouping. The only observable that distinguishes the
+    // fix is how many rows WindowGroupLimitExec forwards: binary grouping fails to collapse
+    // 'a'/'A' and forwards every row, while collation-aware grouping collapses each
+    // UTF8_LCASE partition to its top-k.
+    //
+    // We assert on the Final node's numOutputRows only. With a single shuffle partition
+    // every window partition lands in one reduce task, so that count is deterministic
+    // across environments (2 = one survivor per collated partition). The Partial node's
+    // count depends on scan parallelism, so it is intentionally excluded. AQE is disabled
+    // to keep executedPlan stable and avoid shuffle-partition coalescing.
+    withSQLConf(
+        SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      withTable("t") {
+        sql("CREATE TABLE t (s STRING COLLATE UTF8_LCASE, i INT) USING PARQUET")
+        // Alternating spellings within each UTF8_LCASE partition maximize the gap: under
+        // binary grouping every adjacent row starts a new group. Distinct ORDER BY values
+        // (i) keep which row survives WHERE r <= 1 deterministic (no ties).
+        sql("""INSERT INTO t VALUES
+              |  ('a', 1), ('A', 2), ('a', 3), ('A', 4), ('a', 5), ('A', 6),
+              |  ('b', 7), ('B', 8), ('b', 9), ('B', 10)""".stripMargin)
+        val df = sql("""SELECT s, i, r FROM (
+                       |  SELECT s, i, ROW_NUMBER() OVER (PARTITION BY s ORDER BY i) AS r
+                       |  FROM t) WHERE r <= 1""".stripMargin)
+        // Collation-correct answer, unaffected by the fix.
+        checkAnswer(df, Row("a", 1, 1) :: Row("b", 7, 1) :: Nil)
+        val finalForwarded = collect(df.queryExecution.executedPlan) {
+          case w: WindowGroupLimitExec if w.mode == Final =>
+            w.metrics("numOutputRows").value
+        }.sum
+        // Post-fix collapses each collated partition to its single survivor (2 rows).
+        // Pre-fix binary grouping forwards all 10 rows.
+        assert(finalForwarded == 2,
+          s"WindowGroupLimitExec(Final) should forward 2 rows, got $finalForwarded")
+      }
+    }
+  }
+
+  test("WindowGroupLimitExec collation grouping with Double in mixed partition spec") {
+    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "1") {
+      withTable("t_dbl") {
+        sql("CREATE TABLE t_dbl (d DOUBLE, s STRING COLLATE UTF8_LCASE, i INT) USING PARQUET")
+        sql("INSERT INTO t_dbl VALUES (-0.0, 'foo', 1), (0.0, 'foo', 2)")
+        // UTF8_LCASE on s is non-binary-stable, so InterpretedOrdering is used for all
+        // fields including d. SQLOrderingUtil.compareDoubles treats -0.0 == +0.0, so both
+        // rows land in one partition group and only the rank-1 row survives the filter.
+        val df = sql(
+          """SELECT d, s, i FROM (
+            |  SELECT d, s, i, RANK() OVER (PARTITION BY d, s ORDER BY i) AS r
+            |  FROM t_dbl) WHERE r <= 1""".stripMargin)
+        assert(df.count() == 1, "-0.0 and +0.0 should be treated as equal partition keys")
+      }
+    }
   }
 }
