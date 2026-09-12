@@ -15,11 +15,13 @@
 # limitations under the License.
 #
 
+import unittest
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.utils import is_ansi_mode_test
@@ -158,7 +160,11 @@ class NumMulDivTestsMixin:
             np.signbit(pser // 3.0).tolist(), np.signbit((psser // 3.0).to_pandas()).tolist()
         )
 
-        # The only quotient that does not fit in a long, where pandas wraps around.
+    @unittest.skipIf(
+        LooseVersion(np.__version__) < LooseVersion("1.24.0"),
+        "NumPy < 1.24 leaves integer floor division overflow undefined",
+    )
+    def test_floordiv_integer_overflow(self):
         pser = pd.Series([-(2**63)])
         psser = ps.from_pandas(pser)
         self.assert_eq((pser // -1).astype(float), psser // -1)
