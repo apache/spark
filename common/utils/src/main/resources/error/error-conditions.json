@@ -10107,11 +10107,6 @@
       "Cannot mix year-month and day-time fields: <literal>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0031" : {
-    "message" : [
-      "Invalid number of buckets: <describe>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0032" : {
     "message" : [
       "Duplicated table paths found: '<pathOne>' and '<pathTwo>'. LOCATION and the case insensitive key 'path' in OPTIONS are all used to indicate the custom table path, you can only specify one of them."
