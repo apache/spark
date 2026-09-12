@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{FileAlreadyExistsException, LocalFileSystem, Path, RawLocalFileSystem}
 
-import org.apache.spark.internal.config.CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME
+import org.apache.spark.internal.config.{CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME, CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED}
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.TaskMemoryManager
@@ -769,6 +769,108 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
         condition = "FAILED_CREATE_CHECKPOINT_DIRECTORY",
         sqlState = Some("58030"),
         parameters = Map("path" -> rddPath.toString))
+    }
+  }
+
+  // SPARK-58883: truncated checkpoint directory (trailing part-* file deleted) should be
+  // detected when reading back via SparkContext.checkpointFile.
+  test("SPARK-58883: reading a truncated checkpoint directory throws an error") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf().set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+      rdd.collect()
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+
+      // Delete the last partition file; the remaining files are still contiguous so the
+      // old contiguity check would pass silently and return a 3-partition RDD.
+      val lastPartFile = new Path(checkpointPath, "part-00003")
+      assert(fs.exists(lastPartFile), "expected part-00003 to exist before deletion")
+      fs.delete(lastPartFile, false)
+
+      // Reading back should now throw because _num_partitions records the original count.
+      val recoveredRDD = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+      checkError(
+        exception = intercept[SparkException](recoveredRDD.partitions),
+        condition = "CHECKPOINT_TRUNCATED_DIRECTORY",
+        sqlState = Some("58030"),
+        parameters = Map(
+          "path" -> rdd.getCheckpointFile.get,
+          "expected" -> "4",
+          "found" -> "3"))
+
+      // With the config disabled, the same truncated directory should load silently.
+      sc.conf.set(CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED, false)
+      try {
+        val suppressedRDD = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+        assert(suppressedRDD.partitions.length === 3)
+      } finally {
+        sc.conf.set(CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED, true)
+      }
+    }
+  }
+
+  test("SPARK-58883: checkpoint directory without _num_partitions is read without error") {
+    // Backward compatibility: a checkpoint written before SPARK-58883 has no _num_partitions
+    // file. Removing it must not prevent the RDD from being read.
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf().set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+      rdd.collect()
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+
+      // Remove the metadata file to simulate a pre-SPARK-58883 checkpoint.
+      val countFile = new Path(checkpointPath, "_num_partitions")
+      assert(fs.exists(countFile), "expected _num_partitions to exist before deletion")
+      fs.delete(countFile, false)
+
+      // Must recover normally with all 4 partitions and correct data.
+      val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+      assert(recovered.partitions.length === 4)
+      assert(recovered.collect().sorted === (1 to 20).toArray)
+    }
+  }
+
+  test("SPARK-58883: corrupted _num_partitions file is tolerated") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf().set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+      rdd.collect()
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+
+      // Overwrite _num_partitions with garbage to simulate a partial write or corruption.
+      val countFile = new Path(checkpointPath, "_num_partitions")
+      assert(fs.exists(countFile), "expected _num_partitions to exist before corruption")
+      val out = fs.create(countFile, true)
+      out.write(Array[Byte](0xff.toByte, 0xfe.toByte))
+      out.close()
+
+      // A corrupted file must not prevent recovery, and a WARN must be logged to confirm
+      // the check ran and was suppressed, not silently skipped.
+      val logAppender = new LogAppender("corrupted _num_partitions")
+      withLogAppender(logAppender,
+          loggerNames = Seq(classOf[ReliableCheckpointRDD[_]].getName),
+          level = Some(org.apache.logging.log4j.Level.WARN)) {
+        val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+        assert(recovered.partitions.length === 4)
+        assert(recovered.collect().sorted === (1 to 20).toArray)
+      }
+      assert(logAppender.loggingEvents.exists(
+        _.getMessage.getFormattedMessage.contains("truncation detection will be inactive")))
     }
   }
 }
