@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.BoundReference
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, MapData}
+import org.apache.spark.sql.catalyst.expressions.{ArrayExists, ArrayForAll, ArrayTransform, BoundReference, InterpretedUnsafeProjection, LambdaFunction, Literal, NamedLambdaVariable}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 
@@ -67,6 +67,100 @@ class GenerateUnsafeProjectionSuite extends SparkFunSuite {
     assert(!result3.getStruct(0, 1).isNullAt(0))
     assert(!result3.getStruct(0, 2).isNullAt(0))
     assert(!result3.getStruct(0, 3).isNullAt(0))
+  }
+
+  // The values the writers hold as a reference, each declared non-null.
+  private def nestedTypes: Seq[(String, DataType)] = Seq(
+    ("array", ArrayType(StringType, containsNull = false)),
+    ("map", MapType(StringType, StringType, valueContainsNull = false)),
+    ("struct", (new StructType).add("x", StringType, nullable = false)))
+
+  test("null in a top-level field declared non-nullable is written as null") {
+    nestedTypes.foreach { case (name, dt) =>
+      withClue(s"type=$name: ") {
+        val exprs = BoundReference(0, dt, nullable = false) :: Nil
+        val result = GenerateUnsafeProjection.generate(exprs).apply(InternalRow(null))
+        assert(result.isNullAt(0))
+      }
+    }
+  }
+
+  test("null in a nested struct field declared non-nullable is written as null") {
+    nestedTypes.foreach { case (name, dt) =>
+      withClue(s"type=$name: ") {
+        val outer = (new StructType).add("f", dt, nullable = false)
+        val exprs = BoundReference(0, outer, nullable = true) :: Nil
+        val result = GenerateUnsafeProjection.generate(exprs).apply(InternalRow(InternalRow(null)))
+        assert(!result.isNullAt(0))
+        assert(result.getStruct(0, 1).isNullAt(0))
+      }
+    }
+  }
+
+  test("null element in an array declared containsNull = false is written as null") {
+    val dt = ArrayType(ArrayType(StringType, containsNull = false), containsNull = false)
+    val exprs = BoundReference(0, dt, nullable = false) :: Nil
+    val nonNullElement = new GenericArrayData(Array[Any](UTF8String.fromString("a")))
+    val input = new GenericArrayData(Array[Any](nonNullElement, null))
+    val result = GenerateUnsafeProjection.generate(exprs).apply(InternalRow(input))
+    assert(!result.isNullAt(0))
+    assert(result.getArray(0).numElements() == 2)
+    assert(!result.getArray(0).isNullAt(0))
+    assert(result.getArray(0).isNullAt(1))
+  }
+
+  test("the null bit mask is not carried over between rows") {
+    // All fields declared non-nullable, so the top-level mask is otherwise left uncleared.
+    val dt = ArrayType(StringType, containsNull = true)
+    val exprs = BoundReference(0, dt, nullable = false) :: Nil
+    val projection = GenerateUnsafeProjection.generate(exprs)
+
+    assert(projection.apply(InternalRow(null)).isNullAt(0))
+    val arr = new GenericArrayData(Array[Any](UTF8String.fromString("a")))
+    assert(!projection.apply(InternalRow(arr)).isNullAt(0),
+      "a non-null row must not inherit the previous row's null bit")
+  }
+
+  test("codegen and interpreted projections agree on an inaccurate nullability declaration") {
+    val dt = (new StructType)
+      .add("f", ArrayType(StringType, containsNull = false), nullable = false)
+    val exprs = BoundReference(0, dt, nullable = true) :: Nil
+    val row = InternalRow(InternalRow(null))
+
+    val codegen = GenerateUnsafeProjection.generate(exprs).apply(row).copy()
+    val interpreted = InterpretedUnsafeProjection.createProjection(exprs).apply(row).copy()
+    assert(codegen == interpreted)
+  }
+
+  test("a higher-order function over a declared-non-null null argument yields null") {
+    // The argument is declared non-nullable but is null at runtime. `exists` and `forall` return a
+    // primitive, so a result that is not reported as null would be a wrong answer rather than a
+    // dereference of null.
+    val nullArgument = BoundReference(
+      0, ArrayType(StringType, containsNull = true), nullable = false)
+    def lambdaVar(): NamedLambdaVariable = NamedLambdaVariable("x", StringType, nullable = true)
+
+    val identity = lambdaVar()
+    val exprs = Seq(
+      "transform" -> ArrayTransform(nullArgument, LambdaFunction(identity, Seq(identity))),
+      "exists" -> ArrayExists(
+        nullArgument, LambdaFunction(Literal(true), Seq(lambdaVar())),
+        followThreeValuedLogic = true),
+      "exists (legacy)" -> ArrayExists(
+        nullArgument, LambdaFunction(Literal(true), Seq(lambdaVar())),
+        followThreeValuedLogic = false),
+      "forall" -> ArrayForAll(nullArgument, LambdaFunction(Literal(true), Seq(lambdaVar()))))
+
+    exprs.foreach { case (name, expr) =>
+      withClue(s"$name: ") {
+        // `eval` returns null for a null argument whatever the declaration says, so the expression
+        // has to report itself nullable for the projection to keep the null.
+        assert(expr.nullable)
+        assert(expr.eval(InternalRow(null)) == null)
+        val result = GenerateUnsafeProjection.generate(expr :: Nil).apply(InternalRow(null))
+        assert(result.isNullAt(0))
+      }
+    }
   }
 }
 
