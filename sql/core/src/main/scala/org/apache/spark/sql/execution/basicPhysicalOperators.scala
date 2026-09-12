@@ -1147,14 +1147,12 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   // shell still agrees with the gate: `InputAdapter` delegates `output` and `supportsColumnar` to
   // its child, the other terms walk the subtree through it, and each of those is fixed for a given
   // set of children. `isPlainUnion` is not, which is why it is stamped instead.
-  //
-  // `isPlainUnion` is checked last of all: a union rejected on any other ground was never going to
-  // fuse, and asking the question would fix a decision that costs it SPARK-52921's exchange
-  // elimination for nothing.
   @transient private lazy val supportCodegenFailureReason: Option[String] = {
     val confs = codegenConfSnapshot
     if (!confs.unionCodegenEnabled) {
       Some("union-codegen-disabled")
+    } else if (!isPlainUnion) {
+      Some("partitioning-aware")
     } else if (children.exists(_.exists(_.isInstanceOf[UnionExec]))) {
       Some("nested-union")
     } else if (children.exists(_.exists(UnionExec.isKnownMultiInputRDDCodegen))) {
@@ -1168,8 +1166,6 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     } else if (children.exists(c =>
       c.output.zip(output).exists { case (src, tgt) => src.dataType != tgt.dataType })) {
       Some("type-mismatch")
-    } else if (!isPlainUnion) {
-      Some("partitioning-aware")
     } else {
       None
     }
