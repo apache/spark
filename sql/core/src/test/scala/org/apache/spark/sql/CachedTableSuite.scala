@@ -34,16 +34,11 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, GenericRow, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
-import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
-import org.apache.spark.sql.connector.catalog.CatalogPlugin
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, BufferedRows, CatalogPlugin, Identifier, InMemoryCatalog, TableWritePrivilege, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
-import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.catalog.InMemoryCatalog
-import org.apache.spark.sql.connector.catalog.TableWritePrivilege
-import org.apache.spark.sql.connector.catalog.TruncatableTable
 import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
@@ -2724,6 +2719,47 @@ class CachedTableSuite extends SharedSparkSession
       val result = sql(s"SELECT * FROM $t ORDER BY id")
       assertCached(result)
       checkAnswer(result, Seq(Row(1, "a", null), Row(2, "b", null)))
+    }
+  }
+
+  test("SPARK-59114: Class Cast Exception when disabling vectorized read after caching relation") {
+    def createCachedTable(
+        tablename: String,
+        schema: StructType,
+        location: String): Unit = {
+      val data = new BufferedRows(Seq.empty, schema)
+      for (i <- 1 to 10) {
+        data.withRow(new GenericInternalRow (Array[Any](i, i * 2)))
+      }
+      val loc = s"$location/$tablename"
+      val rows = data.rows.map[Row](i => new GenericRow(i.toSeq(schema).toArray))
+      import scala.jdk.CollectionConverters._
+      val df = spark.createDataFrame(new util.LinkedList[Row](rows.asJavaCollection), schema)
+      df.write.mode(SaveMode.Overwrite).parquet(loc)
+      spark.sql(
+        s"""
+           |CREATE TABLE $tablename USING PARQUET LOCATION '$loc'
+           |""".stripMargin
+      )
+      spark.catalog.cacheTable(tablename)
+    }
+    val t1 = "spark_catalog.default.tbl"
+    val t1_schema = StructType.fromDDL("c1_1 INT, c1_2 INT")
+    withTempPath { location =>
+      withTable(t1) {
+        withCache(t1) {
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key-> "true") {
+            createCachedTable(t1, t1_schema, location.getPath)
+            // the cached plan will be created with FileScanExec node wrapped with ColumnToRowExec
+            // as the parquet vector read is enabled
+            // since the cached buffers are lazily initialized, they will be empty
+          }
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+            val df = spark.table(t1).select($"c1_1", $"c1_2").where($"c1_2" > 10)
+            df.collect()
+          }
+        }
+      }
     }
   }
 
