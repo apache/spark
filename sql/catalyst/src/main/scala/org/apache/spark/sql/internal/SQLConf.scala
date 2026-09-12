@@ -7371,13 +7371,13 @@ object SQLConf {
         "optimized from O(M*N) calculation into O(M) calculation " +
         "using Hash lookup instead of Looping lookup. " +
         "Only support for singleColumn NAAJ for now. The optimization is also controlled by " +
-        "spark.sql.nullAwareAntiJoinBroadcastThreshold.")
+        "spark.sql.optimizeNullAwareAntiJoin.broadcastThreshold.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
 
   val NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD =
-    buildConf("spark.sql.nullAwareAntiJoinBroadcastThreshold")
+    buildConf("spark.sql.optimizeNullAwareAntiJoin.broadcastThreshold")
       .internal()
       .doc("Configures the maximum estimated size in bytes of the right side of a " +
         "single-column null-aware anti join for which Spark uses the broadcast hash join " +
