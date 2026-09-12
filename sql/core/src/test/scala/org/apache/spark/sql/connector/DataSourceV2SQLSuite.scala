@@ -341,7 +341,7 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"CREATE TABLE $t (d struct<a: INT, b: INT>) USING foo")
       checkError(
         exception = analysisException(s"describe $t d.a"),
-        condition = "_LEGACY_ERROR_TEMP_1060",
+        condition = "UNSUPPORTED_FEATURE.NESTED_COLUMN",
         parameters = Map(
           "command" -> "DESC TABLE COLUMN",
           "column" -> "d.a"))

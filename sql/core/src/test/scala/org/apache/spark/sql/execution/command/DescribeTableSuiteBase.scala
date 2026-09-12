@@ -173,10 +173,14 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   test("describe a nested column") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
       sql(s"CREATE TABLE $tbl (`a.b` int, col struct<x:int, y:string>) $defaultUsing")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"DESCRIBE TABLE $tbl col.x")
-      }.getMessage
-      assert(errMsg === "DESC TABLE COLUMN does not support nested column: col.x.")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"DESCRIBE TABLE $tbl col.x")
+        },
+        condition = "UNSUPPORTED_FEATURE.NESTED_COLUMN",
+        parameters = Map(
+          "command" -> "DESC TABLE COLUMN",
+          "column" -> "col.x"))
     }
   }
 
