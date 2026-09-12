@@ -27,6 +27,20 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
 
 class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
+
+  test("SPARK-59289: a collection whose members all need grouping still yields them") {
+    val a = AttributeReference("a", IntegerType)()
+    // Filtering the members on the strict `satisfies` would leave nothing here, and an empty
+    // `ShuffleSpecCollection` is rejected by its own `require`.
+    val ungroupedKeyed = KeyedPartitioning(
+      Seq(a), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
+    assert(!ungroupedKeyed.isGrouped, "test setup: no member serves the distribution as it stands")
+    val collection = PartitioningCollection(Seq(ungroupedKeyed, ungroupedKeyed))
+    val spec = collection.createShuffleSpec(ClusteredDistribution(Seq(a)))
+    assert(spec.asInstanceOf[ShuffleSpecCollection].specs.size == 2)
+    assert(spec.flatten.map(_.numPartitions) == Seq(3, 3))
+  }
+
   private val passThrough_a_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"a"), 10)
   private val passThrough_b_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"b"), 10)
   private val passThrough_c_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"c"), 10)
