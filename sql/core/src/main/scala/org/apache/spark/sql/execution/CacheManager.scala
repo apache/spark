@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -258,14 +259,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       case LogicalRelationWithTable(_, Some(catalogTable)) =>
         isSameName(name, catalogTable.identifier.nameParts, resolver)
 
-      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec) =>
+      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec, _) =>
         val nameInCache = v2Ident.toQualifiedNameParts(catalog)
         isSameName(name, nameInCache, resolver) && (includeTimeTravel || timeTravelSpec.isEmpty)
 
       case v: View =>
         isSameName(name, v.desc.identifier.nameParts, resolver)
 
-      case HiveTableRelation(catalogTable, _, _, _, _) =>
+      case HiveTableRelation(catalogTable, _, _, _, _, _) =>
         isSameName(name, catalogTable.identifier.nameParts, resolver)
 
       case _ => false
@@ -349,6 +350,47 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
+   * Re-caches every entry whose plan contains a [[LogicalRelation]] for `relation`.
+   * Unlike [[recacheByPlan]], this ignores CHAR/VARCHAR scan-mode identity so a V1 write
+   * invalidates preserve-only, standard, and unbound cache entries for that BaseRelation.
+   */
+  def recacheByV1Relation(spark: SparkSession, relation: BaseRelation): Unit = {
+    recacheByCondition(spark, cd => cd.plan.exists {
+      case logical: LogicalRelation => logical.relation == relation
+      case _ => false
+    })
+  }
+
+  /**
+   * Re-caches every entry whose plan contains the given catalog-less [[DataSourceV2Relation]].
+   * The scan mode is ignored only for this mutation-specific match so an unbound write target
+   * invalidates preserve-native and standard cache entries without weakening normal cache identity.
+   */
+  def recacheByV2Relation(spark: SparkSession, relation: DataSourceV2Relation): Unit = {
+    val unboundRelation = relation.copy(charVarcharScanMode = None)
+    recacheByCondition(spark, cd => cd.plan.exists {
+      case cached: DataSourceV2Relation =>
+        cached.copy(charVarcharScanMode = None).sameResult(unboundRelation)
+      case _ => false
+    })
+  }
+
+  /**
+   * Looks up direct cache entries for a V2 table mutation while ignoring only their analyzed
+   * CHAR/VARCHAR scan mode. Normal cache substitution remains mode-sensitive.
+   */
+  def lookupCachedDataByV2Relation(relation: DataSourceV2Relation): Seq[CachedData] = {
+    val unboundRelation = relation.copy(charVarcharScanMode = None)
+    cachedData.filter { cd =>
+      EliminateSubqueryAliases(cd.plan) match {
+        case cached: DataSourceV2Relation =>
+          cached.copy(charVarcharScanMode = None).sameResult(unboundRelation)
+        case _ => false
+      }
+    }
+  }
+
+  /**
    * Re-caches all cache entries that reference the given table name.
    */
   def recacheTableOrView(
@@ -422,7 +464,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
           val table = CatalogV2Util.getTable(catalog, ident, options = r.options)
           if (r.table.id == table.id) {
-            Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), r.options))
+            Some(DataSourceV2Relation
+              .create(table, Some(catalog), Some(ident), r.options)
+              .copy(charVarcharScanMode = r.charVarcharScanMode))
           } else {
             None
           }

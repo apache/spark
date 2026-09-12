@@ -187,7 +187,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
 
       InsertIntoHiveDirCommand(isLocal, storage, child, overwrite, child.output.map(_.name))
 
-    case DeleteFromTable(SubqueryAlias(_, HiveTableRelation(table, _, _, _, _)), _) =>
+    case DeleteFromTable(SubqueryAlias(_, HiveTableRelation(table, _, _, _, _, _)), _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(
         table.identifier,
         "DELETE")

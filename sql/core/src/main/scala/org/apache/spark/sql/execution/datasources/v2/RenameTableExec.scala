@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
@@ -32,14 +33,14 @@ case class RenameTableExec(
     catalog: TableCatalog,
     oldIdent: Identifier,
     newIdent: Identifier,
-    invalidateCache: () => Option[StorageLevel],
+    invalidateCache: () => Seq[(StorageLevel, Option[CharVarcharScanMode])],
     cacheTable: (SparkSession, LogicalPlan, Option[String], StorageLevel) => Unit)
   extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val optOldStorageLevel = invalidateCache()
+    val oldCaches = invalidateCache()
     catalog.invalidateTable(oldIdent)
 
     // If new identifier consists of a table name only, the table should be renamed in place.
@@ -49,9 +50,11 @@ case class RenameTableExec(
     } else newIdent
     catalog.renameTable(oldIdent, qualifiedNewIdent)
 
-    optOldStorageLevel.foreach { oldStorageLevel =>
+    oldCaches.foreach { case (oldStorageLevel, scanMode) =>
       val tbl = catalog.loadTable(qualifiedNewIdent)
-      val newRelation = DataSourceV2Relation.create(tbl, Some(catalog), Some(qualifiedNewIdent))
+      val newRelation = DataSourceV2Relation
+        .create(tbl, Some(catalog), Some(qualifiedNewIdent))
+        .copy(charVarcharScanMode = scanMode)
       cacheTable(
         session,
         newRelation,
