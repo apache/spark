@@ -156,6 +156,11 @@ public class VariantUtil {
   public static final int MAX_DECIMAL8_PRECISION = 18;
   public static final int MAX_DECIMAL16_PRECISION = 38;
 
+  // Long.MIN_VALUE / Long.MAX_VALUE as BigDecimals, hoisted so the decimal-to-long range check
+  // (VariantBuilder.decimalPromotesToLong) does not rebuild them on every call.
+  static final BigDecimal LONG_MIN_AS_DECIMAL = BigDecimal.valueOf(Long.MIN_VALUE);
+  static final BigDecimal LONG_MAX_AS_DECIMAL = BigDecimal.valueOf(Long.MAX_VALUE);
+
   // Write the least significant `numBytes` bytes in `value` into `bytes[pos, pos + numBytes)` in
   // little endian.
   public static void writeLong(byte[] bytes, int pos, long value, int numBytes) {
