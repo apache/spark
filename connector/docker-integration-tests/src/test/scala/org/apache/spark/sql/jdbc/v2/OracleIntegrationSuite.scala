@@ -89,6 +89,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   override val catalogName: String = "oracle"
   override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new OracleDatabaseOnDocker
+  override def roundsIntegralCast: Boolean = true
 
   object JdbcClientTypes {
     val NUMBER = "NUMBER"
