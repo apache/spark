@@ -374,9 +374,10 @@ class DataFramePivotSuite extends SharedSparkSession {
   }
 
   test("SPARK-55483: pivot with null non-atomic pivot column should not throw NPE") {
-    // When the pivot column is a non-atomic type (struct, array), PivotFirst uses a TreeMap
-    // whose comparison-based lookup throws NPE on null keys. Null pivot column values should
-    // be silently ignored since they can never match any declared pivot value.
+    // When the pivot column is a non-atomic type (struct, array), PivotFirst indexes the pivot
+    // values with a comparison-based TreeMap. A null pivot column value is looked up like any
+    // other value; with no NULL among the declared values it matches none of them, so the row
+    // contributes to no output column.
     withTempView("struct_pivot_data") {
       sql(
         """CREATE OR REPLACE TEMP VIEW struct_pivot_data AS
@@ -516,5 +517,54 @@ class DataFramePivotSuite extends SharedSparkSession {
           "operator" -> "!Sort \\[v#\\d+ ASC NULLS FIRST\\], true"),
         matchPVals = true)
     }
+  }
+
+  test("SPARK-39031: pivot on a floating point column matches NaN values") {
+    val df = Seq(Double.NaN, Double.NaN, 1.0d, Double.NaN, 1.0d, 1.0d).toDF("value")
+    checkAnswer(
+      df.groupBy("value").pivot("value").count(),
+      Row(1.0d, 3L, null) :: Row(Double.NaN, null, 3L) :: Nil)
+
+    val floatDf = Seq(Float.NaN, 1.0f, Float.NaN).toDF("value")
+    checkAnswer(
+      floatDf.groupBy("value").pivot("value").count(),
+      Row(1.0f, 1L, null) :: Row(Float.NaN, null, 2L) :: Nil)
+  }
+
+  test("SPARK-39031: pivot matches NaN when the pivot values are given explicitly") {
+    val df = Seq(Double.NaN, 1.0d, Double.NaN).toDF("value")
+    checkAnswer(
+      df.groupBy(lit(1).as("id")).pivot("value", Seq(Double.NaN, 1.0d)).count(),
+      Row(1, 2L, 1L) :: Nil)
+
+    withTempView("nan_pivot_data") {
+      df.createOrReplaceTempView("nan_pivot_data")
+      checkAnswer(
+        sql(
+          """SELECT * FROM (SELECT 1 AS id, value FROM nan_pivot_data)
+            |PIVOT (COUNT(1) FOR value IN (double('NaN') AS nan, 1.0D AS one))""".stripMargin),
+        Row(1, 2L, 1L) :: Nil)
+    }
+  }
+
+  test("SPARK-39031: pivot on a floating point column still matches null values") {
+    val df = Seq(Some(1.0d), None, Some(Double.NaN), None, Some(Double.NaN)).toDF("value")
+    checkAnswer(
+      df.groupBy(lit(1).as("id")).pivot("value").count(),
+      Row(1, 2L, 1L, 2L) :: Nil)
+  }
+
+  test("SPARK-39031: null is a usable pivot value on the TreeMap lookup path") {
+    val collatedDf = Seq(Some("a"), Some("A"), None, Some("b"), None).toDF("value")
+      .select($"value".cast(StringType("UTF8_LCASE")).as("value"))
+    checkAnswer(
+      collatedDf.groupBy(lit(1).as("id")).pivot("value").count(),
+      Row(1, 2L, 2L, 1L) :: Nil)
+
+    val binaryDf =
+      Seq("a".getBytes, "a".getBytes, null, "b".getBytes, null).toDF("value")
+    checkAnswer(
+      binaryDf.groupBy(lit(1).as("id")).pivot("value").count(),
+      Row(1, 2L, 2L, 1L) :: Nil)
   }
 }
