@@ -583,8 +583,9 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   }
 
   test("JSON_ARRAY expands a star nested in a sibling constructor (array(*))") {
-    // Only a bare `*` element is rejected. A star nested in `array(...)` belongs to that call and
-    // is expanded there, exactly as `array(array(*))` would, then JSON_ARRAY wraps the result.
+    // Only a direct star element (bare `*` or qualified `t.*`) is rejected. A star nested in
+    // `array(...)` belongs to that call and is expanded there, exactly as `array(array(*))` would,
+    // then JSON_ARRAY wraps the result.
     checkAnswer(
       sql("SELECT json_array(array(*)) FROM VALUES (1, 2) AS t(a, b)"),
       Row("[[1,2]]"))

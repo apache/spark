@@ -951,9 +951,10 @@ object FunctionRegistry {
     expression[LengthOfJsonArray]("json_array_length"),
     expression[JsonObjectKeys]("json_object_keys"),
     expression[JsonTypeof]("json_typeof"),
-    // Built-in forms of the SQL:2016 JSON constructor and path functions, resolved for plain calls
-    // that carry no SQL/JSON clauses (the dedicated grammar handles clause-bearing syntax). The
-    // names must stay in sync with `routedJsonConstructorNames` below.
+    // Built-in forms of the SQL:2016 JSON constructor and path functions. `AstBuilder` routes the
+    // eligible flat clause-free calls here so a same-named routine can shadow them. Clause-bearing
+    // forms, and the nested/implicit-JSON clause-free forms (routing deferred to SPARK-59243), are
+    // still built directly by the grammar. Keep in sync with `routedJsonConstructorNames` below.
     expressionBuilder("json_value", JsonValueExpressionBuilder),
     expressionBuilder("json_query", JsonQueryExpressionBuilder),
     expressionBuilder("json_exists", JsonExistsExpressionBuilder),

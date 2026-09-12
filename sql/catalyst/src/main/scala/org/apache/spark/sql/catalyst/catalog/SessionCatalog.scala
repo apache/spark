@@ -2448,6 +2448,23 @@ class SessionCatalog(
       TableFunctionRegistry.builtin.functionExists(FunctionIdentifier(name))
   }
 
+  /**
+   * Returns whether `system.builtin.<name>` still resolves to Spark's stock built-in, i.e. it has
+   * not been replaced by `SparkSessionExtensions.injectFunction`. The session `functionRegistry` is
+   * a clone of [[FunctionRegistry.builtin]] that shares each builder by reference, while
+   * `injectFunction` installs a fresh builder under the same identifier -- so builder identity
+   * tells them apart. Built-in-only syntax handling (e.g. the routed SQL/JSON direct-star
+   * rejection) must consult this, since resolution routes to the replacement when present.
+   */
+  def isStockBuiltinFunction(name: String): Boolean = {
+    val ident = FunctionRegistry.builtinFunctionIdentifier(name)
+    (functionRegistry.lookupFunctionBuilder(ident),
+        FunctionRegistry.builtin.lookupFunctionBuilder(ident)) match {
+      case (Some(sessionBuilder), Some(stockBuilder)) => sessionBuilder eq stockBuilder
+      case _ => false
+    }
+  }
+
   protected[sql] def failFunctionLookup(name: FunctionIdentifier): Nothing = {
     throw new NoSuchFunctionException(
       db = name.database.getOrElse(getCurrentDatabase), func = name.funcName)
