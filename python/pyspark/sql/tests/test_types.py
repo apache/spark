@@ -2277,8 +2277,9 @@ class TypesTestsMixin:
 
     def test_timestamp_nanos_type_python_udf(self):
         # SPARK-57462: a Python UDF with a nanosecond return type exercises makeFromJava
-        # (Python -> JVM). useArrow=False forces the classic Py4J path; the Arrow-based UDF path
-        # is not yet implemented for these types. The value round-trips at microsecond resolution.
+        # (Python -> JVM). useArrow=False forces the classic Py4J path; the Arrow-based UDF path is
+        # covered by test_timestamp_nanos_type_arrow_udf. The value round-trips at microsecond
+        # resolution.
         from pyspark.sql.functions import udf
 
         with self.sql_conf({"spark.sql.timestampNanosTypes.enabled": True}):
@@ -2354,36 +2355,147 @@ class TypesTestsMixin:
             # SparkRuntimeException); assert that condition rather than any failure.
             self.assertIn("TIMESTAMP_NANOS_PYTHON_MAP_KEY", str(pe.exception))
 
-    def test_timestamp_nanos_type_arrow_conversion_unsupported(self):
-        # SPARK-57462: Arrow/pandas value conversion for the nanosecond timestamp types is a pending
-        # follow-up; until then the classic read (toPandas) and write (createDataFrame from a pandas
-        # DataFrame) paths must reject an explicit nanosecond schema deterministically, naming the
-        # offending leaf type, rather than silently mis-handle the value. (The Connect data path is
-        # asserted separately in the parity suite.)
+    def test_timestamp_nanos_type_arrow_conversion(self):
+        # SPARK-57462 follow-up: the Arrow / pandas value path carries the nanosecond timestamp
+        # types as an Arrow timestamp[ns], so -- unlike the microsecond-resolution
+        # datetime.datetime boundary used by collect() / Python UDFs -- DataFrame.toPandas and
+        # createDataFrame from a pandas DataFrame preserve full nanosecond precision (pandas
+        # datetime64[ns]). The session time zone is pinned so the timezone-aware LTZ value is
+        # deterministic.
         import pandas as pd
 
+        with self.sql_conf(
+            {
+                "spark.sql.timestampNanosTypes.enabled": True,
+                "spark.sql.session.timeZone": "UTC",
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+            }
+        ):
+            # Read path: toPandas keeps the sub-microsecond digits.
+            pdf = self.spark.sql(
+                "SELECT CAST('2020-01-02 03:04:05.123456789' AS TIMESTAMP_NTZ(9)) AS ts"
+            ).toPandas()
+            self.assertEqual("datetime64[ns]", str(pdf["ts"].dtype))
+            self.assertEqual(pd.Timestamp("2020-01-02 03:04:05.123456789"), pdf["ts"][0])
+            # The sub-microsecond digits survive; datetime.datetime could not carry them.
+            self.assertEqual(789, pdf["ts"][0].nanosecond)
+
+            # Write path: a datetime64[ns] pandas column round-trips its nanoseconds back to Spark,
+            # for both the NTZ and the timezone-aware LTZ nanosecond types.
+            ns_string = "2020-01-02 03:04:05.123456789"
+            in_pdf = pd.DataFrame({"ts": pd.to_datetime(pd.Series([ns_string]))})
+            self.assertEqual("datetime64[ns]", str(in_pdf["ts"].dtype))
+            for nanos_type in (TimestampNTZNanosType(9), TimestampLTZNanosType(9)):
+                schema = StructType([StructField("ts", nanos_type)])
+                df = self.spark.createDataFrame(in_pdf, schema)
+                self.assertEqual(schema, df.schema)
+                # The stored value keeps all nine fractional digits (checked server-side).
+                self.assertEqual(
+                    ns_string,
+                    df.select(F.col("ts").cast("string")).first()[0],
+                )
+                # ... and a full pandas -> Spark -> pandas round-trip is lossless.
+                self.assertEqual(pd.Timestamp(ns_string), df.toPandas()["ts"][0])
+
+    def test_timestamp_nanos_type_arrow_conversion_non_utc(self):
+        # SPARK-57462 follow-up: a naive Arrow timestamp[ns] column ingested as the timezone-aware
+        # LTZ nanosecond type under a non-UTC session time zone must be localized to that zone
+        # (assume_timezone), exactly like TimestampType -- otherwise it is silently read as UTC and
+        # the instant is off by the session offset. This exercises the createDataFrame from a
+        # pyarrow.Table path (createDataFrame from a pandas DataFrame uses a different, already
+        # covered converter). NTZ is the control: it stays a naive wall clock either way.
+        import pandas as pd
+        import pyarrow as pa
+
+        ns_string = "2020-06-15 12:30:00.123456789"
+        with self.sql_conf(
+            {
+                "spark.sql.timestampNanosTypes.enabled": True,
+                "spark.sql.session.timeZone": "America/New_York",
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+            }
+        ):
+            table = pa.table({"ts": pa.array([pd.Timestamp(ns_string)], type=pa.timestamp("ns"))})
+            for nanos_type in (TimestampNTZNanosType(9), TimestampLTZNanosType(9)):
+                schema = StructType([StructField("ts", nanos_type)])
+                df = self.spark.createDataFrame(table, schema)
+                self.assertEqual(schema, df.schema)
+                # Rendered in the session time zone the wall clock is unchanged: NTZ carries no
+                # zone, and LTZ interpreted the naive input in the session zone (not UTC -- which
+                # would shift it by the session offset).
+                self.assertEqual(ns_string, df.select(F.col("ts").cast("string")).first()[0])
+                # Nanoseconds survive the Arrow round-trip.
+                self.assertEqual(789, df.toPandas()["ts"][0].nanosecond)
+
+    def test_timestamp_nanos_type_nested_arrow_conversion(self):
+        # SPARK-57462 follow-up: to_arrow_type carries the nanosecond precision tag on nested Arrow
+        # fields (array element, struct field, map value), so a nested nanosecond value ingested
+        # through the Arrow value path keeps its declared (non-9) precision rather than being
+        # silently reconstructed at a different precision (e.g. a dropped tag on a nested
+        # map<_, NTZNanos(7)> -> precision 9). Exercises createDataFrame from a pyarrow.Table -- the
+        # Spark Connect createDataFrame path -- for both the NTZ and the timezone-aware LTZ
+        # nanosecond types at a non-9 precision.
+        import pandas as pd
+        import pyarrow as pa
+
+        ns_string = "2020-01-02 03:04:05.123456789"
+        ts = pd.Timestamp(ns_string)
+        with self.sql_conf(
+            {
+                "spark.sql.timestampNanosTypes.enabled": True,
+                "spark.sql.session.timeZone": "UTC",
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+            }
+        ):
+            for nanos_type in (TimestampNTZNanosType(7), TimestampLTZNanosType(8)):
+                arrow_ns = pa.timestamp("ns")
+                table = pa.table(
+                    {
+                        "arr": pa.array([[ts, ts]], type=pa.list_(arrow_ns)),
+                        "st": pa.array([{"a": ts}], type=pa.struct([("a", arrow_ns)])),
+                        "mp": pa.array([[("k", ts)]], type=pa.map_(pa.string(), arrow_ns)),
+                    }
+                )
+                schema = StructType(
+                    [
+                        StructField("arr", ArrayType(nanos_type)),
+                        StructField("st", StructType([StructField("a", nanos_type)])),
+                        StructField("mp", MapType(StringType(), nanos_type)),
+                    ]
+                )
+                df = self.spark.createDataFrame(table, schema)
+                # The declared non-9 precision survives on every nested field -- the precision tag
+                # is not dropped, so nothing (including the map value) is silently widened to
+                # precision 9.
+                self.assertEqual(schema, df.schema)
+                # The value round-trips to the declared nanosecond type without corruption. The
+                # first seven fractional digits are shared by precisions 7/8/9, so this holds
+                # regardless of how the reader floors the sub-microsecond remainder.
+                row = df.selectExpr(
+                    "cast(arr[0] as string) as a0",
+                    "cast(st.a as string) as sa",
+                    "cast(mp['k'] as string) as mv",
+                ).first()
+                self.assertTrue(row.a0.startswith("2020-01-02 03:04:05.1234567"), row.a0)
+                self.assertTrue(row.sa.startswith("2020-01-02 03:04:05.1234567"), row.sa)
+                self.assertTrue(row.mv.startswith("2020-01-02 03:04:05.1234567"), row.mv)
+
+    def test_timestamp_nanos_type_arrow_udf(self):
+        # SPARK-57462 follow-up: with the eager Arrow-conversion reject removed, an Arrow-optimized
+        # Python UDF (useArrow=True) can take and return the nanosecond timestamp types through the
+        # Arrow value path (the reject previously blocked returning nanoseconds from an Arrow UDF).
+        # A microsecond-precision value round-trips: the Arrow encoding carries nanoseconds, but the
+        # datetime.datetime Python boundary is microsecond-resolution.
+        from pyspark.sql.functions import udf
+
         with self.sql_conf({"spark.sql.timestampNanosTypes.enabled": True}):
-            schema = StructType([StructField("ts", TimestampNTZNanosType(9))])
-            value = datetime.datetime(2020, 1, 2, 3, 4, 5, 123456)
-
-            # Read path: DataFrame.toPandas().
-            df = self.spark.createDataFrame([(value,)], schema)
-            with self.assertRaises(PySparkTypeError) as pe:
-                df.toPandas()
-            self.check_error(
-                exception=pe.exception,
-                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                messageParameters={"data_type": "TimestampNTZNanosType(9)"},
+            value = datetime.datetime(2021, 6, 7, 8, 9, 10, 123456)
+            df = self.spark.createDataFrame(
+                [(value,)], StructType([StructField("ts", TimestampNTZNanosType(9))])
             )
-
-            # Write path: createDataFrame from a pandas DataFrame with an explicit nanos schema.
-            with self.assertRaises(PySparkTypeError) as pe:
-                self.spark.createDataFrame(pd.DataFrame({"ts": [value]}), schema)
-            self.check_error(
-                exception=pe.exception,
-                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                messageParameters={"data_type": "TimestampNTZNanosType(9)"},
-            )
+            identity_udf = udf(lambda x: x, returnType=TimestampNTZNanosType(9), useArrow=True)
+            row = df.select(identity_udf("ts").alias("out")).first()
+            self.assertEqual(value, row.out)
 
     def test_yearmonth_interval_type_constructor(self):
         self.assertEqual(YearMonthIntervalType().simpleString(), "interval year to month")

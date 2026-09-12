@@ -1959,6 +1959,21 @@ class DataFrame(ParentDataFrame):
         attrs.update(self.columns)
         return sorted(attrs)
 
+    def _check_timestamp_nanos_map_key(self, schema: StructType) -> None:
+        # SPARK-57462: a nanosecond timestamp used as a map key collapses to a single microsecond
+        # datetime.datetime when Arrow rows are turned into Python dicts, dropping entries that
+        # differ only below a microsecond. Reject such a schema up front -- matching the classic
+        # DataFrame's guard -- rather than silently dropping map entries.
+        from pyspark.errors import PySparkTypeError
+        from pyspark.sql.types import _first_timestamp_nanos_map_key_type
+
+        key_type = _first_timestamp_nanos_map_key_type(schema)
+        if key_type is not None:
+            raise PySparkTypeError(
+                errorClass="TIMESTAMP_NANOS_PYTHON_MAP_KEY",
+                messageParameters={"type": key_type.simpleString()},
+            )
+
     def collect(self) -> List[Row]:
         table, schema = self._to_table()
 
@@ -1968,6 +1983,8 @@ class DataFrame(ParentDataFrame):
         schema = schema or schema2
 
         assert schema is not None and isinstance(schema, StructType)
+
+        self._check_timestamp_nanos_map_key(schema)
 
         return ArrowTableToRowsConversion.convert(
             table, schema, binary_as_bytes=self._get_binary_as_bytes()
@@ -1999,15 +2016,6 @@ class DataFrame(ParentDataFrame):
         return self._to_pandas()
 
     def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
-        # SPARK-57462: the Arrow-based nanosecond timestamp value path is a pending follow-up.
-        # Connect overrides _to_pandas and goes straight to client.to_pandas, so the guard on the
-        # classic PandasConversionMixin is not reached; reject here too so the behavior is
-        # deterministic (and consistent with classic toPandas and to_arrow_type) rather than
-        # emitting unhandled pandas nanosecond / wrong-time-zone values.
-        from pyspark.sql.pandas.types import _reject_timestamp_nanos_conversion
-
-        _reject_timestamp_nanos_conversion(self.schema)
-
         query = self._plan.to_proto(self._session.client)
         pdf, ei = self._session.client.to_pandas(query, self._plan.observations, **kwargs)
         self._execution_info = ei
@@ -2231,6 +2239,7 @@ class DataFrame(ParentDataFrame):
         return self.storageLevel != StorageLevel.NONE
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
+        self._check_timestamp_nanos_map_key(self.schema)
         query = self._plan.to_proto(self._session.client)
         binary_as_bytes = self._get_binary_as_bytes()
 
