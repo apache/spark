@@ -833,12 +833,15 @@ class QueryParsingErrorsSuite extends SharedSparkSession {
         stop = query.length - 1))
   }
 
-  test("INVALID_BUCKET_COUNT.NON_INTEGER_LITERAL: bucket count is not an integer literal") {
+  test("INVALID_PARAMETER_VALUE.INTEGER: bucket count is not an integer literal") {
     checkError(
       exception = parseException(
         "CREATE TABLE t (c INT) USING parquet PARTITIONED BY (bucket('x', c))"),
-      condition = "INVALID_BUCKET_COUNT.NON_INTEGER_LITERAL",
-      parameters = Map("describe" -> "'x'"),
+      condition = "INVALID_PARAMETER_VALUE.INTEGER",
+      parameters = Map(
+        "functionName" -> "`bucket`",
+        "parameter" -> "`numBuckets`",
+        "invalidValue" -> "'x'"),
       context = ExpectedContext(
         fragment = "bucket('x', c)",
         start = 53,

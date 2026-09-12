@@ -3781,20 +3781,8 @@
   },
   "INVALID_BUCKET_COUNT" : {
     "message" : [
-      "Invalid number of buckets."
+      "Number of buckets should be greater than 0 but less than or equal to bucketing.maxBuckets (`<bucketingMaxBuckets>`). Got `<numBuckets>`."
     ],
-    "subClass" : {
-      "NON_INTEGER_LITERAL" : {
-        "message" : [
-          "Expected an integer literal, but got <describe>."
-        ]
-      },
-      "OUT_OF_RANGE" : {
-        "message" : [
-          "Should be greater than 0 but less than or equal to bucketing.maxBuckets (`<bucketingMaxBuckets>`). Got `<numBuckets>`."
-        ]
-      }
-    },
     "sqlState" : "22003"
   },
   "INVALID_BUCKET_FILE" : {

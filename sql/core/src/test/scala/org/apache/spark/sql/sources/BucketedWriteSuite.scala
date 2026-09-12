@@ -58,7 +58,7 @@ abstract class BucketedWriteSuite extends QueryTest {
       checkError(
         exception =
           intercept[AnalysisException](df.write.bucketBy(numBuckets, "i").saveAsTable("tt")),
-        condition = "INVALID_BUCKET_COUNT.OUT_OF_RANGE",
+        condition = "INVALID_BUCKET_COUNT",
         parameters = Map("bucketingMaxBuckets" -> "100000", "numBuckets" -> numBuckets.toString))
     })
   }
@@ -82,7 +82,7 @@ abstract class BucketedWriteSuite extends QueryTest {
         checkError(
           exception = intercept[AnalysisException](
             df.write.bucketBy(maxNrBuckets + 1, "i").saveAsTable("t")),
-          condition = "INVALID_BUCKET_COUNT.OUT_OF_RANGE",
+          condition = "INVALID_BUCKET_COUNT",
           parameters = Map(
             "bucketingMaxBuckets" -> maxNrBuckets.toString,
             "numBuckets" -> (maxNrBuckets + 1).toString))

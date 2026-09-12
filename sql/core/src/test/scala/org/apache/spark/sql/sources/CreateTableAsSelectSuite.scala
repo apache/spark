@@ -233,7 +233,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
                """.stripMargin
             )
           },
-          condition = "INVALID_BUCKET_COUNT.OUT_OF_RANGE",
+          condition = "INVALID_BUCKET_COUNT",
           parameters = Map("bucketingMaxBuckets" -> "100000", "numBuckets" -> numBuckets.toString))
       })
     }
@@ -268,7 +268,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
         checkError(
           exception = intercept[ParseException](
             sql(createTableSql(path.toURI.toString, maxNrBuckets + 1))),
-          condition = "INVALID_BUCKET_COUNT.OUT_OF_RANGE",
+          condition = "INVALID_BUCKET_COUNT",
           parameters = Map(
             "bucketingMaxBuckets" -> maxNrBuckets.toString,
             "numBuckets" -> (maxNrBuckets + 1).toString))

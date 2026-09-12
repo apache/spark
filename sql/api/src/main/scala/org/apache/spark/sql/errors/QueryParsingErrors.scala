@@ -545,8 +545,11 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def invalidBucketsNumberError(describe: String, ctx: ApplyTransformContext): Throwable = {
     new ParseException(
-      errorClass = "INVALID_BUCKET_COUNT.NON_INTEGER_LITERAL",
-      messageParameters = Map("describe" -> describe),
+      errorClass = "INVALID_PARAMETER_VALUE.INTEGER",
+      messageParameters = Map(
+        "functionName" -> toSQLId("bucket"),
+        "parameter" -> toSQLId("numBuckets"),
+        "invalidValue" -> describe),
       ctx)
   }
 
