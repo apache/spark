@@ -21,7 +21,9 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.time.Instant
-import java.util.Base64
+import java.util.Date
+
+import io.jsonwebtoken.Jwts
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.deploy.security.UserCredentialManager
@@ -35,37 +37,19 @@ import org.apache.spark.internal.config._
  */
 class LocalSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext {
 
-  private var tokenFile: File = _
-
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    tokenFile = File.createTempFile("oidc-token-", ".jwt")
-    tokenFile.deleteOnExit()
-    // A real (unsigned) JWT with the claims FileTokenIngestor requires: sub + iss (+ exp).
-    Files.write(tokenFile.toPath, makeJwt().getBytes(StandardCharsets.UTF_8))
+  /** Write an unsigned JWT (with the sub/iss/exp claims FileTokenIngestor requires) to `dir`. */
+  private def writeTokenFile(dir: File): File = {
+    val jwt = Jwts.builder()
+      .subject("test-user")
+      .issuer("https://issuer.example.com")
+      .expiration(Date.from(Instant.now().plusSeconds(300)))
+      .compact()
+    val f = new File(dir, "oidc-token.jwt")
+    Files.write(f.toPath, jwt.getBytes(StandardCharsets.UTF_8))
+    f
   }
 
-  override def afterEach(): Unit = {
-    try {
-      if (tokenFile != null) tokenFile.delete()
-    } finally {
-      super.afterEach()
-    }
-  }
-
-  /** Build a minimal unsigned JWT (header.payload) that FileTokenIngestor can parse. */
-  private def makeJwt(): String = {
-    val enc = Base64.getUrlEncoder.withoutPadding()
-    val header = enc.encodeToString(
-      """{"alg":"none","typ":"JWT"}""".getBytes(StandardCharsets.UTF_8))
-    val exp = Instant.now().plusSeconds(300).getEpochSecond
-    val payload = enc.encodeToString(
-      s"""{"sub":"test-user","iss":"https://issuer.example.com","exp":$exp}"""
-        .getBytes(StandardCharsets.UTF_8))
-    s"$header.$payload"
-  }
-
-  private def oidcConf(enabled: Boolean): SparkConf = {
+  private def oidcConf(enabled: Boolean, tokenFile: Option[File] = None): SparkConf = {
     val conf = new SparkConf()
       .setMaster("local[1]")
       .setAppName("LocalSchedulerBackendSuite")
@@ -75,7 +59,7 @@ class LocalSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext {
       .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 1000L)
     if (enabled) {
       conf
-        .set(SECURITY_OIDC_IDENTITY_TOKEN_FILE, tokenFile.getAbsolutePath)
+        .set(SECURITY_OIDC_IDENTITY_TOKEN_FILE, tokenFile.get.getAbsolutePath)
         .set("spark.security.oidc.provider.fake",
           "org.apache.spark.security.FakeCredentialProvider")
     }
@@ -83,34 +67,36 @@ class LocalSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("LocalSchedulerBackend runs OIDC selection and resolution in local mode") {
-    sc = new SparkContext(oidcConf(enabled = true))
+    withTempDir { dir =>
+      sc = new SparkContext(oidcConf(enabled = true, tokenFile = Some(writeTokenFile(dir))))
 
-    // The scheduler backend in local mode is a LocalSchedulerBackend.
-    assert(sc.schedulerBackend.isInstanceOf[LocalSchedulerBackend],
-      "local[1] should use LocalSchedulerBackend")
+      // The scheduler backend in local mode is a LocalSchedulerBackend.
+      assert(sc.schedulerBackend.isInstanceOf[LocalSchedulerBackend],
+        "local[1] should use LocalSchedulerBackend")
 
-    // Selection phase ran on the driver (SparkContext) even in local mode: the provider's
-    // declared spark.hadoop.* property reached the driver's Hadoop Configuration (prefix
-    // stripped), and its non-Hadoop spark.* property reached SparkConf.
-    assert(sc.hadoopConfiguration.get("fs.fake.credentials.provider") ===
-      "org.apache.spark.security.FakeExecutorCredentialProvider",
-      "selection phase should wire the provider into the driver's Hadoop Configuration")
-    assert(sc.getConf.get("spark.fake.credentials.enabled") === "true",
-      "selection phase should apply non-Hadoop provider properties too")
+      // Selection phase ran on the driver (SparkContext) even in local mode: the provider's
+      // declared spark.hadoop.* property reached the driver's Hadoop Configuration (prefix
+      // stripped), and its non-Hadoop spark.* property reached SparkConf.
+      assert(sc.hadoopConfiguration.get("fs.fake.credentials.provider") ===
+        "org.apache.spark.security.FakeExecutorCredentialProvider",
+        "selection phase should wire the provider into the driver's Hadoop Configuration")
+      assert(sc.getConf.get("spark.fake.credentials.enabled") === "true",
+        "selection phase should apply non-Hadoop provider properties too")
 
-    // A loader was retained for reuse by the resolution phase.
-    assert(sc.userCredentialProviderLoader.isDefined,
-      "SparkContext should retain the selection-phase loader when OIDC is enabled")
+      // A loader was retained for reuse by the resolution phase.
+      assert(sc.userCredentialProviderLoader.isDefined,
+        "SparkContext should retain the selection-phase loader when OIDC is enabled")
 
-    // Resolution phase ran in LocalSchedulerBackend: credentials were acquired and stored in
-    // the shared SparkEnv credential store (the same one tasks read from in local mode).
-    val stored = SparkEnv.get.userCredentials.get()
-    assert(stored != null,
-      "LocalSchedulerBackend should acquire and store OIDC credentials in local mode")
-    assert(stored.version >= 1L, "stored credentials should carry a version >= 1")
-    val creds = UserCredentialManager.deserializeUserCredentials(stored.bytes)
-    assert(creds.forScheme("fake").isPresent,
-      "stored credentials should contain the 'fake' scheme resolved by FakeCredentialProvider")
+      // Resolution phase ran in LocalSchedulerBackend: credentials were acquired and stored in
+      // the shared SparkEnv credential store (the same one tasks read from in local mode).
+      val stored = SparkEnv.get.userCredentials.get()
+      assert(stored != null,
+        "LocalSchedulerBackend should acquire and store OIDC credentials in local mode")
+      assert(stored.version >= 1L, "stored credentials should carry a version >= 1")
+      val creds = UserCredentialManager.deserializeUserCredentials(stored.bytes)
+      assert(creds.forScheme("fake").isPresent,
+        "stored credentials should contain the 'fake' scheme resolved by FakeCredentialProvider")
+    }
   }
 
   test("LocalSchedulerBackend is a no-op for OIDC when disabled") {
