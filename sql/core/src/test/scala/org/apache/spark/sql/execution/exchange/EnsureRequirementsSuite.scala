@@ -1779,19 +1779,24 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val right = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyedPartitioning(Seq(days(aR), years(bR)), rightKeys))
 
-    // No `withSQLConf` on purpose. `pushPartValues` is on by default, which is all the push branch
-    // needs, so this is what a user gets out of the box.
-    val smj = SortMergeJoinExec(Seq(xL, yL), Seq(aR, bR), Inner, None, left, right)
-    val planned = EnsureRequirements.apply(smj)
+    // `pushPartValues` is left at its default (on), which is all the push branch needs, so this is
+    // what a user gets out of the box. `partition.filter` is varied to cover both settings: off
+    // pushes the union of the two key sets, on (the default) their intersection.
+    Seq(3 -> false, 1 -> true).foreach { case (expected, filter) =>
+      withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString) {
+        val smj = SortMergeJoinExec(Seq(xL, yL), Seq(aR, bR), Inner, None, left, right)
+        val planned = EnsureRequirements.apply(smj)
 
-    // Without the pairing, the left's first member is taken and its `days(yL)` is matched against
-    // `days(aR)`, which names the other join key, so the join declines and both sides are shuffled
-    // onto the default partitioning.
-    assert(planned.collect { case s: ShuffleExchangeExec => s }.isEmpty,
-      "the second member pairs with the other side, so neither side is shuffled")
-    assert(groupPartitionsNodes(planned).map(_.expectedPartitionKeys.map(_.size)) ===
-      Seq(Some(3), Some(3)),
-      "both sides are pushed the union of the two key sets")
+        // Without the pairing, the left's first member is taken and its `days(yL)` is matched
+        // against `days(aR)`, which names the other join key, so the join declines and both sides
+        // are shuffled onto the default partitioning.
+        assert(planned.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+          "the second member pairs with the other side, so neither side is shuffled")
+        assert(groupPartitionsNodes(planned).map(_.expectedPartitionKeys.map(_.size)) ===
+          Seq(Some(expected), Some(expected)),
+          s"both sides are pushed the ${if (filter) "intersection" else "union"} of the key sets")
+      }
+    }
   }
 
   test("SPARK-59256: no agreeing pair leaves the join alone however many members each side has") {
