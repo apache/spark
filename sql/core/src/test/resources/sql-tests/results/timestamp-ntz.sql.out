@@ -280,6 +280,30 @@ struct<timestampdiff(MILLISECOND, TIMESTAMP_NTZ '2022-02-14 23:59:59.123', DATE 
 
 
 -- !query
+select months_between(timestamp_ntz'1997-02-28 10:30:00', timestamp_ntz'1996-10-30 00:00:00')
+-- !query schema
+struct<months_between(TIMESTAMP_NTZ '1997-02-28 10:30:00', TIMESTAMP_NTZ '1996-10-30 00:00:00', true):double>
+-- !query output
+3.94959677
+
+
+-- !query
+select months_between(timestamp_ntz'1997-02-28 10:30:00', timestamp_ltz'1996-10-30 00:00:00')
+-- !query schema
+struct<months_between(TIMESTAMP_NTZ '1997-02-28 10:30:00', TIMESTAMP '1996-10-30 00:00:00', true):double>
+-- !query output
+3.93884409
+
+
+-- !query
+select months_between(timestamp_ltz'1997-02-28 10:30:00', timestamp_ntz'1996-10-30 00:00:00')
+-- !query schema
+struct<months_between(TIMESTAMP '1997-02-28 10:30:00', TIMESTAMP_NTZ '1996-10-30 00:00:00', true):double>
+-- !query output
+3.96034946
+
+
+-- !query
 select timestamp_ntz'2022-01-01 00:00:00' = date'2022-01-01'
 -- !query schema
 struct<(TIMESTAMP_NTZ '2022-01-01 00:00:00' = DATE '2022-01-01'):boolean>
