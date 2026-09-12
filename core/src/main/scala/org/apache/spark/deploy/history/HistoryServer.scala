@@ -22,6 +22,7 @@ import java.util.zip.ZipOutputStream
 import scala.util.control.NonFatal
 import scala.xml.Node
 
+import jakarta.servlet.Filter
 import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.ee10.servlet.{ServletContextHandler, ServletHolder}
 
@@ -73,6 +74,14 @@ class HistoryServer(
 
   // and its metrics, for testing as well as monitoring
   val cacheMetrics = appCache.metrics
+
+  override protected def getInternalFilters: Seq[() => Filter] = {
+    if (conf.get(History.HISTORY_SERVER_UI_ACCESS_LOG_ENABLED)) {
+      Seq(() => new HistoryServerAccessLogFilter(conf))
+    } else {
+      Nil
+    }
+  }
 
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {

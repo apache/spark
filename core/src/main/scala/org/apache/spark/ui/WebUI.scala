@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.xml.Node
 
-import jakarta.servlet.DispatcherType
+import jakarta.servlet.{DispatcherType, Filter}
 import jakarta.servlet.http.{HttpServlet, HttpServletRequest}
 import org.eclipse.jetty.ee10.servlet.{FilterHolder, FilterMapping, ServletContextHandler, ServletHolder}
 import org.json4s.JsonAST.{JNothing, JValue}
@@ -137,13 +137,16 @@ private[spark] abstract class WebUI(
     attachHandler(JettyUtils.createStaticHandler(resourceBase, path))
   }
 
+  protected def getInternalFilters: Seq[() => Filter] = Nil
+
   /** A hook to initialize components of the UI */
   def initialize(): Unit
 
   def initServer(): ServerInfo = {
     val hostName = Option(conf.getenv("SPARK_LOCAL_IP"))
         .getOrElse(if (Utils.preferIPv6) "[::]" else "0.0.0.0")
-    val server = startJettyServer(hostName, port, sslOptions, conf, name, poolSize)
+    val server = startJettyServer(
+      hostName, port, sslOptions, conf, name, poolSize, getInternalFilters)
     server
   }
 
