@@ -1774,6 +1774,77 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
+  test("isTemporaryScalarFunctionVisible honors stored-view captured temp functions") {
+    withBasicCatalog { catalog =>
+      val tempFunc = (e: Seq[Expression]) => e.head
+      catalog.registerFunction(
+        newFunc("temp_json", None), overrideIfExists = false, functionBuilder = Some(tempFunc))
+
+      // A view descriptor whose frozen catalog/namespace is non-empty (so we are resolving a view)
+      // and that captured the given temp function names.
+      def viewDesc(captured: Seq[String]): CatalogTable = {
+        val tempFnProp = if (captured.isEmpty) {
+          Map.empty[String, String]
+        } else {
+          Map(CatalogTable.VIEW_REFERRED_TEMP_FUNCTION_NAMES ->
+            captured.map(n => s""""$n"""").mkString("[", ",", "]"))
+        }
+        CatalogTable(
+          TableIdentifier("v", Some("default")),
+          CatalogTableType.VIEW,
+          CatalogStorageFormat.empty,
+          StructType(Seq(StructField("a", IntegerType))),
+          viewText = Some("SELECT 1"),
+          properties =
+            CatalogTable.catalogAndNamespaceToProps(SESSION_CATALOG_NAME, Seq("default")) ++
+              tempFnProp)
+      }
+
+      // Outside any view context, a registered temp scalar function is visible.
+      assert(catalog.isTemporaryScalarFunctionVisible(FunctionIdentifier("temp_json")))
+      assert(!catalog.isTemporaryTableFunctionVisible(FunctionIdentifier("temp_json")))
+
+      // Inside a view that did NOT capture it (e.g. an unrelated temp created after the view), it
+      // is hidden, matching handleViewContext used by actual resolution -- so the builtin-ownership
+      // probe won't be fooled into skipping builtin-only syntax handling.
+      AnalysisContext.withAnalysisContext(viewDesc(captured = Nil)) {
+        assert(!catalog.isTemporaryScalarFunctionVisible(FunctionIdentifier("temp_json")))
+      }
+      // Inside a view that captured it, it stays visible.
+      AnalysisContext.withAnalysisContext(viewDesc(captured = Seq("temp_json"))) {
+        assert(catalog.isTemporaryScalarFunctionVisible(FunctionIdentifier("temp_json")))
+      }
+    }
+  }
+
+  test("temp table function is visible to the table probe, not the scalar probe") {
+    // Scalar and table temp functions are probed separately. The scalar probe mirrors the
+    // scalar-only resolveScalarFunctionByIdentifier, so a same-named temp *table* function is not
+    // visible to it; its effect (making scalar resolution terminal) is reported by the table probe.
+    val extCatalog = newEmptyCatalog()
+    extCatalog.createDatabase(newDb("default"), ignoreIfExists = true)
+    val scalarRegistry = new SimpleFunctionRegistry()
+    val tableRegistry = new SimpleTableFunctionRegistry()
+    val catalog = new SessionCatalog(extCatalog, scalarRegistry, tableRegistry)
+    try {
+      val ident = FunctionIdentifier(
+        "count", Some(CatalogManager.SESSION_NAMESPACE), Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      val info = new ExpressionInfo(
+        "test.Example", CatalogManager.SESSION_NAMESPACE, "count", "usage", "arguments",
+        "\n    Examples:\n", "\n    \n  ", "table_funcs", "1.0.0", "", "sql_udf")
+      tableRegistry.registerFunction(ident, info, (_: Seq[Expression]) => Range(1, 1, 1, 1))
+
+      assert(catalog.isTemporaryFunction(FunctionIdentifier("count")),
+        "a temp table function should count as a temporary function")
+      assert(!catalog.isTemporaryScalarFunctionVisible(FunctionIdentifier("count")),
+        "a temp table function must not be visible to the scalar ownership probe")
+      assert(catalog.isTemporaryTableFunctionVisible(FunctionIdentifier("count")),
+        "a temp table function must be visible to the table ownership probe")
+    } finally {
+      catalog.reset()
+    }
+  }
+
   test("isRegisteredFunction") {
     withBasicCatalog { catalog =>
       // Returns false when the function does not register

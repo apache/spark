@@ -935,29 +935,50 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  test("path-driven COUNT(*) rewrite gate: temp count shadowing builtin under SET PATH " +
-      "(session-first) suppresses the * -> 1 rewrite") {
-    // `Analyzer.matchesFunctionName` consults
-    // `FunctionResolution.isSessionBeforeBuiltinInPath` to decide whether COUNT(*) is the
-    // builtin (eligible for the COUNT(*) -> COUNT(1) shortcut) or a user-defined override.
-    // Default `sessionFunctionResolutionOrder` is "second", so creating a temp count while
-    // the default PATH is in effect passes the security check. Once SET PATH puts
-    // `system.session` before `system.builtin`, the rewrite must be suppressed and the
-    // star expansion must reach the temp `count`.
+  test("path-driven COUNT: parser-normalized count(1) resolves via PATH (builtin vs shadow)") {
+    // AstBuilder normalizes SQL `count(*)` to `count(1)` before analysis, so this exercises how
+    // the normalized `count(1)` resolves under the PATH, not the analyzer star/owner gate (the
+    // DataFrame `count("*")` test covers that). Default `sessionFunctionResolutionOrder` is
+    // "second", so creating a temp count under the default PATH passes the security check.
     withPathEnabled {
       sql("CREATE TEMPORARY FUNCTION count(x INT) RETURNS INT RETURN x + 100")
       try {
-        // PATH still has builtin first: count(*) rewrites to count(1), which resolves to
-        // the builtin count and returns the row count of the input (1).
+        // Builtin-first: count(1) resolves to the builtin count and returns the row count (1).
         checkAnswer(sql("SELECT count(*) FROM VALUES (1) AS t(a)"), Row(1))
 
-        // Put session before builtin via SET PATH. The rewrite gate now reports
-        // `isSessionBeforeBuiltinInPath = true` AND a temp count exists, so the
-        // analyzer must NOT collapse `count(*)` to `count(1)`. The `*` then expands
-        // against the table's single column to `count(a)`, which resolves through
-        // the temp under the live path: 1 + 100 = 101.
+        // Session-first: count(1) resolves to the shadowing temp: 1 + 100 = 101.
         sql("SET PATH = system.session, system.builtin")
         checkAnswer(sql("SELECT count(*) FROM VALUES (1) AS t(a)"), Row(101))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS count")
+      }
+    }
+  }
+
+  test("path-driven COUNT rewrite gate: DataFrame count(\"*\") and count(t.*) reach the owner " +
+      "probe and expand through a shadowing temp count") {
+    // SQL `count(*)` is normalized to `count(1)` in AstBuilder, so it never reaches the analyzer
+    // owner probe. A DataFrame `count("*")` keeps its UnresolvedStar and does, as does count(t.*).
+    // A non-1 input distinguishes an incorrect `count(1)` rewrite from correct star expansion to
+    // `count(a)` through the temp.
+    withPathEnabled {
+      sql("CREATE TEMPORARY FUNCTION count(x INT) RETURNS INT RETURN x + 100")
+      try {
+        val df = sql("SELECT * FROM VALUES (7) AS t(a)")
+
+        // Builtin-first: count is the builtin, so `count("*")` collapses to `count(1)` and returns
+        // the row count (1), while `count(t.*)` hits the single-table-star guard.
+        checkAnswer(df.select(functions.count("*")), Row(1))
+        intercept[AnalysisException] {
+          sql("SELECT count(t.*) FROM VALUES (7) AS t(a)").collect()
+        }
+
+        // Session-first: count is shadowed, so neither the rewrite nor the guard fires; the star
+        // expands to `count(a)` and resolves through the temp: 7 + 100 = 107.
+        sql("SET PATH = system.session, system.builtin")
+        checkAnswer(df.select(functions.count("*")), Row(107))
+        checkAnswer(sql("SELECT count(t.*) FROM VALUES (7) AS t(a)"), Row(107))
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         sql("DROP TEMPORARY FUNCTION IF EXISTS count")
@@ -983,45 +1004,72 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
+  test("path-driven COUNT(*) rewrite gate: builtin.count respects persistentCatalogFirst") {
+    withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        sql("CREATE FUNCTION builtin.count(x INT) RETURNS INT RETURN x + 100")
+        try {
+          checkAnswer(sql("SELECT builtin.count(*) FROM VALUES (1) AS t(a)"), Row(101))
+          checkAnswer(sql("SELECT system.builtin.count(*) FROM VALUES (1) AS t(a)"), Row(1))
+        } finally {
+          sql("DROP FUNCTION IF EXISTS builtin.count")
+        }
+      }
+    }
+  }
+
   test("path-driven COUNT(*) rewrite gate: single-pass resolver suppresses the rewrite " +
       "under SET PATH (session-first)") {
     // The single-pass resolver mirrors the fixed-point gate via
-    // `FunctionResolverUtils.isUnqualifiedCountShadowedByTemp`, which is wired into
-    // `isNonDistinctCount` and consulted by `handleStarInArguments`.
+    // `FunctionResolution.functionNameResolvesToBuiltin`, which is consulted by
+    // `handleStarInArguments`. A DataFrame `count("*")` keeps its UnresolvedStar (SQL `count(*)`
+    // is normalized to `count(1)` in AstBuilder and would skip the gate), so it exercises the gate.
     //
-    // Setup (`CREATE TEMPORARY FUNCTION`, `SET PATH`) and execution (Dataset collect via
-    // checkAnswer, which inserts a `DeserializeToObject` node the single-pass analyzer
-    // does not yet support) are run under the fixed-point analyzer; only the actual
-    // count(*) analysis is run under the single-pass analyzer. When the shortcut fires the
-    // analyzed output is the BIGINT builtin count; when it is suppressed the star expands
-    // and resolves through the temp SQL `count`, which the single-pass analyzer does not
-    // support and reports as an `ExplicitlyUnsupportedResolverFeature`. Which of the two
-    // outcomes occurs tells us whether the rewrite was applied.
+    // Setup (`CREATE TEMPORARY FUNCTION`, `SET PATH`) is run under the fixed-point analyzer; only
+    // the count analysis is run under the single-pass analyzer, via `queryExecution.analyzed` (a
+    // collect would insert a `DeserializeToObject` node the single-pass analyzer does not yet
+    // support). When the gate reports the builtin, the star collapses to `count(1)` and analysis
+    // produces the BIGINT builtin count; when it reports a shadow, the star expands and resolves
+    // through the temp SQL `count`, which the single-pass analyzer does not support and reports as
+    // an `ExplicitlyUnsupportedResolverFeature`. Which outcome occurs tells us which owner the gate
+    // picked.
     withPathEnabled {
       sql("CREATE TEMPORARY FUNCTION count(x INT) RETURNS INT RETURN x + 100")
       try {
-        val countStarSql = "SELECT count(*) FROM VALUES (1) AS t(a)"
+        val df = sql("SELECT * FROM VALUES (7) AS t(a)")
 
-        // PATH builtin-first: the single-pass gate reports
-        // `isUnqualifiedCountShadowedByTemp = false`, the shortcut fires, and the analyzed
-        // output is the BIGINT builtin count.
+        // PATH builtin-first: the gate reports the builtin, so the star collapses to `count(1)` and
+        // analysis produces the BIGINT builtin count.
         withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
-          val tpe = spark.sql(countStarSql).queryExecution.analyzed.schema.head.dataType
+          val tpe = df.select(functions.count("*")).queryExecution.analyzed.schema.head.dataType
           assert(tpe == LongType,
             s"Expected BIGINT (builtin count rewrite); got: $tpe")
         }
 
         sql("SET PATH = system.session, system.builtin")
 
-        // PATH session-first: the gate reports true, the rewrite is suppressed, and the
-        // star expands against `a` and resolves through the temp SQL `count`. The
-        // single-pass analyzer does not support SQL functions, so it signals the fallback
-        // via `ExplicitlyUnsupportedResolverFeature` -- reaching this branch confirms the
-        // rewrite was suppressed (otherwise the builtin count would have resolved cleanly).
+        // PATH session-first: the gate reports a shadow, so the star expands against `a` and
+        // resolves through the temp SQL `count`. The single-pass analyzer does not support SQL
+        // functions, so it signals the fallback via `ExplicitlyUnsupportedResolverFeature` --
+        // reaching this branch confirms the gate picked the shadow (otherwise the builtin count
+        // would have resolved cleanly).
         withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
           intercept[ExplicitlyUnsupportedResolverFeature] {
-            spark.sql(countStarSql).queryExecution.analyzed
+            df.select(functions.count("*")).queryExecution.analyzed
           }
+          val qualifiedCountStarSql = "SELECT builtin.count(*) FROM VALUES (1) AS t(a)"
+          val qualifiedTpe = spark.sql(qualifiedCountStarSql)
+            .queryExecution.analyzed.schema.head.dataType
+          assert(qualifiedTpe == LongType,
+            s"Expected BIGINT (qualified builtin count rewrite); got: $qualifiedTpe")
+
+          val systemQualifiedCountStarSql =
+            "SELECT system.builtin.count(*) FROM VALUES (1) AS t(a)"
+          val systemQualifiedTpe = spark.sql(systemQualifiedCountStarSql)
+            .queryExecution.analyzed.schema.head.dataType
+          assert(systemQualifiedTpe == LongType,
+            s"Expected BIGINT (qualified builtin count rewrite); got: $systemQualifiedTpe")
         }
       } finally {
         sql("SET PATH = DEFAULT_PATH")
