@@ -8158,11 +8158,16 @@ class AstBuilder extends DataTypeAstBuilder
         // Add an UnresolvedStarExceptOrReplace to exclude the SET expression name from the relation
         // and add the new SET expression to the projection list.
         // Use a PipeSelect expression to make sure it does not contain any aggregate functions.
+        // Retain the excluded source column as hidden output so that qualified references such as
+        // `t.a` keep returning the original row value after `|> SET a = ...` (SPARK-59146).
         val replacement =
           Alias(PipeExpression(target, isAggregate = false, PipeOperators.setClause), ident)()
         val projectList: Seq[NamedExpression] =
           Seq(UnresolvedStarExceptOrReplace(
-            target = None, excepts = Seq(Seq(ident)), replacements = Some(Seq(replacement))))
+            target = None,
+            excepts = Seq(Seq(ident)),
+            replacements = Some(Seq(replacement)),
+            retainExceptedColumnsAsHidden = true))
         // Add a projection to implement the SET operator using the UnresolvedStarExceptOrReplace
         // expression. We do this once per SET assignment to allow for multiple SET assignments with
         // optional lateral references to previous ones.

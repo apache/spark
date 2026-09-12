@@ -289,14 +289,15 @@ VALUES (0), (1) tab(col)
 +---+
 
 VALUES (0), (1) tab(col)
-|> SET col = col * 2;
+|> SET col = col * 2
+|> SELECT col, tab.col;
 
-+---+
-|col|
-+---+
-|  0|
-|  2|
-+---+
++---+---+
+|col|col|
++---+---+
+|  0|  0|
+|  2|  1|
++---+---+
 ```
 
 #### DROP
