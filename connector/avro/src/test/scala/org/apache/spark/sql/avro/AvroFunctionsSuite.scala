@@ -292,12 +292,15 @@ class AvroFunctionsSuite extends SharedSparkSession {
       df.write.format("avro").save(dir.getCanonicalPath)
       checkAnswer(spark.read.schema(sparkSchema).format("avro").load(dir.getCanonicalPath), df)
 
-      val msg = intercept[SparkException] {
-        spark.read.option("avroSchema", avroTypeStruct).format("avro")
-          .load(dir.getCanonicalPath)
-          .collect()
-      }.getCause.getMessage
-      assert(msg.contains("Invalid default for field id: null not a \"long\""))
+      // Reading with the `avroSchema` option also succeeds. The invalid `null` default is never
+      // materialized because every record carries `id`. Since Avro 1.12.2 (AVRO-4257), a `Schema`
+      // deserialized on the executors is parsed with the non-validating internal parser, so the
+      // reader schema is no longer re-validated after being shipped from the driver, and no error
+      // is raised. This is consistent with the goal of SPARK-39775: schemas that carry invalid but
+      // unused defaults must remain usable end to end.
+      checkAnswer(
+        spark.read.option("avroSchema", avroTypeStruct).format("avro").load(dir.getCanonicalPath),
+        df)
     }
   }
 
