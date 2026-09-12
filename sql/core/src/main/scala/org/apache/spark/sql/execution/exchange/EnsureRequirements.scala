@@ -62,9 +62,18 @@ case class EnsureRequirements(
       shuffleOrigin: ShuffleOrigin): Seq[SparkPlan] = {
     assert(requiredChildDistributions.length == originalChildren.length)
     assert(requiredChildOrderings.length == originalChildren.length)
+    // Get the indexes of children which have specified distribution requirements and need to be
+    // co-partitioned.
+    val childrenIndexes = requiredChildDistributions.zipWithIndex.filter {
+      case (_: ClusteredDistribution, _) => true
+      case _ => false
+    }.map(_._2)
+    val isCoPartitioned = childrenIndexes.length > 1
+
     // Ensure that the operator's children satisfy their output distribution requirements.
     var children = originalChildren.zip(requiredChildDistributions).map {
-      case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
+      case (child, distribution) if satisfiesDistribution(
+          child.outputPartitioning, distribution, isCoPartitioned) =>
         ensureOrdering(child, distribution)
       case (child, BroadcastDistribution(mode)) =>
         BroadcastExchangeExec(mode, child)
@@ -82,13 +91,6 @@ case class EnsureRequirements(
               distribution.createPartitioning(numPartitions), child, shuffleOrigin)
         }
     }
-
-    // Get the indexes of children which have specified distribution requirements and need to be
-    // co-partitioned.
-    val childrenIndexes = requiredChildDistributions.zipWithIndex.filter {
-      case (_: ClusteredDistribution, _) => true
-      case _ => false
-    }.map(_._2)
 
     // Special case: if all sides of the join are single partition and it's physical size less than
     // or equal spark.sql.maxSinglePartitionBytes.
@@ -231,6 +233,31 @@ case class EnsureRequirements(
     }
 
     children
+  }
+
+  private def satisfiesDistribution(
+      partitioning: Partitioning,
+      distribution: Distribution,
+      isCoPartitioned: Boolean): Boolean = {
+    if (isCoPartitioned || !conf.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
+      partitioning.satisfies(distribution)
+    } else {
+      (partitioning, distribution) match {
+        case (PartitioningCollection(partitionings), c: ClusteredDistribution) =>
+          partitionings.exists(satisfiesDistribution(_, c, isCoPartitioned = false))
+        case (k: KeyGroupedPartitioning, c: ClusteredDistribution) =>
+          // With subset keys enabled, satisfies() can be true even though rows sharing an
+          // operation key occupy different partitions. The multi-child path can regroup join
+          // scans, but a single-child operator needs its clustering before it runs. Without
+          // GroupPartitionsExec on this branch, use a shuffle when a partition expression is not
+          // covered by the operation's keys. Do not regroup a scan through an intervening operator.
+          k.satisfies(c) && k.expressions.forall { e =>
+            c.clustering.exists(_.semanticEquals(e)) ||
+              e.collectLeaves().forall(leaf => c.clustering.exists(_.semanticEquals(leaf)))
+          }
+        case _ => partitioning.satisfies(distribution)
+      }
+    }
   }
 
   private def reorder(
