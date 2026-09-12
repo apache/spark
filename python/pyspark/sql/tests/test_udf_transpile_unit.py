@@ -64,11 +64,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 "spark.sql.ansi.enabled": True,
             }
         ):
-            # Make sure we can transpile the object
+            # Make sure we can transpile the object.
             call = PlusFour()
             pudf = UserDefinedFunction(call, LongType())
             self.assertTrue(pudf.transpiled)
-            # Now make sure we can run the transpiled UDF*
+            # Now make sure we can run the transpiled UDF.
             input_df = self.spark.createDataFrame([Row(a=1)])
             transformed_df = input_df.select(pudf("a"))
             [row] = transformed_df.collect()
@@ -97,17 +97,16 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 "spark.sql.ansi.enabled": True,
             }
         ):
-            # Make sure we can transpile the object
+            # Make sure we can transpile the object.
             call = PlusFour()
             pudf = UserDefinedFunction(call, LongType())
             self.assertTrue(pudf.transpiled)
-            # Now make sure we can run the transpiled UDF*
+            # Now make sure we can run the transpiled UDF.
             input_df = self.spark.createDataFrame([Row(a=1)])
             transformed_df = input_df.select(pudf("a").alias("result"))
             [row] = transformed_df.collect()
             self.assertEqual(row[0], 5)
-            physical_plan = transformed_df._jdf.queryExecution().executedPlan().toString()
-            self.assertNotIn("UDF", physical_plan)
+            self.assertEqual(0, self._eval_python_count(transformed_df))
 
         with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFs": False}):
             call = PlusFour()
@@ -522,7 +521,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     def test_udf_transpile_multi_row(self):
         # Every other transpile test uses a 1-row DataFrame; this one runs
         # the same arithmetic transpile on a multi-row input to catch any
-        # column-reference / batch-boundary bug that single-row tests can't.
+        # column-reference / batch-boundary bug that single-row tests cannot.
         from pyspark.sql.types import StructField, StructType
 
         def plus_four(x):
@@ -546,8 +545,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             expected = [None if v is None else v + 4 for v in [-3, -1, 0, 1, 7, None, 100]]
             self.assertEqual(actual, expected)
             # Plan should also have the UDF stripped under the rewrite.
-            physical_plan = transformed_df._jdf.queryExecution().executedPlan().toString()
-            self.assertNotIn("UDF", physical_plan)
+            self.assertEqual(0, self._eval_python_count(transformed_df))
 
     def test_udf_transpile_falls_back_for_non_boolean_short_circuit(self):
         # Python's `x or 0` returns x if truthy else 0; Spark's `|` is
@@ -784,9 +782,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_str_int_compare_matches_python(self):
         # Comparing a value against a string literal (``x == "5"`` / ``x < "5"``)
-        # under the untyped-parameter path produces two candidate options -- a
-        # numeric variant and a string variant. The numeric variant mixes
-        # categories (numeric column vs string literal): Python compares such
+        # under the untyped-parameter path produces integral, fractional, and
+        # string candidate options. The numeric variants mix categories
+        # (numeric column vs string literal): Python compares such
         # values as unequal / raises TypeError, while a lowered ``x = '5'`` would
         # coerce under ANSI and silently diverge -- so ``_lower_eq`` /
         # ``_lower_value_compare`` refuse it. Only the string variant survives.
@@ -1034,9 +1032,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     _warnings.simplefilter("always")
                     pudf = UserDefinedFunction(func, LongType())
                 self.assertEqual([], pudf.transpiled, f"{func.__name__} must not transpile")
-        # Numeric unary still lowers and matches Python.
+        # Runtime numeric unary still lowers and matches Python for in-range values.
         neg = lambda x: -x  # noqa: E731
         self.assertEqual(self._vals(neg, LongType(), "a long", [(5,), (-3,)]), [-5, 3])
+        self._raises(neg, "a long", [(None,)], needle="null")
 
     def test_udf_transpile_falls_back_for_self_reference(self):
         # A __call__ body that references bare `self` has no column
@@ -1431,10 +1430,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         return df._jdf.queryExecution().executedPlan().toString().count("EvalPython")
 
     def test_udf_transpile_lowers_operators(self):
-        # Operators lower to Catalyst and match Python: modulo sign-parity,
-        # non-commutative -/* (parameter order), unary nesting, constant
-        # body, not(compare), nested boolean, string ==/<, reversed-operand and
-        # column-to-column comparisons, if/elif/else, and assigned lambdas.
+        # Operators lower to Catalyst and match Python for in-range arithmetic,
+        # modulo sign parity, unary nesting, comparisons, and control flow.
         L, B = LongType(), BooleanType()
         modulo = lambda x, y: x % y  # noqa: E731
         subtract = lambda a, b: a - b  # noqa: E731
@@ -1460,7 +1457,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             else:
                 return 1
 
-        # (func, return_type, schema, rows, expected); arg columns come from the schema.
+        # (func, return_type, schema, rows, expected); columns come from the schema.
         cases = [
             (modulo, L, "a long, b long", [(7, 3), (7, -3), (-7, 3), (-7, -3)], [1, -2, 2, -1]),
             (subtract, L, "a long, b long", [(5, 3), (3, 5)], [2, -2]),
@@ -1559,8 +1556,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     def test_udf_transpile_falls_back(self):
         # Shapes that must NOT transpile (and still compute via Python):
         # inline/wrapped/partial lambdas, default/variadic/keyword-only args, and
-        # `%` string formatting. (String `+`/`*` now lower to concat/repeat -- see
-        # test_udf_transpile_string_operands -- but `%` as a format is not handled.)
+        # `%` string formatting. String `+` lowers to concat, while string
+        # repetition and `%` formatting fall back.
         import functools
 
         def wrapper(fn):
@@ -1905,18 +1902,42 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             "both parameters come from the call site",
         )
 
-    def test_udf_transpile_known_value_divergences(self):
-        # Transpile but DIVERGE from Python (documented in transpile.py; pinned so
-        # a future fix is noticed): unguarded arithmetic on NULL yields NULL
-        # (Python raises TypeError), and NaN > 0 is True (Python False; Spark
-        # orders NaN highest). Mixed str/numeric arithmetic is handled or falls
-        # back -- see test_udf_transpile_string_operands{,_fall_back}.
+    def test_udf_transpile_null_arithmetic_and_nan_semantics(self):
+        # NULL arithmetic raises as it does in Python. Numeric comparisons
+        # preserve Python's NaN semantics.
         unguarded = lambda x: x + 1  # noqa: E731
         nan_gt = lambda x: (x > 0) if x is not None else None  # noqa: E731
+        nan_eq = lambda x: x == x  # noqa: E731
+        nan_ne = lambda x: x != x  # noqa: E731
         eq_strlit = lambda x: (x == "5") if x is not None else None  # noqa: E731
-        self.assertEqual(self._vals(unguarded, LongType(), "a long", [(None,), (5,)]), [None, 6])
+        self._raises(unguarded, "a long", [(None,)], needle="null")
+        self.assertEqual(self._vals(unguarded, LongType(), "a long", [(5,)]), [6])
         self.assertEqual(
-            self._vals(nan_gt, BooleanType(), "a double", [(float("nan"),), (1.0,)]), [True, True]
+            self._vals(
+                nan_gt,
+                BooleanType(),
+                "a double",
+                [(float("nan"),), (1.0,)],
+            ),
+            [False, True],
+        )
+        self.assertEqual(
+            self._vals(
+                nan_eq,
+                BooleanType(),
+                "a double",
+                [(float("nan"),), (1.0,)],
+            ),
+            [False, True],
+        )
+        self.assertEqual(
+            self._vals(
+                nan_ne,
+                BooleanType(),
+                "a double",
+                [(float("nan"),), (1.0,)],
+            ),
+            [True, False],
         )
         # `x == "5"` used to be pinned as a coercion divergence (int == "5" -> True).
         # The eq category gate now drops the numeric variant, so on a long column the
@@ -1928,22 +1949,38 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             [False, False],
         )
 
+    def test_udf_transpile_nan_guard_only_for_fractional_inputs(self):
+        greater_than_zero = lambda x: x > 0  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            u = self._transpiled_udf(greater_than_zero, BooleanType())
+            self.assertEqual(
+                {("integral",), ("fractional",)},
+                {tuple(categories) for categories in u._transpiled_input_categories},
+            )
+
+            long_df = self.spark.createDataFrame([(1,), (-1,)], "a long")
+            long_result = long_df.select(u("a"))
+            self.assertNotIn("isnan", long_result._jdf.queryExecution().optimizedPlan().toString())
+            self.assertEqual([True, False], [row[0] for row in long_result.collect()])
+
+            double_df = self.spark.createDataFrame([(float("nan"),), (1.0,)], "a double")
+            double_result = double_df.select(u("a"))
+            self.assertIn("isnan", double_result._jdf.queryExecution().optimizedPlan().toString())
+            self.assertEqual([False, True], [row[0] for row in double_result.collect()])
+
     def test_udf_transpile_overflow_and_modulo_zero_raise(self):
-        # Transpiled arithmetic that raises at runtime: `*` overflow raises under
-        # ANSI where Python promotes to a big int (a real divergence, SPARK-55210),
-        # while `% 0` raises in both Spark and Python (compatible -- pinned here so
-        # it isn't mistaken for a divergence).
+        # Transpiled overflow raises under ANSI, while Python promotes to a big
+        # integer. This documented v0 divergence remains until Catalyst can
+        # provide exact promotion. Modulo by zero raises on both paths.
         overflow = lambda x: x * x  # noqa: E731
         modulo_zero = lambda x: x % 0  # noqa: E731
         self._raises(overflow, "a long", [(4000000000,)], "overflow")
         self._raises(modulo_zero, "a long", [(5,)], "zero")
 
     def test_udf_transpile_string_operands(self):
-        # Textual `+`/`*` lower to Catalyst string ops and match Python: `str +
-        # str` -> concat, and `str * int` / `int * str` -> repeat (including a
-        # string column times a numeric literal). The transpiler emits a string-
-        # typed variant whose declared categories the JVM matches against the bound
-        # column types (see UserDefinedPythonFunction.builder).
+        # Textual `+` lowers to NULL-guarded Catalyst concat. Repetition falls
+        # back because its numeric count cannot be represented safely for every
+        # Python integer.
         S = StringType()
         add = lambda a, b: a + b  # noqa: E731
         mul = lambda a, b: a * b  # noqa: E731
@@ -1963,14 +2000,29 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         ]
         for i, (func, rt, schema, rows, expected) in enumerate(cases):
             with self.subTest(case=i):
-                self.assertEqual(self._vals(func, rt, schema, rows), expected, f"case {i}")
+                if i in (0, 4, 5):
+                    actual = self._vals(func, rt, schema, rows)
+                else:
+                    with self.sql_conf(_TRANSPILE_ON):
+                        u, _ = self._fallback_reason(func, rt)
+                        df = self.spark.createDataFrame(rows, schema)
+                        actual = [r[0] for r in df.select(u(*df.columns)).collect()]
+                self.assertEqual(actual, expected, f"case {i}")
+
+        with self.sql_conf(_TRANSPILE_ON):
+            u = UserDefinedFunction(add, StringType())
+            self.assertTrue(u.transpiled)
+            df = self.spark.createDataFrame([(None, "x")], "a string, b string")
+            with self.assertRaises(Exception) as ctx:
+                df.select(u("a", "b")).collect()
+            self.assertIn("null", str(ctx.exception).lower())
 
     def test_udf_transpile_string_operands_fall_back(self):
         # Operand/type combos with no valid string lowering for the bound column
         # types fall back to the Python UDF, which raises the same way CPython does:
         # `str + int` (and reversed), `str - int`, `str * str`, `str % int`, and a
         # string column plus a numeric literal. The transpiler still emits numeric
-        # (and/or concat/repeat) variants, but none match the column types, so the
+        # and/or concat variants, but none match the column types, so the
         # JVM drops them and runs Python -- matching its TypeError.
         add = lambda a, b: a + b  # noqa: E731
         sub = lambda a, b: a - b  # noqa: E731
@@ -2082,6 +2134,17 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self.assertEqual(len(combos), 2)
         for combo in combos:
             self.assertEqual(combo[0], "string")
+
+        compared = _ast.parse("def f(a, b, c, d): return a > b").body[0]
+        comparison_combos = _param_category_combos(compared, ["a", "b", "c", "d"])
+        self.assertEqual(
+            {
+                ("integral",) * 4,
+                ("fractional",) * 4,
+                ("string",) * 4,
+            },
+            {tuple(combo[i] for i in range(4)) for combo in comparison_combos},
+        )
 
 
 if __name__ == "__main__":
