@@ -23,11 +23,11 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{ApplyFunctionExpression, Ascending, AttributeReference, BoundReference, ExprId, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalystRuntimeFilterCatalog, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions._
@@ -478,6 +478,32 @@ class KeyGroupedPartitioningSuite
     val partitionKeys = Seq(0).map(v => InternalRow.fromSeq(Seq(v)))
     checkQueryPlan(df, distribution,
       physical.KeyedPartitioning(distribution.clustering, partitionKeys))
+  }
+
+  test("SPARK-55411: bucket transform preserves null keys") {
+    Seq("TINYINT", "SMALLINT", "INT", "BIGINT", "TIMESTAMP", "TIMESTAMP_NTZ", "STRING", "BINARY")
+      .foreach { dataType =>
+        withTable("testcat.ns.null_bucket") {
+          sql(s"CREATE TABLE testcat.ns.null_bucket (k $dataType) PARTITIONED BY (bucket(4, k))")
+          sql("INSERT INTO testcat.ns.null_bucket VALUES (NULL)")
+          checkAnswer(sql("SELECT k FROM testcat.ns.null_bucket"), Seq(Row(null)))
+
+          val storedTable = catalog.loadTable(Identifier.of(Array("ns"), "null_bucket"))
+            .asInstanceOf[InMemoryBaseTable]
+          assert(storedTable.dataMap.keySet == Set(Seq(0)))
+        }
+      }
+  }
+
+  test("SPARK-55411: bucket function handles null after a non-null key") {
+    val expression = ApplyFunctionExpression(
+      BucketFunction, Seq(Literal(4), BoundReference(0, LongType, nullable = true)))
+
+    // Reuse the expression so its SpecificInternalRow retains the preceding non-null value.
+    assert(expression.eval(InternalRow(5L)) == 1)
+    assert(expression.eval(InternalRow(null)) == 0)
+    assert(expression.eval(InternalRow(-5L)) == 3)
+    assert(expression.eval(InternalRow(null)) == 0)
   }
 
   test("non-clustered distribution: no V2 catalog") {
