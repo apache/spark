@@ -137,6 +137,8 @@ case class StructField(
   }
 
   private def isCollatedString(dt: DataType): Boolean = dt match {
+    case c: CharType => c.collation.isDefined
+    case v: VarcharType => v.collation.isDefined
     case st: StringType => !st.isUTF8BinaryCollation
     case _ => false
   }

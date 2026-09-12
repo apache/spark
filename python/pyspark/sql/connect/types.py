@@ -130,8 +130,12 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.null.CopyFrom(pb2.DataType.NULL())
     elif isinstance(data_type, CharType):
         ret.char.length = data_type.length
+        if data_type.collation is not None:
+            ret.char.collation = data_type.collation
     elif isinstance(data_type, VarcharType):
         ret.var_char.length = data_type.length
+        if data_type.collation is not None:
+            ret.var_char.collation = data_type.collation
     elif isinstance(data_type, StringType):
         ret.string.collation = data_type.collation
     elif isinstance(data_type, BooleanType):
@@ -246,9 +250,11 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         collation = schema.string.collation if schema.string.collation != "" else "UTF8_BINARY"
         return StringType(collation)
     elif schema.HasField("char"):
-        return CharType(schema.char.length)
+        collation = schema.char.collation if schema.char.HasField("collation") else None
+        return CharType(schema.char.length, collation)
     elif schema.HasField("var_char"):
-        return VarcharType(schema.var_char.length)
+        collation = schema.var_char.collation if schema.var_char.HasField("collation") else None
+        return VarcharType(schema.var_char.length, collation)
     elif schema.HasField("date"):
         return DateType()
     elif schema.HasField("time"):

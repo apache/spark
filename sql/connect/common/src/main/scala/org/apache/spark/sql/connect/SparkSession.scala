@@ -56,7 +56,7 @@ import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.internal.{SessionState, SharedState, SqlApiConf, SubqueryExpression}
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{CharType, StructType, VarcharType}
 import org.apache.spark.sql.util.{CloseableIterator, ExecutionListenerManager}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -116,7 +116,11 @@ class SparkSession private[sql] (
   /** @inheritdoc */
   def emptyDataset[T: Encoder]: Dataset[T] = createDataset[T](Nil)
 
-  private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
+  private def createDataset[T](
+      encoder: AgnosticEncoder[T],
+      data: Iterator[T],
+      requestedSchema: Option[StructType] = None): Dataset[T] = {
+    val relationSchema = requestedSchema.getOrElse(encoder.schema)
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
         val confs = conf.getConfigMap(
@@ -150,7 +154,7 @@ class SparkSession private[sql] (
           batchSizeCheckInterval = math.min(1024, maxChunkSizeRows))
 
         try {
-          val schemaBytes = encoder.schema.json.getBytes
+          val schemaBytes = relationSchema.json.getBytes
           // Schema is the first chunk, data chunks follow from the iterator
           val currentBatch = scala.collection.mutable.ArrayBuffer[Array[Byte]](schemaBytes)
           var totalChunks = 1
@@ -191,7 +195,7 @@ class SparkSession private[sql] (
             // Schema + single small data chunk: use LocalRelation with inline data
             val arrowData = ByteString.copyFrom(currentBatch.last)
             builder.getLocalRelationBuilder
-              .setSchema(encoder.schema.json)
+              .setSchema(relationSchema.json)
               .setData(arrowData)
           } else {
             // Multiple data chunks or large data: use ChunkedCachedLocalRelation
@@ -211,7 +215,7 @@ class SparkSession private[sql] (
         }
       } else {
         builder.getLocalRelationBuilder
-          .setSchema(encoder.schema.json)
+          .setSchema(relationSchema.json)
       }
     }
   }
@@ -223,7 +227,19 @@ class SparkSession private[sql] (
 
   /** @inheritdoc */
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
-    createDataset(RowEncoder.encoderFor(schema), rows.iterator().asScala).toDF()
+    // RowEncoder applies CHAR/VARCHAR semantics from the client process's local SqlApiConf, which
+    // can differ from the server-side configuration visible through SparkSession.conf. Send raw
+    // string values and let the server apply its policy to the separately provided logical schema.
+    val physicalSchema = schema
+      .transformRecursively {
+        case c: CharType => c.toStringType
+        case v: VarcharType => v.toStringType
+      }
+      .asInstanceOf[StructType]
+    createDataset(
+      RowEncoder.encoderForResultSchema(physicalSchema),
+      rows.iterator().asScala,
+      requestedSchema = Some(schema)).toDF()
   }
 
   /** @inheritdoc */

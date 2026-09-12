@@ -673,6 +673,68 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(fromDDL(struct.toDDL) === struct)
   }
 
+  test("SPARK-59276: CHAR/VARCHAR collations round trip through JSON") {
+    val dataTypes = Seq(
+      CharType(4, "UTF8_BINARY"),
+      CharType(4, "UTF8_LCASE"),
+      VarcharType(6, "UNICODE_CI"),
+      StructType(
+        StructField("c", CharType(4, "UTF8_LCASE")) ::
+          StructField("v", ArrayType(VarcharType(6, "UNICODE_CI"))) :: Nil),
+      StructType(
+        StructField(
+          "mixed",
+          MapType(CharType(4, "UTF8_BINARY"), VarcharType(6, "UNICODE_CI"))) :: Nil))
+
+    dataTypes.foreach { dataType =>
+      assert(DataType.fromJson(dataType.json) === dataType)
+    }
+
+    val compatibilitySchema = StructType(
+      StructField("plain", CharType(3)) ::
+        StructField("binary", CharType(4, "UTF8_BINARY")) ::
+        StructField("nested", ArrayType(VarcharType(6, "UNICODE_CI"))) :: Nil)
+    val expectedJson =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "plain",
+         |      "type": "char(3)",
+         |      "nullable": true,
+         |      "metadata": {}
+         |    },
+         |    {
+         |      "name": "binary",
+         |      "type": "char(4)",
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "binary": "spark.UTF8_BINARY"
+         |        }
+         |      }
+         |    },
+         |    {
+         |      "name": "nested",
+         |      "type": {
+         |        "type": "array",
+         |        "elementType": "varchar(6)",
+         |        "containsNull": true
+         |      },
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "nested.element": "icu.UNICODE_CI"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+    assert(mapper.readTree(compatibilitySchema.json) == mapper.readTree(expectedJson))
+  }
+
   test("simple struct with collations to json") {
     val simpleStruct = StructType(
       StructField("c1", StringType(UNICODE_COLLATION)) :: Nil)
