@@ -18,19 +18,24 @@
 package org.apache.spark.sql.connect.service
 
 import java.net.InetSocketAddress
+import java.nio.file.Files
+import java.security.KeyStore
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.TrustManagerFactory
 
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import com.google.protobuf.Message
 import io.grpc.{BindableService, MethodDescriptor, Server, ServerMethodDefinition, ServerServiceDefinition}
 import io.grpc.MethodDescriptor.PrototypeMarshaller
-import io.grpc.netty.NettyServerBuilder
+import io.grpc.netty.{GrpcSslContexts, NettyServerBuilder}
 import io.grpc.protobuf.ProtoUtils
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
+import io.netty.handler.ssl.{ClientAuth, SslContext, SslContextBuilder}
 
-import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.{SecurityManager, SparkContext, SparkEnv, SparkException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
@@ -437,6 +442,8 @@ object SparkConnectService extends Logging {
       sb.permitKeepAliveWithoutCalls(true)
       sb.addService(sparkConnectService)
 
+      buildConnectSslContext(SparkEnv.get.securityManager).foreach(sb.sslContext)
+
       getAuthenticateToken.foreach { token =>
         sb.intercept(new PreSharedKeyAuthenticationInterceptor(token))
       }
@@ -470,6 +477,80 @@ object SparkConnectService extends Logging {
       startServiceFn,
       maxRetries,
       getClass.getName.stripSuffix("$"))
+  }
+
+  /**
+   * Build a Netty SslContext for the Spark Connect gRPC server from the `spark.ssl.connect.*`
+   * namespace. Returns None when TLS is disabled.
+   *
+   * Server key material is read as PEM (`certChain` + `privateKey` + optional
+   * `privateKeyPassword`). When `needClientAuth=true` the server additionally requires and
+   * verifies a client certificate against a JKS trust store (`trustStore` +
+   * `trustStorePassword`), i.e. mutual TLS. Reloading trust manager
+   * (`trustStoreReloadingEnabled`) is not yet honored on Connect: the server logs a warning and
+   * loads the trust store statically. `openSslEnabled=true` is rejected with a `SparkException`
+   * at startup rather than silently falling back to the JDK provider, so operators do not think
+   * they are running on OpenSSL when they are not. JKS server key material, protocol/cipher
+   * overrides, PEM trust anchors, and OpenSSL are follow-ups.
+   *
+   * Matches the `spark.ssl.rpc.enabled` precedent: does NOT inherit `spark.ssl.enabled`; must be
+   * opted into explicitly.
+   */
+  private[service] def buildConnectSslContext(sm: SecurityManager): Option[SslContext] = {
+    val opts = sm.getSSLOptions("connect")
+    if (!opts.enabled) {
+      logDebug("Spark Connect gRPC server: TLS disabled")
+      return None
+    }
+    if (opts.openSslEnabled) {
+      throw new SparkException(
+        "spark.ssl.connect.openSslEnabled=true is not yet supported " +
+          "on the Spark Connect server; unset it or set it to false to use the JDK SSL provider")
+    }
+    val cert = opts.certChain.getOrElse(
+      throw new SparkException(
+        "spark.ssl.connect.enabled=true but spark.ssl.connect.certChain is not set"))
+    val key = opts.privateKey.getOrElse(
+      throw new SparkException(
+        "spark.ssl.connect.enabled=true but spark.ssl.connect.privateKey is not set"))
+    val builder = SslContextBuilder.forServer(cert, key, opts.privateKeyPassword.orNull)
+    val trustManagerFactory = opts.trustStore.map { ts =>
+      try {
+        val ksType = opts.trustStoreType.getOrElse(KeyStore.getDefaultType)
+        val ks = KeyStore.getInstance(ksType)
+        val passwordChars = opts.trustStorePassword.map(_.toCharArray).orNull
+        Utils.tryWithResource(Files.newInputStream(ts.toPath))(ks.load(_, passwordChars))
+        val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
+        tmf.init(ks)
+        tmf
+      } catch {
+        case NonFatal(e) =>
+          throw new SparkException(
+            s"Failed to load spark.ssl.connect.trustStore='${ts.getAbsolutePath}': " +
+              e.getMessage,
+            e)
+      }
+    }
+    trustManagerFactory.foreach(builder.trustManager)
+    if (opts.trustStoreReloadingEnabled) {
+      logWarning(
+        "spark.ssl.connect.trustStoreReloadingEnabled=true is not yet supported; " +
+          "loading the trust store statically at startup")
+    }
+    val clientAuth = if (opts.needClientAuth) {
+      if (trustManagerFactory.isEmpty) {
+        throw new SparkException(
+          "spark.ssl.connect.needClientAuth=true but " +
+            "spark.ssl.connect.trustStore is not set")
+      }
+      builder.clientAuth(ClientAuth.REQUIRE)
+      "REQUIRE"
+    } else {
+      "NONE"
+    }
+    logInfo("Spark Connect gRPC server: TLS enabled")
+    logDebug(s"Spark Connect gRPC server TLS posture: keyMaterial=PEM, clientAuth=$clientAuth")
+    Some(GrpcSslContexts.configure(builder).build())
   }
 
   // Starts the service
