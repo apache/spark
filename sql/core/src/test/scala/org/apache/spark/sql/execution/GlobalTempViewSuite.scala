@@ -187,7 +187,7 @@ class GlobalTempViewSuite extends SharedSparkSession {
             "SELECT /*+ MAPJOIN(global_temp.v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id"
           ).foreach { statement =>
             sql(statement).queryExecution.optimizedPlan match {
-              case Join(_, _, _, _, JoinHint(Some(HintInfo(Some(BROADCAST))), None)) =>
+              case Join(_, _, _, _, JoinHint(Some(HintInfo(Some(BROADCAST), _)), None)) =>
               case _ => fail("broadcast hint not found in a left-side table")
             }
           }

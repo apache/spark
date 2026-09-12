@@ -10266,7 +10266,7 @@
   },
   "_LEGACY_ERROR_TEMP_1046" : {
     "message" : [
-      "Join strategy hint parameter should be an identifier or string but was <unsupported> (<class>)."
+      "Join hint parameter should be an identifier or string but was <unsupported> (<class>)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1047" : {
