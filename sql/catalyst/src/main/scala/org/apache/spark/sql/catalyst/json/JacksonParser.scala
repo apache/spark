@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import com.fasterxml.jackson.core._
 import org.apache.hadoop.fs.PositionedReadable
 
-import org.apache.spark.SparkUpgradeException
+import org.apache.spark.{SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
@@ -40,7 +40,7 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkErrorUtils, Utils}
 
 /**
  * Constructs a parser for a given schema that translates a json string to an [[InternalRow]].
@@ -53,6 +53,16 @@ class JacksonParser(
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
+
+  private object DuplicateMapKeyException {
+    def unapply(exception: Throwable): Option[SparkRuntimeException] = {
+      SparkErrorUtils.getRootCause(exception) match {
+        case cause: SparkRuntimeException if cause.getCondition == "DUPLICATED_MAP_KEY" =>
+          Some(cause)
+        case _ => None
+      }
+    }
+  }
 
   // A `ValueConverter` is responsible for converting a value from `JsonParser`
   // to a value in a field for `InternalRow`.
@@ -187,7 +197,8 @@ class JacksonParser(
   private def makeMapRootConverter(mt: MapType): JsonParser => Iterable[InternalRow] = {
     val fieldConverter = makeConverter(mt.valueType)
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, mt) {
-      case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter)))
+      case START_OBJECT =>
+        Some(InternalRow(convertMap(parser, fieldConverter, mt.keyType, mt.valueType)))
     }
   }
 
@@ -302,7 +313,7 @@ class JacksonParser(
           }
       }
 
-    case _: StringType => (parser: JsonParser) => {
+    case dt: StringType => (parser: JsonParser) => {
       // This must be enabled if we will retrieve the bytes directly from the raw content:
       val oldFeature = parser.getFeatureMask
       val featureToAdd = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION.getMask
@@ -356,7 +367,7 @@ class JacksonParser(
       // to be reset. This ensures that every feature is restored to its previous
       // state as defined by `oldFeature`.
       parser.overrideStdFeatures(oldFeature, ~0)
-      result
+      CharVarcharUtils.applyTextParseSemantics(result, dt)
     }
 
     case TimestampType =>
@@ -480,7 +491,7 @@ class JacksonParser(
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
       (parser: JsonParser) => parseJsonToken[MapData](parser, dataType) {
-        case START_OBJECT => convertMap(parser, valueConverter)
+        case START_OBJECT => convertMap(parser, valueConverter, mt.keyType, mt.valueType)
       }
 
     case udt: UserDefinedType[_] =>
@@ -589,6 +600,7 @@ class JacksonParser(
             bitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
+            case DuplicateMapKeyException(e) => throw e
             case err: PartialValueException if enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(err.cause))
               row.update(index, err.partialResult)
@@ -617,33 +629,68 @@ class JacksonParser(
    */
   private def convertMap(
       parser: JsonParser,
-      fieldConverter: ValueConverter): MapData = {
+      fieldConverter: ValueConverter,
+      keyType: DataType,
+      valueType: DataType): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
-    var badRecordException: Option[Throwable] = None
+    val normalizedKeys = ArrayBuffer.empty[UTF8String]
+    val hasConstrainedKeys = keyType.isInstanceOf[CharType] || keyType.isInstanceOf[VarcharType]
+    var partialResultException: Option[Throwable] = None
+    var badMapException: Option[Throwable] = None
 
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      keys += UTF8String.fromString(parser.currentName)
-      try {
-        values += fieldConverter.apply(parser)
+      val rawKey = UTF8String.fromString(parser.currentName)
+      val value = try {
+        Some(fieldConverter.apply(parser))
       } catch {
         case err: PartialValueException if enablePartialResults =>
-          badRecordException = badRecordException.orElse(Some(err.cause))
-          values += err.partialResult
+          partialResultException = partialResultException.orElse(Some(err.cause))
+          Some(err.partialResult)
+        case DuplicateMapKeyException(e) => throw e
         case NonFatal(e) if enablePartialResults =>
-          badRecordException = badRecordException.orElse(Some(e))
+          badMapException = badMapException.orElse(Some(e))
           parser.skipChildren()
+          None
+      }
+      try {
+        val key = CharVarcharUtils.applyTextParseSemantics(rawKey, keyType)
+        if (hasConstrainedKeys) {
+          normalizedKeys += key
+        }
+        value.foreach { parsedValue =>
+          keys += key
+          values += parsedValue
+        }
+      } catch {
+        case DuplicateMapKeyException(e) => throw e
+        case NonFatal(e) if enablePartialResults =>
+          badMapException = badMapException.orElse(Some(e))
       }
     }
 
-    // The JSON map will never have null or duplicated map keys, it's safe to create a
-    // ArrayBasedMapData directly here.
-    val mapData = ArrayBasedMapData(keys.toArray, values.toArray)
+    val mapData = keyType match {
+      case _: CharType | _: VarcharType =>
+        // Apply the duplicate policy to every normalized key, including entries whose malformed
+        // values are omitted from the partial map.
+        new ArrayBasedMapBuilder(keyType, NullType).from(
+          new GenericArrayData(normalizedKeys.toArray),
+          new GenericArrayData(Array.fill[Any](normalizedKeys.length)(null)))
+        new ArrayBasedMapBuilder(keyType, valueType)
+          .from(new GenericArrayData(keys.toArray), new GenericArrayData(values.toArray))
+      case _ =>
+        // Preserve the historical behavior for ordinary string keys.
+        ArrayBasedMapData(keys.toArray, values.toArray)
+    }
 
-    if (badRecordException.isEmpty) {
+    // Ordinary value or key conversion failures invalidate the whole map. Delay throwing until
+    // the closing brace has been consumed and constrained-key deduplication has been applied.
+    badMapException.foreach(throw _)
+
+    if (partialResultException.isEmpty) {
       mapData
     } else {
-      throw PartialMapDataResultException(mapData, badRecordException.get)
+      throw PartialMapDataResultException(mapData, partialResultException.get)
     }
   }
 
@@ -717,6 +764,7 @@ class JacksonParser(
       }
     } catch {
       case e: SparkUpgradeException => throw e
+      case DuplicateMapKeyException(e) => throw e
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by

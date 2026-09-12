@@ -1020,6 +1020,31 @@ trait CharVarcharTestSuite extends QueryTest {
 class BasicCharVarcharTestSuite extends SharedSparkSession {
   import testImplicits._
 
+  private def assertParseExceedLimit(query: String, expectedLimit: String = "5"): Unit = {
+    val e = intercept[SparkException] { sql(query).collect() }
+    val cause = e.getCause match {
+      case r: SparkRuntimeException => r
+      case other =>
+        Option(other).flatMap(t => Option(t.getCause)).getOrElse(other) match {
+          case r: SparkRuntimeException => r
+          case _ => fail(s"expected EXCEED_LIMIT_LENGTH cause, got: $e")
+        }
+    }
+    checkError(
+      exception = cause,
+      condition = "EXCEED_LIMIT_LENGTH",
+      parameters = Map("limit" -> expectedLimit))
+  }
+
+  private def assertDuplicateMapKey(query: String, expectedKey: String = "a "): Unit = {
+    checkError(
+      exception = intercept[SparkRuntimeException] { sql(query).collect() },
+      condition = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> expectedKey,
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
+  }
+
   test("user-specified schema in cast") {
     def assertNoCharType(df: DataFrame): Unit = {
       checkAnswer(df, Row("0"))
@@ -2398,6 +2423,179 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           assert(df.schema.head.dataType === VarcharType(5))
           checkAnswer(df, Row("cd"))
         }
+      }
+    }
+  }
+
+  test("SPARK-59274: from_json/csv/xml honor CHAR/VARCHAR under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val jsonChar = sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
+      val jsonCharType = jsonChar.schema.head.dataType.asInstanceOf[StructType]
+      assert(jsonCharType.head.dataType === CharType(5))
+      checkAnswer(jsonChar, Row(Row("str  ")))
+
+      val jsonVarchar = sql("""SELECT from_json('{"a": "ab"}', 'a VARCHAR(5)')""")
+      val jsonVarcharType = jsonVarchar.schema.head.dataType.asInstanceOf[StructType]
+      assert(jsonVarcharType.head.dataType === VarcharType(5))
+      checkAnswer(jsonVarchar, Row(Row("ab")))
+
+      // Default PERMISSIVE mode turns length failures into a null record.
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
+        checkAnswer(
+          sql(s"""SELECT from_json('{"a": "abcdef"}', 'a $dataType')"""),
+          Row(Row(null)))
+        assertParseExceedLimit(
+          s"""SELECT from_json(
+             |  '{"a": "abcdef"}',
+             |  'a $dataType',
+             |  map('mode', 'FAILFAST'))""".stripMargin)
+      }
+
+      checkAnswer(
+        sql("""SELECT from_json('{"ab": 1}', 'MAP<CHAR(4), INT>')"""),
+        Row(Map("ab  " -> 1)))
+
+      checkAnswer(sql("SELECT from_csv('str', 'a CHAR(5)')"), Row(Row("str  ")))
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
+        checkAnswer(sql(s"SELECT from_csv('abcdef', 'a $dataType')"), Row(Row(null)))
+        assertParseExceedLimit(
+          s"SELECT from_csv('abcdef', 'a $dataType', map('mode', 'FAILFAST'))")
+      }
+
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><a>str</a></ROW>', 'a CHAR(5)')"),
+        Row(Row("str  ")))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><a></a></ROW>',
+            |  'a CHAR(5)',
+            |  map('nullValue', 'NULL'))""".stripMargin),
+        Row(Row("     ")))
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
+        checkAnswer(
+          sql(s"SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a $dataType')"),
+          Row(Row(null)))
+        assertParseExceedLimit(
+          s"SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a $dataType', " +
+            "map('mode', 'FAILFAST'))")
+      }
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(4), INT>')"),
+        Row(Row(Map("ab  " -> 1))))
+      withTempPath { path =>
+        Seq("<ROW><m><a>1</a></m></ROW>").toDS().write.text(path.getCanonicalPath)
+        val xmlDataFrame = spark.read
+          .option("rowTag", "ROW")
+          .schema("m MAP<CHAR(2), INT>")
+          .xml(path.getCanonicalPath)
+        assert(
+          xmlDataFrame.schema("m").dataType ===
+            MapType(CharType(2), IntegerType, valueContainsNull = true))
+        checkAnswer(xmlDataFrame, Row(Map("a " -> 1)))
+      }
+
+      checkAnswer(
+        sql("""SELECT schema_of_json(CAST('{"a":1}' AS VARCHAR(20)))"""),
+        Row("STRUCT<a: BIGINT>"))
+      checkAnswer(
+        sql("SELECT schema_of_csv(CAST('1,abc' AS VARCHAR(20)))"),
+        Row("STRUCT<_c0: INT, _c1: STRING>"))
+      checkAnswer(
+        sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS VARCHAR(40)))"),
+        Row("STRUCT<a: BIGINT>"))
+    }
+  }
+
+  test("SPARK-59274: normalized CHAR map key collisions honor the dedup policy") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      val jsonQuery =
+        """SELECT from_json('{"a":1,"a ":2}', 'MAP<CHAR(2), INT>')"""
+      val jsonFailfastQuery =
+        """SELECT from_json(
+          |  '{"a":1,"a ":2}',
+          |  'MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin
+      val varcharJsonQuery =
+        """SELECT from_json('{"ab":1,"ab ":2}', 'MAP<VARCHAR(2), INT>')"""
+      val varcharOverflowQuery =
+        """SELECT from_json('{"abc":1}', 'MAP<VARCHAR(2), INT>')"""
+      val varcharOverflowFailfastQuery =
+        """SELECT from_json(
+          |  '{"abc":1}',
+          |  'MAP<VARCHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin
+      val nestedJsonQuery =
+        """SELECT from_json(
+          |  '{"outer":{"a":1,"a ":2}}',
+          |  'MAP<STRING, MAP<CHAR(2), INT>>')""".stripMargin
+      val badFieldBeforeDuplicateQuery =
+        """SELECT from_json(
+          |  '{"bad":"not-an-int","m":{"a":1,"a ":2}}',
+          |  'bad INT, m MAP<CHAR(2), INT>')""".stripMargin
+      val badKeyThenSiblingQuery =
+        """SELECT from_json(
+          |  '{"m":{"abc":1},"tail":2}',
+          |  'm MAP<CHAR(2), INT>, tail INT').tail""".stripMargin
+      val badXmlKeyThenSiblingQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><abc>1</abc></m><tail>2</tail></ROW>',
+          |  'm MAP<CHAR(2), INT>, tail INT').tail""".stripMargin
+      val badValueBeforeDuplicateQuery =
+        """SELECT from_json('{"bad":"not-an-int","a":1,"a ":2}', 'MAP<CHAR(2), INT>')"""
+      val malformedValueBeforeDuplicateQuery =
+        """SELECT from_json('{"a":"bad","a ":2}', 'MAP<CHAR(2), INT>')"""
+      val xmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a>9</m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('valueTag', 'a ')).m""".stripMargin
+      val badXmlKeyBeforeDuplicateQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><abc>0</abc><a>1</a>2</m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('valueTag', 'a ')).m""".stripMargin
+
+      assertDuplicateMapKey(jsonQuery)
+      assertDuplicateMapKey(jsonFailfastQuery)
+      assertDuplicateMapKey(varcharJsonQuery, expectedKey = "ab")
+      checkAnswer(sql(varcharOverflowQuery), Row(null))
+      assertParseExceedLimit(varcharOverflowFailfastQuery, expectedLimit = "2")
+      assertDuplicateMapKey(nestedJsonQuery)
+      assertDuplicateMapKey(badFieldBeforeDuplicateQuery)
+      assertDuplicateMapKey(badValueBeforeDuplicateQuery)
+      assertDuplicateMapKey(malformedValueBeforeDuplicateQuery)
+      assertDuplicateMapKey(xmlQuery)
+      assertDuplicateMapKey(badXmlKeyBeforeDuplicateQuery)
+      checkAnswer(sql(badKeyThenSiblingQuery), Row(2))
+      checkAnswer(sql(badXmlKeyThenSiblingQuery), Row(2))
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(jsonFailfastQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(varcharJsonQuery), Row(Map("ab" -> 2)))
+        checkAnswer(sql(nestedJsonQuery), Row(Map("outer" -> Map("a " -> 2))))
+        checkAnswer(sql(badValueBeforeDuplicateQuery), Row(null))
+        checkAnswer(sql(malformedValueBeforeDuplicateQuery), Row(null))
+        checkAnswer(sql(xmlQuery), Row(Map("a " -> 9)))
+      }
+    }
+  }
+
+  test("SPARK-59274: ordinary STRING map duplicate behavior is unchanged") {
+    Seq("false", "true").foreach { standardSemantics =>
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standardSemantics) {
+        checkAnswer(
+          sql("""SELECT from_json('{"a":1,"a":2}', 'MAP<STRING, INT>')"""),
+          Row(Map("a" -> 2)))
+        checkAnswer(
+          sql("""SELECT from_xml(
+            |  '<ROW><m><a>1</a><a>2</a></m></ROW>',
+            |  'm MAP<STRING, INT>').m""".stripMargin),
+          Row(Map("a" -> 2)))
       }
     }
   }

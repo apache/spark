@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.SparkErrorUtils
 
 class FailureSafeParser[IN](
     rawParser: IN => Iterable[InternalRow],
@@ -33,6 +35,13 @@ class FailureSafeParser[IN](
   private val actualSchema = StructType(schema.filterNot(_.name == columnNameOfCorruptRecord))
   private val resultRow = new GenericInternalRow(schema.length)
   private val nullResult = new GenericInternalRow(schema.length)
+
+  private def duplicateMapKeyCause(e: Throwable): Option[SparkRuntimeException] = {
+    SparkErrorUtils.getRootCause(e) match {
+      case cause: SparkRuntimeException if cause.getCondition == "DUPLICATED_MAP_KEY" => Some(cause)
+      case _ => None
+    }
+  }
 
   // This function takes 2 parameters: an optional partial result, and the bad record. If the given
   // schema doesn't contain a field for corrupted record, we just return the partial result or a
@@ -59,6 +68,9 @@ class FailureSafeParser[IN](
     try {
       rawParser.apply(input).iterator.map(row => toResultRow(Some(row), () => null))
     } catch {
+      // Duplicate map keys are governed by mapKeyDedupPolicy, not the parse mode.
+      case e: BadRecordException if duplicateMapKeyCause(e).isDefined =>
+        throw duplicateMapKeyCause(e).get
       case e: BadRecordException => mode match {
         case PermissiveMode =>
           val partialResults = e.partialResults()
