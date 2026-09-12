@@ -22,7 +22,7 @@ import java.net.HttpURLConnection
 import java.util
 import java.util.{Collections, Locale}
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.jdk.CollectionConverters._
 
@@ -246,6 +246,45 @@ class AmIpFilterSuite extends SparkFunSuite {
     assert(servletWrapper.getUserPrincipal.getName === "user")
     assert(servletWrapper.getRemoteUser === "user")
     assert(!servletWrapper.isUserInRole(""))
+  }
+
+  test("proxy-user cookie is not trusted and the filter fails closed when " +
+    "TRUST_PROXY_USER_COOKIE is false") {
+    val request = mock(classOf[HttpServletRequest])
+    when(request.getCookies).thenReturn(
+      Array(new Cookie(AmIpFilter.PROXY_USER_COOKIE_NAME, "someuser")))
+    when(request.getRemoteAddr).thenReturn(proxyHost)
+    val response = mock(classOf[HttpServletResponse])
+
+    def capturedRequest(trust: Option[String]): ServletRequest = {
+      val captured = new AtomicReference[ServletRequest]()
+      val chain = new FilterChain() {
+        override def doFilter(req: ServletRequest, resp: ServletResponse): Unit =
+          captured.set(req)
+      }
+      val params = new util.HashMap[String, String]
+      params.put(AmIpFilter.PROXY_HOST, proxyHost)
+      params.put(AmIpFilter.PROXY_URI_BASE, proxyUri)
+      trust.foreach(t => params.put(AmIpFilter.TRUST_PROXY_USER_PARAM, t))
+      val filter = new TestAmIpFilter
+      filter.init(new DummyFilterConfig(params))
+      filter.doFilter(request, response, chain)
+      filter.destroy()
+      captured.get
+    }
+
+    // Default (parameter absent) trusts the cookie: the request is wrapped with the cookie user.
+    val trusted = capturedRequest(None)
+    assert(trusted.isInstanceOf[AmIpServletRequestWrapper])
+    assert(trusted.asInstanceOf[HttpServletRequest].getRemoteUser === "someuser")
+
+    // TRUST_PROXY_USER_COOKIE=false: the cookie is not trusted, and the filter fails closed by
+    // wrapping the request with the sentinel principal instead of forwarding it with the cookie
+    // user (or with no user at all). The sentinel is in no ACL, so a SecurityManager denies it.
+    val notTrusted = capturedRequest(Some("false"))
+    assert(notTrusted.isInstanceOf[AmIpServletRequestWrapper])
+    assert(notTrusted.asInstanceOf[HttpServletRequest].getRemoteUser ===
+      AmIpFilter.UNTRUSTED_PROXY_USER)
   }
 
   private class HttpServletResponseForTest extends HttpServletResponse {

@@ -301,6 +301,27 @@ package object config extends Logging {
     .intConf
     .createWithDefault(1)
 
+  private[spark] val AM_TRUST_PROXY_USER_COOKIE =
+    ConfigBuilder("spark.yarn.am.trustProxyUserCookie")
+      .doc("When true (default), the YARN AM UI filter uses the 'proxy-user' cookie set by the " +
+        "YARN RM web proxy to determine the user for the AM UI view/modify ACLs. This forwarded " +
+        "cookie is not cryptographically signed; fully guaranteeing its integrity would require " +
+        "the YARN RM web proxy to sign it (a Hadoop-side change), so this option is an interim " +
+        "workaround until then. When false, the AM UI filter does not trust the cookie and fails " +
+        "closed: it treats a proxied request as an unauthenticated user that is in no ACL, so " +
+        "while AM UI ACLs are enabled (spark.acls.enable=true) the request is denied unless " +
+        "another authentication filter establishes the user. (Leaving the request with no user " +
+        "instead would not help: a null user passes every view and modify ACL check.) The AM " +
+        "always installs its own filter first, so this option is meant for client mode, where a " +
+        "separate authentication filter set in spark.ui.filters runs after it and, if it wraps " +
+        "the request, supplies the real user and overrides the sentinel. In cluster mode the AM " +
+        "replaces spark.ui.filters with its own filter, so no other filter runs and, with the " +
+        "cookie not trusted, all proxied requests are denied while ACLs are enabled. Only set it " +
+        "to false in client mode together with such an authentication filter.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val YARN_AM_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
     ConfigBuilder("spark.yarn.am.limitActiveProcessorCount.enabled")
       .doc("Whether to add -XX:ActiveProcessorCount=<spark.yarn.am.cores> to the YARN " +

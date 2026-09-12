@@ -695,7 +695,22 @@ private[spark] class ApplicationMaster(
   /** Add the Yarn IP filter that is required for properly securing the UI. */
   private def addAmIpFilter(driver: Option[RpcEndpointRef], proxyBase: String) = {
     val amFilter = classOf[AmIpFilter].getName
-    val params = client.getAmIpFilterParams(yarnConf, proxyBase)
+    val baseParams = client.getAmIpFilterParams(yarnConf, proxyBase)
+    val trustProxyUserCookie = sparkConf.get(AM_TRUST_PROXY_USER_COOKIE)
+    // Refuse to arm the option silently. Whether another filter establishes the user cannot be
+    // told from the configuration -- an IP allowlist or token filter in spark.ui.filters may run
+    // without wrapping the request -- so state the effect rather than guess the cause: with the
+    // cookie not trusted, the AM filter fails closed and proxied requests are treated as an
+    // unauthenticated user, so AM UI ACLs deny them unless another authentication filter
+    // establishes the user.
+    if (!trustProxyUserCookie) {
+      logWarning(log"${MDC(LogKeys.CONFIG, AM_TRUST_PROXY_USER_COOKIE.key)} is false, so proxied " +
+        log"requests are treated as an unauthenticated user and are denied by the AM UI view " +
+        log"and modify ACLs unless another authentication filter establishes the user.")
+    }
+    // Only pass the init parameter when the cookie is not trusted; when trusted (the default) the
+    // filter parameters stay unchanged from the original behavior.
+    val params = ApplicationMaster.amIpFilterParams(baseParams, trustProxyUserCookie)
     driver match {
       case Some(d) =>
         d.send(AddWebUIFilter(amFilter, params, proxyBase))
@@ -949,6 +964,21 @@ object ApplicationMaster extends Logging {
 
   private[spark] def getAttemptId(): ApplicationAttemptId = {
     master.appAttemptId
+  }
+
+  /**
+   * Builds the AM IP filter init parameters. When the proxy-user cookie is not trusted, adds the
+   * TRUST_PROXY_USER_COOKIE=false init parameter so `AmIpFilter` ignores the cookie; otherwise the
+   * base parameters are returned unchanged, preserving the original behavior.
+   */
+  private[spark] def amIpFilterParams(
+      baseParams: Map[String, String],
+      trustProxyUserCookie: Boolean): Map[String, String] = {
+    if (trustProxyUserCookie) {
+      baseParams
+    } else {
+      baseParams + (AmIpFilter.TRUST_PROXY_USER_PARAM -> "false")
+    }
   }
 
   private[spark] def getHistoryServerAddress(

@@ -41,4 +41,17 @@ class ApplicationMasterSuite extends SparkFunSuite {
 
     assert(shsAddr === s"http://${host}:${port}/history/${appId}/${attemptId}")
   }
+
+  test("SPARK-59312: amIpFilterParams adds TRUST_PROXY_USER_COOKIE only when not trusted") {
+    val baseParams = Map("PROXY_HOSTS" -> "host", "PROXY_URI_BASES" -> "uri")
+
+    // Trusted (the default): parameters are unchanged from the original behavior.
+    assert(ApplicationMaster.amIpFilterParams(baseParams, trustProxyUserCookie = true)
+      === baseParams)
+
+    // Not trusted: the TRUST_PROXY_USER_COOKIE=false init parameter is added.
+    val untrusted = ApplicationMaster.amIpFilterParams(baseParams, trustProxyUserCookie = false)
+    assert(untrusted === baseParams + (AmIpFilter.TRUST_PROXY_USER_PARAM -> "false"))
+    assert(untrusted(AmIpFilter.TRUST_PROXY_USER_PARAM) === "false")
+  }
 }
