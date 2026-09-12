@@ -33,9 +33,10 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * matching the way v2 table inspection execs (e.g. `ShowCreateTableExec`, `DescribeTableExec`)
  * consume the [[org.apache.spark.sql.connector.catalog.Table]] attached to `ResolvedTable`.
  *
- * Only non-session v2 views land here; the session-catalog path is rewritten to v1 commands by
- * `ResolveSessionCatalog` before strategy fires. The catalog name and identifier are passed
- * alongside `viewInfo` for output formatting (qualified names, EXTENDED block headers).
+ * ViewCatalog-backed views land here; session catalogs without ViewCatalog are rewritten to v1
+ * commands by `ResolveSessionCatalog` before strategy fires. The catalog name and identifier
+ * are passed alongside `viewInfo` for output formatting (qualified names, EXTENDED block
+ * headers).
  */
 
 /**

@@ -1885,9 +1885,9 @@ case class RepairTable(
  *
  * Extends [[AnalysisOnlyCommand]] so [[Analyzer.HandleSpecialCommand]] captures
  * `referredTempFunctions` from [[AnalysisContext]]; this list is needed by
- * [[CheckViewReferences]] and by the v2 execs when the target is a non-session catalog.
- * Session-catalog targets are still rewritten to [[AlterViewAsCommand]] by
- * `ResolveSessionCatalog` and the captured value is dropped there (the v1 command re-captures).
+ * [[CheckViewReferences]] and by the v2 execs when the target is a ViewCatalog. Session-catalog
+ * targets without ViewCatalog are rewritten to [[AlterViewAsCommand]] by `ResolveSessionCatalog`
+ * and the captured value is dropped there (the v1 command re-captures).
  */
 case class AlterViewAs(
     child: LogicalPlan,
