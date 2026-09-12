@@ -46,10 +46,10 @@ import org.apache.spark.internal.SparkLoggerFactory;
 //  - RM_HA_URLS
 //  - PROXY_USER_COOKIE_NAME
 // Add the TRUST_PROXY_USER_COOKIE init parameter: when set to "false", the proxy-user cookie is
-//  ignored, so proxy requests are treated as having no user. Controlled by
-//  spark.yarn.am.trustProxyUserCookie; defaults preserve the original behavior. Note that with
-//  no other authentication filter installed, ignoring the cookie leaves proxied requests with no
-//  user, so per-user AM UI ACLs no longer apply to them; see the config doc for details.
+//  not trusted; the filter then fails closed, wrapping the request with a sentinel principal that
+//  is in no ACL so a SecurityManager denies proxied requests unless another authentication filter
+//  establishes the user. Controlled by spark.yarn.am.trustProxyUserCookie; defaults preserve the
+//  original behavior. See the config doc for details.
 @Public
 public class AmIpFilter implements Filter {
   private static final SparkLogger LOG = SparkLoggerFactory.getLogger(AmIpFilter.class);
@@ -69,6 +69,12 @@ public class AmIpFilter implements Filter {
   public static final String PROXY_USER_COOKIE_NAME = "proxy-user";
   // Spark addition: init parameter name controlling whether the proxy-user cookie is trusted.
   public static final String TRUST_PROXY_USER_PARAM = "TRUST_PROXY_USER_COOKIE";
+  // Spark addition: the sentinel principal name used to fail closed when the proxy-user cookie is
+  // not trusted. It is the empty string -- a non-null user that cannot be a real principal or
+  // match any ACL entry -- so SecurityManager denies a request carrying it (a null user, by
+  // contrast, is treated as allowed by every ACL check).
+  @VisibleForTesting
+  static final String UNTRUSTED_PROXY_USER = "";
   // update the proxy IP list about every 5 min
   private static long updateInterval = TimeUnit.MINUTES.toMillis(5);
 
@@ -177,12 +183,20 @@ public class AmIpFilter implements Filter {
       }
 
       ProxyUtils.sendRedirect(httpReq, httpResp, redirect.toString());
+    } else if (!trustProxyUser) {
+      // Spark addition: the proxy-user cookie is not trusted. It is not cryptographically
+      // verified, so rather than read it, fail closed: wrap the request with a sentinel principal
+      // that is in no ACL, so a SecurityManager denies proxied requests that reach the ACL check
+      // with it. Leaving the request with no user instead would pass every view and modify ACL
+      // check, because a null user is treated as allowed. A downstream authentication filter in
+      // spark.ui.filters that wraps the request replaces this principal with the real user, so
+      // that case (the intended use, in client mode) is unaffected.
+      AmIpPrincipal principal = new AmIpPrincipal(UNTRUSTED_PROXY_USER);
+      chain.doFilter(new AmIpServletRequestWrapper(httpReq, principal), resp);
     } else {
       String user = null;
 
-      // Spark addition: only read the proxy-user cookie when it is trusted. The cookie is not
-      // verified, so when trust is disabled the request proceeds with no user.
-      if (trustProxyUser && httpReq.getCookies() != null) {
+      if (httpReq.getCookies() != null) {
         for (Cookie c: httpReq.getCookies()) {
           if (PROXY_USER_COOKIE_NAME.equals(c.getName())){
             user = c.getValue();

@@ -697,14 +697,16 @@ private[spark] class ApplicationMaster(
     val amFilter = classOf[AmIpFilter].getName
     val baseParams = client.getAmIpFilterParams(yarnConf, proxyBase)
     val trustProxyUserCookie = sparkConf.get(AM_TRUST_PROXY_USER_COOKIE)
-    // Refuse to arm the option silently: when the cookie is not trusted and no other UI filter
-    // will run to establish the user (cluster mode replaces spark.ui.filters with the AM's own
-    // filter; client mode may also have no other filter), proxied requests carry no user and pass
-    // every view and modify ACL check.
-    if (!trustProxyUserCookie && (driver.isEmpty || sparkConf.get(UI_FILTERS).isEmpty)) {
-      logWarning(log"${MDC(LogKeys.CONFIG, AM_TRUST_PROXY_USER_COOKIE.key)} is false and no " +
-        log"other UI filter will run, so proxied requests carry no user and pass every view " +
-        log"and modify ACL check.")
+    // Refuse to arm the option silently. Whether another filter establishes the user cannot be
+    // told from the configuration -- an IP allowlist or token filter in spark.ui.filters may run
+    // without wrapping the request -- so state the effect rather than guess the cause: with the
+    // cookie not trusted, the AM filter fails closed and proxied requests are treated as an
+    // unauthenticated user, so AM UI ACLs deny them unless another authentication filter
+    // establishes the user.
+    if (!trustProxyUserCookie) {
+      logWarning(log"${MDC(LogKeys.CONFIG, AM_TRUST_PROXY_USER_COOKIE.key)} is false, so proxied " +
+        log"requests are treated as an unauthenticated user and are denied by the AM UI view " +
+        log"and modify ACLs unless another authentication filter establishes the user.")
     }
     // Only pass the init parameter when the cookie is not trusted; when trusted (the default) the
     // filter parameters stay unchanged from the original behavior.

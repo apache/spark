@@ -248,7 +248,8 @@ class AmIpFilterSuite extends SparkFunSuite {
     assert(!servletWrapper.isUserInRole(""))
   }
 
-  test("proxy-user cookie is ignored when TRUST_PROXY_USER_COOKIE is false") {
+  test("proxy-user cookie is not trusted and the filter fails closed when " +
+    "TRUST_PROXY_USER_COOKIE is false") {
     val request = mock(classOf[HttpServletRequest])
     when(request.getCookies).thenReturn(
       Array(new Cookie(AmIpFilter.PROXY_USER_COOKIE_NAME, "someuser")))
@@ -277,9 +278,13 @@ class AmIpFilterSuite extends SparkFunSuite {
     assert(trusted.isInstanceOf[AmIpServletRequestWrapper])
     assert(trusted.asInstanceOf[HttpServletRequest].getRemoteUser === "someuser")
 
-    // TRUST_PROXY_USER_COOKIE=false: the cookie is ignored, the request passes through unwrapped.
+    // TRUST_PROXY_USER_COOKIE=false: the cookie is not trusted, and the filter fails closed by
+    // wrapping the request with the sentinel principal instead of forwarding it with the cookie
+    // user (or with no user at all). The sentinel is in no ACL, so a SecurityManager denies it.
     val notTrusted = capturedRequest(Some("false"))
-    assert(!notTrusted.isInstanceOf[AmIpServletRequestWrapper])
+    assert(notTrusted.isInstanceOf[AmIpServletRequestWrapper])
+    assert(notTrusted.asInstanceOf[HttpServletRequest].getRemoteUser ===
+      AmIpFilter.UNTRUSTED_PROXY_USER)
   }
 
   private class HttpServletResponseForTest extends HttpServletResponse {
