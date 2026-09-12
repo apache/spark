@@ -21,8 +21,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.TestRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{OuterReference, OuterScopeReference, ScalarSubquery}
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.expressions.{Exists, OuterReference, OuterScopeReference, ScalarSubquery}
+import org.apache.spark.sql.catalyst.plans.{Cross, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CTERelationDef, CTERelationRef, LogicalPlan, OneRowRelation, WithCTE}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
@@ -107,6 +107,74 @@ class InlineCTESuite extends PlanTest {
     assert(e.getCondition == "INTERNAL_ERROR")
     assert(e.getMessage.contains(
       "found a subquery with outer-scope reference"))
+  }
+
+  test("SPARK-58006: forceSkipInline CTE with an internal outer reference is materialized") {
+    // Corresponds to: WITH t AS (SELECT a FROM r WHERE EXISTS (SELECT 1 FROM s WHERE s.k = r.a))
+    //                 SELECT a FROM t
+    // The outer reference to `a` resolves inside the CTE def body, so it must be tolerated.
+    val relation = TestRelation(Seq($"a".int))
+    val subRel = TestRelation(Seq($"k".int))
+    val exists = Exists(
+      subRel.where(subRel.output.head === OuterReference(relation.output.head)),
+      outerAttrs = Seq(relation.output.head))
+    val cteChild = relation.where(exists)
+    val cteDef = CTERelationDef(cteChild, forceSkipInline = true)
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.select(relation.output.head), Seq(cteDef))
+    assert(plan.resolved)
+    val optimized = Optimize.execute(plan)
+    // The internal correlation is safe: the def stays materialized and validation passes.
+    assert(optimized.collectFirst { case _: WithCTE => true }.isDefined,
+      "CTE with an internal outer reference should be materialized, not rejected")
+  }
+
+  test("SPARK-58006: forceSkipInline CTE with an internal outer-scope subquery is materialized") {
+    // Corresponds to: WITH t AS (
+    //   SELECT (SELECT v FROM s2 WHERE s2.v < (SELECT c FROM s1 WHERE s1.k = r.a)) AS s
+    //   FROM r) SELECT s FROM t
+    // The innermost reference to `r.a` is two scopes out but resolves inside the def.
+    val relation = TestRelation(Seq($"a".int))
+    val s1 = TestRelation(Seq($"k".int, $"c".int))
+    val s2 = TestRelation(Seq($"v".int))
+    val deep = ScalarSubquery(
+      s1.where(s1.output.head === OuterReference(relation.output.head)).select(s1.output(1)),
+      outerAttrs = Seq(OuterScopeReference(relation.output.head)))
+    val shallow = ScalarSubquery(
+      s2.where(s2.output.head < deep),
+      outerAttrs = Seq(relation.output.head))
+    val cteChild = relation.select(shallow.as("s"))
+    val cteDef = CTERelationDef(cteChild, forceSkipInline = true)
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.select(cteDef.output.head), Seq(cteDef))
+    assert(plan.resolved)
+    val optimized = Optimize.execute(plan)
+    assert(optimized.collectFirst { case _: WithCTE => true }.isDefined,
+      "CTE with an internal outer-scope subquery should be materialized, not rejected")
+  }
+
+  test("SPARK-58006: forceSkipInline CTE with an outer reference inside a subquery plan fails") {
+    // Corresponds to: WITH t AS (SELECT (SELECT c FROM s WHERE s.k = m.a) AS x FROM r)
+    //                 SELECT x FROM t, m
+    // `m.a` is produced outside the CTE, so the reference escapes the boundary and must fail.
+    val relation = TestRelation(Seq($"c".int))
+    val outerA = $"m.a".int
+    val subquery = ScalarSubquery(
+      relation.where(relation.output.head === OuterReference(outerA)),
+      outerAttrs = Seq(outerA))
+    val cteChild = TestRelation(Seq($"b".int)).select(subquery.as("s"))
+    val cteDef = CTERelationDef(cteChild, forceSkipInline = true)
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val m = TestRelation(Seq(outerA))
+    val main = cteRef.select(cteDef.output.head).join(m, Cross)
+    val plan = WithCTE(main, Seq(cteDef))
+    assert(plan.resolved)
+    val e = intercept[SparkException] {
+      Optimize.execute(plan)
+    }
+    assert(e.getCondition == "INTERNAL_ERROR")
+    assert(e.getMessage.contains(
+      "A force-materialized CTE cannot carry an outer reference across its boundary"))
   }
 
   test("SPARK-58779: optimizer InlineCTE (isAnalysis = false) fails on a ref with no definition") {

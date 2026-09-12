@@ -89,29 +89,55 @@ case class InlineCTE(
   }
 
   private def validateNoOuterReferencesAcrossCTEBoundary(cteDef: CTERelationDef): Unit = {
-    val outerRefs = cteDef.child.flatMap(
-      _.expressions.flatMap(_.collect { case o: OuterReference => o }))
-    if (outerRefs.nonEmpty) {
+    // Only an outer reference that actually escapes the CTE definition is invalid. An outer
+    // reference that points to an attribute produced by an operator inside the definition
+    // body (e.g. a correlated subquery whose correlated column lives in the body) does not
+    // escape, so the definition is self-contained and safe to materialize. Walk the whole
+    // definition (main tree plus nested subquery plans) once, collect every attribute bound
+    // anywhere in the definition, and reject only references that resolve to none of them.
+    //
+    // Matching by exprId is exact for plans produced by a single analysis pass: every
+    // `OuterReference` wraps the very attribute it binds to, exprIds are allocated fresh
+    // per resolution, and `DeduplicateRelations` rewrites duplicated relation instances
+    // (self-join, union, etc.) with fresh exprIds before the optimizer runs. The known
+    // residual gap is a plan stitched together from already-analyzed plans (e.g. a producer
+    // embedding the same analyzed dataset twice): such a tree can carry the same exprId in
+    // multiple places, so an escaping reference could match a duplicated exprId and slip
+    // through. Such a query is ill-formed and fails later during planning or execution
+    // anyway; this check is defense-in-depth that fails fast with a clear error otherwise.
+    val allNodes = cteDef.child.collectWithSubqueries { case n: LogicalPlan => n }
+    val boundExprIds = allNodes.iterator
+      .flatMap(_.output.filter(_.resolved).map(_.exprId))
+      .toSet
+
+    // Check the direct `OuterReference` first: if one escapes the def boundary, report it
+    // and stop; the outer-scope scan below only runs when no direct reference escapes.
+    val escapingOuterRef = allNodes.iterator
+      .flatMap(_.expressions.iterator.flatMap(_.collect {
+        case o: OuterReference if !boundExprIds.contains(o.exprId) => o
+      }))
+      .nextOption()
+    escapingOuterRef.foreach { o =>
       throw SparkException.internalError(
         "A force-materialized CTE cannot carry an outer reference across its boundary, but " +
-          s"found outer reference '${outerRefs.head.name}' in the CTE definition " +
+          s"found outer reference '${o.name}' in the CTE definition " +
           s"(cteId=${cteDef.id}).")
     }
 
-    val outerScopeSubqueries = cteDef.child.flatMap(
-      _.expressions.flatMap(_.collect {
-        case s: SubqueryExpression if s.outerScopeAttrs.nonEmpty => s
-      }))
-    if (outerScopeSubqueries.nonEmpty) {
-      // `outerScopeAttrs` are expressions that contain an `OuterScopeReference` and may be
-      // compound (e.g. `Add(OuterScopeReference(a), Literal(1))`), so collect the reference node
-      // rather than assuming the attribute itself is one.
-      val outerScopeRef = outerScopeSubqueries.head.outerScopeAttrs
-        .flatMap(_.collect { case r: OuterScopeReference => r }).head
+    // Then check for a correlated subquery whose outer-scope attributes escape the def,
+    // i.e. resolve to none of `boundExprIds`.
+    val escapingOuterScopeRef = allNodes.iterator
+      .flatMap(_.expressions.iterator.flatMap(
+        _.collect { case s: SubqueryExpression => s.outerScopeAttrs }
+          .flatMap(_.collect {
+            case r: OuterScopeReference if !boundExprIds.contains(r.exprId) => r
+          })))
+      .nextOption()
+    escapingOuterScopeRef.foreach { r =>
       throw SparkException.internalError(
         "A force-materialized CTE cannot carry an outer reference across its boundary, but " +
           "found a subquery with outer-scope reference " +
-          s"'${outerScopeRef.name}' in the CTE definition " +
+          s"'${r.name}' in the CTE definition " +
           s"(cteId=${cteDef.id}).")
     }
   }
