@@ -48,7 +48,7 @@ import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
 import org.apache.spark.shuffle.{BlockingShuffleManager, PipelinedShuffleManager}
 import org.apache.spark.shuffle.{ShuffleBlockResolver, ShuffleManager}
-import org.apache.spark.shuffle.streaming.{MultiShuffleManager, StreamingShuffleManager}
+import org.apache.spark.shuffle.streaming.MultiShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, UDFDispatcherManager, WorkerDispatcher}
@@ -464,12 +464,14 @@ class SparkEnv (
       return
     }
 
-    // The tracker is needed when the pipelined manager (spark.shuffle.manager.incremental) is a
-    // StreamingShuffleManager -- which is the default. Inspect the already-instantiated manager
-    // rather than re-reading the config; this runs at the end of initializeShuffleManager, so the
+    // The tracker is a transport directory of writer task locations; it is needed only by a
+    // pipelined manager that discovers writers over RPC. The manager declares this via
+    // usesStreamingShuffleOutputTracker (the RPC streaming manager returns true, the default;
+    // an in-process transport returns false). Inspect the already-instantiated manager rather
+    // than re-reading the config; this runs at the end of initializeShuffleManager, so the
     // manager is non-null here.
     val incrementalIsStreaming =
-      _pipelinedShuffleManager.isInstanceOf[StreamingShuffleManager]
+      _pipelinedShuffleManager.usesStreamingShuffleOutputTracker
     // It is also needed when a MultiShuffleManager is the blocking manager (spark.shuffle.manager):
     // it internally routes some shuffles to streaming. A bare StreamingShuffleManager cannot be the
     // blocking manager -- it is pipelined and rejected from that slot in initializeShuffleManager.

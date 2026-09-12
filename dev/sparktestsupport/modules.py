@@ -674,6 +674,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_context",
         "pyspark.sql.tests.test_sql_context",
         "pyspark.sql.tests.test_dataframe",
+        "pyspark.sql.tests.test_pipelined_shuffle",
         "pyspark.sql.tests.test_collection",
         "pyspark.sql.tests.test_creation",
         "pyspark.sql.tests.test_conversion",

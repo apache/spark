@@ -131,7 +131,29 @@ class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
     metrics: Map[String, SQLMetric],
     partitionSpecs: Array[ShufflePartitionSpec])
-  extends RDD[InternalRow](dependency.rdd.context, Nil) {
+  extends RDD[InternalRow](dependency.rdd.context, Nil)
+  with org.apache.spark.rdd.ShuffleReducePartitionMapping {
+
+  /**
+   * The reduce partition this RDD's partition reads, taken from its spec rather than assumed to be
+   * the partition index: only a width-1 `CoalescedPartitionSpec` and a
+   * `PartialReducerPartitionSpec`
+   * name a single reducer. A coalesced range covers several, and a `PartialMapperPartitionSpec`
+   * reads a mapper range rather than one reducer, so both report None (the scheduler then keeps
+   * every reduce partition live instead of dropping records). See
+   * `org.apache.spark.rdd.ShuffleReducePartitionMapping`.
+   */
+  override def reducePartitionIndex(partitionIndex: Int): Option[Int] = {
+    if (partitionIndex < 0 || partitionIndex >= partitionSpecs.length) {
+      None
+    } else {
+      partitionSpecs(partitionIndex) match {
+        case CoalescedPartitionSpec(start, end, _) if end - start == 1 => Some(start)
+        case PartialReducerPartitionSpec(reducerIndex, _, _, _) => Some(reducerIndex)
+        case _ => None
+      }
+    }
+  }
 
   def this(
       dependency: ShuffleDependency[Int, InternalRow, InternalRow],

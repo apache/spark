@@ -1269,6 +1269,23 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LOCAL_PIPELINED_SHUFFLE_ENABLED = buildConf("spark.sql.shuffle.localPipelined.enabled")
+    .internal()
+    .doc("When true in local mode, eligible shuffle exchanges use the in-process channel " +
+      "manager configured by spark.shuffle.manager.incremental. Producer and consumer stages " +
+      "run concurrently. Plans whose estimated group width exceeds the local task capacity, " +
+      "or whose width cannot be determined, retain regular shuffles. In particular, ordinary " +
+      "non-bucketed file scans report unknown widths and stay regular. Runtime admission still " +
+      "checks available slots and can reject a group when other work occupies them. " +
+      "Pipelined exchanges do not receive AQE coalescing. Dataset.rdd, toLocalIterator, cache " +
+      "construction, cached inputs and mixed AQE plans use regular shuffles. Concurrent " +
+      "actions sharing a pipelined exchange remain unsupported. Other multi-job consumers " +
+      "can recompute pipelined producers for each job. Experimental.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
   val ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING =
     buildConf("spark.sql.adaptive.streaming.stateless.enabled")
       .internal()
@@ -8950,6 +8967,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def schemaLevelCollationsEnabled: Boolean = getConf(SCHEMA_LEVEL_COLLATIONS_ENABLED)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def localPipelinedShuffleEnabled: Boolean = getConf(LOCAL_PIPELINED_SHUFFLE_ENABLED)
 
   def adaptiveExecutionEnabledInStatelessStreaming: Boolean =
     getConf(ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING)
