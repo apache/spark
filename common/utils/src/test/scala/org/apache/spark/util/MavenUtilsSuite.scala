@@ -25,12 +25,14 @@ import java.nio.file.{Files, Paths}
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.ivy.Ivy
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
+import org.apache.spark.SparkBuildInfo
 import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 class MavenUtilsSuite
@@ -38,6 +40,8 @@ class MavenUtilsSuite
     with BeforeAndAfterEach {
 
   private var tempIvyPath: String = _
+
+  private var originalUserAgent: Option[String] = None
 
   private val noOpOutputStream = new OutputStream {
     def write(b: Int) = {}
@@ -57,10 +61,18 @@ class MavenUtilsSuite
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    // `buildIvySettings` and `loadIvySettings` set this global property as a side effect;
+    // save and clear it so each test is isolated and the value does not leak to other suites.
+    originalUserAgent = Option(System.getProperty(MavenUtils.USER_AGENT_PROPERTY))
+    System.clearProperty(MavenUtils.USER_AGENT_PROPERTY)
     tempIvyPath = SparkFileUtils.createTempDir(namePrefix = "ivy").getAbsolutePath()
   }
 
   override def afterEach(): Unit = {
+    originalUserAgent match {
+      case Some(userAgent) => System.setProperty(MavenUtils.USER_AGENT_PROPERTY, userAgent)
+      case None => System.clearProperty(MavenUtils.USER_AGENT_PROPERTY)
+    }
     SparkFileUtils.deleteRecursively(new File(tempIvyPath))
     super.afterEach()
   }
@@ -308,5 +320,42 @@ class MavenUtilsSuite
       assert(!jarPath.exists(_.indexOf("mydep") >= 0), "should not find pom dependency." +
         s" Resolved jars are: $jarPath")
     }
+  }
+
+  test("SPARK-59229: user agent identifies Spark and the underlying Ivy version") {
+    val userAgent = MavenUtils.sparkUserAgent
+    // `product RWS comment` per RFC 9110 Section 10.1.5.
+    assert(userAgent.matches("""^Apache-Spark/\S+ \(Apache-Ivy/\S+\)$"""),
+      s"User agent [$userAgent] does not match the RFC 9110 product/comment form")
+    assert(userAgent === s"Apache-Spark/${SparkBuildInfo.spark_version} " +
+      s"(Apache-Ivy/${Ivy.getIvyVersion})")
+  }
+
+  test("SPARK-59229: buildIvySettings sets the user agent when it is unset") {
+    assert(System.getProperty(MavenUtils.USER_AGENT_PROPERTY) === null)
+    MavenUtils.buildIvySettings(None, Some(tempIvyPath))
+    assert(System.getProperty(MavenUtils.USER_AGENT_PROPERTY) === MavenUtils.sparkUserAgent)
+  }
+
+  test("SPARK-59229: loadIvySettings sets the user agent when it is unset") {
+    val settingsText =
+      s"""
+         |<ivysettings>
+         |  <caches defaultCacheDir="$tempIvyPath/cache"/>
+         |</ivysettings>
+         |""".stripMargin
+    val settingsFile = Paths.get(tempIvyPath, "ivysettings.xml")
+    Files.write(settingsFile, settingsText.getBytes(StandardCharsets.UTF_8))
+
+    assert(System.getProperty(MavenUtils.USER_AGENT_PROPERTY) === null)
+    MavenUtils.loadIvySettings(settingsFile.toString, None, Some(tempIvyPath))
+    assert(System.getProperty(MavenUtils.USER_AGENT_PROPERTY) === MavenUtils.sparkUserAgent)
+  }
+
+  test("SPARK-59229: an explicitly configured user agent is not overwritten") {
+    val configuredUserAgent = "AcmeCorp/1.0"
+    System.setProperty(MavenUtils.USER_AGENT_PROPERTY, configuredUserAgent)
+    MavenUtils.buildIvySettings(None, Some(tempIvyPath))
+    assert(System.getProperty(MavenUtils.USER_AGENT_PROPERTY) === configuredUserAgent)
   }
 }
