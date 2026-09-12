@@ -4249,7 +4249,11 @@ private[spark] class DAGScheduler(
         // proceed with unconditional removal of shuffle outputs from all executors on that
         // host, including from those that we still haven't confirmed as lost due to heartbeat
         // delays.
-        ignoreShuffleFileLostEpoch = isHostDecommissioned)
+        ignoreShuffleFileLostEpoch = isHostDecommissioned,
+        // This FetchFailed only proves the specifically-failed map output is gone (already
+        // unregistered by name above); an unrelated reliable shuffle on the same executor lives
+        // off-executor and survives, so preserve reliably-stored shuffles here too.
+        respectReliablyStored = true)
     }
   }
 
@@ -4262,10 +4266,17 @@ private[spark] class DAGScheduler(
    *   with the executor; this happens if the executor serves its own blocks (i.e., we're not
    *   using an external shuffle service), the entire Standalone worker is lost, or a FetchFailed
    *   occurred (in which case we presume all shuffle data related to this executor to be lost).
+   *   When `respectReliablyStored` is also true this "all lost" assumption is qualified: reliably
+   *   stored shuffles are preserved and only the rest is treated as lost.
    * @param hostToUnregisterOutputs (optional) executor host if we're unregistering all the
    *   outputs on the host
    * @param maybeEpoch (optional) the epoch during which the failure was caught (this prevents
    *   reprocessing for follow-on fetch failures)
+   * @param ignoreShuffleFileLostEpoch if true, bypass the shuffleFileLostEpoch gate and remove
+   *   outputs unconditionally (used for merged-chunk fetch failures and host decommission)
+   * @param respectReliablyStored if true, preserve shuffles whose output is reliably stored
+   *   off-executor; only non-reliable output is removed. Set on executor/worker loss and on a
+   *   FetchFailed, whose evidence is specific to the already-unregistered failed map.
    */
   private def removeExecutorAndUnregisterOutputs(
       execId: String,
@@ -4297,31 +4308,27 @@ private[spark] class DAGScheduler(
       clearCacheLocs()
     }
     if (fileLost) {
-      // When the fetch failure is for a merged shuffle chunk, ignoreShuffleFileLostEpoch is true
-      // and so all the files will be removed.
-      val remove = if (ignoreShuffleFileLostEpoch) {
-        true
-      } else if (!shuffleFileLostEpoch.contains(execId) ||
-        shuffleFileLostEpoch(execId) < currentEpoch) {
-        // A selective cleanup keeps reliably-stored outputs, so it isn't a full cleanup: don't
-        // stamp the epoch, or a same-epoch FetchFailed for a preserved-but-gone output is skipped.
-        if (!respectReliablyStored) {
-          shuffleFileLostEpoch(execId) = currentEpoch
-        }
-        true
-      } else {
-        false
-      }
-      if (remove) {
-        hostToUnregisterOutputs match {
+      // A merged-shuffle-chunk fetch failure (ignoreShuffleFileLostEpoch) removes everything
+      // regardless of the epoch gate; otherwise skip a cleanup already done at this epoch.
+      val shouldRemove = ignoreShuffleFileLostEpoch ||
+        !shuffleFileLostEpoch.contains(execId) ||
+        shuffleFileLostEpoch(execId) < currentEpoch
+      if (shouldRemove) {
+        val outcome = hostToUnregisterOutputs match {
           case Some(host) =>
             logInfo(log"Shuffle files lost for host: ${MDC(HOST, host)} (epoch " +
               log"${MDC(EPOCH, currentEpoch)}")
             mapOutputTracker.removeOutputsOnHost(host, respectReliablyStored)
           case None =>
-              logInfo(log"Shuffle files lost for executor: ${MDC(EXECUTOR_ID, execId)} " +
-                log"(epoch ${MDC(EPOCH, currentEpoch)})")
+            logInfo(log"Shuffle files lost for executor: ${MDC(EXECUTOR_ID, execId)} " +
+              log"(epoch ${MDC(EPOCH, currentEpoch)})")
             mapOutputTracker.removeOutputsOnExecutor(execId, respectReliablyStored)
+        }
+        // Record the lost epoch only for a complete cleanup. When reliable output was preserved the
+        // loss was partial, so a later same-epoch FetchFailed for a preserved-but-gone output must
+        // still be processed. Match prior behavior: don't stamp under ignoreShuffleFileLostEpoch.
+        if (!ignoreShuffleFileLostEpoch && !outcome.preservedReliable) {
+          shuffleFileLostEpoch(execId) = currentEpoch
         }
       }
     }
@@ -4331,8 +4338,9 @@ private[spark] class DAGScheduler(
    * Responds to a worker being removed. This is called inside the event loop, so it assumes it can
    * modify the scheduler's internal state. Use workerRemoved() to post a loss event from outside.
    *
-   * We will assume that we've lost all shuffle blocks associated with the host if a worker is
-   * removed, so we will remove them all from MapStatus.
+   * We will assume that we've lost all non-reliably-stored shuffle blocks associated with the
+   * host if a worker is removed, so we will remove them from MapStatus. Output marked reliably
+   * stored survives the worker and is left registered.
    *
    * @param workerId identifier of the worker that is removed.
    * @param host host of the worker that is removed.
