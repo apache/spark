@@ -43,7 +43,7 @@ import org.apache.spark.util.AccumulatorV2
 class PartitionKeyedAccumulator[T] extends AccumulatorV2[(Int, T), java.util.Map[Int, T]] {
 
   // partition id -> value.
-  private val byPartition = new ConcurrentHashMap[Int, T]()
+  protected val byPartition = new ConcurrentHashMap[Int, T]()
 
   override def isZero: Boolean = byPartition.isEmpty
 
