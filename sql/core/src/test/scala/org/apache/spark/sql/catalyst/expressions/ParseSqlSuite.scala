@@ -36,6 +36,16 @@ class ParseSqlSuite extends SparkFunSuite with ExpressionEvalHelper with SQLHelp
     parse(result)
   }
 
+  private def evalStatements(sql: String): List[JObject] = evalJson(sql) match {
+    case JArray(values) => values.map(_.asInstanceOf[JObject])
+    case other => fail(s"expected JSON array, got: $other")
+  }
+
+  private def evalStatement(sql: String): JObject = evalStatements(sql) match {
+    case value :: Nil => value
+    case other => fail(s"expected one statement, got ${other.size}: $other")
+  }
+
   test("parse_sql is disabled by default") {
     assert(!SQLConf.get.parseSqlEnabled)
     checkError(
@@ -58,7 +68,9 @@ class ParseSqlSuite extends SparkFunSuite with ExpressionEvalHelper with SQLHelp
 
   test("parse_sql returns JSON for a valid SELECT") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
-      val j = evalJson("SELECT 1 AS a")
+      val j = evalStatement("SELECT 1 AS a")
+      assert(j \ "start" === JInt(1))
+      assert(j \ "length" === JInt(13))
       assert(j \ "parse_success" === JBool(true))
       assert(j \ "statement_identifier" === JString("SELECT"))
       assert(j \ "statement_code" === JInt(21))
@@ -73,7 +85,7 @@ class ParseSqlSuite extends SparkFunSuite with ExpressionEvalHelper with SQLHelp
 
   test("parse_sql does not throw on syntax error") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
-      val j = evalJson("NOT A STATEMENT !!!")
+      val j = evalStatement("NOT A STATEMENT !!!")
       assert(j \ "parse_success" === JBool(false))
       assert(j \ "error" \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
     }
@@ -83,8 +95,17 @@ class ParseSqlSuite extends SparkFunSuite with ExpressionEvalHelper with SQLHelp
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       val expr = ParseSql(Literal("INSERT INTO t SELECT 1"))
       assert(expr.isInstanceOf[CodegenFallback])
-      val j = evalJson("INSERT INTO t SELECT 1")
+      val j = evalStatement("INSERT INTO t SELECT 1")
       assert(j \ "statement_identifier" === JString("INSERT"))
+    }
+  }
+
+  test("parse_sql returns a JSON array for a SQL batch") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val statements = evalStatements("SELECT 1; SELECT 2")
+      assert(statements.size === 2)
+      assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(11)))
+      assert(statements.map(_ \ "length") === Seq(JInt(8), JInt(8)))
     }
   }
 }
