@@ -110,7 +110,8 @@ class TxnTable(
     schema,
     delegate.partitioning,
     delegate.properties,
-    delegate.constraints) {
+    delegate.constraints,
+    schemaAlignmentConfig = delegate.schemaAlignmentConfig) {
 
   // Expose the same id as the delegate so that identity checks during transaction re-resolution
   // don't false-positive on the TxnTable wrapper having a different UUID.

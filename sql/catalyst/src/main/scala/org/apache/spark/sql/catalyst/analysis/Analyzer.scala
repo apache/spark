@@ -3945,7 +3945,10 @@ class Analyzer(
       case v2Write: V2WriteCommand
           if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved &&
             v2Write.pendingSchemaChanges.isEmpty =>
-        validateStoreAssignmentPolicy()
+        val schemaAlignment = v2Write.table.collectFirst {
+          case r: DataSourceV2Relation => r.table.schemaAlignmentConfig()
+        }.getOrElse(SchemaAlignmentConfig.DEFAULT)
+        validateStoreAssignmentPolicy(schemaAlignment)
         TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
           expected = v2Write.table.output, queryOutput = v2Write.query.output)
         // With schema evolution + coercion flag, missing top-level columns AND missing nested
@@ -3965,7 +3968,8 @@ class Analyzer(
         val (projection, autoFilledGenCols) =
           TableOutputResolver.resolveOutputColumnsWithGeneratedInfo(
             v2Write.table.name, expected, v2Write.query, v2Write.isByName, conf,
-            defaultValueFillMode)
+            defaultValueFillMode,
+            deferCastValidationToRuntime = schemaAlignment.deferCastValidationToRuntime())
         if (projection != v2Write.query) {
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>
@@ -3981,9 +3985,10 @@ class Analyzer(
     }
   }
 
-  private def validateStoreAssignmentPolicy(): Unit = {
-    // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
-    if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
+  private def validateStoreAssignmentPolicy(schemaAlignment: SchemaAlignmentConfig): Unit = {
+    // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2 by default.
+    if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY &&
+        !schemaAlignment.allowLegacyStoreAssignmentPolicy()) {
       throw QueryCompilationErrors.legacyStoreAssignmentPolicyError()
     }
   }

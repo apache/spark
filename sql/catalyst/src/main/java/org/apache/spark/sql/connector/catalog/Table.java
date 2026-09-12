@@ -112,4 +112,14 @@ public interface Table extends Relation {
    * the version that corresponds to the current state of this table instance.
    */
   default String version() { return null; }
+
+  /**
+   * Returns the schema-alignment configuration for writes to this table. This allows connectors to
+   * configure casting behavior and handling of schema mismatches during writes.
+   * It is recommended to use the DEFAULT configuration to provide a unified behavior across data
+   * sources, but some connectors may require deviating from the default behavior.
+   */
+  default SchemaAlignmentConfig schemaAlignmentConfig() {
+    return SchemaAlignmentConfig.DEFAULT;
+  }
 }

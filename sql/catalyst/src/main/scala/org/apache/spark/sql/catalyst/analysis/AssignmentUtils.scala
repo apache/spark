@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.SchemaAlignmentConfig
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -63,7 +64,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       attrs: Seq[Attribute],
       assignments: Seq[Assignment],
       fromStar: Boolean,
-      coerceNestedTypes: Boolean): Seq[Assignment] = {
+      coerceNestedTypes: Boolean,
+      schemaAlignment: SchemaAlignmentConfig = SchemaAlignmentConfig.DEFAULT): Seq[Assignment] = {
 
     val errors = new mutable.ArrayBuffer[String]()
 
@@ -75,7 +77,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         addError = err => errors += err,
         colPath = Seq(attr.name),
         coerceNestedTypes,
-        fromStar)
+        fromStar,
+        schemaAlignment = schemaAlignment)
     }
 
     if (errors.nonEmpty) {
@@ -103,7 +106,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
   def alignInsertAssignments(
       attrs: Seq[Attribute],
       assignments: Seq[Assignment],
-      coerceNestedTypes: Boolean = false): Seq[Assignment] = {
+      coerceNestedTypes: Boolean = false,
+      schemaAlignment: SchemaAlignmentConfig = SchemaAlignmentConfig.DEFAULT): Seq[Assignment] = {
 
     val errors = new mutable.ArrayBuffer[String]()
 
@@ -137,7 +141,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         val value = matchingAssignments.head.value
         val coerceMode = if (coerceNestedTypes) RECURSE else NONE
         TableOutputResolver.resolveUpdate(
-          "", value, actualAttr, conf, err => errors += err, colPath, coerceMode)
+          "", value, actualAttr, conf, err => errors += err, colPath, coerceMode,
+          deferCastValidationToRuntime = schemaAlignment.deferCastValidationToRuntime())
       }
       Assignment(attr, resolvedValue)
     }
@@ -160,7 +165,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       addError: String => Unit,
       colPath: Seq[String],
       coerceNestedTypes: Boolean = false,
-      updateStar: Boolean = false): Expression = {
+      updateStar: Boolean = false,
+      schemaAlignment: SchemaAlignmentConfig): Expression = {
 
     val (exactAssignments, otherAssignments) = assignments.partition { assignment =>
       assignment.key.semanticEquals(colExpr)
@@ -188,21 +194,24 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
           case _: StructType =>
             // Expand assignments to leaf fields (fixNullExpansion is applied inside)
             applyNestedFieldAssignments(col, colExpr, value, addError, colPath,
-              coerceNestedTypes)
+              coerceNestedTypes, schemaAlignment = schemaAlignment)
           case _ =>
             // For non-struct types, resolve directly
             val coerceMode = if (coerceNestedTypes) RECURSE else NONE
             TableOutputResolver.resolveUpdate("", value, col, conf, addError, colPath,
-              coerceMode)
+              coerceMode,
+              deferCastValidationToRuntime = schemaAlignment.deferCastValidationToRuntime())
         }
       } else {
         val value = exactAssignments.head.value
         val coerceMode = if (coerceNestedTypes) RECURSE else NONE
         TableOutputResolver.resolveUpdate("", value, col, conf, addError,
-          colPath, coerceMode)
+          colPath, coerceMode,
+          deferCastValidationToRuntime = schemaAlignment.deferCastValidationToRuntime())
       }
     } else {
-      applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath, coerceNestedTypes)
+      applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath, coerceNestedTypes,
+        schemaAlignment = schemaAlignment)
     }
   }
 
@@ -212,7 +221,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       assignments: Seq[Assignment],
       addError: String => Unit,
       colPath: Seq[String],
-      coerceNestedTypes: Boolean): Expression = {
+      coerceNestedTypes: Boolean,
+      schemaAlignment: SchemaAlignmentConfig): Expression = {
 
     col.dataType match {
       case structType: StructType =>
@@ -222,7 +232,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         }
         val updatedFieldExprs = fieldAttrs.zip(fieldExprs).map { case (fieldAttr, fieldExpr) =>
           applyAssignments(fieldAttr, fieldExpr, assignments, addError, colPath :+ fieldAttr.name,
-            coerceNestedTypes)
+            coerceNestedTypes, schemaAlignment = schemaAlignment)
         }
         toNamedStruct(structType, updatedFieldExprs)
 
@@ -240,7 +250,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       value: Expression,
       addError: String => Unit,
       colPath: Seq[String],
-      coerceNestedTypes: Boolean): Expression = {
+      coerceNestedTypes: Boolean,
+      schemaAlignment: SchemaAlignmentConfig): Expression = {
 
     col.dataType match {
       case structType: StructType =>
@@ -273,12 +284,15 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
             case _: StructType =>
               // Field is a struct, recurse
               applyNestedFieldAssignments(fieldAttr, targetFieldExpr,
-                sourceFieldValue, addError, fieldPath, coerceNestedTypes)
+                sourceFieldValue, addError, fieldPath, coerceNestedTypes,
+                schemaAlignment = schemaAlignment)
             case _ =>
               // Field is not a struct, resolve with TableOutputResolver
               val coerceMode = if (coerceNestedTypes) RECURSE else NONE
-              TableOutputResolver.resolveUpdate("", sourceFieldValue, fieldAttr, conf, addError,
-                fieldPath, coerceMode)
+              TableOutputResolver.resolveUpdate(
+                "", sourceFieldValue, fieldAttr, conf, addError,
+                fieldPath, coerceMode,
+                deferCastValidationToRuntime = schemaAlignment.deferCastValidationToRuntime())
           }
         }
         val namedStruct = toNamedStruct(structType, updatedFieldExprs)

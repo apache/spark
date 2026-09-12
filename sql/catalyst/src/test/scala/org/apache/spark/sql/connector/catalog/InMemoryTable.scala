@@ -47,10 +47,11 @@ class InMemoryTable(
     advisoryPartitionSize: Option[Long] = None,
     isDistributionStrictlyRequired: Boolean = true,
     override val numRowsPerSplit: Int = Int.MaxValue,
-    override val id: String = UUID.randomUUID().toString)
+    override val id: String = UUID.randomUUID().toString,
+    override val schemaAlignmentConfig: SchemaAlignmentConfig = SchemaAlignmentConfig.DEFAULT)
   extends InMemoryBaseTable(name, columns, partitioning, properties, constraints, distribution,
     ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
-    numRowsPerSplit) with SupportsDelete {
+    numRowsPerSplit, schemaAlignmentConfig) with SupportsDelete {
 
   def this(
       name: String,
