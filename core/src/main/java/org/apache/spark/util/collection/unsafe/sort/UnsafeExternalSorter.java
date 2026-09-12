@@ -127,7 +127,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
       serializerManager, taskContext, recordComparatorSupplier, prefixComparator, initialSize,
         pageSizeBytes, numElementsForSpillThreshold, sizeInBytesForSpillThreshold,
-        spillMergeFactor, inMemorySorter, false /* ignored */);
+        spillMergeFactor, inMemorySorter, false /* ignored */, true);
     sorter.spill(Long.MAX_VALUE, sorter);
     taskContext.taskMetrics().incMemoryBytesSpilled(existingMemoryConsumption);
     sorter.totalSpillBytes += existingMemoryConsumption;
@@ -152,7 +152,30 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
       taskContext, recordComparatorSupplier, prefixComparator, initialSize, pageSizeBytes,
       numElementsForSpillThreshold, sizeInBytesForSpillThreshold, spillMergeFactor,
-      null, canUseRadixSort);
+      null, canUseRadixSort, true);
+  }
+
+  /**
+   * Creates a sorter whose caller owns its lifecycle and guarantees that
+   * {@link #cleanupResources()} is invoked.
+   */
+  public static UnsafeExternalSorter createWithCallerOwnedLifecycle(
+      TaskMemoryManager taskMemoryManager,
+      BlockManager blockManager,
+      SerializerManager serializerManager,
+      TaskContext taskContext,
+      Supplier<RecordComparator> recordComparatorSupplier,
+      PrefixComparator prefixComparator,
+      int initialSize,
+      long pageSizeBytes,
+      int numElementsForSpillThreshold,
+      long sizeInBytesForSpillThreshold,
+      int spillMergeFactor,
+      boolean canUseRadixSort) {
+    return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
+      taskContext, recordComparatorSupplier, prefixComparator, initialSize, pageSizeBytes,
+      numElementsForSpillThreshold, sizeInBytesForSpillThreshold, spillMergeFactor,
+      null, canUseRadixSort, false);
   }
 
   private UnsafeExternalSorter(
@@ -168,7 +191,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       long sizeInBytesForSpillThreshold,
       int spillMergeFactor,
       @Nullable UnsafeInMemorySorter existingInMemorySorter,
-      boolean canUseRadixSort) {
+      boolean canUseRadixSort,
+      boolean registerTaskCompletionListener) {
     super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
@@ -200,12 +224,14 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     this.sizeInBytesForSpillThreshold = sizeInBytesForSpillThreshold;
     this.numElementsForSpillThreshold = numElementsForSpillThreshold;
 
-    // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
-    // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
-    // does not fully consume the sorter's output (e.g. sort followed by limit).
-    taskContext.addTaskCompletionListener(context -> {
-      cleanupResources();
-    });
+    if (registerTaskCompletionListener) {
+      // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed
+      // at the end of the task. This is necessary to avoid memory leaks when the downstream
+      // operator does not fully consume the sorter's output (e.g. sort followed by limit).
+      taskContext.addTaskCompletionListener(context -> {
+        cleanupResources();
+      });
+    }
   }
 
   /**
@@ -494,13 +520,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     growPointerArrayIfNecessary();
   }
 
-  /**
-   * Write a record to the sorter.
-   */
-  public void insertRecord(
-      Object recordBase, long recordOffset, int length, long prefix, boolean prefixIsNull)
-    throws IOException {
-
+  private void spillIfThresholdReached() throws IOException {
     assert(inMemSorter != null);
     if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
       logger.info("Spilling data because number of spilledRecords ({}) crossed the threshold {}",
@@ -520,6 +540,16 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         MDC.of(LogKeys.SPILL_RECORDS_SIZE_THRESHOLD, sizeInBytesForSpillThreshold));
       spill();
     }
+  }
+
+  /**
+   * Write a record to the sorter.
+   */
+  public void insertRecord(
+      Object recordBase, long recordOffset, int length, long prefix, boolean prefixIsNull)
+    throws IOException {
+
+    spillIfThresholdReached();
 
     final int uaoSize = UnsafeAlignedOffset.getUaoSize();
     // Need 4 or 8 bytes to store the record length.
@@ -546,6 +576,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   public void insertKVRecord(Object keyBase, long keyOffset, int keyLen,
       Object valueBase, long valueOffset, int valueLen, long prefix, boolean prefixIsNull)
     throws IOException {
+
+    spillIfThresholdReached();
 
     final int uaoSize = UnsafeAlignedOffset.getUaoSize();
     final int required = keyLen + valueLen + (2 * uaoSize);
@@ -585,7 +617,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   public UnsafeSorterIterator getSortedIterator() throws IOException {
     assert(recordComparatorSupplier != null);
     if (spillWriters.isEmpty()) {
-      // No spills — return in-memory sorted iterator
+      // No spills - return in-memory sorted iterator
       assert(inMemSorter != null);
       readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
       return readingIterator;

@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.TestUtils.assertSpilled
+import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.internal.SQLConf.{WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD, WINDOW_EXEC_BUFFER_SPILL_THRESHOLD}
+import org.apache.spark.sql.execution.window.WindowExec
+import org.apache.spark.sql.internal.SQLConf.{ADAPTIVE_EXECUTION_ENABLED, WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD, WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD, WINDOW_EXEC_BUFFER_SPILL_THRESHOLD, WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD}
 import org.apache.spark.sql.test.SharedSparkSession
 
 case class WindowData(month: Int, area: String, product: Int)
@@ -196,11 +197,380 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
       val e = intercept[AnalysisException] {
         sql(
           """
-            |select month, area, product, sum(distinct product + 1) over (partition by 1 order by 2)
+            |select month, area, product, sum(distinct product + 1) over (
+            |  partition by 1 order by 2 rows between current row and current row)
             |from windowData
           """.stripMargin)
       }
-      assert(e.getMessage.contains("Distinct window functions are not supported"))
+      assert(e.getMessage.contains("Unsupported DISTINCT window function"))
+    }
+  }
+
+  test("window function: distinct rejects unorderable inputs") {
+    val e = intercept[AnalysisException] {
+      sql("SELECT count(DISTINCT map('key', id)) OVER () FROM range(1)")
+    }
+    assert(e.getCondition === "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED")
+  }
+
+  test("window function: distinct aggregates with an unbounded preceding frame") {
+    val data = Seq(
+      (1, 0, 10, "a", 10),
+      (1, 1, 20, "a", 10),
+      (1, 2, 20, "b", 20),
+      (1, 3, 20, null.asInstanceOf[String], 30),
+      (1, 4, 30, "c", 30),
+      (2, 5, 5, "b", 5),
+      (2, 6, 5, "b", 5),
+      (2, 7, 6, "a", 6)
+    ).toDF("k", "id", "v", "x", "amount")
+
+    withTempView("distinctWindowData") {
+      data.createOrReplaceTempView("distinctWindowData")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT k, id,
+            |  count(DISTINCT x) OVER (PARTITION BY k ORDER BY v) AS range_count,
+            |  count(DISTINCT x) OVER (
+            |    PARTITION BY k ORDER BY v, id
+            |    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS rows_count,
+            |  count(DISTINCT x) OVER (
+            |    PARTITION BY k ORDER BY v, id
+            |    ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS preceding_count,
+            |  count(DISTINCT x) OVER (
+            |    PARTITION BY k ORDER BY v, id
+            |    ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) AS following_count,
+            |  count(DISTINCT x) OVER (PARTITION BY k) AS partition_count,
+            |  sum(DISTINCT amount) OVER (PARTITION BY k ORDER BY v) AS range_sum,
+            |  avg(DISTINCT amount) OVER (PARTITION BY k ORDER BY v) AS range_avg,
+            |  sort_array(collect_list(DISTINCT amount) OVER (
+            |    PARTITION BY k ORDER BY v)) AS range_values
+            |FROM distinctWindowData
+          """.stripMargin),
+        Seq(
+          Row(1, 0, 1L, 1L, 0L, 1L, 3L, 10L, 10.0, Seq(10)),
+          Row(1, 1, 2L, 1L, 1L, 2L, 3L, 60L, 20.0, Seq(10, 20, 30)),
+          Row(1, 2, 2L, 2L, 1L, 2L, 3L, 60L, 20.0, Seq(10, 20, 30)),
+          Row(1, 3, 2L, 2L, 2L, 3L, 3L, 60L, 20.0, Seq(10, 20, 30)),
+          Row(1, 4, 3L, 3L, 2L, 3L, 3L, 60L, 20.0, Seq(10, 20, 30)),
+          Row(2, 5, 1L, 1L, 0L, 1L, 2L, 5L, 5.0, Seq(5)),
+          Row(2, 6, 1L, 1L, 1L, 2L, 2L, 5L, 5.0, Seq(5)),
+          Row(2, 7, 2L, 2L, 1L, 2L, 2L, 11L, 5.5, Seq(5, 6))
+        ))
+    }
+  }
+
+  test("window function: count distinct with a range offset, filter, and multiple columns") {
+    withSQLConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1") {
+      val data = Seq(
+        (0, 10, "a", 1, true),
+        (1, 20, "a", 1, true),
+        (2, 20, "b", 1, false),
+        (3, 20, "b", 2, true),
+        (4, 30, "c", 3, true)
+      ).toDF("id", "v", "x", "y", "selected")
+
+      withTempView("distinctWindowData") {
+        data.createOrReplaceTempView("distinctWindowData")
+
+        checkAnswer(
+          sql(
+            """
+              |SELECT id,
+              |  count(DISTINCT x) OVER (
+              |    ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND 5 PRECEDING)
+              |      AS preceding_count,
+              |  count(DISTINCT x) FILTER (WHERE selected) OVER (
+              |    ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+              |      AS filtered_count,
+              |  count(DISTINCT x, y) OVER (
+              |    ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS tuple_count
+              |FROM distinctWindowData
+            """.stripMargin),
+          Seq(
+            Row(0, 0L, 1L, 1L),
+            Row(1, 1L, 2L, 3L),
+            Row(2, 1L, 2L, 3L),
+            Row(3, 1L, 2L, 3L),
+            Row(4, 2L, 3L, 4L)
+          ))
+      }
+    }
+  }
+
+  test("window function: count distinct falls back from hash and sorter spills") {
+    withSQLConf(
+      WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1000",
+      WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "5",
+      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> "2") {
+      val result = sql(
+        """
+          |SELECT max(distinct_count)
+          |FROM (
+          |  SELECT count(DISTINCT id % 3) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS distinct_count
+          |  FROM range(100)
+          |)
+        """.stripMargin)
+      assertSpilled(sparkContext, "count distinct window hash fallback") {
+        checkAnswer(result, Row(3L))
+      }
+    }
+  }
+
+  test("window function: unbounded distinct frame skips the event sorter") {
+    withSQLConf(
+      ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1000",
+      WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "5",
+      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> Int.MaxValue.toString) {
+      val result = sql(
+        """
+          |SELECT max(distinct_count)
+          |FROM (
+          |  SELECT count(DISTINCT id) OVER () AS distinct_count
+          |  FROM range(100)
+          |)
+        """.stripMargin)
+      assertNotSpilled(sparkContext, "unbounded distinct window without an event sorter") {
+        checkAnswer(result, Row(100L))
+      }
+      val window = result.queryExecution.executedPlan.collectFirst {
+        case window: WindowExec => window
+      }.get
+      assert(window.metrics("spillSize").value == 0)
+    }
+  }
+
+  test("window function: unbounded distinct frame falls back by size") {
+    withSQLConf(
+      WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1000",
+      WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> Int.MaxValue.toString,
+      WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD.key -> "1",
+      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> Int.MaxValue.toString) {
+      val result = sql(
+        """
+          |SELECT id,
+          |  count(DISTINCT id % 3) OVER () AS distinct_count,
+          |  sum(DISTINCT id % 3) OVER () AS distinct_sum,
+          |  sort_array(collect_list(DISTINCT id % 3) OVER ()) AS distinct_values
+          |FROM range(20)
+        """.stripMargin)
+      checkAnswer(
+        result,
+        Seq.tabulate(20)(id => Row(id.toLong, 3L, 3L, Seq(0L, 1L, 2L))))
+    }
+  }
+
+  test("window function: distinct event sorter spill size is reported") {
+    withSQLConf(
+      ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1000",
+      WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "5",
+      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> Int.MaxValue.toString) {
+      val result = sql(
+        """
+          |SELECT max(distinct_count)
+          |FROM (
+          |  SELECT count(DISTINCT id) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS distinct_count
+          |  FROM range(100)
+          |)
+        """.stripMargin)
+      checkAnswer(result, Row(100L))
+      val window = result.queryExecution.executedPlan.collectFirst {
+        case window: WindowExec => window
+      }.get
+      assert(window.metrics("spillSize").value > 0)
+    }
+  }
+
+  test("window function: count distinct stays in hash at the fallback threshold") {
+    withSQLConf(
+      WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1000",
+      WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "5",
+      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> "2") {
+      val result = sql(
+        """
+          |SELECT max(distinct_count)
+          |FROM (
+          |  SELECT count(DISTINCT id % 2) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS distinct_count
+          |  FROM range(100)
+          |)
+        """.stripMargin)
+      assertNotSpilled(sparkContext, "count distinct window at hash fallback threshold") {
+        checkAnswer(result, Row(2L))
+      }
+    }
+  }
+
+  test("window function: distinct handles binary-unstable collation across spills") {
+    withSQLConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      checkAnswer(
+        sql(
+          """
+            |SELECT id,
+            |  count(DISTINCT value COLLATE UTF8_LCASE) OVER (
+            |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+            |  collect_list(DISTINCT value COLLATE UTF8_LCASE) OVER (
+            |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+            |FROM VALUES (0, 'a'), (1, 'A'), (2, 'b'), (3, 'B') AS data(id, value)
+            |ORDER BY id
+          """.stripMargin),
+        Seq(
+          Row(0, 1L, Seq("a")),
+          Row(1, 1L, Seq("a")),
+          Row(2, 2L, Seq("a", "b")),
+          Row(3, 2L, Seq("a", "b"))))
+    }
+  }
+
+  test("window function: distinct keeps variable-length inputs across row reuse") {
+    withSQLConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      checkAnswer(
+        sql(
+          """
+            |SELECT id,
+            |  max(DISTINCT value) OVER (
+            |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
+            |  first(DISTINCT value) OVER (
+            |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
+            |  max(DISTINCT value) OVER ()
+            |FROM VALUES (0, 'z'), (1, 'a'), (2, 'b') AS data(id, value)
+            |ORDER BY id
+          """.stripMargin),
+        Seq(
+          Row(0, "z", "z", "z"),
+          Row(1, "z", "z", "z"),
+          Row(2, "z", "z", "z")))
+    }
+  }
+
+  test("window function: distinct aggregates use normalized floating-point inputs") {
+    val rows = sql(
+      """
+        |SELECT id, collect_list(DISTINCT value) OVER (
+        |  ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS values
+        |FROM VALUES
+        |  (0, CAST('-0.0' AS DOUBLE)),
+        |  (1, CAST('0.0' AS DOUBLE)) AS data(id, value)
+        |ORDER BY id
+      """.stripMargin).collect()
+
+    val rawBits = rows.map { row =>
+      row.getSeq[Double](1).map(java.lang.Double.doubleToRawLongBits)
+    }
+    assert(rawBits === Seq(Seq(0L), Seq(0L)))
+  }
+
+  test("window function: distinct aggregates share frames by key and filter") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT id,
+          |  count(DISTINCT value) FILTER (WHERE selected) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS count_value,
+          |  sum(DISTINCT value) FILTER (WHERE selected) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum_value,
+          |  avg(DISTINCT value) FILTER (WHERE selected) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS avg_value,
+          |  sort_array(collect_list(DISTINCT value) FILTER (WHERE selected) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) AS values,
+          |  count(DISTINCT value) FILTER (WHERE NOT selected) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS other_count
+          |FROM VALUES
+          |  (0, 1, true),
+          |  (1, 1, true),
+          |  (2, 2, false),
+          |  (3, 3, true) AS data(id, value, selected)
+          |ORDER BY id
+        """.stripMargin),
+      Seq(
+        Row(0, 1L, 1L, 1.0, Seq(1), 0L),
+        Row(1, 1L, 1L, 1.0, Seq(1), 0L),
+        Row(2, 1L, 1L, 1.0, Seq(1), 1L),
+        Row(3, 2L, 4L, 2.0, Seq(1, 3), 1L)))
+  }
+
+  test("window function: distinct imperative aggregates share a frame") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT id,
+          |  listagg(DISTINCT value, ',') OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS concatenated,
+          |  sort_array(collect_list(DISTINCT value) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) AS values
+          |FROM VALUES
+          |  (0, 'a'),
+          |  (1, 'a'),
+          |  (2, 'b') AS data(id, value)
+          |ORDER BY id
+        """.stripMargin),
+      Seq(
+        Row(0, "a", Seq("a")),
+        Row(1, "a", Seq("a")),
+        Row(2, "a,b", Seq("a", "b"))))
+  }
+
+  test("window function: listagg distinct reuses its ordering argument as a key") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT id,
+          |  listagg(DISTINCT value) WITHIN GROUP (ORDER BY value) OVER () AS concatenated
+          |FROM VALUES (0, 'b'), (1, 'a'), (2, 'b') AS data(id, value)
+          |ORDER BY id
+        """.stripMargin),
+      Seq(Row(0, "ab"), Row(1, "ab"), Row(2, "ab")))
+  }
+
+  test("window function: distinct foldable inputs share an empty-key frame") {
+    withSQLConf(
+      WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1",
+      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> "0") {
+      val result = sql(
+        """
+          |SELECT id,
+          |  count(DISTINCT 1) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS count_one,
+          |  count(DISTINCT CAST(NULL AS INT)) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS count_null,
+          |  sum(DISTINCT 2) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum_two
+          |FROM range(3)
+          |ORDER BY id
+        """.stripMargin)
+      assertSpilled(sparkContext, "distinct window with an empty key") {
+        checkAnswer(
+          result,
+          Seq(
+            Row(0L, 1L, 0L, 2L),
+            Row(1L, 1L, 0L, 2L),
+            Row(2L, 1L, 0L, 2L)))
+      }
+    }
+  }
+
+  test("window function: distinct works when the window input buffer spills") {
+    withSQLConf(
+      WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "2") {
+      val result = sql(
+        """
+          |SELECT max(distinct_count)
+          |FROM (
+          |  SELECT count(DISTINCT 1) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS distinct_count
+          |  FROM range(100)
+          |)
+        """.stripMargin)
+      assertSpilled(sparkContext, "distinct window with spilled input buffer") {
+        checkAnswer(result, Row(1L))
+      }
     }
   }
 

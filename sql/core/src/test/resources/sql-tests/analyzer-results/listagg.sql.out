@@ -486,6 +486,21 @@ Aggregate [grp#x], [grp#x, hex(listagg(distinct col#x, 0x2C, col#x ASC NULLS FIR
 
 
 -- !query
+SELECT listagg(DISTINCT col1) OVER (ORDER BY col1) FROM df
+-- !query analysis
+Project [listagg(DISTINCT col1, NULL) OVER (ORDER BY col1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
++- Project [col1#x, listagg(DISTINCT col1, NULL) OVER (ORDER BY col1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, listagg(DISTINCT col1, NULL) OVER (ORDER BY col1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Window [listagg(distinct col1#x, null, 0, 0) windowspecdefinition(col1#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS listagg(DISTINCT col1, NULL) OVER (ORDER BY col1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [col1#x ASC NULLS FIRST]
+      +- Project [col1#x]
+         +- SubqueryAlias df
+            +- View (`df`, [col1#x, col2#x])
+               +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x]
+                  +- Project [col1#x, col2#x]
+                     +- SubqueryAlias __auto_generated_subquery_name
+                        +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
 SELECT listagg(c1) FROM (VALUES (ARRAY('a', 'b'))) AS t(c1)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -605,26 +620,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 73,
     "fragment" : "string_agg(col1) WITHIN GROUP (ORDER BY col1) OVER (ORDER BY col1)"
-  } ]
-}
-
-
--- !query
-SELECT listagg(DISTINCT col1) OVER (ORDER BY col1) FROM df
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "windowExpr" : "\"listagg(DISTINCT col1, NULL) OVER (ORDER BY col1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 50,
-    "fragment" : "listagg(DISTINCT col1) OVER (ORDER BY col1)"
   } ]
 }
 
