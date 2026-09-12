@@ -34,6 +34,7 @@ object SparkRemoteFileTest {
       .builder()
       .appName("SparkRemoteFileTest")
       .getOrCreate()
+    println(s"Driver local file ${args(0)} exists: ${new File(args(0)).isFile}")
     val sc = spark.sparkContext
     val rdd = sc.parallelize(Seq(1)).map(_ => {
       val localLocation = SparkFiles.get(args(0))
