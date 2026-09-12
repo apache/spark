@@ -958,6 +958,10 @@ private[spark] class MapOutputTrackerMaster(
       numMaps: Int,
       numReduces: Int,
       isReliablyStored: Boolean): Unit = {
+    // isReliablyStored is orthogonal to push-based shuffle; the branches differ only in tracking
+    // merge status (numReduces). pushBasedShuffleEnabled is app-global while reliability is
+    // per-shuffle, so no shuffle is both: a reliable manager (e.g. Celeborn) intercepts it, and its
+    // local-disk fallback runs through the built-in SortShuffleManager as unreliable.
     if (pushBasedShuffleEnabled) {
       if (shuffleStatuses.put(shuffleId,
         new ShuffleStatus(numMaps, numReduces, bufferRacingMigrations,
