@@ -168,6 +168,10 @@ class CatalystTranspiler(AbstractTranspiler):
 
     variety = "catalyst"
 
+    def __init__(self) -> None:
+        self._param_categories: dict[int, str] = {}
+        self._category_cache: dict[int, str] = {}
+
     # TODO (SPARK-55218): handle implicit-None return bodies like
     # ``def f(x): x + x`` -- no return statement means return None;
     # we should lower to lit(None) and optionally warn since it's
@@ -382,6 +386,15 @@ class CatalystTranspiler(AbstractTranspiler):
         operands are type-incompatible, so the caller drops that variant and the
         JVM picks another option / falls back to the Python UDF.
         """
+        cache_key = id(node)
+        cached = self._category_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        category = self._category_uncached(params, node)
+        self._category_cache[cache_key] = category
+        return category
+
+    def _category_uncached(self, params: List[str], node: ast.AST) -> str:
         match node:
             case ast.Constant(value=v):
                 # bool subclasses int, so classify it first: int/float -> numeric,
@@ -740,6 +753,9 @@ class CatalystTranspiler(AbstractTranspiler):
         # Per-variant input-type assumption ({public_param_index -> category}),
         # read by ``_category`` to choose str vs numeric operators.
         self._param_categories = param_categories or {}
+        # Category inference depends on the per-variant assumptions above. Cache
+        # each AST node only for this lowering so recursive conversion stays linear.
+        self._category_cache = {}
         function_body = function_ast.body
         if len(function_body) != 1:
             raise UnsupportedOperationException(
