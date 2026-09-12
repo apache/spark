@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.ScalarSubquery
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -48,6 +49,29 @@ class PushProjectThroughUnionSuite extends PlanTest {
         .select("bar".as("d"), $"e", $"f")
         .select("bar".as("n"))
         .select("bar".as("n"), "dummy")).analyze
+
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-59042: PushProjectionThroughUnion handles subquery attributes cleanly") {
+    val testRelation1 = LocalRelation($"a".int)
+    val testRelation2 = LocalRelation($"d".int)
+    val subqueryRelation = LocalRelation($"x".int)
+    val subquery = ScalarSubquery(subqueryRelation.where($"x" === $"a").select($"x"))
+
+    val query = testRelation1
+      .union(testRelation2)
+      .select($"a", subquery.as("sub"))
+      .analyze
+    val optimized = Optimize.execute(query)
+
+    val expectedChild2Sub = ScalarSubquery(subqueryRelation.where($"x" === $"d").select($"x"))
+
+    val expected = testRelation1
+      .select($"a", subquery.as("sub"))
+      .union(testRelation2
+        .select($"d", expectedChild2Sub.as("sub")))
+      .analyze
 
     comparePlans(optimized, expected)
   }

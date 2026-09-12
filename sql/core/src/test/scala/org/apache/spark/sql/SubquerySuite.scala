@@ -2678,4 +2678,22 @@ class SubquerySuite extends SharedSparkSession
 
     assert(exposedAttribute.exprId == outerReferenceAttribute.exprId)
   }
+
+  test("SPARK-59042: PushProjectionThroughUnion fails on a correlated scalar subquery " +
+    "over UNION ALL") {
+    val df = sql(
+      """
+        |SELECT u.a,
+        |       (SELECT max(r.x)
+        |        FROM (VALUES (1), (2), (3), (NULL)) AS r(x)
+        |        WHERE r.x = u.a) AS m
+        |FROM (
+        |  SELECT a FROM (VALUES (1), (2)) AS l(a)
+        |  UNION ALL
+        |  SELECT a FROM (VALUES (2), (3)) AS q(a)
+        |) u
+        |ORDER BY u.a, m
+        |""".stripMargin)
+    checkAnswer(df, Row(1, 1) :: Row(2, 2) :: Row(2, 2) :: Row(3, 3) :: Nil)
+  }
 }
