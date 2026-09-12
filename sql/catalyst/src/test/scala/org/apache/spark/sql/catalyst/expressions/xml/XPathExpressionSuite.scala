@@ -27,6 +27,17 @@ import org.apache.spark.sql.types.StringType
  */
 class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
+  test("SPARK-58209: XPath expressions are copied before evaluation") {
+    val expression = XPathString(Literal("<a/>"), Literal("a"))
+
+    assert(expression.stateful)
+    val freshCopy = expression.freshCopyIfContainsStatefulExpression()
+      .asInstanceOf[XPathString]
+    assert(freshCopy ne expression)
+    assert(freshCopy.xml == expression.xml)
+    assert(freshCopy.path == expression.path)
+  }
+
   /** A helper function that tests null and error behaviors for xpath expressions. */
   private def testNullAndErrorBehavior[T <: AnyRef](testExpr: (String, String, T) => Unit): Unit = {
     // null input should lead to null output
