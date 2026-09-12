@@ -451,6 +451,111 @@ abstract class CTEInlineSuiteBase
     }
   }
 
+  test("SPARK-59434: non-deterministic predicates are not pushed into a CTE def") {
+    withTempView("t") {
+      Seq(0, 1, 2).toDF("c1").createOrReplaceTempView("t")
+      // The CTE def is non-deterministic and referenced twice, so it is not inlined and the
+      // references' predicates get OR-merged into the shared def. A reference keeps its own
+      // predicate, so a non-deterministic one must not be pushed down as well.
+      val df = sql(
+        """with v as (select c1, rand(1) r from t)
+          |select c1 from v where rand(2) < 0.5
+          |union all
+          |select c1 from v where rand(3) < 0.5
+          |""".stripMargin)
+      val cteRepartitions = df.queryExecution.optimizedPlan.collect {
+        case r: RepartitionOperation => r
+      }
+      assert(cteRepartitions.nonEmpty,
+        "Non-deterministic With-CTE with multiple references should not be inlined.")
+      assert(
+        cteRepartitions.forall(_.collectFirst {
+          case f: Filter if f.condition.exists(_.isInstanceOf[Rand]) => f
+        }.isEmpty),
+        "Non-deterministic predicate should not be pushed down to the CTE def 'v'.")
+      val randFilters = df.queryExecution.optimizedPlan.collect {
+        case f: Filter if f.condition.exists(_.isInstanceOf[Rand]) => f
+      }
+      assert(randFilters.length == 2,
+        "Each reference's non-deterministic predicate should be evaluated once.")
+    }
+  }
+
+  test("SPARK-59434: deterministic conjuncts are still pushed into a CTE def") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceTempView("t")
+      val df = sql(
+        """with v as (select c1, c2, rand(1) r from t)
+          |select c1 from v where c1 > 0 and rand(2) < 0.5
+          |union all
+          |select c1 from v where c1 < 2
+          |""".stripMargin)
+      val cteRepartitions = df.queryExecution.optimizedPlan.collect {
+        case r: RepartitionOperation => r
+      }
+      assert(cteRepartitions.nonEmpty, "CTE should not be inlined after optimization.")
+      // The non-deterministic conjunct stays at the reference, the deterministic ones are
+      // still OR-merged and pushed into the definition.
+      val distinctCteRepartitions = cteRepartitions.map(_.canonicalized).distinct
+      assert(distinctCteRepartitions.length == 1)
+      assert(
+        distinctCteRepartitions.head.collectFirst {
+          case f: Filter if f.condition.semanticEquals(
+            Or(GreaterThan(f.output(0), Literal(0)), LessThan(f.output(0), Literal(2)))) => f
+        }.isDefined,
+        "Predicate 'c1 > 0 OR c1 < 2' should be pushed down to the CTE def 'v'.")
+      assert(
+        distinctCteRepartitions.head.collectFirst {
+          case f: Filter if f.condition.exists(_.isInstanceOf[Rand]) => f
+        }.isEmpty,
+        "Non-deterministic predicate should not be pushed down to the CTE def 'v'.")
+    }
+  }
+
+  test("SPARK-59434: a non-deterministic reference blocks push-down for its siblings") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceTempView("t")
+      val df = sql(
+        """with v as (select c1, c2, rand(1) r from t)
+          |select c1 from v where rand(2) < 0.5
+          |union all
+          |select c1 from v where c1 > 0
+          |""".stripMargin)
+      val cteRepartitions = df.queryExecution.optimizedPlan.collect {
+        case r: RepartitionOperation => r
+      }
+      assert(cteRepartitions.nonEmpty, "CTE should not be inlined after optimization.")
+      // The first reference has no pushable predicate, so the combined predicate is TRUE and
+      // the definition gets no filter. The sibling's 'c1 > 0' must not be pushed on its own,
+      // which would drop rows the first reference needs.
+      assert(
+        cteRepartitions.forall(_.collectFirst { case f: Filter => f }.isEmpty),
+        "CTE def 'v' should get no pushed-down filter.")
+    }
+  }
+
+  test("SPARK-59434: a non-deterministic predicate is evaluated once per CTE reference") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      withTempView("t") {
+        spark.range(0, 6, 1, 1).selectExpr("cast(id as int) c1").createOrReplaceTempView("t")
+        // `monotonically_increasing_id` counts the rows it sees within a partition, so each
+        // reference drops exactly its own first row. A second evaluation in the shared def
+        // would drop a row there as well, leaving fewer. `rand(1)` only keeps the def from
+        // being inlined; column pruning removes it, so it never reaches a filter.
+        val df = sql(
+          """with v as (select c1, rand(1) r from t)
+            |select c1 from v where monotonically_increasing_id() > 0
+            |union all
+            |select c1 from v where monotonically_increasing_id() > 0
+            |""".stripMargin)
+        assert(
+          df.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]),
+          "Non-deterministic With-CTE with multiple references should not be inlined.")
+        assert(df.count() === 10, "Each reference should drop only its own first row.")
+      }
+    }
+  }
+
   test("Views with CTEs - 1 temp view") {
     withTempView("t", "t2") {
       Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
