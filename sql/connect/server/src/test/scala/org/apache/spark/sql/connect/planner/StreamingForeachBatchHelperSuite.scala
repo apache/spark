@@ -25,6 +25,7 @@ import org.mockito.Mockito.verify
 import org.mockito.Mockito.when
 import org.scalatestplus.mockito.MockitoSugar
 
+import org.apache.spark.SparkIllegalStateException
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.streaming.StreamingQuery
@@ -47,6 +48,7 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
     val (queryId, runId) = (UUID.randomUUID(), UUID.randomUUID())
     when(query.id).thenReturn(queryId)
     when(query.runId).thenReturn(runId)
+    when(query.isActive).thenReturn(true)
     query
   }
 
@@ -112,6 +114,57 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
     assert(cache.listEntriesForTesting().isEmpty)
     // The fast path must not register a (leaking) listener on the closing session's streams.
     assert(spark.streams.listListeners().length == listenersBefore)
+  }
+
+  test("ForeachBatchSessionManager: close is terminal, and a closing root session is refused") {
+    // The cloned holder is registered with customInactiveTimeoutMs = -1, so it never expires by
+    // inactivity: once the cleaner ran, a later batch must not be able to register another one.
+    // Use a child session, not the shared one -- closing the holder tears its session down.
+    val batchDf = spark.newSession().range(1).toDF()
+
+    val manager = new StreamingForeachBatchHelper.ForeachBatchSessionManager(
+      SparkConnectTestUtils.createDummySessionHolder(spark))
+    val clonedHolder = manager.getOrCreateClonedSessionHolder(batchDf)
+    // The id is pinned for the whole query: every batch resolves to the same holder.
+    assert(manager.getOrCreateClonedSessionHolder(batchDf) eq clonedHolder)
+
+    manager.close()
+    checkError(
+      exception =
+        intercept[SparkIllegalStateException](manager.getOrCreateClonedSessionHolder(batchDf)),
+      condition = "SPARK_CONNECT_ILLEGAL_STATE.STREAM_LIFECYCLE_ALREADY_COMPLETED",
+      parameters = Map("operation" -> "getOrCreateClonedSessionHolder"))
+
+    // Same for a root session that is already closing: the query has no owner to clean up after
+    // it, so registering a holder for it would strand that holder.
+    val closingRoot = unregisteredSessionHolder()
+    closingRoot.close()
+    assert(closingRoot.isClosing)
+    val managerOnClosingRoot =
+      new StreamingForeachBatchHelper.ForeachBatchSessionManager(closingRoot)
+    checkError(
+      exception = intercept[SparkIllegalStateException](
+        managerOnClosingRoot.getOrCreateClonedSessionHolder(batchDf)),
+      condition = "SPARK_CONNECT_ILLEGAL_STATE.SESSION_MANAGEMENT_SESSION_ALREADY_CLOSED",
+      parameters = Map("key" -> closingRoot.key.toString))
+  }
+
+  test("CleanerCache: a cleaner registered for an already terminated query is cleaned up") {
+    // onQueryTerminated only fires for a query that terminates after the registration, so a
+    // cleaner registered for a query that is already gone has no reaper left. It holds the cloned
+    // SessionHolder, which never expires by inactivity, so it must be closed here.
+    val cleaner = mock[AutoCloseable]
+    val query = mockQuery()
+    when(query.isActive).thenReturn(false)
+    val cache = new StreamingForeachBatchHelper.CleanerCache(
+      SparkConnectTestUtils.createDummySessionHolder(spark))
+
+    cache.registerCleanerForQuery(query, cleaner)
+
+    verify(cleaner, times(1)).close()
+    assert(cache.listEntriesForTesting().isEmpty)
+
+    cache.cleanUpAll() // Drops the listener this registration added.
   }
 
   test("CleanerCache.cleanUpAll unregisters the streaming listener") {
