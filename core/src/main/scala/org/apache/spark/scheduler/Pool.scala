@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.util.Comparator
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
 import scala.collection.mutable.ArrayBuffer
@@ -24,16 +25,25 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.util.Utils
 
 /**
  * A Schedulable entity that represents collection of Pools or TaskSetManagers
+ *
+ * The algorithm used to order this pool's schedulables can be provided explicitly; when omitted it
+ * is derived from `schedulingMode` (see [[Pool.schedulingAlgorithmFor]]).
  */
 private[spark] class Pool(
     val poolName: String,
     val schedulingMode: SchedulingMode,
     initMinShare: Int,
-    initWeight: Int)
+    initWeight: Int,
+    schedulingAlgorithm: SchedulingAlgorithm)
   extends Schedulable with Logging {
+
+  def this(poolName: String, schedulingMode: SchedulingMode, initMinShare: Int, initWeight: Int) =
+    this(poolName, schedulingMode, initMinShare, initWeight,
+      Pool.schedulingAlgorithmFor(schedulingMode))
 
   val schedulableQueue = new ConcurrentLinkedQueue[Schedulable]
   val schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
@@ -47,17 +57,7 @@ private[spark] class Pool(
   val name = poolName
   var parent: Pool = null
 
-  private val taskSetSchedulingAlgorithm: SchedulingAlgorithm = {
-    schedulingMode match {
-      case SchedulingMode.FAIR =>
-        new FairSchedulingAlgorithm()
-      case SchedulingMode.FIFO =>
-        new FIFOSchedulingAlgorithm()
-      case _ =>
-        val msg = s"Unsupported scheduling mode: $schedulingMode. Use FAIR or FIFO instead."
-        throw new IllegalArgumentException(msg)
-    }
-  }
+  private val taskSetSchedulingAlgorithm: SchedulingAlgorithm = schedulingAlgorithm
 
   override def isSchedulable: Boolean = true
 
@@ -124,5 +124,31 @@ private[spark] class Pool(
     if (parent != null) {
       parent.decreaseRunningTasks(taskNum)
     }
+  }
+}
+
+private[spark] object Pool {
+  /** Returns the built-in scheduling algorithm for the given mode. */
+  def schedulingAlgorithmFor(schedulingMode: SchedulingMode): SchedulingAlgorithm = {
+    schedulingMode match {
+      case SchedulingMode.FAIR =>
+        new FairSchedulingAlgorithm()
+      case SchedulingMode.FIFO =>
+        new FIFOSchedulingAlgorithm()
+      case _ =>
+        val msg = s"Unsupported scheduling mode: $schedulingMode. Use FAIR or FIFO instead."
+        throw new IllegalArgumentException(msg)
+    }
+  }
+
+  /**
+   * Instantiates the named `java.util.Comparator[SchedulableInfo]` (which must have a no-argument
+   * constructor) and wraps it in a [[SchedulingAlgorithm]] that orders schedulables by comparing
+   * their immutable snapshots.
+   */
+  def schedulingAlgorithmFor(className: String): SchedulingAlgorithm = {
+    val comparator =
+      Utils.classForName[Comparator[SchedulableInfo]](className).getConstructor().newInstance()
+    new ComparatorBasedSchedulingAlgorithm(comparator)
   }
 }
