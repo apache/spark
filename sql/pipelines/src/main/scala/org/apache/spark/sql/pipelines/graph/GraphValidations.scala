@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.pipelines.autocdc.AutoCdcReservedNames
 import org.apache.spark.sql.pipelines.graph.DataflowGraph.mapUnique
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
 
@@ -38,7 +39,7 @@ trait GraphValidations extends Logging {
     // A multiflow table may not have an AutoCDC flow; AutoCDC targets must have exactly one
     // input flow.
     multiQueryTables
-      .find { case (_, flows) => flows.exists(isAutoCdcFlow) }
+      .find { case (_, flows) => flows.exists(GraphElementTypeUtils.isAutoCdcFlow) }
       .foreach {
         case (dest, flows) =>
           throw new AnalysisException(
@@ -75,12 +76,6 @@ trait GraphValidations extends Logging {
       }
 
     multiQueryTables
-  }
-
-  /** Returns true iff the given flow is an [[AutoCdcFlow]] (resolved or not). */
-  private def isAutoCdcFlow(f: Flow): Boolean = f match {
-    case _: AutoCdcFlow | _: AutoCdcMergeFlow => true
-    case _ => false
   }
 
   /**
@@ -258,24 +253,40 @@ trait GraphValidations extends Logging {
     // table's); for a named flow (e.g. `CREATE FLOW <name> AS AUTO CDC INTO <target>`) they
     // differ, and keying on the flow identifier would silently skip validation.
     flowsTo.keys.flatMap(table.get).foreach { t: TableElement =>
+      val flows = flowsTo(t.identifier).map(f => resolvedFlow(f.identifier))
       // The output inferred schema of a table is the declared schema merged with the
       // schema of all incoming flows. This must be equivalent to the declared schema.
       val inferredSchema = SchemaInferenceUtils
         .inferSchemaFromFlows(
           tableIdentifier = t.identifier,
-          flowsTo(t.identifier).map(f => resolvedFlow(f.identifier)),
+          flows,
           userSpecifiedSchema = t.specifiedSchema,
           sessionCaseSensitive = sessionCaseSensitive
         )
+      // Match reserved columns with the flow's effective case sensitivity, not just the session:
+      // a case-sensitivity conf set on the flow overrides the session, the same way the rest of
+      // AUTO CDC derives its resolver.
+      val resolver = SchemaInferenceUtils.resolverFor(
+        SchemaInferenceUtils.effectiveCaseSensitivity(t.identifier, flows, sessionCaseSensitive))
 
       t.specifiedSchema.foreach { ss =>
-        // Check the inferred schema matches the specified schema. Used to catch errors where the
-        // inferred user-facing schema has columns that are not in the specified one.
-        if (inferredSchema != ss) {
-          val datasetType = GraphElementTypeUtils
-            .getDatasetTypeForMaterializedViewOrStreamingTable(
-              flowsTo(t.identifier).map(f => resolvedFlow(f.identifier))
-            )
+        // A declared schema must match the schema inferred from the incoming flows. Only for an
+        // AUTO CDC target are the engine-owned reserved metadata column(s) set aside on both sides
+        // first: the user may omit them (the engine appends them at materialization) or declare
+        // them, and comparing with the reserved columns removed accepts either while still catching
+        // a genuine mismatch in the remaining columns, and stays correct if more than one reserved
+        // column is ever added. For any other table the reserved prefix carries no special meaning,
+        // so the comparison is exact -- otherwise a reserved-prefixed column a non-CDC flow
+        // produces but the declaration omits would be wrongly accepted (then dropped later).
+        val schemasMatch = if (flows.exists(GraphElementTypeUtils.isAutoCdcFlow)) {
+          AutoCdcReservedNames.stripReservedFields(inferredSchema, resolver) ==
+            AutoCdcReservedNames.stripReservedFields(ss, resolver)
+        } else {
+          inferredSchema == ss
+        }
+        if (!schemasMatch) {
+          val datasetType =
+            GraphElementTypeUtils.getDatasetTypeForMaterializedViewOrStreamingTable(flows)
           throw GraphErrors.incompatibleUserSpecifiedAndInferredSchemasError(
             t.identifier,
             datasetType,

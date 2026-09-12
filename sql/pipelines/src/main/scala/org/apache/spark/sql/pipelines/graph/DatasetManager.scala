@@ -38,6 +38,7 @@ import org.apache.spark.sql.connector.catalog.{
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, Transform}
 import org.apache.spark.sql.execution.command.CreateViewCommand
+import org.apache.spark.sql.pipelines.autocdc.AutoCdcReservedNames
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.{
   PipelinesCatalogUtils,
@@ -317,9 +318,36 @@ object DatasetManager extends Logging {
     val (catalog, identifier) =
       PipelinesCatalogUtils.resolveTableCatalog(context.spark, table.identifier)
 
-    val outputSchema = table.specifiedSchema.getOrElse(
-      inferredSchemas(table.identifier).asNullable
-    )
+    // A table is an AUTO CDC target iff it has an AUTO CDC auxiliary table spec. Compute the
+    // effective (flow-aware) resolver once here and reuse it for both the output schema below and
+    // the drift checks further down; each `effectiveCaseSensitivityFor` call walks the flows and
+    // can throw on a conflicting per-flow conf, so computing it a single time also avoids doing
+    // that work (and that potential throw) twice.
+    val autoCdcAuxTableSpecOpt = auxiliaryTableSpecOpt.collect {
+      case autoCdcSpec: AutoCdcAuxiliaryTableSpec => autoCdcSpec
+    }
+    val effectiveCaseSensitive =
+      effectiveCaseSensitivityFor(resolvedDataflowGraph, table.identifier, context)
+    val effectiveResolver = SchemaInferenceUtils.resolverFor(effectiveCaseSensitive)
+
+    val outputSchema = table.specifiedSchema match {
+      case Some(ss) if autoCdcAuxTableSpecOpt.isDefined =>
+        // The user schema describes the logical AUTO CDC target; the engine owns the reserved
+        // metadata column(s). Drop whatever reserved column(s) the user declared and append the
+        // engine-owned shape, so the created table always has exactly the reserved column(s) the
+        // AUTO CDC MERGE writes, even if the user declared it with a different type/nullability.
+        // `inferredSchemas` here is flow-only (DataflowGraph.inferSchemas passes
+        // userSpecifiedSchema = None), unlike the merged inferredSchema in GraphValidations, so the
+        // appended fields are exactly the engine-produced columns, never a user-declared one.
+        AutoCdcReservedNames.appendEngineOwnedReservedFields(
+          ss, inferredSchemas(table.identifier), effectiveResolver)
+      case Some(ss) =>
+        // Not an AUTO CDC target: the reserved prefix has no special meaning here, so the declared
+        // schema is honored verbatim.
+        ss
+      case None =>
+        inferredSchemas(table.identifier).asNullable
+    }
     val mergedProperties = resolveTableProperties(table, identifier)
     val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
     val clustering = table.clusterCols.map(cols =>
@@ -362,13 +390,6 @@ object DatasetManager extends Logging {
     if (existingTableOpt.isDefined && !isTableIncrementallyUpdated) {
       context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
     }
-
-    val autoCdcAuxTableSpecOpt = auxiliaryTableSpecOpt.collect {
-        case autoCdcSpec: AutoCdcAuxiliaryTableSpec => autoCdcSpec
-      }
-    val effectiveCaseSensitive = effectiveCaseSensitivityFor(
-      resolvedDataflowGraph, table.identifier, context)
-    val effectiveResolver = SchemaInferenceUtils.resolverFor(effectiveCaseSensitive)
 
     // For an incrementally-updated AutoCDC target, validate that the AutoCDC configuration recorded
     // on the auxiliary table has not drifted, BEFORE anything is created or evolved this run. These
