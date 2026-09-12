@@ -579,7 +579,7 @@ class BasePythonStreamingDataSourceTestsMixin:
 
             # Test stream writer write and commit.
             # The first microbatch contain 30 rows and 2 partitions.
-            # Number of rows and partitions is writen by StreamWriter.commit().
+            # Number of rows and partitions is written by StreamWriter.commit().
             assertDataFrameEqual(self.spark.read.json(output_dir.name), [Row(2, 30)])
 
             self.spark.range(50, 80).repartition(2).write.format("json").mode("append").save(
