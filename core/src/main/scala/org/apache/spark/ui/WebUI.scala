@@ -59,6 +59,11 @@ private[spark] abstract class WebUI(
     conf.get(DRIVER_HOST_ADDRESS))
   protected val className = Utils.getFormattedClassName(this)
 
+  // Random per-UI token embedded in the links and forms that hit this UI's state-changing
+  // endpoints. A cross-site page can neither read it (same-origin policy) nor guess it, so
+  // forged requests fail the check in JettyUtils.createRedirectHandler.
+  private[spark] val csrfToken: String = newCsrfToken()
+
   def getBasePath: String = basePath
   def getTabs: Seq[WebUITab] = tabs.toSeq
   def getHandlers: Seq[ServletContextHandler] = handlers.toSeq
