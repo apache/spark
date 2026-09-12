@@ -24,6 +24,7 @@ from pyspark.sql.types import (
     Row,
     StringType,
     StructType,
+    TimestampNTZType,
 )
 from pyspark.testing.utils import (
     have_pandas,
@@ -40,7 +41,7 @@ if have_pandas:
     from pyspark.sql.pandas.types import _create_converter_from_pandas, _create_converter_to_pandas
 
 if have_pyarrow:
-    import pyarrow as pa  # noqa: F401
+    import pyarrow as pa
 
 
 @unittest.skipIf(
@@ -123,6 +124,45 @@ class ConverterTests(unittest.TestCase):
                 [[{"a": 1}, {"a": 2}, {"a": 3}, None], [{"a": 4}, {"a": 5}, None], None, 100]
             ),
         )
+
+    def test_converter_from_pandas_array_of_timestamp_ntz(self):
+        # pyarrow cannot place an np.datetime64 scalar into a timestamp[us] list, so a pandas
+        # UDF that builds array<timestamp_ntz> values as datetime64 ndarrays could not return
+        # them. Such elements are boxed; others pass through.
+        ts = pd.Timestamp("2024-01-01 12:00:00.123456")
+        values = np.array([ts.to_datetime64(), np.datetime64("NaT")], dtype="datetime64[ns]")
+        for ignore_unexpected in (False, True):
+            with self.subTest(ignore_unexpected_complex_type_values=ignore_unexpected):
+                conv = _create_converter_from_pandas(
+                    ArrayType(TimestampNTZType()),
+                    ignore_unexpected_complex_type_values=ignore_unexpected,
+                )
+                converted = conv(pd.Series([values, [ts.to_pydatetime(), None], None]))
+                self.assertEqual(converted[0][0], ts)
+                self.assertIsInstance(converted[0][0], pd.Timestamp)
+                self.assertIs(converted[0][1], pd.NaT)
+                self.assertEqual(converted[1], [ts.to_pydatetime(), None])
+                self.assertIsNone(converted[2])
+                array = pa.Array.from_pandas(converted, type=pa.list_(pa.timestamp("us")))
+                self.assertEqual(
+                    array.to_pylist(),
+                    [[ts.to_pydatetime(), None], [ts.to_pydatetime(), None], None],
+                )
+
+        # Nested arrays are boxed at every level. Build the outer array as convert_numpy does,
+        # a 1-D object array holding the inner ndarray: np.array([values], dtype=object) would
+        # instead make a 2-D array whose datetime64[ns] elements numpy turns into plain ints.
+        conv = _create_converter_from_pandas(ArrayType(ArrayType(TimestampNTZType())))
+        outer = np.empty(1, dtype=object)
+        outer[0] = values
+        converted = conv(pd.Series([outer]))
+        self.assertIsInstance(converted[0][0][0], pd.Timestamp)
+        self.assertIs(converted[0][0][1], pd.NaT)
+
+        # A top-level timestamp_ntz column needs no per-element pass and is left untouched.
+        conv = _create_converter_from_pandas(TimestampNTZType())
+        pser = pd.Series(values)
+        self.assertIs(conv(pser), pser)
 
     def test_converter_to_pandas_map(self):
         # _key_conv is None and _value_conv is None
