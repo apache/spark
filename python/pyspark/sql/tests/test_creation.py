@@ -27,6 +27,8 @@ from pyspark.errors import (
 )
 from pyspark.sql import Row
 from pyspark.sql.types import (
+    ArrayType,
+    CharType,
     DateType,
     DecimalType,
     IntegerType,
@@ -36,6 +38,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     TimestampType,
     TimeType,
+    VarcharType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -48,6 +51,31 @@ from pyspark.testing.utils import (
 
 
 class DataFrameCreationTestsMixin:
+    def test_char_varchar_explicit_schema(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("nested", ArrayType(VarcharType(3))),
+            ]
+        )
+
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            df = self.spark.createDataFrame([("ab", ["xyz"])], schema)
+            self.assertEqual(df.first(), Row(c="ab  ", nested=["xyz"]))
+
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                self.spark.createDataFrame([("ab", ["abcd"])], schema).collect()
+
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            df = self.spark.createDataFrame([("ab", ["abcd"])], schema)
+            self.assertEqual(df.first(), Row(c="ab", nested=["abcd"]))
+
     def test_create_str_from_dict(self):
         data = [
             {"broker": {"teamId": 3398, "contactEmail": "abc.xyz@123.ca"}},

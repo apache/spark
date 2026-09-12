@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, Decimal, IntegerType, NullType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, Decimal, IntegerType, NullType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, VarcharType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.Utils
@@ -1433,6 +1433,39 @@ class ArrowConvertersSuite extends SharedSparkSession {
     }
 
     assert(count == inputRows.length)
+  }
+
+  test("local Arrow DataFrame conversion closes resources when VARCHAR validation fails") {
+    val physicalSchema = StructType(Seq(StructField("value", StringType)))
+    val logicalSchema = StructType(Seq(StructField("value", VarcharType(3))))
+    val rows = Iterator.single(InternalRow(UTF8String.fromString("abcd")))
+    val batches = ArrowConverters
+      .toBatchIterator(
+        rows,
+        physicalSchema,
+        1,
+        "UTC",
+        errorOnDuplicatedFieldNames = true,
+        largeVarTypes = false,
+        TaskContext.empty())
+      .toArray
+    val allocatedBefore = ArrowUtils.rootAllocator.getAllocatedMemory
+
+    withSQLConf(
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+      SQLConf.ARROW_LOCAL_RELATION_THRESHOLD.key -> Long.MaxValue.toString) {
+      val error = intercept[Exception] {
+        ArrowConverters.toDataFrame(
+          batches.iterator,
+          logicalSchema,
+          spark,
+          "UTC",
+          errorOnDuplicatedFieldNames = true,
+          largeVarTypes = false)
+      }
+      assert(error.getMessage.contains("EXCEED_LIMIT_LENGTH"))
+    }
+    assert(ArrowUtils.rootAllocator.getAllocatedMemory === allocatedBefore)
   }
 
   test("SPARK-57159: roundtrip arrow batches with nanosecond timestamps") {

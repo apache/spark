@@ -38,6 +38,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     ByteType,
+    CharType,
     DateType,
     DayTimeIntervalType,
     DecimalType,
@@ -54,6 +55,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     TimestampType,
     TimeType,
+    VarcharType,
     VariantType,
 )
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
@@ -1432,6 +1434,80 @@ class ArrowTestsMixin:
             UnsupportedOperationException, "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT"
         ):
             df.limit(0).toArrow()
+
+    def test_char_varchar_explicit_schema_and_to_arrow(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("s", StructType([StructField("v", VarcharType(3))])),
+                StructField("a", ArrayType(CharType(2))),
+            ]
+        )
+        values = [{"c": "ab", "s": {"v": "xyz"}, "a": ["z"]}]
+        inputs = [
+            pd.DataFrame(values),
+            pa.Table.from_pylist(values),
+        ]
+
+        with self.sql_conf(
+            {
+                "spark.sql.charVarchar.standardSemantics.enabled": "true",
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+            }
+        ):
+            for data in inputs:
+                with self.subTest(input_type=type(data).__name__):
+                    df = self.spark.createDataFrame(data, schema)
+                    self.assertEqual(
+                        df.first(),
+                        Row(c="ab  ", s=Row(v="xyz"), a=["z "]),
+                    )
+
+                    table = df.toArrow()
+                    self.assertEqual(table.schema.field("c").type, pa.string())
+                    self.assertEqual(table.schema.field("s").type.field("v").type, pa.string())
+                    self.assertEqual(table.schema.field("a").type.value_type, pa.string())
+                    self.assertEqual(
+                        table.to_pylist(),
+                        [{"c": "ab  ", "s": {"v": "xyz"}, "a": ["z "]}],
+                    )
+
+            invalid = pa.table({"c": ["abcd"]})
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                self.spark.createDataFrame(
+                    invalid, StructType([StructField("c", VarcharType(3))])
+                ).collect()
+
+            with self.sql_conf({"spark.sql.execution.arrow.localRelationThreshold": "0"}):
+                rdd_df = self.spark.createDataFrame(
+                    pa.table({"c": ["a"]}),
+                    StructType([StructField("c", CharType(3))]),
+                )
+                self.assertEqual(rdd_df.first(), Row(c="a  "))
+                with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                    self.spark.createDataFrame(
+                        pa.table({"v": ["abcd"]}),
+                        StructType([StructField("v", VarcharType(3))]),
+                    ).collect()
+
+        legacy_schema = StructType(
+            [
+                StructField("c", CharType(3)),
+                StructField("v", VarcharType(3)),
+            ]
+        )
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+                "spark.sql.execution.arrow.localRelationThreshold": "0",
+            }
+        ):
+            df = self.spark.createDataFrame(pa.table({"c": ["a"], "v": ["abcd"]}), legacy_schema)
+            self.assertEqual(df.schema, StructType().add("c", "string").add("v", "string"))
+            self.assertEqual(df.first(), Row(c="a", v="abcd"))
 
     def test_createDataFrame_pandas_duplicate_field_names(self):
         for arrow_enabled in [True, False]:

@@ -443,12 +443,31 @@ object IntegratedUDFTestUtils extends SQLHelper {
       children: Seq[Expression],
       evalType: Int,
       udfDeterministic: Boolean,
-      resultId: ExprId)
-    extends PythonUDF(name, func, dataType, children, evalType, udfDeterministic, resultId) {
+      resultId: ExprId,
+      elementwiseNestingDepth: Int,
+      applyCharVarcharChecks: Boolean)
+      extends PythonUDF(
+        name,
+        func,
+        dataType,
+        children,
+        evalType,
+        udfDeterministic,
+        resultId,
+        elementwiseNestingDepth,
+        applyCharVarcharChecks) {
 
     def this(pudf: PythonUDF) = {
-      this(pudf.name, pudf.func, pudf.dataType, pudf.children,
-        pudf.evalType, pudf.udfDeterministic, pudf.resultId)
+      this(
+        pudf.name,
+        pudf.func,
+        pudf.dataType,
+        pudf.children,
+        pudf.evalType,
+        pudf.udfDeterministic,
+        pudf.resultId,
+        pudf.elementwiseNestingDepth,
+        pudf.applyCharVarcharChecks)
     }
 
     override def toString: String = s"$name(${children.mkString(", ")})"
@@ -1410,6 +1429,35 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val prettyName: String = "Scalar Pandas UDF"
   }
 
+  case class TestTypedScalarPandasUDF(
+      name: String,
+      returnType: DataType) extends TestUDF {
+    private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
+      name = name,
+      func = SimplePythonFunction(
+        command = pandasFunc.toImmutableArraySeq,
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null),
+      dataType = returnType,
+      pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+      udfDeterministic = true) {
+
+      override def builder(e: Seq[Expression]): Expression = {
+        assert(e.length == 1, "Defined UDF only has one column")
+        new PythonUDFWithoutId(
+          super.builder(e).asInstanceOf[PythonUDF])
+      }
+    }
+
+    def apply(exprs: Column*): Column = udf(exprs: _*)
+
+    val prettyName: String = "Typed Scalar Pandas UDF"
+  }
+
   /**
    * A Grouped Aggregate Pandas UDF that takes one column, executes the
    * Python native function calculating the count of the column using pandas.
@@ -1606,6 +1654,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
   def registerTestUDF(testUDF: TestUDF, session: classic.SparkSession): Unit = testUDF match {
     case udf: TestPythonUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestScalarPandasUDF => session.udf.registerPython(udf.name, udf.udf)
+    case udf: TestTypedScalarPandasUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestGroupedAggPandasUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestScalaUDF =>
       val registry = session.sessionState.functionRegistry

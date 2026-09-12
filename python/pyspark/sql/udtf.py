@@ -28,11 +28,19 @@ from typing import TYPE_CHECKING, Any, Optional, Sequence, Type, Union
 from pyspark.errors import (
     PySparkAttributeError,
     PySparkImportError,
+    PySparkNotImplementedError,
     PySparkPicklingError,
     PySparkTypeError,
 )
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.sql.types import DataType, StructType, _parse_datatype_string
+from pyspark.sql.types import (
+    CharType,
+    DataType,
+    StructType,
+    VarcharType,
+    _has_type,
+    _parse_datatype_string,
+)
 from pyspark.sql.udf import _wrap_function
 from pyspark.util import PythonEvalType
 
@@ -317,6 +325,16 @@ def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]
         )
 
 
+def _check_udtf_return_type(return_type: DataType) -> None:
+    if _has_type(return_type, (CharType, VarcharType)):
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={
+                "feature": f"CHAR/VARCHAR return type in Python UDTFs: {return_type}"
+            },
+        )
+
+
 class UserDefinedTableFunction:
     """
     User-defined table function in Python
@@ -369,6 +387,7 @@ class UserDefinedTableFunction:
                         "return_type": f"{parsed}",
                     },
                 )
+            _check_udtf_return_type(parsed)
             self._returnType_placeholder = parsed
         return self._returnType_placeholder
 

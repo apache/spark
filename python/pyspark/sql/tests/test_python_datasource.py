@@ -54,7 +54,16 @@ from pyspark.sql.datasource import (
 )
 from pyspark.sql.functions import spark_partition_id
 from pyspark.sql.session import SparkSession
-from pyspark.sql.types import DecimalType, IntegerType, Row, StructField, StructType, VariantVal
+from pyspark.sql.types import (
+    ArrayType,
+    CharType,
+    DecimalType,
+    IntegerType,
+    Row,
+    StructField,
+    StructType,
+    VariantVal,
+)
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     SPARK_HOME,
@@ -279,6 +288,19 @@ class BasePythonDataSourceTestsMixin:
         self.register_data_source(read_func=lambda schema, partition: iter([Row(0, 1)]))
         df = self.spark.read.format("test").load()
         assertDataFrameEqual(df, [Row(0, 1)])
+
+    def test_data_source_char_varchar_return_type_is_unsupported(self):
+        schema = StructType([StructField("value", ArrayType(CharType(2)))])
+        self.register_data_source(
+            read_func=lambda schema, partition: iter([(["a"],)]),
+            output=schema,
+        )
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            with self.assertRaisesRegex(
+                PythonException,
+                "CHAR/VARCHAR return types in Python DataSource",
+            ):
+                self.spark.read.format("test").load().collect()
 
     def test_data_source_read_output_named_row(self):
         self.register_data_source(

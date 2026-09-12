@@ -20,7 +20,7 @@ import unittest
 from pyspark.errors import AnalysisException
 from pyspark.sql import functions as sf
 from pyspark.sql.functions import udf
-from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StringType
+from pyspark.sql.types import ArrayType, CharType, DoubleType, IntegerType, StringType, VarcharType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     assertDataFrameEqual,
@@ -51,6 +51,19 @@ class UDFInHigherOrderFunctionTestsMixin:
             df.select(sf.transform("values", lambda x: plus_one(x)).alias("r")),
             df.select(sf.transform("values", lambda x: x + 1).alias("r")),
         )
+
+    def test_transform_char_varchar_results(self):
+        df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
+        char_udf = udf(lambda _: "a", CharType(3))
+        varchar_udf = udf(lambda _: "abcd", VarcharType(3))
+
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            assertDataFrameEqual(
+                df.select(sf.transform("values", lambda x: char_udf(x)).alias("r")),
+                [(["a  ", "a  "],)],
+            )
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                df.select(sf.transform("values", lambda x: varchar_udf(x))).collect()
 
     def test_transform_null_array_and_null_elements(self):
         # A null array must stay null, and a null *element* must reach the UDF as None.

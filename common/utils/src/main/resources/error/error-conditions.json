@@ -9189,9 +9189,19 @@
           "Purge table."
         ]
       },
+      "PYTHON_STATE_CHAR_VARCHAR_SCHEMA" : {
+        "message" : [
+          "Python state does not support CHAR/VARCHAR in <schemaKind> schema <dataType>."
+        ]
+      },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
           "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+        ]
+      },
+      "PYTHON_UDTF_CHAR_VARCHAR_RETURN_TYPE" : {
+        "message" : [
+          "Python UDTFs do not support CHAR/VARCHAR in return type <dataType>."
         ]
       },
       "QUERY_ONLY_CORRUPT_RECORD_COLUMN" : {

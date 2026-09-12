@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.test.{ExamplePointUDT, SharedSparkSession}
+import org.apache.spark.sql.types._
 
 /**
  * End-to-end tests for the Arrow columnar Python UDF input path.
@@ -50,6 +51,18 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     plan.collect {
       case p if tag.runtimeClass.isInstance(p) => p.asInstanceOf[T]
     }
+  }
+
+  test("CHAR/VARCHAR output normalization also unwraps UDT siblings") {
+    val logicalSchema =
+      StructType(Seq(StructField("c", CharType(3)), StructField("point", new ExamplePointUDT())))
+    val expectedSchema = StructType(
+      Seq(
+        StructField("c", StringType),
+        StructField("point", ArrayType(DoubleType, containsNull = false))))
+
+    assert(
+      ColumnarArrowEvalPythonEvaluatorFactory.toPhysicalType(logicalSchema) === expectedSchema)
   }
 
   test("Arrow-backed source: no ColumnarToRowExec before ArrowEvalPythonExec") {
@@ -99,6 +112,71 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         assert(row.getInt(0) == i, s"id mismatch at row $i")
         assert(row.getString(1) == i.toString,
           s"UDF result mismatch at row $i")
+      }
+    }
+  }
+
+  test("Arrow-backed source: CHAR/VARCHAR output checks") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "arrow_char_udf", returnType = CharType(4))
+      val varcharUDF = TestTypedScalarPandasUDF(
+        name = "arrow_varchar_udf", returnType = VarcharType(3))
+      registerTestUDF(charUDF, spark)
+      registerTestUDF(varcharUDF, spark)
+
+      val df = readArrowSource(numRows = 10)
+      val padded = df.selectExpr(
+        "id", "name", "value", "data",
+        "arrow_char_udf(id) as udf_id")
+      val arrowExec = collectNodes[ArrowEvalPythonExec](
+        padded.queryExecution.executedPlan).head
+      assert(arrowExec.child.supportsColumnar,
+        "ArrowEvalPythonExec should retain its Arrow-backed columnar child")
+      assert(padded.collect().map(_.getString(4)).toSeq ===
+        (0 until 10).map(_.toString.padTo(4, ' ').mkString))
+
+      val exception = intercept[SparkRuntimeException] {
+        df.selectExpr(
+          "id", "name", "value", "data",
+          "arrow_varchar_udf(name) as udf_name").collect()
+      }
+      assert(exception.getMessage.contains("EXCEED_LIMIT_LENGTH"))
+    }
+  }
+
+  test("Arrow-backed source: legacy CHAR/VARCHAR output remains unchecked") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "legacy_arrow_char_udf", returnType = CharType(4))
+      val varcharUDF = TestTypedScalarPandasUDF(
+        name = "legacy_arrow_varchar_udf", returnType = VarcharType(3))
+      registerTestUDF(charUDF, spark)
+      registerTestUDF(varcharUDF, spark)
+
+      val result = readArrowSource(numRows = 10).selectExpr(
+        "id", "name", "value", "data",
+        "legacy_arrow_char_udf(id) as udf_id",
+        "legacy_arrow_varchar_udf(name) as udf_name")
+      val arrowExec = collectNodes[ArrowEvalPythonExec](
+        result.queryExecution.executedPlan).head
+      assert(arrowExec.child.supportsColumnar,
+        "ArrowEvalPythonExec should retain its Arrow-backed columnar child")
+
+      val rows = result.collect()
+      rows.zipWithIndex.foreach { case (row, index) =>
+        assert(row.getString(4) === index.toString)
+        assert(row.getString(5) === s"row_$index")
       }
     }
   }

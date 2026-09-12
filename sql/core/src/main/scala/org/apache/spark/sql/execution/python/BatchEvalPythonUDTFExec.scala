@@ -86,7 +86,7 @@ case class BatchEvalPythonUDTFExec(
 
     // The return type of a UDTF is an array of struct.
     val resultType = udtf.dataType
-    val fromJava = EvaluatePython.makeFromJava(resultType)
+    val fromJava = EvaluatePython.makeFromJava(resultType, udtf.applyCharVarcharChecks)
 
     outputIterator.flatMap { pickedResult =>
       val unpickledBatch = unpickle.loads(pickedResult)

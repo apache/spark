@@ -29,9 +29,15 @@ from pyspark.sql.column import Column
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import (
+    ArrayType,
+    CharType,
     DataType,
+    MapType,
     StringType,
     StructType,
+    UserDefinedType,
+    VarcharType,
+    _has_type,
     _parse_datatype_string,
 )
 from pyspark.sql.utils import get_active_spark_context
@@ -314,9 +320,49 @@ class UserDefinedFunction:
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
+        class _InvalidCharVarcharArrowTypeError(TypeError):
+            pass
+
+        def has_char_varchar_in_udt(data_type: DataType) -> bool:
+            if isinstance(data_type, UserDefinedType):
+                return _has_type(data_type.sqlType(), (CharType, VarcharType))
+            if isinstance(data_type, StructType):
+                return any(has_char_varchar_in_udt(f.dataType) for f in data_type.fields)
+            if isinstance(data_type, ArrayType):
+                return has_char_varchar_in_udt(data_type.elementType)
+            if isinstance(data_type, MapType):
+                return has_char_varchar_in_udt(data_type.keyType) or has_char_varchar_in_udt(
+                    data_type.valueType
+                )
+            return False
+
+        if has_char_varchar_in_udt(returnType):
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={
+                    "feature": f"CHAR/VARCHAR inside Python UDF UDT return type: {returnType}"
+                },
+            )
+
+        char_varchar_supported_eval_types = (
+            PythonEvalType.SQL_BATCHED_UDF,
+            PythonEvalType.SQL_ARROW_BATCHED_UDF,
+            PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+            PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_SCALAR_ARROW_UDF,
+            PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+        )
+
+        def check_arrow_type() -> None:
+            if evalType not in char_varchar_supported_eval_types and _has_type(
+                returnType, (CharType, VarcharType)
+            ):
+                raise _InvalidCharVarcharArrowTypeError
+            to_arrow_type(returnType, timezone="UTC")
+
         if evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
             try:
-                to_arrow_type(returnType, timezone="UTC")
+                check_arrow_type()
             except TypeError:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
@@ -330,7 +376,7 @@ class UserDefinedFunction:
             or evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
         ):
             try:
-                to_arrow_type(returnType, timezone="UTC")
+                check_arrow_type()
             except TypeError:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
@@ -343,7 +389,7 @@ class UserDefinedFunction:
             or evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
         ):
             try:
-                to_arrow_type(returnType, timezone="UTC")
+                check_arrow_type()
             except TypeError:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
@@ -358,7 +404,7 @@ class UserDefinedFunction:
         ):
             if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(returnType, timezone="UTC")
+                    check_arrow_type()
                 except TypeError:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
@@ -383,7 +429,7 @@ class UserDefinedFunction:
         ):
             if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(returnType, timezone="UTC")
+                    check_arrow_type()
                 except TypeError:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
@@ -405,7 +451,7 @@ class UserDefinedFunction:
         ):
             if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(returnType, timezone="UTC")
+                    check_arrow_type()
                 except TypeError:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
@@ -425,7 +471,7 @@ class UserDefinedFunction:
         elif evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(returnType, timezone="UTC")
+                    check_arrow_type()
                 except TypeError:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
@@ -444,7 +490,7 @@ class UserDefinedFunction:
         elif evalType == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
             if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(returnType, timezone="UTC")
+                    check_arrow_type()
                 except TypeError:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
@@ -460,7 +506,10 @@ class UserDefinedFunction:
                         "return_type": str(returnType),
                     },
                 )
-        elif evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
+        elif (
+            evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+            or evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
+        ):
             try:
                 # StructType is not yet allowed as a return type, explicitly check here to fail fast
                 if isinstance(returnType, StructType):
@@ -471,7 +520,7 @@ class UserDefinedFunction:
                             f"{returnType}"
                         },
                     )
-                to_arrow_type(returnType, timezone="UTC")
+                check_arrow_type()
             except TypeError:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
@@ -480,10 +529,13 @@ class UserDefinedFunction:
                         f"{returnType}"
                     },
                 )
-        elif evalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF:
+        elif (
+            evalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+            or evalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
+        ):
             try:
                 # Different from SQL_GROUPED_AGG_PANDAS_UDF, StructType is allowed here
-                to_arrow_type(returnType, timezone="UTC")
+                check_arrow_type()
             except TypeError:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
@@ -492,6 +544,16 @@ class UserDefinedFunction:
                         f"{returnType}"
                     },
                 )
+        elif evalType not in char_varchar_supported_eval_types and _has_type(
+            returnType, (CharType, VarcharType)
+        ):
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={
+                    "feature": f"Invalid return type with Python UDF eval type {evalType}: "
+                    f"{returnType}"
+                },
+            )
 
     @property
     def returnType(self) -> DataType:

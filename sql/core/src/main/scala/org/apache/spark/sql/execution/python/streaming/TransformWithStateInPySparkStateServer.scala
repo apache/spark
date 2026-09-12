@@ -40,6 +40,8 @@ import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateVariableType
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleImplBase, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateResponseWithMapIterator, StateResponseWithMapKeysOrValues, StateResponseWithStringTypeVal, StateResponseWithTimer, StateVariableRequest, TimerInfo, TimerRequest, TimerStateCallCommand, TimerValueRequest, UtilsRequest, ValueStateCall}
@@ -79,6 +81,14 @@ class TransformWithStateInPySparkStateServer(
   extends Runnable with Logging {
 
   import PythonResponseWriterUtils._
+
+  private def validateStateSchema(schema: StructType, schemaKind: String): Unit = {
+    if (CharVarcharUtils.hasCharVarchar(schema)) {
+      throw QueryCompilationErrors.invalidPythonStateSchema(schema, schemaKind)
+    }
+  }
+
+  validateStateSchema(groupingKeySchema, "grouping key")
 
   private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
@@ -697,6 +707,7 @@ class TransformWithStateInPySparkStateServer(
       ttlDurationMs: Option[Long],
       mapStateValueSchemaString: String = null): Unit = {
     val schema = StructType.fromString(schemaString)
+    validateStateSchema(schema, s"$stateType state")
     val expressionEncoder = ExpressionEncoder(schema).resolveAndBind()
     stateType match {
       case StateVariableType.ValueState => if (!valueStates.contains(stateName)) {
@@ -732,6 +743,7 @@ class TransformWithStateInPySparkStateServer(
 
       case StateVariableType.MapState => if (!mapStates.contains(stateName)) {
         val valueSchema = StructType.fromString(mapStateValueSchemaString)
+        validateStateSchema(valueSchema, "map state value")
         val valueExpressionEncoder = ExpressionEncoder(valueSchema).resolveAndBind()
         val state = if (ttlDurationMs.isEmpty) {
           statefulProcessorHandle.getMapState[Row, Row](stateName,
