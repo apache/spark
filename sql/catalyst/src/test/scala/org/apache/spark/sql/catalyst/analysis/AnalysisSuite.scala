@@ -29,8 +29,8 @@ import org.scalatest.matchers.must.Matchers
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, QueryPlanningTracker, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog, SQLFunction}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -1893,6 +1893,69 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // The expected Project (root node) should only have column "i".
     val expectedPlan = Project(Seq(UnresolvedAttribute("i")), addColumnF).analyze
     checkAnalysis(inputPlan, expectedPlan)
+  }
+
+  private def scalarSQLFunctionWithProps(
+      props: Map[String, String]): SQLFunction = {
+    val intType: DataType = IntegerType
+    val scalarReturnType: Either[DataType, StructType] = scala.Left(intType)
+    SQLFunction(
+      name = FunctionIdentifier("ansi_probe"),
+      inputParam = Some(new StructType().add("x", intType)),
+      returnType = scalarReturnType,
+      exprText = Some("x + 1"),
+      queryText = None,
+      comment = None,
+      collation = None,
+      deterministic = Some(true),
+      containsSQL = Some(true),
+      isTableFunc = false,
+      properties = props)
+  }
+
+  gridTest("SQL UDF body-resolution ANSI: persisted ANSI makes alwaysSetAnsiValue a no-op")(
+      Seq(false, true)) { applySessionOverrides =>
+    val ansiKey = SQLConf.ANSI_ENABLED.key
+    val fnWithPersistedAnsi = scalarSQLFunctionWithProps(Map(s"sqlConfig.$ansiKey" -> "false"))
+
+    withSQLConf(
+        SQLConf.ASSUME_ANSI_FALSE_IF_NOT_PERSISTED.key -> "true",
+        SQLConf.APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION.key ->
+          applySessionOverrides.toString,
+        ansiKey -> "true") {
+      val withFlag = Analyzer.buildSQLFunctionConf(
+        function = fnWithPersistedAnsi,
+        applySessionOverrides = applySessionOverrides,
+        alwaysSetAnsiValue = true)
+      val withoutFlag = Analyzer.buildSQLFunctionConf(
+        function = fnWithPersistedAnsi,
+        applySessionOverrides = applySessionOverrides,
+        alwaysSetAnsiValue = false)
+      assert(withFlag.settings.get(ansiKey) == "false")
+      assert(withoutFlag.settings.get(ansiKey) == "false")
+      assert(withFlag.settings.get(ansiKey) == withoutFlag.settings.get(ansiKey))
+    }
+  }
+
+  test("SQL UDF body-resolution ANSI: flag only bites when ANSI is unpersisted") {
+    val ansiKey = SQLConf.ANSI_ENABLED.key
+    val fnWithoutPersistedAnsi = scalarSQLFunctionWithProps(Map.empty)
+
+    withSQLConf(
+        SQLConf.ASSUME_ANSI_FALSE_IF_NOT_PERSISTED.key -> "true",
+        SQLConf.APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION.key -> "false",
+        ansiKey -> "true") {
+      val withFlag = Analyzer.buildSQLFunctionConf(
+        function = fnWithoutPersistedAnsi,
+        applySessionOverrides = false,
+        alwaysSetAnsiValue = true)
+      val withoutFlag = Analyzer.buildSQLFunctionConf(
+        function = fnWithoutPersistedAnsi,
+        applySessionOverrides = false,
+        alwaysSetAnsiValue = false)
+      assert(withFlag.settings.get(ansiKey) == "false")
+      assert(withoutFlag.settings.get(ansiKey) == null)
+    }
   }
 }
 
