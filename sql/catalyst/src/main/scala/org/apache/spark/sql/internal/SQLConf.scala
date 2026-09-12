@@ -2908,7 +2908,9 @@ object SQLConf {
       .doc("When both this conf and `spark.sql.codegen.wholeStage` are true, " +
         "UnionExec participates in whole-stage codegen on its " +
         "non-partitioning-aware path: the parent and all children fuse into " +
-        "a single WholeStageCodegenExec stage.")
+        "a single WholeStageCodegenExec stage. The value is read when a UnionExec " +
+        "first decides, so a change applies to plans built afterwards, not to a " +
+        "plan that has already been prepared.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -2923,7 +2925,9 @@ object SQLConf {
         "bytecode size, constant pool growth, JIT compilation time) rather " +
         "than the JVM per-method bytecode limit. Unions with more children " +
         "fall back to per-child codegen stages. Only effective when " +
-        s"`${WHOLESTAGE_UNION_CODEGEN_ENABLED.key}` is true.")
+        s"`${WHOLESTAGE_UNION_CODEGEN_ENABLED.key}` is true. The value is read when a " +
+        "UnionExec first decides, so a change applies to plans built afterwards, not " +
+        "to a plan that has already been prepared.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf

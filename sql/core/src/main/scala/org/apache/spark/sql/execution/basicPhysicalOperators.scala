@@ -1038,41 +1038,58 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
-  // Serializes the latches below so concurrent first readers agree on one answer. What must not be
-  // reachable under it is the AQE final-plan lock: `CoalesceShufflePartitions` reads `isPlainUnion`
-  // while holding that lock, so the reverse edge deadlocks. `InMemoryTableScanExec` is safe here
-  // because it reads `adaptive.executedPlan`, a volatile read, not `finalPhysicalPlan`, which is
-  // `lock.synchronized`. Child `lazy val`s such as `AQEShuffleReadExec.outputPartitioning` do take
-  // their own instance monitor; that is harmless, as nothing holds one of those and then waits
-  // here. Driver-only, hence `@transient`.
+  // Serializes the latches below so concurrent first readers agree on one answer. Nothing called
+  // under it may take the AQE final-plan lock, which `CoalesceShufflePartitions` holds while it
+  // reads `isPlainUnion`; `InMemoryTableScanExec` is safe on that count, reading the volatile
+  // `adaptive.executedPlan` rather than `finalPhysicalPlan`. Monitors are taken under it, since a
+  // `lazy val` initializes on its own instance, but none belongs to this node or one above it.
+  // That matters for this node in particular: `metrics` and `supportCodegenFailureReason` hold its
+  // monitor and then take this lock, so nothing under the lock may force a `lazy val` here.
+  // `output` and `prepareOutputPartitioning` are `def`s. Driver-only, hence `@transient`.
   @transient private val decisionLock = new Object()
 
   /**
    * True when this union behaves as a plain concatenation, so `unionedInputRDD` matches the
    * semantics of `sparkContext.union(...)` in `unionRDDs`. It satisfies the partitioning gate on
    * the codegen path, not the whole of it: `supportCodegenFailureReason` still applies its other
-   * checks. A `KeyedPartitioning` union also concatenates, but codegen stays off for it, with the
-   * reason "partitioning-aware", because a downstream `GroupPartitionsExec` consumes its key
-   * descriptor.
+   * checks. When this union merges its children's `KeyedPartitioning` instead, it concatenates all
+   * the same, but codegen stays off, with the reason "partitioning-aware", because a downstream
+   * `GroupPartitionsExec` consumes its key descriptor.
    *
    * Latched, because the answer moves under its consumers.
    * `InMemoryTableScanExec.outputPartitioning` reports `UnknownPartitioning` while its inner
    * `AdaptiveSparkPlanExec` has no final plan, so a union can look plain when
    * `CollapseCodegenStages` gates on it and partitioning-aware by the time the stage runs. The
    * shell that gate builds wraps a `withNewChildren` copy, and a copy that re-derived here came
-   * back with empty `metrics` while `doProduce` asked `metricTerm` for `numOutputRows`. The tag
-   * carries the answer onto that copy, since `withNewChildren` ends in `copyTagsFrom`.
+   * back with empty `metrics` while `doProduce` asked `metricTerm` for `numOutputRows`. A fresh
+   * copy inherits the answer instead, since `withNewChildren` ends in `copyTagsFrom`.
    *
-   * `UNION_OUTPUT_PARTITIONING` is read here rather than in `rawPartitioning` so it is latched too:
-   * `conf` is live, and a plan must execute by the partitioning it was planned against.
+   * `UNION_OUTPUT_PARTITIONING` is read where the decision is stamped rather than in
+   * `rawPartitioning`, so it too is fixed once the plan is prepared: `conf` is live, and a plan
+   * must execute by the partitioning it was planned against.
+   *
+   * A read before `StampUnionDecisions` answers from the children as they are then, and does not
+   * write, so observing an unprepared plan cannot decide anything for the prepared one.
    */
   private[sql] def isPlainUnion: Boolean = decisionLock.synchronized {
-    getTagValue(UnionExec.PLAIN_UNION_DECISION).getOrElse {
-      val plain = !conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING) ||
-        rawPartitioning.isInstanceOf[UnknownPartitioning]
-      setTagValue(UnionExec.PLAIN_UNION_DECISION, plain)
-      plain
+    getTagValue(UnionExec.PLAIN_UNION_DECISION).getOrElse(derivePlainUnion)
+  }
+
+  private def derivePlainUnion: Boolean =
+    !conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING) ||
+      rawPartitioning.isInstanceOf[UnknownPartitioning]
+
+  /**
+   * Fixes both decisions for the rest of this plan's life. Called by `StampUnionDecisions` right
+   * after `EnsureRequirements`, so the answer a parent's exchange decision was taken from is the
+   * one execution uses. Idempotent, and never overwrites: a node that already carries the tags
+   * keeps them, which is how the copy in the codegen shell stays in step with the gate.
+   */
+  private[execution] def stampDecisions(): Unit = decisionLock.synchronized {
+    if (getTagValue(UnionExec.PLAIN_UNION_DECISION).isEmpty) {
+      setTagValue(UnionExec.PLAIN_UNION_DECISION, derivePlainUnion)
     }
+    codegenConfSnapshot
   }
 
   /**
@@ -1122,19 +1139,22 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
-  // Memoized per instance, not latched on a tag: every term below the confs reads the children, and
-  // a tag outlives them. `SparkPlanInfo` forces `metrics` on an AQE plan update, before the rules
-  // that run ahead of `CollapseCodegenStages`, so a rule replacing a child there would inherit an
-  // allowing answer and fuse a topology that `hasPartitionIndexDependentCodegen` or
-  // `supportsColumnar` rejects. The copy in the codegen shell still agrees with the gate:
-  // `InputAdapter` delegates `output` and `supportsColumnar` to its child, the remaining terms walk
-  // the subtree through it, and each is fixed for a given set of children.
+  // Memoized per instance rather than latched on a tag. Every term below the confs except
+  // `isPlainUnion` reads the children, and a tag outlives them: `SparkPlanInfo` forces `metrics` on
+  // an AQE plan update, before the rules that run ahead of `CollapseCodegenStages`, so a rule
+  // replacing a child there would inherit an allowing answer and fuse a topology that
+  // `hasPartitionIndexDependentCodegen` or `supportsColumnar` rejects. The copy in the codegen
+  // shell still agrees with the gate: `InputAdapter` delegates `output` and `supportsColumnar` to
+  // its child, the other terms walk the subtree through it, and each of those is fixed for a given
+  // set of children. `isPlainUnion` is not, which is why it is stamped instead.
+  //
+  // `isPlainUnion` is checked last of all: a union rejected on any other ground was never going to
+  // fuse, and asking the question would fix a decision that costs it SPARK-52921's exchange
+  // elimination for nothing.
   @transient private lazy val supportCodegenFailureReason: Option[String] = {
     val confs = codegenConfSnapshot
     if (!confs.unionCodegenEnabled) {
       Some("union-codegen-disabled")
-    } else if (!isPlainUnion) {
-      Some("partitioning-aware")
     } else if (children.exists(_.exists(_.isInstanceOf[UnionExec]))) {
       Some("nested-union")
     } else if (children.exists(_.exists(UnionExec.isKnownMultiInputRDDCodegen))) {
@@ -1148,6 +1168,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     } else if (children.exists(c =>
       c.output.zip(output).exists { case (src, tgt) => src.dataType != tgt.dataType })) {
       Some("type-mismatch")
+    } else if (!isPlainUnion) {
+      Some("partitioning-aware")
     } else {
       None
     }
@@ -1352,19 +1374,21 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
 object UnionExec {
   /**
-   * The latched "is this a plain concatenation" decision. See `isPlainUnion`.
+   * The stamped "is this a plain concatenation" decision. See `isPlainUnion`.
    *
-   * Rebuilds carry it: `withNewChildren` and a transform rule's replacement both go through
-   * `copyTagsFrom`. A `UnionExec` with no predecessor node at its position starts unlatched: it
-   * can re-derive the opposite answer and leave `metrics` empty under generated code that
-   * increments it.
+   * `withNewChildren` copies it onto a rebuilt node, and so does a transform rule's replacement,
+   * but only where the target carries no tags of its own: `copyTagsFrom` leaves a node that already
+   * has some untouched. A `UnionExec` reaching execution unstamped therefore answers from the
+   * children it has then, and can leave `metrics` empty, so `doProduce` fails asking `metricTerm`
+   * for `numOutputRows`.
    */
   private val PLAIN_UNION_DECISION = TreeNodeTag[Boolean]("plainUnionDecision")
 
   /**
    * The confs `supportCodegenFailureReason` reads, latched by `codegenConfSnapshot`. Only the conf
-   * values are latched. The terms that read the children are derived per instance instead, so that
-   * a rule replacing a child cannot inherit an answer taken from the topology it replaced.
+   * values are latched here. Every other term of the reason except `isPlainUnion` is derived per
+   * instance, so a rule replacing a child cannot inherit one taken from the topology it replaced;
+   * `isPlainUnion` is latched separately, on [[PLAIN_UNION_DECISION]], and does carry over.
    */
   private case class CodegenConfSnapshot(unionCodegenEnabled: Boolean, maxChildren: Int)
 

@@ -21,9 +21,9 @@ import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioningLike, UnknownPartitioning}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -65,9 +65,9 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
    * `AdaptiveSparkPlanHelper.collect` descends through AQE wrappers and query stages;
    * `SparkPlan.collect` stops at them, since both are `LeafExecNode`s.
    *
-   * Stricter than `unionInsideWSCG` on purpose: `w.find` also matches a union that an
-   * `InputAdapter` left inside the stage unfused, and the callers here assert on `metrics`, which
-   * an unfused union does not register.
+   * Stricter than `unionInsideWSCG` on purpose: this matches only a union that is the root of its
+   * own codegen stage, which is what "fused" means for the callers here, while `w.find` also
+   * matches one an `InputAdapter` left inside the stage.
    */
   private def fusedUnions(df: DataFrame): Seq[UnionExec] =
     collect(df.queryExecution.executedPlan) {
@@ -667,13 +667,13 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     // `children.forall`, so one row-based `ProjectExec` over the columnar scan is enough to make
     // it false, and without one `supportCodegenFailureReason` reports `columnar` and nothing
     // fuses. `SELECT *` or a plain alias collapses the projection away and does not reproduce
-    // this. Once the cache stages finalise, both children report the same `HashPartitioning`, and
-    // re-deriving the decision at that point left `metrics` empty while the generated code still
-    // incremented it, so `doProduce` threw `key not found: numOutputRows`.
+    // this. Once the cache stages finalise, both children report the same concrete layout, and
+    // re-deriving the decision at that point left `metrics` empty while `doProduce` asked
+    // `metricTerm` for `numOutputRows`.
     //
     // Both halves of the decision are asserted here. Registering the metric unconditionally would
     // fix the crash and leave the other half broken: a fused union concatenates its children's
-    // partitions, so claiming their `HashPartitioning` would let a parent satisfy a clustered
+    // partitions, so claiming their partitioning would let a parent satisfy a clustered
     // distribution from an RDD that does not have it.
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -688,6 +688,16 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         assert(fused.nonEmpty,
           "this shape must actually fuse, or the test is not exercising the defect")
         fused.foreach { u =>
+          // Part of the premise, not the whole of it: the children expose a concrete layout by now,
+          // so this node is not reporting `UnknownPartitioning` merely for want of anything to
+          // derive from. `rawPartitioning` also falls back when the children's remapped
+          // partitionings do not compare equal, and that cannot be asserted here: each side carries
+          // its own exprIds, and they line up only after the private `prepareOutputPartitioning`.
+          val childPartitionings = u.children.map(_.outputPartitioning)
+          assert(childPartitionings.forall(_.isInstanceOf[HashPartitioningLike]),
+            s"premise: got $childPartitionings")
+          assert(childPartitionings.map(_.numPartitions).distinct.size == 1,
+            s"premise: got $childPartitionings")
           assert(u.metrics.contains("numOutputRows"),
             "a fused union must register the metric its generated code increments")
           assert(u.outputPartitioning.isInstanceOf[UnknownPartitioning],
@@ -718,10 +728,12 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         assert(unions.size == 1)
         // Not asserted through `isPlainUnion`: that call latches the decision, which would warm
         // a field-based implementation's memo and hide the regression this test is for. The
-        // exchange count below proves the union reported a concrete partitioning, without
-        // touching the node.
-        assert(plan.collect { case s: ShuffleExchangeExec => s }.size == 2,
-          "only the two repartitions may shuffle; the aggregate's exchange must have been elided")
+        // exchanges below prove the union reported a concrete partitioning, without touching the
+        // node: only the two repartitions may shuffle, so the aggregate's exchange was elided.
+        val shuffles = plan.collect { case s: ShuffleExchangeExec => s }
+        assert(shuffles.size == 2)
+        assert(shuffles.forall(_.shuffleOrigin == REPARTITION_BY_NUM),
+          s"expected only the two repartitions, got ${shuffles.map(_.shuffleOrigin)}")
         df
       }
 
@@ -743,8 +755,9 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val planned = withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true") {
         // Each child is an exchange, which is not `CodegenSupport`, so `insertInputAdapter` wraps
-        // it and `withNewChildren` really does produce a copy. With codegen-support children it
-        // returns `this`, the memo stays the original's warm one, and nothing re-derives.
+        // it and the union is rebuilt through `withNewChildren`, the copy this test needs. Children
+        // that do support codegen can still produce one, since `insertInputAdapter` recurses into
+        // their descendants; exchanges just make it certain.
         val df = rangeDF(100).repartition(2).union(rangeDF(100).repartition(2))
         // `fusedUnions` requires the union to be the stage root; `unionInsideWSCG` would also
         // match a union that an `InputAdapter` left inside the stage unfused, which is exactly
@@ -754,6 +767,16 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       }
       withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false") {
         assert(planned.collect().length == 200)
+        // The row count alone does not discriminate, since the shell was installed at planning and
+        // keeps emitting; registering `numOutputRows` unconditionally and reading the conf per call
+        // passes it. This assertion is what fails there, because nothing forces the copy's reason
+        // before it. It has to sit after the flip, as it does here: taken while the conf was still
+        // on, it would warm a memoizing implementation with the answer this test needs it not to
+        // have.
+        val copy = fusedUnions(planned)
+        assert(copy.size == 1)
+        assert(copy.head.supportCodegen,
+          "the copy in the shell must keep the decision it was planned with")
       }
     }
   }
@@ -775,11 +798,62 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       assert(union.supportCodegen)
 
       // A nested union is one of the topologies the gate rejects, and `withNewChildren` is the path
-      // every rule takes to install a replacement.
+      // a rule takes when it rewrites children in place. A rule returning an arbitrary replacement
+      // node is a different path, and one `copyTagsFrom` need not carry the tags along.
       val nested = UnionExec(Seq(union.children.head, union.children.head))
       val rebuilt = union.withNewChildren(Seq(nested, union.children.last)).asInstanceOf[UnionExec]
       assert(!rebuilt.supportCodegen, "the rebuilt union must answer against its own children")
       assert(rebuilt.metrics.isEmpty)
+    }
+  }
+
+  test("SPARK-59122: reading the unprepared plan does not decide the prepared one") {
+    // `QueryExecution.executedPlan` is `prepareForExecution(sparkPlan.clone())`, and `clone` ends
+    // in `makeCopy`, which calls `copyTagsFrom`. A decision written while answering a read on
+    // `sparkPlan` would therefore ride into the prepared plan. Here the two answers differ: each
+    // child is an aggregate whose exchange `EnsureRequirements` has yet to insert, so the union
+    // passes nothing through before preparation and both children's `HashPartitioning` after it.
+    // Reads before `StampUnionDecisions` answer without writing, so only preparation decides.
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+      val left = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k").groupBy("k").count()
+      val right = spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k").groupBy("k").count()
+      val df = left.union(right)
+
+      val unprepared = df.queryExecution.sparkPlan.collect { case u: UnionExec => u }
+      assert(unprepared.size == 1)
+      assert(unprepared.head.outputPartitioning.isInstanceOf[UnknownPartitioning],
+        "the aggregates have no exchange under them yet, so there is nothing to pass through")
+
+      val prepared = df.queryExecution.executedPlan.collect { case u: UnionExec => u }
+      assert(prepared.size == 1)
+      assert(!prepared.head.outputPartitioning.isInstanceOf[UnknownPartitioning],
+        "the read above must not have decided for the prepared plan, got " +
+          s"${prepared.head.outputPartitioning}")
+      checkAnswer(df, (0L until 5L).flatMap(k => Seq(Row(k, 4L), Row(k, 4L))))
+    }
+  }
+
+  test("SPARK-59122: a prepared union keeps its layout when nothing read it during preparation") {
+    // With whole-stage codegen off, no gate consults the union while the plan is prepared, and a
+    // root union has no parent to ask for its partitioning either. First-read initialization would
+    // then decide at execution, under whatever the conf says by then; `StampUnionDecisions` decides
+    // during preparation instead.
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val plan = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k"))
+          .union(spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k")))
+          .queryExecution.executedPlan
+      }
+      withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+        // Co-partitioned children pass their four partitions through; a plain concatenation would
+        // report eight.
+        assert(plan.execute().getNumPartitions == 4,
+          "a prepared union must execute by the layout it was prepared with")
+      }
     }
   }
 
