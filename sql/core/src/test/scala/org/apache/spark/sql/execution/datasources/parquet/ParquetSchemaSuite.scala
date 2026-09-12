@@ -21,7 +21,6 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.parquet.column.ColumnDescriptor
-import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type._
@@ -1047,7 +1046,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     withTempPath { dir =>
       val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = false)
       val expectedMessage = "Encountered error while reading file"
-      assert(e.getCause.isInstanceOf[ParquetDecodingException])
+      // SPARK-59251: the row (non-vectorized) reader now rejects incompatible conversions with the
+      // same SchemaColumnConvertNotSupportedException as the vectorized reader, instead of the
+      // reader-internal ParquetDecodingException.
+      assert(e.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
       assert(e.getMessage.contains(expectedMessage))
     }
   }
