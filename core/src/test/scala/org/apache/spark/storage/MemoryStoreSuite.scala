@@ -27,7 +27,7 @@ import org.scalatest._
 import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
-import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager}
+import org.apache.spark.memory.{MemoryMode, MemoryTestingUtils, UnifiedMemoryManager}
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator}
 import org.apache.spark.util._
@@ -87,7 +87,11 @@ class MemoryStoreSuite
   }
 
   def makeMemoryStore(maxMem: Long): (MemoryStore, BlockInfoManager) = {
-    val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem / 2, 1)
+    makeMemoryStore(new UnifiedMemoryManager(conf, maxMem, maxMem / 2, 1))
+  }
+
+  private def makeMemoryStore(
+      memManager: UnifiedMemoryManager): (MemoryStore, BlockInfoManager) = {
     val blockInfoManager = new BlockInfoManager
     var memoryStore: MemoryStore = null
     val blockEvictionHandler = new BlockEvictionHandler {
@@ -144,6 +148,22 @@ class MemoryStoreSuite
     assert(memoryStore.currentUnrollMemoryForThisTask === 4000)
     memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP) // release all
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+  }
+
+  test("impossible storage and unroll requests do not reclaim optional memory") {
+    for (mode <- Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP)) {
+      val mm = new UnifiedMemoryManager(conf, 12000L, 6000L, 1)
+      val (store, _) = makeMemoryStore(mm)
+      MemoryTestingUtils.withOptionalMemoryReclaimer(mm, 1L, 100L, mode, () => {
+        throw new IllegalStateException("impossible admission must not invoke reclaimers")
+      }) {
+        assert(!mm.acquireStorageMemory("too-large", 12001L, mode))
+        assert(!mm.acquireUnrollMemory("too-large", 12001L, mode))
+        assert(!store.reserveUnrollMemoryForThisTask("too-large", 12001L, mode))
+        assert(mm.executionMemoryUsed === 100L)
+        assert(mm.storageMemoryUsed === 0L && store.currentUnrollMemory === 0L)
+      }
+    }
   }
 
   test("safely unroll blocks") {

@@ -68,6 +68,54 @@ private[memory] class ExecutionMemoryPool(
   }
 
   /**
+   * Check a prospective ordinary request without registering a task or changing its charge.
+   * `availableMemory` includes free storage the caller can borrow without eviction; `maxPoolSize`
+   * uses the same potential fair-share ceiling as ordinary acquisition. False asks the caller to
+   * drain optional owners before any grant, eviction, or capacity wait.
+   */
+  private[memory] def canAcquireMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      maxPoolSize: Long,
+      availableMemory: Long): Boolean = lock.synchronized {
+    val tasks = memoryForTask.size + (if (memoryForTask.contains(taskAttemptId)) 0 else 1)
+    val current = memoryForTask.getOrElse(taskAttemptId, 0L)
+    numBytes <= availableMemory && numBytes <= math.max(0L, maxPoolSize / tasks - current)
+  }
+
+  /**
+   * Reserve all `numBytes` for optional work, or return zero without changing this pool.
+   *
+   * Only currently free execution memory is eligible. The prospective task count includes a new
+   * caller when checking its `maxPoolSize / N` share, but a denied caller is not registered. A
+   * successful new caller wakes ordinary allocators so they can recompute their fair shares.
+   * This method never waits for capacity, grows the pool, or evicts memory. Acquiring the existing
+   * bookkeeping monitor can still block. Successful reservations use the normal release methods.
+   */
+  private[memory] def tryAcquireMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      maxPoolSize: Long): Long = lock.synchronized {
+    require(numBytes >= 0, s"invalid number of bytes requested: $numBytes")
+    if (numBytes == 0) {
+      return 0L
+    }
+    val isNewTask = !memoryForTask.contains(taskAttemptId)
+    val numActiveTasks = memoryForTask.size + (if (isNewTask) 1 else 0)
+    val currentMemory = memoryForTask.getOrElse(taskAttemptId, 0L)
+    val remainingShare = math.max(0L, maxPoolSize / numActiveTasks - currentMemory)
+    if (numBytes > memoryFree || numBytes > remainingShare) {
+      0L
+    } else {
+      memoryForTask(taskAttemptId) = currentMemory + numBytes
+      if (isNewTask) {
+        lock.notifyAll()
+      }
+      numBytes
+    }
+  }
+
+  /**
    * Try to acquire up to `numBytes` of memory for the given task and return the number of bytes
    * obtained, or 0 if none can be allocated.
    *
