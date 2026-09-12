@@ -801,7 +801,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
         assert(callbacks === 2)
         mm.releaseStorageMemory(150L, mode)
 
-        assert(!mm.acquireStorageMemory(dummyBlock, 201L, mode))
+        assert(!mm.acquireStorageMemory(dummyBlock, 1001L, mode))
         assert(callbacks === 2)
       } finally {
         mm.releaseAllExecutionMemoryForTask(1L)
@@ -809,6 +809,53 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
         unregister.run()
         UnifiedMemoryManager.clearUnmanagedMemoryUsers()
       }
+    }
+  }
+
+  test("storage preflight and immediate grant use the same unmanaged memory sample") {
+    val mode = MemoryMode.ON_HEAP
+    val conf = new SparkConf()
+      .set(MEMORY_OFFHEAP_SIZE, 0L)
+      .set(UNMANAGED_MEMORY_POLLING_INTERVAL, 100L)
+    val poll = PrivateMethod[Unit](Symbol("pollUnmanagedMemoryUsers"))
+    var unmanagedMemory = 0L
+    var storageLimitReads = 0
+    val mm = new UnifiedMemoryManager(conf, 1000L, 500L, 1) {
+      override def maxOnHeapStorageMemory: Long = {
+        val available = super.maxOnHeapStorageMemory
+        storageLimitReads += 1
+        if (storageLimitReads == 2) {
+          // A poll may complete after preflight even while the requesting thread holds the monitor.
+          unmanagedMemory = 800L
+          UnifiedMemoryManager invokePrivate poll()
+        }
+        available
+      }
+    }
+    makeMemoryStore(mm)
+    UnifiedMemoryManager.shutdownUnmanagedMemoryPoller()
+    val consumer = new UnmanagedMemoryConsumer {
+      override def unmanagedMemoryConsumerId: UnmanagedMemoryConsumerId =
+        UnmanagedMemoryConsumerId("OptionalMemoryTest", "poll-during-storage-admission")
+      override def memoryMode: MemoryMode = mode
+      override def getMemBytesUsed: Long = unmanagedMemory
+    }
+    var callbacks = 0
+    val unregister = mm.registerOptionalMemoryReclaimer(1L, mode, () => { callbacks += 1 })
+    try {
+      UnifiedMemoryManager.registerUnmanagedMemoryConsumer(consumer)
+      UnifiedMemoryManager invokePrivate poll()
+      assert(mm.tryAcquireExecutionMemory(200L, 1L, mode) === 200L)
+      assert(mm.acquireStorageMemory(dummyBlock, 150L, mode))
+      assert(storageLimitReads === 2)
+      assert(unmanagedMemory === 800L)
+      assert(callbacks === 0)
+      assert(mm.executionMemoryUsed === 200L)
+    } finally {
+      mm.releaseAllStorageMemory()
+      mm.releaseAllExecutionMemoryForTask(1L)
+      unregister.run()
+      UnifiedMemoryManager.clearUnmanagedMemoryUsers()
     }
   }
 

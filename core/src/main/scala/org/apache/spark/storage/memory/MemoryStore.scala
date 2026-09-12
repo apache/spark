@@ -461,7 +461,7 @@ private[spark] class MemoryStore(
     case holder: SerializedValuesHolder[_] =>
       Utils.tryWithSafeFinally {
         // As in PartiallySerializedBlock.discard, closing must not allocate or flush more data.
-        holder.redirectableStream.setOutputStream(ByteStreams.nullOutputStream())
+        holder.redirectableStream.setOutputStream(OutputStream.nullOutputStream())
         holder.serializationStream.close()
       } {
         holder.bbos.dispose()
