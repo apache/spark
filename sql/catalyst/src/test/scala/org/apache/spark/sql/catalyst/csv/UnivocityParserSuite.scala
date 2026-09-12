@@ -236,6 +236,23 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalParsing)
   }
 
+  test("SPARK-50110: parse decimals with surrounding whitespace using locale") {
+    def checkDecimalParsing(langTag: String): Unit = {
+      val decimalVal = new BigDecimal("1000.001")
+      val decimalType = new DecimalType(10, 5)
+      val expected = Decimal(decimalVal, decimalType.precision, decimalType.scale)
+      val df = new DecimalFormat("", new DecimalFormatSymbols(Locale.forLanguageTag(langTag)))
+      val input = s" ${df.format(expected.toBigDecimal)} "
+
+      val options = new CSVOptions(Map("locale" -> langTag), false, "UTC")
+      val parser = new UnivocityParser(new StructType().add("d", decimalType), options)
+
+      assert(parser.makeConverter("_1", decimalType).apply(input) === expected)
+    }
+
+    Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalParsing)
+  }
+
   test("SPARK-27591 UserDefinedType can be read") {
 
     @SQLUserDefinedType(udt = classOf[StringBasedUDT])
