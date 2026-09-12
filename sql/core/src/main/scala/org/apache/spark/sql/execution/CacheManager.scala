@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.IdentityHashMap
+
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -79,11 +81,45 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   @transient @volatile
   private var cachedData = IndexedSeq[CachedData]()
 
+  /**
+   * Tracks the sessions that explicitly cached each entry. A cache entry can be shared by
+   * multiple sessions because cache lookup uses plan semantics rather than session identity.
+   */
+  @transient
+  private val cacheOwners = new IdentityHashMap[CachedData, Set[String]]
+
   /** Clears all cached tables. */
   def clearCache(): Unit = this.synchronized {
     cachedData.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
     cachedData = IndexedSeq[CachedData]()
+    cacheOwners.clear()
     CacheManager.logCacheOperation(log"Cleared all Dataframe cache entries")
+  }
+
+  /** Clears cached data that is owned only by the given session. */
+  private[sql] def clearCache(session: SparkSession): Unit = {
+    val sessionUUID = session.sessionUUID
+    val plansToUncache = this.synchronized {
+      val plans = cachedData.filter { cd =>
+        Option(cacheOwners.get(cd)).contains(Set(sessionUUID))
+      }
+      cachedData = cachedData.filterNot(cd => plans.exists(_ eq cd))
+      val ownerEntries = cacheOwners.entrySet().iterator()
+      while (ownerEntries.hasNext) {
+        val entry = ownerEntries.next()
+        val remainingOwners = entry.getValue - sessionUUID
+        if (remainingOwners.nonEmpty) {
+          entry.setValue(remainingOwners)
+        } else {
+          ownerEntries.remove()
+        }
+      }
+      plans
+    }
+    plansToUncache.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
+    CacheManager.logCacheOperation(
+      log"Cleared ${MDC(SIZE, plansToUncache.size)} Dataframe cache entries for session " +
+        log"${MDC(SESSION_ID, sessionUUID)}")
   }
 
   /** Checks if the cache is empty. */
@@ -144,7 +180,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         log"Asked to cache a plan that is inapplicable for caching: " +
         log"${MDC(LOGICAL_PLAN, unnormalizedPlan)}"
       )
-    } else if (lookupCachedDataInternal(normalizedPlan).nonEmpty) {
+    } else if (registerCacheOwner(normalizedPlan, spark.sessionUUID)) {
       logWarning("Asked to cache already cached data.")
     } else {
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
@@ -158,18 +194,30 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       }
 
       this.synchronized {
-        if (lookupCachedDataInternal(normalizedPlan).nonEmpty) {
+        if (registerCacheOwner(normalizedPlan, spark.sessionUUID)) {
           logWarning("Data has already been cached.")
         } else {
           // the cache key is the normalized plan
           val cd = CachedData(normalizedPlan, inMemoryRelation)
           cachedData = cd +: cachedData
+          cacheOwners.put(cd, Set(spark.sessionUUID))
           CacheManager.logCacheOperation(log"Added Dataframe cache entry:" +
             log"${MDC(DATAFRAME_CACHE_ENTRY, cd)}")
         }
       }
     }
   }
+
+  private def registerCacheOwner(plan: LogicalPlan, sessionUUID: String): Boolean =
+    this.synchronized {
+      lookupCachedDataInternal(plan) match {
+        case Some(cd) =>
+          val owners = Option(cacheOwners.get(cd)).getOrElse(Set.empty)
+          cacheOwners.put(cd, owners + sessionUUID)
+          true
+        case None => false
+      }
+    }
 
   /**
    * Un-cache the given plan or all the cache entries that refer to the given plan.
@@ -301,6 +349,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     val plansToUncache = cachedData.filter(cd => shouldRemove(cd.plan))
     this.synchronized {
       cachedData = cachedData.filterNot(cd => plansToUncache.exists(_ eq cd))
+      plansToUncache.foreach(cd => cacheOwners.remove(cd))
     }
     plansToUncache.foreach { _.cachedRepresentation.cacheBuilder.clearCache(blocking) }
     CacheManager.logCacheOperation(log"Removed ${MDC(SIZE, plansToUncache.size)} Dataframe " +
@@ -374,14 +423,22 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
     needToRecache.foreach { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      tryRebuildCacheEntry(spark, cd).foreach { entry =>
-        this.synchronized {
-          if (lookupCachedDataInternal(entry.plan).nonEmpty) {
-            logWarning("While recaching, data was already added to cache.")
-          } else {
-            cachedData = entry +: cachedData
-            CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
-              log"${MDC(DATAFRAME_CACHE_ENTRY, entry)}")
+      val rebuiltEntry = tryRebuildCacheEntry(spark, cd)
+      this.synchronized {
+        val previousOwners = Option(cacheOwners.remove(cd)).getOrElse(Set.empty)
+        rebuiltEntry.foreach { entry =>
+          if (previousOwners.nonEmpty) {
+            lookupCachedDataInternal(entry.plan) match {
+              case Some(existing) =>
+                val existingOwners = Option(cacheOwners.get(existing)).getOrElse(Set.empty)
+                cacheOwners.put(existing, existingOwners ++ previousOwners)
+                logWarning("While recaching, data was already added to cache.")
+              case None =>
+                cachedData = entry +: cachedData
+                cacheOwners.put(entry, previousOwners)
+                CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
+                  log"${MDC(DATAFRAME_CACHE_ENTRY, entry)}")
+            }
           }
         }
       }

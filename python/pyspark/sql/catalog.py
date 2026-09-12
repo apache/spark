@@ -1409,15 +1409,24 @@ class Catalog:
         """
         self._jcatalog.uncacheTable(tableName)
 
-    def clearCache(self) -> None:
-        """Removes all cached tables from the in-memory cache.
+    def clearCache(self, allSessions: bool = True) -> None:
+        """Removes cached tables from the in-memory cache.
 
         .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        allSessions : bool, optional
+            Whether to clear cached data across all sessions. If ``False``, only data cached by
+            the current session is cleared, while data also cached by another session is preserved.
+            Defaults to ``True``.
+
+            .. versionadded:: 4.4.0
 
         Notes
         -----
         Cached data is shared across all Spark sessions on the cluster, so clearing
-        the cache affects all sessions.
+        the cache affects all sessions by default.
 
         Examples
         --------
@@ -1428,7 +1437,7 @@ class Catalog:
         False
         >>> _ = spark.sql("DROP TABLE tbl1")
         """
-        self._jcatalog.clearCache()
+        self._jcatalog.clearCache(allSessions)
 
     def refreshTable(self, tableName: str) -> None:
         """Invalidates and refreshes all the cached data and metadata of the given table.
