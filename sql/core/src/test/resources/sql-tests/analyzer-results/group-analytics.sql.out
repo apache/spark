@@ -1321,17 +1321,16 @@ FROM aggSrc
 GROUP BY GROUPING SETS ((a, b), (a))
 ORDER BY SUM(b)
 -- !query analysis
-Project [a#x, b#x, sb#xL]
-+- Sort [sum(b)#xL ASC NULLS FIRST], true
-   +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL, sum(b#x) AS sum(b)#xL]
-      +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
-         +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
-            +- SubqueryAlias aggsrc
-               +- View (`aggSrc`, [a#x, b#x])
-                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
-                     +- Project [a#x, b#x]
-                        +- SubqueryAlias aggSrc
-                           +- LocalRelation [a#x, b#x]
+Sort [sb#xL ASC NULLS FIRST], true
++- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL]
+   +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+      +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+         +- SubqueryAlias aggsrc
+            +- View (`aggSrc`, [a#x, b#x])
+               +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                  +- Project [a#x, b#x]
+                     +- SubqueryAlias aggSrc
+                        +- LocalRelation [a#x, b#x]
 
 
 -- !query
@@ -1340,17 +1339,16 @@ FROM aggSrc
 GROUP BY CUBE(a, b)
 ORDER BY SUM(b)
 -- !query analysis
-Project [a#x, b#x, sb#xL]
-+- Sort [sum(b)#xL ASC NULLS FIRST], true
-   +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL, sum(b#x) AS sum(b)#xL]
-      +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
-         +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
-            +- SubqueryAlias aggsrc
-               +- View (`aggSrc`, [a#x, b#x])
-                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
-                     +- Project [a#x, b#x]
-                        +- SubqueryAlias aggSrc
-                           +- LocalRelation [a#x, b#x]
+Sort [sb#xL ASC NULLS FIRST], true
++- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL]
+   +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+      +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+         +- SubqueryAlias aggsrc
+            +- View (`aggSrc`, [a#x, b#x])
+               +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                  +- Project [a#x, b#x]
+                     +- SubqueryAlias aggSrc
+                        +- LocalRelation [a#x, b#x]
 
 
 -- !query
@@ -1359,17 +1357,16 @@ FROM aggSrc
 GROUP BY ROLLUP(a, b)
 ORDER BY SUM(b)
 -- !query analysis
-Project [a#x, b#x, sb#xL]
-+- Sort [sum(b)#xL ASC NULLS FIRST], true
-   +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL, sum(b#x) AS sum(b)#xL]
-      +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
-         +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
-            +- SubqueryAlias aggsrc
-               +- View (`aggSrc`, [a#x, b#x])
-                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
-                     +- Project [a#x, b#x]
-                        +- SubqueryAlias aggSrc
-                           +- LocalRelation [a#x, b#x]
+Sort [sb#xL ASC NULLS FIRST], true
++- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL]
+   +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+      +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+         +- SubqueryAlias aggsrc
+            +- View (`aggSrc`, [a#x, b#x])
+               +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                  +- Project [a#x, b#x]
+                     +- SubqueryAlias aggSrc
+                        +- LocalRelation [a#x, b#x]
 
 
 -- !query
