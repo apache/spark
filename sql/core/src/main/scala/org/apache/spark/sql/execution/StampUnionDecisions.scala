@@ -20,16 +20,19 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
- * Fixes each [[UnionExec]]'s partitioning decision and codegen conf snapshot at one defined point.
+ * Fixes each [[UnionExec]]'s partitioning decision and the confs its codegen gate reads, at one
+ * defined point.
  *
  * `UnionExec` derives both from state that moves: its children's `outputPartitioning` sharpens as
  * AQE finalises the plans behind them, and `conf` is the live session conf. Whoever asked first
  * used to decide, which made the answer depend on when it was observed. This rule asks once,
- * right after `EnsureRequirements`, so the partitioning a parent's exchange decision was taken
- * from is the one `unionRDDs` and the codegen gate use.
+ * right after `EnsureRequirements`, so the decision the exchanges around a union were planned
+ * against is the one `unionRDDs` and the codegen gate use.
  *
- * It only writes what is not there yet, so re-running it (AQE re-optimizes each round) keeps the
- * first answer, and a node rebuilt from a stamped one keeps the tags `copyTagsFrom` gave it.
+ * It only writes what is not there yet, so a second pass over the same nodes keeps the first
+ * answer, and a node rebuilt from a stamped one keeps the tag `copyTagsFrom` gave it. AQE re-plans
+ * between rounds, so a union outside a materialized stage is stamped again from what that round
+ * sees; one already inside a stage is not revisited, since `foreach` stops at `QueryStageExec`.
  */
 object StampUnionDecisions extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = {

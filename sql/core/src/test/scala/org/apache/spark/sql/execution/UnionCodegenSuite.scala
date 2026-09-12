@@ -709,7 +709,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
 
   test("SPARK-59122: a partitioning-aware union keeps its layout when the conf changes between " +
     "planning and execution") {
-    // `spark.sql.unionOutputPartitioning` is read where the plain-union decision is latched, not on
+    // `spark.sql.unionOutputPartitioning` is read where the plain-union decision is stamped, not on
     // every `outputPartitioning` call, so a plan executes by the partitioning it was planned
     // against. Reading it per call let the parent aggregate lose its exchange at planning and get a
     // plain concatenation at execution, reporting each group twice. The `checkAnswer` below stays
@@ -726,10 +726,10 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         val plan = df.queryExecution.executedPlan
         val unions = plan.collect { case u: UnionExec => u }
         assert(unions.size == 1)
-        // Not asserted through `isPlainUnion`: that call latches the decision, which would warm
-        // a field-based implementation's memo and hide the regression this test is for. The
-        // exchanges below prove the union reported a concrete partitioning, without touching the
-        // node: only the two repartitions may shuffle, so the aggregate's exchange was elided.
+        // Asserted through the exchanges rather than through `isPlainUnion`, so that the check
+        // does not depend on how the decision is stored: only the two repartitions may shuffle, so
+        // the aggregate's exchange was elided, which it could only be if the union reported a
+        // concrete partitioning.
         val shuffles = plan.collect { case s: ShuffleExchangeExec => s }
         assert(shuffles.size == 2)
         assert(shuffles.forall(_.shuffleOrigin == REPARTITION_BY_NUM),
