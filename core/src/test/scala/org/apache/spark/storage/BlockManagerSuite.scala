@@ -129,6 +129,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val bmConf = testConf.map(_.setAll(conf.getAll)).getOrElse(conf)
     bmConf.set(TEST_MEMORY, maxMem)
     bmConf.set(MEMORY_OFFHEAP_SIZE, maxMem)
+    if(maxMem > 0) {
+      bmConf.set(MEMORY_OFFHEAP_ENABLED, true)
+    }
     val serializer = new KryoSerializer(bmConf)
     val encryptionKey = if (bmConf.get(IO_ENCRYPTION_ENABLED)) {
       Some(CryptoStreamUtils.createKey(bmConf))
