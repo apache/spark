@@ -613,4 +613,24 @@ public class TransportConf {
     return JavaUtils.timeStringAsSec(
       conf.get("spark.shuffle.push.server.mergedShuffleCleaner.shutdown.timeout", "60s"));
   }
+
+  /**
+   * Whether the shuffle server calculates a checksum for every chunk of a merged shuffle
+   * partition while merging pushed blocks. The checksums are stored alongside the merged shuffle
+   * data and are only used to diagnose the cause of a corrupted shuffle chunk.
+   */
+  public boolean mergedShuffleChecksumEnabled() {
+    return conf.getBoolean("spark.shuffle.push.server.mergedShuffleChecksum.enabled", true);
+  }
+
+  /**
+   * The algorithm used to calculate the checksums of the merged shuffle chunks. The reducer
+   * calculates the checksum of a corrupted chunk with spark.shuffle.checksum.algorithm, so
+   * corruption of a merged shuffle chunk can only be diagnosed when the two match.
+   */
+  public String mergedShuffleChecksumAlgorithm() {
+    // Upper cased like the spark.shuffle.checksum.algorithm of the application is
+    return conf.get("spark.shuffle.push.server.mergedShuffleChecksum.algorithm", "ADLER32")
+      .toUpperCase(Locale.ROOT);
+  }
 }

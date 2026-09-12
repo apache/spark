@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io._
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.{CompletableFuture, Semaphore}
 import java.util.zip.CheckedInputStream
@@ -42,6 +43,7 @@ import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExternalBlockStoreClient, MergedBlockMeta, MergedBlocksMetaListener}
+import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
 import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.storage.BlockManagerId.SHUFFLE_MERGER_IDENTIFIER
@@ -1973,6 +1975,81 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
           "but corruption diagnosis is skipped due to lack of " +
           "shuffle checksum support for ShuffleBlockBatchId")))
     }
+  }
+
+  test("SPARK-36284: diagnose the corruption of a push-merged shuffle chunk") {
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer())
+    answerFetchBlocks { invocation =>
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      listener.onBlockFetchSuccess(ShuffleBlockId(0, 0, 0).toString, createMockManagedBuffer())
+    }
+    val blockManager = createMockBlockManager()
+    doReturn(7337).when(blockManager).externalShuffleServicePort
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
+      blockManager = Some(blockManager))
+    val chunkId = ShuffleBlockChunkId(0, 3, 2, 1)
+
+    // A push-merged-local chunk is diagnosed against the local shuffle service, whose port is
+    // not the one the address of the chunk carries.
+    when(transfer.diagnoseShuffleChunkCorruption(
+      any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(Cause.DISK_ISSUE)
+    val localMergerBmId = BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "test-local-host", 1)
+    val localResponse = iterator.diagnoseCorruption(
+      createCheckedInputStream("chunk data"), localMergerBmId, chunkId)
+    verify(transfer, times(1)).diagnoseShuffleChunkCorruption(
+      meq("test-local-host"), meq(7337), meq(0), meq(3), meq(2), meq(1), any(), meq("ADLER32"))
+    assert(localResponse === s"BlockChunk $chunkId is corrupted due to DISK_ISSUE")
+
+    // A remote chunk is diagnosed against the shuffle service its address points at
+    val remoteMergerBmId = BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "test-remote-host", 7337)
+    when(transfer.diagnoseShuffleChunkCorruption(
+      any(), any(), any(), any(), any(), any(), any(), any()))
+      .thenReturn(Cause.CHECKSUM_VERIFY_PASS)
+    val remoteResponse = iterator.diagnoseCorruption(
+      createCheckedInputStream("chunk data"), remoteMergerBmId, chunkId)
+    verify(transfer, times(1)).diagnoseShuffleChunkCorruption(
+      meq("test-remote-host"), meq(7337), meq(0), meq(3), meq(2), meq(1), any(), meq("ADLER32"))
+    assert(remoteResponse ===
+      s"BlockChunk $chunkId is corrupted but checksum verification passed")
+  }
+
+  test("SPARK-36284: diagnose a corrupt push-merged shuffle chunk before falling back") {
+    val blockManager = mock(classOf[BlockManager])
+    val localDirs = Array("local-dir")
+    val blocksByAddress = prepareForFallbackToLocalBlocks(
+      blockManager, Map(SHUFFLE_MERGER_IDENTIFIER -> localDirs))
+    val corruptBuffer = createMockManagedBuffer(2)
+    doReturn(Seq({corruptBuffer})).when(blockManager)
+      .getLocalMergedBlockData(ShuffleMergedBlockId(0, 0, 2), localDirs)
+    val corruptStream = mock(classOf[InputStream])
+    when(corruptStream.read(any(), any(), any())).thenThrow(new IOException("corrupt"))
+    doReturn(corruptStream).when(corruptBuffer).createInputStream()
+    val taskContext = TaskContext.empty()
+    val shuffleMetrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val logAppender = new LogAppender("diagnose corruption of a shuffle chunk")
+    withLogAppender(logAppender) {
+      val iterator = createShuffleBlockIteratorWithDefaults(
+        blocksByAddress,
+        blockManager = Some(blockManager),
+        taskContext = Some(taskContext),
+        shuffleMetrics = Some(shuffleMetrics),
+        streamWrapperLimitSize = Some(100))
+      // The corruption is diagnosed, and the original shuffle blocks are fetched either way
+      verifyLocalBlocksFromFallback(iterator)
+    }
+    assert(logAppender.loggingEvents.count(
+      _.getMessage.getFormattedMessage.contains("Start corruption diagnosis")) === 1)
+    assert(shuffleMetrics.corruptMergedBlockChunks === 1)
+    assert(shuffleMetrics.mergedFetchFallbackCount === 1)
+  }
+
+  private def createCheckedInputStream(data: String): CheckedInputStream = {
+    new CheckedInputStream(
+      new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)),
+      ShuffleChecksumHelper.getChecksumByAlgorithm("ADLER32"))
   }
 
   test("SPARK-52395: Fast fail when fetch failure happens for local blocks") {
