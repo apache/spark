@@ -41,6 +41,51 @@ of its own. Passed straight to ``udf(...)``, wrapped in another call, returned
 by another lambda, or sharing a line with a second lambda, nothing in the
 source read back says which lambda is the UDF, so it falls back to interpreted
 Python rather than risk the wrong body.
+
+A lowered UDF computes each argument it uses once per row (SPARK-58626): the
+argument becomes a column on the operator's input, and however many times the
+body reads that parameter it reads that one column. Two parameters bound to the
+same deterministic argument share the column, so ``f(a + 1, a + 1)`` computes
+``a + 1`` once.
+
+A call inside a higher-order function's lambda is never lowered: Spark already
+applies a Python UDF over the whole array there, and that path is left to it.
+Otherwise a few positions have nowhere to put the column -- under a ``groupBy``,
+in a join condition, in a command such as ``DELETE FROM``, or a draw anywhere
+above a join, where the column would cost the join its condition -- and there a
+body reading the parameter more than once stays an interpreted Python UDF, which
+computes its inputs once, rather than being lowered into an argument evaluated
+per read. One evaluation per parameter per row either way; ``f(rand(), rand())``
+is two parameters and so still two draws::
+
+    body = lambda x: x if x > 0.5 else 0.0
+    clamp = udf(body, "double")
+    df.select(clamp(rand()))  # never a value the body's own condition rejects
+
+Where the column stands it is computed for every row reaching the operator, which
+makes the argument eager even where the call sits in a branch that may not run:
+under ANSI ``when(cond, f(a / b))`` can raise on a row with ``b = 0`` and ``cond``
+false. That is what the interpreted Python UDF does too, evaluating its inputs in
+a projection feeding the worker, below the conditional -- unlike a bare Catalyst
+``when``, which is lazy. Whether such an error surfaces is not a guarantee in
+either direction: an argument left inline, or inlined again by a later rule, is
+lazy once more.
+
+Two arguments no projection can hold count as those positions too: one that is
+itself an aggregate (``f(sum(a))``), and one reading an outer query's column when
+correlated-subquery decorrelation is disabled.
+
+An argument read once gets no column, since one read is one evaluation anyway,
+and neither does one as cheap to repeat as to read -- a bare column or a literal.
+Anything more, arithmetic included, is either computed once or left to
+interpreted Python; a repeated ``a + 1`` gets a column where one fits and stops
+the UDF being lowered where one does not.
+
+That column is what we emit, not what necessarily runs: later optimizer rules may
+inline a deterministic one again where that is faster, as they may for any other
+expression. A draw is never inlined, because those rules check determinism.
+
+An argument the body never reads is not computed at all.
 """
 
 import ast
