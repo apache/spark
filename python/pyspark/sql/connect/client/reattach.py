@@ -29,8 +29,10 @@ import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.connect.client.retries import RetryException, Retrying
-from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.logging import getLogger
 from pyspark.util import disable_gc
+
+logger = getLogger(__name__)
 
 
 class ExecutePlanResponseReattachableIterator(Generator):

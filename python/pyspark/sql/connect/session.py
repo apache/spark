@@ -61,7 +61,7 @@ from pyspark.sql.connect.client import DefaultChannelBuilder, SparkConnectClient
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.functions import builtin as F
-from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.logging import getLogger
 from pyspark.sql.connect.plan import (
     SQL,
     CachedRelation,
@@ -112,6 +112,9 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.tvf import TableValuedFunction
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
+
+
+logger = getLogger(__name__)
 
 
 class SparkSession:
