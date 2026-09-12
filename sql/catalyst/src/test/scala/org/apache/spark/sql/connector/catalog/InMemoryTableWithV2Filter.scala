@@ -210,14 +210,10 @@ object InMemoryTableWithV2Filter {
    */
   def supportsPredicates(predicates: Array[Predicate]): Boolean = {
     predicates.flatMap(splitAnd).forall { p =>
-      def column = p.children().length == 1 && p.children()(0).isInstanceOf[NamedReference]
-      def columnAndLiteral = p.children().length == 2 &&
-        p.children()(0).isInstanceOf[NamedReference] &&
-        p.children()(1).isInstanceOf[LiteralValue[_]]
-      p.name() match {
-        case "=" | "<=>" => columnAndLiteral
-        case "IS_NULL" | "IS_NOT_NULL" => column
-        case "ALWAYS_TRUE" => true
+      (p.name(), p.children().toSeq) match {
+        case ("=" | "<=>", Seq(_: NamedReference, _: LiteralValue[_])) => true
+        case ("IS_NULL" | "IS_NOT_NULL", Seq(_: NamedReference)) => true
+        case ("ALWAYS_TRUE", _) => true
         case _ => false
       }
     }

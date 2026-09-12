@@ -119,9 +119,11 @@ object PartitionPredicateImpl extends Logging {
         log"Cannot create partition predicate ${MDC(LogKeys.EXPR, catalystExpr.sql)}: " +
         log"expression references " +
         log"${MDC(LogKeys.FIELD_NAME, unmatchedRefs.map(_.name).mkString(", "))} " +
-        log"not found in partition fields " +
+        log"not found in identity partition fields " +
         log"${MDC(LogKeys.PARTITION_SPECIFICATION,
-          partitionFields.map(_.fieldNames.mkString(".")).mkString(", "))}. " +
+          partitionFields.collect {
+            case PartitionPredicateField(names, Some(_)) => names.mkString(".")
+          }.mkString(", "))}. " +
         log"Skipping pushdown for this predicate.")
       return None
     }

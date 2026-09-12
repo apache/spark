@@ -440,12 +440,16 @@ class DataSourceV2EnhancedPartitionFilterSuite
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("a/1", "A/2"))
       assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part_col", "bucket(4, id)"))
-      assert(df.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]),
-        "Filter on the bucket source column should remain as a post-scan Filter")
+      val postScanFilter = df.queryExecution.executedPlan.collectFirst {
+        case f: FilterExec => f
+      }.getOrElse(fail("Filter on the bucket source column should remain as a post-scan Filter"))
+      val referenced = postScanFilter.condition.references.map(_.name).toSet
+      assert(referenced.contains("id") && !referenced.contains("part_col"),
+        s"Post-scan Filter should reference id but not part_col, got $referenced")
     }
   }
 
-  test("mixed partitioning: no identity transform -> no PartitionPredicate") {
+  test("bucket-only partitioning: no identity transform -> no PartitionPredicate") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (id int, data string) " +
         s"USING $v2Source PARTITIONED BY (bucket(4, id))")

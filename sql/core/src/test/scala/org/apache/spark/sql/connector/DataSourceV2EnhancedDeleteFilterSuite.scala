@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
+import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -37,6 +38,8 @@ import org.apache.spark.sql.util.QueryExecutionListener
  */
 class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
+
+  import testImplicits._
 
   private val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   private val catalogName = "ppd_cat"
@@ -311,6 +314,68 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
       checkAnswer(
         sql(s"SELECT * FROM $deleteTableName"),
         Seq(Row(1, "hr", 101), Row(2, "software", 201), Row(3, "marketing", 300)))
+    }
+  }
+
+  // Mixed partitioning: the bucket field keeps its ordinal but is never referenced, so the IN on
+  // the identity column still becomes a PartitionPredicate over the full partition key.
+  test("group-based UPDATE: PartitionPredicate on an identity column next to a bucket transform") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk))")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+
+      val plan = executeAndKeepPlan {
+        sql(s"UPDATE $deleteTableName SET salary = salary + 1 WHERE dep IN ('hr', 'software')")
+      }
+      assertRowLevelScanPrunedByPartitionPredicate(plan,
+        expectedOrdinals = Array(0),
+        expectedPartitionFieldNames = Array("dep", "bucket(4, pk)"),
+        expectedReplacedDeps = Set("hr", "software"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "hr", 101), Row(2, "software", 201), Row(3, "marketing", 300)))
+    }
+  }
+
+  // Group-based MERGE: the target-only IN of the ON clause is pushed the same way, and since
+  // the scan fully evaluates it, it is dropped from the join condition.
+  test("group-based MERGE: PartitionPredicate on an identity column next to a bucket transform") {
+    withTable(deleteTableName) {
+      withTempView("source") {
+        sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+          s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk))")
+        sql(s"INSERT INTO $deleteTableName VALUES " +
+          "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+        Seq((1, 1000), (3, 3000)).toDF("pk", "salary").createOrReplaceTempView("source")
+
+        val plan = executeAndKeepPlan {
+          sql(
+            s"""MERGE INTO $deleteTableName t
+               |USING source s
+               |ON t.pk = s.pk AND t.dep IN ('hr', 'software')
+               |WHEN MATCHED THEN
+               | UPDATE SET salary = s.salary
+               |""".stripMargin)
+        }
+        assertRowLevelScanPrunedByPartitionPredicate(plan,
+          expectedOrdinals = Array(0),
+          expectedPartitionFieldNames = Array("dep", "bucket(4, pk)"),
+          expectedReplacedDeps = Set("hr", "software"))
+        val joins = collect(plan) { case j: BaseJoinExec => j }
+        assert(joins.nonEmpty, "Expected a join in the MERGE plan")
+        joins.foreach { j =>
+          assert(!j.condition.exists(_.references.exists(_.name == "dep")),
+            s"Evaluated IN on dep should be dropped from the join condition: ${j.condition}")
+        }
+
+        // Row 3 is in a pruned partition, so it is never read and stays unchanged.
+        checkAnswer(
+          sql(s"SELECT * FROM $deleteTableName"),
+          Seq(Row(1, "hr", 1000), Row(2, "software", 200), Row(3, "marketing", 300)))
+      }
     }
   }
 
