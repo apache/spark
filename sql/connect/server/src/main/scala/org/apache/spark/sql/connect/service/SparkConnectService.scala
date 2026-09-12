@@ -314,6 +314,7 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
  */
 object SparkConnectService extends Logging {
 
+  private[connect] val SPARK_CONNECT_SESSION_USER_KEY: String = "spark.connect.session.user"
   // Floor for permitKeepAliveTime: the minimum interval the server tolerates between a client's
   // keepalive PINGs before striking the connection as "too_many_pings" (gRFC A8). This is
   // independent of the server's own keepAlive.time (its probe interval for detecting dead
