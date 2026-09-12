@@ -3668,9 +3668,10 @@ case class Sequence(
 
     if (isNanos) {
       // The sequence runs on epochMicros and every element carries the start value's fraction.
-      // The step sign and the microsecond bound both honor the endpoints' fractions, so the result
-      // never overshoots stop and an out-of-order same-microsecond pair still raises the boundary
-      // error. See nanosStepIsNegative / nanosBoundedStopMicros.
+      // The step sign and the microsecond bound honor the endpoints' fractions (an out-of-order
+      // same-microsecond pair still raises the boundary error), and a final full-precision check
+      // drops an endpoint the micros-only bound cannot exclude, so the result never overshoots
+      // stop. See nanosStepIsNegative / nanosBoundedStopMicros.
       val startNanos = startVal.asInstanceOf[TimestampNanosVal]
       val stopNanos = stopVal.asInstanceOf[TimestampNanosVal]
       val startMicros = startNanos.epochMicros
@@ -3681,9 +3682,9 @@ case class Sequence(
         impl.defaultStep(startNanos.compareTo(stopNanos).toLong, 0L)
       }
       if (stepVal == null) return null
+      val stepNegative = Sequence.nanosStepIsNegative(stepVal)
       val stopMicros = Sequence.nanosBoundedStopMicros(
-        startFrac, stopNanos.epochMicros, stopNanos.nanosWithinMicro.toInt,
-        Sequence.nanosStepIsNegative(stepVal))
+        startFrac, stopNanos.epochMicros, stopNanos.nanosWithinMicro.toInt, stepNegative)
       val microsArr = impl.eval(startMicros, stopMicros, stepVal).asInstanceOf[Array[Long]]
       val out = new Array[TimestampNanosVal](microsArr.length)
       var i = 0
@@ -3692,7 +3693,20 @@ case class Sequence(
         out(i) = TimestampNanosVal.fromTrustedRowBytes(microsArr(i), startFrac.toShort)
         i += 1
       }
-      ArrayData.toArrayData(out)
+      // Membership is decided on the microsecond grid, but every element carries startFrac, so the
+      // element landing on stop's microsecond can still fall outside [start, stop] when the
+      // fractions differ (calendar/day/month and default steps use the while-loop machinery, whose
+      // micro-nudged bound cannot drop it). Only that endpoint element can be out of range, so
+      // compare it against stop in full precision and drop it if it overshoots.
+      val n = out.length
+      val trimmed =
+        if (n > 0 && (if (stepNegative) out(n - 1).compareTo(stopNanos) < 0
+                      else out(n - 1).compareTo(stopNanos) > 0)) {
+          out.slice(0, n - 1)
+        } else {
+          out
+        }
+      ArrayData.toArrayData(trimmed)
     } else {
       val stepVal = stepOpt.map(_.eval(input)).getOrElse(impl.defaultStep(startVal, stopVal))
       if (stepVal == null) return null
@@ -3723,6 +3737,7 @@ case class Sequence(
       val startFrac = ctx.freshName("startFrac")
       val startMicros = ctx.freshName("startMicros")
       val stopMicros = ctx.freshName("stopMicros")
+      val stepNeg = ctx.freshName("stepNeg")
       val idx = ctx.freshName("idx")
       val tnv = classOf[TimestampNanosVal].getName
       val genericArr = "org.apache.spark.sql.catalyst.util.GenericArrayData"
@@ -3731,15 +3746,23 @@ case class Sequence(
       s"""
          |long $startMicros = ${startGen.value}.epochMicros;
          |short $startFrac = ${startGen.value}.nanosWithinMicro;
+         |boolean $stepNeg = $seqObj.nanosStepIsNegative(${stepGen.value});
          |long $stopMicros = $seqObj.nanosBoundedStopMicros(
-         |  $startFrac, ${stopGen.value}.epochMicros, ${stopGen.value}.nanosWithinMicro,
-         |  $seqObj.nanosStepIsNegative(${stepGen.value}));
+         |  $startFrac, ${stopGen.value}.epochMicros, ${stopGen.value}.nanosWithinMicro, $stepNeg);
          |long[] $microsArr = null;
          |$microsGen
          |$tnv[] $nanosArr = new $tnv[$microsArr.length];
          |for (int $idx = 0; $idx < $microsArr.length; $idx++) {
          |  // startFrac is already a valid fraction, so skip the per-element range check.
          |  $nanosArr[$idx] = $tnv.fromTrustedRowBytes($microsArr[$idx], $startFrac);
+         |}
+         |// The endpoint landing on stop's microsecond carries startFrac and can overshoot stop
+         |// when the fractions differ; the micros-only bound cannot always drop it (see the eval
+         |// path). Only the last element can be out of range, so drop it with a full-precision cmp.
+         |if ($nanosArr.length > 0 &&
+         |    ($stepNeg ? $nanosArr[$nanosArr.length - 1].compareTo(${stopGen.value}) < 0
+         |              : $nanosArr[$nanosArr.length - 1].compareTo(${stopGen.value}) > 0)) {
+         |  $nanosArr = ($tnv[]) java.util.Arrays.copyOf($nanosArr, $nanosArr.length - 1);
          |}
          |${ev.value} = new $genericArr($nanosArr);
        """.stripMargin
@@ -3825,9 +3848,12 @@ object Sequence {
   /**
    * The microsecond bound handed to the microsecond sequence machinery for a nanosecond sequence.
    * Every generated element lands on the microsecond grid and carries `startFrac`, so an element
-   * that falls exactly on `stopMicros` is kept only when `startFrac` does not carry it past `stop`
-   * in the step's direction; otherwise the bound is nudged one microsecond off the boundary. That
-   * nudge also makes the machinery's boundary check reject an out-of-order same-microsecond pair.
+   * that falls exactly on `stopMicros` should be kept only when `startFrac` does not carry it past
+   * `stop` in the step's direction; nudging the bound one microsecond off the boundary drops it on
+   * the count-based micros path and makes the machinery reject an out-of-order same-microsecond
+   * pair. The nudge cannot express that drop on the while-loop path (calendar/day/month and default
+   * steps), so the endpoint is finalized by a full-precision `compareTo` against `stop` in
+   * `eval` / `doGenCode`; this bound only has to be right for sizing and the boundary error.
    */
   def nanosBoundedStopMicros(
       startFrac: Int, stopMicros: Long, stopFrac: Int, stepNegative: Boolean): Long = {

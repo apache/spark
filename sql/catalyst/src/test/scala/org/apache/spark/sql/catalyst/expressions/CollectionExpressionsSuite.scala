@@ -1480,6 +1480,29 @@ class CollectionExpressionsSuite
       Literal(negateExact(stringToInterval("interval 1 second")))),
       Seq(tnv(2 * sec, 900), tnv(sec, 900), tnv(0, 900)))
 
+    // Negative calendar/day/month and default steps route through the while-loop sequence
+    // machinery (not the count-based micros path), where the micro-nudged bound cannot exclude an
+    // endpoint that lands on stop's microsecond. A descending whole-day step with
+    // startFrac < stopFrac must still drop that endpoint (tnv(0, 100) is < stop tnv(0, 900)).
+    checkEvaluation(new Sequence(
+      ntz(2 * day, 100), ntz(0, 900),
+      Literal(negateExact(stringToInterval("interval 1 day")))),
+      Seq(tnv(2 * day, 100), tnv(day, 100)))
+    // Same descending day step but startFrac >= stopFrac keeps the endpoint (it stays >= stop).
+    checkEvaluation(new Sequence(
+      ntz(2 * day, 900), ntz(0, 100),
+      Literal(negateExact(stringToInterval("interval 1 day")))),
+      Seq(tnv(2 * day, 900), tnv(day, 900), tnv(0, 900)))
+    // Descending month step (Period, while-loop path) with startFrac < stopFrac: the endpoint that
+    // lands on stop's microsecond is dropped.
+    checkEvaluation(new Sequence(
+      ntz(month, 100), ntz(0, 900), Literal(Period.ofMonths(-1))),
+      Seq(tnv(month, 100)))
+    // Default (implicit) step: start > stop picks a descending 1-day step (while-loop path); the
+    // endpoint that lands on stop's microsecond is dropped when startFrac < stopFrac.
+    checkEvaluation(new Sequence(ntz(2 * day, 100), ntz(0, 900)),
+      Seq(tnv(2 * day, 100), tnv(day, 100)))
+
     // start == stop yields a single element that still carries the fraction.
     checkEvaluation(new Sequence(
       ntz(5 * sec, 42), ntz(5 * sec, 42),
