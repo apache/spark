@@ -200,4 +200,23 @@ class QueryPlanSuite extends SparkFunSuite {
     assert(normalizedExpressions.map(_.dataType) == Seq(IntegerType, StringType),
       "normalizeExpressions preserves original expression order")
   }
+
+  test("SPARK-57109: no-op rename Alias canonicalizes the same as a bare attribute") {
+    val relation = LocalRelation(AttributeReference("a", IntegerType)(ExprId(0)))
+    val a = relation.output.head
+
+    // Branch 1: the attribute is still wrapped in a no-op rename alias, e.g. because it is
+    // protected from RemoveRedundantAliases (the Union first-child case in SPARK-39887, or a
+    // self-join dedup alias).
+    val aliasedBranch = Project(Seq(Alias(a, a.name)(ExprId(1))), relation)
+
+    // Branch 2: the exact same underlying attribute, but the no-op alias has already been
+    // stripped down to a bare AttributeReference (e.g. because RemoveRedundantAliases was free
+    // to remove it here).
+    val bareBranch = Project(Seq(a), relation)
+
+    assert(aliasedBranch.sameResult(bareBranch),
+      "a no-op rename alias and the bare attribute it wraps must canonicalize identically, " +
+      "or ReuseExchange/subquery reuse cannot match semantically equivalent Union branches")
+  }
 }
