@@ -975,6 +975,12 @@
     ],
     "sqlState" : "42000"
   },
+  "CANNOT_USE_RESERVED_DATABASE_AS_CURRENT" : {
+    "message" : [
+      "Cannot use <database> as the current database because the name is reserved for system use. To access global temporary views, use a qualified name, e.g. SELECT * FROM <database>.viewName."
+    ],
+    "sqlState" : "42939"
+  },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
       "Error writing state store files for provider <providerClass>."
@@ -10297,11 +10303,6 @@
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
       "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1068" : {
-    "message" : [
-      "<database> is a system preserved database, you cannot use it as current database. To access global temporary views, you should use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM <database>.viewName."
     ]
   },
   "_LEGACY_ERROR_TEMP_1071" : {
