@@ -144,7 +144,7 @@ SELECT parse_sql('CREATE VIEW v AS SELECT a, b FROM t');
 SELECT parse_sql('SELECT 1 AS IDENTIFIER(''alias.field'')');
 SELECT parse_sql('SELECT DATE ''not-a-date''');
 
--- a malformed balanced script remains one failed statement
+-- location for an error inside a multiline script
 --QUERY-DELIMITER-START
 SELECT parse_sql(
 'BEGIN
@@ -156,12 +156,12 @@ SELECT parse_sql(
 -- JSON-path access over one shared scripting parse result
 --QUERY-DELIMITER-START
 SELECT
-  get_json_object(result, '$[0].start') AS start,
-  get_json_object(result, '$[0].length') AS length,
-  get_json_object(result, '$[0].error.errorClass') AS error_class,
-  get_json_object(result, '$[0].error.line') AS line,
-  get_json_object(result, '$[0].error.position') AS position,
-  get_json_object(result, '$[0].error.queryContext[0].fragment') AS fragment
+  get_json_object(result, '$[1].start') AS start,
+  get_json_object(result, '$[1].length') AS length,
+  get_json_object(result, '$[1].error.errorClass') AS error_class,
+  get_json_object(result, '$[1].error.line') AS line,
+  get_json_object(result, '$[1].error.position') AS position,
+  get_json_object(result, '$[1].error.queryContext[0].fragment') AS fragment
 FROM (
   SELECT parse_sql(
 'BEGIN

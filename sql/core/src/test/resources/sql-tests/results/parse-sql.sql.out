@@ -412,17 +412,17 @@ struct<parse_sql(BEGIN
    SELEC 2;
  END):string>
 -- !query output
-[{"start":1,"length":35,"parse_success":false,"error":{"errorClass":"PARSE_SYNTAX_ERROR","messageTemplate":"Syntax error at or near <error><hint>.","sqlState":"42601","messageParameters":{"error":"'2'","hint":""},"queryContext":[{"objectType":"","objectName":"","startIndex":1,"stopIndex":35,"fragment":"BEGIN\n   SELECT 1;\n   SELEC 2;\n END"}],"line":3,"position":9}}]
+[{"start":1,"length":17,"parse_success":false,"error":{"errorClass":"PARSE_SYNTAX_ERROR","messageTemplate":"Syntax error at or near <error><hint>.","sqlState":"42601","messageParameters":{"error":"end of input","hint":""},"queryContext":[{"objectType":"","objectName":"","startIndex":1,"stopIndex":17,"fragment":"BEGIN\n   SELECT 1"}],"line":2,"position":11}},{"start":23,"length":7,"parse_success":false,"error":{"errorClass":"PARSE_SYNTAX_ERROR","messageTemplate":"Syntax error at or near <error><hint>.","sqlState":"42601","messageParameters":{"error":"'SELEC'","hint":""},"queryContext":[{"objectType":"","objectName":"","startIndex":1,"stopIndex":7,"fragment":"SELEC 2"}],"line":1,"position":0}},{"start":33,"length":3,"parse_success":false,"error":{"errorClass":"PARSE_SYNTAX_ERROR","messageTemplate":"Syntax error at or near <error><hint>.","sqlState":"42601","messageParameters":{"error":"'END'","hint":""},"queryContext":[{"objectType":"","objectName":"","startIndex":1,"stopIndex":3,"fragment":"END"}],"line":1,"position":0}}]
 
 
 -- !query
 SELECT
-  get_json_object(result, '$[0].start') AS start,
-  get_json_object(result, '$[0].length') AS length,
-  get_json_object(result, '$[0].error.errorClass') AS error_class,
-  get_json_object(result, '$[0].error.line') AS line,
-  get_json_object(result, '$[0].error.position') AS position,
-  get_json_object(result, '$[0].error.queryContext[0].fragment') AS fragment
+  get_json_object(result, '$[1].start') AS start,
+  get_json_object(result, '$[1].length') AS length,
+  get_json_object(result, '$[1].error.errorClass') AS error_class,
+  get_json_object(result, '$[1].error.line') AS line,
+  get_json_object(result, '$[1].error.position') AS position,
+  get_json_object(result, '$[1].error.queryContext[0].fragment') AS fragment
 FROM (
   SELECT parse_sql(
 'BEGIN
@@ -433,10 +433,7 @@ FROM (
 -- !query schema
 struct<start:string,length:string,error_class:string,line:string,position:string,fragment:string>
 -- !query output
-1	35	PARSE_SYNTAX_ERROR	3	9	BEGIN
-   SELECT 1;
-   SELEC 2;
- END
+23	7	PARSE_SYNTAX_ERROR	1	0	SELEC 2
 
 
 -- !query

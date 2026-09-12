@@ -127,96 +127,6 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(statements(1) \ "error" \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
   }
 
-  test("malformed BEGIN statements preserve later batch results") {
-    val cases = Seq(
-      "BEGIN; SELECT 1;" -> Seq(
-        "BEGIN" -> false,
-        "SELECT 1" -> true),
-      "BEGIN SELECT 1; END; END; SELECT 2" -> Seq(
-        "BEGIN SELECT 1; END" -> true,
-        "END" -> false,
-        "SELECT 2" -> true),
-      "BEGIN BEGIN; END; END; SELECT 3" -> Seq(
-        "BEGIN BEGIN; END; END" -> false,
-        "SELECT 3" -> true),
-      "SELECT 0; BEGIN IF TRUE THEN BEGIN SELECT 1; END IF; END; SELECT 9" -> Seq(
-        "SELECT 0" -> true,
-        "BEGIN IF TRUE THEN BEGIN SELECT 1; END IF; END" -> false,
-        "SELECT 9" -> true),
-      "SELECT 0; BEGIN DECLARE CONTINUE HANDLER FOR SQLEXCEPTION BEGIN; END; END; SELECT 9" ->
-        Seq(
-          "SELECT 0" -> true,
-          "BEGIN DECLARE CONTINUE HANDLER FOR SQLEXCEPTION BEGIN; END; END" -> false,
-          "SELECT 9" -> true),
-      "BEGIN IF TRUE THEN lbl: BEGIN; END lbl; END IF; END; SELECT 9" -> Seq(
-        "BEGIN IF TRUE THEN lbl: BEGIN; END lbl; END IF; END" -> false,
-        "SELECT 9" -> true),
-      "BEGIN IF TRUE THEN SELECT 1; ELSEIF THEN BEGIN; END; END IF; END; SELECT 9" -> Seq(
-        "BEGIN IF TRUE THEN SELECT 1; ELSEIF THEN BEGIN; END; END IF; END" -> false,
-        "SELECT 9" -> true),
-      "BEGIN CASE WHEN TRUE THEN SELECT 1; ELSE BEGIN; END; END CASE; END; SELECT 9" -> Seq(
-        "BEGIN CASE WHEN TRUE THEN SELECT 1; ELSE BEGIN; END; END CASE; END" -> false,
-        "SELECT 9" -> true),
-      "BEGIN WHILE TRUE DO SELECT 1; END; END WHILE; END; SELECT 9" -> Seq(
-        "BEGIN WHILE TRUE DO SELECT 1; END; END WHILE; END" -> false,
-        "SELECT 9" -> true),
-      "BEGIN SELECT 1; END bad; SELECT 2" -> Seq(
-        "BEGIN SELECT 1; END bad" -> false,
-        "SELECT 2" -> true),
-      "BEGIN SELECT 1 END; SELECT 2" -> Seq(
-        "BEGIN SELECT 1 END" -> false,
-        "SELECT 2" -> true))
-
-    cases.foreach { case (sql, expected) =>
-      val statements = objs(sql)
-      assert(statements.size === expected.size, sql)
-      statements.zip(expected).foreach { case (statement, (text, success)) =>
-        val JInt(start) = statement \ "start"
-        val JInt(length) = statement \ "length"
-        assert(sql.substring(start.toInt - 1, start.toInt - 1 + length.toInt) === text)
-        assert(statement \ "parse_success" === JBool(success))
-      }
-    }
-  }
-
-  test("malformed balanced SQL scripts remain one statement in a batch") {
-    val statements = objs("BEGIN SELECT 1; SELEC 2; END; SELECT 3")
-    assert(statements.size === 2)
-    assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(31)))
-    assert(statements.map(_ \ "length") === Seq(JInt(28), JInt(8)))
-    assert(statements.map(_ \ "parse_success") === Seq(JBool(false), JBool(true)))
-  }
-
-  test("malformed nested control END does not end the outer SQL script") {
-    val block = "BEGIN IFF TRUE THEN SELECT 1; END IF; SELECT 2; END"
-    val statements = objs(s"$block; SELECT 3")
-
-    assert(statements.size === 2)
-    assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(block.length + 3)))
-    assert(statements.map(_ \ "length") === Seq(JInt(block.length), JInt(8)))
-    assert(statements.map(_ \ "parse_success") === Seq(JBool(false), JBool(true)))
-  }
-
-  test("statement-final END before the outer END does not end the SQL script") {
-    val block = "BEGIN IFF TRUE THEN SELECT 1; END IF; SELECT END; END"
-    val statements = objs(s"$block; SELECT 3")
-
-    assert(statements.size === 2)
-    assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(block.length + 3)))
-    assert(statements.map(_ \ "length") === Seq(JInt(block.length), JInt(8)))
-    assert(statements.map(_ \ "parse_success") === Seq(JBool(false), JBool(true)))
-  }
-
-  test("nested compound END does not end the outer malformed SQL script") {
-    val block = "BEGIN IFF TRUE THEN SELECT 1; END IF; BEGIN SELECT 2; END; END"
-    val statements = objs(s"$block; SELECT 3")
-
-    assert(statements.size === 2)
-    assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(block.length + 3)))
-    assert(statements.map(_ \ "length") === Seq(JInt(block.length), JInt(8)))
-    assert(statements.map(_ \ "parse_success") === Seq(JBool(false), JBool(true)))
-  }
-
   test("SQL scripts remain one statement in a batch") {
     val statements = objs("BEGIN SELECT 1; SELECT 2; END; SELECT 3")
     assert(statements.size === 2)
@@ -224,26 +134,6 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(statements.map(_ \ "length") === Seq(JInt(29), JInt(8)))
     assert(statements.map(_ \ "statement_identifier") ===
       Seq(JString("BEGIN END"), JString("SELECT")))
-  }
-
-  test("loop boundary parsing preserves raw variable references for stock parsing") {
-    SQLConf.withExistingConf(new SQLConf) {
-      SQLConf.get.setConfString("flag", "TRUE")
-      SQLConf.get.setConfString("query", "SELECT 1")
-      val blocks = Seq(
-        "BEGIN WHILE ${flag} DO SELECT 1; END WHILE; END",
-        "BEGIN REPEAT SELECT 1; UNTIL ${flag} END REPEAT; END",
-        "BEGIN FOR x AS ${query} DO SELECT x; END FOR; END")
-
-      blocks.foreach { block =>
-        val sql = s"$block; SELECT 2"
-        val statements = objs(sql)
-        assert(statements.size === 2, block)
-        assert(statements.map(_ \ "parse_success") === Seq(JBool(true), JBool(true)), block)
-        assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(block.length + 3)), block)
-        assert(statements.map(_ \ "length") === Seq(JInt(block.length), JInt(8)), block)
-      }
-    }
   }
 
   test("empty and closed-comment-only batches contain no statements") {

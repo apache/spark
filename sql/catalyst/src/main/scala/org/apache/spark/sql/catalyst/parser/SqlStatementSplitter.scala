@@ -117,116 +117,21 @@ private[sql] case class PositionedSqlStatementSplitResult(
  * for real at execution time. When `validationPreprocess` is `identity`
  * (the default), the splitter behaves as a pure original-text splitter.
  *
- * Performance note: the generic splitter calls `tryParseRegion` O(k) times on
- * growing prefixes for a single `BEGIN ... END` block with k internal `;` -- an
+ * Performance note: for a single `BEGIN ... END` block with k internal `;`,
+ * the splitter calls `tryParseRegion` O(k) times on growing prefixes -- an
  * O(k^2) cost in the worst case (incomplete block on every keystroke in
  * interactive mode). Ordinary non-scripting SQL is O(n). A non-EOF terminated
  * single-statement rule (read `ctx.getStop` once per region) would make this
  * O(n), but Spark's `setResetStatement` has `SET .*?` / `RESET .*?` wildcards
  * that need an EOF anchor to terminate deterministically, so such a
  * single-statement rule-rewrite does not drop in cleanly. Tracked as a
- * follow-up. The normal parse_sql-only path uses [[splitForParseSql]] and performs
- * one linear boundary parse instead; a parser stack overflow falls back to the generic path.
+ * follow-up.
  */
 object SqlStatementSplitter {
 
   /** Split the given SQL text into individual statements at `;` boundaries. */
   def split(sqlText: String): SqlStatementSplitResult =
     splitWithPositions(sqlText, identity).withoutPositions
-
-  /**
-   * Split a parse_sql batch in one grammar-owned pass while retaining source positions.
-   * Unlike the generic splitter, this boundary-only grammar accepts malformed leaf statements
-   * and uses scripting grammar contexts to assign internal semicolons to compound statements.
-   */
-  private[sql] def splitForParseSql(sqlText: String): PositionedSqlStatementSplitResult = {
-    require(sqlText != null, "sqlText must not be null")
-
-    val toUtf16 = utf16Offsets(sqlText)
-    val sourceLexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
-    sourceLexer.removeErrorListeners()
-    val sourceTokens = new CommonTokenStream(sourceLexer)
-    sourceTokens.fill()
-    val boundaryTokens = new java.util.ArrayList[Token](sourceTokens.size() + 1)
-    var sourceIndex = 0
-    while (sourceIndex < sourceTokens.size() - 1) {
-      boundaryTokens.add(sourceTokens.get(sourceIndex))
-      sourceIndex += 1
-    }
-    val boundary = new CommonToken(SqlBaseParser.PARSE_SQL_BATCH_DELIMITER, "")
-    boundary.setStartIndex(toUtf16.length - 1)
-    boundary.setStopIndex(toUtf16.length - 2)
-    boundaryTokens.add(boundary)
-    boundaryTokens.add(sourceTokens.get(sourceTokens.size() - 1))
-    val tokens = new CommonTokenStream(new ListTokenSource(boundaryTokens))
-    tokens.fill()
-    val parser = new SqlBaseParser(tokens)
-    configureSplitterParser(parser, SqlApiConf.get)
-    parser.getInterpreter.setPredictionMode(PredictionMode.LL)
-    val batch = try {
-      parser.parseSqlBatch()
-    } catch {
-      case _: StackOverflowError =>
-        return splitWithPositions(sqlText, identity)
-    }
-
-    def statementStart(context: ParserRuleContext): Int = {
-      var index = context.getStart.getTokenIndex
-      while (index > 0 && tokens.get(index - 1).getChannel == Token.HIDDEN_CHANNEL) {
-        index -= 1
-      }
-      toUtf16(tokens.get(index).getStartIndex)
-    }
-
-    def positioned(
-        context: ParserRuleContext,
-        end: Int,
-        terminator: String): PositionedSqlStatement = {
-      val start = statementStart(context)
-      val (leadingWhitespace, statement) = trimSqlWhitespace(sqlText.substring(start, end))
-      PositionedSqlStatement(statement, terminator, start + leadingWhitespace)
-    }
-
-    val complete = mutable.ArrayBuffer.empty[PositionedSqlStatement]
-    var partial: Option[PositionedSqlStatement] = None
-    var i = 0
-    while (i < batch.items.size()) {
-      val item = batch.items.get(i)
-      val context = Option(item.batchStatement).getOrElse(item.partialStatement)
-      if (item.terminator.getType == SqlBaseParser.PARSE_SQL_BATCH_DELIMITER) {
-        partial = Some(positioned(context, sqlText.length, ""))
-      } else {
-        complete += positioned(
-          context,
-          toUtf16(item.terminator.getStartIndex),
-          item.terminator.getText)
-      }
-      i += 1
-    }
-
-    partial = partial.orElse {
-      if (sourceLexer.has_unclosed_bracketed_comment) {
-        var index = sourceTokens.size() - 1
-        while (index >= 0 && sourceTokens.get(index).getType != SqlBaseLexer.SEMICOLON) {
-          index -= 1
-        }
-        val start = if (index < 0) {
-          0
-        } else {
-          toUtf16(sourceTokens.get(index).getStopIndex + 1)
-        }
-        val (leadingWhitespace, statement) = trimSqlWhitespace(sqlText.substring(start))
-        Some(PositionedSqlStatement(statement, "", start + leadingWhitespace))
-      } else {
-        None
-      }
-    }
-
-    PositionedSqlStatementSplitResult(
-      complete.toSeq,
-      partial,
-      sourceLexer.has_unclosed_bracketed_comment && partial.nonEmpty)
-  }
 
   /**
    * Split the given SQL text, applying `validationPreprocess` to each candidate
@@ -242,7 +147,8 @@ object SqlStatementSplitter {
     splitWithPositions(sqlText, validationPreprocess).withoutPositions
 
   /**
-   * Split SQL while retaining each statement's source position.
+   * Split SQL while retaining each statement's source position. This is used by
+   * parse-only tooling that reports spans into the original input.
    */
   private[sql] def splitWithPositions(
       sqlText: String,
@@ -358,7 +264,7 @@ object SqlStatementSplitter {
               // prefix that includes the next `;`.
               d += 1
             case FailedNonEof =>
-              // Structurally invalid ordinary statement; stop extending.
+              // Structurally invalid; stop extending.
               failedNonEof = true
           }
         }
@@ -369,11 +275,7 @@ object SqlStatementSplitter {
           // `startIdx` are leading whitespace/comments that we preserve in the
           // buffer too (so the emitted statement text matches the original
           // input shape, modulo trimming).
-          val terminator = if (tokenStream.get(matchedDelimIdx).getType == Token.EOF) {
-            ""
-          } else {
-            tokenStream.get(matchedDelimIdx).getText
-          }
+          val terminator = tokenStream.get(matchedDelimIdx).getText
           while (index < matchedDelimIdx) {
             val tok = tokenStream.get(index)
             if (tok.getChannel != Token.HIDDEN_CHANNEL) bufferHasContent = true
@@ -545,9 +447,7 @@ object SqlStatementSplitter {
    * exceptions, but the splitter surfaces them via the
    * [[SqlStatementSplitResult.hasUnclosedComment]] flag instead.
    */
-  private def configureSplitterParser(
-      parser: SqlBaseParser,
-      conf: SqlApiConf): Unit = {
+  private def configureSplitterParser(parser: SqlBaseParser, conf: SqlApiConf): Unit = {
     if (conf.manageParserCaches) AbstractParser.installCaches(parser)
 
     parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced

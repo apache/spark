@@ -412,12 +412,12 @@ Project [parse_sql(BEGIN
 
 -- !query
 SELECT
-  get_json_object(result, '$[0].start') AS start,
-  get_json_object(result, '$[0].length') AS length,
-  get_json_object(result, '$[0].error.errorClass') AS error_class,
-  get_json_object(result, '$[0].error.line') AS line,
-  get_json_object(result, '$[0].error.position') AS position,
-  get_json_object(result, '$[0].error.queryContext[0].fragment') AS fragment
+  get_json_object(result, '$[1].start') AS start,
+  get_json_object(result, '$[1].length') AS length,
+  get_json_object(result, '$[1].error.errorClass') AS error_class,
+  get_json_object(result, '$[1].error.line') AS line,
+  get_json_object(result, '$[1].error.position') AS position,
+  get_json_object(result, '$[1].error.queryContext[0].fragment') AS fragment
 FROM (
   SELECT parse_sql(
 'BEGIN
@@ -426,7 +426,7 @@ FROM (
  END') AS result
 )
 -- !query analysis
-Project [get_json_object(result#x, $[0].start) AS start#x, get_json_object(result#x, $[0].length) AS length#x, get_json_object(result#x, $[0].error.errorClass) AS error_class#x, get_json_object(result#x, $[0].error.line) AS line#x, get_json_object(result#x, $[0].error.position) AS position#x, get_json_object(result#x, $[0].error.queryContext[0].fragment) AS fragment#x]
+Project [get_json_object(result#x, $[1].start) AS start#x, get_json_object(result#x, $[1].length) AS length#x, get_json_object(result#x, $[1].error.errorClass) AS error_class#x, get_json_object(result#x, $[1].error.line) AS line#x, get_json_object(result#x, $[1].error.position) AS position#x, get_json_object(result#x, $[1].error.queryContext[0].fragment) AS fragment#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [parse_sql(BEGIN
    SELECT 1;
