@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.time.LocalDateTime
 import java.util.Locale
 
+import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -241,10 +242,48 @@ class DataFramePivotSuite extends SharedSparkSession {
     )
   }
 
-  test("pivot with null should not throw NPE") {
+  // SPARK-19882: null pivot keys must not NPE; also checks empty count buckets return 0.
+  test("pivot count with null pivot value returns 0 for empty buckets") {
     checkAnswer(
       Seq(Tuple1(None), Tuple1(Some(1))).toDF("a").groupBy($"a").pivot("a").count(),
-      Row(null, 1, null) :: Row(1, null, 1) :: Nil)
+      Row(null, 1, 0) :: Row(1, 0, 1) :: Nil)
+  }
+
+  // Empty-bucket result coverage is in the pivot.sql golden file. The tests below cover what it
+  // cannot: output-schema nullability, the ANSI runtime error path, and the empty-bucket flag.
+
+  test("pivot count produces non-nullable column schema") {
+    val df = Seq((1, "a")).toDF("id", "cat")
+      .groupBy("id").pivot("cat", Seq("a", "b")).count()
+    assert(!df.schema("a").nullable, s"expected 'a' column to be non-nullable: ${df.schema}")
+    assert(!df.schema("b").nullable, s"expected 'b' column to be non-nullable: ${df.schema}")
+  }
+
+  test("pivot integral division of counts throws on an empty bucket under ANSI") {
+    // 0 div 0 on an empty bucket throws DIVIDE_BY_ZERO at runtime, mirroring the slow path.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = Seq((1, "a", 10, 100), (2, "a", 40, 400))
+        .toDF("id", "cat", "v1", "v2")
+        .groupBy("id")
+        .pivot("cat", Seq("a", "b"))
+        .agg(expr("count(v1) div count(v2)"))
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          df.collect()
+        },
+        condition = "DIVIDE_BY_ZERO",
+        parameters = Map("config" -> "\"spark.sql.ansi.enabled\""),
+        context = ExpectedContext(fragment = "count(v1) div count(v2)", start = 0, stop = 22))
+    }
+  }
+
+  test("disabling the empty-bucket default returns NULL for empty count buckets") {
+    withSQLConf(SQLConf.PIVOT_EMPTY_BUCKET_RETURNS_AGGREGATE_DEFAULT.key -> "false") {
+      val df = Seq(Tuple1(None), Tuple1(Some(1))).toDF("a").groupBy($"a").pivot("a").count()
+      checkAnswer(df, Row(null, 1, null) :: Row(1, null, 1) :: Nil)
+      // No Coalesce is added, so the pivoted columns stay nullable.
+      assert(df.schema.fields.drop(1).forall(_.nullable))
+    }
   }
 
   test("pivot with null and aggregate type not supported by PivotFirst returns correct result") {
@@ -263,7 +302,7 @@ class DataFramePivotSuite extends SharedSparkSession {
       val df = Seq(java.sql.Timestamp.valueOf(ts)).toDF("a").groupBy("a").pivot("a").count()
       val expected = StructType(
         StructField("a", TimestampType) ::
-        StructField(tsWithZone, LongType) :: Nil)
+        StructField(tsWithZone, LongType, nullable = false) :: Nil)
       assert(df.schema == expected)
       // String representation of timestamp with timezone should take the time difference
       // into account.
