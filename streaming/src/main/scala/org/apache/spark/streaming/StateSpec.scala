@@ -180,6 +180,7 @@ object StateSpec {
    *
    * @param mappingFunction The function applied on every data item to manage the associated state
    *                         and generate the mapped data
+   * @tparam KeyType      Class of the keys
    * @tparam ValueType    Class of the values
    * @tparam StateType    Class of the states data
    * @tparam MappedType   Class of the mapped data
@@ -231,6 +232,7 @@ object StateSpec {
    *
    * @param mappingFunction The function applied on every data item to manage the associated
    *                        state and generate the mapped data
+   * @tparam KeyType      Class of the keys
    * @tparam ValueType    Class of the values
    * @tparam StateType    Class of the states data
    * @tparam MappedType   Class of the mapped data
