@@ -3698,13 +3698,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def invalidJdbcPartitionBoundError(
-      option: String,
+      optionName: String,
       value: String,
       dataType: DataType): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_JDBC_PARTITION_BOUND",
       messageParameters = Map(
-        "option" -> toDSOption(option),
+        "option" -> toDSOption(optionName),
         "value" -> toSQLConfVal(value),
         "dataType" -> toSQLType(dataType)))
   }
