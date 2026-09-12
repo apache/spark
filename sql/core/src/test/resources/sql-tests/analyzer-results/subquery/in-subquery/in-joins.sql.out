@@ -1184,6 +1184,55 @@ Project [id#x, id#x AS id2#x]
 
 
 -- !query
+create temporary view s4 as select * from values
+    (99), (cast(null as int))
+  as s4(id)
+-- !query analysis
+CreateViewCommand `s4`, select * from values
+    (99), (cast(null as int))
+  as s4(id), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [id#x]
+      +- SubqueryAlias s4
+         +- LocalRelation [id#x]
+
+
+-- !query
+SELECT s_a.id, s_b.id AS id2 FROM s1 AS s_a
+FULL OUTER JOIN s2 AS s_b
+ON (5 NOT IN (SELECT id FROM s4))
+-- !query analysis
+Project [id#x, id#x AS id2#x]
++- Join FullOuter, NOT 5 IN (list#x [])
+   :  +- Project [id#x]
+   :     +- SubqueryAlias s4
+   :        +- View (`s4`, [id#x])
+   :           +- Project [cast(id#x as int) AS id#x]
+   :              +- Project [id#x]
+   :                 +- SubqueryAlias s4
+   :                    +- LocalRelation [id#x]
+   :- SubqueryAlias s_a
+   :  +- SubqueryAlias s1
+   :     +- View (`s1`, [id#x])
+   :        +- Project [cast(id#x as int) AS id#x]
+   :           +- Project [id#x]
+   :              +- SubqueryAlias s1
+   :                 +- LocalRelation [id#x]
+   +- SubqueryAlias s_b
+      +- SubqueryAlias s2
+         +- View (`s2`, [id#x])
+            +- Project [cast(id#x as int) AS id#x]
+               +- Project [id#x]
+                  +- SubqueryAlias s2
+                     +- LocalRelation [id#x]
+
+
+-- !query
+DROP VIEW s4
+-- !query analysis
+DropTempViewCommand s4, false
+
+
+-- !query
 DROP VIEW s1
 -- !query analysis
 DropTempViewCommand s1, false

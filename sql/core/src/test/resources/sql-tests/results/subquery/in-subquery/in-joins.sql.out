@@ -570,6 +570,43 @@ NULL	9
 
 
 -- !query
+create temporary view s4 as select * from values
+    (99), (cast(null as int))
+  as s4(id)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT s_a.id, s_b.id AS id2 FROM s1 AS s_a
+FULL OUTER JOIN s2 AS s_b
+ON (5 NOT IN (SELECT id FROM s4))
+-- !query schema
+struct<id:int,id2:int>
+-- !query output
+1	NULL
+3	NULL
+5	NULL
+7	NULL
+9	NULL
+NULL	1
+NULL	3
+NULL	4
+NULL	6
+NULL	9
+
+
+-- !query
+DROP VIEW s4
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP VIEW s1
 -- !query schema
 struct<>
