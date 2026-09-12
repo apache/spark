@@ -115,7 +115,7 @@ class PushdownPredicatesForCTEDefStalenessSuite extends PlanTest {
     // because no real rule mutates only the definition without also enriching the
     // reference sites, which is exactly what would re-arm the guard.)
     val mutated = once.transform {
-      case d @ CTERelationDef(Filter(cond, j: Join), `cteId`, Some(_), _, _, _) =>
+      case d @ CTERelationDef(Filter(cond, j: Join), `cteId`, Some(_), _, _, _, _) =>
         d.copy(child = Filter(cond, j.copy(right = Filter(GreaterThan(t2b, Literal(0)), j.right))))
     }
     val afterMutation = PushdownPredicatesAndPruneColumnsForCTEDef.apply(mutated)

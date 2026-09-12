@@ -187,7 +187,7 @@ object ParseSqlResult {
     name.toLowerCase(java.util.Locale.ROOT)
 
   private def childScope(parent: LogicalPlan, scope: CteScope): CteScope = parent match {
-    case w: UnresolvedWith => scope ++ w.cteRelations.map(r => normalizeCteName(r._1))
+    case w: UnresolvedWith => scope ++ w.cteRelations.map(r => normalizeCteName(r.name))
     case _ => scope
   }
 
@@ -262,11 +262,11 @@ object ParseSqlResult {
         // name when the clause is RECURSIVE. Later aliases are not in scope,
         // so a definition naming one refers to the real table.
         var definitionScope = scope
-        w.cteRelations.foreach { case (name, ctePlan, _) =>
-          val normalized = normalizeCteName(name)
+        w.cteRelations.foreach { cteRelation =>
+          val normalized = normalizeCteName(cteRelation.name)
           val bodyScope =
             if (w.allowRecursion) definitionScope + normalized else definitionScope
-          visitPlan(ctePlan, bodyScope, TableRefRole.Source)(f)
+          visitPlan(cteRelation.plan, bodyScope, TableRefRole.Source)(f)
           definitionScope += normalized
         }
       case c: CacheTable if c.multipartIdentifier.isEmpty =>

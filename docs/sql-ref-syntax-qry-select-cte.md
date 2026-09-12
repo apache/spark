@@ -31,7 +31,7 @@ WITH common_table_expression [ , ... ]
 
 While `common_table_expression` is defined as
 ```sql
-expression_name [ ( column_name [ , ... ] ) ] [ AS ] ( query )
+expression_name [ ( column_name [ , ... ] ) ] [ AS ] [ [ NOT ] MATERIALIZED ] ( query )
 ```
 
 ### Parameters
@@ -39,6 +39,19 @@ expression_name [ ( column_name [ , ... ] ) ] [ AS ] ( query )
 * **expression_name**
 
     Specifies a name for the common table expression.
+
+* **MATERIALIZED**, **NOT MATERIALIZED**
+
+    Optionally specifies how the common table expression is evaluated. `MATERIALIZED` forces it
+    to be evaluated once and shared by all references. `NOT MATERIALIZED` forces it to be inlined,
+    so that each reference is planned and evaluated independently, and non-deterministic
+    expressions such as `rand()` may yield different values per reference. A `MATERIALIZED`
+    common table expression cannot reference columns of an outer query. `MATERIALIZED` is not
+    supported in a statement whose common table expressions are always inlined, such as a
+    multi-insert statement, nor in a subquery whose WITH clause or query references columns of
+    an outer query. `NOT MATERIALIZED` is supported in both. Omit both to let Spark decide
+    whether to inline the common table expression into its references or to evaluate it once and
+    share the result.
 
 * **query**
 
@@ -67,6 +80,15 @@ SELECT * FROM t;
 +---+
 |  1|
 +---+
+
+-- CTE evaluated once and shared by all references
+WITH t AS MATERIALIZED (SELECT 1 AS x)
+SELECT * FROM t JOIN t AS t2 ON t.x = t2.x;
++---+---+
+|  x|  x|
++---+---+
+|  1|  1|
++---+---+
 
 -- CTE in subquery
 SELECT max(c) FROM (
