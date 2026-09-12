@@ -140,6 +140,22 @@ configuration and security options.
 Each cloud connector has its own set of configuration parameters, again, 
 consult the relevant documentation.
 
+### Working with S3-compatible object stores
+
+The `s3a` connector talks to Amazon S3 by default, and it also works with any
+S3-compatible object store, such as Backblaze B2, Cloudflare R2, or MinIO. To
+use a compatible store, point the connector at its endpoint (and set the region
+where the store requires one) instead of the default Amazon S3 endpoint:
+
+```
+spark.hadoop.fs.s3a.endpoint          <s3-compatible-endpoint>
+spark.hadoop.fs.s3a.endpoint.region   <region>
+```
+
+Supply credentials for the chosen store through the same options described in
+[Authenticating](#authenticating), and consult the store's own documentation for
+its endpoint, region, and any connector-specific settings.
+
 ### Recommended settings for writing to object stores
 
 For object stores whose consistency model means that rename-based commits are safe
