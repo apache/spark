@@ -201,10 +201,10 @@ private[sql] object JDBCRelation extends Logging {
       value: String,
       columnType: DataType,
       timeZoneId: String,
-      option: String): Long = {
+      optionName: String): Long = {
     def parse[T](f: UTF8String => Option[T]): T = {
       f(UTF8String.fromString(value)).getOrElse {
-        throw QueryCompilationErrors.invalidJdbcPartitionBoundError(option, value, columnType)
+        throw QueryCompilationErrors.invalidJdbcPartitionBoundError(optionName, value, columnType)
       }
     }
     columnType match {
