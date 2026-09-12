@@ -78,6 +78,11 @@ class SparkEnv (
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
 
+  // The driver's BlockManagerMasterEndpoint, kept so SparkContext can wire the RDD TTL cleaner's
+  // hooks onto it (they need pieces that do not exist yet when SparkEnv builds the endpoint).
+  // None on executors, which only hold a ref to it.
+  @volatile private[spark] var blockManagerMasterEndpoint: Option[BlockManagerMasterEndpoint] = None
+
   // The two shuffle managers are peers keyed by kind, not a default and an override: a shuffle is
   // routed to one or the other by its dependency type via `shuffleManagerFor`, so neither is ever
   // installed "behind" the other.
@@ -694,21 +699,27 @@ object SparkEnv extends Logging {
 
     // Mapping from block manager id to the block manager's information.
     val blockManagerInfo = new concurrent.TrieMap[BlockManagerId, BlockManagerInfo]()
+    // Only the driver builds the endpoint; an executor just looks up its ref.
+    val driverBlockManagerMasterEndpoint = if (isDriver) {
+      Some(new BlockManagerMasterEndpoint(
+        rpcEnv,
+        isLocal,
+        conf,
+        listenerBus,
+        // Already None unless the shuffle service is enabled, which is what the old conditional
+        // here re-checked.
+        externalShuffleClient,
+        blockManagerInfo,
+        mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
+        isDriver))
+    } else {
+      None
+    }
     val blockManagerMaster = new BlockManagerMaster(
       registerOrLookupEndpoint(
         BlockManagerMaster.DRIVER_ENDPOINT_NAME,
-        new BlockManagerMasterEndpoint(
-          rpcEnv,
-          isLocal,
-          conf,
-          listenerBus,
-          if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
-            externalShuffleClient
-          } else {
-            None
-          }, blockManagerInfo,
-          mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
-          isDriver)),
+        // By-name, and only evaluated when isDriver, which is exactly when this is non-empty.
+        driverBlockManagerMasterEndpoint.get),
       registerOrLookupEndpoint(
         BlockManagerMaster.DRIVER_HEARTBEAT_ENDPOINT_NAME,
         new BlockManagerMasterHeartbeatEndpoint(rpcEnv, isLocal, blockManagerInfo)),
@@ -772,6 +783,8 @@ object SparkEnv extends Logging {
       metricsSystem,
       outputCommitCoordinator,
       conf)
+
+    envInstance.blockManagerMasterEndpoint = driverBlockManagerMasterEndpoint
 
     // Add a reference to tmp dir created by driver, we will delete this tmp dir when stop() is
     // called, and we only need to do it for driver. Because driver may run as a service, and if we

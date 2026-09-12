@@ -21,14 +21,15 @@ import scala.collection.BuildFrom
 import scala.collection.immutable.Iterable
 import scala.concurrent.Future
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkEnv}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config
 import org.apache.spark.internal.config.CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT
 import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
 import org.apache.spark.storage.BlockManagerMessages._
-import org.apache.spark.util.{RpcUtils, ThreadUtils}
+import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
 private[spark]
 class BlockManagerMaster(
@@ -42,6 +43,13 @@ class BlockManagerMaster(
 
   private val waitBlockRemovalTimeout =
     RpcTimeout(conf, CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key, "120s")
+
+  // Mirrors BlockManagerMasterEndpoint.externalShuffleServiceRemoveShuffleEnabled: the endpoint
+  // gates on its external block store client being defined, which is exactly when the shuffle
+  // service is enabled.
+  private val removeShuffleFromExternalServiceEnabled =
+    conf.get(config.SHUFFLE_SERVICE_ENABLED) &&
+      conf.get(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED)
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String): Unit = {
@@ -234,7 +242,9 @@ class BlockManagerMaster(
 
   /** Remove all blocks belonging to the given shuffle. */
   def removeShuffle(shuffleId: Int, blocking: Boolean): Unit = {
-    val future = driverEndpoint.askSync[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
+    val (mapOutputLocations, shuffleMergerLocations) = shuffleOutputLocations(shuffleId)
+    val future = driverEndpoint.askSync[Future[Seq[Boolean]]](
+      RemoveShuffleFromMaster(shuffleId, mapOutputLocations, shuffleMergerLocations))
     future.failed.foreach(e =>
       logWarning(log"Failed to remove shuffle ${MDC(SHUFFLE_ID, shuffleId)} - " +
         log"${MDC(ERROR, e.getMessage)}", e)
@@ -242,6 +252,44 @@ class BlockManagerMaster(
     if (blocking) {
       waitBlockRemovalTimeout.awaitResult(future)
     }
+  }
+
+  /**
+   * Snapshots the shuffle output locations that `BlockManagerMasterEndpoint.removeShuffle` needs:
+   * the map output locations it matches against departed executors to find blocks the external
+   * shuffle service still serves, and the push-merger locations it asks the service to clean up.
+   *
+   * Read here, on the caller's thread, rather than on the master's dispatcher thread, because
+   * reading either takes the shuffle's `ShuffleStatus` lock. A thread holding that lock for write
+   * can be blocked on an RPC that only the block-manager dispatcher can serve -- serializing the
+   * map statuses broadcasts them, and the broadcast reports its blocks to the master; invalidating
+   * the cache destroys that broadcast, which asks the master to remove them. Acquiring the lock on
+   * the dispatcher closes the cycle, and since that dispatcher is single-threaded, it wedges all
+   * block management until the RPC times out. SPARK-36782 is the same cycle, fixed the same way for
+   * `updateMapOutput`. Snapshotting before the RPC also means the caller is free to unregister the
+   * shuffle as soon as `removeShuffle` returns.
+   *
+   * Both gates mirror the endpoint's own, so nothing is gathered that it would not use, and both
+   * are empty off the driver or before the `SparkEnv` exists.
+   */
+  private def shuffleOutputLocations(
+      shuffleId: Int): (Seq[(BlockManagerId, Long)], Seq[BlockManagerId]) = {
+    val tracker = Option(SparkEnv.get).map(_.mapOutputTracker).collect {
+      case master: MapOutputTrackerMaster => master
+    }
+    tracker.map { mapOutputTracker =>
+      val mapOutputLocations = if (removeShuffleFromExternalServiceEnabled) {
+        mapOutputTracker.getMapOutputLocations(shuffleId)
+      } else {
+        Seq.empty
+      }
+      val shuffleMergerLocations = if (Utils.isPushBasedShuffleEnabled(conf, isDriver)) {
+        mapOutputTracker.getShufflePushMergerLocations(shuffleId)
+      } else {
+        Seq.empty
+      }
+      (mapOutputLocations, shuffleMergerLocations)
+    }.getOrElse((Seq.empty, Seq.empty))
   }
 
   /** Remove all blocks belonging to the given broadcast. */
