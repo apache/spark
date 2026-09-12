@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.net.URI
+
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
@@ -172,21 +174,19 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     Seq(JARS, FILES, ARCHIVES, SUBMIT_PYTHON_FILES).foreach { key =>
       val (localUris, remoteUris) =
         conf.get(key).partition(uri => KubernetesUtils.isLocalAndResolvable(uri))
-      val value = {
-        if (key == ARCHIVES) {
-          localUris.map(Utils.getUriBuilder(_).fragment(null).build()).map(_.toString)
-        } else {
-          localUris
-        }
+      val localUrisWithFragments = localUris.map { uri =>
+        (uri, Option(new URI(uri).getFragment))
       }
-      val resolved = KubernetesUtils.uploadAndTransformFileUris(value, Some(conf.sparkConf))
+      val uploadUris = localUrisWithFragments.map {
+        case (uri, Some(_)) => Utils.getUriBuilder(uri).fragment(null).build().toString
+        case (uri, None) => uri
+      }
+      val resolved = KubernetesUtils.uploadAndTransformFileUris(uploadUris, Some(conf.sparkConf))
       if (resolved.nonEmpty) {
-        val resolvedValue = if (key == ARCHIVES) {
-          localUris.zip(resolved).map { case (uri, r) =>
-            Utils.getUriBuilder(r).fragment(new java.net.URI(uri).getFragment).build().toString
-          }
-        } else {
-          resolved
+        val resolvedValue = localUrisWithFragments.zip(resolved).map {
+          case ((_, Some(fragment)), r) =>
+            Utils.getUriBuilder(r).fragment(fragment).build().toString
+          case ((_, None), r) => r
         }
         additionalProps.put(key.key, (resolvedValue ++ remoteUris).mkString(","))
       }
