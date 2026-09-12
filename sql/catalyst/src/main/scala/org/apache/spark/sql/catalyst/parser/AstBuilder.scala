@@ -4438,11 +4438,12 @@ class AstBuilder extends DataTypeAstBuilder
     val partition = ctx.partition.asScala.map(expression)
     val order = ctx.sortItem.asScala.map(visitSortItem)
 
-    // RANGE/ROWS BETWEEN ...
+    // RANGE/ROWS/GROUPS BETWEEN ...
     val frameSpecOption = Option(ctx.windowFrame).map { frame =>
       val frameType = frame.frameType.getType match {
         case SqlBaseParser.RANGE => RangeFrame
         case SqlBaseParser.ROWS => RowFrame
+        case SqlBaseParser.GROUPS => GroupFrame
       }
 
       SpecifiedWindowFrame(
@@ -4466,7 +4467,12 @@ class AstBuilder extends DataTypeAstBuilder
       if (!(e.resolved && e.foldable || e.isInstanceOf[Parameter])) {
         throw QueryParsingErrors.invalidWindowFrameBoundError(ctx)
       }
-      e
+      if (ctx.getParent.asInstanceOf[WindowFrameContext].frameType.getType ==
+          SqlBaseParser.GROUPS) {
+        GroupFrameOffset(e)
+      } else {
+        e
+      }
     }
 
     ctx.boundType.getType match {

@@ -1885,8 +1885,10 @@ windowSpec
 windowFrame
     : frameType=RANGE start=frameBound
     | frameType=ROWS start=frameBound
+    | frameType=GROUPS start=frameBound
     | frameType=RANGE BETWEEN start=frameBound AND end=frameBound
     | frameType=ROWS BETWEEN start=frameBound AND end=frameBound
+    | frameType=GROUPS BETWEEN start=frameBound AND end=frameBound
     ;
 
 frameBound
@@ -2277,6 +2279,7 @@ ansiNonReserved
     | GEOMETRY
     | GLOBAL
     | GROUPING
+    | GROUPS
     | HANDLER
     | HISTORY
     | HOUR
@@ -2723,6 +2726,7 @@ nonReserved
     | GRANT
     | GROUP
     | GROUPING
+    | GROUPS
     | HANDLER
     | HAVING
     | HISTORY
