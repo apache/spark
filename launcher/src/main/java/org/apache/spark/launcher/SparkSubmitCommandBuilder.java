@@ -84,6 +84,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   static {
     specialClasses.put("org.apache.spark.repl.Main", "spark-shell");
     specialClasses.put("org.apache.spark.sql.application.ConnectRepl", "connect-shell");
+    specialClasses.put("org.apache.spark.sql.application.SparkConnectSQLCLIDriver",
+      "connect-shell");
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
       SparkLauncher.NO_RESOURCE);
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
@@ -289,6 +291,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       args.add(parser.CLASS);
       if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL"))) {
         args.add("org.apache.spark.sql.application.ConnectRepl");
+      } else if (isRemote && "1".equals(getenv("SPARK_SQL_SHELL"))) {
+        args.add("org.apache.spark.sql.application.SparkConnectSQLCLIDriver");
       } else {
         args.add(mainClass);
       }
@@ -297,7 +301,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     args.addAll(parsedArgs);
 
     if (appResource != null) {
-      if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL"))) {
+      if (isRemote && ("1".equals(getenv("SPARK_SCALA_SHELL"))
+          || "1".equals(getenv("SPARK_SQL_SHELL")))) {
         args.add("connect-shell");
       } else {
         args.add(appResource);
