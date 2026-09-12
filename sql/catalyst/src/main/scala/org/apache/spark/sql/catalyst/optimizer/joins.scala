@@ -438,12 +438,15 @@ trait JoinSelectionHelper extends Logging {
       getBroadcastBuildSide(join, hintOnly = true, conf).orElse {
         if (noShufflePlannedBefore) getBroadcastBuildSide(join, hintOnly = false, conf) else None
       }
-    // `JoinSelection` always builds from the right for this shape. Its dedicated threshold
-    // defaults to Long.MaxValue to preserve the original NAAJ planning behavior.
-    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _)
-        if j.right.stats.sizeInBytes >= 0 &&
-          j.right.stats.sizeInBytes <= conf.nullAwareAntiJoinBroadcastThreshold =>
-      Some(BuildRight)
+    // `JoinSelection` always builds from the right for this shape. A negative threshold preserves
+    // the original unbounded NAAJ behavior, while zero disables the broadcast hash optimization.
+    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) =>
+      val threshold = conf.nullAwareAntiJoinBroadcastThreshold
+      if (threshold < 0 || (threshold > 0 && j.right.stats.sizeInBytes <= threshold)) {
+        Some(BuildRight)
+      } else {
+        None
+      }
     case _ => None
   }
 
