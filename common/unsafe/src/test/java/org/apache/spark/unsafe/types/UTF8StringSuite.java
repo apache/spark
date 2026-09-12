@@ -194,6 +194,13 @@ public class UTF8StringSuite {
     assertTrue(fromString("大千世界").contains(fromString("千世界")));
     assertFalse(fromString("大千世界").contains(fromString("世千")));
     assertFalse(fromString("大千世界").contains(fromString("大千世界好")));
+    // Single-byte needle: exercises the word-at-a-time (SWAR) fast path in `contains`.
+    assertFalse(EMPTY_UTF8.contains(fromString("a")));
+    assertTrue(fromString("abcdefghijklmnop").contains(fromString("a")));  // first byte
+    assertTrue(fromString("abcdefghijklmnop").contains(fromString("i")));  // past first word
+    assertTrue(fromString("abcdefghijklmnop").contains(fromString("p")));  // last byte
+    assertFalse(fromString("abcdefghijklmnop").contains(fromString("z"))); // absent
+    assertTrue(fromString("a").contains(fromString("a")));                 // length below one word
   }
 
   @Test

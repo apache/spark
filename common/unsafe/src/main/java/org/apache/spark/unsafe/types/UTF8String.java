@@ -689,6 +689,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (substring.numBytes == 0) {
       return true;
     }
+    if (substring.numBytes == 1) {
+      // Single-byte needle (e.g. `LIKE '%x%'` with an ASCII character): a word-at-a-time byte
+      // search is faster than the byte-by-byte scan below, and skips the redundant `matchAt`.
+      return ByteArrayMethods.containsByte(base, offset, numBytes, substring.getByte(0));
+    }
 
     byte first = substring.getByte(0);
     for (int i = 0; i <= numBytes - substring.numBytes; i++) {
