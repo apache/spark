@@ -86,6 +86,24 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
+  test("SPARK-59277: TRANSFORM output supports first-class CHAR/VARCHAR without SerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val input = Seq(("ab", "xyz")).toDF("c", "v")
+      checkAnswer(
+        input,
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(
+            AttributeReference("c", CharType(4, "UTF8_LCASE"))(),
+            AttributeReference("v", VarcharType(5, "UNICODE_CI"))()),
+          child = child,
+          ioschema = defaultIOSchema),
+        Seq(Row("ab  ", "xyz")))
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
   test("script transformation should not swallow errors from upstream operators (no serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 

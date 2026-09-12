@@ -112,7 +112,9 @@ class HiveSimpleUDFEvaluator(
 }
 
 class HiveGenericUDFEvaluator(
-    funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
+    funcWrapper: HiveFunctionWrapper,
+    children: Seq[Expression],
+    resolvedReturnType: Option[DataType])
   extends HiveUDFEvaluatorBase[GenericUDF](funcWrapper, children) {
 
   // SPARK-58792: copied expression nodes (e.g. via withNewChildrenInternal) share one
@@ -161,10 +163,13 @@ class HiveGenericUDFEvaluator(
     case (inspect, child) => new DeferredObjectAdapter(inspect, child.dataType)
   }
 
-  @transient
-  private lazy val unwrapper: Any => Any = unwrapperFor(returnInspector)
+  private lazy val catalystReturnType =
+    resolvedReturnType.getOrElse(inspectorToDataType(returnInspector))
 
-  override def returnType: DataType = inspectorToDataType(returnInspector)
+  @transient
+  private lazy val unwrapper: Any => Any = unwrapperFor(returnInspector, catalystReturnType)
+
+  override def returnType: DataType = catalystReturnType
 
   def setArg(index: Int, arg: Any): Unit =
     deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(() => arg)
