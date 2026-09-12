@@ -1874,6 +1874,66 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-59175: select item combining a window function with the GROUP BY expression") {
+    withTempView("events") {
+      sql("SELECT * FROM VALUES ('us'), ('US'), ('us'), ('ca'), ('CA'), ('mx'), ('br') " +
+        "AS t(country)").createOrReplaceTempView("events")
+
+      // The window function and the grouping expression UPPER(country) appear in the same select
+      // item. The grouping expression must be pushed into the child Aggregate as a whole; before
+      // the fix the raw `country` column was pushed instead, failing with MISSING_AGGREGATION.
+      val groupByExpr = sql(
+        """
+          |WITH ranked AS (
+          |  SELECT
+          |    CASE
+          |      WHEN ROW_NUMBER() OVER (ORDER BY COUNT(1) DESC) <= 2 THEN UPPER(country)
+          |      ELSE 'Other'
+          |    END AS bucket,
+          |    COUNT(1) AS events
+          |  FROM events
+          |  GROUP BY UPPER(country)
+          |)
+          |SELECT bucket, SUM(events) AS events
+          |FROM ranked
+          |GROUP BY bucket
+          |""".stripMargin)
+      checkAnswer(groupByExpr, Seq(Row("US", 3), Row("CA", 2), Row("Other", 2)))
+
+      // Grouping by the bare column while referencing a function of it in the same window item
+      // must keep working: `country` is a grouping column, so it is extracted directly and
+      // UPPER(country) is evaluated above the Window. The `country` tiebreak keeps ROW_NUMBER
+      // deterministic across the count ties.
+      val groupByColumn = sql(
+        """
+          |SELECT
+          |  CASE
+          |    WHEN ROW_NUMBER() OVER (ORDER BY COUNT(1) DESC, country) <= 2 THEN UPPER(country)
+          |    ELSE 'Other'
+          |  END AS bucket,
+          |  COUNT(1) AS events
+          |FROM events
+          |GROUP BY country
+          |""".stripMargin)
+      checkAnswer(groupByColumn,
+        Seq(Row("US", 2), Row("CA", 1), Row("Other", 1), Row("Other", 1),
+          Row("Other", 1), Row("Other", 1)))
+
+      // The window function in a separate select item from the grouping expression already worked
+      // and must remain correct.
+      val separateItems = sql(
+        """
+          |SELECT
+          |  UPPER(country) AS bucket,
+          |  ROW_NUMBER() OVER (ORDER BY COUNT(1) DESC, UPPER(country)) AS rn
+          |FROM events
+          |GROUP BY UPPER(country)
+          |""".stripMargin)
+      checkAnswer(separateItems,
+        Seq(Row("US", 1), Row("CA", 2), Row("BR", 3), Row("MX", 4)))
+    }
+  }
 }
 
 /**
