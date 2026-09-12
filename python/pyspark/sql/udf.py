@@ -222,6 +222,8 @@ class UserDefinedFunction:
         # Extract Python UDF details if transpilation is enabled.
         self.transpiled: list = []
         self._transpiled_param_names: list[str] = []
+        # A keyword call naming one of these must retain interpreted Python semantics.
+        self._transpiled_positional_only_names: set[str] = set()
         # Per-option input-type categories ("numeric"/"string" per public param),
         # parallel to ``self.transpiled``; the JVM picks the option matching the
         # actual column types or falls back to interpreted Python.
@@ -295,8 +297,10 @@ class UserDefinedFunction:
                     self.transpiled,
                     errors,
                     self._transpiled_param_names,
+                    positional_only_names,
                     self._transpiled_input_categories,
                 ) = _transpile_func(session, func, self.returnType)
+                self._transpiled_positional_only_names = set(positional_only_names)
                 if not self.transpiled:
                     detail = f": {errors}" if errors else ""
                     warnings.warn(f"Unable to transpile UDF {func}{detail}")
@@ -310,6 +314,7 @@ class UserDefinedFunction:
             warnings.warn(f"Exception transpiling UDF {func}: {e}")
             self.transpiled = []
             self._transpiled_param_names = []
+            self._transpiled_positional_only_names = set()
             self._transpiled_input_categories = []
 
     @staticmethod
@@ -565,7 +570,12 @@ class UserDefinedFunction:
         # rejects named arguments). Resolve kwargs to positional here
         # using the parameter list captured at transpilation time so the
         # rewritten expression sees plain column refs in declared order.
-        if kwargs and self.transpiled and self._transpiled_param_names:
+        if (
+            kwargs
+            and self.transpiled
+            and self._transpiled_param_names
+            and self._transpiled_positional_only_names.isdisjoint(kwargs)
+        ):
             params = self._transpiled_param_names
             ordered: list = list(args)
             remaining_kwargs = dict(kwargs)
@@ -736,6 +746,7 @@ class UserDefinedFunction:
         # nondeterministic UDF always runs as interpreted Python.
         self.transpiled = []
         self._transpiled_param_names = []
+        self._transpiled_positional_only_names = set()
         self._transpiled_input_categories = []
         return self
 
