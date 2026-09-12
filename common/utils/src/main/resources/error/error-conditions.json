@@ -4870,7 +4870,7 @@
       },
       "EXTENSION" : {
         "message" : [
-          "Invalid extension: <invalidValue>. Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"
+          "Invalid extension: <invalidValue>. Extension must be non-empty and contain only letters."
         ]
       },
       "HMAC_ALGORITHM" : {
