@@ -2055,7 +2055,8 @@ case class CacheTableAsSelect(
     isLazy: Boolean,
     options: Map[String, String],
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty)
+    referredTempFunctions: Seq[String] = Seq.empty,
+    referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
   extends AnalysisOnlyCommand with CTEInChildren {
 
   /**
@@ -2082,7 +2083,10 @@ case class CacheTableAsSelect(
     copy(
       isAnalyzed = true,
       // Collect the referred temporary functions from AnalysisContext
-      referredTempFunctions = ac.referredTempFunctionNames.toSeq)
+      referredTempFunctions = ac.referredTempFunctionNames.toSeq,
+      // Collect the temporary variables read via an IDENTIFIER clause in the SELECT body, so the
+      // text-backed temporary view stays resolvable when re-analyzed on read.
+      referredTempVariablesUnderIdentifier = ac.referredTempVariableNamesUnderIdentifier.toSeq)
   }
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {

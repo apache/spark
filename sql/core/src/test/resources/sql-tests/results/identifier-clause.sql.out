@@ -3783,3 +3783,205 @@ DROP TEMPORARY VARIABLE identifier_nested_col
 struct<>
 -- !query output
 
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_fn_target AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_fn_var STRING DEFAULT 'identifier_fn_target'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_fn() RETURN SELECT count(*) FROM IDENTIFIER(identifier_fn_var)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_fn_view AS SELECT identifier_fn() AS c
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_fn_view
+-- !query schema
+struct<c:bigint>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_fn_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_fn
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW identifier_fn_target
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_fn_var
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_talter_view AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_talter_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ALTER VIEW identifier_talter_view AS
+SELECT IDENTIFIER(identifier_talter_col) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_talter_view
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_talter_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_talter_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_cache_col STRING DEFAULT 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CACHE TABLE identifier_cache_view AS
+SELECT IDENTIFIER(identifier_cache_col) AS x FROM VALUES(1) AS t(c1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_cache_view
+-- !query schema
+struct<x:int>
+-- !query output
+1
+
+
+-- !query
+UNCACHE TABLE identifier_cache_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_cache_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_cache_name STRING DEFAULT 'identifier_cache_named'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CACHE TABLE IDENTIFIER(identifier_cache_name) AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_cache_named
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+UNCACHE TABLE identifier_cache_named
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_cache_name
+-- !query schema
+struct<>
+-- !query output
+

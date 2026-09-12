@@ -167,11 +167,14 @@ case class AnalysisContext(
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     // Like `referredTempFunctionNames`, this is populated only by fixed-point analysis (by
-    // `ResolveIdentifierClause`, the sole writer) and exported to the view metadata; the
-    // single-pass resolver has no IDENTIFIER-clause resolution of its own, so there is no second
-    // writer to keep in sync. LinkedHashSet keeps insertion order so the recorded names (and any
-    // error naming them) are deterministic when more than one variable is read via an IDENTIFIER
-    // clause.
+    // `ResolveIdentifierClause`, the sole writer). It is consumed when a temporary view, temporary
+    // ALTER VIEW, or CACHE TABLE AS SELECT is created: the names are stored in the temporary view
+    // metadata so they resolve when the stored view text is analyzed again. For a persisted view
+    // these variables are instead rejected by default (`verifyTemporaryObjectsNotExists`), unless
+    // `spark.sql.legacy.allowSessionVariableInPersistedView` permits them. The single-pass resolver
+    // has no IDENTIFIER-clause resolution of its own, so there is no second writer to keep in sync.
+    // LinkedHashSet keeps insertion order so the recorded names (and any error naming them) are
+    // deterministic when more than one variable is read via an IDENTIFIER clause.
     referredTempVariableNamesUnderIdentifier: mutable.Set[Seq[String]] =
       mutable.LinkedHashSet.empty,
     outerPlan: Option[LogicalPlan] = None,
@@ -281,8 +284,13 @@ object AnalysisContext {
       resolutionPathEntries = function.functionStoredResolutionPath
         .map(CatalogManager.deserializePathEntriesOrFail(
           _, "SQL function", function.name.unquotedString)),
-      // See the same reset in `withAnalysisContext(viewDesc)`.
-      referredTempVariableNamesUnderIdentifier = mutable.LinkedHashSet.empty,
+      // Unlike `withAnalysisContext(viewDesc)`, do NOT reset this accumulator. A SQL function has no
+      // IDENTIFIER-variable metadata of its own, so a variable its body reads through an IDENTIFIER
+      // clause is part of the enclosing object's definition (e.g. the temporary view or CACHE TABLE
+      // AS SELECT that selects the function), and must be recorded there. Sharing the caller's set
+      // records it; a nested view, by contrast, stores its own and so is reset.
+      referredTempVariableNamesUnderIdentifier =
+        originContext.referredTempVariableNamesUnderIdentifier,
       collation = function.collation)
     set(context)
     try f finally { set(originContext) }

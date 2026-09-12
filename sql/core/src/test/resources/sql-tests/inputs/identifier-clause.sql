@@ -581,3 +581,47 @@ SELECT * FROM identifier_nested_outer;
 DROP VIEW identifier_nested_outer;
 DROP VIEW identifier_nested_inner;
 DROP TEMPORARY VARIABLE identifier_nested_col;
+
+-- A temporary SQL function whose body reads a relation via an IDENTIFIER clause, referenced by a
+-- temporary view. A SQL function keeps no IDENTIFIER-variable metadata of its own, so the variable
+-- is part of the enclosing view's transitive definition: expanding the function while creating the
+-- view must record the variable as a referred variable of the view (the function-body analysis
+-- context must not discard it). Otherwise re-resolving the stored view text on read fails.
+CREATE OR REPLACE TEMPORARY VIEW identifier_fn_target AS SELECT 1 AS c1;
+DECLARE OR REPLACE VARIABLE identifier_fn_var STRING DEFAULT 'identifier_fn_target';
+CREATE TEMPORARY FUNCTION identifier_fn() RETURN SELECT count(*) FROM IDENTIFIER(identifier_fn_var);
+CREATE OR REPLACE TEMPORARY VIEW identifier_fn_view AS SELECT identifier_fn() AS c;
+SELECT * FROM identifier_fn_view;
+DROP VIEW identifier_fn_view;
+DROP TEMPORARY FUNCTION identifier_fn;
+DROP VIEW identifier_fn_target;
+DROP TEMPORARY VARIABLE identifier_fn_var;
+
+-- ALTER of a LOCAL TEMPORARY view whose new body reads a column via an IDENTIFIER clause. The
+-- forwarded referred-variable dependency must be stored so re-analyzing the altered view text on
+-- read still resolves the variable.
+CREATE OR REPLACE TEMPORARY VIEW identifier_talter_view AS SELECT 1 AS c1;
+DECLARE OR REPLACE VARIABLE identifier_talter_col STRING DEFAULT 'c1';
+ALTER VIEW identifier_talter_view AS
+SELECT IDENTIFIER(identifier_talter_col) AS x FROM VALUES(1) AS t(c1);
+SELECT * FROM identifier_talter_view;
+DROP VIEW identifier_talter_view;
+DROP TEMPORARY VARIABLE identifier_talter_col;
+
+-- CACHE TABLE AS SELECT reads a column via an IDENTIFIER clause. The dependency must be threaded
+-- through the cache command so the text-backed temporary view it creates stays resolvable for the
+-- eager caching read (and any later lazy read).
+DECLARE OR REPLACE VARIABLE identifier_cache_col STRING DEFAULT 'c1';
+CACHE TABLE identifier_cache_view AS
+SELECT IDENTIFIER(identifier_cache_col) AS x FROM VALUES(1) AS t(c1);
+SELECT * FROM identifier_cache_view;
+UNCACHE TABLE identifier_cache_view;
+DROP TEMPORARY VARIABLE identifier_cache_col;
+
+-- A variable used only to compute the CACHE TABLE target name is not part of the cached view
+-- definition, so it must not be recorded as a referred variable of the view.
+DECLARE OR REPLACE VARIABLE identifier_cache_name STRING DEFAULT 'identifier_cache_named';
+CACHE TABLE IDENTIFIER(identifier_cache_name) AS SELECT 1 AS c1;
+SELECT * FROM identifier_cache_named;
+UNCACHE TABLE identifier_cache_named;
+DROP TEMPORARY VARIABLE identifier_cache_name;

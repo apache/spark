@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, Command, CreateView, LogicalPlan, V2WriteCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, CacheTableAsSelect, Command, CreateView, LogicalPlan, V2WriteCommand}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -57,12 +57,27 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
           createView.copy(child = analyzedChild, query = analyzedQuery)
         }
       // Same as [[CreateView]]: only the query body's IDENTIFIER-clause variables are dependencies
-      // of the view definition. Without this, a variable used only to compute the ALTER target is
-      // recorded and then wrongly rejected by `verifyTemporaryObjectsNotExists`.
+      // of the view definition, so resolve the ALTER target without recording. Recording a variable
+      // used only to compute the target would, for a persisted view, be rejected by
+      // `verifyTemporaryObjectsNotExists`, and for a temporary view (which skips that validator) be
+      // persisted as a spurious dependency that breaks later reads.
       case alterView: AlterViewAs =>
         val analyzedChild = apply0(alterView.child, recordUnderIdentifier = false)
         val analyzedQuery = apply0(alterView.query)
         alterView.copy(child = analyzedChild, query = analyzedQuery)
+      // CACHE TABLE AS SELECT creates a text-backed temporary view, so like [[CreateView]] only the
+      // SELECT body's IDENTIFIER-clause variables are dependencies. The target name is an expression
+      // on the node (not a plan wrapped in `PlanWithUnresolvedIdentifier`), so the command guard in
+      // `apply0` does not exclude it; resolve the name without recording and the body with it.
+      case cacheTableAsSelect: CacheTableAsSelect =>
+        val analyzedName = cacheTableAsSelect.tempViewName.transformUpWithPruning(
+          _.containsPattern(UNRESOLVED_IDENTIFIER)) {
+          case e: ExpressionWithUnresolvedIdentifier if e.identifierExpr.resolved =>
+            e.exprBuilder.apply(
+              IdentifierResolution.evalIdentifierExpr(e.identifierExpr), e.otherExprs)
+        }
+        val analyzedPlan = apply0(cacheTableAsSelect.plan)
+        cacheTableAsSelect.copy(tempViewName = analyzedName, plan = analyzedPlan)
       case _ => apply0(plan)
     }
   }
@@ -81,11 +96,14 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
 
         val resolvedPlan = executor.execute(p.planBuilder.apply(
           IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children))
-        // Only record the variables when the identifier names something inside a view body. When it
+        // Record the variables whenever the identifier resolves to something other than a command:
+        // the generic body case (a view/ALTER body, a CACHE TABLE AS SELECT body, or even a
+        // standalone SELECT whose recorded set is simply never consumed). When the identifier
         // instead supplies the *name* of a command (e.g. the target of
         // `CREATE TEMPORARY VIEW IDENTIFIER(v) AS ...`), the evaluated plan is that command and `v`
-        // is not a variable the view refers to, so recording it would wrongly persist it as a
-        // dependency of the created view.
+        // names the object rather than a variable it refers to, so recording it would wrongly
+        // persist it as a dependency. Only the commands that consume the recorded set (temporary
+        // view create/ALTER and CACHE TABLE AS SELECT) turn it into stored metadata.
         if (recordUnderIdentifier && !resolvedPlan.isInstanceOf[Command]) {
           recordTemporaryVariablesUnderIdentifier(p.identifierExpr)
         }
