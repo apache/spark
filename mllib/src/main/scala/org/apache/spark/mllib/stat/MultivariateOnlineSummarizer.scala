@@ -94,12 +94,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     val localCurrMax = currMax
     val localCurrMin = currMin
     instance.foreachNonZero { (index, value) =>
-      if (localCurrMax(index) < value) {
-        localCurrMax(index) = value
-      }
-      if (localCurrMin(index) > value) {
-        localCurrMin(index) = value
-      }
+      localCurrMax(index) = math.max(localCurrMax(index), value)
+      localCurrMin(index) = math.min(localCurrMin(index), value)
 
       val prevMean = localCurrMean(index)
       val diff = value - prevMean
