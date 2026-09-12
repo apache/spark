@@ -1453,7 +1453,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
         def convert_df_to_arrow(result: "pd.DataFrame") -> "pa.RecordBatch":
             # Convert the output pandas DataFrame into a single "_0" struct column,
             # applying the legacy pandas-to-Arrow coercions.
-            return PandasToArrowConversion.convert(
+            return PandasToArrowConversion.from_pandas(
                 [result],
                 output_schema,
                 timezone=runner_conf.timezone,
@@ -1462,7 +1462,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 assign_cols_by_name=False,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 ignore_unexpected_complex_type_values=True,
-                is_legacy=True,
+                use_legacy_error_handling=True,
             )
 
         def evaluate_rows(
@@ -2026,7 +2026,7 @@ def _elementwise_result_to_arrow(result, return_type, arrow_element_type, is_pan
     import pyarrow as pa
 
     if is_pandas:
-        batch = PandasToArrowConversion.convert(
+        batch = PandasToArrowConversion.from_pandas(
             [result],
             StructType([StructField("_0", return_type)]),
             timezone=runner_conf.timezone,
@@ -2542,7 +2542,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     for udf_func, args_offsets, kwargs_offsets, _ in udfs
                 ]
                 result_series = [pd.Series([r]) for r in results]
-                yield PandasToArrowConversion.convert(
+                yield PandasToArrowConversion.from_pandas(
                     result_series,
                     output_schema,
                     timezone=runner_conf.timezone,
@@ -2587,7 +2587,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 # Drain remaining batches to maintain stream position
                 for _ in series_iter:
                     pass
-                yield PandasToArrowConversion.convert(
+                yield PandasToArrowConversion.from_pandas(
                     [pd.Series([result])],
                     output_schema,
                     timezone=runner_conf.timezone,
@@ -2835,7 +2835,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                             messageParameters={"window_bound_type": bound_type},
                         )
 
-                yield PandasToArrowConversion.convert(
+                yield PandasToArrowConversion.from_pandas(
                     result_series,
                     output_schema,
                     timezone=runner_conf.timezone,
@@ -3027,7 +3027,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     truncate_return_schema=False,
                 )
 
-                yield PandasToArrowConversion.convert(
+                yield PandasToArrowConversion.from_pandas(
                     [result],
                     output_schema,
                     timezone=runner_conf.timezone,
@@ -3099,7 +3099,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         runner_conf.assign_cols_by_name,
                         truncate_return_schema=False,
                     )
-                    yield PandasToArrowConversion.convert(
+                    yield PandasToArrowConversion.from_pandas(
                         [df],
                         output_schema,
                         timezone=runner_conf.timezone,
@@ -3231,7 +3231,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 verify_pandas_result(
                     df, return_type, assign_cols_by_name=True, truncate_return_schema=True
                 )
-                yield PandasToArrowConversion.convert(
+                yield PandasToArrowConversion.from_pandas(
                     [df],
                     output_schema,
                     timezone=runner_conf.timezone,
@@ -3298,7 +3298,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     truncate_return_schema=False,
                 )
 
-                yield PandasToArrowConversion.convert(
+                yield PandasToArrowConversion.from_pandas(
                     [result],
                     output_schema,
                     timezone=runner_conf.timezone,
@@ -3480,7 +3480,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     result_series.append(pd.Series(results))
 
                 # --- Output: pandas -> Arrow ---
-                yield PandasToArrowConversion.convert(
+                yield PandasToArrowConversion.from_pandas(
                     result_series,
                     return_schema,
                     timezone=runner_conf.timezone,
@@ -3969,7 +3969,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     results.append(result)
 
                 # --- Output: pandas -> Arrow ---
-                yield PandasToArrowConversion.convert(
+                yield PandasToArrowConversion.from_pandas(
                     results,
                     return_schema,
                     timezone=runner_conf.timezone,
@@ -4027,7 +4027,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     verify_pandas_result(
                         result, return_type, assign_cols_by_name=True, truncate_return_schema=True
                     )
-                    yield PandasToArrowConversion.convert(
+                    yield PandasToArrowConversion.from_pandas(
                         [result],
                         return_schema,
                         timezone=runner_conf.timezone,
@@ -4158,7 +4158,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                             "Invalid return type. Please make sure that the UDF returns a "
                             "pandas.DataFrame when the specified return type is StructType."
                         )
-                    yield PandasToArrowConversion.convert(
+                    yield PandasToArrowConversion.from_pandas(
                         [result],
                         output_schema,
                         timezone=runner_conf.timezone,
@@ -4363,7 +4363,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                             "Invalid return type. Please make sure that the UDF returns a "
                             "pandas.DataFrame when the specified return type is StructType."
                         )
-                    yield PandasToArrowConversion.convert(
+                    yield PandasToArrowConversion.from_pandas(
                         [result],
                         output_schema,
                         timezone=runner_conf.timezone,
@@ -4671,7 +4671,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     StructField("_2", result_state_df_type),
                 ]
             )
-            return PandasToArrowConversion.convert(
+            return PandasToArrowConversion.from_pandas(
                 data,
                 schema,
                 timezone=runner_conf.timezone,
