@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
-import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite, RewriteWithExpression}
+import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateOffsets, NestedColumnAliasingSuite, RewriteWithExpression}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -5327,6 +5327,20 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       checkAnswer(
         sql("SELECT x BETWEEN 1 AND 2 AS in_range FROM (VALUES (3)) AS t(x)"),
         Row(false))
+    }
+  }
+
+  test("SPARK-59044: OFFSET 0 succeeds when EliminateOffsets is in excludedRules") {
+    // EliminateOffsets normally removes an OFFSET 0 (a no-op) before physical planning. When the
+    // rule is excluded the Offset node survives; before the fix this failed the assertion in
+    // CollectLimitExec/GlobalLimitExec during physical planning.
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> EliminateOffsets.ruleName) {
+      // Collected to the driver -> SpecialLimits -> CollectLimitExec path.
+      checkAnswer(sql("SELECT 1 AS x OFFSET 0"), Row(1))
+      // Non-terminal OFFSET 0 -> BasicOperators -> GlobalLimitExec path.
+      checkAnswer(
+        sql("SELECT * FROM (SELECT id FROM range(3) OFFSET 0) ORDER BY id"),
+        Seq(Row(0), Row(1), Row(2)))
     }
   }
 }
