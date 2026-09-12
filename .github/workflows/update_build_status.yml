@@ -179,14 +179,22 @@ jobs:
 
                       // Keep syncing the status of the checks
                       if (run.data.status == 'completed') {
-                        console.log('    Run ' + cr.id + ': set status (' + run.data.status + ') and conclusion (' + run.data.conclusion + ')')
+                        // PATCH /check-runs accepts only success | failure | neutral |
+                        // cancelled | timed_out | action_required | skipped, but a workflow_run
+                        // may also conclude startup_failure / stale, or report a null conclusion.
+                        // Those all mean the run produced no test result, so they become failure.
+                        const conclusions = ['success', 'failure', 'neutral', 'cancelled',
+                          'timed_out', 'action_required', 'skipped']
+                        const conclusion = conclusions.includes(run.data.conclusion)
+                          ? run.data.conclusion : 'failure'
+                        console.log('    Run ' + cr.id + ': set status (' + run.data.status + ') and conclusion (' + run.data.conclusion + ' -> ' + conclusion + ')')
                         const response = await github.request('PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}', {
                           owner: context.repo.owner,
                           repo: context.repo.repo,
                           check_run_id: cr.id,
                           output: cr.output,
                           status: run.data.status,
-                          conclusion: run.data.conclusion,
+                          conclusion: conclusion,
                           details_url: run.data.details_url
                         })
                       } else {
