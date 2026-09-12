@@ -144,6 +144,27 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
   testItemType[String]("String", 100000) { r => r.nextString(r.nextInt(512)) }
 
+  // The Spark SQL runtime bloom filter sizes are powers of two, see
+  // `spark.sql.optimizer.runtime.bloomFilter.numBits`, which is the case where the bit index is
+  // computed with a mask rather than a modulo.
+  Seq(BloomFilter.Version.V1, BloomFilter.Version.V2).foreach { version =>
+    Seq(1L << 20, (1L << 20) + 64L).foreach { numBits =>
+      val sizeName = if (numBits == (numBits & -numBits)) "power of two" else "non power of two"
+      test(s"$version - $sizeName bit size - $numBits") {
+        val r = new Random(37)
+        val numInsertion = 10000
+        val allItems = Set.fill(2 * numInsertion)(r.nextLong()).take(numInsertion)
+
+        val filter = BloomFilter.create(version, numInsertion, numBits, 0)
+        allItems.foreach(filter.putLong)
+
+        // false negative is not allowed, whichever way the bit index was computed.
+        assert(allItems.forall(filter.mightContainLong))
+        checkSerDe(filter)
+      }
+    }
+  }
+
   test("incompatible merge") {
     intercept[IncompatibleMergeException] {
       BloomFilter.create(1000).mergeInPlace(null)

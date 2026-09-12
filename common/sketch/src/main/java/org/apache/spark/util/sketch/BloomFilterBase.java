@@ -105,6 +105,39 @@ abstract class BloomFilterBase extends BloomFilter {
     return new HiLoHash(h1, h2);
   }
 
+  /**
+   * Reduces a non-negative {@code hash} into a bit index of a bit array of {@code bitSize} bits.
+   *
+   * <p>A bloom filter probe performs this reduction once per hash function, so it sits in the
+   * hottest loop of both {@code put} and {@code mightContain}. {@code bitSize} is not a compile
+   * time constant, so {@code hash % bitSize} compiles down to a hardware division. When the bit
+   * size is a power of two - which the Spark SQL runtime bloom filter sizes are, see
+   * {@code spark.sql.optimizer.runtime.bloomFilter.numBits} - taking a non-negative value modulo
+   * it is exactly the same as masking off the low bits, so {@code bitSizeMask} lets us skip the
+   * division. The mask is 0 when the bit size is not a power of two, in which case we fall back
+   * to the modulo.
+   *
+   * @param bitSizeMask {@link BitArray#bitSizeMask()} of the bit array being indexed
+   */
+  protected static long bitIndex(long hash, long bitSize, long bitSizeMask) {
+    return bitSizeMask != 0 ? hash & bitSizeMask : hash % bitSize;
+  }
+
+  /**
+   * Same as {@link #bitIndex(long, long, long)}, for a non-negative {@code hash} that fits in an
+   * int. A bit size that fits in an int as well lets the fallback use a 32 bit division, which is
+   * cheaper than the 64 bit one that widening the operands would otherwise require.
+   */
+  protected static long bitIndex(int hash, long bitSize, long bitSizeMask) {
+    if (bitSizeMask != 0) {
+      return hash & bitSizeMask;
+    } else if (bitSize <= Integer.MAX_VALUE) {
+      return hash % (int) bitSize;
+    } else {
+      return hash % bitSize;
+    }
+  }
+
   protected abstract boolean scatterHashAndSetAllBits(HiLoHash inputHash);
 
   protected abstract boolean scatterHashAndGetAllBits(HiLoHash inputHash);
