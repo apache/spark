@@ -1400,6 +1400,18 @@ def _create_converter_from_pandas(
         if isinstance(dt, ArrayType):
             _element_conv = _converter(dt.elementType)
 
+            if _element_conv is None and isinstance(dt.elementType, TimestampNTZType):
+                # pyarrow cannot place an np.datetime64 scalar into a timestamp[us] list
+                # ("Expected np.datetime64 but got: timestamp[ns]"), so a UDF that builds
+                # array<timestamp_ntz> values as datetime64 ndarrays could not return them.
+                # Box such elements. Only elements of arrays need this: a top-level
+                # timestamp_ntz column is a datetime64 Series, which pyarrow converts natively,
+                # and giving it a converter would force a per-element pass over it.
+                import numpy as np
+
+                def _element_conv(value: Any) -> Any:
+                    return pd.Timestamp(value) if isinstance(value, np.datetime64) else value
+
             if ignore_unexpected_complex_type_values:
                 if _element_conv is None:
 
