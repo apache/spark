@@ -23,7 +23,6 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
-import org.apache.spark.SparkException.internalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -3729,14 +3728,20 @@ object Sequence {
       }
       len.toInt
     } catch {
-      // We handle overflows in the previous try block by raising an appropriate exception.
+      // An overflow in the previous try block does not by itself mean the sequence is too long:
+      // `stop - start` can exceed the `Long` range while a large `step` still yields only a few
+      // elements. Recompute the length exactly and reject it only if it really cannot be
+      // allocated, otherwise return it.
       case _: ArithmeticException =>
         val safeLen =
           BigInt(1) + (BigInt(stop) - BigInt(start)) / BigInt(step)
         if (safeLen > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
           throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(prettyName, safeLen)
         }
-        throw internalError("Unreachable code reached.")
+        // The check above bounds `safeLen` by `MAX_ROUNDED_ARRAY_LENGTH`, and the caller has
+        // already rejected boundaries whose step points the wrong way, so `safeLen` is positive
+        // and `toInt` is exact.
+        safeLen.toInt
       case e: Exception => throw e
     }
   }
@@ -4230,8 +4235,14 @@ case class ArrayRepeat(left: Expression, right: Expression)
 
   private def genCodeForNumberOfElements(ctx: CodegenContext, count: String): (String, String) = {
     val numElements = ctx.freshName("numElements")
+    // The upper bound is checked here rather than left to the array allocation so that this path
+    // reports the same error as `eval`. Without it the allocation fails with an internal error.
     val numElementsCode =
       s"""
+         |if ($count > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+         |  throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(
+         |    "$prettyName", $count);
+         |}
          |int $numElements = 0;
          |if ($count > 0) {
          |  $numElements = $count;
@@ -5631,7 +5642,7 @@ case class ArrayInsert(
            |
            |  $resLength = java.lang.Math.max($arr.numElements() + 1, $itemInsertionIndex + 1);
            |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-           |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError(
+           |    throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
            |      "$prettyName", $resLength);
            |  }
            |

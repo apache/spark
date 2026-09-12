@@ -198,11 +198,6 @@ class DecisionTreeRegressionModel private[ml] (
     rootNode.predictImpl(features).prediction
   }
 
-  /** We need to update this function if we ever add other impurity measures. */
-  protected def predictVariance(features: Vector): Double = {
-    rootNode.predictImpl(features).impurityStats.calculate()
-  }
-
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)
@@ -220,24 +215,24 @@ class DecisionTreeRegressionModel private[ml] (
     val outputSchema = transformSchema(dataset.schema, logging = true)
     val localRootNode = rootNode
 
-    var predictionColNames = Seq.empty[String]
-    var predictionColumns = Seq.empty[Column]
+    var predColNames = Seq.empty[String]
+    var predCols = Seq.empty[Column]
 
     if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector =>
+      val predUDF = udf { features: Vector =>
         localRootNode.predictImpl(features).prediction
       }
-      predictionColNames :+= $(predictionCol)
-      predictionColumns :+= predictUDF(col($(featuresCol)))
+      predColNames :+= $(predictionCol)
+      predCols :+= predUDF(col($(featuresCol)))
         .as($(predictionCol), outputSchema($(predictionCol)).metadata)
     }
 
     if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
-      val predictVarianceUDF = udf { features: Vector =>
+      val varianceUDF = udf { features: Vector =>
         localRootNode.predictImpl(features).impurityStats.calculate()
       }
-      predictionColNames :+= $(varianceCol)
-      predictionColumns :+= predictVarianceUDF(col($(featuresCol)))
+      predColNames :+= $(varianceCol)
+      predCols :+= varianceUDF(col($(featuresCol)))
         .as($(varianceCol), outputSchema($(varianceCol)).metadata)
     }
 
@@ -245,13 +240,13 @@ class DecisionTreeRegressionModel private[ml] (
       val leafUDF = udf { features: Vector =>
         DecisionTreeModel.predictLeaf(features, localRootNode)
       }
-      predictionColNames :+= $(leafCol)
-      predictionColumns :+= leafUDF(col($(featuresCol)))
+      predColNames :+= $(leafCol)
+      predCols :+= leafUDF(col($(featuresCol)))
         .as($(leafCol), outputSchema($(leafCol)).metadata)
     }
 
-    if (predictionColNames.nonEmpty) {
-      dataset.withColumns(predictionColNames, predictionColumns)
+    if (predColNames.nonEmpty) {
+      dataset.withColumns(predColNames, predCols)
     } else {
       this.logWarning(log"${MDC(LogKeys.UUID, uid)}: DecisionTreeRegressionModel.transform() " +
         log"does nothing because no output columns were set.")

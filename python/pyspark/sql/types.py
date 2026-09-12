@@ -22,6 +22,7 @@ import datetime
 import decimal
 import json
 import math
+import operator
 import os
 import re
 import sys
@@ -90,6 +91,8 @@ __all__ = [
     "TimeType",
     "TimestampType",
     "TimestampNTZType",
+    "TimestampNTZNanosType",
+    "TimestampLTZNanosType",
     "DecimalType",
     "DoubleType",
     "Geography",
@@ -228,6 +231,7 @@ class DataType:
                 DayTimeIntervalType,
                 YearMonthIntervalType,
                 TimeType,
+                AnyTimestampNanoType,
             ),
         ):
             return dataType.simpleString()
@@ -482,6 +486,149 @@ class TimestampNTZType(DatetimeType, metaclass=DataTypeSingleton):
             return datetime.datetime.fromtimestamp(ts // 1000000, datetime.timezone.utc).replace(
                 microsecond=ts % 1000000, tzinfo=None
             )
+
+
+class AnyTimestampNanoType(DatetimeType):
+    """
+    Super class of the nanosecond-capable timestamp data types
+    :class:`TimestampNTZNanosType` and :class:`TimestampLTZNanosType`.
+
+    .. versionadded:: 4.4.0
+    """
+
+    MIN_PRECISION: int = 7
+    MAX_PRECISION: int = 9
+    DEFAULT_PRECISION: int = 9
+    # Precision of the standard microsecond timestamp types, which the parameterized DDL / JSON
+    # type names also accept (``timestamp_ntz(6)`` / ``timestamp_ltz(6)``).
+    MICROS_PRECISION: int = 6
+
+    # Set by each subclass to the SQL type name used in the DDL / JSON representation, e.g.
+    # "timestamp_ntz". Also used, upper-cased, in the invalid-precision error message.
+    _sqlTypeName: str = ""
+
+    def __init__(self, precision: int = DEFAULT_PRECISION):
+        # Reject non-integer precision (e.g. 7.5 or float("nan")), which would otherwise slip
+        # through the range comparison below. operator.index accepts any integer-like value
+        # (including a NumPy integer) and rejects the rest with a TypeError.
+        try:
+            precision = operator.index(precision)
+        except TypeError:
+            raise PySparkValueError(
+                errorClass="INVALID_TIMESTAMP_PRECISION",
+                messageParameters={
+                    "precision": repr(precision),
+                    "type": self._sqlTypeName.upper(),
+                },
+            )
+        if precision < self.MIN_PRECISION or precision > self.MAX_PRECISION:
+            raise PySparkValueError(
+                errorClass="INVALID_TIMESTAMP_PRECISION",
+                messageParameters={
+                    "precision": str(precision),
+                    "type": self._sqlTypeName.upper(),
+                },
+            )
+        self.precision = precision
+
+    def needConversion(self) -> bool:
+        return True
+
+    def simpleString(self) -> str:
+        return "%s(%d)" % (self._sqlTypeName, self.precision)
+
+    def jsonValue(self) -> str:
+        return "%s(%d)" % (self._sqlTypeName, self.precision)
+
+    def __repr__(self) -> str:
+        return "%s(%d)" % (type(self).__name__, self.precision)
+
+    def typeName(self) -> str:  # type: ignore[override]
+        # Instance-level override of the DataType.typeName classmethod, whose default would derive
+        # "timestampntznanos" from the class name. Return simpleString() so the public type name
+        # carries the precision and matches the JVM (e.g. timestamp_ntz(9)), so callers such as
+        # df.schema["ts"].dataType.typeName() and assertSchemaEqual see a sensible name.
+        return self.simpleString()
+
+
+class TimestampNTZNanosType(AnyTimestampNanoType):
+    """Timestamp (datetime.datetime) data type without timezone information, with
+    nanosecond-capable fractional-second precision (7 to 9 digits).
+
+    Parameters
+    ----------
+    precision : int, optional
+        Number of digits of fractional seconds, one of 7, 8 or 9 (default: 9).
+
+    Notes
+    -----
+    These types are behind the ``spark.sql.timestampNanosTypes.enabled`` preview flag (disabled
+    by default); using them while it is off raises an error.
+
+    ``datetime.datetime`` is microsecond-resolution, so values crossing the Python boundary as
+    ``datetime.datetime`` -- :meth:`DataFrame.collect`, :meth:`DataFrame.toLocalIterator`, and
+    Python UDF arguments -- are truncated to microseconds, as are ``datetime.datetime`` values
+    supplied to :meth:`SparkSession.createDataFrame` from Python lists/rows. The value stored by
+    Spark keeps full precision; only this Python boundary is microsecond-resolution. A ``map``
+    with keys of this type that differ only below a microsecond would collapse to one entry, so
+    that conversion raises rather than silently dropping an entry.
+
+    Arrow- and pandas-based conversion for these types -- :meth:`DataFrame.toPandas`,
+    :meth:`SparkSession.createDataFrame` from a pandas ``DataFrame``, Arrow-based UDFs, and the
+    Spark Connect data path -- is not yet supported and raises
+    ``UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION``; it is planned as a follow-up.
+
+    .. versionadded:: 4.4.0
+    """
+
+    _sqlTypeName = "timestamp_ntz"
+
+    def toInternal(self, dt: datetime.datetime) -> int:
+        # Mirrors TimestampNTZType.toInternal: the value is on the UTC grid and carries no zone.
+        if dt is not None:
+            seconds = calendar.timegm(dt.timetuple())
+            return int(seconds) * 1000000 + dt.microsecond
+
+    def fromInternal(self, ts: int) -> datetime.datetime:
+        if ts is not None:
+            # using int to avoid precision loss in float
+            return datetime.datetime.fromtimestamp(ts // 1000000, datetime.timezone.utc).replace(
+                microsecond=ts % 1000000, tzinfo=None
+            )
+
+
+class TimestampLTZNanosType(AnyTimestampNanoType):
+    """Timestamp (datetime.datetime) data type with local timezone semantics, with
+    nanosecond-capable fractional-second precision (7 to 9 digits).
+
+    Parameters
+    ----------
+    precision : int, optional
+        Number of digits of fractional seconds, one of 7, 8 or 9 (default: 9).
+
+    Notes
+    -----
+    Carries the same microsecond-only Python boundary as :class:`TimestampNTZNanosType`; see the
+    notes there.
+
+    .. versionadded:: 4.4.0
+    """
+
+    _sqlTypeName = "timestamp_ltz"
+
+    def toInternal(self, dt: datetime.datetime) -> int:
+        # Mirrors TimestampType.toInternal: an aware value is converted through UTC, a naive one
+        # is interpreted in the local time zone.
+        if dt is not None:
+            seconds = (
+                calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
+            )
+            return int(seconds) * 1000000 + dt.microsecond
+
+    def fromInternal(self, ts: int) -> datetime.datetime:
+        if ts is not None:
+            # using int to avoid precision loss in float
+            return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
 
 
 class DecimalType(FractionalType):
@@ -2274,6 +2421,9 @@ _all_mappable_types: Dict[str, Type[DataType]] = {
     "date": DateType,
     "timestamp": TimestampType,
     "timestamp_ntz": TimestampNTZType,
+    # Bare "timestamp_ltz" (no precision) is the LTZ spelling of the default TimestampType, matching
+    # the JVM parser (DataTypeAstBuilder: TIMESTAMP_LTZ with no precision -> TimestampType).
+    "timestamp_ltz": TimestampType,
     "void": NullType,
     "variant": VariantType,
     "interval": CalendarIntervalType,
@@ -2286,6 +2436,8 @@ _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
 _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
 _TIME = re.compile(r"time\(\s*(\d+)\s*\)")
+_TIMESTAMP_NTZ_PRECISION = re.compile(r"timestamp_ntz\(\s*(\d+)\s*\)")
+_TIMESTAMP_LTZ_PRECISION = re.compile(r"timestamp_ltz\(\s*(\d+)\s*\)")
 _GEOMETRY = re.compile(r"^geometry$")
 _GEOMETRY_CRS = re.compile(r"geometry\(\s*([\w]+:-?[\w]+)\s*\)")
 _GEOGRAPHY = re.compile(r"^geography$")
@@ -2418,6 +2570,18 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     return _parse_datatype_json_value(json.loads(json_string))
 
 
+def _parse_parameterized_timestamp_type(precision: int, ntz: bool) -> DataType:
+    """Maps a parameterized ``timestamp_ntz(p)`` / ``timestamp_ltz(p)`` type name to a type.
+
+    Mirrors ``DataType.parseDataType`` in ``sql/api``: precision 6 denotes the standard
+    microsecond type, 7 to 9 the nanosecond-capable types, and any other precision is rejected
+    with ``INVALID_TIMESTAMP_PRECISION`` (raised by the nanosecond type's constructor).
+    """
+    if precision == AnyTimestampNanoType.MICROS_PRECISION:
+        return TimestampNTZType() if ntz else TimestampType()
+    return TimestampNTZNanosType(precision) if ntz else TimestampLTZNanosType(precision)
+
+
 def _parse_datatype_json_value(  # type: ignore[return]
     json_value: Union[dict, str],
     fieldPath: str = "",
@@ -2434,6 +2598,10 @@ def _parse_datatype_json_value(  # type: ignore[return]
             return DecimalType(int(m.group(1)), int(m.group(2)))
         elif m := _TIME.match(json_value):
             return TimeType(int(m.group(1)))
+        elif m := _TIMESTAMP_NTZ_PRECISION.fullmatch(json_value):
+            return _parse_parameterized_timestamp_type(int(m.group(1)), ntz=True)
+        elif m := _TIMESTAMP_LTZ_PRECISION.fullmatch(json_value):
+            return _parse_parameterized_timestamp_type(int(m.group(1)), ntz=False)
         elif m := _INTERVAL_DAYTIME.match(json_value):
             inverted_fields = DayTimeIntervalType._inverted_fields
             first_field = inverted_fields.get(m.group(1))
@@ -2883,6 +3051,67 @@ def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
         return False
 
 
+def _first_timestamp_nanos_map_key_type(dt: DataType) -> Optional["DataType"]:
+    """Return the key type of the first map (depth-first) whose key carries a nanosecond timestamp
+    type, or ``None`` if ``dt`` contains no such map.
+
+    Such keys cannot be represented on the Python conversion path: a ``datetime.datetime`` key is
+    microsecond-resolution, so two nanosecond keys can collapse to one map entry (SPARK-57462).
+    Callers reject this schema shape up front rather than let an entry be silently dropped. Unlike
+    a scalar / array / struct-field nanosecond value, which converts fine (truncated to micros),
+    only the map-key position is unsafe, so this is narrower than ``_has_type``. The returned key
+    type is reported in the error message, mirroring the JVM ``EvaluatePython.toJava`` twin, which
+    reports ``mt.keyType.sql``.
+    """
+    if isinstance(dt, MapType):
+        if _has_type(dt.keyType, AnyTimestampNanoType):
+            return dt.keyType
+        # The check above already proves the whole key subtree carries no nanosecond type (so a map
+        # nested inside the key can't have a nanosecond key either); only the value type may still
+        # contain such a map.
+        return _first_timestamp_nanos_map_key_type(dt.valueType)
+    elif isinstance(dt, ArrayType):
+        return _first_timestamp_nanos_map_key_type(dt.elementType)
+    elif isinstance(dt, StructType):
+        for field in dt.fields:
+            found = _first_timestamp_nanos_map_key_type(field.dataType)
+            if found is not None:
+                return found
+        return None
+    elif isinstance(dt, UserDefinedType):
+        return _first_timestamp_nanos_map_key_type(dt.sqlType())
+    else:
+        return None
+
+
+def _first_timestamp_nanos_type(dt: DataType) -> Optional["DataType"]:
+    """Return the first nanosecond-capable timestamp type (depth-first) that ``dt`` is or contains,
+    or ``None`` if it contains none.
+
+    The Arrow / pandas / Connect value conversion for :class:`TimestampNTZNanosType` /
+    :class:`TimestampLTZNanosType` is not implemented yet (planned follow-up). Callers reject such a
+    schema up front rather than mis-handle the value; the returned leaf type feeds the error
+    message, consistent with :func:`~pyspark.sql.pandas.types.to_arrow_type`, which reports the
+    offending leaf. This is the "find the node" companion to the ``_has_type`` boolean check.
+    """
+    if isinstance(dt, AnyTimestampNanoType):
+        return dt
+    elif isinstance(dt, ArrayType):
+        return _first_timestamp_nanos_type(dt.elementType)
+    elif isinstance(dt, MapType):
+        return _first_timestamp_nanos_type(dt.keyType) or _first_timestamp_nanos_type(dt.valueType)
+    elif isinstance(dt, StructType):
+        for field in dt.fields:
+            found = _first_timestamp_nanos_type(field.dataType)
+            if found is not None:
+                return found
+        return None
+    elif isinstance(dt, UserDefinedType):
+        return _first_timestamp_nanos_type(dt.sqlType())
+    else:
+        return None
+
+
 @overload
 def _merge_type(a: StructType, b: StructType, name: Optional[str] = None) -> StructType: ...
 
@@ -3079,6 +3308,8 @@ _acceptable_types = {
     TimeType: (datetime.time,),
     TimestampType: (datetime.datetime,),
     TimestampNTZType: (datetime.datetime,),
+    TimestampNTZNanosType: (datetime.datetime,),
+    TimestampLTZNanosType: (datetime.datetime,),
     DayTimeIntervalType: (datetime.timedelta,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),

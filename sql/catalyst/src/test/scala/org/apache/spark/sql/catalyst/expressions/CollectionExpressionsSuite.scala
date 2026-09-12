@@ -1222,6 +1222,20 @@ class CollectionExpressionsSuite
         "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
         "parameter" -> toSQLId("count")))
 
+    // SPARK-58821: an overflow in the `Long` length computation does not by itself mean the
+    // sequence is too long, because the length also depends on the step. For a large step the
+    // result has only a few elements, so the exact length recomputed in `BigInt` has to be
+    // returned rather than treated as an unreachable case.
+    checkEvaluation(
+      new Sequence(Literal(Long.MinValue), Literal(Long.MaxValue), Literal(Long.MaxValue)),
+      Seq(Long.MinValue, -1L, Long.MaxValue - 1))
+    checkEvaluation(
+      new Sequence(Literal(Long.MinValue), Literal(0L), Literal(4611686018427387904L)),
+      Seq(Long.MinValue, -4611686018427387904L, 0L))
+    checkEvaluation(
+      new Sequence(Literal(Long.MaxValue), Literal(Long.MinValue), Literal(-Long.MaxValue)),
+      Seq(Long.MaxValue, 0L, -Long.MaxValue))
+
     // test sequence with one element (zero step or equal start and stop)
 
     checkEvaluation(new Sequence(Literal(1), Literal(1), Literal(-1)), Seq(1))
@@ -2535,6 +2549,17 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayRepeat(intArray, Literal(2)), Seq(Seq(1, 2), Seq(1, 2)))
     checkEvaluation(ArrayRepeat(strArray, Literal(2)), Seq(Seq("hi", "hola"), Seq("hi", "hola")))
     checkEvaluation(ArrayRepeat(Literal("hi"), Literal(null, IntegerType)), null)
+
+    // A count above the max array length must raise the same error in the interpreted and the
+    // codegen path. The codegen path used to let the array allocation fail with an internal error.
+    checkErrorInExpression[SparkRuntimeException](
+      ArrayRepeat(Literal("hi"), Literal(Int.MaxValue)),
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      parameters = Map(
+        "numberOfElements" -> Int.MaxValue.toString,
+        "functionName" -> toSQLId("array_repeat"),
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
+        "parameter" -> toSQLId("count")))
   }
 
   test("Array remove") {
@@ -3453,6 +3478,22 @@ class CollectionExpressionsSuite
       condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
       parameters = Map(
         "numberOfElements" -> (-BigInt(Int.MinValue) + 1).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
+        "functionName" -> "`array_insert`"))
+  }
+
+  test("SPARK-58631: Array insert with a non-foldable pos above the max array length") {
+    val a = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType))
+    // A foldable positive `pos` is handled by a separate codegen branch, so `pos` has to be
+    // non-foldable to reach the one that used to report COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER,
+    // naming a `count` parameter that array_insert does not have.
+    checkErrorInExpression[SparkRuntimeException](
+      ArrayInsert(a, BoundReference(0, IntegerType, nullable = false), Literal(3),
+        legacyNegativeIndex = false),
+      InternalRow(Int.MaxValue),
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+      parameters = Map(
+        "numberOfElements" -> Int.MaxValue.toString,
         "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
         "functionName" -> "`array_insert`"))
   }

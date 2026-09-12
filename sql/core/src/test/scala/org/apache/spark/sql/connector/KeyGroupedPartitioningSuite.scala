@@ -45,6 +45,8 @@ import org.apache.spark.sql.execution.{
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
+import org.apache.spark.sql.execution.ui.SparkPlanGraphNode
 import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
@@ -370,7 +372,7 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
 
 @ExtendedSQLTest
 class KeyGroupedPartitioningSuite
-  extends KeyGroupedPartitioningSuiteBase with ExplainSuiteHelper {
+  extends KeyGroupedPartitioningSuiteBase with ExplainSuiteHelper with SQLMetricsTestUtils {
   private val functions = Seq(
     UnboundYearsFunction,
     UnboundDaysFunction,
@@ -654,6 +656,66 @@ class KeyGroupedPartitioningSuite
       s"expected $expectedNumGroups key groups, got ${actualNumGroups.mkString(", ")}")
   }
 
+  /** An `items` to `purchases` existence join, planned by the `EXISTS` in a disjunction. */
+  private val existenceJoinQuery =
+    s"""
+       |SELECT id, name FROM testcat.ns.$items i
+       |WHERE EXISTS (SELECT /*+ MERGE(p) */ 1 FROM testcat.ns.$purchases p
+       |              WHERE i.id = p.item_id)
+       |   OR i.name = 'bb'
+       |""".stripMargin
+
+  /**
+   * An `items` to `purchases` left single join, planned by a correlated scalar subquery not proven
+   * to return one row. It cannot sort-merge, hence the shuffled hash join hint.
+   */
+  private val leftSingleJoinQuery =
+    s"""
+       |SELECT id, name,
+       |  (SELECT /*+ SHUFFLE_HASH(p) */ p.price FROM testcat.ns.$purchases p
+       |   WHERE i.id = p.item_id) AS sale_price
+       |FROM testcat.ns.$items i
+       |""".stripMargin
+
+  /**
+   * Runs `query` with partially clustered distribution on and off, asserting `expectedRows`, that
+   * its one shuffled join accepted by `isJoinType` has no shuffle under it, and per setting what
+   * `expected` gives: whether the left grouping distributes its splits (the right never does) and
+   * both sides' partition count.
+   */
+  private def checkPartiallyClusteredJoin(
+      query: String,
+      isJoinType: JoinType => Boolean,
+      expectedRows: Seq[Row],
+      expected: Boolean => (Boolean, Int)): Unit = {
+    Seq(true, false).foreach { partiallyClustered =>
+      val (expectedLeftDistributed, expectedNumPartitions) = expected(partiallyClustered)
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+          partiallyClustered.toString,
+        SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expectedRows)
+
+        val plan = df.queryExecution.executedPlan
+        val joins = collect(plan) { case j: ShuffledJoin if isJoinType(j.joinType) => j }
+        assert(joins.size == 1, s"expected one matching join in\n$plan")
+        assert(collectAllShuffles(joins.head).isEmpty,
+          "should not add shuffle for both sides of the join")
+        val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+        val distributed = sides.map(_.map(_.distributePartitions))
+        assert(distributed == Seq(Seq(expectedLeftDistributed), Seq(false)),
+          s"left/right distributePartitions with partially clustered $partiallyClustered: " +
+            distributed)
+        val numPartitions = sides.flatten.map(_.outputPartitioning.numPartitions)
+        assert(numPartitions == Seq(expectedNumPartitions, expectedNumPartitions),
+          s"left/right partitions with partially clustered $partiallyClustered: $numPartitions")
+      }
+    }
+  }
+
   /**
    * Creates a table partitioned by `bucket(numBuckets, id)` and holding the ids 0 until `numIds`.
    * Joining two such tables reduces both sides onto the greatest common divisor of their bucket
@@ -680,6 +742,40 @@ class KeyGroupedPartitioningSuite
     sql("SELECT b12.id FROM testcat.ns.bucket12 b12 " +
       "JOIN testcat.ns.bucket8 b8 ON b12.id = b8.id " +
       s"JOIN testcat.ns.bucket$third b ON b12.id = b.id")
+
+  /**
+   * Creates `items` and `purchases` identity-partitioned on the join key, each reporting a
+   * two-column ordering. Keys 1 and 2 sit on two splits per side, so a join over them makes
+   * `GroupPartitionsExec` coalesce. Rows are inserted so that concatenating a key's splits violates
+   * the reported ordering, which is what a k-way merge has to repair.
+   */
+  private def createOrderedIdTables(): Unit = {
+    val itemOrdering = Array(
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(2, 'cc', 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 'bb', 20.0, cast('2022-03-10' as timestamp)), " +
+      "(3, 'dd', 40.0, cast('2024-01-01' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2021-05-20' as timestamp)), " +
+      "(2, 'ee', 50.0, cast('2025-09-01' as timestamp))")
+
+    val purchaseOrdering = Array(
+      sort(FieldReference("item_id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(purchases, purchasesColumns, Array(identity("item_id")), purchaseOrdering)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(2, 50.0, cast('2025-09-01' as timestamp)), " +
+      "(1, 10.0, cast('2021-05-20' as timestamp)), " +
+      "(3, 40.0, cast('2024-01-01' as timestamp)), " +
+      "(2, 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 20.0, cast('2022-03-10' as timestamp))")
+  }
+
+  /** What a join of the `createOrderedIdTables` tables on both ordering columns returns. */
+  private val orderedIdJoinRows =
+    Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd"))
 
   /** The `(id, ts)` rows the `withReducedTsJoinLegs` tables are filled from, one per year. */
   private val row2020 = "(0, cast('2020-01-01' as timestamp))"
@@ -790,6 +886,199 @@ class KeyGroupedPartitioningSuite
     nodes.map(_.outputPartitioning)
       .flatMap(physical.PartitioningCollection.flatten)
       .collect { case kp: physical.KeyedPartitioning => kp }
+  }
+
+  /** Reads one metric of a plan-graph node back from the status store values. */
+  private def metricValue(
+      metricValues: Map[Long, String], node: SparkPlanGraphNode, name: String): String = {
+    val metric = node.metrics.find(_.name == name).getOrElse {
+      val names = node.metrics.map(_.name).mkString(", ")
+      fail(s"metric '$name' missing on ${node.name}: $names")
+    }
+    metricValues(metric.accumulatorId).replaceAll(",", "")
+  }
+
+  test("SPARK-59310: an inner join intersection prunes both sides") {
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+        createTable(items, itemsColumns, Array(identity("id")))
+        sql(s"INSERT INTO testcat.ns.$items VALUES " +
+            s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+            s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+            s"(2, 'bb', 10.5, cast('2020-01-01' as timestamp)), " +
+            s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+        createTable(purchases, purchasesColumns, Array(identity("item_id")))
+        sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+            s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 44.0, cast('2020-01-15' as timestamp)), " +
+            s"(1, 45.0, cast('2020-01-15' as timestamp)), " +
+            s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+            s"(4, 19.5, cast('2020-02-01' as timestamp))")
+
+        // The sides hold different keys ({1,2,3} vs {1,2,4}), so grouping alone cannot align
+        // them and the join pushes the inner intersection {1,2} down as the expected keys.
+        // Each side then coalesces its duplicate-key splits (items merges two groups of two,
+        // purchases one group of three) and prunes the one split of its unmatched key
+        // (items key 3, purchases key 4); nothing is empty or replicated.
+        // Both AQE arms run their own query and read their own execution's plan graph and
+        // metric values: the reporting chain must work with and without AQE.
+        Seq(false, true).foreach { aqeEnabled =>
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+            val df = sql(s"SELECT i.id FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+              "ON i.id = p.item_id")
+            val previousExecutionIds = currentExecutionIds()
+            checkAnswer(df, Seq.fill(6)(Row(1L)) ++ Seq.fill(2)(Row(2L)))
+            val executionIds = currentExecutionIds().diff(previousExecutionIds)
+            assert(executionIds.size === 1)
+            val executionId = executionIds.head
+
+            // The metrics must survive the full reporting path: set on the driver during
+            // doExecute, posted to the listener bus, and readable back from the status store
+            // the SQL UI renders.
+            val metricValues = statusStore.executionMetrics(executionId)
+            val groupNodes =
+              statusStore.planGraph(executionId).nodes.filter(_.name == "GroupPartitions")
+            assert(groupNodes.size === 2, "one GroupPartitionsExec per join side")
+            groupNodes.foreach { node =>
+              assert(metricValue(metricValues, node, "number of input partitions") === "5")
+              assert(metricValue(metricValues, node, "number of partitions") === "2")
+              assert(metricValue(metricValues, node, "number of empty partitions") === "0")
+              assert(metricValue(metricValues, node, "number of pruned input partitions") === "1")
+              assert(!node.metrics.exists(
+                _.name == "number of replicated input partition reads"),
+                "no expected key carries multiple slots, so the metric stays unregistered")
+            }
+            assert(groupNodes.map(metricValue(metricValues, _, "number of coalesced partitions"))
+              .sorted === Seq("1", "2"))
+            assert(groupNodes.map(metricValue(metricValues, _, "max partitions per group"))
+              .sorted === Seq("2", "3"))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59310: a disjoint inner join prunes both sides to empty end to end") {
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+        createTable(items, itemsColumns, Array(identity("id")))
+        sql(s"INSERT INTO testcat.ns.$items VALUES " +
+            s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+            s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp))")
+        createTable(purchases, purchasesColumns, Array(identity("item_id")))
+        sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+            s"(3, 42.0, cast('2020-01-01' as timestamp)), " +
+            s"(4, 44.0, cast('2020-01-15' as timestamp))")
+
+        // The key sets {1, 2} and {3, 4} are disjoint, so the inner join's intersection is
+        // empty: the alignment emits no output partition on either side, each side prunes both
+        // of its inputs, and doExecute takes the empty-RDD branch. The metrics are sent before
+        // that branch, so the total pruning still reaches the store. Both AQE arms run their
+        // own query and read their own execution's plan graph and metric values.
+        Seq(false, true).foreach { aqeEnabled =>
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+            val df = sql(s"SELECT i.id FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+              "ON i.id = p.item_id")
+            val previousExecutionIds = currentExecutionIds()
+            checkAnswer(df, Nil)
+            val executionIds = currentExecutionIds().diff(previousExecutionIds)
+            assert(executionIds.size === 1)
+            val executionId = executionIds.head
+
+            val metricValues = statusStore.executionMetrics(executionId)
+            val groupNodes =
+              statusStore.planGraph(executionId).nodes.filter(_.name == "GroupPartitions")
+            assert(groupNodes.size === 2, "one GroupPartitionsExec per join side")
+            groupNodes.foreach { node =>
+              assert(metricValue(metricValues, node, "number of input partitions") === "2")
+              assert(metricValue(metricValues, node, "number of partitions") === "0")
+              assert(metricValue(metricValues, node, "number of pruned input partitions") === "2")
+              assert(metricValue(metricValues, node, "number of empty partitions") === "0")
+              assert(metricValue(metricValues, node, "number of coalesced partitions") === "0")
+              assert(metricValue(metricValues, node, "max partitions per group") === "0")
+              assert(!node.metrics.exists(
+                _.name == "number of replicated input partition reads"),
+                "an empty intersection carries no key with multiple slots")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59310: partial clustering replicates the smaller side") {
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+      withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+        createTable(items, itemsColumns, Array(identity("id")))
+        sql(s"INSERT INTO testcat.ns.$items VALUES " +
+            s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+            s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+            s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+        createTable(purchases, purchasesColumns, Array(identity("item_id")))
+        sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+            s"(1, 45.0, cast('2020-01-01' as timestamp)), " +
+            s"(1, 50.0, cast('2020-01-02' as timestamp)), " +
+            s"(1, 55.0, cast('2020-01-02' as timestamp)), " +
+            s"(2, 15.0, cast('2020-01-02' as timestamp)), " +
+            s"(2, 20.0, cast('2020-01-03' as timestamp)), " +
+            s"(2, 22.0, cast('2020-01-03' as timestamp)), " +
+            s"(3, 20.0, cast('2020-02-01' as timestamp))")
+
+        // Partial clustering picks the side with fewer splits to replicate: items (4 splits,
+        // key 1 x2, key 2 x1, key 3 x1) groups per key and copies each group into every
+        // expected slot, while purchases (7 splits) keeps them, one per slot. The slots come
+        // from purchases: key 1 x3, key 2 x3, key 3 x1. Items' extra reads: (3-1) x 2 splits
+        // for key 1, (3-1) x 1 for key 2, none for key 3's single slot. Both AQE arms run
+        // their own query and read their own execution's plan graph and metric values.
+        Seq(false, true).foreach { aqeEnabled =>
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+            val df = sql(s"SELECT i.id FROM testcat.ns.$items i JOIN testcat.ns.$purchases p " +
+              "ON i.id = p.item_id")
+            val previousExecutionIds = currentExecutionIds()
+            checkAnswer(df, Seq.fill(6)(Row(1L)) ++ Seq.fill(3)(Row(2L)) ++ Seq(Row(3L)))
+            val executionIds = currentExecutionIds().diff(previousExecutionIds)
+            assert(executionIds.size === 1)
+            val executionId = executionIds.head
+
+            val metricValues = statusStore.executionMetrics(executionId)
+            val groupNodes =
+              statusStore.planGraph(executionId).nodes.filter(_.name == "GroupPartitions")
+            assert(groupNodes.size === 2, "one GroupPartitionsExec per join side")
+            val byInputPartitions = groupNodes.map { node =>
+              metricValue(metricValues, node, "number of input partitions") -> node
+            }.toMap
+            assert(byInputPartitions.keySet === Set("4", "7"))
+            val replicatedSide = byInputPartitions("4")
+            val distributeSide = byInputPartitions("7")
+            Seq(replicatedSide, distributeSide).foreach { node =>
+              assert(metricValue(metricValues, node, "number of partitions") === "7")
+              assert(metricValue(metricValues, node, "number of empty partitions") === "0")
+              assert(metricValue(metricValues, node, "number of pruned input partitions") === "0")
+            }
+            assert(metricValue(metricValues, replicatedSide,
+              "number of replicated input partition reads") === "6")
+            assert(!distributeSide.metrics.exists(
+              _.name == "number of replicated input partition reads"),
+              "the distribute side holds one split per slot and registers no replicated metric")
+            assert(metricValue(metricValues, replicatedSide,
+              "number of coalesced partitions") === "3",
+              "the three copies of key 1's two-split group each merge their splits")
+            assert(metricValue(metricValues, replicatedSide, "max partitions per group") === "2")
+            assert(metricValue(metricValues, distributeSide,
+              "number of coalesced partitions") === "0")
+            assert(metricValue(metricValues, distributeSide, "max partitions per group") === "1")
+          }
+        }
+      }
+    }
   }
 
   test("partitioned join: exact distribution (same number of buckets) from both sides") {
@@ -985,11 +1274,11 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-59045: reduced expression is retargeted per KeyedPartitioning") {
     // A chained SPJ's output partitioning reports one `KeyedPartitioning` per join side, but the
-    // reduced expression is derived from the single spec that `createKeyedShuffleSpec` picks
-    // (`collectFirst`). Re-targeting it at each `KeyedPartitioning`'s own key attribute keeps the
-    // other sides' partitionings intact - otherwise a GROUP BY on the other side's key no longer
-    // sees a partitioning on it and the query shuffles (0 shuffles on base and here, 1 if the
-    // use-site re-targeting is dropped).
+    // reduced expression is derived from the one member `checkKeyGroupCompatible` paired this side
+    // on. Re-targeting it at each `KeyedPartitioning`'s own key attribute keeps the other sides'
+    // partitionings intact - otherwise a GROUP BY on the other side's key no longer sees a
+    // partitioning on it and the query shuffles (0 shuffles on base and here, 1 if the use-site
+    // re-targeting is dropped).
     val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
     createTable("b16", cols, Array(bucket(16, "id")))
     createTable("b8", cols, Array(bucket(8, "id")))
@@ -2504,6 +2793,103 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59285: two legs whose struct field names differ are still co-partitioned") {
+    // Both legs prune to nothing, and their key spaces differ only in a struct field name, which
+    // `identity` carries into the key type. A reduce cannot bridge that, since there is no reducer
+    // between two attributes, so calling the two sides incompatible leaves nowhere to go: the join
+    // must keep taking them as one layout.
+    withTable("p1", "p2", "p3", "p4") {
+      createTable("p1", Array(Column.create("id", structA)), Array(identity("id")))
+      sql("INSERT INTO testcat.ns.p1 VALUES (named_struct('a', 1))")
+      createTable("p2", Array(Column.create("id", structA)), Array(identity("id")))
+      sql("INSERT INTO testcat.ns.p2 VALUES (named_struct('a', 2))")
+      createTable("p3", Array(Column.create("k", structB)), Array(identity("k")))
+      sql("INSERT INTO testcat.ns.p3 VALUES (named_struct('b', 1))")
+      createTable("p4", Array(Column.create("k", structB)), Array(identity("k")))
+      sql("INSERT INTO testcat.ns.p4 VALUES (named_struct('b', 2))")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+        val df = sql(
+          """SELECT leg1.id, leg2.k FROM
+            |  (SELECT p1.id AS id FROM testcat.ns.p1 JOIN testcat.ns.p2 ON p1.id = p2.id) leg1
+            |  JOIN
+            |  (SELECT p3.k AS k FROM testcat.ns.p3 JOIN testcat.ns.p4 ON p3.k = p4.k) leg2
+            |  ON leg1.id = leg2.k
+            |""".stripMargin)
+        assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+          "the two legs are taken as one layout, so neither is shuffled")
+        checkAnswer(df, Nil)
+      }
+    }
+  }
+
+  test("SPARK-59285: two sides whose partitions were all pruned are not one layout") {
+    // Both legs prune to no partition at all, and they describe key spaces of different types:
+    // `identity(id)` gives `LongType` keys, `bucket(4, id)` gives `IntegerType` ones. Key rows are
+    // compared at their types, but two empty lists compare equal whatever they describe, so the
+    // join over the two legs used to declare them co-partitioned on that alone and report both
+    // partitionings as alternative descriptions of one layout. It reduces the identity side onto
+    // the bucket key space instead, which is what the two sides actually share.
+    //
+    // The FULL OUTER join above brings `t5`'s keys in, so the `GroupPartitionsExec` below it lays
+    // out real `IntegerType` key rows over that partitioning. That is what makes a member claiming
+    // `LongType` keys harmful rather than merely untidy.
+    val cols = Array(Column.create("id", LongType), Column.create("v", StringType))
+    withTable("t1", "t2", "t3", "t4", "t5") {
+      createTable("t1", cols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1')")
+      createTable("t2", cols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'b2')")
+      createTable("t3", cols, Array(bucket(4, "id")))
+      sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1')")
+      createTable("t4", cols, Array(bucket(4, "id")))
+      sql("INSERT INTO testcat.ns.t4 VALUES (2, 'd2')")
+      createTable("t5", cols, Array(bucket(4, "id")))
+      sql("INSERT INTO testcat.ns.t5 VALUES (3, 'e3')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(
+          """SELECT legs.id1, legs.id2, t5.id AS id5
+            |FROM (
+            |  SELECT leg1.id AS id1, leg2.id AS id2
+            |  FROM (SELECT t1.id AS id FROM testcat.ns.t1 JOIN testcat.ns.t2 ON t1.id = t2.id) leg1
+            |  JOIN (SELECT t3.id AS id FROM testcat.ns.t3 JOIN testcat.ns.t4 ON t3.id = t4.id) leg2
+            |  ON leg1.id = leg2.id
+            |) legs
+            |FULL OUTER JOIN testcat.ns.t5 ON legs.id2 = t5.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+        assert(!plan.exists { p =>
+          keyedPartitioningsOf(Seq(p)).map(_.keyDataTypes).distinct.size > 1
+        }, "no node reports two key spaces as one layout")
+        assert(ValidateRequirements.validate(plan), "and the plan it does report holds up")
+
+        // The assert above is on absence, so a regression that dropped every keyed claim would
+        // satisfy it with no key space at all. These pin the claim positively: nothing shuffles,
+        // and the topmost node that reports a keyed partitioning describes the bucket key space the
+        // two legs share, which is `IntegerType` rather than the identity side's `LongType`. The
+        // identity legs below it still report their own `LongType` space, which is why this asks
+        // the topmost node rather than the whole plan.
+        assert(collectAllShuffles(plan).isEmpty, "the whole query should be co-partitioned")
+        val topKeySpaces = plan.collectFirst {
+          case p if keyedPartitioningsOf(Seq(p)).nonEmpty =>
+            keyedPartitioningsOf(Seq(p)).map(_.keyDataTypes).distinct
+        }
+        assert(topKeySpaces.contains(Seq(Seq(IntegerType))),
+          s"the shared key space should be the bucket one, got $topKeySpaces")
+
+        checkAnswer(df, Seq(Row(null, null, 3L)))
+      }
+    }
+  }
+
   test("SPARK-59054: shuffle one side: partition transform collapsing -0.0 and 0.0") {
     withFunction(UnboundSignedZerosFunction) {
       // `signed_zeros` maps id 1 to -0.0 and id 2 to 0.0: two partition keys that are equal
@@ -3715,11 +4101,11 @@ class KeyGroupedPartitioningSuite
     // `arrive_time` is selected twice under two aliases, so the projected partitioning is a
     // `PartitioningCollection` whose members cover different numbers of the join keys: one covers
     // (id, t1), another only id. Each member's spec is projected onto its own subset, so the specs
-    // disagree on `numPartitions`, and asking the collection for one partitioning fails with
-    // "expected all specs in the collection to have the same number of partitions".
+    // disagree on `numPartitions`, and there is no one partitioning the collection could answer
+    // for. Since SPARK-59256 it cannot be asked for one at all.
     //
-    // `EnsureRequirements` now resolves the member the two sides agreed on before it asks, so the
-    // keyed side is grouped on both join keys and the shuffled side is laid out on those same keys.
+    // `EnsureRequirements` resolves the member the two sides agreed on before it asks, so the
+    // shuffled side is laid out on the keys the keyed side actually reports.
     val items_partitions = Array(identity("id"), identity("arrive_time"))
     createTable(items, itemsColumns, items_partitions)
 
@@ -3748,10 +4134,16 @@ class KeyGroupedPartitioningSuite
            |JOIN testcat.ns.$purchases p ON i.id = p.item_id AND i.t1 = p.time
            |""".stripMargin)
       val plan = df.queryExecution.executedPlan
-      val positions = collectAllGroupPartitions(plan).flatMap(_.joinKeyPositions)
-      assert(positions === Seq(Seq(0, 1)),
-        "the keyed side must be grouped on both join keys, the finest granularity available")
-      assert(collectAllShuffles(plan).size == 1, "only the unpartitioned side shuffles")
+      // The keyed side needs no grouping node: the member covering both join keys is already the
+      // scan's layout. What pins the choice is where the other side lands - that member has one
+      // partition per (id, arrive_time) pair, four of them, while the `id`-only member would put
+      // the shuffle on the three distinct ids.
+      assert(collectAllGroupPartitions(plan).isEmpty,
+        "the member covering both join keys is already the scan's layout")
+      val shuffles = collectAllShuffles(plan)
+      assert(shuffles.size == 1, "only the unpartitioned side shuffles")
+      assert(shuffles.map(_.outputPartitioning.numPartitions) === Seq(4),
+        "the shuffled side must land on the member covering both join keys")
       checkAnswer(df, Seq(
         Row(1, java.sql.Timestamp.valueOf("2020-01-01 00:00:00"),
           java.sql.Timestamp.valueOf("2020-01-01 00:00:00"), 40.0, 42.0),
@@ -4348,6 +4740,57 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59294: partially clustered distribution with existence join and left single join") {
+    createTable(items, itemsColumns, Array(bucket(8, "id")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 38.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'bb', 39.0, cast('2020-01-02' as timestamp)), " +
+        s"(4, 'cc', 40.0, cast('2020-01-02' as timestamp)), " +
+        s"(4, 'dd', 41.0, cast('2020-01-03' as timestamp)), " +
+        s"(4, 'ee', 42.0, cast('2020-01-04' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array(bucket(8, "item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(4, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(5, 44.0, cast('2020-01-15' as timestamp))")
+
+    // `items` holds three splits for key 4 and is the larger side, so partially clustered
+    // distribution keeps its splits apart and replicates `purchases` to each of them. Each left
+    // row still lands in one task that sees every right row for its key, which is all these join
+    // types need, so the join runs over five partitions instead of three key groups.
+    checkPartiallyClusteredJoin(existenceJoinQuery, _.isInstanceOf[ExistenceJoin],
+      Seq(Row(1, "bb"), Row(4, "cc"), Row(4, "dd"), Row(4, "ee")),
+      expected = on => if (on) (true, 5) else (false, 3))
+    checkPartiallyClusteredJoin(leftSingleJoinQuery, _ == LeftSingle,
+      Seq(Row(0, "aa", null), Row(1, "bb", null), Row(4, "cc", 42.0), Row(4, "dd", 42.0),
+        Row(4, "ee", 42.0)),
+      expected = on => if (on) (true, 5) else (false, 3))
+  }
+
+  test("SPARK-59294: partially clustered distribution is skipped when the smaller side is the " +
+      "left of an existence join or a left single join") {
+    createTable(items, itemsColumns, Array(bucket(8, "id")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 38.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'bb', 39.0, cast('2020-01-02' as timestamp)), " +
+        s"(4, 'cc', 40.0, cast('2020-01-02' as timestamp))")
+
+    // One row per item id, as a left single join errors on a second match. Eight rows outweigh
+    // the three `items` rows, so `items` is the side picked for replication.
+    createTable(purchases, purchasesColumns, Array(bucket(8, "item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        (4 to 11).map(id => s"($id, ${id + 38}.0, cast('2020-01-01' as timestamp))")
+          .mkString(", "))
+
+    // Only the right side may be replicated for these join types, so picking the left leaves
+    // both sides grouped by key whether or not the distribution is enabled.
+    checkPartiallyClusteredJoin(existenceJoinQuery, _.isInstanceOf[ExistenceJoin],
+      Seq(Row(1, "bb"), Row(4, "cc")), expected = _ => (false, 3))
+    checkPartiallyClusteredJoin(leftSingleJoinQuery, _ == LeftSingle,
+      Seq(Row(0, "aa", null), Row(1, "bb", null), Row(4, "cc", 42.0)),
+      expected = _ => (false, 3))
+  }
+
   test("SPARK-53322: checkpointed scans avoid shuffles for aggregates") {
     withTempDir { dir =>
       spark.sparkContext.setCheckpointDir(dir.getPath)
@@ -4899,10 +5342,10 @@ class KeyGroupedPartitioningSuite
            |""".stripMargin)
       val simpleAndExtendedKeyword =
         "GroupPartitions JoinKeyPositions: [0] ExpectedPartitionKeys: 2 " +
-        "Reducers: [BucketReducer(2)] DistributePartitions: false"
+        "Reducers: [BucketReducer(2)] DistributePartitions: false SortedMerge: false"
       val formattedKeyword =
         "Arguments: JoinKeyPositions: [0], ExpectedPartitionKeys: 2, " +
-        "Reducers: [BucketReducer(2)], DistributePartitions: false"
+        "Reducers: [BucketReducer(2)], DistributePartitions: false, SortedMerge: false"
       checkKeywordsExistsInExplain(df, SimpleMode, simpleAndExtendedKeyword)
       checkKeywordsExistsInExplain(df, ExtendedMode, simpleAndExtendedKeyword)
       checkKeywordsExistsInExplain(df, FormattedMode, formattedKeyword)
@@ -5376,32 +5819,9 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-56549: k-way merge enabled only when parent requires ordering") {
-    // Both tables are partitioned by id/item_id and report a two-column ordering.
-    // Key 1 appears on two splits on each side, so GroupPartitionsExec must coalesce.
-    //
     // Dynamic gate: with the config enabled, k-way merge must be activated only when the parent
     // actually requires ordering (SMJ), and must stay off when the parent does not (hash join).
-    val itemOrdering = Array(
-      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
-      sort(FieldReference("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
-    createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
-    sql(s"INSERT INTO testcat.ns.$items VALUES " +
-      "(2, 'cc', 30.0, cast('2023-06-15' as timestamp)), " +
-      "(1, 'bb', 20.0, cast('2022-03-10' as timestamp)), " +
-      "(3, 'dd', 40.0, cast('2024-01-01' as timestamp)), " +
-      "(1, 'aa', 10.0, cast('2021-05-20' as timestamp)), " +
-      "(2, 'ee', 50.0, cast('2025-09-01' as timestamp))")
-
-    val purchaseOrdering = Array(
-      sort(FieldReference("item_id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
-      sort(FieldReference("time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
-    createTable(purchases, purchasesColumns, Array(identity("item_id")), purchaseOrdering)
-    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
-      "(2, 50.0, cast('2025-09-01' as timestamp)), " +
-      "(1, 10.0, cast('2021-05-20' as timestamp)), " +
-      "(3, 40.0, cast('2024-01-01' as timestamp)), " +
-      "(2, 30.0, cast('2023-06-15' as timestamp)), " +
-      "(1, 20.0, cast('2022-03-10' as timestamp))")
+    createOrderedIdTables()
 
     withSQLConf(
         SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
@@ -5413,7 +5833,7 @@ class KeyGroupedPartitioningSuite
            |FROM testcat.ns.$items i
            |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
            |""".stripMargin)
-      checkAnswer(hashDf, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
+      checkAnswer(hashDf, orderedIdJoinRows)
       val hashPlan = hashDf.queryExecution.executedPlan
       assert(collect(hashPlan) { case j: ShuffledHashJoinExec => j }.nonEmpty,
         "expected ShuffledHashJoinExec")
@@ -5435,7 +5855,7 @@ class KeyGroupedPartitioningSuite
            |FROM testcat.ns.$items i
            |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
            |""".stripMargin)
-      checkAnswer(smjDf, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
+      checkAnswer(smjDf, orderedIdJoinRows)
       val smjPlan = smjDf.queryExecution.executedPlan
       assert(collectAllShuffles(smjPlan).isEmpty, "should not shuffle for compatible partitioning")
       val smjCoalescing =
@@ -5446,6 +5866,63 @@ class KeyGroupedPartitioningSuite
           "sort-merge join requires ordering: enableSortedMerge must be true")
         assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
           "sort-merge join requires ordering: must use SortedMergeCoalescedRDD")
+      }
+    }
+  }
+
+  test("SPARK-59279: a planned k-way merge survives a later config change") {
+    // The plan is built with the config on, so the k-way merge delivers the child's full ordering
+    // and EnsureRequirements adds no SortExec below the sort-merge join. Turning the config off
+    // afterwards must not change what the already planned node does. If it did, the join would read
+    // concatenated partitions as if they were still sorted and silently drop rows.
+    //
+    // Both AQE modes are covered, because a fresh node instance is minted at a different point in
+    // each. Without AQE, `CollapseCodegenStages` puts a `WholeStageCodegenExec` under this node
+    // during `prepareForExecution`. With AQE, the wrappers go in when the result stage is created,
+    // which is after the flip below.
+    createOrderedIdTables()
+
+    Seq(true, false).foreach { aqeEnabled =>
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString,
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+          SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("i", "p")}
+             |i.id, i.name
+             |FROM testcat.ns.$items i
+             |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+             |""".stripMargin)
+        // Force the plan without executing it, so the k-way merge is decided under this config.
+        val plan = df.queryExecution.executedPlan
+        assert(collectAllShuffles(plan).isEmpty, "should not shuffle for compatible partitioning")
+        val coalescing =
+          collectAllGroupPartitions(plan).filter(_.groupedPartitions.exists(_._2.size > 1))
+        assert(coalescing.nonEmpty, "expected coalescing GroupPartitionsExec")
+        coalescing.foreach { gp =>
+          assert(gp.enableSortedMerge,
+            "sort-merge join requires ordering: enableSortedMerge must be true")
+        }
+        val smjs = collect(plan) { case j: SortMergeJoinExec => j }
+        assert(smjs.nonEmpty, "expected SortMergeJoinExec")
+        assert(smjs.flatMap(_.children).forall(c => collect(c) { case s: SortExec => s }.isEmpty),
+          "the k-way merge satisfies the ordering, so no SortExec should be added")
+
+        // Flip only the ordering config. The plan above is already committed.
+        withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
+          checkAnswer(df, orderedIdJoinRows)
+          // Re-collected, because under AQE `executedPlan` only reaches the final plan's nodes
+          // once the query has run.
+          val executed =
+            collectAllGroupPartitions(df.queryExecution.executedPlan)
+              .filter(_.groupedPartitions.exists(_._2.size > 1))
+          assert(executed.nonEmpty, "expected coalescing GroupPartitionsExec")
+          executed.foreach { gp =>
+            assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+              "the planned k-way merge must not be dropped by a config change")
+          }
+        }
       }
     }
   }
@@ -7370,7 +7847,7 @@ class KeyGroupedPartitioningSuite
     val keys = Seq(InternalRow(1), InternalRow(2))
     def markedExchange(e: AttributeReference): ShuffleExchangeExec =
       ShuffleExchangeExec(
-        KeyedPartitioning(Seq(e), keys).copy(mayContainUnknownPartitionKeys = true),
+        KeyedPartitioning(Seq(e), keys).withLayout(_.copy(mayContainUnknownPartitionKeys = true)),
         new LocalTableScanExec(Seq(e), Nil, None, false))
     def keylessExchange(e: AttributeReference): ShuffleExchangeExec =
       ShuffleExchangeExec(physical.HashPartitioning(Seq(e), keys.length),
@@ -7402,7 +7879,7 @@ class KeyGroupedPartitioningSuite
     val attrB = AttributeReference("b", IntegerType)()
     val keys = Seq(InternalRow(1), InternalRow(2))
     def markedKP(e: AttributeReference): KeyedPartitioning =
-      KeyedPartitioning(Seq(e), keys).copy(mayContainUnknownPartitionKeys = true)
+      KeyedPartitioning(Seq(e), keys).withLayout(_.copy(mayContainUnknownPartitionKeys = true))
     def markedExchange(e: AttributeReference): ShuffleExchangeExec =
       ShuffleExchangeExec(markedKP(e), new LocalTableScanExec(Seq(e), Nil, None, false))
     def plainExchange(e: AttributeReference): ShuffleExchangeExec =

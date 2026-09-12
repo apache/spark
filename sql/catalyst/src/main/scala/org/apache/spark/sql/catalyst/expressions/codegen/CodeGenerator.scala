@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.WITH_EXPRESSION
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil, UnsafeRowUtils}
@@ -205,6 +206,163 @@ class CodegenContext extends Logging {
     currentLambdaVars.getOrElse(
       id,
       throw QueryExecutionErrors.lambdaVariableNotDefinedError(id))
+  }
+
+  /**
+   * The slots a `CommonExpressionRef` reads: the value and its nullness, plus the flag saying
+   * whether this row has computed them yet, and the definition to compute them from.
+   */
+  case class CommonExprSlots(
+      value: ExprCode,
+      computed: String,
+      definition: Expression) {
+
+    // Not constructor parameters: a mutable one takes part in `equals`/`hashCode`/`copy`, so a
+    // slot's hash would change as it is filled and a `copy` would carry another scope's code.
+    private var fillCode: Option[Block] = None
+    private var filling: Boolean = false
+
+    /**
+     * The code that computes the definition into the slots and sets `computed`, which a reference
+     * emits behind that flag. Cached, so every reference shares whatever mutable state the
+     * definition allocated, such as an RNG.
+     *
+     * The cache lives on the slot, so it lasts exactly as long as the scope: the code names the
+     * `INPUT_ROW` and `currentVars` in effect when it was generated. `GenerateOrdering` generates
+     * its key once per comparison side under a different row variable, so a slot shared between the
+     * sides would read the wrong row, or not compile where `Expression.reduceCodeSize` has hoisted
+     * the reference into a method taking one row.
+     *
+     * `filling` catches a definition that references its own id, which would otherwise re-enter and
+     * recurse, since `fillCode` is set only after `definition.genCode` returns.
+     *
+     * The body goes into a method where it can and is worth it -- a definition that is or holds
+     * another `With`, or a body past the split threshold -- so it is emitted once per scope rather
+     * than once per reference, which for nested `With`s would double per level. A method is only
+     * possible where the definition reads the input row rather than local variables, the condition
+     * `reduceCodeSize` splits under. That is not the same as whole-stage codegen being off: a
+     * whole-stage `Project` or `Filter` passes local variables, while
+     * `SortMergeJoinExec.createJoinKey` and the aggregate output paths generate against a row.
+     */
+    def fill: Block = {
+      if (fillCode.isEmpty) {
+        if (filling) {
+          throw SparkException.internalError(
+            "Cannot generate a common expression whose definition references it: " +
+              definition.toString)
+        }
+        filling = true
+        try {
+          fillCode = Some(build)
+        } finally {
+          filling = false
+        }
+      }
+      fillCode.get
+    }
+
+    private def build: Block = {
+      val defGen = definition.genCode(CodegenContext.this)
+      // Whether the isNull slot exists is decided by the definition, so it is read off the slot
+      // rather than off a reference's own `nullable`: taking it from both would let the two
+      // disagree, and either emit `false = <isNull>;`, which does not compile, or leave the slot
+      // holding the previous row's nullness.
+      val assignIsNull = if (value.isNull == FalseLiteral) {
+        ""
+      } else {
+        s"${value.isNull} = ${defGen.isNull};"
+      }
+      val body = code"""
+         |${defGen.code}
+         |$assignIsNull
+         |${value.value} = ${defGen.value};
+         |$computed = true;
+       """.stripMargin
+      // TODO(SPARK-59295): cover the local-variable case too, by passing the `currentVars` values a
+      //   definition reads into the method as parameters, the way
+      //   `subexpressionEliminationForWholeStageCodegen` does. It needs a decision first:
+      //   `getLocalInputVariableValues` hoists an input variable that is not evaluated yet to
+      //   before the call, which for a reference behind a branch means evaluating it on rows that
+      //   never reach the reference.
+      val canPutInMethod = INPUT_ROW != null && currentVars == null
+      // A definition that is or holds another `With` is the shape whose code doubles per level,
+      // and what this is aimed at. It is not the only one -- a definition referencing a sibling
+      // definition of the same `With` doubles the same way, and codegen accepts that, since the
+      // sibling's slots are in scope while this definition is generated (`With.refsToBind` says
+      // why nothing builds that tree, and that evaluating one raises). What bounds those is not
+      // the length arm below: `body` is assembled after `definition.genCode` already ran
+      // `reduceCodeSize`, so the arm fires only in the band just under the threshold. It is
+      // `reduceCodeSize` itself, which hoists whichever node's code first passes the threshold as
+      // generation walks up, capping what one level contributes, so the code stays linear in the
+      // depth either way. The length arm just keeps the same body from being split once per
+      // reference, which leaves the methods small and the code as large.
+      val worthAMethod = definition.containsPattern(WITH_EXPRESSION) ||
+        body.length > SQLConf.get.methodSplitThreshold
+      if (canPutInMethod && worthAMethod) {
+        val funcName = freshName("computeCommonExpr")
+        val funcFullName = addNewFunction(funcName,
+          s"""
+             |private void $funcName(InternalRow $INPUT_ROW) {
+             |  $body
+             |}
+           """.stripMargin)
+        code"$funcFullName($INPUT_ROW);"
+      } else {
+        body
+      }
+    }
+  }
+
+  /**
+   * Holding a map of the common expressions of the `With` expressions currently being generated,
+   * the same way [[currentLambdaVars]] holds the variables of the enclosing lambdas.
+   */
+  var currentCommonExprs: mutable.Map[Long, CommonExprSlots] = mutable.HashMap.empty
+
+  /**
+   * Allocates a value slot and a `computed` flag per definition, generates `f` with them in scope,
+   * then takes them out of scope again. A reference generated inside `f` reads the slots back by
+   * id and fills them the first time it is reached on a row -- the enclosing `With` only clears the
+   * flags.
+   */
+  def withCommonExprs(defs: Seq[CommonExpressionDef])(f: Seq[CommonExprSlots] => ExprCode)
+    : ExprCode = {
+    // The ids this call registered, so the cleanup takes back exactly those: the duplicate-id check
+    // below throws partway, and removing by the whole `defs` list would take that duplicate out of
+    // the enclosing scope that still owns it. Allocating inside the `try` is what runs the cleanup
+    // at all -- otherwise the slots allocated before the throw stay registered, and a later
+    // `getCommonExpr` for one of those ids resolves an orphan instead of reporting it out of scope.
+    val added = mutable.ArrayBuffer.empty[Long]
+    try {
+      val slots = defs.map { d =>
+        val id = d.id.id
+        if (currentCommonExprs.contains(id)) {
+          throw SparkException.internalError(s"Common expression $id is already being generated")
+        }
+        val isNull = if (d.nullable) {
+          JavaCode.isNullGlobal(addMutableState(JAVA_BOOLEAN, "commonExprIsNull"))
+        } else {
+          FalseLiteral
+        }
+        val value = addMutableState(javaType(d.dataType), "commonExprValue")
+        val slot = CommonExprSlots(
+          ExprCode(isNull, JavaCode.global(value, d.dataType)),
+          addMutableState(JAVA_BOOLEAN, "commonExprComputed"),
+          d.child)
+        currentCommonExprs.put(id, slot)
+        added += id
+        slot
+      }
+      f(slots)
+    } finally {
+      added.foreach(currentCommonExprs.remove)
+    }
+  }
+
+  def getCommonExpr(id: Long): CommonExprSlots = {
+    currentCommonExprs.getOrElse(
+      id,
+      throw SparkException.internalError(s"Common expression $id is not in scope"))
   }
 
   /**

@@ -1876,10 +1876,56 @@ case class BinBy(
   override def producedAttributes: AttributeSet =
     AttributeSet(scaledDistributeColumns ++ appendedAttributes)
 
+  override protected def stringArgs: Iterator[Any] = {
+    BinBy.explainStringArgs(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidthMicros = binWidthMicros,
+      originMicros = originMicros,
+      distributeColumns = distributeColumns,
+      scaledDistributeColumns = scaledDistributeColumns,
+      appendedAttributes = appendedAttributes,
+      timeZoneId = timeZoneId)
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(BIN_BY)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): BinBy =
     copy(child = newChild)
+}
+
+object BinBy {
+
+  // Builds the `stringArgs` for EXPLAIN. LTZ formats `alignTo` in the captured zone and appends
+  // `zone=`, NTZ formats in UTC and omits it.
+  private[sql] def explainStringArgs(
+      rangeStart: Attribute,
+      rangeEnd: Attribute,
+      binWidthMicros: Long,
+      originMicros: Long,
+      distributeColumns: Seq[Attribute],
+      scaledDistributeColumns: Seq[Attribute],
+      appendedAttributes: Seq[Attribute],
+      timeZoneId: Option[String]): Iterator[Any] = {
+    val maxFields = SQLConf.get.maxToStringFields
+    val fmt = TimestampFormatter.getFractionFormatter(
+      DateTimeUtils.getZoneId(timeZoneId.getOrElse("UTC")))
+
+    def refs(attrs: Seq[Attribute]): String = {
+      truncatedString(attrs.map(_.simpleString(maxFields)), "[", ", ", "]", maxFields)
+    }
+
+    Iterator(
+      s"range=[${rangeStart.simpleString(maxFields)}, ${rangeEnd.simpleString(maxFields)}]",
+      "binWidth=" + IntervalUtils.toDayTimeIntervalString(
+        binWidthMicros, IntervalStringStyles.ANSI_STYLE,
+        DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND),
+      s"alignTo=${fmt.format(originMicros)}",
+      s"distribute=${refs(distributeColumns)}",
+      s"scaledDistribute=${refs(scaledDistributeColumns)}",
+      s"appends=${refs(appendedAttributes)}") ++
+      timeZoneId.map(z => s"zone=$z")
+  }
 }
 
 /**
