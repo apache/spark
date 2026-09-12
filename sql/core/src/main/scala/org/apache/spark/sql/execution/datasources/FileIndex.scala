@@ -134,6 +134,20 @@ trait FileIndex {
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory]
 
   /**
+   * Given the `partitionFilters` Spark will use to prune files for this index, returns the
+   * subset that this index guarantees are fully applied for all returned rows. Only these are
+   * dropped from the row-level `FilterExec` above the scan; any filter not returned is still
+   * evaluated after the scan for correctness.
+   *
+   * The default returns all `partitionFilters`, matching standard file-source behavior where
+   * partition filters are guaranteed by file listing. Override to omit filters that are only
+   * partially applied - for example with partition evolution, where not all data files are
+   * partitioned by a given partition column and may contain both matching and non-matching rows.
+   */
+  def canFullPushDownPartitionFilter(partitionFilters: Seq[Expression]): Seq[Expression] =
+    partitionFilters
+
+  /**
    * Returns the list of files that will be read when scanning this relation. This call may be
    * very expensive for large tables.
    * The strings returned are expected to be url-encoded paths.

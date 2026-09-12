@@ -252,6 +252,27 @@ class FileSourceStrategySuite extends SharedSparkSession {
     assert(getPhysicalFilters(df2) contains resolve(df2, "(p1 + c2) = 2"))
   }
 
+  test("FileIndex canFullPushDownPartitionFilter controls final FilterExec removal") {
+    val (table, testIndex) =
+      createTableWithCanFullPushDownPartitionFilterIndex(
+        files = Seq(
+          "p1=1/file1" -> 10,
+          "p1=2/file2" -> 10))
+
+    // By default the index returns the partition filters, matching legacy behavior, so the
+    // partition-key filter is removed from the FilterExec above the scan.
+    val defaultPartitionFilter = table.where("p1 = 1")
+    assert(!getPhysicalFilters(defaultPartitionFilter).contains(
+      resolve(defaultPartitionFilter, "p1 = 1")))
+
+    // Returning nothing means no partition filter is fully pushed, so the partition-key
+    // filter stays in the FilterExec above the scan.
+    testIndex.setCanFullPushDownPartitionFilter(_ => Nil)
+    val explicitNoFullyPushed = table.where("p1 = 1")
+    assert(getPhysicalFilters(explicitNoFullyPushed).contains(
+      resolve(explicitNoFullyPushed, "p1 = 1")))
+  }
+
   test("bucketed table") {
     val table =
       createTable(
@@ -705,6 +726,57 @@ class FileSourceStrategySuite extends SharedSparkSession {
     } else {
       df
     }
+  }
+
+  private class CanFullPushDownPartitionFilterTestFileIndex(
+      sparkSession: SparkSession,
+      rootPathsSpecified: Seq[Path],
+      parameters: Map[String, String],
+      userSpecifiedSchema: Option[StructType])
+    extends InMemoryFileIndex(
+      sparkSession,
+      rootPathsSpecified,
+      parameters,
+      userSpecifiedSchema) {
+
+    private var canFullPushDown: Seq[Expression] => Seq[Expression] = identity
+
+    override def canFullPushDownPartitionFilter(
+        partitionFilters: Seq[Expression]): Seq[Expression] =
+      canFullPushDown(partitionFilters)
+
+    def setCanFullPushDownPartitionFilter(f: Seq[Expression] => Seq[Expression]): Unit = {
+      canFullPushDown = f
+    }
+  }
+
+  private def createTableWithCanFullPushDownPartitionFilterIndex(
+      files: Seq[(String, Int)]): (DataFrame, CanFullPushDownPartitionFilterTestFileIndex) = {
+    val tempDir = Utils.createTempDir()
+    files.foreach {
+      case (name, size) =>
+        val file = new File(tempDir, name)
+        assert(file.getParentFile.exists() || Utils.createDirectory(file.getParentFile))
+        util.stringToFile(file, "*".repeat(size))
+    }
+
+    val dataSchema = StructType(Nil)
+      .add("c1", IntegerType)
+      .add("c2", IntegerType)
+    val fileIndex = new CanFullPushDownPartitionFilterTestFileIndex(
+      spark,
+      Seq(new Path(tempDir.getCanonicalPath)),
+      Map.empty[String, String],
+      Some(dataSchema))
+    val relation = HadoopFsRelation(
+      location = fileIndex,
+      partitionSchema = fileIndex.partitionSchema,
+      dataSchema = dataSchema,
+      bucketSpec = None,
+      fileFormat = TestFileFormat(),
+      options = Map.empty)(spark)
+
+    Dataset.ofRows(spark, LogicalRelation(relation)) -> fileIndex
   }
 
   def getFileScanRDD(df: DataFrame): FileScanRDD = {
