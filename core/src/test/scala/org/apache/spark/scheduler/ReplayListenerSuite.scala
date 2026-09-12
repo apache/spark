@@ -78,6 +78,37 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJsonString(applicationEnd))
   }
 
+  test("Over-long event log lines are skipped instead of materialized") {
+    val logFilePath = getFilePath(testDir, "events.txt")
+    val fstream = fileSystem.create(logFilePath)
+    val fwriter = new OutputStreamWriter(fstream, StandardCharsets.UTF_8)
+    val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
+      125L, "Mickey", None)
+    val applicationEnd = SparkListenerApplicationEnd(1000L)
+    val maxLineLength = 8 * 1024
+    val hugeLine = "x" * (maxLineLength + 1024)
+    Utils.tryWithResource(new PrintWriter(fwriter)) { writer =>
+      // scalastyle:off println
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationStart))
+      writer.println(hugeLine)
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationEnd))
+      // scalastyle:on println
+    }
+
+    val logData = fileSystem.open(logFilePath)
+    val eventMonster = new EventBufferingListener
+    try {
+      val replayer = new ReplayListenerBus(maxLineLength = maxLineLength)
+      replayer.addListener(eventMonster)
+      assert(replayer.replay(logData, logFilePath.toString))
+    } finally {
+      logData.close()
+    }
+    assert(eventMonster.loggedEvents.size === 2)
+    assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJsonString(applicationStart))
+    assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJsonString(applicationEnd))
+  }
+
   /**
    * Test replaying compressed spark history file that internally throws an EOFException.  To
    * avoid sensitivity to the compression specifics the test forces an EOFException to occur
