@@ -360,11 +360,45 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       val verts = sc.parallelize(List((1: VertexId, "a"), (2: VertexId, "b")), 1)
       val edges = sc.parallelize(List(Edge(1, 2, 0), Edge(2, 1, 0)), 2)
       val graph = Graph(verts, edges, "", StorageLevel.MEMORY_ONLY, StorageLevel.MEMORY_ONLY)
-      // Note: Before caching, graph.vertices is cached, but graph.edges is not (but graph.edges'
-      //       parent RDD is cached).
+      assert(graph.vertices.getStorageLevel == StorageLevel.NONE)
+      assert(graph.edges.getStorageLevel == StorageLevel.NONE)
       graph.cache()
       assert(graph.vertices.getStorageLevel == StorageLevel.MEMORY_ONLY)
       assert(graph.edges.getStorageLevel == StorageLevel.MEMORY_ONLY)
+    }
+  }
+
+  test("selected graph construction and transformation paths avoid implicit persistence") {
+    withSpark { sc =>
+      def newGraph(): Graph[Int, Int] = {
+        val vertices = sc.parallelize(Seq((1L, 1), (2L, 2)))
+        val edges = sc.parallelize(Seq(Edge(1L, 2L, 1)))
+        Graph(vertices, edges)
+      }
+
+      val fromEdges = Graph.fromEdges(sc.parallelize(Seq(Edge(1L, 2L, 1))), 1)
+      fromEdges.vertices.count()
+      fromEdges.edges.count()
+      assert(fromEdges.vertices.getStorageLevel == StorageLevel.NONE)
+      assert(fromEdges.edges.getStorageLevel == StorageLevel.NONE)
+
+      val aggregateInput = newGraph()
+      aggregateInput.aggregateMessages[Int](_.sendToDst(1), _ + _).count()
+      assert(aggregateInput.vertices.getStorageLevel == StorageLevel.NONE)
+
+      val joinInput = newGraph()
+      val joined = joinInput.outerJoinVertices(sc.parallelize(Seq((1L, 1)))) {
+        (_, value, update) => value + update.getOrElse(0)
+      }
+      joined.vertices.count()
+      assert(joinInput.vertices.getStorageLevel == StorageLevel.NONE)
+      joined.unpersist()
+
+      val mapped = newGraph().mapVertices((_, value) => value.toString)
+      mapped.vertices.count()
+      mapped.edges.count()
+      assert(mapped.vertices.getStorageLevel == StorageLevel.NONE)
+      assert(mapped.edges.getStorageLevel == StorageLevel.NONE)
     }
   }
 

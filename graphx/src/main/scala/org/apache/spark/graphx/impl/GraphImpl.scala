@@ -191,7 +191,6 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       tripletFields: TripletFields,
       activeSetOpt: Option[(VertexRDD[_], EdgeDirection)]): VertexRDD[A] = {
 
-    vertices.cache()
     // For each vertex, replicate its attribute only to partitions where it is
     // in the relevant position in an edge.
     replicatedVertexView.upgrade(vertices, tripletFields.useSrc, tripletFields.useDst)
@@ -250,7 +249,6 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     // The implicit parameter eq will be populated by the compiler if VD and VD2 are equal, and left
     // null if not
     if (eq != null) {
-      vertices.cache()
       // updateF preserves type, so we can use incremental replication
       val newVerts = vertices.leftJoin(other)(updateF).cache()
       val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
@@ -316,13 +314,9 @@ object GraphImpl {
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: VertexRDD[VD],
       edges: EdgeRDD[ED]): GraphImpl[VD, ED] = {
-
-    vertices.cache()
-
     // Convert the vertex partitions in edges to the correct type
     val newEdges = edges.asInstanceOf[EdgeRDDImpl[ED, _]]
       .mapEdgePartitions((pid, part) => part.withoutVertexAttributes[VD]())
-      .cache()
 
     GraphImpl.fromExistingRDDs(vertices, newEdges)
   }
@@ -347,11 +341,11 @@ object GraphImpl {
       defaultVertexAttr: VD,
       edgeStorageLevel: StorageLevel,
       vertexStorageLevel: StorageLevel): GraphImpl[VD, ED] = {
-    val edgesCached = edges.withTargetStorageLevel(edgeStorageLevel).cache()
+    val targetEdges = edges.withTargetStorageLevel(edgeStorageLevel)
     val vertices =
-      VertexRDD.fromEdges(edgesCached, edgesCached.partitions.length, defaultVertexAttr)
+      VertexRDD.fromEdges(targetEdges, targetEdges.partitions.length, defaultVertexAttr)
       .withTargetStorageLevel(vertexStorageLevel)
-    fromExistingRDDs(vertices, edgesCached)
+    fromExistingRDDs(vertices, targetEdges)
   }
 
 } // end of object GraphImpl

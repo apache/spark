@@ -56,7 +56,22 @@ object ShortestPaths extends Serializable {
    * each reachable landmark vertex.
    */
   def run[VD, ED: ClassTag](graph: Graph[VD, ED], landmarks: Seq[VertexId]): Graph[SPMap, ED] = {
-    val spGraph = graph.mapVertices { (vid, attr) =>
+    run(graph, landmarks, isDirected = true)
+  }
+
+  /**
+   * Computes shortest paths to the given set of landmark vertices.
+   *
+   * @param graph the graph for which to compute the shortest paths
+   * @param landmarks the list of landmark vertex ids. Shortest paths will be computed to each
+   * landmark.
+   * @param isDirected whether paths must follow the direction of each edge
+   */
+  def run[VD, ED: ClassTag](
+      graph: Graph[VD, ED],
+      landmarks: Seq[VertexId],
+      isDirected: Boolean): Graph[SPMap, ED] = {
+    val spGraph = graph.mapVertices { (vid, _) =>
       if (landmarks.contains(vid)) makeMap(vid -> 0) else makeMap()
     }
 
@@ -67,9 +82,20 @@ object ShortestPaths extends Serializable {
     }
 
     def sendMessage(edge: EdgeTriplet[SPMap, _]): Iterator[(VertexId, SPMap)] = {
-      val newAttr = incrementMap(edge.dstAttr)
-      if (edge.srcAttr != addMaps(newAttr, edge.srcAttr)) Iterator((edge.srcId, newAttr))
-      else Iterator.empty
+      val toSrc = incrementMap(edge.dstAttr)
+      val srcMessage =
+        if (edge.srcAttr != addMaps(toSrc, edge.srcAttr)) Iterator((edge.srcId, toSrc))
+        else Iterator.empty
+
+      if (isDirected) {
+        srcMessage
+      } else {
+        val toDst = incrementMap(edge.srcAttr)
+        val dstMessage =
+          if (edge.dstAttr != addMaps(toDst, edge.dstAttr)) Iterator((edge.dstId, toDst))
+          else Iterator.empty
+        srcMessage ++ dstMessage
+      }
     }
 
     Pregel(spGraph, initialMessage)(vertexProgram, sendMessage, addMaps)

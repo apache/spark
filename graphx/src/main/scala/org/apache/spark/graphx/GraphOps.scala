@@ -140,6 +140,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       case EdgeDirection.Both =>
         throw new SparkException("collectEdges does not support EdgeDirection.Both. Use" +
           "EdgeDirection.Either instead.")
+      case _ => throw new SparkException("Unknown edge direction")
     }
     graph.vertices.leftJoin(nbrs) { (vid, vdata, nbrsOpt) =>
       nbrsOpt.getOrElse(Array.empty[(VertexId, VD)])
@@ -181,6 +182,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       case EdgeDirection.Both =>
         throw new SparkException("collectEdges does not support EdgeDirection.Both. Use" +
           "EdgeDirection.Either instead.")
+      case _ => throw new SparkException("Unknown edge direction")
     }
   }
 
