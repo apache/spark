@@ -2996,6 +2996,41 @@ class TaskSetManagerSuite
       s"Expected staleMapIndexes to contain mapIndex 0, got $staleMapIndexes")
   }
 
+  test("SPARK-58137: hasAttemptOnHost uses taskAttemptHosts for O(1) host lookup") {
+    sc = new SparkContext("local", "test")
+    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_ENABLED, true)
+    sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"),
+      ("exec3", "host3"))
+    val taskSet = FakeTask.createTaskSet(1, Seq(TaskLocation("host1", "exec1")))
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    // Launch the single task on host1 (exec1)
+    val task1 = manager.resourceOffer("exec1", "host1", TaskLocality.PROCESS_LOCAL)._1.get
+    assert(task1.index === 0)
+    assert(manager.runningTasks === 1)
+
+    // Mark the task as speculatable and add to pending speculative list
+    manager.speculatableTasks += 0
+    manager.addPendingTask(0, speculatable = true)
+
+    // Speculative task should NOT be scheduled on host1 which already has an attempt
+    assert(manager.resourceOffer("exec1", "host1", TaskLocality.ANY)._1.isEmpty)
+
+    // Speculative task SHOULD be scheduled on host2 which has no attempt for task 0
+    val task2 = manager.resourceOffer("exec2", "host2", TaskLocality.ANY)._1
+    assert(task2.isDefined)
+    assert(task2.get.index === 0)
+    assert(task2.get.attemptNumber === 1)
+
+    // Now task 0 has attempts on both host1 and host2.
+    // Offering host1 or host2 should not schedule another speculative copy.
+    assert(manager.resourceOffer("exec1", "host1", TaskLocality.ANY)._1.isEmpty)
+    assert(manager.resourceOffer("exec2", "host2", TaskLocality.ANY)._1.isEmpty)
+  }
+
   private def createMapStatusTaskResult(
       mapStatus: MapStatus,
       accumUpdates: Seq[AccumulatorV2[_, _]],
