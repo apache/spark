@@ -37,6 +37,7 @@ import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, Su
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -573,6 +574,7 @@ object DataSourceV2Relation {
     }
 
     var colStats: Seq[(Attribute, ColumnStat)] = Seq.empty[(Attribute, ColumnStat)]
+    val resolver = SQLConf.get.resolver
     // columnStats() may be null even when numRows/sizeInBytes are present, so normalize it to an
     // empty map before conversion to avoid an NPE.
     val v2ColumnStats = Option(v2Statistics.columnStats()).getOrElse(EMPTY_V2_COLUMN_STATS)
@@ -602,11 +604,23 @@ object DataSourceV2Relation {
 
         val catalystColStat = ColumnStat(distinct, min, max, nullCount, avgLen, maxLen, histogram)
 
-        output.foreach(attribute => {
-          if (attribute.name.equals(key.describe())) {
-            colStats = colStats :+ (attribute -> catalystColStat)
+        // Catalyst statistics are keyed by top-level Attribute, so only single-part references
+        // can be matched to an output column.
+        val fieldNames = key.fieldNames
+        if (fieldNames.length == 1) {
+          val fieldName = fieldNames.head
+          val matches = output.filter(attribute => resolver(attribute.name, fieldName))
+          // On an ambiguous case-insensitive match (e.g. outputs "id" and "ID"), require a unique
+          // exact-name match, otherwise skip so CBO is not fed the wrong column.
+          val matched = matches match {
+            case Seq(single) => Some(single)
+            case multiple => multiple.filter(_.name == fieldName) match {
+              case Seq(exact) => Some(exact)
+              case _ => None
+            }
           }
-        })
+          matched.foreach(attribute => colStats = colStats :+ (attribute -> catalystColStat))
+        }
       })
     }
     val attributeStats = AttributeMap(colStats)
