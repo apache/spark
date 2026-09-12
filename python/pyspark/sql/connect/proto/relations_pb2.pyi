@@ -44,6 +44,7 @@ import google.protobuf.message
 import pyspark.sql.connect.proto.catalog_pb2
 import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
+import pyspark.sql.connect.proto.graphframes_pb2
 import pyspark.sql.connect.proto.ml_common_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -113,6 +114,7 @@ class Relation(google.protobuf.message.Message):
     RELATION_CHANGES_FIELD_NUMBER: builtins.int
     NEAREST_BY_JOIN_FIELD_NUMBER: builtins.int
     ZIP_FIELD_NUMBER: builtins.int
+    GRAPH_FRAMES_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -229,6 +231,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def zip(self) -> global___Zip: ...
     @property
+    def graph_frames(self) -> pyspark.sql.connect.proto.graphframes_pb2.GraphFramesAPI: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -318,6 +322,7 @@ class Relation(google.protobuf.message.Message):
         relation_changes: global___RelationChanges | None = ...,
         nearest_by_join: global___NearestByJoin | None = ...,
         zip: global___Zip | None = ...,
+        graph_frames: pyspark.sql.connect.proto.graphframes_pb2.GraphFramesAPI | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -385,6 +390,8 @@ class Relation(google.protobuf.message.Message):
             b"filter",
             "freq_items",
             b"freq_items",
+            "graph_frames",
+            b"graph_frames",
             "group_map",
             b"group_map",
             "hint",
@@ -518,6 +525,8 @@ class Relation(google.protobuf.message.Message):
             b"filter",
             "freq_items",
             b"freq_items",
+            "graph_frames",
+            b"graph_frames",
             "group_map",
             b"group_map",
             "hint",
@@ -651,6 +660,7 @@ class Relation(google.protobuf.message.Message):
             "relation_changes",
             "nearest_by_join",
             "zip",
+            "graph_frames",
             "fill_na",
             "drop_na",
             "replace",

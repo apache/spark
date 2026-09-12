@@ -63,10 +63,12 @@ object BuildCommons {
     Seq("udf-worker-proto", "udf-worker-core", "udf-worker-grpc").map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
-    core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
+    core, graphx, graphframes, mllib, mllibLocal, repl, networkCommon, networkShuffle,
+    launcher, unsafe, tags, sketch, kvstore,
     commonUtils, commonUtilsJava, variant, pipelines, sparkConfig, _*
   ) = Seq(
-    "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
+    "core", "graphx", "graphframes", "mllib", "mllib-local", "repl", "network-common",
+    "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore", "common-utils", "common-utils-java", "variant", "pipelines", "config"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects ++
     udfWorkerProjects
@@ -416,7 +418,7 @@ object SparkBuild extends PomBuild {
 
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
-      spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
+      spark, graphframes, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
       connectJdbc, connectClient, variant, connectShims, profiler, credentialAws,
       commonUtilsJava, sparkConfig,

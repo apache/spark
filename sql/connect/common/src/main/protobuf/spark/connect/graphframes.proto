@@ -1,0 +1,331 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = 'proto3';
+
+package spark.connect.graphframes;
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto.graphframes";
+option java_generate_equals_and_hash = true;
+option optimize_for = SPEED;
+
+
+// GraphFramesAPI represents the core message type for GraphFrames operations
+// containing graph data and the specific graph algorithm to be executed
+message GraphFramesAPI {
+  // Serialized vertex DataFrame containing node information
+  bytes vertices = 1;
+  // Serialized edge DataFrame containing relationship information
+  bytes edges = 2;
+  // Specifies which graph algorithm operation to perform
+  oneof method {
+    AggregateMessages aggregate_messages = 3;
+    BFS bfs = 4;
+    ConnectedComponents connected_components = 5;
+    DropIsolatedVertices drop_isolated_vertices = 6;
+    DetectingCycles detecting_cycles = 7;
+    FilterEdges filter_edges = 8;
+    FilterVertices filter_vertices = 9;
+    Find find = 10;
+    LabelPropagation label_propagation = 11;
+    PageRank page_rank = 12;
+    ParallelPersonalizedPageRank parallel_personalized_page_rank = 13;
+    PowerIterationClustering power_iteration_clustering = 14;
+    Pregel pregel = 15;
+    ShortestPaths shortest_paths = 16;
+    StronglyConnectedComponents strongly_connected_components = 17;
+    SVDPlusPlus svd_plus_plus = 18;
+    TriangleCount triangle_count = 19;
+    Triplets triplets = 20;
+    KCore kcore = 21;
+    MaximalIndependentSet mis = 22;
+    RandomWalkEmbeddings rw_embeddings = 23;
+    AggregateNeighbors aggregate_neighbors = 24;
+    NeighborhoodAwareCDLP neighborhood_aware_cdlp = 25;
+    AllPaths all_paths = 26;
+    HyperANF hyper_anf = 27;
+  }
+}
+
+// Mapping follows PySpark Storage Levels!
+// (not Scala-Spark Storage Levels)
+message StorageLevel {
+  oneof storage_level {
+    bool disk_only = 1;
+    bool disk_only_2 = 2;
+    bool disk_only_3 = 3;
+    bool memory_and_disk = 4;
+    bool memory_and_disk_2 = 5;
+    bool memory_and_disk_deser = 6;
+    bool memory_only = 7;
+    bool memory_only_2 = 8;
+  }
+}
+
+// String expression or serialized column
+message ColumnOrExpression {
+  oneof col_or_expr {
+    bytes col = 1;
+    string expr = 2;
+  }
+}
+
+// Connect supports only string or long-like IDs
+message StringOrLongID {
+  oneof id {
+    int64 long_id = 1;
+    string string_id = 2;
+  }
+}
+
+message AggregateMessages {
+  repeated ColumnOrExpression agg_col = 1;
+  repeated ColumnOrExpression send_to_src = 2;
+  repeated ColumnOrExpression send_to_dst = 3;
+  optional StorageLevel storage_level = 4;
+}
+
+message BFS {
+  ColumnOrExpression from_expr = 1;
+  ColumnOrExpression to_expr = 2;
+  ColumnOrExpression edge_filter = 3;
+  int32 max_path_length = 4;
+}
+
+message AllPaths {
+  ColumnOrExpression from_expr = 1;
+  ColumnOrExpression to_expr = 2;
+  ColumnOrExpression edge_filter = 3;
+  int32 max_path_length = 4;
+  bool is_directed = 5;
+  int32 checkpoint_interval = 6;
+  bool use_local_checkpoints = 7;
+  optional StorageLevel storage_level = 8;
+}
+
+message HyperANF {
+  int32 n_hops = 1;
+  int32 lg_nom_entries = 2;
+  optional ColumnOrExpression edges_filter_expression = 3;
+  int32 checkpoint_interval = 4;
+  bool use_local_checkpoints = 5;
+  optional StorageLevel storage_level = 6;
+}
+
+message ConnectedComponents {
+  string algorithm = 1;
+  int32 checkpoint_interval = 2;
+  int32 broadcast_threshold = 3;
+  bool use_labels_as_components = 4;
+  bool use_local_checkpoints = 5;
+  int32 max_iter = 6;
+  optional StorageLevel storage_level = 7;
+}
+
+message DetectingCycles {
+  bool use_local_checkpoints = 1;
+  int32 checkpoint_interval = 2;
+  optional StorageLevel storage_level = 3;
+}
+
+message DropIsolatedVertices {}
+
+message FilterEdges {
+  ColumnOrExpression condition = 1;
+}
+
+message FilterVertices {
+  ColumnOrExpression condition = 2;
+}
+
+message Find {
+  string pattern = 1;
+}
+
+message LabelPropagation {
+  string algorithm = 1;
+  int32 max_iter = 2;
+  bool use_local_checkpoints = 3;
+  int32 checkpoint_interval = 4;
+  optional StorageLevel storage_level = 5;
+}
+
+message NeighborhoodAwareCDLP {
+  int32 max_iter = 1;
+  bool ignore_direct_links = 2;
+  double structural_similarity_multiplier = 3;
+  bool use_local_checkpoints = 4;
+  int32 checkpoint_interval = 5;
+  optional StorageLevel storage_level = 6;
+  bool is_directed = 7;
+  int32 lg_nom_entries = 8;
+  optional string initial_label_col = 9;
+}
+
+message PageRank {
+  double reset_probability = 1;
+  optional StringOrLongID source_id = 2;
+  optional int32 max_iter = 3;
+  optional double tol = 4;
+}
+
+message ParallelPersonalizedPageRank {
+  double reset_probability = 1;
+  repeated StringOrLongID source_ids = 2;
+  int32 max_iter = 3;
+}
+
+message PowerIterationClustering {
+  int32 k = 1;
+  int32 max_iter = 2;
+  optional string weight_col = 3;
+}
+
+message Pregel {
+  ColumnOrExpression agg_msgs = 1;
+  repeated ColumnOrExpression send_msg_to_dst = 2;
+  repeated ColumnOrExpression send_msg_to_src = 3;
+  int32 checkpoint_interval = 4;
+  int32 max_iter = 5;
+  string additional_col_name = 6;
+  ColumnOrExpression additional_col_initial = 7;
+  ColumnOrExpression additional_col_upd = 8;
+  optional bool early_stopping = 9;
+  bool use_local_checkpoints = 10;
+  optional StorageLevel storage_level = 11;
+  optional bool stop_if_all_non_active = 12;
+  optional ColumnOrExpression initial_active_expr = 13;
+  optional ColumnOrExpression update_active_expr = 14;
+  optional bool skip_messages_from_non_active = 15;
+  // Required columns for triplet construction (memory optimization)
+  // Column names separated by comma
+  optional string required_src_columns = 16;
+  optional string required_dst_columns = 17;
+  optional string required_edge_columns = 18;
+}
+
+message ShortestPaths {
+  repeated StringOrLongID landmarks = 1;
+  string algorithm = 2;
+  bool use_local_checkpoints = 3;
+  int32 checkpoint_interval = 4;
+  optional StorageLevel storage_level = 5;
+  optional bool is_directed = 6;
+}
+
+message StronglyConnectedComponents {
+  int32 max_iter = 1;
+}
+
+message SVDPlusPlus {
+  int32 rank = 1;
+  int32 max_iter = 2;
+  double min_value = 3;
+  double max_value = 4;
+  double gamma1 = 5;
+  double gamma2 = 6;
+  double gamma6 = 7;
+  double gamma7 = 8;
+}
+
+message TriangleCount {
+  optional StorageLevel storage_level = 1;
+  optional string algorithm = 2;
+  optional int32 lg_nom_entries = 3;
+}
+
+message Triplets {}
+
+message MaximalIndependentSet {
+  int32 checkpoint_interval = 1;
+  optional StorageLevel storage_level = 2;
+  bool use_local_checkpoints = 3;
+  int64 seed = 4;
+}
+
+message KCore {
+  bool use_local_checkpoints = 1;
+  int32 checkpoint_interval = 2;
+  optional StorageLevel storage_level = 3;
+}
+
+message AggregateNeighbors {
+  // Starting vertices condition (Boolean column expression)
+  ColumnOrExpression starting_vertices = 1;
+  // Maximum number of hops to explore
+  int32 max_hops = 2;
+  // Accumulator names
+  repeated string accumulator_names = 3;
+  // Accumulator initial value expressions
+  repeated ColumnOrExpression accumulator_inits = 4;
+  // Accumulator update expressions
+  repeated ColumnOrExpression accumulator_updates = 5;
+  // Optional stopping condition (Boolean column expression)
+  optional ColumnOrExpression stopping_condition = 6;
+  // Optional target condition (Boolean column expression)
+  optional ColumnOrExpression target_condition = 7;
+  // Optional required vertex attributes to carry through traversal
+  repeated string required_vertex_attributes = 8;
+  // Optional required edge attributes to carry through traversal
+  repeated string required_edge_attributes = 9;
+  // Optional edge filter condition (Boolean column expression)
+  optional ColumnOrExpression edge_filter = 10;
+  // Whether to remove self-loops
+  bool remove_loops = 11;
+  // Checkpoint interval (0 means disabled)
+  int32 checkpoint_interval = 12;
+  // Whether to use local checkpoints
+  bool use_local_checkpoints = 13;
+  // Optional storage level for intermediate results
+  optional StorageLevel storage_level = 14;
+}
+
+message RandomWalkEmbeddings {
+  bool use_edge_direction = 1;
+  string rw_model = 2;
+  int32 rw_max_nbrs = 3;
+  int32 rw_num_walks_per_node = 4;
+  int32 rw_batch_size = 5;
+  int32 rw_num_batches = 6;
+  int64 rw_seed = 7;
+  double rw_restart_probability = 8;
+  string rw_temporary_prefix = 9;
+  string rw_cached_walks = 10;
+  string sequence_model = 11;
+  int32 hash2vec_context_size = 12;
+  int32 hash2vec_num_partitions = 13;
+  int32 hash2vec_embeddings_dim = 14;
+  string hash2vec_decay_function = 15;
+  double hash2vec_gaussian_sigma = 16;
+  int32 hash2vec_hashing_seed = 17;
+  int32 hash2vec_sign_seed = 18;
+  bool hash2vec_do_l2_norm = 19;
+  bool hash2vec_safe_l2 = 20;
+  int32 word2vec_max_iter = 21;
+  int32 word2vec_embeddings_dim = 22;
+  int32 word2vec_window_size = 23;
+  int32 word2vec_num_partitions = 24;
+  int32 word2vec_min_count = 25;
+  int32 word2vec_max_sentence_length = 26;
+  int64 word2vec_seed = 27;
+  double word2vec_step_size = 28;
+  bool aggregate_neighbors = 29;
+  int32 aggregate_neighbors_max_nbrs = 30;
+  int64 aggregate_neighbors_seed = 31;
+  bool clean_up_after_run = 32;
+}
