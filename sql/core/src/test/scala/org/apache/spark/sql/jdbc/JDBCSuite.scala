@@ -541,6 +541,41 @@ class JDBCSuite extends SharedSparkSession {
     assert(e.getMessage.contains("2018-07-06 10:00:00+05:00"))
   }
 
+  test("SPARK-59051: compile temporal partition bounds with the JDBC dialect") {
+    val testUrl = "jdbc:spark-test:"
+    val quotedColumn = "\"PartitionColumn\""
+    val cases = Seq(
+      (DateType, "2018-07-06", "2018-07-08", "{d '2018-07-07'}"),
+      (TimestampType, "2018-07-06 10:00:00", "2018-07-06 14:00:00",
+        "{ts '2018-07-06 12:00:00.0'}"),
+      (TimestampNTZType, "2018-07-06 10:00:00", "2018-07-06 14:00:00",
+        "{ts '2018-07-06 12:00:00.0'}"))
+
+    JdbcDialects.registerDialectForUrlPrefix(testUrl, OracleDialect())
+    try {
+      cases.foreach { case (dataType, lowerBound, upperBound, compiledMidpoint) =>
+        val schema = StructType(Seq(StructField("PartitionColumn", dataType)))
+        val partitions = JDBCRelation.columnPartition(
+          schema,
+          analysis.caseInsensitiveResolution,
+          "UTC",
+          new JDBCOptions(testUrl, "table", Map(
+            "driver" -> "org.h2.Driver",
+            "lowerBound" -> lowerBound,
+            "upperBound" -> upperBound,
+            "numPartitions" -> "2",
+            "partitionColumn" -> "PartitionColumn")))
+
+        val clauses = partitions.map(_.asInstanceOf[JDBCPartition].whereClause)
+        assert(clauses === Array(
+          s"$quotedColumn < $compiledMidpoint or $quotedColumn is null",
+          s"$quotedColumn >= $compiledMidpoint"))
+      }
+    } finally {
+      JdbcDialects.unregisterDialectForUrlPrefix(testUrl)
+    }
+  }
+
   test("overflow of partition bound difference does not give negative stride") {
     val df = sql("SELECT * FROM partsoverflow")
     checkNumPartitions(df, expectedNumPartitions = 3)

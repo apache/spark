@@ -462,16 +462,15 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       // the partition column. E.g. 2018-07-06 cannot be evaluated as Timestamp, and the error
       // message says: Timestamp format must be yyyy-mm-dd hh:mm:ss[.fffffffff].
       .option("oracle.jdbc.mapDateToTimestamp", "false")
-      .option("sessionInitStatement", "ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD'")
       .load()
 
     df1.logicalPlan match {
       case LogicalRelationWithTable(JDBCRelation(_, parts, _, _), _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
-          """"D" < '2018-07-11' or "D" is null""",
-          """"D" >= '2018-07-11' AND "D" < '2018-07-15'""",
-          """"D" >= '2018-07-15'"""))
+          """"D" < {d '2018-07-11'} or "D" is null""",
+          """"D" >= {d '2018-07-11'} AND "D" < {d '2018-07-15'}""",
+          """"D" >= {d '2018-07-15'}"""))
     }
     assert(df1.collect().toSet === expectedResult)
 
@@ -484,16 +483,14 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       .option("upperBound", "2018-07-27 14:11:05.0")
       .option("numPartitions", 2)
       .option("oracle.jdbc.mapDateToTimestamp", "false")
-      .option("sessionInitStatement",
-        "ALTER SESSION SET NLS_TIMESTAMP_FORMAT = 'YYYY-MM-DD HH24:MI:SS.FF'")
       .load()
 
     df2.logicalPlan match {
       case LogicalRelationWithTable(JDBCRelation(_, parts, _, _), _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
-          """"T" < '2018-07-15 20:50:32.5' or "T" is null""",
-          """"T" >= '2018-07-15 20:50:32.5'"""))
+          """"T" < {ts '2018-07-15 20:50:32.5'} or "T" is null""",
+          """"T" >= {ts '2018-07-15 20:50:32.5'}"""))
     }
     assert(df2.collect().toSet === expectedResult)
   }

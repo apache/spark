@@ -26,13 +26,13 @@ import org.apache.spark.internal.LogKeys.{CLAUSES, LOWER_BOUND, NEW_VALUE, NUM_P
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.jdbc.JdbcDialects
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, DateType, NumericType, StructType, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -111,8 +111,9 @@ private[sql] object JDBCRelation extends Logging {
       "Operation not allowed: the lower bound of partitioning column is larger than the upper " +
       s"bound. Lower bound: $lowerBound; Upper bound: $upperBound")
 
+    val dialect = JdbcDialects.get(jdbcOptions.url)
     val boundValueToString: Long => String =
-      toBoundValueInWhereClause(_, partitioning.columnType, timeZoneId)
+      toBoundValueInWhereClause(_, partitioning.columnType, timeZoneId, dialect)
     val numPartitions =
       if ((upperBound - lowerBound) >= partitioning.numPartitions || /* check for overflow */
           (upperBound - lowerBound) < 0) {
@@ -216,26 +217,22 @@ private[sql] object JDBCRelation extends Logging {
   private def toBoundValueInWhereClause(
       value: Long,
       columnType: DataType,
-      timeZoneId: String): String = {
-    def dateTimeToString(): String = {
-      val dateTimeStr = columnType match {
+      timeZoneId: String,
+      dialect: JdbcDialect): String = {
+    def compileDateTimeValue(): String = {
+      val dateTimeValue = columnType match {
         case DateType =>
-          DateFormatter().format(value.toInt)
+          java.sql.Date.valueOf(DateTimeUtils.daysToLocalDate(value.toInt))
         case TimestampType =>
-          val timestampFormatter = TimestampFormatter.getFractionFormatter(
-            DateTimeUtils.getZoneId(timeZoneId))
-          timestampFormatter.format(value)
+          DateTimeUtils.microsToInstant(value).atZone(getZoneId(timeZoneId)).toLocalDateTime
         case TimestampNTZType =>
-          // NTZ micros are zoneless wall-clock values; format in UTC so no zone shift is applied.
-          val timestampFormatter = TimestampFormatter.getFractionFormatter(
-            DateTimeUtils.getZoneId("UTC"))
-          timestampFormatter.format(value)
+          DateTimeUtils.microsToLocalDateTime(value)
       }
-      s"'$dateTimeStr'"
+      dialect.compileValue(dateTimeValue).toString
     }
     columnType match {
       case _: NumericType => value.toString
-      case DateType | TimestampType | TimestampNTZType => dateTimeToString()
+      case DateType | TimestampType | TimestampNTZType => compileDateTimeValue()
     }
   }
 
