@@ -748,6 +748,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def unsupportedViewChangeError(e: IllegalArgumentException): Throwable = {
+    new SparkException(
+      errorClass = "UNSUPPORTED_VIEW_CHANGE",
+      messageParameters = Map("message" -> e.getMessage),
+      cause = e)
+  }
+
   def notADatasourceRDDPartitionError(split: Partition): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2046",
