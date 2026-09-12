@@ -17,14 +17,23 @@
 
 package org.apache.spark.memory
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+
+import scala.concurrent.{blocking, Future}
+import scala.concurrent.duration._
+
+import org.mockito.ArgumentMatchers.{any, anyLong}
+import org.mockito.Mockito.doAnswer
+import org.mockito.invocation.InvocationOnMock
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
-import org.apache.spark.storage.TestBlockId
+import org.apache.spark.storage.{BlockId, TestBlockId}
 import org.apache.spark.storage.memory.MemoryStore
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTester {
   private val dummyBlock = TestBlockId("--")
@@ -73,6 +82,371 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     // Release beyond what was acquired
     mm.releaseExecutionMemory(maxMemory, taskAttemptId, memoryMode)
     assert(mm.executionMemoryUsed === 0L)
+  }
+
+  test("optional admission does not borrow free storage or partially reserve") {
+    val (mm, ms) = makeThings(1000L)
+    val mode = MemoryMode.ON_HEAP
+    assert(mm.tryAcquireExecutionMemory(501L, 1L, mode) === 0L)
+    assert(mm.executionMemoryUsed === 0L)
+    assert(mm.tryAcquireExecutionMemory(500L, 1L, mode) === 500L)
+    assert(mm.tryAcquireExecutionMemory(1L, 1L, mode) === 0L)
+    assert(mm.storageMemoryUsed === 0L)
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
+    assert(mm.releaseAllExecutionMemoryForTask(1L) === 500L)
+    assert(mm.tryAcquireExecutionMemory(501L, 1L, mode) === 0L)
+  }
+
+  test("direct storage pressure reclaims only matching optional owners before eviction") {
+    val (mm, _) = makeThings(1000L)
+    val mode = MemoryMode.ON_HEAP
+    var held = 0L
+    var callbacks = 0
+    val unregister = mm.registerOptionalMemoryReclaimer(1L, mode, () => {
+      assert(!Thread.holdsLock(mm))
+      callbacks += 1
+      mm.releaseExecutionMemory(held, 1L, mode)
+      held = 0L
+    })
+    held = mm.tryAcquireExecutionMemory(100L, 1L, mode)
+    assert(held === 100L)
+    assert(mm.acquireStorageMemory(dummyBlock, 800L, mode))
+    assert(callbacks === 0)
+    assert(held === 100L)
+    mm.releaseStorageMemory(800L, mode)
+    assert(mm.acquireStorageMemory(dummyBlock, 950L, mode))
+    assert(callbacks === 1)
+    assert(held === 0L)
+    assert(mm.executionMemoryUsed === 0L)
+    mm.releaseStorageMemory(950L, mode)
+    unregister.run()
+  }
+
+  test("outer storage marker drains before inherited monitor and excludes new optional admission") {
+    val (mm, _) = makeThings(1000L)
+    val mode = MemoryMode.ON_HEAP
+    var held = 0L
+    var callbacks = 0
+    val unregister = mm.registerOptionalMemoryReclaimer(1L, mode, () => {
+      assert(!Thread.holdsLock(mm))
+      callbacks += 1
+      assert(mm.tryAcquireExecutionMemory(1L, 3L, mode) === 0L)
+      mm.releaseExecutionMemory(held, 1L, mode)
+      held = 0L
+    })
+    held = mm.tryAcquireExecutionMemory(100L, 1L, mode)
+    mm.withMemoryReclamation {
+      mm.synchronized {
+        assert(callbacks === 1)
+        assert(mm.acquireStorageMemory(dummyBlock, 950L, mode))
+        assert(callbacks === 1)
+      }
+    }
+    assert(mm.executionMemoryUsed === 0L)
+    mm.releaseStorageMemory(950L, mode)
+    unregister.run()
+  }
+
+  test("ordinary reclamation drains other owners before propagating callback failure") {
+    val (mm, _) = makeThings(1000L)
+    val mode = MemoryMode.ON_HEAP
+    var held = 0L
+    val failed = mm.registerOptionalMemoryReclaimer(1L, mode, () => {
+      throw new IllegalStateException("injected release failure")
+    })
+    val released = mm.registerOptionalMemoryReclaimer(2L, mode, () => {
+      assert(!Thread.holdsLock(mm))
+      mm.releaseExecutionMemory(held, 2L, mode)
+      held = 0L
+    })
+    assert(mm.tryAcquireExecutionMemory(100L, 1L, mode) === 100L)
+    held = mm.tryAcquireExecutionMemory(100L, 2L, mode)
+    assert(held === 100L)
+    intercept[IllegalStateException] {
+      mm.acquireExecutionMemory(700L, 3L, mode)
+    }
+    assert(held === 0L)
+    assert(mm.getExecutionMemoryUsageForTask(3L) === 0L)
+    assert(mm.executionMemoryUsed === 100L)
+    mm.releaseExecutionMemory(100L, 1L, mode)
+    failed.run()
+    released.run()
+    assert(mm.acquireExecutionMemory(700L, 3L, mode) === 700L)
+    mm.releaseAllExecutionMemoryForTask(3L)
+  }
+
+  test("concurrent demand reclaims shared optional ownership exactly once") {
+    for (mode <- Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP)) {
+      val mm = createMemoryManager(1000L, 1000L)
+      val ownerLock = new Object
+      val bothReclaiming = new CountDownLatch(2)
+      val calls = new AtomicInteger()
+      var held = 0L
+      var released = 0L
+      val unregister = mm.registerOptionalMemoryReclaimer(1L, mode, () => {
+        assert(!Thread.holdsLock(mm))
+        calls.incrementAndGet()
+        // Force overlapping callbacks before either releases the optional reservation.
+        // This scheduling barrier is outside the owner's short release-only critical section.
+        bothReclaiming.countDown()
+        assert(blocking { bothReclaiming.await(5, TimeUnit.SECONDS) })
+        ownerLock.synchronized {
+          if (held != 0L) {
+            mm.releaseExecutionMemory(held, 1L, mode)
+            released += held
+            held = 0L
+          }
+        }
+      })
+      ownerLock.synchronized {
+        held = mm.tryAcquireExecutionMemory(400L, 1L, mode)
+        assert(held === 400L)
+      }
+      // Ordinary allocation must not retain the owner lock: it can reclaim another task.
+      val demands = Seq(2L, 3L).map { taskId =>
+        Future {
+          try {
+            val granted = mm.acquireExecutionMemory(700L, taskId, mode)
+            assert(granted > 0L && granted <= 700L)
+          } finally {
+            mm.releaseAllExecutionMemoryForTask(taskId)
+          }
+        }
+      }
+      try {
+        demands.foreach(ThreadUtils.awaitResult(_, 10.seconds))
+        // A repeated invocation must also be harmless after both demand requests have finished.
+        mm.withMemoryReclamation { () }
+        assert(calls.get() === 3)
+        assert(held === 0L)
+        assert(released === 400L)
+        assert(mm.executionMemoryUsed === 0L)
+      } finally {
+        mm.releaseAllExecutionMemoryForTask(1L)
+        unregister.run()
+      }
+    }
+  }
+
+  test("storage cleanup tolerates drain failure but preserves body failures and memory charges") {
+    val (mm, _) = makeThings(1000L)
+    val mode = MemoryMode.ON_HEAP
+    val drainFailure = new IllegalStateException("injected drain failure")
+    val bodyFailure = new IllegalArgumentException("injected cleanup failure")
+    val unregister = mm.registerOptionalMemoryReclaimer(1L, mode, () => throw drainFailure)
+    assert(mm.tryAcquireExecutionMemory(100L, 1L, mode) === 100L)
+    try {
+      // Ordinary operations still stop before their body if reclamation fails.
+      assert(intercept[IllegalStateException] {
+        mm.withMemoryReclamation { fail("body must not run") }
+      } eq drainFailure)
+      assert(intercept[IllegalArgumentException] {
+        mm.withMemoryReclamation({
+          assert(mm.tryAcquireExecutionMemory(1L, 2L, mode) === 0L)
+          throw bodyFailure
+        }, releaseOnly = true)
+      } eq bodyFailure)
+      assert(mm.executionMemoryUsed === 100L)
+      // The gate is released even when the cleanup body throws.
+      assert(mm.tryAcquireExecutionMemory(1L, 2L, mode) === 1L)
+    } finally {
+      mm.releaseAllExecutionMemoryForTask(1L)
+      mm.releaseAllExecutionMemoryForTask(2L)
+      unregister.run()
+    }
+  }
+
+  test("ordinary pressure reclaims only the requested memory mode") {
+    val mm = createMemoryManager(1000L, 1000L)
+    makeMemoryStore(mm)
+    var onHeapHeld = 0L
+    var offHeapHeld = 0L
+    val onHeap = mm.registerOptionalMemoryReclaimer(1L, MemoryMode.ON_HEAP, () => {
+      mm.releaseExecutionMemory(onHeapHeld, 1L, MemoryMode.ON_HEAP)
+      onHeapHeld = 0L
+    })
+    val offHeap = mm.registerOptionalMemoryReclaimer(1L, MemoryMode.OFF_HEAP, () => {
+      mm.releaseExecutionMemory(offHeapHeld, 1L, MemoryMode.OFF_HEAP)
+      offHeapHeld = 0L
+    })
+    onHeapHeld = mm.tryAcquireExecutionMemory(100L, 1L, MemoryMode.ON_HEAP)
+    offHeapHeld = mm.tryAcquireExecutionMemory(100L, 1L, MemoryMode.OFF_HEAP)
+    assert(mm.acquireExecutionMemory(700L, 2L, MemoryMode.OFF_HEAP) === 700L)
+    assert(offHeapHeld === 0L)
+    assert(onHeapHeld === 100L)
+    mm.releaseExecutionMemory(onHeapHeld, 1L, MemoryMode.ON_HEAP)
+    mm.releaseExecutionMemory(700L, 2L, MemoryMode.OFF_HEAP)
+    onHeap.run()
+    offHeap.run()
+    assert(mm.executionMemoryUsed === 0L)
+  }
+
+  test("optional admission does not evict storage borrowed from execution") {
+    val (mm, ms) = makeThings(1000L)
+    val mode = MemoryMode.ON_HEAP
+    assert(mm.acquireStorageMemory(dummyBlock, 800L, mode))
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
+    assert(mm.tryAcquireExecutionMemory(201L, 1L, mode) === 0L)
+    assert(mm.storageMemoryUsed === 800L)
+    assert(mm.executionMemoryUsed === 0L)
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
+    assert(mm.tryAcquireExecutionMemory(200L, 1L, mode) === 200L)
+    assert(mm.releaseAllExecutionMemoryForTask(1L) === 200L)
+  }
+
+  test("optional admission preserves fair shares and task release in both memory modes") {
+    for (mode <- Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP)) {
+      val mm = createMemoryManager(1000L, 1000L)
+      // Ordinary admission borrows storage, making the execution pool 1000 bytes.
+      assert(mm.acquireExecutionMemory(1000L, 1L, mode) === 1000L)
+      mm.releaseExecutionMemory(1000L, 1L, mode)
+      assert(mm.tryAcquireExecutionMemory(250L, 1L, mode) === 250L)
+      assert(mm.tryAcquireExecutionMemory(501L, 2L, mode) === 0L)
+      assert(mm.tryAcquireExecutionMemory(500L, 2L, mode) === 500L)
+      assert(mm.tryAcquireExecutionMemory(251L, 1L, mode) === 0L)
+      assert(mm.tryAcquireExecutionMemory(250L, 1L, mode) === 250L)
+      assert(mm.executionMemoryUsed === 1000L)
+      assert(mm.releaseAllExecutionMemoryForTask(2L) === 500L)
+      assert(mm.tryAcquireExecutionMemory(500L, 1L, mode) === 500L)
+      assert(mm.releaseAllExecutionMemoryForTask(1L) === 1000L)
+      assert(mm.executionMemoryUsed === 0L)
+    }
+  }
+
+  test("zero and denied optional requests do not create phantom fair-share participants") {
+    val mm = createMemoryManager(1000L)
+    val mode = MemoryMode.ON_HEAP
+    assert(mm.acquireExecutionMemory(1000L, 1L, mode) === 1000L)
+    assert(mm.tryAcquireExecutionMemory(0L, 2L, mode) === 0L)
+    assert(mm.tryAcquireExecutionMemory(1L, 2L, mode) === 0L)
+    intercept[IllegalArgumentException] {
+      mm.tryAcquireExecutionMemory(-1L, 3L, mode)
+    }
+    mm.releaseExecutionMemory(100L, 1L, mode)
+    assert(mm.tryAcquireExecutionMemory(100L, 1L, mode) === 100L)
+    assert(mm.releaseAllExecutionMemoryForTask(1L) === 1000L)
+  }
+
+  test("optional admission refuses stalled eviction before and after first registration") {
+    for (storageRequest <- Seq(false, true)) {
+      val (mm, ms) = makeThings(1000L)
+      val mode = MemoryMode.ON_HEAP
+      assert(mm.acquireStorageMemory(dummyBlock, 800L, mode))
+      val evicting = new CountDownLatch(1)
+      val finishEviction = new CountDownLatch(1)
+      doAnswer(
+        (invocation: InvocationOnMock) => {
+          evicting.countDown()
+          assert(finishEviction.await(10, TimeUnit.SECONDS))
+          val bytes = invocation.getArguments()(1).asInstanceOf[Long]
+          mm.releaseStorageMemory(bytes, mode)
+          bytes
+        }).when(ms).evictBlocksToFreeSpace(any(), anyLong(), any())
+      // No owner exists when this request takes the fast path and starts eviction.
+      val ordinary = Future {
+        if (storageRequest) {
+          assert(mm.acquireStorageMemory(TestBlockId("replacement"), 900L, mode))
+        } else {
+          assert(mm.acquireExecutionMemory(300L, 1L, mode) === 300L)
+        }
+      }
+      var unregister: Option[Runnable] = None
+      try {
+        assert(evicting.await(5, TimeUnit.SECONDS))
+        val beforeRegistration = Future { mm.tryAcquireExecutionMemory(1L, 2L, mode) }
+        assert(ThreadUtils.awaitResult(beforeRegistration, 5.seconds) === 0L)
+        unregister = Some(mm.registerOptionalMemoryReclaimer(2L, mode, () => {
+          fail("the first empty owner must not be reclaimed by an in-progress fast path")
+        }))
+        val afterRegistration = Future { mm.tryAcquireExecutionMemory(100L, 2L, mode) }
+        assert(ThreadUtils.awaitResult(afterRegistration, 5.seconds) === 0L)
+        finishEviction.countDown()
+        ThreadUtils.awaitResult(ordinary, 5.seconds)
+        if (storageRequest) mm.releaseStorageMemory(900L, mode)
+        else mm.releaseExecutionMemory(300L, 1L, mode)
+        // Storage may own the whole pool; only ordinary admission can borrow free storage back.
+        assert(mm.acquireExecutionMemory(100L, 2L, mode) === 100L)
+        mm.releaseExecutionMemory(100L, 2L, mode)
+        assert(mm.tryAcquireExecutionMemory(100L, 2L, mode) === 100L)
+        assert(mm.releaseAllExecutionMemoryForTask(2L) === 100L)
+      } finally {
+        finishEviction.countDown()
+        ThreadUtils.awaitResult(ordinary, 5.seconds)
+        unregister.foreach(_.run())
+        mm.releaseAllExecutionMemoryForTask(1L)
+        mm.releaseAllExecutionMemoryForTask(2L)
+        mm.releaseAllStorageMemory()
+      }
+    }
+  }
+
+  test("optional admission marker does not serialize ordinary operations") {
+    val mm = createMemoryManager(1000L)
+    val marked = new CountDownLatch(1)
+    val finish = new CountDownLatch(1)
+    val markedOperation = Future {
+      mm.withMemoryReclamation {
+        marked.countDown()
+        assert(finish.await(10, TimeUnit.SECONDS))
+      }
+    }
+    try {
+      assert(marked.await(5, TimeUnit.SECONDS))
+      assert(mm.tryAcquireExecutionMemory(1L, 1L, MemoryMode.ON_HEAP) === 0L)
+      val ordinary = Future { mm.acquireExecutionMemory(1L, 1L, MemoryMode.ON_HEAP) }
+      assert(ThreadUtils.awaitResult(ordinary, 5.seconds) === 1L)
+      assert(mm.releaseAllExecutionMemoryForTask(1L) === 1L)
+    } finally {
+      finish.countDown()
+      ThreadUtils.awaitResult(markedOperation, 5.seconds)
+    }
+    assert(mm.tryAcquireExecutionMemory(1L, 1L, MemoryMode.ON_HEAP) === 1L)
+    assert(mm.releaseAllExecutionMemoryForTask(1L) === 1L)
+  }
+
+  test("direct unroll admission acquires the reclamation marker before the monitor") {
+    val enteredStorage = new CountDownLatch(1)
+    val continueStorage = new CountDownLatch(1)
+    val abortStorage = new AtomicBoolean(false)
+    val mode = MemoryMode.ON_HEAP
+    val mm = new UnifiedMemoryManager(new SparkConf(), 1000L, 500L, 1) {
+      /**
+       * Pause before ordinary storage admission so optional admission can take its gate first.
+       * On test failure, return without entering that gate to let both futures finish safely.
+       */
+      override def acquireStorageMemory(
+          blockId: BlockId,
+          numBytes: Long,
+          memoryMode: MemoryMode): Boolean = {
+        enteredStorage.countDown()
+        assert(continueStorage.await(10, TimeUnit.SECONDS))
+        if (abortStorage.get()) {
+          false
+        } else {
+          super.acquireStorageMemory(blockId, numBytes, memoryMode)
+        }
+      }
+    }
+    val unroll = Future { mm.acquireUnrollMemory(dummyBlock, 1L, mode) }
+    val optional = Future {
+      assert(enteredStorage.await(5, TimeUnit.SECONDS))
+      mm.tryAcquireExecutionMemory(1L, 1L, mode)
+    }
+    try {
+      assert(ThreadUtils.awaitResult(optional, 5.seconds) === 1L)
+      continueStorage.countDown()
+      assert(ThreadUtils.awaitResult(unroll, 5.seconds))
+      assert(mm.storageMemoryUsed === 1L)
+    } finally {
+      abortStorage.set(true)
+      continueStorage.countDown()
+      ThreadUtils.awaitResult(unroll, 5.seconds)
+      ThreadUtils.awaitResult(optional, 5.seconds)
+      mm.releaseAllExecutionMemoryForTask(1L)
+      mm.releaseAllStorageMemory()
+    }
+    assert(mm.executionMemoryUsed === 0L)
+    assert(mm.storageMemoryUsed === 0L)
   }
 
   test("basic storage memory") {
@@ -376,6 +750,66 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assertEvictBlocksToFreeSpaceCalled(ms, 50)
     assert(mm.storageMemoryUsed === 600L)
     UnifiedMemoryManager.shutdownUnmanagedMemoryPoller()
+  }
+
+  test("optional memory admission and reclamation account for unmanaged memory") {
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { mode =>
+      val conf = new SparkConf()
+        .set(MEMORY_FRACTION, 1.0)
+        .set(TEST_MEMORY, 1000L)
+        .set(MEMORY_OFFHEAP_SIZE, 1000L)
+        .set(MEMORY_STORAGE_FRACTION, storageFraction)
+        .set(UNMANAGED_MEMORY_POLLING_INTERVAL, 100L)
+      val mm = UnifiedMemoryManager(conf, numCores = 1)
+      makeMemoryStore(mm)
+      // Poll explicitly so admission observes a fixed unmanaged usage without sleeps.
+      UnifiedMemoryManager.shutdownUnmanagedMemoryPoller()
+      val consumer = new UnmanagedMemoryConsumer {
+        override def unmanagedMemoryConsumerId: UnmanagedMemoryConsumerId =
+          UnmanagedMemoryConsumerId("OptionalMemoryTest", mode.toString)
+        override def memoryMode: MemoryMode = mode
+        override def getMemBytesUsed: Long = 800L
+      }
+      var held = 0L
+      var callbacks = 0
+      val unregister = mm.registerOptionalMemoryReclaimer(1L, mode, () => {
+        callbacks += 1
+        mm.releaseExecutionMemory(held, 1L, mode)
+        held = 0L
+      })
+      try {
+        UnifiedMemoryManager.registerUnmanagedMemoryConsumer(consumer)
+        val poll = PrivateMethod[Unit](Symbol("pollUnmanagedMemoryUsers"))
+        UnifiedMemoryManager invokePrivate poll()
+        assert(mm.tryAcquireExecutionMemory(201L, 1L, mode) === 0L)
+        held = mm.tryAcquireExecutionMemory(100L, 1L, mode)
+        assert(held === 100L)
+        assert(mm.acquireExecutionMemory(100L, 2L, mode) === 100L)
+        assert(callbacks === 0)
+        mm.releaseAllExecutionMemoryForTask(2L)
+        held += mm.tryAcquireExecutionMemory(100L, 1L, mode)
+        assert(held === 200L)
+
+        // The prospective fair share is 100 bytes until the optional task releases its charge.
+        assert(mm.acquireExecutionMemory(150L, 2L, mode) === 150L)
+        assert(callbacks === 1)
+        mm.releaseAllExecutionMemoryForTask(2L)
+
+        held = mm.tryAcquireExecutionMemory(200L, 1L, mode)
+        assert(held === 200L)
+        assert(mm.acquireStorageMemory(dummyBlock, 150L, mode))
+        assert(callbacks === 2)
+        mm.releaseStorageMemory(150L, mode)
+
+        assert(!mm.acquireStorageMemory(dummyBlock, 201L, mode))
+        assert(callbacks === 2)
+      } finally {
+        mm.releaseAllExecutionMemoryForTask(1L)
+        mm.releaseAllExecutionMemoryForTask(2L)
+        unregister.run()
+        UnifiedMemoryManager.clearUnmanagedMemoryUsers()
+      }
+    }
   }
 
   test("unmanaged memory tracking with memory mode separation") {

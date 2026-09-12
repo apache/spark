@@ -53,6 +53,16 @@ private[spark] class ChunkedByteBufferOutputStream(
 
   def size: Long = _size
 
+  /** Release untransferred chunks without allocating a compact final chunk. */
+  def dispose(): Unit = {
+    if (!toChunkedByteBufferWasCalled) {
+      close()
+      chunks.foreach(StorageUtils.dispose)
+      chunks.clear()
+      toChunkedByteBufferWasCalled = true
+    }
+  }
+
   override def close(): Unit = {
     if (!closed) {
       super.close()
