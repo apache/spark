@@ -511,6 +511,21 @@ class SubquerySuite extends SharedSparkSession
       Row(null, null) :: Row(null, null) :: Row(6, null) :: Nil)
   }
 
+  test("HAVING on an outer grouping expression") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT (
+          |  SELECT COUNT(inner_value)
+          |  FROM VALUES (1), (2) AS inner_table(inner_value)
+          |  GROUP BY outer_table.outer_key
+          |  HAVING outer_table.outer_key = outer_table.outer_key
+          |)
+          |FROM VALUES (DATE '2024-01-01'), (DATE '2024-01-02') AS outer_table(outer_key)
+          |""".stripMargin),
+      Seq(Row(2L), Row(2L)))
+  }
+
   test("correlated scalar subquery in select (null safe)") {
     checkAnswer(
       sql("select a, (select sum(b) from l l2 where l2.a <=> l1.a) sum_b from l l1"),
