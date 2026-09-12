@@ -1,0 +1,12 @@
+================================================================================================
+WindowReorder: stack reordering of the window chain
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.4.1
+Apple M4 Pro
+window batch over two user key groups:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+baseline (window reorder off)                      8575           8629          61          2.0         511.1       1.0X
+optimized (window reorder on)                      6466           6537          65          2.6         385.4       1.3X
+
+
