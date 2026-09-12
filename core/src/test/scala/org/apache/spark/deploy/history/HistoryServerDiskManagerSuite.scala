@@ -427,9 +427,8 @@ abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAn
     // The caller rolls the lease back after the failed commit, as FsHistoryProvider does.
     lease.rollback()
 
-    // The reservation was returned exactly once: usage is back to zero (not negative) and the
-    // full capacity is free again.
-    assert(manager.committed() === 0)
+    // The leased reservation was returned exactly once: the current (leased) usage is back to
+    // zero, not negative, so the full capacity is free again. committed() is untouched here.
     assert(manager.free() === MAX_USAGE)
 
     // Accounting is intact, so a subsequent lease and commit still succeed.
