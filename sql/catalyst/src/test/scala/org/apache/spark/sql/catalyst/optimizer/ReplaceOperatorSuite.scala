@@ -266,6 +266,22 @@ class ReplaceOperatorSuite extends PlanTest {
     comparePlans(result, correctAnswer)
   }
 
+  test("SPARK-58383: ReplaceExceptWithFilter should not bind the right condition by name") {
+    val table = LocalRelation(Seq($"id".int, $"val".int))
+    // The left side aliases `val` to `id`, which collides with the name of the base column that
+    // the right side's filter references. The filter is not expressible over the left output, so
+    // the rewrite must be skipped instead of binding the condition to the alias.
+    val basePlan = table.select($"val".as("id"))
+    val otherPlan = table.where($"id" === 1).select($"val".as("v"))
+    val except = Except(basePlan, otherPlan, false)
+    val result = Optimize.execute(except.analyze)
+    val condition = basePlan.output.zip(otherPlan.output).map { case (a1, a2) =>
+      a1 <=> a2 }.reduce( _ && _)
+    val correctAnswer = Aggregate(basePlan.output, basePlan.output,
+      Join(basePlan, otherPlan, LeftAnti, Option(condition), JoinHint.NONE)).analyze
+    comparePlans(result, correctAnswer)
+  }
+
   test("SPARK-46763: ReplaceDeduplicateWithAggregate non-grouping keys with duplicate attributes") {
     val a = $"a".int
     val b = $"b".int
