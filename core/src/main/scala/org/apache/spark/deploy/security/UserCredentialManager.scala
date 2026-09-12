@@ -51,8 +51,9 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  *      safetyMargin`
  *   5. Retries with exponential backoff on failure
  *
- * Intended to be started from `CoarseGrainedSchedulerBackend.start()` when
- * `spark.security.oidc.enabled=true`, independently of
+ * Intended to be started from a scheduler backend -- `CoarseGrainedSchedulerBackend.start()` or
+ * `LocalSchedulerBackend.start()` (both via `SupportsDelegationToken.setupUserCredentialManager()`)
+ * -- when `spark.security.oidc.enabled=true`, independently of
  * `UserGroupInformation.isSecurityEnabled()`.
  *
  * Lifecycle: call `start()` exactly once, then `stop()` to shut down.

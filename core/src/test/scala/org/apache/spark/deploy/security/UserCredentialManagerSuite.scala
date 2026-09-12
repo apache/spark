@@ -746,10 +746,10 @@ class UserCredentialManagerSuite extends SparkFunSuite {
   test("selection then resolution reuse one loader and initialize the provider exactly once") {
     // Ordering invariant behind the driver-side fix: the selection phase
     // (applyProviderProperties) selects the provider WITHOUT init() and applies its declared
-    // properties, then the resolution phase (start(), via UserCredentialManager.create) reuses
-    // the SAME loader so the provider is initialized exactly once. This mirrors what
-    // SparkContext (selection) and the scheduler backend (resolution) do at runtime -- including
-    // LocalSchedulerBackend now that local mode runs a resolution phase.
+    // properties, then the resolution phase (start()) reuses the SAME loader so the provider is
+    // initialized exactly once. This mirrors what SparkContext (selection) and the scheduler
+    // backend (resolution) do at runtime -- including LocalSchedulerBackend now that local mode
+    // runs a resolution phase.
     val conf = createSparkConf()
     conf.set("spark.security.oidc.provider.fake",
       "org.apache.spark.security.FakeCredentialProvider")
@@ -761,52 +761,35 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     assert(conf.get("spark.hadoop.fs.fake.credentials.provider") ===
       "org.apache.spark.security.FakeExecutorCredentialProvider")
 
-    // Selection must NOT have initialized the provider (selectProviderForProperties skips init).
+    // Observe the SAME provider instance the loader caches, WITHOUT initializing it, and assert
+    // the selection phase left it uninitialized. Do not call providerFor() here: that would
+    // initialize the provider before start(), making the post-start assertion below only prove
+    // loader idempotency rather than that start() reused this selection-phase loader.
     val confMap = conf.getAll
       .filter { case (k, _) => k.startsWith("spark.security.oidc.") }
       .toMap.asJava
-    // Observe the SAME provider instance the loader caches, without initializing it, and assert
-    // the selection phase left it uninitialized.
     val provider = loader.selectProviderForProperties("fake", confMap).get()
       .asInstanceOf[FakeCredentialProvider]
     assert(provider.getInitCount === 0,
       "the selection phase must not initialize the provider")
-    // The first providerFor() call (resolution path) performs the single init().
-    val resolved = loader.providerFor("fake", confMap).get()
-      .asInstanceOf[FakeCredentialProvider]
-    assert(resolved eq provider, "loader must reuse the same cached provider instance")
-    assert(provider.getInitCount === 1,
-      "providerFor should initialize the provider exactly once")
 
-    // start() goes through the real FileTokenIngestor (via create()), so a parseable token
-    // file must exist. Write a minimal unsigned JWT with the required sub/iss/exp claims.
-    val tokenFile = java.io.File.createTempFile("oidc-token-", ".jwt")
-    tokenFile.deleteOnExit()
-    val enc = java.util.Base64.getUrlEncoder.withoutPadding()
-    val header = enc.encodeToString(
-      """{"alg":"none","typ":"JWT"}""".getBytes(java.nio.charset.StandardCharsets.UTF_8))
-    val exp = Instant.now().plusSeconds(300).getEpochSecond
-    val payload = enc.encodeToString(
-      s"""{"sub":"test-user","iss":"https://issuer.example.com","exp":$exp}"""
-        .getBytes(java.nio.charset.StandardCharsets.UTF_8))
-    conf.set(SECURITY_OIDC_IDENTITY_TOKEN_FILE, tokenFile.getAbsolutePath)
-    java.nio.file.Files.writeString(tokenFile.toPath, s"$header.$payload")
-
-    // Resolution phase reuses the same loader (as UserCredentialManager.create does with the
-    // loader from the selection phase). start() calls providerFor internally, which must NOT
-    // re-init the already-initialized provider instance.
-    val manager = UserCredentialManager.create(
-      conf, (_: Long, _: Array[Byte]) => (), Some(loader)).get
+    // Resolution phase reuses the SAME loader (passed explicitly, as UserCredentialManager.create
+    // does with the loader from the selection phase). A mock ingestor avoids needing a token file.
+    // start() calls providerFor internally, which performs the single init() on this same cached
+    // instance -- so getInitCount goes 0 -> 1. If start() had regressed to a fresh loader, it would
+    // initialize a DIFFERENT FakeCredentialProvider and this instance's count would stay 0.
+    val manager = new UserCredentialManager(
+      conf, createIngestor(createUserContext()), (_: Long, _: Array[Byte]) => (), loader)
     try {
       val (version, bytes) = manager.start()
       assert(version === 1L)
       val creds = UserCredentialManager.deserializeUserCredentials(bytes)
       assert(creds.forScheme("fake").isPresent)
       assert(provider.getInitCount === 1,
-        "reusing the selection-phase loader must not re-initialize the provider")
+        "resolution must initialize the selection-phase provider exactly once")
     } finally {
       manager.stop()
-      tokenFile.delete()
+      loader.closeAll()
     }
   }
 
@@ -830,21 +813,6 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     assert(loader.isEmpty, "no loader should be allocated when OIDC is disabled")
     assert(!conf.contains("spark.hadoop.fs.fake.credentials.provider"))
     assert(!conf.contains("spark.fake.credentials.enabled"))
-  }
-
-  test("applyProviderProperties applies properties regardless of local mode") {
-    // SPARK-59296 follow-up: local mode now starts a resolution phase (LocalSchedulerBackend
-    // starts a UserCredentialManager), so the selection phase is no longer skipped in local
-    // mode. There is no longer an isLocal parameter; selection applies properties whenever OIDC
-    // is enabled, exactly as it does for cluster mode.
-    val conf = createSparkConf()
-    conf.set("spark.security.oidc.provider.fake",
-      "org.apache.spark.security.FakeCredentialProvider")
-    val loader = UserCredentialManager.applyProviderProperties(conf)
-    assert(loader.isDefined, "a loader should be allocated whenever OIDC is enabled")
-    assert(conf.get("spark.hadoop.fs.fake.credentials.provider") ===
-      "org.apache.spark.security.FakeExecutorCredentialProvider")
-    assert(conf.get("spark.fake.credentials.enabled") === "true")
   }
 
   test("applyProviderProperties does not overwrite user-set properties") {

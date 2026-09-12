@@ -28,7 +28,6 @@ import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState, VersionedCredentials}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.UserCredentialManager
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.{config, Logging}
@@ -54,7 +53,7 @@ import org.apache.spark.util.ArrayImplicits._
  * Spark's standalone deploy mode (spark.deploy.*).
  */
 private[spark]
-class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
+class CoarseGrainedSchedulerBackend(protected val scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
   extends ExecutorAllocationClient with SchedulerBackend
     with SupportsDelegationToken with Logging {
 
@@ -143,9 +142,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // Current set of delegation tokens to send to executors.
   private val delegationTokens = new AtomicReference[Array[Byte]]()
-
-  // UserCredentialManager for OIDC credential propagation (if enabled).
-  private var userCredentialManager: Option[UserCredentialManager] = None
 
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
@@ -1252,42 +1248,26 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Called from the DriverEndpoint receive loop (thread-safe access to executorDataMap).
    */
   private def updateUserCredentials(version: Long, credentials: Array[Byte]): Unit = {
-    VersionedCredentials.updateIfNewer(SparkEnv.get.userCredentials, version, credentials)
+    VersionedCredentials.updateIfNewer(scheduler.sc.env.userCredentials, version, credentials)
     executorDataMap.values.foreach { ed =>
       ed.executorEndpoint.send(UpdateUserCredentials(version, credentials))
     }
   }
 
   /**
-   * Start the UserCredentialManager if OIDC credential propagation is enabled.
-   * Called from start(), independently of Kerberos/HadoopDelegationTokenManager.
+   * Propagate OIDC user credentials to executors. Called on the driver by the
+   * [[org.apache.spark.deploy.security.UserCredentialManager]] (initially and on each renewal).
+   *
+   * Updates the driver's own credential store synchronously so the credentials are available for
+   * `SparkAppConfig` (late-registering executors) and `TaskDescription` (task dispatch) with no
+   * null window, then broadcasts to registered executors via the `DriverEndpoint` (mirroring
+   * `HadoopDelegationTokenManager`'s `UpdateDelegationTokens` path) to ensure thread-safe access
+   * to `executorDataMap`.
    */
-  private def setupUserCredentialManager(): Unit = {
-    // Reuse the loader from SparkContext's selection phase (Some when OIDC is enabled, None
-    // otherwise). Passing the Option straight through keeps SparkContext as the single owner of
-    // the loader: create() enforces that an enabled configuration has a loader, rather than
-    // silently allocating one here that no one would close.
-    userCredentialManager = UserCredentialManager.create(conf, { (version, credentials) =>
-      // Send to DriverEndpoint to ensure thread-safe access to executorDataMap.
-      // This mirrors HadoopDelegationTokenManager's pattern of sending
-      // UpdateDelegationTokens via schedulerRef.
-      driverEndpoint.send(UpdateUserCredentials(version, credentials))
-    }, scheduler.sc.userCredentialProviderLoader)
-    userCredentialManager.foreach { manager =>
-      val (version, initialCredentials) = manager.start()
-      // Store initial credentials synchronously so they are available for SparkAppConfig
-      // (late-registering executors) and TaskDescription (task dispatch) immediately.
-      // Note: the onCredentialsUpdate callback above also triggers an async
-      // UpdateUserCredentials message that will redundantly call updateIfNewer.
-      // The synchronous set here ensures no null window before the async message
-      // is processed by DriverEndpoint.
-      VersionedCredentials.updateIfNewer(
-        SparkEnv.get.userCredentials, version, initialCredentials)
-    }
-  }
-
-  private def stopUserCredentialManager(): Unit = {
-    userCredentialManager.foreach(_.stop())
+  override protected def propagateUserCredentials(
+      version: Long, credentials: Array[Byte]): Unit = {
+    VersionedCredentials.updateIfNewer(scheduler.sc.env.userCredentials, version, credentials)
+    driverEndpoint.send(UpdateUserCredentials(version, credentials))
   }
 
   /**
