@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StructField, StructType}
 
 class BinaryComparisonSimplificationSuite extends PlanTest {
 
@@ -42,6 +42,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
         NullPropagation,
         ConstantFolding,
         BooleanSimplification,
+        DeriveIntegralComparisonPredicates,
         SimplifyBinaryComparison,
         PruneFilters) :: Nil
   }
@@ -52,6 +53,47 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
   val nullableRelation = LocalRelation($"a".int.withNullability(true))
   val nonNullableRelation = LocalRelation($"a".int.withNullability(false))
   val boolRelation = LocalRelation($"a".boolean, $"b".boolean)
+
+  test("derive pruning predicates from ANSI integral arithmetic comparisons") {
+    val a = nonNullableRelation.output.head
+    val add = Add(a, Literal(10), EvalMode.ANSI)
+    val subtract = Subtract(a, Literal(10), EvalMode.ANSI)
+    val addOverflow = a > Literal(Int.MaxValue - 10)
+    val subtractOverflow = a < Literal(Int.MinValue + 10)
+
+    val cases = Seq[(Expression, Expression)](
+      (add < Literal(100), (a < Literal(90) || addOverflow) && add < Literal(100)),
+      (add <= Literal(100), (a <= Literal(90) || addOverflow) && add <= Literal(100)),
+      (add > Literal(100), (a > Literal(90) || addOverflow) && add > Literal(100)),
+      (add >= Literal(100), (a >= Literal(90) || addOverflow) && add >= Literal(100)),
+      (add === Literal(100), (a === Literal(90) || addOverflow) && add === Literal(100)),
+      (add < Literal(Int.MinValue), addOverflow && add < Literal(Int.MinValue)),
+      (add > Literal(Int.MaxValue), addOverflow && add > Literal(Int.MaxValue)),
+      (subtract > Literal(100),
+        (a > Literal(110) || subtractOverflow) && subtract > Literal(100)),
+      (subtract < Literal(Int.MinValue),
+        subtractOverflow && subtract < Literal(Int.MinValue)),
+      (subtract > Literal(Int.MaxValue),
+        subtractOverflow && subtract > Literal(Int.MaxValue)),
+      (Literal(100) < add, (a > Literal(90) || addOverflow) && Literal(100) < add))
+
+    cases.foreach { case (input, expected) =>
+      checkCondition(nonNullableRelation, input, expected)
+    }
+  }
+
+  test("do not derive pruning predicates when arithmetic is not checked integral arithmetic") {
+    val a = nonNullableRelation.output.head
+    val cases = Seq(
+      Add(a, Literal(10), EvalMode.LEGACY) > Literal(100),
+      Multiply(a, Literal(10), EvalMode.ANSI) > Literal(100),
+      Add(Cast(a, DoubleType), Literal(10.0), EvalMode.ANSI) > Literal(100.0),
+      Add(a, a, EvalMode.ANSI) > Literal(100))
+
+    cases.foreach { condition =>
+      checkCondition(nonNullableRelation, condition, condition)
+    }
+  }
 
 
   test("Preserve nullable exprs when constraintPropagation is false") {

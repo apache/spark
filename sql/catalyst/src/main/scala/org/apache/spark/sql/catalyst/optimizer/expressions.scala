@@ -568,6 +568,134 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
 
 /**
+ * Derives predicates over integral operands from comparisons involving ANSI addition or
+ * subtraction. The original comparison is retained to preserve overflow errors and exact
+ * evaluation semantics.
+ */
+object DeriveIntegralComparisonPredicates extends Rule[LogicalPlan] {
+  private val derived = TreeNodeTag[Unit]("derived_integral_comparison_predicate")
+
+  private case class IntegralRange(min: BigInt, max: BigInt, literal: BigInt => Literal)
+
+  private def integralRange(dataType: DataType): Option[IntegralRange] = dataType match {
+    case ByteType => Some(IntegralRange(Byte.MinValue, Byte.MaxValue,
+      value => Literal(value.toByte)))
+    case ShortType => Some(IntegralRange(Short.MinValue, Short.MaxValue,
+      value => Literal(value.toShort)))
+    case IntegerType => Some(IntegralRange(Int.MinValue, Int.MaxValue,
+      value => Literal(value.toInt)))
+    case LongType => Some(IntegralRange(Long.MinValue, Long.MaxValue,
+      value => Literal(value.toLong)))
+    case _ => None
+  }
+
+  private def integralValue(literal: Literal): Option[BigInt] = literal.value match {
+    case value: Byte => Some(BigInt(value))
+    case value: Short => Some(BigInt(value))
+    case value: Int => Some(BigInt(value))
+    case value: Long => Some(BigInt(value))
+    case _ => None
+  }
+
+  private def normalizedComparison(
+      comparison: BinaryComparison): Option[(Expression, Literal, BinaryComparison)] = {
+    comparison match {
+      case EqualTo(arithmetic, literal: Literal) => Some((arithmetic, literal, comparison))
+      case EqualTo(literal: Literal, arithmetic) =>
+        Some((arithmetic, literal, EqualTo(arithmetic, literal)))
+      case LessThan(arithmetic, literal: Literal) => Some((arithmetic, literal, comparison))
+      case LessThan(literal: Literal, arithmetic) =>
+        Some((arithmetic, literal, GreaterThan(arithmetic, literal)))
+      case LessThanOrEqual(arithmetic, literal: Literal) =>
+        Some((arithmetic, literal, comparison))
+      case LessThanOrEqual(literal: Literal, arithmetic) =>
+        Some((arithmetic, literal, GreaterThanOrEqual(arithmetic, literal)))
+      case GreaterThan(arithmetic, literal: Literal) => Some((arithmetic, literal, comparison))
+      case GreaterThan(literal: Literal, arithmetic) =>
+        Some((arithmetic, literal, LessThan(arithmetic, literal)))
+      case GreaterThanOrEqual(arithmetic, literal: Literal) =>
+        Some((arithmetic, literal, comparison))
+      case GreaterThanOrEqual(literal: Literal, arithmetic) =>
+        Some((arithmetic, literal, LessThanOrEqual(arithmetic, literal)))
+      case _ => None
+    }
+  }
+
+  private def arithmeticOperand(
+      expression: Expression): Option[(Expression, Literal, BigInt)] = expression match {
+    case add @ Add(operand, literal: Literal, _)
+        if add.evalMode == EvalMode.ANSI && operand.deterministic =>
+      integralValue(literal).map((operand, literal, _))
+    case add @ Add(literal: Literal, operand, _)
+        if add.evalMode == EvalMode.ANSI && operand.deterministic =>
+      integralValue(literal).map((operand, literal, _))
+    case subtract @ Subtract(operand, literal: Literal, _)
+        if subtract.evalMode == EvalMode.ANSI && operand.deterministic =>
+      integralValue(literal).map(value => (operand, literal, -value))
+    case _ => None
+  }
+
+  private def comparison(
+      template: BinaryComparison,
+      left: Expression,
+      right: Expression): BinaryComparison = template match {
+    case _: EqualTo => EqualTo(left, right)
+    case _: LessThan => LessThan(left, right)
+    case _: LessThanOrEqual => LessThanOrEqual(left, right)
+    case _: GreaterThan => GreaterThan(left, right)
+    case _: GreaterThanOrEqual => GreaterThanOrEqual(left, right)
+  }
+
+  private def comparisonOutsideRange(
+      template: BinaryComparison,
+      thresholdIsBelowRange: Boolean): Expression = template match {
+    case _: EqualTo => FalseLiteral
+    case _: LessThan | _: LessThanOrEqual => Literal(!thresholdIsBelowRange)
+    case _: GreaterThan | _: GreaterThanOrEqual => Literal(thresholdIsBelowRange)
+  }
+
+  private def derivedPredicate(comparisonExpression: BinaryComparison): Option[Expression] = {
+    for {
+      (arithmetic, comparisonLiteral, normalized) <- normalizedComparison(comparisonExpression)
+      (operand, arithmeticLiteral, delta) <- arithmeticOperand(arithmetic)
+      range <- integralRange(arithmetic.dataType)
+      comparisonValue <- integralValue(comparisonLiteral)
+      if operand.dataType == arithmetic.dataType
+      if arithmeticLiteral.dataType == arithmetic.dataType
+      if comparisonLiteral.dataType == arithmetic.dataType
+    } yield {
+      val threshold = comparisonValue - delta
+      val algebraic = if (threshold < range.min || threshold > range.max) {
+        comparisonOutsideRange(normalized, threshold < range.min)
+      } else {
+        comparison(normalized, operand, range.literal(threshold))
+      }
+      val overflow = if (delta > 0) {
+        Some(GreaterThan(operand, range.literal(range.max - delta)))
+      } else if (delta < 0) {
+        Some(LessThan(operand, range.literal(range.min - delta)))
+      } else {
+        None
+      }
+      overflow.map(Or(algebraic, _)).getOrElse(algebraic)
+    }
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(BINARY_COMPARISON), ruleId) {
+    case logicalPlan: LogicalPlan =>
+      logicalPlan.transformExpressionsDownWithPruning(_.containsPattern(BINARY_COMPARISON)) {
+        case comparison: BinaryComparison if comparison.getTagValue(derived).isEmpty =>
+          derivedPredicate(comparison).filterNot(_ == TrueLiteral).map { predicate =>
+            comparison.setTagValue(derived, ())
+            And(predicate, comparison)
+          }.getOrElse(comparison)
+      }
+  }
+}
+
+
+/**
  * Simplifies binary comparisons with semantically-equal expressions:
  * 1) Replace '<=>' with 'true' literal.
  * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
