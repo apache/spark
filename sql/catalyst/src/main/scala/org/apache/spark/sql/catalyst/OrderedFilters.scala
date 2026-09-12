@@ -60,7 +60,12 @@ class OrderedFilters(filters: Seq[sources.Filter], requiredSchema: StructType)
         // Accordingly, `fieldIndex()` returns a valid index always.
         refs.map(requiredSchema.fieldIndex).max
       }
-      groupedFilters(index) :+= filter
+      // When the required schema has no fields, for example `SELECT COUNT(*)`, there is no
+      // position at which a filter w/o references could be applied, and `skipRow()` is
+      // never called for such a schema.
+      if (len > 0) {
+        groupedFilters(index) :+= filter
+      }
     }
     if (len > 0 && groupedFilters(0).nonEmpty) {
       // We assume that filters w/o refs like `AlwaysTrue` and `AlwaysFalse`
