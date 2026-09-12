@@ -20,6 +20,7 @@ package org.apache.spark.shuffle
 import java.io.IOException
 
 import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric
 
 /**
  * Obtained inside a map task to write out records to the shuffle system.
@@ -34,4 +35,10 @@ private[spark] abstract class ShuffleWriter[K, V] {
 
   /** Get the lengths of each partition */
   def getPartitionLengths(): Array[Long]
+
+  /**
+   * The custom shuffle metrics reported by the underlying `ShuffleMapOutputWriter` for this task,
+   * available after a successful [[write]]. By default returns an empty array.
+   */
+  def currentMetricsValues(): Array[CustomShuffleTaskMetric] = Array.empty
 }
