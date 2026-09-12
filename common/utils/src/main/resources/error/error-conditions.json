@@ -4546,7 +4546,7 @@
     "message" : [
       "Cannot parse the value <value> for JDBC option <option> as <dataType>."
     ],
-    "sqlState" : "22023"
+    "sqlState" : "42616"
   },
   "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
     "message" : [
