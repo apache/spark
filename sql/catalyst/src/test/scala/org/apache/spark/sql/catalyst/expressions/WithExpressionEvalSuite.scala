@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode, GenerateMutableProjection}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, EmptyBlock, ExprCode, FalseLiteral, GenerateMutableProjection, JavaCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType}
@@ -168,10 +169,9 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-58902: nesting does not multiply a definition's body when it can go in a method") {
     // Each level reads its definition twice, so pasting the body doubles it per level;
-    // `CommonExprSlots.fill` putting it in a method makes it 2 at any depth. Not covered here: the
-    // shape where the input arrives as local variables, as a whole-stage `Project` or `Filter`
-    // passes it, where no method is possible and the count is 2, 4, 8, ... 256 at depths 1 to 8 --
-    // see SPARK-59295. A bare `CodegenContext` has `INPUT_ROW` set and `currentVars` null.
+    // `CommonExprSlots.fill` putting it in a method makes it 2 at any depth. A bare
+    // `CodegenContext` has `INPUT_ROW` set and `currentVars` null; the case below covers the input
+    // arriving as local variables instead.
     val marker = 1234567
     def nested(depth: Int): Expression = {
       val leaf: Expression = Add(BoundReference(0, IntegerType, nullable = false), Literal(marker))
@@ -200,6 +200,86 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
       // Four levels keeps the product inside Int, which ANSI `Add` would raise on past depth 10.
       val proj = GenerateMutableProjection.generate(Seq(nested(4)))
       assert(proj(InternalRow(1)).getInt(0) == (1 + marker) * 16)
+    }
+  }
+
+  test("SPARK-59295: a method for the local variables the operator has already evaluated") {
+    // What a whole-stage `Project` or `Filter` passes: no input row, the input as local variables.
+    // A method is possible for what the operator has already evaluated, and not for the rest --
+    // an unevaluated variable's code names a local of the operator that produces the row, so it
+    // cannot go inside a method, and those definitions stay inline as before.
+    val marker = 1234567
+    def nested(depth: Int): Expression = {
+      val leaf: Expression = Add(BoundReference(0, IntegerType, nullable = false), Literal(marker))
+      (1 to depth).foldLeft(leaf) { (inner, _) =>
+        With(inner) { case Seq(ref) => Add(ref, ref) }
+      }
+    }
+    // The input variable a whole-stage operator would have put in `currentVars`: `evaluated` is
+    // whether it emitted its code before generating this expression, which is what decides whether
+    // the method can take it.
+    def generate(e: Expression, input: ExprCode): (String, String) = {
+      val ctx = new CodegenContext
+      ctx.INPUT_ROW = null
+      ctx.currentVars = Seq(input)
+      (e.genCode(ctx).code.toString, ctx.declareAddedFunctions())
+    }
+    def intVar(evaluated: Boolean): ExprCode = {
+      val code = if (evaluated) EmptyBlock else code"int v0 = i.getInt(0);"
+      ExprCode(code, FalseLiteral, JavaCode.variable("v0", IntegerType))
+    }
+    def markerCount(source: (String, String)): Int =
+      marker.toString.r.findAllMatchIn(source._1 + source._2).size
+
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024") {
+      (1 to 6).foreach { depth =>
+        val count = markerCount(generate(nested(depth), intVar(evaluated = true)))
+        assert(count == 2, s"the innermost body was emitted $count times at depth $depth")
+      }
+      // The variable is declared in the scope the call sits in, so the method takes it as a
+      // parameter rather than reading it as a field. A nullable one carries its nullness in a
+      // second local, which the method needs just as much.
+      val (inline, functions) = generate(nested(2), intVar(evaluated = true))
+      assert("private void computeCommonExpr_[0-9]+\\(int v0\\)".r
+        .findFirstIn(functions).isDefined, functions)
+      assert("computeCommonExpr_[0-9]+\\(v0\\);".r.findFirstIn(inline).isDefined, inline)
+      val nullableLeaf = Add(BoundReference(0, IntegerType, nullable = true), Literal(marker))
+      val nullable = With(nullableLeaf) { case Seq(ref) => Add(ref, ref) }
+      val (nullableInline, nullableFunctions) = generate(
+        With(nullable) { case Seq(ref) => Add(ref, ref) },
+        ExprCode(EmptyBlock, JavaCode.isNullVariable("v0IsNull"),
+          JavaCode.variable("v0", IntegerType)))
+      assert("private void computeCommonExpr_[0-9]+\\(int v0, boolean v0IsNull\\)".r
+        .findFirstIn(nullableFunctions).isDefined, nullableFunctions)
+      assert("computeCommonExpr_[0-9]+\\(v0, v0IsNull\\);".r
+        .findFirstIn(nullableInline).isDefined, nullableInline)
+
+      // An unevaluated variable gets no method: `int v0 = i.getInt(0);` names `i`, the producing
+      // operator's local, which is not in scope inside a method here. So the bodies stay inline and
+      // double per level, as they did before a method was possible at all.
+      (1 to 4).foreach { depth =>
+        val deferred = generate(nested(depth), intVar(evaluated = false))
+        val count = markerCount(deferred)
+        assert(count == (1 << depth),
+          s"the innermost body was emitted $count times at depth $depth")
+        assert(!deferred._2.contains("computeCommonExpr"), deferred._2)
+      }
+      // Nor does a value whose name is not one a parameter can take. `ExpandExec` hands out a
+      // compacted mutable state array slot as if it were a local.
+      val slot = ExprCode(EmptyBlock, FalseLiteral,
+        JavaCode.variable("mutableStateArray_0[3]", IntegerType))
+      assert(!generate(nested(2), slot)._2.contains("computeCommonExpr"))
+
+      // A definition reading an enclosing scope's reference needs what that definition reads, which
+      // is behind a `CommonExpressionRef` rather than in the tree being walked.
+      val outer = With(BoundReference(0, IntegerType, nullable = false)) { case Seq(outerRef) =>
+        With(With(outerRef) { case Seq(ref) => Add(ref, Literal(marker)) }) {
+          case Seq(ref) => Add(ref, ref)
+        }
+      }
+      val enclosing = generate(outer, intVar(evaluated = true))
+      assert("private void computeCommonExpr_[0-9]+\\(int v0\\)".r
+        .findFirstIn(enclosing._2).isDefined, enclosing._2)
     }
   }
 
