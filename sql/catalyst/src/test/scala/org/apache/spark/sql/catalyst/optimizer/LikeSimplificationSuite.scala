@@ -312,6 +312,32 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
 
+  test("SPARK-59371: do not simplify startsAndEndsWith LIKE for a non-cheap child") {
+    // 'a%b' rewrites to a length guard + StartsWith + EndsWith, referencing the child three
+    // times. Duplicating a non-cheap child would re-evaluate it (and yield different values for a
+    // nondeterministic one), so this shape must be left as Like -- cf. the SPARK-40228 gate above.
+    val originalQuery = testRelation.where($"a".substring(1, 5) like "a%b").analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("SPARK-59371: still simplify single-reference LIKE shapes for a non-cheap child") {
+    // The single-reference shapes evaluate the child once, exactly like the original LIKE, so they
+    // stay enabled for a non-cheap child; only the duplicating startsAndEndsWith shape is gated.
+    val child = $"a".substring(1, 5)
+    comparePlans(
+      Optimize.execute(testRelation.where(child like "a%").analyze),
+      testRelation.where(StartsWith(child, "a")).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where(child like "%b").analyze),
+      testRelation.where(EndsWith(child, "b")).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where(child like "%ab%").analyze),
+      testRelation.where(Contains(child, "ab")).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.where(child like "abc").analyze),
+      testRelation.where(EqualTo(child, "abc")).analyze)
+  }
+
   // scalastyle:off nonascii
   test("SPARK-59063: LikeSimplification preserves LIKE semantics under non-binary collation") {
     // Under UTF8_LCASE, StartsWith/EndsWith are collation-aware, so a single code point
