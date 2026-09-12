@@ -400,12 +400,13 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
     val restrictedPassword = "restricted_password"
     val restrictedJdbcUrl = s"jdbc:postgresql://$dockerIp:$externalPort/postgres"
 
-    Using.resource(getConnection()) { conn =>
-      conn.prepareStatement(s"CREATE USER $restrictedUser PASSWORD '$restrictedPassword'")
-        .executeUpdate()
-    }
-
     Utils.tryWithSafeFinally {
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(s"DROP USER IF EXISTS $restrictedUser").executeUpdate()
+        conn.prepareStatement(s"CREATE USER $restrictedUser PASSWORD '$restrictedPassword'")
+          .executeUpdate()
+      }
+
       val postgresError = intercept[SQLException] {
         spark.read.format("jdbc")
           .option("url", restrictedJdbcUrl)

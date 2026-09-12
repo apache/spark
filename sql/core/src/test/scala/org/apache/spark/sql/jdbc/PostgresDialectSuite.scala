@@ -82,11 +82,13 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
     verify(conn).setAutoCommit(false)
   }
 
-  test("SPARK-59336: classify only syntax error SQLSTATEs as syntax errors") {
-    assert(dialect.isSyntaxErrorBestEffort(new SQLException("syntax error", "42000")))
+  test("SPARK-59336: classify only SQLSTATE 42601 as a syntax error") {
     assert(dialect.isSyntaxErrorBestEffort(new SQLException("syntax error", "42601")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("access rule violation", "42000")))
     assert(!dialect.isSyntaxErrorBestEffort(new SQLException("permission denied", "42501")))
     assert(!dialect.isSyntaxErrorBestEffort(new SQLException("undefined table", "42P01")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("undefined column", "42703")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("undefined function", "42883")))
     assert(!dialect.isSyntaxErrorBestEffort(new SQLException("error without SQLSTATE")))
   }
 

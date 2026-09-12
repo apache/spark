@@ -260,10 +260,9 @@ private case class PostgresDialect()
 
   // See https://www.postgresql.org/docs/current/errcodes-appendix.html
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    exception.getSQLState match {
-      case "42000" | "42601" => true
-      case _ => false
-    }
+    // SQLSTATE 42000 covers both syntax errors and access-rule violations, so preserve the
+    // original exception for that ambiguous state.
+    exception.getSQLState == "42601"
   }
 
   // SHOW INDEX syntax
