@@ -68,12 +68,11 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=ABCMeta):
         # Register concrete handlers, i.e. those that declare an eval type.
         eval_type = cls.__dict__.get("eval_type")
         if eval_type is not None:
-            if eval_type in EVAL_TYPE_HANDLERS:
-                raise AssertionError(
-                    "Duplicate eval type handler for {}: {} and {}".format(
-                        eval_type, EVAL_TYPE_HANDLERS[eval_type].__name__, cls.__name__
-                    )
+            assert eval_type not in EVAL_TYPE_HANDLERS, (
+                "Duplicate eval type handler for {}: {} and {}".format(
+                    eval_type, EVAL_TYPE_HANDLERS[eval_type].__name__, cls.__name__
                 )
+            )
             EVAL_TYPE_HANDLERS[eval_type] = cls
 
     def __init__(
