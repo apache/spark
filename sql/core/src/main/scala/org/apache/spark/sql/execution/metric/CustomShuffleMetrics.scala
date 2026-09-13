@@ -1,0 +1,91 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.metric
+
+import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.METRIC_NAME
+import org.apache.spark.shuffle.api.metric.{CustomShuffleMetric, CustomShuffleTaskMetric}
+
+object CustomShuffleMetrics extends Logging {
+
+  private[spark] val SHUFFLE_CUSTOM = "shuffleCustom"
+
+  /**
+   * Given a custom shuffle metric, builds and returns a metric type for a `CustomShuffleMetric`
+   * class.
+   */
+  def buildMetricTypeName(metric: CustomShuffleMetric): String = {
+    s"${SHUFFLE_CUSTOM}_${metric.getClass.getName}"
+  }
+
+  /**
+   * Given a custom shuffle metric type name, this method parses it and returns the corresponding
+   * `CustomShuffleMetric` class name.
+   */
+  def parseMetricType(metricType: String): Option[String] = {
+    if (metricType.startsWith(s"${SHUFFLE_CUSTOM}_")) {
+      Some(metricType.drop(SHUFFLE_CUSTOM.length + 1))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Creates collision-filtered custom shuffle metric [[SQLMetric]]s for an operator that already
+   * exposes the given Spark-owned metric names. Plugin metrics whose names collide with a
+   * Spark-owned name are dropped so they can't shadow the real accumulators (e.g.
+   * `shuffleRecordsWritten`, which feeds AQE). Operators pass the reserved names they own; the
+   * declared metrics come from the shuffle driver components.
+   */
+  def createFilteredMetrics(
+      sc: SparkContext,
+      reservedNames: Set[String]): Map[String, SQLMetric] = {
+    val (reserved, allowed) = sc.shuffleDriverComponents.supportedCustomMetrics()
+      .partition(metric => reservedNames.contains(metric.name()))
+    if (reserved.nonEmpty) {
+      logWarning(log"Ignoring custom shuffle metrics whose names collide with Spark-owned " +
+        log"Exchange metrics: " +
+        log"${MDC(METRIC_NAME, reserved.map(_.name()).sorted.mkString(", "))}.")
+    }
+    createMetrics(sc, allowed)
+  }
+
+  /**
+   * Creates [[SQLMetric]]s for the given declared custom shuffle metrics, keyed by metric name.
+   */
+  def createMetrics(
+      sc: SparkContext,
+      metrics: Array[CustomShuffleMetric]): Map[String, SQLMetric] = {
+    metrics.map { metric =>
+      metric.name() -> SQLMetrics.createShuffleCustomMetric(sc, metric)
+    }.toMap
+  }
+
+  /**
+   * Updates the custom-metric [[SQLMetric]]s with the per-task reported values, matching by name.
+   * Reported values with no matching declaration are ignored.
+   */
+  def updateMetrics(
+      taskMetricsValues: Array[CustomShuffleTaskMetric],
+      customMetrics: Map[String, SQLMetric]): Unit = {
+    taskMetricsValues.foreach { metric =>
+      customMetrics.get(metric.name()).foreach(_.set(metric.value()))
+    }
+  }
+}

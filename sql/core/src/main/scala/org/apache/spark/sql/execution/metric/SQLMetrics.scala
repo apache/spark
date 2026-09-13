@@ -21,6 +21,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
+import org.apache.spark.shuffle.api.metric.CustomShuffleMetric
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
@@ -150,6 +151,15 @@ object SQLMetrics {
    */
   def createV2CustomMetric(sc: SparkContext, customMetric: CustomMetric): SQLMetric = {
     val acc = new SQLMetric(CustomMetrics.buildV2CustomMetricTypeName(customMetric))
+    acc.register(sc, name = metricsCache.get(customMetric.description()), countFailedValues = false)
+    acc
+  }
+
+  /**
+   * Create a metric to report a custom shuffle metric.
+   */
+  def createShuffleCustomMetric(sc: SparkContext, customMetric: CustomShuffleMetric): SQLMetric = {
+    val acc = new SQLMetric(CustomShuffleMetrics.buildMetricTypeName(customMetric))
     acc.register(sc, name = metricsCache.get(customMetric.description()), countFailedValues = false)
     acc
   }
