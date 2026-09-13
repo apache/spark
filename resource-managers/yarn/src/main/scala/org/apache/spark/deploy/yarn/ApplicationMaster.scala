@@ -699,14 +699,19 @@ private[spark] class ApplicationMaster(
     val trustProxyUserCookie = sparkConf.get(AM_TRUST_PROXY_USER_COOKIE)
     // Refuse to arm the option silently. Whether another filter establishes the user cannot be
     // told from the configuration -- an IP allowlist or token filter in spark.ui.filters may run
-    // without wrapping the request -- so state the effect rather than guess the cause: with the
-    // cookie not trusted, the AM filter fails closed and proxied requests are treated as an
-    // unauthenticated user, so AM UI ACLs deny them unless another authentication filter
-    // establishes the user.
+    // without wrapping the request -- so state the effect rather than guess the cause. The effect
+    // depends on whether the AM UI ACLs are enabled: with them off (the default) the option has no
+    // effect, since a request is allowed before its user is even looked at.
     if (!trustProxyUserCookie) {
-      logWarning(log"${MDC(LogKeys.CONFIG, AM_TRUST_PROXY_USER_COOKIE.key)} is false, so proxied " +
-        log"requests are treated as an unauthenticated user and are denied by the AM UI view " +
-        log"and modify ACLs unless another authentication filter establishes the user.")
+      if (sparkConf.get(ACLS_ENABLE)) {
+        logWarning(log"${MDC(LogKeys.CONFIG, AM_TRUST_PROXY_USER_COOKIE.key)} is false, so " +
+          log"proxied requests are treated as an unauthenticated user and are denied by the AM " +
+          log"UI view and modify ACLs unless another authentication filter establishes the user.")
+      } else {
+        logWarning(log"${MDC(LogKeys.CONFIG, AM_TRUST_PROXY_USER_COOKIE.key)} is false but " +
+          log"${MDC(LogKeys.CONFIG2, ACLS_ENABLE.key)} is false, so it has no effect: the AM UI " +
+          log"view and modify ACLs allow every user.")
+      }
     }
     // Only pass the init parameter when the cookie is not trusted; when trusted (the default) the
     // filter parameters stay unchanged from the original behavior.

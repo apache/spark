@@ -409,6 +409,12 @@ private[spark] class SecurityManager(
         aclUsers.contains(user) ||
         aclGroups.contains(WILDCARD_ACL)) {
       true
+    } else if (aclGroups.isEmpty) {
+      // No group ACLs to match, so skip the group lookup entirely. Besides being wasteful, the
+      // lookup shells out (ShellBasedGroupsMappingProvider), which for a user that cannot exist --
+      // such as the YARN AM's untrusted-proxy sentinel -- forks a process and logs an ERROR on
+      // every denied request.
+      false
     } else {
       val userGroups = Utils.getCurrentUserGroups(sparkConf, user)
       logDebug(s"user $user is in groups ${userGroups.mkString(",")}")

@@ -36,7 +36,8 @@ import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.UI.{ACLS_ENABLE, UI_VIEW_ACLS}
 
 // A port of org.apache.hadoop.yarn.server.webproxy.amfilter.TestAmFilter
 class AmIpFilterSuite extends SparkFunSuite {
@@ -285,6 +286,16 @@ class AmIpFilterSuite extends SparkFunSuite {
     assert(notTrusted.isInstanceOf[AmIpServletRequestWrapper])
     assert(notTrusted.asInstanceOf[HttpServletRequest].getRemoteUser ===
       AmIpFilter.UNTRUSTED_PROXY_USER)
+  }
+
+  test("SPARK-59312: the untrusted proxy sentinel is denied by the AM UI ACLs") {
+    // The whole fail-closed path rests on the sentinel being in no ACL. Pin it: the sentinel must
+    // not be a real user, and must not slip into the default ACLs (which are seeded from
+    // System.getProperty("user.name", ""), so an empty sentinel could).
+    val conf = new SparkConf().set(ACLS_ENABLE, true).set(UI_VIEW_ACLS, Seq("alice"))
+    val sm = new SecurityManager(conf)
+    assert(!sm.checkUIViewPermissions(AmIpFilter.UNTRUSTED_PROXY_USER))
+    assert(!sm.checkModifyPermissions(AmIpFilter.UNTRUSTED_PROXY_USER))
   }
 
   private class HttpServletResponseForTest extends HttpServletResponse {

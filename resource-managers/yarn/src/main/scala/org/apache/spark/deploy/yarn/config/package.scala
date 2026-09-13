@@ -294,13 +294,8 @@ package object config extends Logging {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("1m")
 
-  /* Client-mode AM configuration. */
-
-  private[spark] val AM_CORES = ConfigBuilder("spark.yarn.am.cores")
-    .version("1.3.0")
-    .intConf
-    .createWithDefault(1)
-
+  // Not under the client-mode section below: this takes effect in cluster mode too, and that is
+  // where its effect is largest (the AM replaces spark.ui.filters with its own filter there).
   private[spark] val AM_TRUST_PROXY_USER_COOKIE =
     ConfigBuilder("spark.yarn.am.trustProxyUserCookie")
       .doc("When true (default), the YARN AM UI filter uses the 'proxy-user' cookie set by the " +
@@ -321,6 +316,13 @@ package object config extends Logging {
       .version("4.3.0")
       .booleanConf
       .createWithDefault(true)
+
+  /* Client-mode AM configuration. */
+
+  private[spark] val AM_CORES = ConfigBuilder("spark.yarn.am.cores")
+    .version("1.3.0")
+    .intConf
+    .createWithDefault(1)
 
   private[spark] val YARN_AM_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
     ConfigBuilder("spark.yarn.am.limitActiveProcessorCount.enabled")
