@@ -446,7 +446,7 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
 
     val combined = PartitioningCollection.fromPartitionings(Seq(nested, kpY))
     val interned = combined.partitionings.last.asInstanceOf[KeyedPartitioning]
-    assert(interned.partitionKeys eq kpX.partitionKeys)
+    assert(interned.layout eq kpX.layout, "the whole layout is interned, keys and all")
   }
 
   test("SPARK-59050: a marked one-partition layout keeps the global ordering claim") {
@@ -457,9 +457,9 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val a = AttributeReference("a", IntegerType)()
     val ordered = OrderedDistribution(Seq(SortOrder(a, Ascending)))
     val markedOne = KeyedPartitioning(Seq(a), Seq(InternalRow(1)))
-      .copy(mayContainUnknownPartitionKeys = true)
+      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
     val markedTwo = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2)))
-      .copy(mayContainUnknownPartitionKeys = true)
+      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
     withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
       checkSatisfied(markedOne, ordered, true)
       checkSatisfied(markedTwo, ordered, false)
@@ -470,14 +470,14 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()
     val marked = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2)))
-      .copy(mayContainUnknownPartitionKeys = true)
+      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
     val plain = KeyedPartitioning(Seq(y), Seq(InternalRow(1), InternalRow(2)))
     val combined = PartitioningCollection.fromPartitionings(Seq(marked, plain))
     // The conservative direction: an unmarked member must never excuse marked data, because
     // the OR'd-on marker only costs a shuffle while the AND'd-off one could cost correctness.
     val members = combined.partitionings.map(_.asInstanceOf[KeyedPartitioning])
     assert(members.forall(_.mayContainUnknownPartitionKeys), members.toString)
-    assert(members.last.partitionKeys eq members.head.partitionKeys)
+    assert(members.last.layout eq members.head.layout)
   }
 
   test("SPARK-59050: PartitioningCollection requires members to agree on the marker") {
@@ -485,21 +485,23 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val y = AttributeReference("y", IntegerType)()
     val keys = Seq(InternalRow(1), InternalRow(2))
     val base = KeyedPartitioning(Seq(x), keys)
-    val marked = base.copy(mayContainUnknownPartitionKeys = true)
-    // Same keys reference, arity and isCollapsed, only the marker disagrees: it has to reach
-    // the marker require rather than the reference check ahead of it.
-    val disagree = marked.copy(expressions = Seq(y), mayContainUnknownPartitionKeys = false)
+    val marked = base.withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    // The marker lives on the layout, so two members that disagree on it hold two layouts, and the
+    // one `eq` on the layout refuses them. There is no clause of its own to reach.
+    val disagree =
+      KeyedPartitioning(Seq(y), marked.layout.copy(mayContainUnknownPartitionKeys = false))
     val err = intercept[IllegalArgumentException] {
       PartitioningCollection(Seq(marked, disagree))
     }
-    assert(err.getMessage.contains("agree on mayContainUnknownPartitionKeys"))
+    assert(err.getMessage.contains("share the same KeyLayout reference"))
   }
 
   test("SPARK-59050: fromPartitionings normalizes the unknown-keys marker through nesting") {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()
     val keys = Seq(InternalRow(1), InternalRow(2))
-    val marked = KeyedPartitioning(Seq(x), keys).copy(mayContainUnknownPartitionKeys = true)
+    val marked =
+      KeyedPartitioning(Seq(x), keys).withLayout(_.copy(mayContainUnknownPartitionKeys = true))
     val plainNested = PartitioningCollection.fromPartitionings(
       Seq(KeyedPartitioning(Seq(y), keys)))
     val combined = PartitioningCollection.fromPartitionings(Seq(marked, plainNested))
@@ -509,8 +511,8 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
       .collect { case k: KeyedPartitioning => k }
     assert(leaves.length === 2, combined.toString)
     assert(leaves.forall(_.mayContainUnknownPartitionKeys), leaves.toString)
-    assert(leaves.forall(_.partitionKeys eq leaves.head.partitionKeys),
-      "the interned keys must survive the rebuild")
+    assert(leaves.forall(_.layout eq leaves.head.layout),
+      "the interned layout must survive the rebuild")
   }
 
   test("SPARK-59050: PartitioningCollection requires a nested collection to agree on the " +
@@ -520,15 +522,15 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val keys = Seq(InternalRow(1), InternalRow(2))
     val base = KeyedPartitioning(Seq(x), keys)
     val markedNested = PartitioningCollection.fromPartitionings(Seq(
-      base.copy(mayContainUnknownPartitionKeys = true)))
+      base.withLayout(_.copy(mayContainUnknownPartitionKeys = true))))
     val plain = base.copy(expressions = Seq(y))
-    // The nested collection is internally uniform, so its own construction passes; the outer
-    // constructor must still catch its representative against the unmarked sibling. Same keys
-    // reference, arity and isCollapsed, only the marker disagrees.
+    // The nested collection is internally uniform, so its own construction passes. The outer
+    // constructor must still catch its representative against the unmarked sibling, and the marker
+    // living on the layout is what makes that one `eq` enough.
     val err = intercept[IllegalArgumentException] {
       PartitioningCollection(Seq(markedNested, plain))
     }
-    assert(err.getMessage.contains("agree on mayContainUnknownPartitionKeys"))
+    assert(err.getMessage.contains("share the same KeyLayout reference"))
   }
 
   test("SPARK-56877: PartitioningCollection enforces the invariant through nesting") {
@@ -542,7 +544,7 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     val refMismatch = intercept[IllegalArgumentException] {
       PartitioningCollection(Seq(nested, kpY))
     }
-    assert(refMismatch.getMessage.contains("share the same partitionKeys reference"))
+    assert(refMismatch.getMessage.contains("share the same KeyLayout reference"))
 
     val kpXY = KeyedPartitioning(Seq(x, y), Seq(InternalRow(1, 1), InternalRow(2, 2)))
     val arityMismatch = intercept[IllegalArgumentException] {
@@ -551,12 +553,28 @@ class DistributionSuite extends SparkFunSuite with SQLHelper {
     assert(arityMismatch.getMessage.contains("matching expression arity"))
   }
 
+  test("SPARK-59285: fromPartitionings refuses a member that disagrees on isGrouped") {
+    // Interning now replaces a member's layout whole, where it used to keep each member's own
+    // `isGrouped`. Whether the keys are unique is a property of the keys, so a member that
+    // disagrees about it over equal keys is wrong, and interning would hide that.
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val keys = Seq(InternalRow(1), InternalRow(2))
+
+    val kpX = KeyedPartitioning(Seq(x), keys)
+    val ungrouped = KeyedPartitioning(Seq(y), keys).withLayout(_.copy(isGrouped = false))
+    val mismatch = intercept[IllegalArgumentException] {
+      PartitioningCollection.fromPartitionings(Seq(kpX, ungrouped))
+    }
+    assert(mismatch.getMessage.contains("must agree on isGrouped"))
+  }
+
   test("SPARK-59057: toGrouped and KeyedShuffleSpec.createPartitioning keep isCollapsed sticky") {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()
 
     val collapsedKP = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
-      .copy(isCollapsed = true)
+      .withLayout(_.copy(isCollapsed = true))
     assert(collapsedKP.toGrouped.isCollapsed, "toGrouped must keep isCollapsed sticky")
 
     val spec = KeyedShuffleSpec(collapsedKP, ClusteredDistribution(Seq(x)))

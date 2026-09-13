@@ -1274,11 +1274,11 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-59045: reduced expression is retargeted per KeyedPartitioning") {
     // A chained SPJ's output partitioning reports one `KeyedPartitioning` per join side, but the
-    // reduced expression is derived from the single spec that `createKeyedShuffleSpec` picks
-    // (`collectFirst`). Re-targeting it at each `KeyedPartitioning`'s own key attribute keeps the
-    // other sides' partitionings intact - otherwise a GROUP BY on the other side's key no longer
-    // sees a partitioning on it and the query shuffles (0 shuffles on base and here, 1 if the
-    // use-site re-targeting is dropped).
+    // reduced expression is derived from the one member `checkKeyGroupCompatible` paired this side
+    // on. Re-targeting it at each `KeyedPartitioning`'s own key attribute keeps the other sides'
+    // partitionings intact - otherwise a GROUP BY on the other side's key no longer sees a
+    // partitioning on it and the query shuffles (0 shuffles on base and here, 1 if the use-site
+    // re-targeting is dropped).
     val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
     createTable("b16", cols, Array(bucket(16, "id")))
     createTable("b8", cols, Array(bucket(8, "id")))
@@ -2793,6 +2793,103 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-59285: two legs whose struct field names differ are still co-partitioned") {
+    // Both legs prune to nothing, and their key spaces differ only in a struct field name, which
+    // `identity` carries into the key type. A reduce cannot bridge that, since there is no reducer
+    // between two attributes, so calling the two sides incompatible leaves nowhere to go: the join
+    // must keep taking them as one layout.
+    withTable("p1", "p2", "p3", "p4") {
+      createTable("p1", Array(Column.create("id", structA)), Array(identity("id")))
+      sql("INSERT INTO testcat.ns.p1 VALUES (named_struct('a', 1))")
+      createTable("p2", Array(Column.create("id", structA)), Array(identity("id")))
+      sql("INSERT INTO testcat.ns.p2 VALUES (named_struct('a', 2))")
+      createTable("p3", Array(Column.create("k", structB)), Array(identity("k")))
+      sql("INSERT INTO testcat.ns.p3 VALUES (named_struct('b', 1))")
+      createTable("p4", Array(Column.create("k", structB)), Array(identity("k")))
+      sql("INSERT INTO testcat.ns.p4 VALUES (named_struct('b', 2))")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+        val df = sql(
+          """SELECT leg1.id, leg2.k FROM
+            |  (SELECT p1.id AS id FROM testcat.ns.p1 JOIN testcat.ns.p2 ON p1.id = p2.id) leg1
+            |  JOIN
+            |  (SELECT p3.k AS k FROM testcat.ns.p3 JOIN testcat.ns.p4 ON p3.k = p4.k) leg2
+            |  ON leg1.id = leg2.k
+            |""".stripMargin)
+        assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+          "the two legs are taken as one layout, so neither is shuffled")
+        checkAnswer(df, Nil)
+      }
+    }
+  }
+
+  test("SPARK-59285: two sides whose partitions were all pruned are not one layout") {
+    // Both legs prune to no partition at all, and they describe key spaces of different types:
+    // `identity(id)` gives `LongType` keys, `bucket(4, id)` gives `IntegerType` ones. Key rows are
+    // compared at their types, but two empty lists compare equal whatever they describe, so the
+    // join over the two legs used to declare them co-partitioned on that alone and report both
+    // partitionings as alternative descriptions of one layout. It reduces the identity side onto
+    // the bucket key space instead, which is what the two sides actually share.
+    //
+    // The FULL OUTER join above brings `t5`'s keys in, so the `GroupPartitionsExec` below it lays
+    // out real `IntegerType` key rows over that partitioning. That is what makes a member claiming
+    // `LongType` keys harmful rather than merely untidy.
+    val cols = Array(Column.create("id", LongType), Column.create("v", StringType))
+    withTable("t1", "t2", "t3", "t4", "t5") {
+      createTable("t1", cols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1')")
+      createTable("t2", cols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'b2')")
+      createTable("t3", cols, Array(bucket(4, "id")))
+      sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1')")
+      createTable("t4", cols, Array(bucket(4, "id")))
+      sql("INSERT INTO testcat.ns.t4 VALUES (2, 'd2')")
+      createTable("t5", cols, Array(bucket(4, "id")))
+      sql("INSERT INTO testcat.ns.t5 VALUES (3, 'e3')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(
+          """SELECT legs.id1, legs.id2, t5.id AS id5
+            |FROM (
+            |  SELECT leg1.id AS id1, leg2.id AS id2
+            |  FROM (SELECT t1.id AS id FROM testcat.ns.t1 JOIN testcat.ns.t2 ON t1.id = t2.id) leg1
+            |  JOIN (SELECT t3.id AS id FROM testcat.ns.t3 JOIN testcat.ns.t4 ON t3.id = t4.id) leg2
+            |  ON leg1.id = leg2.id
+            |) legs
+            |FULL OUTER JOIN testcat.ns.t5 ON legs.id2 = t5.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+        assert(!plan.exists { p =>
+          keyedPartitioningsOf(Seq(p)).map(_.keyDataTypes).distinct.size > 1
+        }, "no node reports two key spaces as one layout")
+        assert(ValidateRequirements.validate(plan), "and the plan it does report holds up")
+
+        // The assert above is on absence, so a regression that dropped every keyed claim would
+        // satisfy it with no key space at all. These pin the claim positively: nothing shuffles,
+        // and the topmost node that reports a keyed partitioning describes the bucket key space the
+        // two legs share, which is `IntegerType` rather than the identity side's `LongType`. The
+        // identity legs below it still report their own `LongType` space, which is why this asks
+        // the topmost node rather than the whole plan.
+        assert(collectAllShuffles(plan).isEmpty, "the whole query should be co-partitioned")
+        val topKeySpaces = plan.collectFirst {
+          case p if keyedPartitioningsOf(Seq(p)).nonEmpty =>
+            keyedPartitioningsOf(Seq(p)).map(_.keyDataTypes).distinct
+        }
+        assert(topKeySpaces.contains(Seq(Seq(IntegerType))),
+          s"the shared key space should be the bucket one, got $topKeySpaces")
+
+        checkAnswer(df, Seq(Row(null, null, 3L)))
+      }
+    }
+  }
+
   test("SPARK-59054: shuffle one side: partition transform collapsing -0.0 and 0.0") {
     withFunction(UnboundSignedZerosFunction) {
       // `signed_zeros` maps id 1 to -0.0 and id 2 to 0.0: two partition keys that are equal
@@ -4004,11 +4101,11 @@ class KeyGroupedPartitioningSuite
     // `arrive_time` is selected twice under two aliases, so the projected partitioning is a
     // `PartitioningCollection` whose members cover different numbers of the join keys: one covers
     // (id, t1), another only id. Each member's spec is projected onto its own subset, so the specs
-    // disagree on `numPartitions`, and asking the collection for one partitioning fails with
-    // "expected all specs in the collection to have the same number of partitions".
+    // disagree on `numPartitions`, and there is no one partitioning the collection could answer
+    // for. Since SPARK-59256 it cannot be asked for one at all.
     //
-    // `EnsureRequirements` now resolves the member the two sides agreed on before it asks, so the
-    // keyed side is grouped on both join keys and the shuffled side is laid out on those same keys.
+    // `EnsureRequirements` resolves the member the two sides agreed on before it asks, so the
+    // shuffled side is laid out on the keys the keyed side actually reports.
     val items_partitions = Array(identity("id"), identity("arrive_time"))
     createTable(items, itemsColumns, items_partitions)
 
@@ -4037,10 +4134,16 @@ class KeyGroupedPartitioningSuite
            |JOIN testcat.ns.$purchases p ON i.id = p.item_id AND i.t1 = p.time
            |""".stripMargin)
       val plan = df.queryExecution.executedPlan
-      val positions = collectAllGroupPartitions(plan).flatMap(_.joinKeyPositions)
-      assert(positions === Seq(Seq(0, 1)),
-        "the keyed side must be grouped on both join keys, the finest granularity available")
-      assert(collectAllShuffles(plan).size == 1, "only the unpartitioned side shuffles")
+      // The keyed side needs no grouping node: the member covering both join keys is already the
+      // scan's layout. What pins the choice is where the other side lands - that member has one
+      // partition per (id, arrive_time) pair, four of them, while the `id`-only member would put
+      // the shuffle on the three distinct ids.
+      assert(collectAllGroupPartitions(plan).isEmpty,
+        "the member covering both join keys is already the scan's layout")
+      val shuffles = collectAllShuffles(plan)
+      assert(shuffles.size == 1, "only the unpartitioned side shuffles")
+      assert(shuffles.map(_.outputPartitioning.numPartitions) === Seq(4),
+        "the shuffled side must land on the member covering both join keys")
       checkAnswer(df, Seq(
         Row(1, java.sql.Timestamp.valueOf("2020-01-01 00:00:00"),
           java.sql.Timestamp.valueOf("2020-01-01 00:00:00"), 40.0, 42.0),
@@ -7744,7 +7847,7 @@ class KeyGroupedPartitioningSuite
     val keys = Seq(InternalRow(1), InternalRow(2))
     def markedExchange(e: AttributeReference): ShuffleExchangeExec =
       ShuffleExchangeExec(
-        KeyedPartitioning(Seq(e), keys).copy(mayContainUnknownPartitionKeys = true),
+        KeyedPartitioning(Seq(e), keys).withLayout(_.copy(mayContainUnknownPartitionKeys = true)),
         new LocalTableScanExec(Seq(e), Nil, None, false))
     def keylessExchange(e: AttributeReference): ShuffleExchangeExec =
       ShuffleExchangeExec(physical.HashPartitioning(Seq(e), keys.length),
@@ -7776,7 +7879,7 @@ class KeyGroupedPartitioningSuite
     val attrB = AttributeReference("b", IntegerType)()
     val keys = Seq(InternalRow(1), InternalRow(2))
     def markedKP(e: AttributeReference): KeyedPartitioning =
-      KeyedPartitioning(Seq(e), keys).copy(mayContainUnknownPartitionKeys = true)
+      KeyedPartitioning(Seq(e), keys).withLayout(_.copy(mayContainUnknownPartitionKeys = true))
     def markedExchange(e: AttributeReference): ShuffleExchangeExec =
       ShuffleExchangeExec(markedKP(e), new LocalTableScanExec(Seq(e), Nil, None, false))
     def plainExchange(e: AttributeReference): ShuffleExchangeExec =

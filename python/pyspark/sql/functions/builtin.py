@@ -109,6 +109,8 @@ if TYPE_CHECKING:
 # even though there might be few exceptions for legacy or inevitable reasons.
 # If you are fixing other language APIs together, also please note that Scala side is not the case
 # since it requires making every single overridden definition.
+# Public function groups are defined by pyspark.sql.functions.__all__ and mirrored in the API
+# reference.
 
 
 def _get_jvm_function(name: str, sc: "SparkContext") -> Callable:
@@ -9295,9 +9297,6 @@ def factorial(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("factorial", col)
 
 
-# ---------------  Window functions ------------------------
-
-
 @_try_remote_functions
 def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> Column:
     """
@@ -9896,9 +9895,6 @@ def ntile(n: int) -> Column:
     +---+---+-----+
     """
     return _invoke_function("ntile", int(_enum_to_value(n)))
-
-
-# ---------------------- Date/Timestamp functions ------------------------------
 
 
 @_try_remote_functions
@@ -14343,7 +14339,8 @@ def time_bucket(
         A day-time or year-month interval defining the bucket size. Must be positive
         and foldable.
     ts : :class:`~pyspark.sql.Column` or column name
-        A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+        A TIMESTAMP, TIMESTAMP_NTZ, or nanosecond-precision
+        (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p in [7, 9]) value to bucket.
     origin : :class:`~pyspark.sql.Column`, optional
         Alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as
         ``ts`` and must be foldable.
@@ -14882,9 +14879,6 @@ def to_timestamp_ntz(
         return _invoke_function_over_columns("to_timestamp_ntz", timestamp, format)
     else:
         return _invoke_function_over_columns("to_timestamp_ntz", timestamp)
-
-
-# ---------------------------- misc functions ----------------------------------
 
 
 @_try_remote_functions
@@ -15568,9 +15562,6 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
             },
         )
     return _invoke_function_over_columns("raise_error", lit(errMsg))
-
-
-# ---------------------- String/Binary functions ------------------------------
 
 
 @_try_remote_functions
@@ -20318,9 +20309,6 @@ def quote(col: "ColumnOrName") -> Column:
     +-----+------------+
     """
     return _invoke_function_over_columns("quote", col)
-
-
-# ---------------------- Collection functions ------------------------------
 
 
 @overload
@@ -27427,9 +27415,6 @@ def str_to_map(
     return _invoke_function_over_columns("str_to_map", text, pairDelim, keyValueDelim)
 
 
-# ---------------------- Partition transform functions --------------------------------
-
-
 @_try_remote_functions
 def years(col: "ColumnOrName") -> Column:
     """
@@ -29535,9 +29520,6 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     return partitioning.bucket(numBuckets, col)
 
 
-# Geospatial ST Functions
-
-
 @_try_remote_functions
 def st_asbinary(geo: "ColumnOrName", endianness: Optional["ColumnOrName"] = None) -> Column:
     """Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
@@ -29703,9 +29685,6 @@ def st_srid(geo: "ColumnOrName") -> Column:
     [Row(st_srid(st_geomfromwkb(wkb, 0))=0)]
     """
     return _invoke_function_over_columns("st_srid", geo)
-
-
-# Call Functions
 
 
 @_try_remote_functions
@@ -29992,9 +29971,6 @@ def wrap_udt(col: "ColumnOrName", udt: "Union[UserDefinedType, Column]") -> Colu
             },
         )
     return _invoke_function("wrap_udt", _to_java_column(col), _to_java_column(udt_col))
-
-
-# ---------------------- Datasketch functions ------------------------------
 
 
 @_try_remote_functions
@@ -32543,9 +32519,6 @@ def tuple_union_theta_integer(
     return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
 
 
-# ---------------------- Predicates functions ------------------------------
-
-
 @_try_remote_functions
 def ifnull(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
@@ -34108,9 +34081,6 @@ def bitmap_xor_agg(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitmap_xor_agg", col)
 
 
-# ---------------------------- User Defined Function ----------------------------------
-
-
 def udaf(agg: "Aggregator") -> "UserDefinedFunctionLike":
     """Turn an :class:`~pyspark.sql.aggregator.Aggregator` instance into a callable usable in
     ``groupBy().agg(...)`` (and as a window function), the Python counterpart of Scala's
@@ -34682,9 +34652,6 @@ def arrow_udtf(
         return functools.partial(_create_pyarrow_udtf, returnType=returnType)
     else:
         return _create_pyarrow_udtf(cls=cls, returnType=returnType)
-
-
-# ---------------------- Vector Functions ----------------------
 
 
 @_try_remote_functions

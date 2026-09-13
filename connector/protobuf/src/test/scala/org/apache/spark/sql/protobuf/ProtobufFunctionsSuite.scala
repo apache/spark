@@ -1506,6 +1506,30 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
     }
   }
 
+  test("deeply nested Any-in-Any is rejected as malformed instead of overflowing the stack") {
+    checkWithFileAndClassName("ProtoWithAny") { case (name, descFilePathOpt) =>
+      // Each nested Any level is re-parsed by JsonFormat with a fresh protobuf recursion
+      // limit; without a cross-level budget a deeply nested record overflows the executor
+      // stack with StackOverflowError, which PERMISSIVE mode cannot recover from.
+      var nested = AnyProto.pack(SimpleMessage.newBuilder().setId(1).build())
+      (0 until 2000).foreach(_ => nested = AnyProto.pack(nested))
+      val deeplyNested = ProtoWithAny.newBuilder()
+        .setEventName("deeply-nested")
+        .setDetails(nested)
+        .build()
+        .toByteArray
+      val inputDF = Seq(deeplyNested).toDF("binary")
+
+      val options = Map(
+        ProtobufOptions.CONVERT_ANY_FIELDS_TO_JSON_CONFIG -> "true",
+        "mode" -> "PERMISSIVE")
+      val dfJson = inputDF.select(
+        from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("proto"))
+      // The record is treated as malformed (null in PERMISSIVE mode) and the task survives.
+      assert(dfJson.collect()(0).getStruct(0) == null)
+    }
+  }
+
   test("test explicitly set zero values - proto3") {
     // All fields explicitly zero. Message, map, repeated, and oneof fields
     // are left unset, as null is their zero value.
