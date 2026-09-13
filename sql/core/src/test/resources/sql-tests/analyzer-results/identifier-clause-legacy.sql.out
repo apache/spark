@@ -3969,3 +3969,34 @@ DROP TEMPORARY VARIABLE identifier_cache_name
 -- !query analysis
 DropVariable false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_cache_name
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_subq_col STRING DEFAULT 'c1'
+-- !query analysis
+CreateVariable default(cast(c1 as string), sql=''c1''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_subq_col
+
+
+-- !query
+CREATE VIEW identifier_subq_view AS
+SELECT (SELECT IDENTIFIER(identifier_subq_col) FROM VALUES(1) AS t(c1)) AS x
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`default`.`identifier_subq_view`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`identifier_subq_col`"
+  }
+}
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_subq_col
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_subq_col

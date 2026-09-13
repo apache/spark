@@ -58,17 +58,19 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
         }
       // Same as [[CreateView]]: only the query body's IDENTIFIER-clause variables are dependencies
       // of the view definition, so resolve the ALTER target without recording. Recording a variable
-      // used only to compute the target would, for a persisted view, be rejected by
-      // `verifyTemporaryObjectsNotExists`, and for a temporary view (which skips that validator) be
-      // persisted as a spurious dependency that breaks later reads.
+      // used only to compute the target is rejected by `verifyTemporaryObjectsNotExists` for a
+      // persisted view; for a temporary view (which skips that validator) it just stores an
+      // inaccurate dependency. That is harmless to reads -- stored names are an allow-list that is
+      // not proactively resolved -- but still wrong.
       case alterView: AlterViewAs =>
         val analyzedChild = apply0(alterView.child, recordUnderIdentifier = false)
         val analyzedQuery = apply0(alterView.query)
         alterView.copy(child = analyzedChild, query = analyzedQuery)
-      // CACHE TABLE AS SELECT creates a text-backed temporary view, so like [[CreateView]] only the
-      // SELECT body's IDENTIFIER-clause variables are dependencies. The target name is an expression
-      // on the node (not a plan wrapped in `PlanWithUnresolvedIdentifier`), so the command guard in
-      // `apply0` does not exclude it; resolve the name without recording and the body with it.
+      // CACHE TABLE AS SELECT builds a temporary view from the SELECT body, so like [[CreateView]]
+      // only the body's IDENTIFIER-clause variables are dependencies. The target name is an
+      // expression on the node (not a plan wrapped in `PlanWithUnresolvedIdentifier`), so the
+      // command guard in `apply0` does not exclude it; resolve the name without recording and the
+      // body with it.
       case cacheTableAsSelect: CacheTableAsSelect =>
         val analyzedName = cacheTableAsSelect.tempViewName.transformUpWithPruning(
           _.containsPattern(UNRESOLVED_IDENTIFIER)) {
@@ -102,8 +104,9 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
         // instead supplies the *name* of a command (e.g. the target of
         // `CREATE TEMPORARY VIEW IDENTIFIER(v) AS ...`), the evaluated plan is that command and `v`
         // names the object rather than a variable it refers to, so recording it would wrongly
-        // persist it as a dependency. Only the commands that consume the recorded set (temporary
-        // view create/ALTER and CACHE TABLE AS SELECT) turn it into stored metadata.
+        // persist it as a dependency. The commands that consume the recorded set are temporary-view
+        // create/ALTER and CACHE TABLE AS SELECT, which store it as metadata, and persisted
+        // CREATE/ALTER VIEW, which validate against it.
         if (recordUnderIdentifier && !resolvedPlan.isInstanceOf[Command]) {
           recordTemporaryVariablesUnderIdentifier(p.identifierExpr)
         }

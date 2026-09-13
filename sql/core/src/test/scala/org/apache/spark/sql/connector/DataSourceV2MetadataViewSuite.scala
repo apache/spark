@@ -315,6 +315,31 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
     }
   }
 
+  test("v2 CREATE / ALTER VIEW allows a temporary variable under an IDENTIFIER clause when the " +
+    "legacy flag is enabled") {
+    // With `spark.sql.legacy.allowSessionVariableInPersistedView` enabled, `CheckViewReferences`
+    // takes its legacy branch for both the v2 CREATE VIEW and ALTER VIEW commands and permits the
+    // dependency instead of rejecting it (the default rejection is covered above). This checks that
+    // both commands are allowed under the flag; the flag does not persist the variable.
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("DECLARE OR REPLACE VARIABLE v2_ident_col STRING DEFAULT 'x'")
+      try {
+        withSQLConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW.key -> "true") {
+          // CREATE is allowed under the flag.
+          sql("CREATE VIEW view_catalog.default.v_ident_flag AS " +
+            "SELECT IDENTIFIER(v2_ident_col) FROM spark_catalog.default.t")
+          // ALTER is allowed under the flag too.
+          sql("ALTER VIEW view_catalog.default.v_ident_flag AS " +
+            "SELECT IDENTIFIER(v2_ident_col) AS y FROM spark_catalog.default.t")
+        }
+      } finally {
+        sql("DROP VIEW IF EXISTS view_catalog.default.v_ident_flag")
+        sql("DROP TEMPORARY VARIABLE v2_ident_col")
+      }
+    }
+  }
+
   // --- v2 view DDL / inspection on a non-session v2 catalog ----------------------------
   // ResolveSessionCatalog's `ResolvedViewIdentifier` matcher is gated on isSessionCatalog, so
   // these plans flow through to DataSourceV2Strategy with a `ResolvedPersistentView` child.

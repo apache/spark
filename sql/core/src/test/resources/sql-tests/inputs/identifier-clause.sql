@@ -625,3 +625,12 @@ CACHE TABLE IDENTIFIER(identifier_cache_name) AS SELECT 1 AS c1;
 SELECT * FROM identifier_cache_named;
 UNCACHE TABLE identifier_cache_named;
 DROP TEMPORARY VARIABLE identifier_cache_name;
+
+-- A persisted CREATE VIEW must reject a session variable read via an IDENTIFIER clause even when it
+-- appears only inside a scalar subquery. The variable is absent from the analyzed plan, so the
+-- recorded set (not a scan of the plan) is what the validator must consult; otherwise the view is
+-- wrongly created and stores text that cannot be resolved on read.
+DECLARE OR REPLACE VARIABLE identifier_subq_col STRING DEFAULT 'c1';
+CREATE VIEW identifier_subq_view AS
+SELECT (SELECT IDENTIFIER(identifier_subq_col) FROM VALUES(1) AS t(c1)) AS x;
+DROP TEMPORARY VARIABLE identifier_subq_col;
