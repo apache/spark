@@ -227,7 +227,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"col\"",
     "inputType" : "\"ARRAY<INT>\"",
     "paramIndex" : "first",
-    "requiredType" : "(\"INT\" or \"BIGINT\" or \"TIME\" or \"STRING\" or \"BINARY\")",
+    "requiredType" : "(\"INT\" or \"BIGINT\" or \"STRING\" or \"BINARY\" or \"TIME\")",
     "sqlExpr" : "\"hll_sketch_agg(col, 12)\""
   },
   "queryContext" : [ {
