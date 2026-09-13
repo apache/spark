@@ -22,6 +22,39 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.3 to 4.4
+
+Since Spark 4.4, coarse-grained executors must supply the launching driver's instance ID
+before retrieving bootstrap configuration and when registering. This prevents stale executors
+from attaching to another driver after its RPC address is reused, even when application IDs match.
+Spark's built-in Standalone, YARN, and Kubernetes launchers propagate the ID automatically.
+
+External cluster managers and custom executor launchers using Spark's internal RPC protocol
+must update their launch and bootstrap paths:
+
+1. After constructing `CoarseGrainedSchedulerBackend`, read `spark.driver.instanceId` from
+   the driver's `SparkConf`. Use this generated value; do not generate a replacement or derive
+   it from the application ID. The backend overwrites any user-supplied value.
+2. Pass the value to every executor JVM as `-Dspark.driver.instanceId=<value>` before its
+   first RPC. The existing `SparkConf.isExecutorStartupConf` filter includes this property.
+   Retain it for delayed launches belonging to that backend; a replacement backend generates
+   a new value.
+3. Custom bootstrap senders must send
+   `RetrieveSparkAppConfigWithIdentity(resourceProfileId, driverInstanceId)` instead of
+   `RetrieveSparkAppConfig(resourceProfileId)`.
+4. Custom registration senders must include `spark.driver.instanceId` in the existing
+   `RegisterExecutor.attributes` map, using the same launch-time value. Do not replace it
+   with an identity learned from another driver or from a mismatch error.
+
+The legacy bootstrap message and the eight-field `RegisterExecutor` retain their class shapes,
+but their behavior is not backward compatible: legacy bootstrap requests and missing or
+mismatched identities are rejected. There is no fallback that returns bootstrap credentials
+without the check. Driver and executor processes must use matching Spark versions.
+
+The instance ID is an internal, non-secret correlation value, not a user setting or an
+authentication credential. RPC authentication and cluster isolation remain necessary against
+malicious callers; see the [security documentation](security.html).
+
 ## Upgrading from Core 4.2 to 4.3
 
 - Since Spark 4.3, Spark compresses serialized RDD partitions by default. To restore the legacy behavior, you can set `spark.rdd.compress` to `false`.
