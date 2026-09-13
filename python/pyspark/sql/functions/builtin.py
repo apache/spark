@@ -23417,10 +23417,11 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def variant_array_length(v: "ColumnOrName") -> Column:
+def variant_array_length(v: "ColumnOrName", path: Optional[Union[Column, str]] = None) -> Column:
     """
-    Returns the number of elements in a variant array. Returns NULL if the input is SQL NULL, a
-    variant null, or any non-array variant value.
+    Returns the number of elements in the variant array at `path`. If `path` is omitted, the root
+    array is inspected. Returns NULL if the input is SQL NULL, the path does not exist, or the
+    target is a variant null or any non-array variant value.
 
     .. versionadded:: 5.0.0
 
@@ -23429,6 +23430,10 @@ def variant_array_length(v: "ColumnOrName") -> Column:
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
         A column that evaluates to a variant.
+    path : :class:`~pyspark.sql.Column` or str, optional
+        the JSONPath identifying the array to inspect. A `str` is a literal path; a
+        :class:`~pyspark.sql.Column` supplies the path at runtime. If omitted, the root array is
+        inspected.
 
     Returns
     -------
@@ -23438,13 +23443,16 @@ def variant_array_length(v: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('''[1, 2, 3]''',), ('''{"a": 1}''',), ('null',)], ['json'])
-    >>> df.select(variant_array_length(parse_json(df.json)).alias("r")).collect()
-    [Row(r=3), Row(r=None), Row(r=None)]
+    >>> df = spark.createDataFrame([('''{"a": [1, 2, 3]}''',), ('''{"a": 1}''',)], ['json'])
+    >>> df.select(variant_array_length(parse_json(df.json), "$.a").alias("r")).collect()
+    [Row(r=3), Row(r=None)]
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("variant_array_length", _to_java_column(v))
+    if path is None:
+        return _invoke_function("variant_array_length", _to_java_column(v))
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("variant_array_length", _to_java_column(v), _to_java_column(path_col))
 
 
 @_try_remote_functions

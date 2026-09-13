@@ -348,6 +348,25 @@ class VariantEndToEndSuite extends SharedSparkSession {
 
     checkAnswer(df.selectExpr("variant_array_length(parse_json(j))"), expected)
     checkAnswer(df.select(variant_array_length(parse_json($"j"))), expected)
+
+    val nested = Seq(
+      ("""{"a": [1, 2, 3]}""", "$.a"),
+      ("""{"a": []}""", "$.a"),
+      ("""{"a": 1}""", "$.a"),
+      ("{}", "$.a"),
+      ("""{"a": [1]}""", null)).toDF("j", "path")
+    val dynamicExpected = Seq(Row(3), Row(0), Row(null), Row(null), Row(null))
+    val literalExpected = Seq(Row(3), Row(0), Row(null), Row(null), Row(1))
+
+    checkAnswer(
+      nested.selectExpr("variant_array_length(parse_json(j), path)"),
+      dynamicExpected)
+    checkAnswer(
+      nested.select(variant_array_length(parse_json($"j"), $"path")),
+      dynamicExpected)
+    checkAnswer(
+      nested.select(variant_array_length(parse_json($"j"), "$.a")),
+      literalExpected)
   }
 
   test("schema_of_variant_agg") {

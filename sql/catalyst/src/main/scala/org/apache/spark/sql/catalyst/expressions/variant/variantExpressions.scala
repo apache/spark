@@ -123,36 +123,17 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
     copy(child = newChild)
 }
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the number of elements in a variant array. Returns NULL if " +
-    "the input is SQL NULL, a variant null, or any non-array variant value.",
-  arguments = """
-    Arguments:
-      * expr - A variant value to inspect.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(parse_json('[1, 2, 3]'));
-       3
-      > SELECT _FUNC_(parse_json('{"a": 1}'));
-       NULL
-      > SELECT _FUNC_(parse_json('null'));
-       NULL
-  """,
-  since = "5.0.0",
-  group = "variant_funcs")
-// scalastyle:on line.size.limit
-case class VariantArrayLength(child: Expression) extends UnaryExpression
-  with ExpectsInputTypes with RuntimeReplaceable {
+case class VariantArrayLength(child: Expression)
+    extends UnaryExpression
+    with ExpectsInputTypes
+    with RuntimeReplaceable {
 
   override lazy val replacement: Expression = StaticInvoke(
-    VariantExpressionEvalUtils.getClass,
+    VariantArrayLength.getClass,
     IntegerType,
     "variantArrayLength",
     Seq(child),
     inputTypes,
-    propagateNull = false,
     returnNullable = true)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
@@ -165,6 +146,140 @@ case class VariantArrayLength(child: Expression) extends UnaryExpression
 
   override protected def withNewChildInternal(newChild: Expression): VariantArrayLength =
     copy(child = newChild)
+}
+
+case class VariantArrayLengthWithPath(child: Expression, path: Expression)
+    extends BinaryExpression
+    with ExpectsInputTypes {
+
+  @transient private lazy val parsedPath: Option[Array[VariantPathSegment]] = {
+    if (path.foldable) {
+      Option(path.eval()).map(p => VariantGet.getParsedPath(p.toString, prettyName))
+    } else {
+      None
+    }
+  }
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(VariantType, StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def dataType: DataType = IntegerType
+
+  override def nullable: Boolean = true
+
+  override def nullIntolerant: Boolean = true
+
+  override def prettyName: String = "variant_array_length"
+
+  override def eval(input: InternalRow): Any = {
+    val _ = parsedPath
+    super.eval(input)
+  }
+
+  override protected def nullSafeEval(input: Any, path: Any): Any = parsedPath match {
+    case Some(pp) =>
+      VariantArrayLength.variantArrayLength(input.asInstanceOf[VariantVal], pp)
+    case _ =>
+      VariantArrayLength.variantArrayLength(
+        input.asInstanceOf[VariantVal], path.asInstanceOf[UTF8String], prettyName)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childCode = child.genCode(ctx)
+    val (pathCode, pathArg, functionNameArg) = if (parsedPath.isEmpty) {
+      val pathCode = path.genCode(ctx)
+      (pathCode, pathCode.value, s""", "$prettyName"""")
+    } else {
+      (
+        new ExprCode(EmptyBlock, FalseLiteral, TrueLiteral),
+        ctx.addReferenceObj("parsedPath", parsedPath.get),
+        ""
+      )
+    }
+    val code = code"""
+      ${childCode.code}
+      ${pathCode.code}
+      boolean ${ev.isNull} = ${childCode.isNull} || ${pathCode.isNull};
+      int ${ev.value} = ${CodeGenerator.defaultValue(IntegerType)};
+      if (!${ev.isNull}) {
+        Integer length =
+          org.apache.spark.sql.catalyst.expressions.variant.VariantArrayLength.variantArrayLength(
+            ${childCode.value}, $pathArg$functionNameArg);
+        if (length == null) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = length;
+        }
+      }
+    """
+    ev.copy(code = code)
+  }
+
+  override def left: Expression = child
+
+  override def right: Expression = path
+
+  override protected def withNewChildrenInternal(
+      newChild: Expression,
+      newPath: Expression): VariantArrayLengthWithPath = copy(child = newChild, path = newPath)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr[, path]) - Returns the number of elements in the variant array at `path`. " +
+    "If `path` is omitted, the root array is inspected. Returns NULL if the input is SQL NULL, " +
+    "the path does not exist, or the target is a variant null or any non-array variant value.",
+  arguments = """
+    Arguments:
+      * expr - A variant value to inspect.
+      * path - An optional string expression in JSONPath format that identifies the array to
+          inspect. When omitted, it defaults to `$`.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('[1, 2, 3]'));
+       3
+      > SELECT _FUNC_(parse_json('{"a": [1, 2]}'), '$.a');
+       2
+      > SELECT _FUNC_(parse_json('{"a": 1}'));
+       NULL
+      > SELECT _FUNC_(parse_json('null'));
+       NULL
+  """,
+  since = "5.0.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit
+object VariantArrayLength extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    expressions.length match {
+      case 1 => VariantArrayLength(expressions.head)
+      case 2 => VariantArrayLengthWithPath(expressions.head, expressions(1))
+      case numArgs => throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
+    }
+  }
+
+  def variantArrayLength(input: VariantVal): Integer = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    if (v.getType == Type.ARRAY) {
+      v.arraySize()
+    } else {
+      null
+    }
+  }
+
+  def variantArrayLength(input: VariantVal, parsedPath: Array[VariantPathSegment]): Integer = {
+    val v = VariantGet.getVariant(input, parsedPath)
+    if (v != null && v.getType == Type.ARRAY) {
+      v.arraySize()
+    } else {
+      null
+    }
+  }
+
+  def variantArrayLength(input: VariantVal, path: UTF8String, prettyName: String): Integer = {
+    val parsedPath = VariantGet.getParsedPath(path.toString, prettyName)
+    variantArrayLength(input, parsedPath)
+  }
 }
 
 // scalastyle:off line.size.limit
@@ -593,6 +708,18 @@ case object VariantGet {
       parsedPath: Array[VariantPathSegment],
       dataType: DataType,
       castArgs: VariantCastArgs): Any = {
+    val v = getVariant(input, parsedPath)
+    if (v == null) {
+      null
+    } else {
+      VariantGet.cast(v, dataType, castArgs)
+    }
+  }
+
+  /**
+   * Returns the sub-variant at `parsedPath` without copying its value or metadata.
+   */
+  def getVariant(input: VariantVal, parsedPath: Array[VariantPathSegment]): Variant = {
     var v = new Variant(input.getValue, input.getMetadata)
     for (path <- parsedPath) {
       v = path match {
@@ -602,7 +729,7 @@ case object VariantGet {
       }
       if (v == null) return null
     }
-    VariantGet.cast(v, dataType, castArgs)
+    v
   }
 
   /**
