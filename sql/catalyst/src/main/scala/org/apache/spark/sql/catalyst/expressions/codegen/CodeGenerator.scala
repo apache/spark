@@ -316,7 +316,9 @@ class CodegenContext extends Logging {
       val args = mutable.LinkedHashMap.empty[String, VariableValue]
       // False for a value no parameter can carry: `ExpandExec` hands out a `VariableValue` naming a
       // slot of a compacted mutable state array, and a `SimpleExprValue` is an expression rather
-      // than a name. A field or a literal needs no parameter and is read as it stands.
+      // than a name -- `posexplode_outer` gives its position the nullness `index == -1`, and a
+      // `Byte` or `Short` literal's value is `(byte)1`. A field or a literal needs no parameter and
+      // is read as it stands.
       def canPass(v: ExprValue): Boolean = v match {
         case local: VariableValue =>
           val name = local.variableName
@@ -332,17 +334,29 @@ class CodegenContext extends Logging {
       var possible = INPUT_ROW == null ||
         canPass(JavaCode.variable(INPUT_ROW, classOf[InternalRow]))
       val visited = mutable.HashSet.empty[Long]
+      // The definitions of a `With` in the tree walked here, which reach `currentCommonExprs` only
+      // once that `With` is generated. Ids come from one counter, so one map serves every scope.
+      val nestedDefs = mutable.HashMap.empty[Long, Expression]
       val toVisit = mutable.Stack[Expression](definition)
       while (possible && toVisit.nonEmpty) {
         toVisit.pop() match {
           case ref: BoundReference if currentVars != null && currentVars(ref.ordinal) != null =>
             val input = currentVars(ref.ordinal)
             possible = input.code == EmptyBlock && canPass(input.value) && canPass(input.isNull)
+          case w: With =>
+            // Only `child` is generated: a definition is generated where a reference reaches it, so
+            // one no reference reaches is not in the body, and what it reads decides nothing.
+            w.defs.foreach(d => nestedDefs.put(d.id.id, d.child))
+            toVisit.push(w.child)
           case ref: CommonExpressionRef =>
-            // A reference to an enclosing scope, since one to this scope is refused. Its slots are
-            // filled inside this method, so what that definition reads has to come in as well.
+            // The definition this reference fills, which it does inside this method, so what that
+            // definition reads has to come in as well. One belonging to a `With` in the tree walked
+            // here is in `nestedDefs`; a sibling of this definition, or one of an enclosing scope,
+            // is registered in `currentCommonExprs`.
             if (visited.add(ref.id.id)) {
-              currentCommonExprs.get(ref.id.id).foreach(slot => toVisit.push(slot.definition))
+              nestedDefs.get(ref.id.id)
+                .orElse(currentCommonExprs.get(ref.id.id).map(_.definition))
+                .foreach(toVisit.push)
             }
           case e =>
             // Stopping where `Expression.genCode` stops: it reads a subexpression's value off the
