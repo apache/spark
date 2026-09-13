@@ -192,6 +192,28 @@ struct<hll_sketch_estimate(hll_union_agg(sketch, true)):bigint>
 
 
 -- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(col))
+FROM VALUES (TIME'12:00:00'), (TIME'12:00:00'), (TIME'09:00:00'), (TIME'17:00:00') tab(col)
+-- !query schema
+struct<hll_sketch_estimate(hll_sketch_agg(col, 12)):bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_union_agg(sketch, true))
+    FROM (SELECT hll_sketch_agg(col) as sketch
+            FROM VALUES (TIME'12:00:00'), (TIME'09:00:00') AS tab(col)
+          UNION ALL
+          SELECT hll_sketch_agg(col) as sketch
+            FROM VALUES (TIME'12:00:00'), (TIME'17:00:00') AS tab(col))
+-- !query schema
+struct<hll_sketch_estimate(hll_union_agg(sketch, true)):bigint>
+-- !query output
+3
+
+
+-- !query
 SELECT hll_sketch_agg(col)
 FROM VALUES (ARRAY(1, 2)), (ARRAY(3, 4)) tab(col)
 -- !query schema
@@ -205,7 +227,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"col\"",
     "inputType" : "\"ARRAY<INT>\"",
     "paramIndex" : "first",
-    "requiredType" : "(\"INT\" or \"BIGINT\" or \"STRING\" or \"BINARY\")",
+    "requiredType" : "(\"INT\" or \"BIGINT\" or \"TIME\" or \"STRING\" or \"BINARY\")",
     "sqlExpr" : "\"hll_sketch_agg(col, 12)\""
   },
   "queryContext" : [ {
