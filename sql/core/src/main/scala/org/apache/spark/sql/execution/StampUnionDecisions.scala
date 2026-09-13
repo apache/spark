@@ -25,14 +25,27 @@ import org.apache.spark.sql.catalyst.rules.Rule
  *
  * `UnionExec` derives both from state that moves: its children's `outputPartitioning` sharpens as
  * AQE finalises the plans behind them, and `conf` is the live session conf. Whoever asked first
- * used to decide, which made the answer depend on when it was observed. This rule asks once,
- * right after `EnsureRequirements`, so the decision the exchanges around a union were planned
- * against is the one `unionRDDs` and the codegen gate use.
+ * used to decide, which made the answer depend on when it was observed. This rule asks right
+ * after `EnsureRequirements`, so the decision the exchanges around a union were planned against is
+ * the one `unionRDDs` and the codegen gate use.
  *
- * It only writes what is not there yet, so a second pass over the same nodes keeps the first
- * answer, and a node rebuilt from a stamped one keeps the tag `copyTagsFrom` gave it. AQE re-plans
- * between rounds, so a union outside a materialized stage is stamped again from what that round
- * sees; one already inside a stage is not revisited, since `foreach` stops at `QueryStageExec`.
+ * It is listed again after the injected columnar and query-stage rules, the hooks that can add a
+ * `UnionExec` of their own. One created there has no decision yet, and would otherwise take one
+ * wherever it is first asked, where the copy in the codegen shell can disagree with the gate. The
+ * cached-scan branch of stage creation needs no barrier: it rejects a result that is no longer an
+ * `InMemoryTableScanLike`, which is a leaf.
+ *
+ * A tag rather than a constructor field, because a field would land in `argString` and so in
+ * every `explain` and `PlanStability` golden holding a `Union`, and in `canonicalized`, which
+ * exchange and cached-plan reuse key on. Writing it in place is safe here, unlike in
+ * `MarkSingleTaskExecution`, because preparation runs on `sparkPlan.clone()` and every
+ * shared-subtree boundary is a leaf, so `foreach` cannot reach a node another query owns.
+ *
+ * It only writes what is not there yet, so a later pass cannot move a decision already stamped on
+ * a node, a second pass over the same nodes keeps the first answer, and a node rebuilt from a
+ * stamped one keeps the tag `copyTagsFrom` gave it. AQE re-plans between rounds, so a union above
+ * the stages already created is stamped again from what that round sees, where that plan is the one
+ * adopted; a union inside a stage is not revisited, since `foreach` stops at `QueryStageExec`.
  */
 object StampUnionDecisions extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = {

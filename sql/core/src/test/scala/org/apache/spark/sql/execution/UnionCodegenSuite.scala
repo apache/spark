@@ -23,7 +23,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioningLike, UnknownPartitioning}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -67,7 +67,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
    *
    * Stricter than `unionInsideWSCG` on purpose: this matches only a union that is the root of its
    * own codegen stage, which is what "fused" means for the callers here, while `w.find` also
-   * matches one an `InputAdapter` left inside the stage.
+   * matches one that an `InputAdapter` left inside the stage.
    */
   private def fusedUnions(df: DataFrame): Seq[UnionExec] =
     collect(df.queryExecution.executedPlan) {
@@ -781,11 +781,44 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
+  test("SPARK-59122: a fused union keeps numOutputRows when the child cap drops between " +
+    "planning and execution") {
+    // `WHOLESTAGE_UNION_MAX_CHILDREN` is on the same snapshot as the enable flag, so the same shape
+    // has to hold for it: prepared under a cap this union meets, it stays fused even if the cap is
+    // lowered under it. Reading the cap live would give the shell's copy `max-children-exceeded`,
+    // empty `metrics`, and `doProduce` failing at `metricTerm`. Three children against a cap of
+    // two, since the conf refuses anything below two.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val planned = withSQLConf(
+          SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true",
+          SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN.key -> "3") {
+        // Exchange children again, so the shell really holds a `withNewChildren` copy.
+        val df = rangeDF(100).repartition(2)
+          .union(rangeDF(100).repartition(2))
+          .union(rangeDF(100).repartition(2))
+        val fused = fusedUnions(df)
+        assert(fused.size == 1 && fused.head.children.size == 3,
+          s"this shape must fuse as one three-child union, got ${fused.map(_.children.size)}")
+        df
+      }
+      withSQLConf(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN.key -> "2") {
+        assert(planned.collect().length == 300)
+        val copy = fusedUnions(planned)
+        assert(copy.size == 1)
+        assert(copy.head.supportCodegen,
+          "the copy in the shell must keep the cap it was planned with")
+        // Not `metrics.contains`, which `collect()` above already proves: an empty `metrics` would
+        // have thrown at `metricTerm`. The count is what says the fused code ran and counted.
+        assert(copy.head.metrics("numOutputRows").value == 300)
+      }
+    }
+  }
+
   test("SPARK-59122: the codegen gate re-derives when a rule replaces the children") {
     // The gate's children-dependent terms must not outlive the children they were taken from.
-    // `SparkPlanInfo` reads `metrics` on every node when AQE posts a plan update, and that happens
-    // before the rules running just ahead of `CollapseCodegenStages`; a decision carried from there
-    // onto the rebuilt node would fuse a topology that the gate rejects.
+    // `SQLExecution` builds a `SparkPlanInfo` before execution, which reads `metrics` on every
+    // node; a decision carried from there onto a node whose children a rule then replaced would
+    // fuse a topology that the gate rejects.
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true") {
@@ -853,6 +886,59 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         // report eight.
         assert(plan.execute().getNumPartitions == 4,
           "a prepared union must execute by the layout it was prepared with")
+      }
+    }
+  }
+
+  test("SPARK-59122: a later stamping pass fills in a fresh union and keeps stamped ones") {
+    // `StampUnionDecisions` is listed again after the phases that can add a `UnionExec`, so one an
+    // injected columnar or query-stage rule created does not answer from whatever the conf says
+    // wherever it is first asked. A later pass must also not move a decision already taken, which
+    // is the second half here. The rule is driven directly: injecting an extension needs its own
+    // session, and what matters is the rule's contract.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      // Pins the property the standard pipeline has to keep: a stamping pass runs after
+      // `EnsureRequirements`, so the decision is taken from the plan the exchanges were placed in.
+      // A count would break on a sixth legitimate pass and say nothing about the order. The three
+      // AQE positions are private to `AdaptiveSparkPlanExec`.
+      val rules = QueryExecution.preparations(spark, subquery = false)
+      val firstStamp = rules.indexWhere(_ eq StampUnionDecisions)
+      val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
+      assert(ensureRequirements >= 0 && firstStamp > ensureRequirements,
+        s"expected a stamping pass after EnsureRequirements, got $ensureRequirements/$firstStamp")
+
+      val stamped = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k"))
+          .union(spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k")))
+        val union = df.queryExecution.executedPlan.collect { case u: UnionExec => u }
+        assert(union.size == 1)
+        union.head
+      }
+
+      // A fresh node standing in for one an extension made after the first pass: no decision yet.
+      val fresh = UnionExec(stamped.children)
+      withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+        StampUnionDecisions(fresh)
+      }
+      // Read back with the conf the other way round, so the answer can only come from the stamp:
+      // deriving here would make it non-plain, these children being co-partitioned.
+      withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        assert(fresh.isPlainUnion, "the barrier must have decided the fresh node")
+      }
+
+      // The other half. The conf a decision was stamped with is the part a second pass could move,
+      // so the node to watch is one whose gate the conf still answers: plain, and with its reason
+      // not yet forced. `fusedUnions` returns the copy inside the codegen shell, whose reason no
+      // preparation rule has asked for, so what it answers below comes from the stamp alone.
+      val fused = withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true") {
+        val df = rangeDF(100).repartition(2).union(rangeDF(100).repartition(2))
+        val union = fusedUnions(df)
+        assert(union.size == 1, "this shape must fuse, or the test exercises nothing")
+        union.head
+      }
+      withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false") {
+        StampUnionDecisions(fused)
+        assert(fused.supportCodegen, "a second pass must not restamp the conf it was decided with")
       }
     }
   }

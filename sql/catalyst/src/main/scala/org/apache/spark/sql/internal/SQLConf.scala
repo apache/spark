@@ -2908,9 +2908,9 @@ object SQLConf {
       .doc("When both this conf and `spark.sql.codegen.wholeStage` are true, " +
         "UnionExec participates in whole-stage codegen on its " +
         "non-partitioning-aware path: the parent and all children fuse into " +
-        "a single WholeStageCodegenExec stage. The value is read when a UnionExec " +
-        "first decides, so a change applies to plans built afterwards, not to a " +
-        "plan that has already been prepared.")
+        "a single WholeStageCodegenExec stage. The value is read when a UnionExec's " +
+        "decision is fixed during physical preparation, so a change does not reach a " +
+        "decision already taken.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -2926,8 +2926,8 @@ object SQLConf {
         "than the JVM per-method bytecode limit. Unions with more children " +
         "fall back to per-child codegen stages. Only effective when " +
         s"`${WHOLESTAGE_UNION_CODEGEN_ENABLED.key}` is true. The value is read when a " +
-        "UnionExec first decides, so a change applies to plans built afterwards, not " +
-        "to a plan that has already been prepared.")
+        "UnionExec's decision is fixed during physical preparation, so a change does not " +
+        "reach a decision already taken.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf
@@ -8125,8 +8125,8 @@ object SQLConf {
       .internal()
       .doc("When set to true, the output partitioning of UnionExec will be the same as the " +
         "input partitioning if its children have same partitioning. Otherwise, it will be a " +
-        "default partitioning. The value is read when a UnionExec first decides, so a change " +
-        "applies to plans built afterwards, not to a plan that has already been prepared.")
+        "default partitioning. The value is read when a UnionExec's decision is fixed during " +
+        "physical preparation, so a change does not reach a decision already taken.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)

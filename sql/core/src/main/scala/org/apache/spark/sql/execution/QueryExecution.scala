@@ -827,6 +827,10 @@ object QueryExecution {
       RemoveRedundantSorts,
       ApplyColumnarRulesAndInsertTransitions(
         sparkSession.sessionState.columnarRules, outputsColumnar = false),
+      // A barrier for a `UnionExec` an injected columnar rule just created, which has no decision
+      // yet and would otherwise take one wherever it is first asked. A decision already stamped on
+      // a node is kept.
+      StampUnionDecisions,
       CollapseCodegenStages()) ++
       (if (subquery) {
         Nil

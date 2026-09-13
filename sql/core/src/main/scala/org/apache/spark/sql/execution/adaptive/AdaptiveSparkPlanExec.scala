@@ -163,7 +163,10 @@ case class AdaptiveSparkPlanExec(
       // local sort left dangling right below the extra shuffle that skew join optimization may
       // insert between two joins.
       RemoveRedundantSorts
-    ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
+    ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules :+
+      // A barrier for a `UnionExec` an injected prep rule just created. Decisions already stamped
+      // above are kept.
+      StampUnionDecisions
   }
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
@@ -188,6 +191,10 @@ case class AdaptiveSparkPlanExec(
   private def postStageCreationRules(outputsColumnar: Boolean) = Seq(
     ApplyColumnarRulesAndInsertTransitions(
       context.session.sessionState.columnarRules, outputsColumnar),
+    // A barrier for a `UnionExec` an injected stage-optimizer or columnar rule just created, which
+    // has no decision yet and would otherwise take one wherever it is first asked. A decision
+    // already stamped on a node is kept, so this pass cannot move one.
+    StampUnionDecisions,
     collapseCodegenStagesRule
   )
 
