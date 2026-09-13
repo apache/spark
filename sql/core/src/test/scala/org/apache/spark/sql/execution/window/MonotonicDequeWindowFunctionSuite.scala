@@ -226,7 +226,9 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
       .range(0, 50)
       .selectExpr("id", "(id % 2) AS pk", "IF(id % 5 == 0, null, CAST(id AS INT)) AS v")
     val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-2, 2)
-    checkEquivalence(() => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)))
+    checkEquivalence(
+      () => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)),
+      expectedDequeCount = 2) // pk = id % 2 => 2 partitions
   }
 
   test("SPARK-58201: MIN/MAX on all-null partition") {
@@ -259,7 +261,9 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
         |  END AS v
         |FROM RANGE(0, 20)""".stripMargin)
     val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-2, 2)
-    checkEquivalence(() => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)))
+    checkEquivalence(
+      () => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)),
+      expectedDequeCount = 1) // 1 AS pk => single partition
   }
 
   test("SPARK-58201: MIN/MAX on Double with signed zero (+0.0 / -0.0)") {
@@ -277,7 +281,9 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
            ELSE CAST(-id AS DOUBLE)
          END AS v""")
     val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-2, 2)
-    checkEquivalence(() => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)))
+    checkEquivalence(
+      () => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)),
+      expectedDequeCount = 1) // 1 AS pk => single partition
   }
 
   // Spill coverage: lower thresholds to force ExternalAppendOnlyUnsafeRowArray
