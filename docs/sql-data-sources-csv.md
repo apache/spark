@@ -145,6 +145,12 @@ Data source options of CSV can be set via:
     <td>read/write</td>
   </tr>
   <tr>
+    <td><code>treatNullAsEmptyString</code></td>
+    <td></td>
+    <td>Controls how null values are written when <code>nullValue</code> is left at its default (empty string). When <code>true</code>, a null is written through <code>emptyValue</code> (a quoted empty string <code>""</code> by default), which makes it indistinguishable from an actual empty string. When <code>false</code>, a null is written as a bare, unquoted empty token, so it can be told apart from an empty string. When unset, the write follows the session default. Setting a non-empty <code>nullValue</code> makes this option a no-op, since the <code>nullValue</code> is then written verbatim. This option only affects writing.</td>
+    <td>write</td>
+  </tr>
+  <tr>
     <td><code>nanValue</code></td>
     <td>NaN</td>
     <td>Sets the string representation of a non-number value.</td>
