@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.types._
@@ -69,6 +69,15 @@ class JdbcUtilsSuite extends SparkFunSuite {
       },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'.'", "hint" -> ""))
+  }
+
+  test("null url option throws NULL_DATA_SOURCE_OPTION instead of NullPointerException") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        new JDBCOptions(Map("url" -> null, "dbtable" -> "t"))
+      },
+      condition = "NULL_DATA_SOURCE_OPTION",
+      parameters = Map("option" -> "url"))
   }
 
   test("redactUrl keeps only the jdbc:<subprotocol>: prefix") {

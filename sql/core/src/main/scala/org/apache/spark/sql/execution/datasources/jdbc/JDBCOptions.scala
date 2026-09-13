@@ -84,6 +84,12 @@ class JDBCOptions(
   require(parameters.isDefinedAt(JDBC_URL), s"Option '$JDBC_URL' is required.")
   // a JDBC URL
   val url = parameters(JDBC_URL)
+  // `isDefinedAt` above only checks the key is present; the value can still be `null`. Guard it
+  // here so a null url surfaces as a user-facing error instead of a raw NullPointerException from
+  // `DriverManager.getDriver(url)` below. Mirrors the null-value guard in `asProperties`.
+  if (url == null) {
+    throw QueryExecutionErrors.nullDataSourceOption(JDBC_URL)
+  }
   // table name or a table subquery.
   val tableOrQuery = (parameters.get(JDBC_TABLE_NAME), parameters.get(JDBC_QUERY_STRING)) match {
     case (Some(name), Some(subquery)) =>
