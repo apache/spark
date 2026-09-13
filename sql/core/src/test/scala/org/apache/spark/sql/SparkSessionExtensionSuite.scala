@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface, SqlStatementSplitResult}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Project, Range, Sort, SortHint, Statistics, UnresolvedHint}
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -617,6 +617,67 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
         }.isDefined)
       }
     }
+  }
+
+  /**
+   * Prepares a plan whose `UnionExec` was made by an injected rule, then turns
+   * `UNION_OUTPUT_PARTITIONING` off and reads that node again. A union the `StampUnionDecisions`
+   * barrier following the hook reached keeps answering from the decision it was prepared with; one
+   * no barrier reached has no decision to answer from, so this read derives one from the conf as it
+   * is now and comes back `UnknownPartitioning`. `UnionCodegenSuite` covers the stamping itself by
+   * calling the rule directly, so it stays green if one of the post-hook listings is dropped; these
+   * pin the post-hook stamping in each pipeline, the two AQE listings jointly rather than one each.
+   */
+  private def checkInjectedUnionIsStamped(
+      extensions: Seq[SparkSessionExtensionsProvider], aqeEnabled: Boolean): Unit = {
+    withSession(extensions) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, aqeEnabled)
+      // The union ends up over the projection above a repartition by `k`, so it has a concrete
+      // partitioning to pass through. A filter would not do: `PushPredicateThroughNonJoin` pushes
+      // it below the exchange.
+      val df = session.range(0, 20, 1, 2).selectExpr("id % 5 AS k", "id AS v")
+        .repartition(4, col("k")).selectExpr("k", "v + 1 AS w")
+      // Also what makes the final adaptive plan available in the two AQE cases. `w` is `id + 1`, so
+      // a union that dropped or duplicated a row would show up here.
+      assert(df.collect().map(_.getLong(1)).sorted.toSeq == (1L to 20L).toSeq,
+        "the injected union must not drop or duplicate rows")
+
+      val unions = collect(df.queryExecution.executedPlan) { case u: UnionExec => u }
+      assert(unions.size == 1, s"expected the one union the rule adds, got ${unions.size}")
+      val union = unions.head
+      val prepared = union.outputPartitioning
+      assert(!prepared.isInstanceOf[UnknownPartitioning],
+        s"this union must be prepared partitioning-aware, got $prepared")
+
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, false)
+      assert(union.outputPartitioning == prepared,
+        "no barrier stamped the union the rule added, so this conf change decided it: " +
+          s"${union.outputPartitioning}")
+    }
+  }
+
+  test("SPARK-59122: the barrier after the injected columnar rules stamps a union they added") {
+    checkInjectedUnionIsStamped(
+      create(_.injectColumnar(_ => WrapRootInUnionColumnarRule)), aqeEnabled = false)
+  }
+
+  test("SPARK-59122: a union an injected query stage prep rule adds is stamped before execution") {
+    // Attributed to the AQE pipeline rather than to one listing: the barrier in
+    // `postStageCreationRules` stands behind the one after the prep rules, so this case fails only
+    // when both are gone. What the earlier one adds is that the answer is fixed before the
+    // stage-optimizer rules read it, as `CoalesceShufflePartitions` does to decide whether a
+    // union's children have to be coalesced as one group.
+    checkInjectedUnionIsStamped(
+      create(_.injectQueryStagePrepRule(_ => WrapRootInUnion)), aqeEnabled = true)
+  }
+
+  test("SPARK-59122: the barrier in AQE post stage creation stamps a union added there") {
+    // With AQE on, the columnar rules reach this plan only through `postStageCreationRules`: the
+    // root of the plan `QueryExecution.preparations` hands them is `AdaptiveSparkPlanExec`, which
+    // `WrapRootInUnion` leaves alone. An injected stage-optimizer rule runs ahead of the same
+    // barrier, so it needs no case of its own.
+    checkInjectedUnionIsStamped(
+      create(_.injectColumnar(_ => WrapRootInUnionColumnarRule)), aqeEnabled = true)
   }
 
   test("custom aggregate hint") {
@@ -1385,6 +1446,25 @@ object MyQueryPostPlannerStrategyRule extends Rule[SparkPlan] {
         SortExec(h.groupingExpressions.map(k => SortOrder.apply(k, Ascending)), false, h)
     }
   }
+}
+
+/**
+ * Stands for an extension that introduces a `UnionExec` of its own: replaces a root `ProjectExec`
+ * with a fresh one-child union, which carries no stamped decision because it is a new instance, and
+ * leaves the rows alone. Matching only the root keeps it idempotent, since the root is a
+ * `UnionExec` afterwards; matching a `ProjectExec` keeps it out of the way of
+ * `postStageCreationRules`, which requires the exchange it is handed to stay an exchange.
+ */
+object WrapRootInUnion extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = plan match {
+    case p: ProjectExec => UnionExec(Seq(p))
+    case other => other
+  }
+}
+
+/** The columnar-rule wrapper for `WrapRootInUnion`. */
+object WrapRootInUnionColumnarRule extends ColumnarRule {
+  override def postColumnarTransitions: Rule[SparkPlan] = WrapRootInUnion
 }
 
 

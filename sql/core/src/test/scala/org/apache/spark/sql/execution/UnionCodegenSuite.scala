@@ -836,6 +836,8 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       val nested = UnionExec(Seq(union.children.head, union.children.head))
       val rebuilt = union.withNewChildren(Seq(nested, union.children.last)).asInstanceOf[UnionExec]
       assert(!rebuilt.supportCodegen, "the rebuilt union must answer against its own children")
+      // Implied by the line above as the code stands, and kept as the pin on that: registering the
+      // metric unconditionally would leave the line above green, and only this one would fail.
       assert(rebuilt.metrics.isEmpty)
     }
   }
@@ -894,13 +896,15 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     // `StampUnionDecisions` is listed again after the phases that can add a `UnionExec`, so one an
     // injected columnar or query-stage rule created does not answer from whatever the conf says
     // wherever it is first asked. A later pass must also not move a decision already taken, which
-    // is the second half here. The rule is driven directly: injecting an extension needs its own
-    // session, and what matters is the rule's contract.
+    // is the second half here. The rule is driven directly, since what this case is about is its
+    // contract; that the pipelines still list it after each phase that can add a union is pinned
+    // from the outside by the extension-driven cases in `SparkSessionExtensionSuite`, which need a
+    // session of their own.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       // Pins the property the standard pipeline has to keep: a stamping pass runs after
       // `EnsureRequirements`, so the decision is taken from the plan the exchanges were placed in.
-      // A count would break on a sixth legitimate pass and say nothing about the order. The three
-      // AQE positions are private to `AdaptiveSparkPlanExec`.
+      // A count would break on a sixth legitimate pass and say nothing about the order. The AQE
+      // lists are private to `AdaptiveSparkPlanExec`, so their first pass has no counterpart here.
       val rules = QueryExecution.preparations(spark, subquery = false)
       val firstStamp = rules.indexWhere(_ eq StampUnionDecisions)
       val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])

@@ -24,10 +24,12 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * defined point.
  *
  * `UnionExec` derives both from state that moves: its children's `outputPartitioning` sharpens as
- * AQE finalises the plans behind them, and `conf` is the live session conf. Whoever asked first
- * used to decide, which made the answer depend on when it was observed. This rule asks right
- * after `EnsureRequirements`, so the decision the exchanges around a union were planned against is
- * the one `unionRDDs` and the codegen gate use.
+ * AQE finalises the plans behind them, and `conf` is the live session conf. Every reader used to
+ * derive its own answer, so the answer depended on when it was read: the codegen gate could fuse a
+ * union whose copy in the shell then answered the other way, so `metrics` came back empty and
+ * `doProduce` failed asking `metricTerm` for `numOutputRows`. This rule asks right after
+ * `EnsureRequirements`, so the decision the exchanges around a union were planned against is the
+ * one `unionRDDs` and the codegen gate use.
  *
  * It is listed again after the injected columnar and query-stage rules, the hooks that can add a
  * `UnionExec` of their own. One created there has no decision yet, and would otherwise take one
@@ -44,8 +46,9 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * It only writes what is not there yet, so a later pass cannot move a decision already stamped on
  * a node, a second pass over the same nodes keeps the first answer, and a node rebuilt from a
  * stamped one keeps the tag `copyTagsFrom` gave it. AQE re-plans between rounds, so a union above
- * the stages already created is stamped again from what that round sees, where that plan is the one
- * adopted; a union inside a stage is not revisited, since `foreach` stops at `QueryStageExec`.
+ * the stages already created is stamped again, from what that round sees and against that round's
+ * exchanges; a round whose plan loses on cost is discarded whole, stamps included. A union inside a
+ * stage is not revisited, since `foreach` stops at `QueryStageExec`.
  */
 object StampUnionDecisions extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = {

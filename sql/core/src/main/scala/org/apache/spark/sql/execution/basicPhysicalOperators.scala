@@ -978,10 +978,11 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   }
 
   /**
-   * The SPARK-52921 pass-through partitioning, derived from the children. `isPlainUnion` answers
-   * whether this comes back `UnknownPartitioning`; `outputPartitioning` reports it when that
-   * decision says the union is not a plain concatenation. The `UNION_OUTPUT_PARTITIONING` gate is
-   * read with the decision, not here.
+   * The SPARK-52921 candidate partitioning derived from the children, which `outputPartitioning`
+   * reports when the decision says this union is not a plain concatenation. That decision comes out
+   * plain on either of two grounds: `UNION_OUTPUT_PARTITIONING` being off, which is read where the
+   * decision is stamped rather than here, or this coming back `UnknownPartitioning`. Under that
+   * conf the candidate can still be concrete while the union reports unknown.
    */
   private def rawPartitioning: Partitioning = {
     // Children's partitionings with attributes remapped to this union's output attributes.
@@ -1050,9 +1051,10 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * `InMemoryTableScanExec.outputPartitioning` reports `UnknownPartitioning` while its inner
    * `AdaptiveSparkPlanExec` has no final plan, so a union can look plain when
    * `CollapseCodegenStages` gates on it and partitioning-aware by the time the stage runs. The
-   * shell that gate builds wraps a `withNewChildren` copy, and a copy that re-derived here came
-   * back with empty `metrics` while `doProduce` asked `metricTerm` for `numOutputRows`. A fresh
-   * copy inherits the answer instead, since `withNewChildren` ends in `copyTagsFrom`.
+   * shell that gate builds wraps a `withNewChildren` copy where a child had to be adapted, and a
+   * copy that re-derived here came back with empty `metrics` while `doProduce` asked `metricTerm`
+   * for `numOutputRows`. A fresh copy inherits the answer instead, since `withNewChildren` ends in
+   * `copyTagsFrom`.
    *
    * `UNION_OUTPUT_PARTITIONING` is read where the decision is stamped rather than in
    * `rawPartitioning`, so it too is fixed once the plan is prepared: `conf` is live, and a plan
@@ -1095,7 +1097,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    *
    * The reverse costs fusion. A rule that runs after the stamp and drops a child's partitioning
    * leaves the node stamped non-plain, so the codegen gate answers "partitioning-aware" and
-   * `numOutputRows` goes unregistered, where re-deriving at the gate would have fused it.
+   * `numOutputRows` goes unregistered, whereas re-deriving at the gate would have fused it.
    * `DisableUnnecessaryBucketedScan` does that to a union over two bucketed scans, once a
    * projection on each side makes them row-based; the `columnar` term would reject the bare scans
    * anyway. Results are unaffected, since the other branch below re-derives and concatenates.
