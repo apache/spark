@@ -68,7 +68,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     ).asJava
 
     new ContainerBuilder()
-      .withImage("minio/minio:RELEASE.2025-09-07T16-13-09Z")
+      .withImage("alpine/minio:RELEASE.2025-10-15T17-29-55Z")
       .withImagePullPolicy("IfNotPresent")
       .withName(cName)
       .withArgs("server", "/data")
