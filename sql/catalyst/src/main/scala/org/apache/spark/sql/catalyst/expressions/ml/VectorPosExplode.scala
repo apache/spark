@@ -37,13 +37,13 @@ import org.apache.spark.unsafe.types.UTF8String
  * Sparse vector examples:
  * {{{
  *   // v = {type: 0, size: 4, indices: [1, 3], values: [2.0, 4.0]}
- *   vector_posexplode(v)
+ *   ml_vector_posexplode(v)
  *   index  value
  *   -5     NaN
  *   1      2.0
  *   3      4.0
  *
- *   vector_posexplode(v, mode = "dense")
+ *   ml_vector_posexplode(v, mode = "dense")
  *   index  value
  *   -5     NaN
  *   0      0.0
@@ -55,13 +55,13 @@ import org.apache.spark.unsafe.types.UTF8String
  * Dense vector examples:
  * {{{
  *   // v = {type: 1, size: null, indices: null, values: [1.0, 0.0, 3.0]}
- *   vector_posexplode(v)
+ *   ml_vector_posexplode(v)
  *   index  value
  *   -4     NaN
  *   0      1.0
  *   2      3.0
  *
- *   vector_posexplode(v, mode = "dense")
+ *   ml_vector_posexplode(v, mode = "dense")
  *   index  value
  *   -4     NaN
  *   0      1.0
@@ -75,6 +75,8 @@ case class VectorPosExplode(child: Expression, mode: Expression)
   def this(child: Expression) = this(child, Literal("sparse"))
 
   override def children: Seq[Expression] = Seq(child, mode)
+
+  override def prettyName: String = "ml_vector_posexplode"
 
   @transient private lazy val vectorMode: VectorPosExplode.VectorMode.Value =
     VectorPosExplode.toMode(mode.eval().asInstanceOf[UTF8String].toString)
@@ -101,13 +103,13 @@ case class VectorPosExplode(child: Expression, mode: Expression)
     }
     val modeValue = mode.eval()
     if (modeValue == null) {
-      return TypeCheckFailure("The second argument of vector_posexplode cannot be null.")
+      return TypeCheckFailure(s"The second argument of $prettyName cannot be null.")
     }
     VectorPosExplode.toModeOption(modeValue.asInstanceOf[UTF8String].toString) match {
       case Some(_) =>
       case None =>
         return TypeCheckFailure(
-          "The second argument of vector_posexplode must be one of: dense, sparse.")
+          s"The second argument of $prettyName must be one of: dense, sparse.")
     }
     TypeCheckResult.TypeCheckSuccess
   }

@@ -47,7 +47,7 @@ jobs:
         restore-keys: |
           build-sparkr-windows-maven-${{ runner.os }}-
     - name: Install Java 17
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: 17
@@ -65,7 +65,7 @@ jobs:
     # includes Python 3.7, which Spark does not support. Therefore, we simply install the proper Python
     # for simplicity, see SPARK-47116.
     - name: Install Python 3.11
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: '3.11'
         architecture: x64

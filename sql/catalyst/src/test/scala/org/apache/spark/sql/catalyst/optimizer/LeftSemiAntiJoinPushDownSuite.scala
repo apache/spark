@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
@@ -107,6 +108,66 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
       .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("Aggregate: NAAJ pushdown when original and rewritten joins can build right") {
+    val condition = Or($"b" === $"d", IsNull($"b" === $"d"))
+    val originalQuery = testRelation
+      .groupBy($"b")($"b", sum($"c"))
+      .join(testRelation1, joinType = LeftAnti, condition = Some(condition))
+    val correctAnswer = testRelation
+      .join(testRelation1, joinType = LeftAnti, condition = Some(condition))
+      .groupBy($"b")($"b", sum($"c"))
+
+    withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true") {
+      val analyzedOriginal = originalQuery.analyze
+      val analyzedCorrectAnswer = correctAnswer.analyze
+      val originalJoin = analyzedOriginal.asInstanceOf[Join]
+      val pushedJoin = analyzedCorrectAnswer.asInstanceOf[Aggregate].child.asInstanceOf[Join]
+      assert(PushDownLeftSemiAntiJoin.canPlanAsBroadcastHashJoin(originalJoin, SQLConf.get))
+      assert(PushDownLeftSemiAntiJoin.canPlanAsBroadcastHashJoin(pushedJoin, SQLConf.get))
+      comparePlans(Optimize.execute(analyzedOriginal), analyzedCorrectAnswer)
+    }
+  }
+
+  test("Aggregate: NAAJ no pushdown when the original join would build left") {
+    val leftKey = $"leftKey".int
+    val leftKeyStats = ColumnStat(
+      distinctCount = Some(1),
+      min = Some(0),
+      max = Some(0),
+      nullCount = Some(0),
+      avgLen = Some(4),
+      maxLen = Some(4))
+    val child = StatsTestPlan(
+      Seq(leftKey), 1000, AttributeMap(Seq(leftKey -> leftKeyStats)), Some(1000))
+    val aggregate = Aggregate(Seq(leftKey), Seq(leftKey), child)
+    val right = StatsTestPlan(
+      Seq($"rightKey".int), 1000, AttributeMap(Seq()), Some(1000))
+    val condition = Or(
+      EqualTo(aggregate.output.head, right.output.head),
+      IsNull(EqualTo(aggregate.output.head, right.output.head)))
+    val originalQuery = Join(
+      aggregate, right, LeftAnti, Some(condition), JoinHint.NONE)
+
+    withSQLConf(
+      SQLConf.CBO_ENABLED.key -> "true",
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100") {
+      assert(aggregate.stats.sizeInBytes <= SQLConf.get.autoBroadcastJoinThreshold)
+      assert(child.stats.sizeInBytes > SQLConf.get.autoBroadcastJoinThreshold)
+      assert(right.stats.sizeInBytes > SQLConf.get.autoBroadcastJoinThreshold)
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
+  }
+
+  test("Aggregate: ordinary LeftSemi join no pushdown - empty join condition") {
+    val originalQuery = testRelation
+      .groupBy($"b")($"b", sum($"c"))
+      .join(testRelation1, joinType = LeftSemi, condition = None)
+    val correctAnswer = originalQuery.analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
   }
 
   test("Aggregate: LeftSemi join no pushdown - non-deterministic aggr expressions") {
@@ -460,7 +521,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
   }
 
   Seq(LeftSemi, LeftAnti).foreach { jt =>
-    test(s"SPARK-34081: $jt only push down if join can be planned as broadcast join") {
+    test(s"SPARK-34081: ordinary $jt only pushes down when broadcast-eligible") {
       Seq(-1, 100000).foreach { threshold =>
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
           val originalQuery = testRelation
