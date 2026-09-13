@@ -103,7 +103,12 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
         validateTableIdentity(currentTable, r)
         validateDataColumns(currentTable, r, schemaValidationMode)
         validateMetadataColumns(currentTable, r, schemaValidationMode)
-        r.copy(table = currentTable)
+        val refreshed = r.copy(table = currentTable)
+        if (schemaValidationMode == ALLOW_NEW_FIELDS) {
+          CapturedSchemaProjection.rebindToCapturedSchema(refreshed)
+        } else {
+          refreshed
+        }
     }
   }
 
