@@ -4527,6 +4527,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "docroot" -> SPARK_DOC_ROOT))
   }
 
+  def materializedCTEWithOuterReferenceError(reference: NamedExpression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+      messageParameters = Map("colName" -> toSQLId(reference.name)),
+      origin = reference.origin)
+  }
+
+  def materializedCTEAlwaysInlinedError(cteName: String, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_ALWAYS_INLINED",
+      messageParameters = Map("cteName" -> toSQLId(cteName)),
+      origin = origin)
+  }
+
+  def materializedCTEInCorrelatedSubqueryError(cteName: String, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_IN_CORRELATED_SUBQUERY",
+      messageParameters = Map("cteName" -> toSQLId(cteName)),
+      origin = origin)
+  }
+
   def ambiguousLateralColumnAliasError(name: String, numOfMatches: Int): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
