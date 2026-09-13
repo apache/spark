@@ -1545,6 +1545,31 @@ class BasePythonDataSourceTestsMixin:
         rounded = df.select("d").first().d
         self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
+    def test_decimal_round_half_up(self):
+        # A decimal read from a Python data source is rescaled to the declared scale the
+        # way CAST does (HALF_UP), so 1.005 becomes 1.01 and not 1.00
+        class TieDataSource(DataSource):
+            @classmethod
+            def name(cls) -> str:
+                return "tie_decimal"
+
+            def schema(self) -> StructType:
+                return StructType([StructField("d", DecimalType(10, 2))])
+
+            def reader(self, schema: StructType) -> DataSourceReader:
+                return TieDataSourceReader()
+
+        class TieDataSourceReader(DataSourceReader):
+            def read(self, partition: InputPartition) -> Iterator[Tuple]:
+                for v in ["1.005", "1.025", "-1.005", "0.125"]:
+                    yield (Decimal(v),)
+
+        self.spark.dataSource.register(TieDataSource)
+        df = self.spark.read.format("tie_decimal").load()
+        self.assertEqual(
+            [r.d for r in df.collect()], [Decimal(v) for v in ["1.01", "1.03", "-1.01", "0.13"]]
+        )
+
     def test_data_source_segfault(self):
         import ctypes
 
