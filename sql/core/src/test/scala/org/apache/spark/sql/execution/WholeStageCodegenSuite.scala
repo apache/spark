@@ -1781,12 +1781,21 @@ class WholeStageCodegenSuite extends SharedSparkSession
         case _: With => true
         case _ => false
       })), "the rewrite left no With to generate")
-      val code = genCode(query)
+      // Pin the threshold for the two assertions below: under the inner definition's length that
+      // body would go into a method of its own, whatever this case is about.
+      val code = withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024") {
+        genCode(query)
+      }
       // Compiling it is the check: before this was refused, the method named the row index of the
       // column batch and janino rejected it, which drops the whole stage.
       code.foreach(CodeGenerator.compile)
-      assert(!code.map(_.body).mkString("\n").contains("computeCommonExpr"),
+      val source = code.map(_.body).mkString("\n")
+      assert(!source.contains("computeCommonExpr"),
         "the definition reads an unevaluated variable, so it cannot go in a method")
+      // Which leaves the inner definition pasted at its two references inside the outer one, itself
+      // pasted at two: 4, against the 2 the case above gets from a method.
+      val emitted = marker.toString.r.findAllMatchIn(source).size
+      assert(emitted == 4, s"the innermost definition was emitted $emitted times")
       checkAnswer(query, (0 until 10).map(i => Row(i + marker)))
     }
   }

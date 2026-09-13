@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, EmptyBlock, ExprCode, FalseLiteral, GenerateMutableProjection, JavaCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, EmptyBlock, ExprCode, FalseLiteral, GenerateMutableProjection, JavaCode, SubExprEliminationState}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
@@ -80,13 +80,19 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
   }
 
   /**
-   * Generates `e` in the context a whole-stage `Project` or `Filter` sets up -- no input row, the
-   * input as local variables -- and returns the code it emitted and the methods it added.
+   * The context a whole-stage `Project` or `Filter` sets up: no input row, the input as local
+   * variables.
    */
-  private def generateWithLocalInput(e: Expression, inputs: ExprCode*): (String, String) = {
+  private def localInputContext(inputs: ExprCode*): CodegenContext = {
     val ctx = new CodegenContext
     ctx.INPUT_ROW = null
     ctx.currentVars = inputs
+    ctx
+  }
+
+  /** Generates `e` against [[localInputContext]]: the code it emitted, and the methods added. */
+  private def generateWithLocalInput(e: Expression, inputs: ExprCode*): (String, String) = {
+    val ctx = localInputContext(inputs: _*)
     (e.genCode(ctx).code.toString, ctx.declareAddedFunctions())
   }
 
@@ -268,9 +274,9 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
       assert("private void computeCommonExpr_[0-9]+\\(int v0\\)".r
         .findFirstIn(enclosingMethods).isDefined, enclosingMethods)
 
-      // A definition no reference reaches is never generated, so what it reads decides nothing: only
-      // `v0` is read by a body here, and the one method takes just that. Walking every definition of
-      // the nested `With` instead would find the unevaluated `v1` and refuse the method.
+      // A definition no reference reaches is never generated, so what it reads decides nothing:
+      // only `v0` is read by a body here, and the one method takes just that. Walking every
+      // definition of the nested `With` instead would find the unevaluated `v1` and refuse it.
       val unreferenced = With(
         BoundReference(0, IntegerType, nullable = false),
         Add(BoundReference(1, IntegerType, nullable = false), Literal(marker))) {
@@ -300,18 +306,23 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
         assert(!methods.contains("computeCommonExpr"), methods)
       }
       // A value whose name is not one a parameter can take: `ExpandExec` hands out a compacted
-      // mutable state array slot as if it were a local.
+      // mutable state array slot as if it were a local. The marker count says the fallback pasted
+      // the body at both references; that a method was attempted at all is the case above, which
+      // gets one from the same shape with a passable name.
       val slot = ExprCode(EmptyBlock, FalseLiteral,
         JavaCode.variable("mutableStateArray_0[3]", IntegerType))
-      val (_, slotMethods) = generateWithLocalInput(nested(2), slot)
+      val (slotBody, slotMethods) = generateWithLocalInput(nested(2), slot)
       assert(!slotMethods.contains("computeCommonExpr"), slotMethods)
-      // A nullness that is an expression rather than a name, which is the shape `GenerateExec` hands
-      // out for the position of `posexplode_outer`: whichever locals such an expression names, this
+      assert(markersIn(slotBody + slotMethods) == 4, slotBody + slotMethods)
+      // A nullness that is an expression rather than a name, the shape `GenerateExec` hands out
+      // for the position of `posexplode_outer`: whichever locals such an expression names, this
       // has no way to pass them. A plain name in its place does get a method, in the case above.
       val position = ExprCode(EmptyBlock, JavaCode.isNullExpression("index_0 == -1"),
         JavaCode.variable("index_0", IntegerType))
-      val (_, positionMethods) = generateWithLocalInput(nested(2, nullable = true), position)
+      val (positionBody, positionMethods) =
+        generateWithLocalInput(nested(2, nullable = true), position)
       assert(!positionMethods.contains("computeCommonExpr"), positionMethods)
+      assert(markersIn(positionBody + positionMethods) == 4, positionBody + positionMethods)
     }
     // More parameters than a method descriptor can carry. The limit is 255 words, which takes an
     // operator handing out that many variables, so the conf the other splitting paths test this
@@ -323,6 +334,37 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
       assert(!methods.contains("computeCommonExpr"), methods)
       val count = markersIn(body + methods)
       assert(count == 4, s"the innermost body was emitted $count times")
+    }
+  }
+
+  test("SPARK-59295: a field needs no parameter, a subexpression elimination state no method") {
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024") {
+      // An input variable the operator allocated as mutable state, which is what the aggregate
+      // paths hand out for their buffer and result variables: a field is in scope in the method.
+      val field = ExprCode(EmptyBlock, FalseLiteral, JavaCode.global("aggValue_0", IntegerType))
+      val (_, fieldMethods) = generateWithLocalInput(nested(2), field)
+      assert("private void computeCommonExpr_[0-9]+\\(\\)".r
+        .findFirstIn(fieldMethods).isDefined, fieldMethods)
+
+      // A definition holding a node subexpression elimination has computed keeps the inline body.
+      // The node here is the definition itself, so `Expression.genCode` reads the state and the
+      // body assigns the slots from its two locals; one whose node were an `Alias` or a `Collate`
+      // would read the regenerated subtree instead, and the walk cannot tell which it would be. The
+      // state's code is unemitted here, as it is where `ProjectExec.doConsume` generates.
+      val definition = nested(1, nullable = true)
+      val state = SubExprEliminationState(
+        ExprCode(code"boolean subIsNull = false;\nint subValue = 1;",
+          JavaCode.isNullVariable("subIsNull"), JavaCode.variable("subValue", IntegerType)))
+      val ctx = localInputContext(intVar(evaluated = true))
+      val body = ctx.withSubExprEliminationExprs(Map(ExpressionEquals(definition) -> state)) {
+        Seq(With(definition) { case Seq(ref) => Add(ref, ref) }.genCode(ctx))
+      }.head.code.toString
+      val methods = ctx.declareAddedFunctions()
+      assert(!methods.contains("computeCommonExpr"), methods)
+      // The state was read rather than the definition generated: no marker anywhere below it, and
+      // the slot assigned from the state's value.
+      assert(markersIn(body) == 0, body)
+      assert(body.contains("= subValue;") && body.contains("= subIsNull;"), body)
     }
   }
 
