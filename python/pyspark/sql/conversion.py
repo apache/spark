@@ -74,7 +74,7 @@ if TYPE_CHECKING:
 
 class ArrowBatchTransformer:
     """
-    Pure functions that transform RecordBatch -> RecordBatch.
+    Pure functions that transform Arrow RecordBatches and Tables.
     They should have no side effects (no I/O, no writing to streams).
     """
 
@@ -243,64 +243,6 @@ class ArrowBatchTransformer:
         if isinstance(batch, pa.Table):
             return pa.Table.from_arrays(coerced_arrays, names=output_names)
         return pa.RecordBatch.from_arrays(coerced_arrays, names=output_names)
-
-    @classmethod
-    def to_pandas(
-        cls,
-        batch: Union["pa.RecordBatch", "pa.Table"],
-        timezone: str,
-        schema: Optional["StructType"] = None,
-        struct_in_pandas: str = "dict",
-        ndarray_as_list: bool = False,
-        prefer_int_ext_dtype: bool = False,
-        df_for_struct: bool = False,
-    ) -> List[Union["pd.Series", "pd.DataFrame"]]:
-        """
-        Convert a RecordBatch or Table to a list of pandas Series.
-
-        Parameters
-        ----------
-        batch : pa.RecordBatch or pa.Table
-            The Arrow RecordBatch or Table to convert.
-        timezone : str
-            Timezone for timestamp conversion.
-        schema : StructType, optional
-            Spark schema for type conversion. If None, types are inferred from Arrow.
-        struct_in_pandas : str
-            How to represent struct in pandas ("dict", "row", etc.)
-        ndarray_as_list : bool
-            Whether to convert ndarray as list.
-        prefer_int_ext_dtype : bool, optional
-            Whether to convert integers to Pandas ExtensionDType.
-        df_for_struct : bool
-            If True, convert struct columns to DataFrame instead of Series.
-
-        Returns
-        -------
-        List[Union[pd.Series, pd.DataFrame]]
-            List of pandas Series (or DataFrame if df_for_struct=True), one for each column.
-        """
-        import pandas as pd
-
-        if batch.num_columns == 0:
-            return [pd.Series([pyspark._NoValue] * batch.num_rows)]
-
-        if schema is None:
-            schema = from_arrow_schema(batch.schema)
-
-        return [
-            ArrowArrayToPandasConversion.convert(
-                batch.column(i),
-                schema[i].dataType,
-                ser_name=schema[i].name,
-                timezone=timezone,
-                struct_in_pandas=struct_in_pandas,
-                ndarray_as_list=ndarray_as_list,
-                prefer_int_ext_dtype=prefer_int_ext_dtype,
-                df_for_struct=df_for_struct,
-            )
-            for i in range(batch.num_columns)
-        ]
 
 
 class PandasToArrowConversion:
@@ -1750,16 +1692,68 @@ class ArrowArrayConversion:
         )
 
 
-class ArrowArrayToPandasConversion:
+class ArrowToPandasConversion:
     """
-    Conversion utilities for converting PyArrow Arrays and ChunkedArrays to pandas.
-
-    This class provides methods to convert PyArrow columnar data structures to pandas
-    Series or DataFrames, with support for Spark-specific type handling and conversions.
-
-    The class is primarily used by PySpark's Arrow-based serializers for UDF execution,
-    where Arrow data needs to be converted to pandas for Python UDF processing.
+    Conversion utilities from Arrow batches and arrays to pandas for UDF execution.
     """
+
+    @classmethod
+    def to_pandas(
+        cls,
+        batch: Union["pa.RecordBatch", "pa.Table"],
+        timezone: str,
+        schema: Optional["StructType"] = None,
+        struct_in_pandas: str = "dict",
+        ndarray_as_list: bool = False,
+        prefer_int_ext_dtype: bool = False,
+        df_for_struct: bool = False,
+    ) -> List[Union["pd.Series", "pd.DataFrame"]]:
+        """
+        Convert a RecordBatch or Table to a list of pandas Series.
+
+        Parameters
+        ----------
+        batch : pa.RecordBatch or pa.Table
+            The Arrow RecordBatch or Table to convert.
+        timezone : str
+            Timezone for timestamp conversion.
+        schema : StructType, optional
+            Spark schema for type conversion. If None, types are inferred from Arrow.
+        struct_in_pandas : str
+            How to represent struct in pandas ("dict", "row", etc.)
+        ndarray_as_list : bool
+            Whether to convert ndarray as list.
+        prefer_int_ext_dtype : bool, optional
+            Whether to convert integers to Pandas ExtensionDType.
+        df_for_struct : bool
+            If True, convert struct columns to DataFrame instead of Series.
+
+        Returns
+        -------
+        List[Union[pd.Series, pd.DataFrame]]
+            List of pandas Series (or DataFrame if df_for_struct=True), one for each column.
+        """
+        import pandas as pd
+
+        if batch.num_columns == 0:
+            return [pd.Series([pyspark._NoValue] * batch.num_rows)]
+
+        if schema is None:
+            schema = from_arrow_schema(batch.schema)
+
+        return [
+            cls.convert(
+                batch.column(i),
+                schema[i].dataType,
+                ser_name=schema[i].name,
+                timezone=timezone,
+                struct_in_pandas=struct_in_pandas,
+                ndarray_as_list=ndarray_as_list,
+                prefer_int_ext_dtype=prefer_int_ext_dtype,
+                df_for_struct=df_for_struct,
+            )
+            for i in range(batch.num_columns)
+        ]
 
     @classmethod
     def convert(
