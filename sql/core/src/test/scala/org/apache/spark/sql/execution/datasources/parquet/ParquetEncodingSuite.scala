@@ -17,17 +17,20 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.math.BigDecimal
+import java.nio.{ByteBuffer, ByteOrder}
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
+import org.apache.parquet.bytes.ByteBufferInputStream
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
 import org.apache.parquet.example.data.simple.SimpleGroup
 import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
+import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.MessageTypeParser
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
@@ -35,9 +38,11 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.spark.TestUtils
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, STUtils}
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{BinaryType, GeometryType}
 
 // TODO: this needs a lot more testing but it's currently not easy to test with the parquet
 // writer abstractions. Revisit.
@@ -556,5 +561,64 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         }
       }
     }
+  }
+
+  test("VectorizedPlainValuesReader rejects a negative BYTE_ARRAY length") {
+    // PLAIN BYTE_ARRAY layout is repeated [4-byte little-endian length][data]. A well-formed
+    // writer never emits a negative length, but a corrupt/third-party file can; it must be
+    // rejected before it reaches in.slice / in.skipFully rather than corrupting the batch or
+    // silently no-op-ing the skip (in.skip rewinds a single-buffer stream and returns 0 on a
+    // multi-buffer one for a negative argument, and skipFully throws on neither).
+    def negativeLengthPage(): ByteBufferInputStream = {
+      val buf = ByteBuffer.allocate(4 + 3 + 4).order(ByteOrder.LITTLE_ENDIAN)
+      buf.putInt(3).put("abc".getBytes()) // value 0: length 3
+      buf.putInt(-6) // value 1: negative length
+      buf.flip()
+      ByteBufferInputStream.wrap(buf)
+    }
+
+    // readBinary: value 0 reads cleanly, value 1 must throw.
+    var reader = new VectorizedPlainValuesReader()
+    reader.initFromPage(2, negativeLengthPage())
+    val vector = new OnHeapColumnVector(2, BinaryType)
+    reader.readBinary(1, vector, 0)
+    assert("abc".getBytes() sameElements vector.getBinary(0))
+    val readError = intercept[ParquetDecodingException] {
+      reader.readBinary(1, vector, 1)
+    }
+    assert(readError.getMessage.contains("negative length"))
+
+    // skipBinary: skipping value 0 succeeds, value 1 must throw rather than silently no-op.
+    reader = new VectorizedPlainValuesReader()
+    reader.initFromPage(2, negativeLengthPage())
+    reader.skipBinary(1)
+    val skipError = intercept[ParquetDecodingException] {
+      reader.skipBinary(1)
+    }
+    assert(skipError.getMessage.contains("negative length"))
+  }
+
+  test("VectorizedPlainValuesReader rejects a negative geometry length") {
+    // The PLAIN geometry/geography path decodes a per-value length straight from the stream, just
+    // like readBinary, and must reject a negative one before it reaches in.readNBytes (which would
+    // otherwise return a short array rather than signalling truncation).
+    val point = makePointWkb(1, 1)
+    def negativeLengthGeoPage(): ByteBufferInputStream = {
+      val buf = ByteBuffer.allocate(4 + point.length + 4).order(ByteOrder.LITTLE_ENDIAN)
+      buf.putInt(point.length).put(point) // value 0: a valid point
+      buf.putInt(-6) // value 1: negative length
+      buf.flip()
+      ByteBufferInputStream.wrap(buf)
+    }
+
+    val reader = new VectorizedPlainValuesReader()
+    reader.initFromPage(2, negativeLengthGeoPage())
+    val vector = new OnHeapColumnVector(2, GeometryType(0))
+    reader.readGeometry(1, vector, 0)
+    assert(point sameElements STUtils.stGeomAsBinary(vector.getBinaryView(0)))
+    val geoError = intercept[ParquetDecodingException] {
+      reader.readGeometry(1, vector, 1)
+    }
+    assert(geoError.getMessage.contains("negative length"))
   }
 }

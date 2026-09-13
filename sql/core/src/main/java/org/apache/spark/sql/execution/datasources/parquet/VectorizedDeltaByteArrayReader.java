@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import static org.apache.spark.sql.execution.datasources.parquet.VectorizedReaderBase.checkLength;
 import static org.apache.spark.sql.types.DataTypes.BinaryType;
 import static org.apache.spark.sql.types.DataTypes.IntegerType;
 
@@ -78,7 +79,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       // even for the *first* value of a page. Even though the first
       // value of the page should have an empty prefix, it may not
       // because of PARQUET-246.
-      int prefixLength = prefixLengthVector.getInt(currentRow);
+      int prefixLength = checkLength(prefixLengthVector.getInt(currentRow));
       ByteBuffer suffix = suffixReader.getBytes(currentRow);
       byte[] suffixArray = suffix.array();
       int suffixLength = suffix.limit() - suffix.position();
@@ -119,7 +120,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   private void readGeoData(int total, WritableColumnVector c, int rowId, int srid,
      WKBConverterStrategy converter) {
     for (int i = 0; i < total; i++) {
-      int prefixLength = prefixLengthVector.getInt(currentRow);
+      int prefixLength = checkLength(prefixLengthVector.getInt(currentRow));
       ByteBuffer suffix = suffixReader.getBytes(currentRow);
       int suffixLength = suffix.limit() - suffix.position();
       int length = prefixLength + suffixLength;
@@ -164,7 +165,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
     WritableColumnVector c2 = binaryValVector;
 
     for (int i = 0; i < total; i++) {
-      int prefixLength = prefixLengthVector.getInt(currentRow);
+      int prefixLength = checkLength(prefixLengthVector.getInt(currentRow));
       ByteBuffer suffix = suffixReader.getBytes(currentRow);
       byte[] suffixArray = suffix.array();
       int suffixLength = suffix.limit() - suffix.position();
