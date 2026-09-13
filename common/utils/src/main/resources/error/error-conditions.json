@@ -4544,7 +4544,7 @@
   },
   "INVALID_JDBC_PARTITION_BOUND" : {
     "message" : [
-      "Cannot parse the value <value> for JDBC option <option> as <dataType>."
+      "Cannot parse the value <value> for JDBC data source option <option> as <dataType>."
     ],
     "sqlState" : "42616"
   },
