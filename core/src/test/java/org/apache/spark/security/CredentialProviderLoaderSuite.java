@@ -231,6 +231,42 @@ public class CredentialProviderLoaderSuite {
   }
 
   @Test
+  public void testSelectProviderForPropertiesDoesNotInitialize() {
+    // The selection phase uses selectProviderForProperties, which must NOT call init().
+    Optional<CredentialProvider> selected = loader.selectProviderForProperties("fake", Map.of());
+    assertTrue(selected.isPresent());
+    FakeCredentialProvider fake = (FakeCredentialProvider) selected.get();
+    assertEquals(0, fake.getInitCount(),
+        "selectProviderForProperties must not initialize the provider");
+    // additionalSparkProperties() is a static declaration and is available without init().
+    assertEquals("org.apache.spark.security.FakeExecutorCredentialProvider",
+        fake.additionalSparkProperties().get("spark.hadoop.fs.fake.credentials.provider"));
+  }
+
+  @Test
+  public void testSelectThenProviderForInitializesOnceOnSameInstance() {
+    // Mirrors the real flow: selection (no init) followed by resolution (init once). The same
+    // cached instance must be reused, so init runs exactly once across both phases.
+    Optional<CredentialProvider> selected = loader.selectProviderForProperties("fake", Map.of());
+    Optional<CredentialProvider> resolved = loader.providerFor("fake", Map.of());
+    assertTrue(selected.isPresent());
+    assertTrue(resolved.isPresent());
+    assertSame(selected.get(), resolved.get(),
+        "selection and resolution must share the same cached provider instance");
+    FakeCredentialProvider fake = (FakeCredentialProvider) resolved.get();
+    assertEquals(1, fake.getInitCount(),
+        "init() should run exactly once across selection + resolution");
+  }
+
+  @Test
+  public void testSelectProviderForPropertiesRejectsAmbiguousScheme() {
+    // "shared" has two candidates; without explicit config, selection is ambiguous and must
+    // throw the same way providerFor does (so the selection phase can catch and skip it).
+    assertThrows(IllegalArgumentException.class,
+        () -> loader.selectProviderForProperties("shared", Map.of()));
+  }
+
+  @Test
   public void testNullSupportedSchemesThrowsClearError() {
     // Inject a provider that returns null from supportedSchemes() to verify the guard.
     CredentialProvider nullSchemesProvider = new CredentialProvider() {

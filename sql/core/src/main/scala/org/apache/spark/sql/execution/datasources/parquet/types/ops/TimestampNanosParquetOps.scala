@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
 import java.lang.{Long => JLong}
-import java.time.{Instant, LocalDateTime}
+import java.time.{Instant, LocalDateTime, ZoneId}
 
 import org.apache.parquet.column.{ColumnDescriptor, Dictionary}
 import org.apache.parquet.io.api.{Converter, RecordConsumer}
@@ -29,8 +29,10 @@ import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetPrimitiveConverter, ParquetVectorUpdater, VectorizedValuesReader}
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetPrimitiveConverter, ParquetToSparkSchemaConverter, ParquetVectorUpdater, VectorizedValuesReader}
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
@@ -87,9 +89,9 @@ private[parquet] trait TimestampNanosParquetOps extends ParquetTypeOps {
 
   override def isBatchReadSupported(sqlConf: SQLConf): Boolean = true
 
-  // Only a canonical INT64 TIMESTAMP(NANOS) column can be vectorized-decoded as a nanos timestamp.
-  // Return None for anything else so the factory falls through to its clean
-  // SchemaColumnConvertNotSupportedException instead of silently mis-reading.
+  // Vectorized-decode only the canonical INT64 TIMESTAMP(NANOS) encoding here; return None for
+  // anything else. The factory then handles an INT64 TIMESTAMP(MICROS) column (promoting it to
+  // nanos) and raises SchemaColumnConvertNotSupportedException for the rest.
   override def getVectorUpdater(descriptor: ColumnDescriptor): Option[ParquetVectorUpdater] = {
     val parquetType = descriptor.getPrimitiveType
     if (TimestampNanosParquetOps.isNanosTimestamp(parquetType)) {
@@ -123,23 +125,62 @@ private[parquet] trait TimestampNanosParquetOps extends ParquetTypeOps {
 
   // ==================== Row-Based Read ====================
 
+  // Simple (no-context) path: only the canonical INT64 TIMESTAMP(NANOS) encoding can be decoded
+  // without the datetime rebase spec. A microsecond source is handled only by the extended overload
+  // below (which receives the rebase spec); here anything but NANOS fails loudly, matching the
+  // legacy ParquetRowConverter behavior where the guarded nanos arms fell through to the
+  // cannot-create-converter error.
   override def newConverter(
       parquetType: Type,
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
-    // Framework-first dispatch in ParquetRowConverter routes here for any nanos catalyst type,
-    // regardless of the actual Parquet encoding. Only an INT64 TIMESTAMP(NANOS) column can be
-    // decoded as a nanos timestamp; anything else (a non-NANOS timestamp, a foreign annotation,
-    // etc.) must fail loudly, matching the legacy ParquetRowConverter behavior where the guarded
-    // nanos arms fell through to the cannot-create-converter error.
     if (!TimestampNanosParquetOps.isNanosTimestamp(parquetType)) {
       throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
         sparkType, parquetType.toString)
     }
+    nanosConverter(updater)
+  }
+
+  // Extended path (the one ParquetRowConverter actually calls): besides the canonical
+  // TIMESTAMP(NANOS) encoding, reads an INT64 TIMESTAMP(MICROS) column as a nanos value (widening
+  // TIMESTAMP(6) to nanos), mapping each micros value to (value, 0) with no *1000 encode.
+  override def newConverter(
+      parquetType: Type,
+      updater: ParentContainerUpdater,
+      schemaConverter: ParquetToSparkSchemaConverter,
+      convertTz: Option[ZoneId],
+      datetimeRebaseSpec: RebaseSpec,
+      int96RebaseSpec: RebaseSpec): Converter with HasParentContainerUpdater = {
+    if (TimestampNanosParquetOps.isNanosTimestamp(parquetType)) {
+      nanosConverter(updater)
+    } else if (TimestampNanosParquetOps.isMicrosTimestamp(parquetType, isAdjustedToUTC)) {
+      microsAsNanosConverter(updater, datetimeRebaseSpec)
+    } else {
+      throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
+        sparkType, parquetType.toString)
+    }
+  }
+
+  private def nanosConverter(
+      updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
     val p = precision
     new ParquetPrimitiveConverter(updater) {
-      override def addLong(value: Long): Unit = {
+      override def addLong(value: Long): Unit =
         this.updater.set(DateTimeUtils.epochNanosToTimestampNanos(value, p))
-      }
+    }
+  }
+
+  private def microsAsNanosConverter(
+      updater: ParentContainerUpdater,
+      datetimeRebaseSpec: RebaseSpec): Converter with HasParentContainerUpdater = {
+    // LTZ micros files may be legacy Julian and need rebasing; NTZ never does (it postdates the
+    // proleptic Gregorian switch). Mirrors ParquetVectorUpdaterFactory's TimestampType (rebase) vs
+    // TimestampNTZType (no rebase) split for the microsecond read path.
+    val rebase: Long => Long =
+      if (isNtz) identity
+      else DataSourceUtils.createTimestampRebaseFuncInRead(datetimeRebaseSpec, "Parquet")
+    new ParquetPrimitiveConverter(updater) {
+      override def addLong(value: Long): Unit =
+        this.updater.set(TimestampNanosVal.fromParts(rebase(value), 0.toShort))
     }
   }
 }
@@ -186,6 +227,26 @@ private[ops] object TimestampNanosParquetOps {
       parquetType.asPrimitiveType.getPrimitiveTypeName == INT64 &&
       (parquetType.getLogicalTypeAnnotation match {
         case ts: TimestampLogicalTypeAnnotation => ts.getUnit == TimeUnit.NANOS
+        case _ => false
+      })
+
+  /**
+   * Whether the Parquet field is an INT64 TIMESTAMP(MICROS) column of the given time-zone family,
+   * i.e. the on-disk encoding of a microsecond-precision timestamp (TIMESTAMP(6)). Such a column
+   * can be read as a nanosecond timestamp -- the read side of widening TIMESTAMP(6) to nanosecond
+   * precision -- by promoting each micros value to (epochMicros = value, nanosWithinMicro = 0).
+   *
+   * `expectedAdjustedToUTC` must equal the requested type's family (true for LTZ, false for NTZ) so
+   * an explicit read schema cannot silently reinterpret a cross-family micros file (e.g. reading an
+   * NTZ file as an LTZ instant). Widening only ever pairs same-family types, so this guard just
+   * fails a deliberately mismatched `.schema(...)` loudly instead of mis-decoding.
+   */
+  private[ops] def isMicrosTimestamp(parquetType: Type, expectedAdjustedToUTC: Boolean): Boolean =
+    parquetType.isPrimitive &&
+      parquetType.asPrimitiveType.getPrimitiveTypeName == INT64 &&
+      (parquetType.getLogicalTypeAnnotation match {
+        case ts: TimestampLogicalTypeAnnotation =>
+          ts.getUnit == TimeUnit.MICROS && ts.isAdjustedToUTC == expectedAdjustedToUTC
         case _ => false
       })
 

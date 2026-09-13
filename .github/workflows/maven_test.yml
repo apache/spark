@@ -205,7 +205,7 @@ jobs:
           coursier: none
           cache-maven-local: 'true'
       - name: Install Python 3.12
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         # We should install one Python that is higher than 3+ for SQL and Yarn because:
         # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
         # - Yarn has a Python specific test too, for example, YarnClusterSuite.

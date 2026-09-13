@@ -120,6 +120,27 @@ object SQLExecution extends Logging {
     }
   }
 
+  private[sql] val NONE_EXPLAIN_MODE = "none"
+
+  private[sql] val NO_PLAN_DESCRIPTION =
+    s"No plan description because ${SQLConf.UI_EXPLAIN_MODE.key}=$NONE_EXPLAIN_MODE"
+
+  /**
+   * Returns the plan description carried by the SQL UI events, or a placeholder when the UI
+   * explain mode is `none`, in which case the explain string, which is expensive to build for
+   * large plans, is not generated at all.
+   *
+   * `none` is intentionally not an [[ExplainMode]]: it only makes sense for the UI events, and
+   * keeping it here avoids making `df.explain("none")` a valid public API.
+   */
+  private[sql] def planDescription(qe: QueryExecution, uiExplainMode: String): String = {
+    if (uiExplainMode.equalsIgnoreCase(NONE_EXPLAIN_MODE)) {
+      NO_PLAN_DESCRIPTION
+    } else {
+      qe.explainString(ExplainMode.fromString(uiExplainMode))
+    }
+  }
+
   /**
    * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
    * we can connect them with an execution.
@@ -209,9 +230,8 @@ object SQLExecution extends Logging {
                   sc.listenerBus.post(startEvent)
                   throw e
                 case Right(f) =>
-                  val planDescriptionMode =
-                    ExplainMode.fromString(sparkSession.sessionState.conf.uiExplainMode)
-                  val planDesc = queryExecution.explainString(planDescriptionMode)
+                  val planDesc = planDescription(
+                    queryExecution, sparkSession.sessionState.conf.uiExplainMode)
                   val planInfo = try {
                     SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)
                   } catch {

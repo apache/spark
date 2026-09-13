@@ -258,6 +258,15 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a not like all ('foo%', 'b%')", $"a" notLikeAll("foo%", "b%"))
     assertEqual("not (a like all ('foo%', 'b%'))", !($"a" likeAll("foo%", "b%")))
 
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assertEqual(
+        "a like any (cast('foo%' as char(4)), cast('b%' as varchar(2)))",
+        $"a" likeAny("foo%", "b%"))
+      assertEqual(
+        "a like all (cast('foo%' as varchar(4)), cast('b%' as char(2)))",
+        $"a" likeAll("foo%", "b%"))
+    }
+
     Seq("any", "some", "all").foreach { quantifier =>
       checkError(
         exception = parseException(s"a like $quantifier()"),
@@ -640,6 +649,14 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a[b]", $"a".getItem($"b"))
     assertEqual("a[1 + 1]", $"a".getItem(Literal(1) + 1))
     assertEqual("`c`.a[b]", UnresolvedAttribute("c.a").getItem($"b"))
+  }
+
+  test("invalid semi-structured extract path") {
+    checkError(
+      exception = parseException("c:['']"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'['']'", "hint" -> ""),
+      queryContext = Array(ExpectedContext("c:['']", 0, 5)))
   }
 
   test("parenthesis") {
