@@ -51,6 +51,18 @@ import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueStat
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
+private[streaming] object TransformWithStateInPySparkStateServer {
+  def validateStateSchema(schema: StructType, schemaKind: String): Unit = {
+    if (CharVarcharUtils.hasCharVarchar(schema)) {
+      throw QueryCompilationErrors.invalidPythonStateSchema(schema, schemaKind)
+    }
+  }
+
+  def validateGroupingKeySchema(schema: StructType): Unit = {
+    validateStateSchema(schema, "grouping key")
+  }
+}
+
 /**
  * This class is used to handle the state requests from the Python side. It runs on a separate
  * thread spawned by TransformWithStateInPySparkStateRunner per task. It opens a dedicated socket
@@ -81,14 +93,9 @@ class TransformWithStateInPySparkStateServer(
   extends Runnable with Logging {
 
   import PythonResponseWriterUtils._
+  import TransformWithStateInPySparkStateServer._
 
-  private def validateStateSchema(schema: StructType, schemaKind: String): Unit = {
-    if (CharVarcharUtils.hasCharVarchar(schema)) {
-      throw QueryCompilationErrors.invalidPythonStateSchema(schema, schemaKind)
-    }
-  }
-
-  validateStateSchema(groupingKeySchema, "grouping key")
+  validateGroupingKeySchema(groupingKeySchema)
 
   private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()

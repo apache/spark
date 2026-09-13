@@ -904,7 +904,7 @@ class SparkSession private(
         .asInstanceOf[StructType]
     }
     val rowRdd = rdd.mapPartitions { iter =>
-      val fromJava = python.EvaluatePython.makeFromJava(schema)
+      val fromJava = python.EvaluatePython.makeFromJava(schema, applyCharVarcharChecks)
       iter.map(r => fromJava(r).asInstanceOf[InternalRow])
     }
     internalCreateDataFrame(rowRdd, outputSchema)

@@ -276,6 +276,7 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
       inputIterator: Iterator[I],
       partitionIndex: Int,
       context: TaskContext): Iterator[ColumnarBatch] = {
+    TransformWithStateInPySparkStateServer.validateGroupingKeySchema(groupingKeySchema)
     initStateServer()
 
     val executor = ThreadUtils.newDaemonSingleThreadExecutor("stateConnectionListenerThread")
@@ -323,6 +324,7 @@ class TransformWithStateInPySparkPythonPreInitRunner(
   private var daemonThread: Thread = _
 
   override def init(): (DataOutputStream, DataInputStream) = {
+    TransformWithStateInPySparkStateServer.validateGroupingKeySchema(groupingKeySchema)
     val result = super.init()
     dataOut = result._1
     dataIn = result._2

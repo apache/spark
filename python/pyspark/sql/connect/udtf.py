@@ -174,18 +174,19 @@ class UserDefinedTableFunction:
         self._validated_return_type_session_ids: Set[str] = set()
 
     def _check_return_type(self, session: "SparkSession") -> None:
-        if self.returnType is None or self.evalType not in (
+        if self.returnType is None:
+            return
+        if not isinstance(self.returnType, UnparsedDataType):
+            _check_udtf_return_type(self.returnType)
+            return
+        if self.evalType not in (
             PythonEvalType.SQL_ARROW_TABLE_UDF,
             PythonEvalType.SQL_ARROW_UDTF,
         ):
             return
         if session._session_id in self._validated_return_type_session_ids:
             return
-        return_type = (
-            session._parse_ddl(self.returnType.data_type_string)
-            if isinstance(self.returnType, UnparsedDataType)
-            else self.returnType
-        )
+        return_type = session._parse_ddl(self.returnType.data_type_string)
         _check_udtf_return_type(return_type)
         self._validated_return_type_session_ids.add(session._session_id)
 

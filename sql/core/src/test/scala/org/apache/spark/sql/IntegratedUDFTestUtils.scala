@@ -445,7 +445,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
       udfDeterministic: Boolean,
       resultId: ExprId,
       elementwiseNestingDepth: Int,
-      applyCharVarcharChecks: Boolean)
+      applyCharVarcharChecks: Boolean,
+      hasCharVarcharResult: Boolean = false)
       extends PythonUDF(
         name,
         func,
@@ -455,7 +456,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
         udfDeterministic,
         resultId,
         elementwiseNestingDepth,
-        applyCharVarcharChecks) {
+        applyCharVarcharChecks,
+        hasCharVarcharResult = hasCharVarcharResult) {
 
     def this(pudf: PythonUDF) = {
       this(
@@ -467,7 +469,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
         pudf.udfDeterministic,
         pudf.resultId,
         pudf.elementwiseNestingDepth,
-        pudf.applyCharVarcharChecks)
+        pudf.applyCharVarcharChecks,
+        pudf.hasCharVarcharResult)
     }
 
     override def toString: String = s"$name(${children.mkString(", ")})"
