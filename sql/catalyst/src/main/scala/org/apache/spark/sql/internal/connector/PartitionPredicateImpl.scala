@@ -19,9 +19,10 @@ package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BindReferences, Expression => CatalystExpression, ExprId, Predicate => CatalystPredicate}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, Expression => CatalystExpression, ExprId, Predicate => CatalystPredicate}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
+import org.apache.spark.sql.types.NullType
 
 /**
  * An implementation for [[PartitionPredicate]] that wraps a Catalyst Expression representing a
@@ -32,15 +33,24 @@ class PartitionPredicateImpl private (
     private val partitionFields: Seq[PartitionPredicateField])
   extends PartitionPredicate with Logging {
 
+  /** Ordinal of each identity partition field, keyed by the attribute a filter references. */
   @transient private lazy val exprIdToIndex: Map[ExprId, Int] =
-    partitionFields.zipWithIndex.map { case (f, i) => f.attrRef.exprId -> i }.toMap
+    partitionFields.zipWithIndex.collect {
+      case (PartitionPredicateField(_, Some(attr)), i) => attr.exprId -> i
+    }.toMap
 
   /** The wrapped partition filter Catalyst Expression. */
   def expression: CatalystExpression = catalystExpr
 
   /** Bound predicate, computed once and reused for all partition rows. */
   @transient private lazy val boundPredicate: InternalRow => Boolean = {
-    val boundExpr = BindReferences.bindReference(catalystExpr, partitionFields.map(_.attrRef))
+    // One attribute per partition field, so that ordinals match the full partition key. A field
+    // of a non-identity transform has no attribute a filter can reference; a placeholder keeps
+    // its slot.
+    val input = partitionFields.map { f =>
+      f.attrRef.getOrElse(AttributeReference(f.fieldNames.mkString("."), NullType)())
+    }
+    val boundExpr = BindReferences.bindReference(catalystExpr, input)
     val predicate = CatalystPredicate.createInterpreted(boundExpr)
     predicate.eval
   }
@@ -102,16 +112,18 @@ object PartitionPredicateImpl extends Logging {
       return None
     }
 
-    val partitionExprIds = partitionFields.map(_.attrRef.exprId).toSet
+    val partitionExprIds = partitionFields.flatMap(_.attrRef).map(_.exprId).toSet
     val unmatchedRefs = catalystExpr.references.filterNot(r => partitionExprIds.contains(r.exprId))
     if (unmatchedRefs.nonEmpty) {
       logWarning(
         log"Cannot create partition predicate ${MDC(LogKeys.EXPR, catalystExpr.sql)}: " +
         log"expression references " +
         log"${MDC(LogKeys.FIELD_NAME, unmatchedRefs.map(_.name).mkString(", "))} " +
-        log"not found in partition fields " +
+        log"not found in identity partition fields " +
         log"${MDC(LogKeys.PARTITION_SPECIFICATION,
-          partitionFields.map(_.fieldNames.mkString(".")).mkString(", "))}. " +
+          partitionFields.collect {
+            case PartitionPredicateField(names, Some(_)) => names.mkString(".")
+          }.mkString(", "))}. " +
         log"Skipping pushdown for this predicate.")
       return None
     }

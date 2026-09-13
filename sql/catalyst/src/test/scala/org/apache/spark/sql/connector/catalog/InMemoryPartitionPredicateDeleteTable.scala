@@ -19,17 +19,23 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.expressions.MetadataStructFieldWithLogicalName
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.{PartitionPredicate, Predicate}
+import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 /**
  * In-memory table that supports row-level operations and accepts [[PartitionPredicate]]s
- * in V2 [[canDeleteWhere]]/[[deleteWhere]] for metadata-only deletes.
+ * in V2 [[canDeleteWhere]]/[[deleteWhere]] for metadata-only deletes, and in the scan of a
+ * group-based UPDATE, MERGE or DELETE, which pushes V2 predicates iteratively.
  *
  * Contains some knobs to control acceptance of various partition and data predicates.
  */
@@ -106,6 +112,72 @@ class InMemoryPartitionPredicateDeleteTable(
       }
     }
   }
+
+  /**
+   * Row-level scans push V2 predicates iteratively, so a group-based operation receives a
+   * second-pass [[PartitionPredicate]] the same way a metadata-only DELETE does. Only partition
+   * predicates prune, by partition key; a data predicate is always returned since the scan
+   * cannot filter rows.
+   */
+  override protected def newRowLevelScanBuilder(
+      options: CaseInsensitiveStringMap)(
+      onBuild: BatchScanBaseClass => Unit): ScanBuilder = {
+    new PartitionPredicateRowLevelScanBuilder(onBuild)
+  }
+
+  class PartitionPredicateRowLevelScanBuilder(onBuild: BatchScanBaseClass => Unit)
+    extends ScanBuilder with SupportsPushDownV2Filters with SupportsPushDownRequiredColumns {
+
+    private var readSchema: StructType = schema
+    private val pushed = ArrayBuffer.empty[Predicate]
+
+    override def supportsIterativePushdown(): Boolean = true
+
+    override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+      val (accepted, returned) = predicates.partition {
+        case _: PartitionPredicate => acceptPartitionPredicates
+        case p => refsOnlyPartCols(p) && InMemoryTableWithV2Filter.supportsPredicates(Array(p))
+      }
+      pushed ++= accepted
+      returned
+    }
+
+    override def pushedPredicates(): Array[Predicate] = pushed.toArray
+
+    override def pruneColumns(requiredSchema: StructType): Unit = {
+      val metadataNames = metadataColumns.map(_.name).toSet
+      val schemaNames = schema.map(_.name).toSet
+      readSchema = StructType(requiredSchema.filter {
+        case MetadataStructFieldWithLogicalName(_, name) => metadataNames.contains(name)
+        case f => schemaNames.contains(f.name)
+      })
+    }
+
+    override def build(): Scan = {
+      val (partPreds, stdPreds) = pushed.toArray.partition(_.isInstanceOf[PartitionPredicate])
+      val partitionPredicates = partPreds.map(_.asInstanceOf[PartitionPredicate])
+      val keys = InMemoryTableWithV2Filter.filtersToKeys(
+        data.map(_.key).toImmutableArraySeq,
+        partCols.map(_.toSeq.quoted).toImmutableArraySeq,
+        stdPreds).toSet
+      val partitions = data.filter { p =>
+        keys.contains(p.key) && partitionPredicates.forall(_.eval(p.partitionKey()))
+      }
+      val scan = PartitionPredicateRowLevelBatchScan(
+        partitions.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq,
+        readSchema, schema, partitionPredicates.toImmutableArraySeq)
+      onBuild(scan)
+      scan
+    }
+  }
+
+  /** Row-level batch scan that records the [[PartitionPredicate]]s it was pruned by. */
+  case class PartitionPredicateRowLevelBatchScan(
+      _data: Seq[InputPartition],
+      readSchema: StructType,
+      tableSchema: StructType,
+      pushedPartitionPredicates: Seq[PartitionPredicate])
+    extends BatchScanBaseClass(_data, readSchema, tableSchema)
 
   private def rowMatchesAll(
       row: InternalRow,

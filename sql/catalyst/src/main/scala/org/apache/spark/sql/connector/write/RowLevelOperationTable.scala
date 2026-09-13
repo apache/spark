@@ -21,6 +21,7 @@ import java.util
 
 import org.apache.spark.sql.connector.catalog.{Column, SupportsRead, SupportsRowLevelOperations, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -40,6 +41,7 @@ private[sql] case class RowLevelOperationTable(
   override def columns: Array[Column] = table.columns()
   override def capabilities: util.Set[TableCapability] = table.capabilities
   override def constraints(): Array[Constraint] = table.constraints()
+  override def partitioning(): Array[Transform] = table.partitioning()
   override def toString: String = table.toString
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {

@@ -19,20 +19,27 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.InMemoryPartitionPredicateDeleteCatalog
+import org.apache.spark.sql.connector.catalog.{InMemoryPartitionPredicateDeleteCatalog, InMemoryPartitionPredicateDeleteTable}
 import org.apache.spark.sql.connector.expressions.PartitionFieldReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
+import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
-import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
+import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.QueryExecutionListener
 
 /**
  * Tests for metadata-only delete optimization using second-pass
- * PartitionPredicate (see SPARK-55596).
+ * PartitionPredicate (see SPARK-55596), and for the second pass in the scan of a
+ * group-based UPDATE or MERGE (GroupBasedRowLevelOperationScanPlanning).
  */
-class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
+class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
+  with AdaptiveSparkPlanHelper {
+
+  import testImplicits._
 
   private val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   private val catalogName = "ppd_cat"
@@ -184,6 +191,50 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
     }
   }
 
+  // Mixed partitioning: the bucket field keeps its ordinal but is never referenced, so the
+  // IN on the identity column still becomes a PartitionPredicate over the full partition key.
+  test("second pass accepted: identity column next to a bucket transform") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk))")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+
+      assertDeleteWithFilters(
+        s"DELETE FROM $deleteTableName WHERE dep IN ('hr', 'software')",
+        expectedNumConditions = 1,
+        expectedNumPartitionPredicates = 1,
+        expectedOrdinalsPerPredicate = Seq(Array(0)),
+        expectedPartitionFieldNames = Array("dep", "bucket(4, pk)"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Row(3, "marketing", 300) :: Nil)
+    }
+  }
+
+  // `dt = DATE'...'` is analyzed as `cast(dt AS DATE) = DATE'...'`, which the table cannot
+  // evaluate in the first pass; the second pass turns it into a PartitionPredicate.
+  test("second pass accepted: cast on a string identity column next to a bucket transform") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dt STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dt, bucket(4, pk))")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, '2026-09-01', 100), (2, '2026-09-02', 200), (3, '2026-09-03', 300)")
+
+      assertDeleteWithFilters(
+        s"DELETE FROM $deleteTableName WHERE dt = DATE'2026-09-02'",
+        expectedNumConditions = 1,
+        expectedNumPartitionPredicates = 1,
+        expectedOrdinalsPerPredicate = Seq(Array(0)),
+        expectedPartitionFieldNames = Array("dt", "bucket(4, pk)"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "2026-09-01", 100), Row(3, "2026-09-03", 300)))
+    }
+  }
+
   // Table property disables PartitionPredicate acceptance;
   // both passes rejected, falls back to row-level operation.
   test("first and second pass rejected: table rejects all") {
@@ -238,6 +289,93 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
       checkAnswer(
         sql(s"SELECT * FROM $deleteTableName"),
         Seq(Row(2, "hr", 200), Row(3, "software", 300)))
+    }
+  }
+
+  // A group-based UPDATE reads the table through RowLevelOperationTable. The wrapper reports
+  // the table's partitioning, so the row-level scan, which pushes V2 predicates iteratively,
+  // receives the IN on the partition column as a second-pass PartitionPredicate, and only the
+  // matching partitions are read and replaced.
+  test("SPARK-59457: group-based UPDATE receives a second-pass PartitionPredicate") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep)")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+
+      val plan = executeAndKeepPlan {
+        sql(s"UPDATE $deleteTableName SET salary = salary + 1 WHERE dep IN ('hr', 'software')")
+      }
+      assertRowLevelScanPrunedByPartitionPredicate(plan,
+        expectedOrdinals = Array(0),
+        expectedPartitionFieldNames = Array("dep"),
+        expectedReplacedDeps = Set("hr", "software"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "hr", 101), Row(2, "software", 201), Row(3, "marketing", 300)))
+    }
+  }
+
+  // Mixed partitioning: the bucket field keeps its ordinal but is never referenced, so the IN on
+  // the identity column still becomes a PartitionPredicate over the full partition key.
+  test("group-based UPDATE: PartitionPredicate on an identity column next to a bucket transform") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk))")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+
+      val plan = executeAndKeepPlan {
+        sql(s"UPDATE $deleteTableName SET salary = salary + 1 WHERE dep IN ('hr', 'software')")
+      }
+      assertRowLevelScanPrunedByPartitionPredicate(plan,
+        expectedOrdinals = Array(0),
+        expectedPartitionFieldNames = Array("dep", "bucket(4, pk)"),
+        expectedReplacedDeps = Set("hr", "software"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "hr", 101), Row(2, "software", 201), Row(3, "marketing", 300)))
+    }
+  }
+
+  // Group-based MERGE: the target-only IN of the ON clause is pushed the same way, and since
+  // the scan fully evaluates it, it is dropped from the join condition.
+  test("group-based MERGE: PartitionPredicate on an identity column next to a bucket transform") {
+    withTable(deleteTableName) {
+      withTempView("source") {
+        sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+          s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk))")
+        sql(s"INSERT INTO $deleteTableName VALUES " +
+          "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+        Seq((1, 1000), (3, 3000)).toDF("pk", "salary").createOrReplaceTempView("source")
+
+        val plan = executeAndKeepPlan {
+          sql(
+            s"""MERGE INTO $deleteTableName t
+               |USING source s
+               |ON t.pk = s.pk AND t.dep IN ('hr', 'software')
+               |WHEN MATCHED THEN
+               | UPDATE SET salary = s.salary
+               |""".stripMargin)
+        }
+        assertRowLevelScanPrunedByPartitionPredicate(plan,
+          expectedOrdinals = Array(0),
+          expectedPartitionFieldNames = Array("dep", "bucket(4, pk)"),
+          expectedReplacedDeps = Set("hr", "software"))
+        val joins = collect(plan) { case j: BaseJoinExec => j }
+        assert(joins.nonEmpty, "Expected a join in the MERGE plan")
+        joins.foreach { j =>
+          assert(!j.condition.exists(_.references.exists(_.name == "dep")),
+            s"Evaluated IN on dep should be dropped from the join condition: ${j.condition}")
+        }
+
+        // Row 3 is in a pruned partition, so it is never read and stays unchanged.
+        checkAnswer(
+          sql(s"SELECT * FROM $deleteTableName"),
+          Seq(Row(1, "hr", 1000), Row(2, "software", 200), Row(3, "marketing", 300)))
+      }
     }
   }
 
@@ -355,6 +493,35 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
               s"'$expected', got '$actual'")
         }
     }
+  }
+
+  /**
+   * Asserts that the group-based plan's row-level scan was pruned by one PartitionPredicate with
+   * the given references, and that only the partitions with the given `dep` values, the first
+   * partition field, were replaced.
+   */
+  private def assertRowLevelScanPrunedByPartitionPredicate(
+      plan: SparkPlan,
+      expectedOrdinals: Array[Int],
+      expectedPartitionFieldNames: Array[String],
+      expectedReplacedDeps: Set[String]): Unit = {
+    assert(plan.isInstanceOf[ReplaceDataExec],
+      s"Expected ReplaceDataExec but got: ${plan.getClass.getSimpleName}")
+    val scans = collect(plan) { case s: BatchScanExec => s }
+    val scan = scans.map(_.scan).collectFirst {
+      case s: InMemoryPartitionPredicateDeleteTable#PartitionPredicateRowLevelBatchScan => s
+    }.getOrElse(fail("Expected the row-level scan of the in-memory table"))
+    assertPartitionFieldReferences(
+      scan.pushedPartitionPredicates.toArray, Seq(expectedOrdinals), expectedPartitionFieldNames)
+
+    val table = scans.map(_.table).collectFirst {
+      case RowLevelOperationTable(t: InMemoryPartitionPredicateDeleteTable, _) => t
+    }.getOrElse(fail("Expected the row-level operation table"))
+    val replacedDeps = table.replacedPartitions.map(_.head.toString)
+    assert(
+      replacedDeps.toSet === expectedReplacedDeps &&
+        replacedDeps.size === expectedReplacedDeps.size,
+      s"Expected replaced partitions for $expectedReplacedDeps, got ${table.replacedPartitions}")
   }
 
   private def assertDeleteWithRowLevel(query: String): Unit = {
