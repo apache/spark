@@ -95,7 +95,8 @@ private[sql] class AvroOptions(
             throw QueryCompilationErrors.avroOptionsException(
               AVRO_SCHEMA_URL,
               s"The scheme '$scheme' of avroSchemaUrl '$url' is not in the allowlist " +
-                s"configured by ${SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key}.")
+                s"${allowedSchemes.mkString("[", ", ", "]")} configured by " +
+                s"${SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key}.")
           }
         }
         val fs = FileSystem.get(uri, conf)

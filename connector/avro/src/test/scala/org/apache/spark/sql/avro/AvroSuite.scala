@@ -1257,7 +1257,8 @@ abstract class AvroSuite
 
   // spark.sql.avro.schemaUrlAllowedSchemes is a static SQL config, so it cannot be set with
   // withSQLConf; these drive AvroOptions directly under a SQLConf provided via withExistingConf.
-  // A scheme-less local path resolves to the default file system ("file").
+  // testFile returns a "file:" URL, so its scheme is an explicit "file"; the scheme-less path that
+  // resolves against the default file system is covered by its own test below.
   test("SPARK-59329: avroSchemaUrl scheme allowlist permits an allowed scheme") {
     val avroSchemaUrl = testFile("test_sub.avsc")
     val hadoopConf = spark.sessionState.newHadoopConf()
@@ -1312,6 +1313,30 @@ abstract class AvroSuite
     SQLConf.withExistingConf(conf) {
       val options = new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
       assert(options.schema.isDefined)
+    }
+  }
+
+  test("SPARK-59329: avroSchemaUrl allowlist resolves a scheme-less path " +
+    "against the default file system") {
+    // testFile returns a "file:" URL, so strip the scheme to get a genuinely scheme-less path.
+    // This exercises the FileSystem.getDefaultUri fallback that the other cases do not reach.
+    val avroSchemaUrl = new URI(testFile("test_sub.avsc")).getPath
+    assert(new URI(avroSchemaUrl).getScheme == null)
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    // The default file system is "file", so allowing "file" permits the scheme-less path ...
+    val allowed = new SQLConf()
+    allowed.setConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
+    SQLConf.withExistingConf(allowed) {
+      assert(new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf).schema.isDefined)
+    }
+    // ... and an allowlist without it rejects the same path, reporting the resolved "file" scheme.
+    val disallowed = new SQLConf()
+    disallowed.setConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("s3a"))
+    SQLConf.withExistingConf(disallowed) {
+      val e = intercept[AnalysisException] {
+        new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
+      }
+      assert(e.getMessage.contains("The scheme 'file'"))
     }
   }
 
@@ -4278,7 +4303,7 @@ class AvroSchemaUrlAllowlistSuite extends QueryTest with SharedSparkSession {
   private val testAvro = testFile("test.avro")
 
   test("SPARK-59329: an allowed avroSchemaUrl scheme is permitted through a read") {
-    // A scheme-less local path resolves to the default file system ("file"), which is allowed.
+    // testFile returns a "file:" URL, whose scheme "file" is allowed.
     val result = spark.read.option("avroSchemaUrl", testFile("test_sub.avsc"))
       .format("avro").load(testAvro).collect()
     val expected = spark.read.format("avro").load(testAvro).select("string").collect()
