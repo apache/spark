@@ -116,12 +116,6 @@ case class HllSketchAgg(
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      // AnyTimeType must stay last: a TIME argument is accepted by the order-independent
-      // acceptsType short-circuit regardless of position, but ANSI implicit coercion walks this
-      // collection in order for a type it does not directly accept. Keeping AnyTimeType after
-      // StringType preserves the pre-existing behavior where TIMESTAMP/TIMESTAMP_NTZ/DATE inputs
-      // coerce to STRING (canANSIStoreAssign to TIME is also true, so an earlier AnyTimeType would
-      // instead route them to TIME and silently under-count).
       TypeCollection(
         IntegerType,
         LongType,
