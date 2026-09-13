@@ -2162,13 +2162,27 @@ package object config {
 
   private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
 
+  // A map from the short class names of built-in plugins to their fully-qualified class names.
+  private val BUILTIN_PLUGINS: Map[String, String] = Seq(
+    "org.apache.spark.deploy.DriverTimeoutPlugin",
+    "org.apache.spark.deploy.RedirectConsolePlugin",
+    "org.apache.spark.profiler.ProfilerPlugin",
+    "org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin",
+    "org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin",
+    "org.apache.spark.scheduler.cluster.k8s.ExecutorRollPlugin",
+    "org.apache.spark.sql.connect.SparkConnectPlugin"
+  ).map(name => name.substring(name.lastIndexOf('.') + 1) -> name).toMap
+
   private[spark] val PLUGINS =
     ConfigBuilder("spark.plugins")
       .withPrepended(DEFAULT_PLUGINS_LIST, separator = ",")
       .doc("Comma-separated list of class names implementing " +
-        "org.apache.spark.api.plugin.SparkPlugin to load into the application.")
+        "org.apache.spark.api.plugin.SparkPlugin to load into the application. " +
+        "Built-in plugins can also be specified by their short class names, " +
+        "e.g. `DriverTimeoutPlugin`.")
       .version("3.0.0")
       .stringConf
+      .transform(name => BUILTIN_PLUGINS.getOrElse(name, name))
       .toSequence
       .createWithDefault(Nil)
 

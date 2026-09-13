@@ -177,16 +177,21 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
   test("SPARK-57102: requesting a nanos type over a non-NANOS Parquet column fails clearly") {
     withNanosEnabled {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+      withSQLConf(
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+        SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
+          SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS.toString) {
         withTempPath { dir =>
-          // Write a microsecond column: the Parquet annotation is TIMESTAMP(MICROS), not NANOS.
-          spark.sql("SELECT TIMESTAMP_NTZ '2020-01-01 12:34:56.123456' AS ts")
+          // Write a TIMESTAMP(MILLIS) column: a coarser non-NANOS encoding, not the INT64
+          // TIMESTAMP(MICROS) the nanos reader now widens to nanos.
+          spark.sql("SELECT TIMESTAMP '2020-01-01 12:34:56.123' AS ts")
             .write.parquet(dir.getCanonicalPath)
-          // Forcing a nanosecond read schema leaves no matching converter case (the guard requires
-          // a NANOS annotation), so it falls through to the generic PARQUET_CONVERSION_FAILURE
-          // error - the same path every other type uses, not a confusing one.
+          // Forcing a nanosecond read schema leaves no matching converter case (only NANOS and
+          // same-family MICROS are accepted), so it falls through to the generic
+          // PARQUET_CONVERSION_FAILURE error - the same path every other type uses, not a confusing
+          // one.
           val e = intercept[SparkException] {
-            spark.read.schema("ts TIMESTAMP_NTZ(7)").parquet(dir.getCanonicalPath).collect()
+            spark.read.schema("ts TIMESTAMP_LTZ(7)").parquet(dir.getCanonicalPath).collect()
           }
           var cause: Throwable = e
           while (cause != null && (cause.getMessage == null ||
