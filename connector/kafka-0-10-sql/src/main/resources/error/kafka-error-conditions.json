@@ -1,4 +1,9 @@
 {
+  "KAFKA_DISALLOWED_OPTION" : {
+    "message" : [
+      "The Kafka option 'kafka.<option>' is not allowed because it is listed in <config>."
+    ]
+  },
   "MISMATCHED_TOPIC_PARTITIONS_BETWEEN_END_OFFSET_AND_PREFETCHED" : {
     "message" : [
       "Kafka data source in Trigger.AvailableNow should provide the same topic partitions in pre-fetched offset to end offset for each microbatch. The error could be transient - restart your query, and report if you still see the same issue.",
