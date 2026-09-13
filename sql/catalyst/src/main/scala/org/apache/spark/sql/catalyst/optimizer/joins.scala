@@ -442,7 +442,8 @@ trait JoinSelectionHelper extends Logging {
     // the original unbounded NAAJ behavior, while zero disables the broadcast hash optimization.
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) =>
       val threshold = conf.nullAwareAntiJoinBroadcastThreshold
-      if (threshold < 0 || (threshold > 0 && j.right.stats.sizeInBytes <= threshold)) {
+      val rightSize = j.right.stats.sizeInBytes
+      if (threshold < 0 || (threshold > 0 && rightSize >= 0 && rightSize <= threshold)) {
         Some(BuildRight)
       } else {
         None

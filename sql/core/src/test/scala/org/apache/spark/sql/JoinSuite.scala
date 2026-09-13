@@ -1381,11 +1381,11 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
 
             val result = sql(
               "select * from naajHashLeft where key not in (select key from naajHashRight)")
-            val joinExec = result.queryExecution.sparkPlan.collect {
+            checkAnswer(result, Row(2.0d))
+            val joinExec = collect(result.queryExecution.executedPlan) {
               case join: BroadcastHashJoinExec if join.isNullAwareAntiJoin => join
             }
             assert(joinExec.size === 1)
-            checkAnswer(result, Row(2.0d))
           }
         }
       }

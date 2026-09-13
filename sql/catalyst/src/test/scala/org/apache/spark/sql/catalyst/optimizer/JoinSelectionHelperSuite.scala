@@ -201,6 +201,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     val condition = Or(EqualTo(leftKey, rightKey), IsNull(EqualTo(leftKey, rightKey)))
     val nullAwareAntiJoin = Join(left, right, LeftAnti, Some(condition), JoinHint.NONE)
     val largeRight = right.copy(rowCount = 20000000, size = Some(20000000))
+    val negativeSizeRight = right.copy(size = Some(-1))
     val overLongMaxRight = right.copy(
       rowCount = BigInt(Long.MaxValue) + 1,
       size = Some(BigInt(Long.MaxValue) + 1))
@@ -234,6 +235,8 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       assert(getBroadcastHashJoinBuildSide(nullAwareAntiJoin, SQLConf.get) === Some(BuildRight))
       assert(getBroadcastHashJoinBuildSide(
         nullAwareAntiJoin.copy(right = largeRight), SQLConf.get).isEmpty)
+      assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoin.copy(right = negativeSizeRight), SQLConf.get).isEmpty)
     }
   }
 }
