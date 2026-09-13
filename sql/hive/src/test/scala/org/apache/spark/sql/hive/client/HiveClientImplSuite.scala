@@ -60,6 +60,26 @@ class HiveClientImplSuite extends SparkFunSuite {
     assert(StaticInitFlags.outputFormatInitialized)
   }
 
+  test("SPARK-59330: toHiveTable still resolves the format class when " +
+    "spark.sql.hive.initializeMetastoreFormatClasses is false") {
+    // false skips the static initializer but still loads the class, so a missing class fails here
+    // rather than being silently deferred; this pins that contract (the reason for initialize =
+    // false over dropping the resolution entirely).
+    val table = CatalogTable(
+      identifier = TableIdentifier("t", Some("default")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty.copy(
+        inputFormat = Some("org.apache.spark.sql.hive.DoesNotExistInputFormat")),
+      schema = new StructType().add("a", "int"))
+    val conf = new SQLConf()
+    conf.setConf(HiveUtils.INITIALIZE_METASTORE_FORMAT_CLASSES, false)
+    intercept[ClassNotFoundException] {
+      SQLConf.withExistingConf(conf) {
+        HiveClientImpl.toHiveTable(table)
+      }
+    }
+  }
+
   test("SPARK-21529: a clear error is raised for an unsupported Hive union type") {
     val column = new FieldSchema("c", "uniontype<int,string>", null)
     checkError(

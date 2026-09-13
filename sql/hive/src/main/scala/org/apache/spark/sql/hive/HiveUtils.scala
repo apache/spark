@@ -210,7 +210,7 @@ private[spark] object HiveUtils extends Logging {
         "operation. Note that the conversion also runs when planning a scan or write and when " +
         "inferring the schema of a Hive serde table, so with false a format class whose static " +
         "initializer fails no longer fails fast at resolution time. It fails when the format " +
-        "is instantiated instead (as NoClassDefFoundError: Could not initialize class ...), " +
+        "is instantiated instead, " +
         "which for a Hive serde scan is on the driver when the input splits are computed, and " +
         "for a Hive serde write is on an executor. A table read through the built-in " +
         "Parquet/ORC reader never instantiates the format, so there the initializer never " +
