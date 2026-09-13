@@ -729,7 +729,8 @@ class SparkContext(config: SparkConf) extends Logging {
             Some(new ExecutorAllocationManager(
               schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf,
               cleaner = cleaner, resourceProfileManager = resourceProfileManager,
-              reliableShuffleStorage = _shuffleDriverComponents.supportsReliableStorage()))
+              reliableShuffleStorage = _shuffleDriverComponents.supportsReliableStorage(),
+              isShuffleReliablyStored = _dagScheduler.isShuffleReliablyStored))
           case _ =>
             None
         }
