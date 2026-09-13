@@ -468,3 +468,160 @@ SELECT EXTRACT(IDENTIFIER('YEAR') FROM DATE'2024-01-15');
 SELECT TIMESTAMPADD(IDENTIFIER('YEAR'), 1, DATE'2024-01-15');
 
 DROP SCHEMA identifier_clause_test_schema;
+
+-- A variable read only by a temporary view's IDENTIFIER clause is still a variable the view refers
+-- to, so it stays resolvable when the stored view text is analyzed again.
+CREATE OR REPLACE TEMPORARY VIEW identifier_var_target AS SELECT 1 AS c1;
+DECLARE OR REPLACE VARIABLE identifier_var_name STRING DEFAULT 'identifier_var_target';
+CREATE OR REPLACE TEMPORARY VIEW identifier_var_view AS
+SELECT * FROM IDENTIFIER(identifier_var_name);
+SELECT count(*) AS row_count FROM identifier_var_view;
+DROP VIEW identifier_var_view;
+DROP VIEW identifier_var_target;
+DROP TEMPORARY VARIABLE identifier_var_name;
+
+-- A permanent view must still reject a temporary variable read via an IDENTIFIER clause.
+CREATE TEMPORARY VIEW identifier_perm_target AS SELECT 1 AS c1;
+DECLARE OR REPLACE VARIABLE identifier_perm_name STRING DEFAULT 'identifier_perm_target';
+CREATE VIEW identifier_perm_view AS SELECT * FROM IDENTIFIER(identifier_perm_name);
+DROP VIEW identifier_perm_target;
+DROP TEMPORARY VARIABLE identifier_perm_name;
+
+-- A permanent ALTER VIEW must also reject a temporary variable read via an IDENTIFIER clause.
+-- The IDENTIFIER target is a permanent table so the variable is the only temporary object.
+CREATE SCHEMA identifier_alter_schema;
+USE identifier_alter_schema;
+CREATE TABLE identifier_alter_target (c1 INT) USING parquet;
+DECLARE OR REPLACE VARIABLE identifier_alter_name STRING DEFAULT 'identifier_alter_target';
+CREATE VIEW identifier_alter_view AS SELECT 1 AS c1;
+ALTER VIEW identifier_alter_view AS SELECT * FROM IDENTIFIER(identifier_alter_name);
+SELECT * FROM identifier_alter_view;
+DROP VIEW identifier_alter_view;
+DROP TABLE identifier_alter_target;
+DROP TEMPORARY VARIABLE identifier_alter_name;
+USE default;
+DROP SCHEMA identifier_alter_schema;
+
+-- ALTER VIEW whose TARGET is picked by a variable, with a body that has no temp dependency, must
+-- still succeed: the variable is not a dependency of the view definition.
+CREATE SCHEMA ivt_schema;
+USE ivt_schema;
+CREATE VIEW ivt_target AS SELECT 1 AS c1;
+DECLARE OR REPLACE VARIABLE ivt_name STRING DEFAULT 'ivt_target';
+ALTER VIEW IDENTIFIER(ivt_name) AS SELECT 2 AS c1;
+SELECT * FROM ivt_target;
+DROP VIEW ivt_target;
+DROP TEMPORARY VARIABLE ivt_name;
+USE default;
+DROP SCHEMA ivt_schema;
+
+-- A temporary view whose body reads a variable via an IDENTIFIER clause in expression position
+-- (here as a column name). Unlike the table-position case above, this identifier expression
+-- resolves to a bare variable reference, so recording it requires visiting the root of the
+-- expression tree. If it is not recorded, the variable is missing from the stored view text and
+-- reading the view back fails.
+DECLARE OR REPLACE VARIABLE identifier_expr_col STRING DEFAULT 'c1';
+CREATE OR REPLACE TEMPORARY VIEW identifier_expr_view AS
+SELECT IDENTIFIER(identifier_expr_col) AS x FROM VALUES(1) AS t(c1);
+SELECT * FROM identifier_expr_view;
+DROP VIEW identifier_expr_view;
+DROP TEMPORARY VARIABLE identifier_expr_col;
+
+-- A GLOBAL TEMPORARY VIEW reads a variable via an IDENTIFIER clause the same way a session-local
+-- temporary view does, so the variable stays resolvable when the stored view text is analyzed again.
+DECLARE OR REPLACE VARIABLE identifier_gtv_col STRING DEFAULT 'c1';
+CREATE OR REPLACE GLOBAL TEMPORARY VIEW identifier_gtv_view AS
+SELECT IDENTIFIER(identifier_gtv_col) AS x FROM VALUES(1) AS t(c1);
+SELECT * FROM global_temp.identifier_gtv_view;
+DROP VIEW global_temp.identifier_gtv_view;
+DROP TEMPORARY VARIABLE identifier_gtv_col;
+
+-- A variable used only to supply a view's NAME via an IDENTIFIER clause is not part of the view
+-- definition, so it must not be recorded as a referred variable of the view.
+DECLARE OR REPLACE VARIABLE identifier_view_name STRING DEFAULT 'identifier_named_view';
+CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(identifier_view_name) AS SELECT 1 AS c1;
+SELECT * FROM identifier_named_view;
+DROP VIEW identifier_named_view;
+DROP TEMPORARY VARIABLE identifier_view_name;
+
+-- When both the NAME and the BODY use an IDENTIFIER clause, only the body variable is a dependency
+-- of the view; the name variable must not be recorded.
+DECLARE OR REPLACE VARIABLE identifier_name_part STRING DEFAULT 'identifier_named_view2';
+DECLARE OR REPLACE VARIABLE identifier_body_part STRING DEFAULT 'c1';
+CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(identifier_name_part) AS
+SELECT IDENTIFIER(identifier_body_part) AS x FROM VALUES(1) AS t(c1);
+SELECT * FROM identifier_named_view2;
+DROP VIEW identifier_named_view2;
+DROP TEMPORARY VARIABLE identifier_name_part;
+DROP TEMPORARY VARIABLE identifier_body_part;
+
+-- ALTER VIEW honors `spark.sql.legacy.allowSessionVariableInPersistedView` just like CREATE VIEW:
+-- with it set, the DDL is allowed instead of rejected (the legacy permissive behavior). The flag
+-- does not persist the variable into the stored view, so the view is not guaranteed to resolve in a
+-- fresh session; the default (tested by `identifier_alter_view` above) rejects it outright.
+SET spark.sql.legacy.allowSessionVariableInPersistedView=true;
+DECLARE OR REPLACE VARIABLE identifier_p2a_col STRING DEFAULT 'c1';
+CREATE VIEW identifier_p2a_view AS SELECT 1 AS c1;
+ALTER VIEW identifier_p2a_view AS SELECT IDENTIFIER(identifier_p2a_col) FROM VALUES(1) AS t(c1);
+DROP VIEW identifier_p2a_view;
+DROP TEMPORARY VARIABLE identifier_p2a_col;
+SET spark.sql.legacy.allowSessionVariableInPersistedView=false;
+
+-- Nested temporary views lock in the `withAnalysisContext` accumulator reset: creating the outer
+-- view (which selects the inner view) resolves the inner view along the way, and the inner view's
+-- IDENTIFIER-clause variable must be attributed to the inner view only -- it must never be recorded
+-- as a referred variable of the outer view. The inner `CreateViewCommand` records
+-- `identifier_nested_col`; the outer `CreateViewCommand` must record nothing.
+DECLARE OR REPLACE VARIABLE identifier_nested_col STRING DEFAULT 'c1';
+CREATE OR REPLACE TEMPORARY VIEW identifier_nested_inner AS
+SELECT IDENTIFIER(identifier_nested_col) AS x FROM VALUES(1) AS t(c1);
+CREATE OR REPLACE TEMPORARY VIEW identifier_nested_outer AS
+SELECT x FROM identifier_nested_inner;
+SELECT * FROM identifier_nested_outer;
+DROP VIEW identifier_nested_outer;
+DROP VIEW identifier_nested_inner;
+DROP TEMPORARY VARIABLE identifier_nested_col;
+
+-- A temporary SQL function whose body reads a relation via an IDENTIFIER clause, referenced by a
+-- temporary view. A SQL function keeps no IDENTIFIER-variable metadata of its own, so the variable
+-- is part of the enclosing view's transitive definition: expanding the function while creating the
+-- view must record the variable as a referred variable of the view (the function-body analysis
+-- context must not discard it). Otherwise re-resolving the stored view text on read fails.
+CREATE OR REPLACE TEMPORARY VIEW identifier_fn_target AS SELECT 1 AS c1;
+DECLARE OR REPLACE VARIABLE identifier_fn_var STRING DEFAULT 'identifier_fn_target';
+CREATE TEMPORARY FUNCTION identifier_fn() RETURN SELECT count(*) FROM IDENTIFIER(identifier_fn_var);
+CREATE OR REPLACE TEMPORARY VIEW identifier_fn_view AS SELECT identifier_fn() AS c;
+SELECT * FROM identifier_fn_view;
+DROP VIEW identifier_fn_view;
+DROP TEMPORARY FUNCTION identifier_fn;
+DROP VIEW identifier_fn_target;
+DROP TEMPORARY VARIABLE identifier_fn_var;
+
+-- ALTER of a LOCAL TEMPORARY view whose new body reads a column via an IDENTIFIER clause. The
+-- forwarded referred-variable dependency must be stored so re-analyzing the altered view text on
+-- read still resolves the variable.
+CREATE OR REPLACE TEMPORARY VIEW identifier_talter_view AS SELECT 1 AS c1;
+DECLARE OR REPLACE VARIABLE identifier_talter_col STRING DEFAULT 'c1';
+ALTER VIEW identifier_talter_view AS
+SELECT IDENTIFIER(identifier_talter_col) AS x FROM VALUES(1) AS t(c1);
+SELECT * FROM identifier_talter_view;
+DROP VIEW identifier_talter_view;
+DROP TEMPORARY VARIABLE identifier_talter_col;
+
+-- CACHE TABLE AS SELECT reads a column via an IDENTIFIER clause. The dependency must be threaded
+-- through the cache command so the text-backed temporary view it creates stays resolvable for the
+-- eager caching read (and any later lazy read).
+DECLARE OR REPLACE VARIABLE identifier_cache_col STRING DEFAULT 'c1';
+CACHE TABLE identifier_cache_view AS
+SELECT IDENTIFIER(identifier_cache_col) AS x FROM VALUES(1) AS t(c1);
+SELECT * FROM identifier_cache_view;
+UNCACHE TABLE identifier_cache_view;
+DROP TEMPORARY VARIABLE identifier_cache_col;
+
+-- A variable used only to compute the CACHE TABLE target name is not part of the cached view
+-- definition, so it must not be recorded as a referred variable of the view.
+DECLARE OR REPLACE VARIABLE identifier_cache_name STRING DEFAULT 'identifier_cache_named';
+CACHE TABLE IDENTIFIER(identifier_cache_name) AS SELECT 1 AS c1;
+SELECT * FROM identifier_cache_named;
+UNCACHE TABLE identifier_cache_named;
+DROP TEMPORARY VARIABLE identifier_cache_name;

@@ -287,6 +287,34 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
     }
   }
 
+  test("v2 CREATE / ALTER VIEW rejects a temporary variable read via an IDENTIFIER clause") {
+    // A variable read via an IDENTIFIER clause is not present in the analyzed view body (the
+    // placeholder is replaced by the plan built from the evaluated name), so it is captured during
+    // analysis (referredTempVariablesUnderIdentifier) and must be rejected for a permanent v2 view,
+    // just like a temporary function. The ALTER path is only covered once the v2 command threads
+    // the captured variables into CheckViewReferences.
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("DECLARE OR REPLACE VARIABLE v2_ident_col STRING DEFAULT 'x'")
+      try {
+        val createEx = intercept[AnalysisException] {
+          sql("CREATE VIEW view_catalog.default.v_ident_var AS " +
+            "SELECT IDENTIFIER(v2_ident_col) FROM spark_catalog.default.t")
+        }
+        assert(createEx.getCondition == "INVALID_TEMP_OBJ_REFERENCE")
+
+        sql("CREATE VIEW view_catalog.default.v_ident_var AS SELECT x FROM spark_catalog.default.t")
+        val alterEx = intercept[AnalysisException] {
+          sql("ALTER VIEW view_catalog.default.v_ident_var AS " +
+            "SELECT IDENTIFIER(v2_ident_col) FROM spark_catalog.default.t")
+        }
+        assert(alterEx.getCondition == "INVALID_TEMP_OBJ_REFERENCE")
+      } finally {
+        sql("DROP TEMPORARY VARIABLE v2_ident_col")
+      }
+    }
+  }
+
   // --- v2 view DDL / inspection on a non-session v2 catalog ----------------------------
   // ResolveSessionCatalog's `ResolvedViewIdentifier` matcher is gated on isSessionCatalog, so
   // these plans flow through to DataSourceV2Strategy with a `ResolvedPersistentView` child.

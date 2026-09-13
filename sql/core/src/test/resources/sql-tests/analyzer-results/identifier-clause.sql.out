@@ -2892,3 +2892,795 @@ DROP SCHEMA identifier_clause_test_schema
 -- !query analysis
 DropNamespace false, false
 +- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_clause_test_schema]
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_var_target AS SELECT 1 AS c1
+-- !query analysis
+CreateViewCommand `identifier_var_target`, SELECT 1 AS c1, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS c1#x]
+      +- OneRowRelation
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_var_name STRING DEFAULT 'identifier_var_target'
+-- !query analysis
+CreateVariable default(cast(identifier_var_target as string), sql=''identifier_var_target''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_var_name
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_var_view AS
+SELECT * FROM IDENTIFIER(identifier_var_name)
+-- !query analysis
+CreateViewCommand `identifier_var_view`, SELECT * FROM IDENTIFIER(identifier_var_name), false, true, LocalTempView, UNSUPPORTED, true, [[identifier_var_name]]
+   +- Project [c1#x]
+      +- SubqueryAlias identifier_var_target
+         +- View (`identifier_var_target`, [c1#x])
+            +- Project [cast(c1#x as int) AS c1#x]
+               +- Project [1 AS c1#x]
+                  +- OneRowRelation
+
+
+-- !query
+SELECT count(*) AS row_count FROM identifier_var_view
+-- !query analysis
+Aggregate [count(1) AS row_count#xL]
++- SubqueryAlias identifier_var_view
+   +- View (`identifier_var_view`, [c1#x])
+      +- Project [cast(c1#x as int) AS c1#x]
+         +- Project [c1#x]
+            +- SubqueryAlias identifier_var_target
+               +- View (`identifier_var_target`, [c1#x])
+                  +- Project [cast(c1#x as int) AS c1#x]
+                     +- Project [1 AS c1#x]
+                        +- OneRowRelation
+
+
+-- !query
+DROP VIEW identifier_var_view
+-- !query analysis
+DropTempViewCommand identifier_var_view, false
+
+
+-- !query
+DROP VIEW identifier_var_target
+-- !query analysis
+DropTempViewCommand identifier_var_target, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_var_name
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_var_name
+
+
+-- !query
+CREATE TEMPORARY VIEW identifier_perm_target AS SELECT 1 AS c1
+-- !query analysis
+CreateViewCommand `identifier_perm_target`, SELECT 1 AS c1, false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS c1#x]
+      +- OneRowRelation
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_perm_name STRING DEFAULT 'identifier_perm_target'
+-- !query analysis
+CreateVariable default(cast(identifier_perm_target as string), sql=''identifier_perm_target''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_perm_name
+
+
+-- !query
+CREATE VIEW identifier_perm_view AS SELECT * FROM IDENTIFIER(identifier_perm_name)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "VIEW",
+    "objName" : "`unknown`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`identifier_perm_name`"
+  }
+}
+
+
+-- !query
+DROP VIEW identifier_perm_target
+-- !query analysis
+DropTempViewCommand identifier_perm_target, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_perm_name
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_perm_name
+
+
+-- !query
+CREATE SCHEMA identifier_alter_schema
+-- !query analysis
+CreateNamespace false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_alter_schema]
+
+
+-- !query
+USE identifier_alter_schema
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_alter_schema]
+
+
+-- !query
+CREATE TABLE identifier_alter_target (c1 INT) USING parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`identifier_alter_schema`.`identifier_alter_target`, false
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_alter_name STRING DEFAULT 'identifier_alter_target'
+-- !query analysis
+CreateVariable default(cast(identifier_alter_target as string), sql=''identifier_alter_target''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_alter_name
+
+
+-- !query
+CREATE VIEW identifier_alter_view AS SELECT 1 AS c1
+-- !query analysis
+CreateViewCommand `spark_catalog`.`identifier_alter_schema`.`identifier_alter_view`, SELECT 1 AS c1, false, false, PersistedView, COMPENSATION, true
+   +- Project [1 AS c1#x]
+      +- OneRowRelation
+
+
+-- !query
+ALTER VIEW identifier_alter_view AS SELECT * FROM IDENTIFIER(identifier_alter_name)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`identifier_alter_schema`.`identifier_alter_view`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`identifier_alter_name`"
+  }
+}
+
+
+-- !query
+SELECT * FROM identifier_alter_view
+-- !query analysis
+Project [c1#x]
++- SubqueryAlias spark_catalog.identifier_alter_schema.identifier_alter_view
+   +- View (`spark_catalog`.`identifier_alter_schema`.`identifier_alter_view`, [c1#x])
+      +- Project [cast(c1#x as int) AS c1#x]
+         +- Project [1 AS c1#x]
+            +- OneRowRelation
+
+
+-- !query
+DROP VIEW identifier_alter_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`identifier_alter_schema`.`identifier_alter_view`, false, true, false
+
+
+-- !query
+DROP TABLE identifier_alter_target
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_alter_schema.identifier_alter_target
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_alter_name
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_alter_name
+
+
+-- !query
+USE default
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [default]
+
+
+-- !query
+DROP SCHEMA identifier_alter_schema
+-- !query analysis
+DropNamespace false, false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_alter_schema]
+
+
+-- !query
+CREATE SCHEMA ivt_schema
+-- !query analysis
+CreateNamespace false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [ivt_schema]
+
+
+-- !query
+USE ivt_schema
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [ivt_schema]
+
+
+-- !query
+CREATE VIEW ivt_target AS SELECT 1 AS c1
+-- !query analysis
+CreateViewCommand `spark_catalog`.`ivt_schema`.`ivt_target`, SELECT 1 AS c1, false, false, PersistedView, COMPENSATION, true
+   +- Project [1 AS c1#x]
+      +- OneRowRelation
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE ivt_name STRING DEFAULT 'ivt_target'
+-- !query analysis
+CreateVariable default(cast(ivt_target as string), sql=''ivt_target''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.ivt_name
+
+
+-- !query
+ALTER VIEW IDENTIFIER(ivt_name) AS SELECT 2 AS c1
+-- !query analysis
+AlterViewAsCommand `spark_catalog`.`ivt_schema`.`ivt_target`, SELECT 2 AS c1, true
+   +- Project [2 AS c1#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT * FROM ivt_target
+-- !query analysis
+Project [c1#x]
++- SubqueryAlias spark_catalog.ivt_schema.ivt_target
+   +- View (`spark_catalog`.`ivt_schema`.`ivt_target`, [c1#x])
+      +- Project [cast(c1#x as int) AS c1#x]
+         +- Project [2 AS c1#x]
+            +- OneRowRelation
+
+
+-- !query
+DROP VIEW ivt_target
+-- !query analysis
+DropTableCommand `spark_catalog`.`ivt_schema`.`ivt_target`, false, true, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE ivt_name
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.ivt_name
+
+
+-- !query
+USE default
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [default]
+
+
+-- !query
+DROP SCHEMA ivt_schema
+-- !query analysis
+DropNamespace false, false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [ivt_schema]
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_expr_col STRING DEFAULT 'c1'
+-- !query analysis
+CreateVariable default(cast(c1 as string), sql=''c1''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_expr_col
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_expr_view AS
+SELECT IDENTIFIER(identifier_expr_col) AS x FROM VALUES(1) AS t(c1)
+-- !query analysis
+CreateViewCommand `identifier_expr_view`, SELECT IDENTIFIER(identifier_expr_col) AS x FROM VALUES(1) AS t(c1), false, true, LocalTempView, UNSUPPORTED, true, [[identifier_expr_col]]
+   +- Project [c1#x AS x#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x]
+
+
+-- !query
+SELECT * FROM identifier_expr_view
+-- !query analysis
+Project [x#x]
++- SubqueryAlias identifier_expr_view
+   +- View (`identifier_expr_view`, [x#x])
+      +- Project [cast(x#x as int) AS x#x]
+         +- Project [c1#x AS x#x]
+            +- SubqueryAlias t
+               +- LocalRelation [c1#x]
+
+
+-- !query
+DROP VIEW identifier_expr_view
+-- !query analysis
+DropTempViewCommand identifier_expr_view, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_expr_col
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_expr_col
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_gtv_col STRING DEFAULT 'c1'
+-- !query analysis
+CreateVariable default(cast(c1 as string), sql=''c1''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_gtv_col
+
+
+-- !query
+CREATE OR REPLACE GLOBAL TEMPORARY VIEW identifier_gtv_view AS
+SELECT IDENTIFIER(identifier_gtv_col) AS x FROM VALUES(1) AS t(c1)
+-- !query analysis
+CreateViewCommand `identifier_gtv_view`, SELECT IDENTIFIER(identifier_gtv_col) AS x FROM VALUES(1) AS t(c1), false, true, GlobalTempView, UNSUPPORTED, true, [[identifier_gtv_col]]
+   +- Project [c1#x AS x#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x]
+
+
+-- !query
+SELECT * FROM global_temp.identifier_gtv_view
+-- !query analysis
+Project [x#x]
++- SubqueryAlias global_temp.identifier_gtv_view
+   +- View (`global_temp`.`identifier_gtv_view`, [x#x])
+      +- Project [cast(x#x as int) AS x#x]
+         +- Project [c1#x AS x#x]
+            +- SubqueryAlias t
+               +- LocalRelation [c1#x]
+
+
+-- !query
+DROP VIEW global_temp.identifier_gtv_view
+-- !query analysis
+DropTempViewCommand global_temp.identifier_gtv_view, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_gtv_col
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_gtv_col
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_view_name STRING DEFAULT 'identifier_named_view'
+-- !query analysis
+CreateVariable default(cast(identifier_named_view as string), sql=''identifier_named_view''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_view_name
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(identifier_view_name) AS SELECT 1 AS c1
+-- !query analysis
+CreateViewCommand `identifier_named_view`, SELECT 1 AS c1, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS c1#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT * FROM identifier_named_view
+-- !query analysis
+Project [c1#x]
++- SubqueryAlias identifier_named_view
+   +- View (`identifier_named_view`, [c1#x])
+      +- Project [cast(c1#x as int) AS c1#x]
+         +- Project [1 AS c1#x]
+            +- OneRowRelation
+
+
+-- !query
+DROP VIEW identifier_named_view
+-- !query analysis
+DropTempViewCommand identifier_named_view, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_view_name
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_view_name
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_name_part STRING DEFAULT 'identifier_named_view2'
+-- !query analysis
+CreateVariable default(cast(identifier_named_view2 as string), sql=''identifier_named_view2''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_name_part
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_body_part STRING DEFAULT 'c1'
+-- !query analysis
+CreateVariable default(cast(c1 as string), sql=''c1''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_body_part
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(identifier_name_part) AS
+SELECT IDENTIFIER(identifier_body_part) AS x FROM VALUES(1) AS t(c1)
+-- !query analysis
+CreateViewCommand `identifier_named_view2`, SELECT IDENTIFIER(identifier_body_part) AS x FROM VALUES(1) AS t(c1), false, true, LocalTempView, UNSUPPORTED, true, [[identifier_body_part]]
+   +- Project [c1#x AS x#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x]
+
+
+-- !query
+SELECT * FROM identifier_named_view2
+-- !query analysis
+Project [x#x]
++- SubqueryAlias identifier_named_view2
+   +- View (`identifier_named_view2`, [x#x])
+      +- Project [cast(x#x as int) AS x#x]
+         +- Project [c1#x AS x#x]
+            +- SubqueryAlias t
+               +- LocalRelation [c1#x]
+
+
+-- !query
+DROP VIEW identifier_named_view2
+-- !query analysis
+DropTempViewCommand identifier_named_view2, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_name_part
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_name_part
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_body_part
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_body_part
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=true
+-- !query analysis
+SetCommand (spark.sql.legacy.allowSessionVariableInPersistedView,Some(true))
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_p2a_col STRING DEFAULT 'c1'
+-- !query analysis
+CreateVariable default(cast(c1 as string), sql=''c1''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_p2a_col
+
+
+-- !query
+CREATE VIEW identifier_p2a_view AS SELECT 1 AS c1
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`identifier_p2a_view`, SELECT 1 AS c1, false, false, PersistedView, COMPENSATION, true
+   +- Project [1 AS c1#x]
+      +- OneRowRelation
+
+
+-- !query
+ALTER VIEW identifier_p2a_view AS SELECT IDENTIFIER(identifier_p2a_col) FROM VALUES(1) AS t(c1)
+-- !query analysis
+AlterViewAsCommand `spark_catalog`.`default`.`identifier_p2a_view`, SELECT IDENTIFIER(identifier_p2a_col) FROM VALUES(1) AS t(c1), true, [[identifier_p2a_col]]
+   +- Project [c1#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x]
+
+
+-- !query
+DROP VIEW identifier_p2a_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`identifier_p2a_view`, false, true, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_p2a_col
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_p2a_col
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=false
+-- !query analysis
+SetCommand (spark.sql.legacy.allowSessionVariableInPersistedView,Some(false))
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_nested_col STRING DEFAULT 'c1'
+-- !query analysis
+CreateVariable default(cast(c1 as string), sql=''c1''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_nested_col
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_nested_inner AS
+SELECT IDENTIFIER(identifier_nested_col) AS x FROM VALUES(1) AS t(c1)
+-- !query analysis
+CreateViewCommand `identifier_nested_inner`, SELECT IDENTIFIER(identifier_nested_col) AS x FROM VALUES(1) AS t(c1), false, true, LocalTempView, UNSUPPORTED, true, [[identifier_nested_col]]
+   +- Project [c1#x AS x#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x]
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_nested_outer AS
+SELECT x FROM identifier_nested_inner
+-- !query analysis
+CreateViewCommand `identifier_nested_outer`, SELECT x FROM identifier_nested_inner, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [x#x]
+      +- SubqueryAlias identifier_nested_inner
+         +- View (`identifier_nested_inner`, [x#x])
+            +- Project [cast(x#x as int) AS x#x]
+               +- Project [c1#x AS x#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [c1#x]
+
+
+-- !query
+SELECT * FROM identifier_nested_outer
+-- !query analysis
+Project [x#x]
++- SubqueryAlias identifier_nested_outer
+   +- View (`identifier_nested_outer`, [x#x])
+      +- Project [cast(x#x as int) AS x#x]
+         +- Project [x#x]
+            +- SubqueryAlias identifier_nested_inner
+               +- View (`identifier_nested_inner`, [x#x])
+                  +- Project [cast(x#x as int) AS x#x]
+                     +- Project [c1#x AS x#x]
+                        +- SubqueryAlias t
+                           +- LocalRelation [c1#x]
+
+
+-- !query
+DROP VIEW identifier_nested_outer
+-- !query analysis
+DropTempViewCommand identifier_nested_outer, false
+
+
+-- !query
+DROP VIEW identifier_nested_inner
+-- !query analysis
+DropTempViewCommand identifier_nested_inner, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_nested_col
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_nested_col
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_fn_target AS SELECT 1 AS c1
+-- !query analysis
+CreateViewCommand `identifier_fn_target`, SELECT 1 AS c1, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS c1#x]
+      +- OneRowRelation
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_fn_var STRING DEFAULT 'identifier_fn_target'
+-- !query analysis
+CreateVariable default(cast(identifier_fn_target as string), sql=''identifier_fn_target''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_fn_var
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_fn() RETURN SELECT count(*) FROM IDENTIFIER(identifier_fn_var)
+-- !query analysis
+CreateSQLFunctionCommand identifier_fn, , SELECT count(*) FROM IDENTIFIER(identifier_fn_var), false, true, false, false
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_fn_view AS SELECT identifier_fn() AS c
+-- !query analysis
+CreateViewCommand `identifier_fn_view`, SELECT identifier_fn() AS c, false, true, LocalTempView, UNSUPPORTED, true, [identifier_fn], [[identifier_fn_var]]
+   +- Project [identifier_fn() AS c#xL]
+      :  +- Aggregate [count(1) AS count(1)#xL]
+      :     +- SubqueryAlias identifier_fn_target
+      :        +- View (`identifier_fn_target`, [c1#x])
+      :           +- Project [cast(c1#x as int) AS c1#x]
+      :              +- Project [1 AS c1#x]
+      :                 +- OneRowRelation
+      +- Project
+         +- OneRowRelation
+
+
+-- !query
+SELECT * FROM identifier_fn_view
+-- !query analysis
+Project [c#xL]
++- SubqueryAlias identifier_fn_view
+   +- View (`identifier_fn_view`, [c#xL])
+      +- Project [cast(c#xL as bigint) AS c#xL]
+         +- Project [identifier_fn() AS c#xL]
+            :  +- Aggregate [count(1) AS count(1)#xL]
+            :     +- SubqueryAlias identifier_fn_target
+            :        +- View (`identifier_fn_target`, [c1#x])
+            :           +- Project [cast(c1#x as int) AS c1#x]
+            :              +- Project [1 AS c1#x]
+            :                 +- OneRowRelation
+            +- Project
+               +- OneRowRelation
+
+
+-- !query
+DROP VIEW identifier_fn_view
+-- !query analysis
+DropTempViewCommand identifier_fn_view, false
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_fn
+-- !query analysis
+DropFunctionCommand identifier_fn, false, true
+
+
+-- !query
+DROP VIEW identifier_fn_target
+-- !query analysis
+DropTempViewCommand identifier_fn_target, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_fn_var
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_fn_var
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW identifier_talter_view AS SELECT 1 AS c1
+-- !query analysis
+CreateViewCommand `identifier_talter_view`, SELECT 1 AS c1, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS c1#x]
+      +- OneRowRelation
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_talter_col STRING DEFAULT 'c1'
+-- !query analysis
+CreateVariable default(cast(c1 as string), sql=''c1''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_talter_col
+
+
+-- !query
+ALTER VIEW identifier_talter_view AS
+SELECT IDENTIFIER(identifier_talter_col) AS x FROM VALUES(1) AS t(c1)
+-- !query analysis
+AlterViewAsCommand `identifier_talter_view`, SELECT IDENTIFIER(identifier_talter_col) AS x FROM VALUES(1) AS t(c1), true, [[identifier_talter_col]]
+   +- Project [c1#x AS x#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x]
+
+
+-- !query
+SELECT * FROM identifier_talter_view
+-- !query analysis
+Project [x#x]
++- SubqueryAlias identifier_talter_view
+   +- View (`identifier_talter_view`, [x#x])
+      +- Project [cast(x#x as int) AS x#x]
+         +- Project [c1#x AS x#x]
+            +- SubqueryAlias t
+               +- LocalRelation [c1#x]
+
+
+-- !query
+DROP VIEW identifier_talter_view
+-- !query analysis
+DropTempViewCommand identifier_talter_view, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_talter_col
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_talter_col
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_cache_col STRING DEFAULT 'c1'
+-- !query analysis
+CreateVariable default(cast(c1 as string), sql=''c1''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_cache_col
+
+
+-- !query
+CACHE TABLE identifier_cache_view AS
+SELECT IDENTIFIER(identifier_cache_col) AS x FROM VALUES(1) AS t(c1)
+-- !query analysis
+CacheTableAsSelect identifier_cache_view, SELECT IDENTIFIER(identifier_cache_col) AS x FROM VALUES(1) AS t(c1), false, true, [[identifier_cache_col]]
+   +- Project [c1#x AS x#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x]
+
+
+-- !query
+SELECT * FROM identifier_cache_view
+-- !query analysis
+Project [x#x]
++- SubqueryAlias identifier_cache_view
+   +- View (`identifier_cache_view`, [x#x])
+      +- Project [cast(x#x as int) AS x#x]
+         +- Project [c1#x AS x#x]
+            +- SubqueryAlias t
+               +- LocalRelation [c1#x]
+
+
+-- !query
+UNCACHE TABLE identifier_cache_view
+-- !query analysis
+UncacheTable false, true
+   +- SubqueryAlias identifier_cache_view
+      +- View (`identifier_cache_view`, [x#x])
+         +- Project [cast(x#x as int) AS x#x]
+            +- Project [c1#x AS x#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [c1#x]
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_cache_col
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_cache_col
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_cache_name STRING DEFAULT 'identifier_cache_named'
+-- !query analysis
+CreateVariable default(cast(identifier_cache_named as string), sql=''identifier_cache_named''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_cache_name
+
+
+-- !query
+CACHE TABLE IDENTIFIER(identifier_cache_name) AS SELECT 1 AS c1
+-- !query analysis
+CacheTableAsSelect identifier_cache_named, SELECT 1 AS c1, false, true
+   +- Project [1 AS c1#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT * FROM identifier_cache_named
+-- !query analysis
+Project [c1#x]
++- SubqueryAlias identifier_cache_named
+   +- View (`identifier_cache_named`, [c1#x])
+      +- Project [cast(c1#x as int) AS c1#x]
+         +- Project [1 AS c1#x]
+            +- OneRowRelation
+
+
+-- !query
+UNCACHE TABLE identifier_cache_named
+-- !query analysis
+UncacheTable false, true
+   +- SubqueryAlias identifier_cache_named
+      +- View (`identifier_cache_named`, [c1#x])
+         +- Project [cast(c1#x as int) AS c1#x]
+            +- Project [1 AS c1#x]
+               +- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_cache_name
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_cache_name
