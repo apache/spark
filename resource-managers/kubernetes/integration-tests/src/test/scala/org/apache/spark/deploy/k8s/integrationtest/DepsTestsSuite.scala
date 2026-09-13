@@ -71,7 +71,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .withImage("alpine/minio:RELEASE.2025-10-15T17-29-55Z")
       .withImagePullPolicy("IfNotPresent")
       .withName(cName)
-      .withArgs("server", "/data")
+      .withArgs("server", "/home/minio/data")
       .withPorts(new ContainerPortBuilder()
           .withName(svcName)
           .withProtocol("TCP")
