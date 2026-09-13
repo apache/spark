@@ -158,20 +158,23 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
         case (p, Exists(sub, _, _, conditions, subHint)) =>
-          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          val join = buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
+          val (joinCond, outerPlan, newSub) =
+            rewriteExistentialExprInJoinCondition(conditions, p, sub)
+          val join = buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, joinCond),
             LeftSemi, joinCond, subHint)
           Project(p.output, join)
         case (p, Not(Exists(sub, _, _, conditions, subHint))) =>
-          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
-          val join = buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
+          val (joinCond, outerPlan, newSub) =
+            rewriteExistentialExprInJoinCondition(conditions, p, sub)
+          val join = buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, joinCond),
             LeftAnti, joinCond, subHint)
           Project(p.output, join)
         case (p, InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
           // Deduplicate conflicting attributes if any.
-          val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
-          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
-          val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
+          val dedupSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
+          val inConditions = values.zip(dedupSub.output).map(EqualTo.tupled)
+          val (joinCond, outerPlan, newSub) =
+            rewriteExistentialExprInJoinCondition(inConditions ++ conditions, p, dedupSub)
           val join = Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, joinCond),
             LeftSemi, joinCond, JoinHint(None, subHint))
           Project(p.output, join)
@@ -184,8 +187,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // Use EXISTS if performance matters to you.
 
           // Deduplicate conflicting attributes if any.
-          val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
-          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
+          val dedupSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
+          val inConditions = values.zip(dedupSub.output).map(EqualTo.tupled)
+          // The hoisted correlated predicates may carry existential sub-queries that only the
+          // sub-query plan can evaluate, see rewriteExistentialExprInJoinCondition.
+          val (subConditions, newSub) =
+            rewriteExistentialExprInSubqueryPlan(conditions, p, dedupSub)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions, p)
           // Expand the NOT IN expression with the NULL-aware semantic
           // to its full form. That is from:
@@ -199,7 +206,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // SELECT ... FROM A WHERE A.A1 NOT IN (SELECT B.B1 FROM B WHERE B.B2 = A.A2 AND B.B3 > 1)
           // will have the final conditions in the LEFT ANTI as
           // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2) AND B.B3 > 1
-          val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
+          val finalJoinCond = (nullAwareJoinConds ++ subConditions).reduceLeft(And)
           Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, Some(finalJoinCond)),
             LeftAnti, Option(finalJoinCond), JoinHint(None, subHint))
         case (p, predicate) =>
@@ -398,14 +405,21 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     (newExpr, newPlan)
   }
 
+  /**
+   * Same as [[rewriteExistentialExpr]], but it also returns the newly introduced attributes, and
+   * it only rewrites the existential sub-queries for which `canRewrite` returns true. The ones
+   * that are left untouched stay in the returned expression.
+   */
   private def rewriteExistentialExprWithAttrs(
     exprs: Seq[Expression],
-    plan: LogicalPlan): (Option[Expression], LogicalPlan, Seq[Attribute]) = {
+    plan: LogicalPlan,
+    canRewrite: Expression => Boolean = _ => true): (Option[Expression], LogicalPlan,
+      Seq[Attribute]) = {
     var newPlan = plan
     val introducedAttrs = ArrayBuffer.empty[Attribute]
     val newExprs = exprs.map { e =>
       e.transformDownWithPruning(_.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
-        case Exists(sub, _, _, conditions, subHint) =>
+        case sq @ Exists(sub, _, _, conditions, subHint) if canRewrite(sq) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           val existenceJoin = ExistenceJoin(exists)
           val newCondition = conditions.reduceLeftOption(And)
@@ -414,7 +428,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
               existenceJoin, newCondition, subHint)
           introducedAttrs += exists
           exists
-        case Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
+        case sq @ Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)))
+            if canRewrite(sq) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
@@ -439,7 +454,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
             ExistenceJoin(exists), Some(finalJoinCond), joinHint)
           introducedAttrs += exists
           Not(exists)
-        case InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)) =>
+        case sq @ InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))
+            if canRewrite(sq) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
@@ -453,6 +469,70 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       }
     }
     (newExprs.reduceOption(And), newPlan, introducedAttrs.toSeq)
+  }
+
+  /**
+   * Returns true if `e` references any of the attributes produced by `plan`.
+   */
+  private def referencesPlan(e: Expression, plan: LogicalPlan): Boolean = {
+    e.references.intersect(plan.outputSet).nonEmpty
+  }
+
+  /**
+   * Rewrites the existential sub-queries that are nested in the correlated predicates which
+   * [[PullupCorrelatedPredicates]] hoisted out of a predicate sub-query, and which therefore end
+   * up in the condition of the semi/anti join that replaces that sub-query.
+   *
+   * A hoisted predicate can carry a nested existential sub-query out of the sub-query plan,
+   * because a correlated predicate is hoisted as a whole when it is a disjunction. For example
+   *
+   *   SELECT * FROM t1 WHERE EXISTS (
+   *     SELECT 1 FROM t2 WHERE t1.a = t2.c1 OR t2.c1 IN (SELECT col1 FROM t3))
+   *
+   * hoists `a = c1 OR c1 IN (SELECT col1 FROM t3)` into the join condition. Such a nested
+   * sub-query must be rewritten against the plan that produces the attributes it references:
+   * the one above references `c1`, which is produced by the sub-query plan and not by the outer
+   * plan, so its existence join has to be built on top of the sub-query plan. Building it on top
+   * of the outer plan instead yields a join whose condition references an attribute that neither
+   * of its children can produce (SPARK-59351).
+   *
+   * A nested sub-query that references both plans cannot be rewritten into an existence join on
+   * either side, so it is left in the join condition, where both plans are in scope. Such a
+   * sub-query is necessarily uncorrelated, as being correlated to the outer plan as well would
+   * require two levels of correlation, which the Analyzer rejects. It is then either planned as
+   * an in-subquery filter or reported as unsupported by the rewrite of predicate sub-queries in
+   * join conditions.
+   *
+   * Returns the rewritten condition along with the updated outer and sub-query plans.
+   */
+  private def rewriteExistentialExprInJoinCondition(
+      conditions: Seq[Expression],
+      outerPlan: LogicalPlan,
+      subPlan: LogicalPlan): (Option[Expression], LogicalPlan, LogicalPlan) = {
+    val (subCond, newSubPlan) =
+      rewriteExistentialExprInSubqueryPlan(conditions, outerPlan, subPlan)
+    // The sub-queries that do not reference the sub-query plan are rewritten against the outer
+    // plan, as they only reference attributes of the outer plan, if any.
+    val (newCond, newOuterPlan, _) = rewriteExistentialExprWithAttrs(
+      subCond.toSeq, outerPlan, e => !referencesPlan(e, subPlan))
+    (newCond, newOuterPlan, newSubPlan)
+  }
+
+  /**
+   * Rewrites the existential sub-queries in `conditions` that can only be evaluated by the
+   * sub-query plan, that is those referencing the sub-query plan but not the outer plan, into
+   * existence joins on top of the sub-query plan. See
+   * [[rewriteExistentialExprInJoinCondition]] for details.
+   *
+   * Returns the rewritten condition along with the updated sub-query plan.
+   */
+  private def rewriteExistentialExprInSubqueryPlan(
+      conditions: Seq[Expression],
+      outerPlan: LogicalPlan,
+      subPlan: LogicalPlan): (Option[Expression], LogicalPlan) = {
+    val (newCond, newSubPlan, _) = rewriteExistentialExprWithAttrs(conditions, subPlan,
+      e => referencesPlan(e, subPlan) && !referencesPlan(e, outerPlan))
+    (newCond, newSubPlan)
   }
 }
 
