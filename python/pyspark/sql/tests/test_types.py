@@ -1052,8 +1052,8 @@ class TypesTestsMixin:
             ("geography(SRID:ANY)", GeographyType("ANY")),
             ("geography(srid:any)", GeographyType("ANY")),
         ]
-        for json, expected in valid_test_cases:
-            python_datatype = _parse_datatype_json_value(json)
+        for json_value, expected in valid_test_cases:
+            python_datatype = _parse_datatype_json_value(json_value)
             self.assertEqual(python_datatype, expected)
             self.assertEqual(expected, _parse_datatype_json_string(expected.json()))
 
@@ -1085,9 +1085,9 @@ class TypesTestsMixin:
             "geography(SRID0)",
             "geography(SRID:4326, ALG)",
         ]
-        for json in invalid_test_cases:
+        for json_value in invalid_test_cases:
             with self.assertRaises(Exception):
-                _parse_datatype_json_value(json)
+                _parse_datatype_json_value(json_value)
 
     def test_geometry_json_serde(self):
         from pyspark.sql.types import _parse_datatype_json_string, _parse_datatype_json_value
@@ -1098,8 +1098,8 @@ class TypesTestsMixin:
             ("geometry(SRID:ANY)", GeometryType("ANY")),
             ("geometry(srid:any)", GeometryType("ANY")),
         ]
-        for json, expected in valid_test_cases:
-            python_datatype = _parse_datatype_json_value(json)
+        for json_value, expected in valid_test_cases:
+            python_datatype = _parse_datatype_json_value(json_value)
             self.assertEqual(python_datatype, expected)
             self.assertEqual(expected, _parse_datatype_json_string(expected.json()))
 
@@ -1129,9 +1129,9 @@ class TypesTestsMixin:
             "geometry(SRID:0,)",
             "geometry(SRID0)",
         ]
-        for json in invalid_test_cases:
+        for json_value in invalid_test_cases:
             with self.assertRaises(Exception):
-                _parse_datatype_json_value(json)
+                _parse_datatype_json_value(json_value)
 
     def test_udt(self):
         from pyspark.sql.types import _infer_type, _make_type_verifier, _parse_datatype_json_string
@@ -2857,9 +2857,9 @@ class TypesTestsMixin:
         )
 
         # check parse_json
-        for key, json, obj in expected_values:
-            self.assertEqual(VariantVal.parseJson(json).toJson(), json)
-            self.assertEqual(VariantVal.parseJson(json).toPython(), obj)
+        for key, json_value, obj in expected_values:
+            self.assertEqual(VariantVal.parseJson(json_value).toJson(), json_value)
+            self.assertEqual(VariantVal.parseJson(json_value).toPython(), obj)
 
         # compare the parse_json in Spark vs python. `json_str` contains all of `expected_values`.
         parse_json_spark_output = variants[0]
