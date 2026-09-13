@@ -826,10 +826,31 @@ Apart from these, the following properties are also available, and may be useful
     Where both set the same variable, this one wins. An environment variable that Spark sets for a
     Python worker itself takes precedence over both.
     <br /><br />
-    Currently applied to the regular scalar Python UDF: its Arrow-optimized form, its non-Arrow
-    form, and the element-wise form a UDF takes inside the lambda of a higher-order function such
-    as <code>transform</code>. Other Python function families -- pandas UDFs, Python UDTFs, and the
-    streaming and listener paths -- do not receive it yet.
+    Applied to every Python worker the session launches for a Python function it supplied: scalar
+    UDFs in each of their forms, including Arrow-optimized, non-Arrow, pandas, iterator and the
+    element-wise form a UDF takes inside the lambda of a higher-order function such as
+    <code>transform</code>; <code>mapInPandas</code> and <code>mapInArrow</code>; grouped-map,
+    cogrouped-map, grouped-aggregate and window functions; Python UDTFs, both row and Arrow;
+    <code>applyInPandasWithState</code> and <code>transformWithState</code>;
+    <code>writeStream.foreach</code>; and Python data sources, including the workers that plan them
+    and read a streaming source.
+    <br /><br />
+    A running streaming query holds a configuration snapshot, because its batches run on a cloned
+    session whose configurations are copied when the query starts. A change made while a query is
+    running therefore reaches it only when the query restarts.
+    <br /><br />
+    A dynamic Python UDTF's <code>analyze</code> method and a Python data source's schema and
+    partition planning run in a worker while a query is being planned. Those results are resolved
+    once for a given DataFrame and are not recomputed if the environment changes afterwards; a new
+    read picks up the current values.
+    <br /><br />
+    Some Python code a session supplies does not run in a worker Spark launches, and no session
+    environment applies to it. <code>foreachBatch</code> receives the environment on Spark Connect,
+    where the function runs in a worker the server starts, but not on classic Spark, where it is a
+    callback into the client's own Python process. A streaming query listener added with
+    <code>addListener</code> likewise runs its callbacks in the client process on both classic Spark
+    and Spark Connect. In each of those cases the client process's own environment is what the
+    callback observes.
     <br /><br />
     Names Spark reserves for itself are rejected: any name beginning with <code>SPARK_</code>,
     <code>PYSPARK_</code> or <code>PYTHON_WORKER_FACTORY_</code>, together with

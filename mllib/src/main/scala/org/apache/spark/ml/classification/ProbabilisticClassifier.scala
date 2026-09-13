@@ -124,7 +124,7 @@ abstract class ProbabilisticClassifier[
  *     <td>Set</td>
  *     <td>Set</td>
  *     <td>Set</td>
- *     <td><code>predictRawColumn</code> => <code>raw2probabilityColumn</code> =>
+ *     <td><code>predictRawColumn</code> => <code>raw2probabilityColumn</code> &amp;
  *       <code>raw2predictionColumn</code></td>
  *   </tr>
  * </table>

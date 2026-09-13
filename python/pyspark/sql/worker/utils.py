@@ -110,29 +110,32 @@ def worker_run(main: Callable, infile: IO, outfile: IO) -> None:
         conf = RunnerConf(infile)
 
         _accumulatorRegistry.clear()
-        accumulator = _deserialize_accumulator(
-            SpecialAccumulatorIds.SQL_UDF_PROFIER, {}, ProfileResultsParam
-        )
+        profiler = conf.profiler
+        if profiler in ("perf", "memory"):
+            accumulator = _deserialize_accumulator(
+                SpecialAccumulatorIds.SQL_UDF_PROFIER, {}, ProfileResultsParam
+            )
+            accumulator_v2 = _deserialize_accumulator(
+                SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
+            )
 
-        accumulator_v2 = _deserialize_accumulator(
-            SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
-        )
+            if main.__module__ == "__main__":
+                try:
+                    worker_module = (
+                        sys.modules["__main__"].__spec__.name  # type: ignore[union-attr]
+                    )
+                except Exception:
+                    worker_module = "__main__"
+            else:
+                worker_module = main.__module__
+            worker_module = worker_module.split(".")[-1]
 
-        if main.__module__ == "__main__":
-            try:
-                worker_module = sys.modules["__main__"].__spec__.name  # type: ignore[union-attr]
-            except Exception:
-                worker_module = "__main__"
-        else:
-            worker_module = main.__module__
-        worker_module = worker_module.split(".")[-1]
-
-        if conf.profiler == "perf":
-            with WorkerPerfProfiler(accumulator, accumulator_v2, worker_module):
-                main(infile, outfile)
-        elif conf.profiler == "memory":
-            with WorkerMemoryProfiler(accumulator, accumulator_v2, worker_module, main):
-                main(infile, outfile)
+            if profiler == "perf":
+                with WorkerPerfProfiler(accumulator, accumulator_v2, worker_module):
+                    main(infile, outfile)
+            else:
+                with WorkerMemoryProfiler(accumulator, accumulator_v2, worker_module, main):
+                    main(infile, outfile)
         else:
             main(infile, outfile)
     except BaseException as e:

@@ -1522,7 +1522,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 if cleanup is not None:
                     cleanup()
 
-        return func, None, ser, ser
+        return func, ser
 
     elif (
         eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF
@@ -1686,7 +1686,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 if cleanup is not None:
                     cleanup()
 
-        return func, None, ser, ser
+        return func, ser
 
     elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
         import pyarrow as pa
@@ -1794,7 +1794,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 if cleanup is not None:
                     cleanup()
 
-        return func, None, ser, ser
+        return func, ser
 
     else:
 
@@ -1896,7 +1896,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 if cleanup is not None:
                     cleanup()
 
-        return mapper, None, ser, ser
+        return mapper, ser
 
 
 def _elementwise_renest(flat_values, shape_lengths, is_large):
@@ -2186,8 +2186,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             )
             yield from map(ArrowBatchTransformer.wrap_struct, verified_iter)
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
         import pyarrow as pa
@@ -2219,8 +2218,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 verify_scalar_result(output_batch, batch.num_rows)
                 yield output_batch
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
         import pyarrow as pa
@@ -2279,8 +2277,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             # Verify iterator consumed
             verify_iterator_exhausted(args_iter)
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF:
         import pyarrow as pa
@@ -2319,8 +2316,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 
-        # profiling is not supported for UDF
-        return grouped_func, None, ser, ser
+        return grouped_func, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF:
         import pyarrow as pa
@@ -2350,8 +2346,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 batch = pa.RecordBatch.from_arrays([pa.array([result])], ["_0"])
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 
-        # profiling is not supported for UDF
-        return grouped_func, None, ser, ser
+        return grouped_func, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF:
         import pyarrow as pa
@@ -2469,8 +2464,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 for start in range(0, len(entries), cap):
                     yield make_batch(entries[start : start + cap])
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF:
         import pyarrow as pa
@@ -2516,8 +2510,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 
-        # profiling is not supported for UDF
-        return grouped_func, None, ser, ser
+        return grouped_func, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         import pandas as pd
@@ -2560,8 +2553,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
 
-        # profiling is not supported for UDF
-        return grouped_func, None, ser, ser
+        return grouped_func, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
         import pandas as pd
@@ -2606,8 +2598,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
 
-        # profiling is not supported for UDF
-        return grouped_func, None, ser, ser
+        return grouped_func, ser
 
     if eval_type == PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF:
         import pyarrow as pa
@@ -2674,8 +2665,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 
-        # profiling is not supported for UDF
-        return grouped_func, None, ser, ser
+        return grouped_func, ser
 
     if eval_type == PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF:
         import pyarrow as pa
@@ -2769,8 +2759,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 
-        # profiling is not supported for UDF
-        return grouped_func, None, ser, ser
+        return grouped_func, ser
 
     if eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
         import pandas as pd
@@ -2857,8 +2846,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
 
-        # profiling is not supported for UDF
-        return grouped_func, None, ser, ser
+        return grouped_func, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
         import pyarrow as pa
@@ -2918,8 +2906,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 for batch in result.to_batches():
                     yield ArrowBatchTransformer.wrap_struct(batch)
 
-        # profiling is not supported for UDF
-        return grouped_func, None, ser, ser
+        return grouped_func, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF:
         import pyarrow as pa
@@ -2982,8 +2969,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 for _ in value_batches:
                     pass
 
-        # profiling is not supported for UDF
-        return grouped_func, None, ser, ser
+        return grouped_func, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         import pandas as pd
@@ -3053,8 +3039,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 )
                 del result
 
-        # profiling is not supported for UDF
-        return grouped_func, None, ser, ser
+        return grouped_func, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
         import pandas as pd
@@ -3129,8 +3114,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 for _ in group_iter:
                     pass
 
-        # profiling is not supported for UDF
-        return grouped_func, None, ser, ser
+        return grouped_func, ser
 
     if eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
         import pyarrow as pa
@@ -3182,8 +3166,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 for batch in result.to_batches():
                     yield ArrowBatchTransformer.wrap_struct(batch)
 
-        # profiling is not supported for UDF
-        return cogrouped_func, None, ser, ser
+        return cogrouped_func, ser
 
     if eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
         import pandas as pd
@@ -3259,8 +3242,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         import pandas as pd
@@ -3328,8 +3310,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 )
                 del result
 
-        # profiling is not supported for UDF
-        return cogrouped_func, None, ser, ser
+        return cogrouped_func, ser
 
     if (
         eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
@@ -3421,8 +3402,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if (
         eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
@@ -3511,8 +3491,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF:
         # This path exchanges data with the JVM over Arrow, so PyArrow is required. Fail with a
@@ -3641,8 +3620,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
@@ -3767,8 +3745,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
@@ -3932,8 +3909,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
             yield from process_results()
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
         import pandas as pd
@@ -4004,8 +3980,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         import pandas as pd
@@ -4081,8 +4056,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             # Verify iterator consumed
             verify_iterator_exhausted(args_iter)
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         import pandas as pd
@@ -4224,8 +4198,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 )
             )
 
-        # profiling is not supported for UDF
-        return transform_with_state_func, None, ser, ser
+        return transform_with_state_func, ser
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF:
         import pandas as pd
@@ -4437,8 +4410,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 )
             )
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
         import pandas as pd
@@ -4771,8 +4743,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     pdfs, pdf_data_cnt, return_type, state_pdfs, state_data_cnt
                 )
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
         import pyarrow as pa
@@ -4873,8 +4844,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 )
             )
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
         import pyarrow as pa
@@ -5054,8 +5024,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 )
             )
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         # Plain Python (pickle) UDFs, the only eval type reaching this branch. read_single_udf
@@ -5072,8 +5041,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 for row in data
             )
 
-        # profiling is not supported for UDF
-        return func, None, ser, ser
+        return func, ser
 
     else:
         raise ValueError("Unknown eval type: {}".format(eval_type))
@@ -5115,21 +5083,24 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         eval_type = init_info.eval_type
         runner_conf = RunnerConf(init_info.runner_conf)
         eval_conf = EvalConf(init_info.eval_conf)
+        # UDF and UDTF runners fold profiling into func at construction time (see
+        # read_single_udf); only the classic RDD command carries a profiler of its own.
+        profiler = None
         if eval_type == PythonEvalType.NON_UDF:
             assert isinstance(init_info.udf_info, (bytes, memoryview))
             func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf_info)
-        elif eval_type in (
-            PythonEvalType.SQL_TABLE_UDF,
-            PythonEvalType.SQL_ARROW_TABLE_UDF,
-            PythonEvalType.SQL_ARROW_UDTF,
-        ):
-            func, profiler, deserializer, serializer = read_udtf(
-                pickleSer, init_info.udf_info, eval_type, runner_conf, eval_conf
-            )
         else:
-            func, profiler, deserializer, serializer = read_udfs(
+            # UDF and UDTF runners read input and write output through a single serializer.
+            is_udtf = eval_type in (
+                PythonEvalType.SQL_TABLE_UDF,
+                PythonEvalType.SQL_ARROW_TABLE_UDF,
+                PythonEvalType.SQL_ARROW_UDTF,
+            )
+            read = read_udtf if is_udtf else read_udfs
+            func, serializer = read(
                 pickleSer, init_info.udf_info, eval_type, runner_conf, eval_conf
             )
+            deserializer = serializer
 
         init_time = time.time()
 

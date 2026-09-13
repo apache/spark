@@ -125,7 +125,7 @@ class CSVOptions(
   val extension = {
     val ext = parameters.getOrElse(EXTENSION, "csv")
     if (ext.size != 3 && !ext.forall(_.isLetter)) {
-      throw QueryExecutionErrors.invalidFileExtensionError(EXTENSION, ext)
+      throw QueryExecutionErrors.invalidFileExtensionError("csv", ext)
     }
 
     ext

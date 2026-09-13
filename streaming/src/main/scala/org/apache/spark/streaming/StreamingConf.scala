@@ -20,6 +20,7 @@ package org.apache.spark.streaming
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.streaming.util.OpenHashMapBasedStateMap.DELTA_CHAIN_LENGTH_THRESHOLD
 
 object StreamingConf {
@@ -40,6 +41,16 @@ object StreamingConf {
     ConfigBuilder("spark.streaming.backpressure.initialRate")
       .version("2.0.0")
       .fallbackConf(RECEIVER_MAX_RATE)
+
+  private[streaming] val RAW_INPUT_MAX_BLOCK_SIZE =
+    ConfigBuilder("spark.streaming.raw.maxBlockSizeBytes")
+      .doc("Maximum size in bytes of a single block frame accepted by rawSocketStream " +
+        "receivers. The receiver allocates a buffer of exactly the size announced in " +
+        "the frame header before reading the frame body; frames announcing a negative " +
+        "length or one larger than this limit are rejected with an error.")
+      .version("5.0.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("1g")
 
   private[streaming] val BLOCK_INTERVAL =
     ConfigBuilder("spark.streaming.blockInterval")

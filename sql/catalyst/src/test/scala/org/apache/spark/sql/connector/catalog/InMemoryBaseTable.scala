@@ -848,6 +848,10 @@ abstract class InMemoryBaseTable(
     }
 
     override def filter(filters: Array[Filter]): Unit = {
+      if (filters.exists(_.isInstanceOf[AlwaysFalse])) {
+        this.data = Seq.empty
+        return
+      }
       if (partitioning.length == 1 && identityPartitionReferences.length == 1) {
         val ref = identityPartitionReferences.head
         filters.foreach {

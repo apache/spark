@@ -18,21 +18,26 @@
 package org.apache.spark.deploy.history
 
 import java.io.File
+import java.util.concurrent.{CountDownLatch, FutureTask, TimeUnit}
+
+import scala.concurrent.duration._
 
 import org.mockito.AdditionalAnswers
 import org.mockito.ArgumentMatchers.{anyBoolean, anyLong, eq => meq}
 import org.mockito.Mockito.{doAnswer, spy}
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend
 import org.apache.spark.status.KVUtils
 import org.apache.spark.tags.ExtendedLevelDBTest
-import org.apache.spark.util.{ManualClock, Utils}
+import org.apache.spark.util.{Clock, ManualClock, Utils}
 import org.apache.spark.util.kvstore.KVStore
 
-abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
+abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter
+  with Eventually {
 
   protected def backend: HybridStoreDiskBackend.Value
 
@@ -60,13 +65,58 @@ abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAn
     }
   }
 
-  private def mockManager(): HistoryServerDiskManager = {
+  private def mockManager(clock: Clock = new ManualClock()): HistoryServerDiskManager = {
     val conf = new SparkConf().set(MAX_LOCAL_DISK_USAGE, MAX_USAGE)
     val manager = spy[HistoryServerDiskManager](
-      new HistoryServerDiskManager(conf, testDir, store, new ManualClock()))
+      new HistoryServerDiskManager(conf, testDir, store, clock))
     doAnswer(AdditionalAnswers.returnsFirstArg[Long]()).when(manager)
       .approximateSize(anyLong(), anyBoolean())
     manager
+  }
+
+  /**
+   * Waits until `thread` is blocked on the lock another thread holds, or has finished, which
+   * lets a regression that no longer takes the lock fail fast instead of timing out.
+   */
+  private def awaitBlockedOrDone(thread: Thread): Unit = {
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      assert(Set(Thread.State.BLOCKED, Thread.State.TERMINATED).contains(thread.getState))
+    }
+  }
+
+  /** Commits a store of size 2 for app1 and releases it, so it stays on disk and evictable. */
+  private def commitIdleStore(manager: HistoryServerDiskManager): File = {
+    val lease = manager.lease(2)
+    doReturn(2L).when(manager).sizeOf(meq(lease.tmpPath))
+    val dst = lease.commit("app1", None)
+    doReturn(2L).when(manager).sizeOf(meq(dst))
+    manager.release("app1", None)
+    assert(manager.committed() === 2)
+    dst
+  }
+
+  private case class ParkedRelease(thread: Thread, task: FutureTask[Unit], resume: CountDownLatch)
+
+  /**
+   * Runs release(delete = true) for app1 on its own thread, and returns once it is parked inside
+   * sizeOf(dst), i.e. after it decided to deduct the store but before it deleted it.
+   */
+  private def parkReleaseInSizeOf(manager: HistoryServerDiskManager, dst: File): ParkedRelease = {
+    val parked = new CountDownLatch(1)
+    val resume = new CountDownLatch(1)
+    val task = new FutureTask[Unit](() => manager.release("app1", None, delete = true))
+    val thread = new Thread(task)
+    doAnswer(_ => {
+      // Only park the release thread; on the pre-fix code, openStore() also measures the store.
+      if (Thread.currentThread() eq thread) {
+        parked.countDown()
+        resume.await(10, TimeUnit.SECONDS)
+      }
+      2L
+    }).when(manager).sizeOf(meq(dst))
+    thread.start()
+    assert(parked.await(10, TimeUnit.SECONDS))
+    ParkedRelease(thread, task, resume)
   }
 
   test("leasing space") {
@@ -250,6 +300,115 @@ abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAn
     assert(!store.view(classOf[ApplicationStoreInfo]).iterator().hasNext)
     assert(manager2.committed() === 0)
     assert(manager2.free() === MAX_USAGE)
+  }
+
+  test("SPARK-58985: release with delete is atomic with openStore") {
+    val manager = mockManager()
+    val dst = commitIdleStore(manager)
+
+    val release = parkReleaseInSizeOf(manager, dst)
+    val openStoreTask = new FutureTask[Option[File]](() => manager.openStore("app1", None))
+    val openStoreThread = new Thread(openStoreTask)
+    try {
+      openStoreThread.start()
+      awaitBlockedOrDone(openStoreThread)
+    } finally {
+      release.resume.countDown()
+    }
+    release.task.get(10, TimeUnit.SECONDS)
+
+    // release() holds the lock until the store is deleted, so openStore() must not hand out the
+    // path, and the size is deducted exactly once.
+    assert(openStoreTask.get(10, TimeUnit.SECONDS).isEmpty)
+    assert(manager.committed() === 0)
+    assert(!dst.exists())
+  }
+
+  test("SPARK-58985: makeRoom is atomic with release") {
+    val manager = mockManager()
+    val dst = commitIdleStore(manager)
+
+    // Run a lease() that has to evict the store while release() is deleting it.
+    val release = parkReleaseInSizeOf(manager, dst)
+    val leaseTask = new FutureTask[Unit](() => manager.lease(2))
+    val leaseThread = new Thread(leaseTask)
+    try {
+      leaseThread.start()
+      awaitBlockedOrDone(leaseThread)
+    } finally {
+      release.resume.countDown()
+    }
+    release.task.get(10, TimeUnit.SECONDS)
+    leaseTask.get(10, TimeUnit.SECONDS)
+
+    // release() deleted the store first, so makeRoom() found nothing left to deduct.
+    assert(manager.committed() === 0)
+    assert(!dst.exists())
+    assert(manager.free() === 1)
+  }
+
+  test("SPARK-58985: makeRoom deducts a store deleted out of band") {
+    val manager = mockManager()
+    val dst = commitIdleStore(manager)
+    Utils.deleteRecursively(dst)
+
+    // The store is still counted and listed, so evicting it must deduct its size.
+    manager.lease(2)
+    assert(manager.committed() === 0)
+    assert(!store.view(classOf[ApplicationStoreInfo]).iterator().hasNext)
+  }
+
+  test("SPARK-58985: commit deducts a store deleted out of band") {
+    val manager = mockManager()
+    val dst = commitIdleStore(manager)
+    Utils.deleteRecursively(dst)
+
+    // A lease that fits without evicting anything, so commit() meets the leftover entry itself.
+    val lease = manager.lease(1)
+    doReturn(1L).when(manager).sizeOf(meq(lease.tmpPath))
+    assert(lease.commit("app1", None) === dst)
+    assert(manager.committed() === 1)
+    assert(store.read(classOf[ApplicationStoreInfo], dst.getAbsolutePath).size === 1)
+  }
+
+  test("SPARK-58985: commit is atomic with release") {
+    // updateApplicationStoreInfo() reads the clock after commit() has moved the store into
+    // place; park commit() there and run release() concurrently.
+    val inCommit = new CountDownLatch(1)
+    val resumeCommit = new CountDownLatch(1)
+    val manager = mockManager(new ManualClock() {
+      override def getTimeMillis(): Long = {
+        inCommit.countDown()
+        resumeCommit.await(10, TimeUnit.SECONDS)
+        super.getTimeMillis()
+      }
+    })
+    val lease = manager.lease(2)
+    doReturn(2L).when(manager).sizeOf(meq(lease.tmpPath))
+    val dst = manager.appStorePath("app1", None)
+    doReturn(2L).when(manager).sizeOf(meq(dst))
+
+    val commitTask = new FutureTask[File](() => lease.commit("app1", None))
+    val commitThread = new Thread(commitTask)
+    val releaseTask = new FutureTask[Unit](() => manager.release("app1", None, delete = true))
+    val releaseThread = new Thread(releaseTask)
+    try {
+      commitThread.start()
+      assert(inCommit.await(10, TimeUnit.SECONDS))
+      releaseThread.start()
+      awaitBlockedOrDone(releaseThread)
+    } finally {
+      resumeCommit.countDown()
+    }
+    commitTask.get(10, TimeUnit.SECONDS)
+    releaseTask.get(10, TimeUnit.SECONDS)
+
+    // release() cannot see the store until commit() has registered it, so it deducts the size
+    // exactly once; the provider's own release of the committed store then finds nothing left.
+    assert(manager.committed() === 0)
+    assert(!dst.exists())
+    manager.release("app1", None, delete = true)
+    assert(manager.committed() === 0)
   }
 
   test("SPARK-38095: appStorePath should use backend extensions") {
