@@ -980,9 +980,10 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   /**
    * The SPARK-52921 candidate partitioning derived from the children, which `outputPartitioning`
    * reports when the decision says this union is not a plain concatenation. That decision comes out
-   * plain on either of two grounds: `UNION_OUTPUT_PARTITIONING` being off, which is read where the
-   * decision is stamped rather than here, or this coming back `UnknownPartitioning`. Under that
-   * conf the candidate can still be concrete while the union reports unknown.
+   * plain on either of two grounds: `UNION_OUTPUT_PARTITIONING` being off, which is taken from the
+   * record `SnapshotUnionOutputPartitioningConf` writes rather than read here, or this coming back
+   * `UnknownPartitioning`. Under that conf the candidate can still be concrete while the union
+   * reports unknown.
    */
   private def rawPartitioning: Partitioning = {
     // Children's partitionings with attributes remapped to this union's output attributes.
@@ -1056,20 +1057,38 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * for `numOutputRows`. A fresh copy inherits the answer instead, since `withNewChildren` ends in
    * `copyTagsFrom`.
    *
-   * `UNION_OUTPUT_PARTITIONING` is read where the decision is stamped rather than in
-   * `rawPartitioning`, so it too is fixed once the plan is prepared: `conf` is live, and a plan
-   * must execute by the partitioning it was planned against.
+   * `UNION_OUTPUT_PARTITIONING` is taken from `snapshotOutputPartitioningConf`, recorded before
+   * `EnsureRequirements`, so the value the exchanges are planned against is the value execution
+   * uses; a node created after that pass carries no record and reads the live conf. Reading it live
+   * here would leave one rule between the two: `conf` is live, and another thread setting it in
+   * that window would let a parent drop an exchange over a concrete partitioning and then have the
+   * stamp freeze plain concatenation under it.
    *
    * A read before `StampUnionDecisions` answers from the children as they are then, and does not
    * write, so observing an unprepared plan cannot decide anything for the prepared one.
    */
   private[execution] def isPlainUnion: Boolean = stampedDecisions.map(_.plainUnion).getOrElse {
-    !conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING) ||
-      rawPartitioning.isInstanceOf[UnknownPartitioning]
+    !outputPartitioningEnabled || rawPartitioning.isInstanceOf[UnknownPartitioning]
   }
 
   private def stampedDecisions: Option[UnionExec.Decisions] =
     getTagValue(UnionExec.DECISIONS)
+
+  private def outputPartitioningEnabled: Boolean =
+    getTagValue(UnionExec.OUTPUT_PARTITIONING_CONF)
+      .getOrElse(conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING))
+
+  /**
+   * Records the conf `isPlainUnion` answers from, read once for the whole plan by
+   * `SnapshotUnionOutputPartitioningConf` and passed in here, ahead of `EnsureRequirements`, whose
+   * reads the following stamp has to agree with. Only the conf, never a partitioning: the exchanges
+   * `EnsureRequirements` adds are not there yet, so a decision taken here would freeze plain on a
+   * union whose children only become co-partitioned there.
+   */
+  private[execution] def snapshotOutputPartitioningConf(enabled: Boolean): Unit =
+    if (getTagValue(UnionExec.OUTPUT_PARTITIONING_CONF).isEmpty) {
+      setTagValue(UnionExec.OUTPUT_PARTITIONING_CONF, enabled)
+    }
 
   /**
    * Fixes this node's decisions for the rest of the plan's life. Called by `StampUnionDecisions`,
@@ -1393,6 +1412,14 @@ object UnionExec {
    * `metricTerm` for `numOutputRows`.
    */
   private val DECISIONS = TreeNodeTag[Decisions]("unionDecisions")
+
+  /**
+   * The `UNION_OUTPUT_PARTITIONING` value `isPlainUnion` answers from until the decision is
+   * stamped. See `snapshotOutputPartitioningConf`. Written before `EnsureRequirements` and read by
+   * the stamp after it, so both phases use one value; travels onto rebuilt nodes the same way
+   * `DECISIONS` does, which is what carries it across the copies `EnsureRequirements` makes.
+   */
+  private val OUTPUT_PARTITIONING_CONF = TreeNodeTag[Boolean]("unionOutputPartitioningConf")
 
   /**
    * Codegen operators that return more than one RDD from `inputRDDs()`.

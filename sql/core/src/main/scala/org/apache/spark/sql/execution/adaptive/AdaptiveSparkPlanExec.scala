@@ -134,6 +134,10 @@ case class AdaptiveSparkPlanExec(
     Seq(
       CoalesceBucketsInJoin,
       RemoveRedundantProjects,
+      // Must run before `ensureRequirements`, which asks a `UnionExec` what it reports: it
+      // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
+      // decision under the same value the exchanges were planned against.
+      SnapshotUnionOutputPartitioningConf,
       ensureRequirements,
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, so
       // every rule below and the execution itself read the answer the exchanges above it were

@@ -8125,8 +8125,8 @@ object SQLConf {
       .internal()
       .doc("When set to true, the output partitioning of UnionExec will be the same as the " +
         "input partitioning if its children have same partitioning. Otherwise, it will be a " +
-        "default partitioning. The value is read when a UnionExec's decision is fixed during " +
-        "physical preparation, so a change does not reach a decision already taken.")
+        "default partitioning. The value is read during physical preparation, so a change does " +
+        "not reach a decision already taken.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)

@@ -709,13 +709,14 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
 
   test("SPARK-59122: a partitioning-aware union keeps its layout when the conf changes between " +
     "planning and execution") {
-    // `spark.sql.unionOutputPartitioning` is read where the plain-union decision is stamped, not on
-    // every `outputPartitioning` call, so a plan executes by the partitioning it was planned
-    // against. Reading it per call let the parent aggregate lose its exchange at planning and get a
-    // plain concatenation at execution, reporting each group twice. The `checkAnswer` below stays
-    // outside the block that planned the DataFrame on purpose: the plan is forced inside that
-    // block and `executedPlan` is memoized, so the two phases see different confs. Asserting
-    // inside it, or dropping the second `withSQLConf`, makes the test pass without testing this.
+    // `spark.sql.unionOutputPartitioning` is read once during preparation, ahead of
+    // `EnsureRequirements`, not on every `outputPartitioning` call, so a plan executes by the
+    // partitioning it was planned against. Reading it per call let the parent aggregate lose its
+    // exchange at planning and get a plain concatenation at execution, reporting each group twice.
+    // The `checkAnswer` below stays outside the block that planned the DataFrame on purpose: the
+    // plan is forced inside that block and `executedPlan` is memoized, so the two phases see
+    // different confs. Asserting inside it, or dropping the second `withSQLConf`, makes the test
+    // pass without testing this.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val left = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k")
       val right = spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k")
@@ -943,6 +944,44 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false") {
         StampUnionDecisions(fused)
         assert(fused.supportCodegen, "a second pass must not restamp the conf it was decided with")
+      }
+    }
+  }
+
+  test("SPARK-59122: the stamp uses the conf the exchanges were planned against") {
+    // `EnsureRequirements` asks the union what it reports, and the barrier behind it freezes that
+    // answer one rule later. `conf` is live, so another thread turning `UNION_OUTPUT_PARTITIONING`
+    // off in between would leave the parent's elided exchange standing over a union that then
+    // concatenates. `SnapshotUnionOutputPartitioningConf` records the value ahead of
+    // `EnsureRequirements` for both to use. Driven rule by rule, because the two sit next to each
+    // other in the pipeline and no injected rule can run in the window.
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+      // The pipeline has to keep the two on either side of `EnsureRequirements`; the AQE list is
+      // private, so only the standard one can be checked from here.
+      val rules = QueryExecution.preparations(spark, subquery = false)
+      val snapshot = rules.indexWhere(_ eq SnapshotUnionOutputPartitioningConf)
+      val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
+      assert(snapshot >= 0 && snapshot < ensureRequirements,
+        s"expected the conf snapshot before EnsureRequirements, got $snapshot/$ensureRequirements")
+
+      val df = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k"))
+        .union(spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k")))
+        .groupBy("k").count()
+      val required = EnsureRequirements()(
+        SnapshotUnionOutputPartitioningConf(df.queryExecution.sparkPlan.clone()))
+      assert(required.collect { case s: ShuffleExchangeExec => s.shuffleOrigin } ==
+        Seq(REPARTITION_BY_NUM, REPARTITION_BY_NUM),
+        "the aggregate's exchange must have been elided, or the window has nothing at stake")
+
+      val union = required.collect { case u: UnionExec => u }
+      assert(union.size == 1)
+      withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+        StampUnionDecisions(required)
+        assert(!union.head.outputPartitioning.isInstanceOf[UnknownPartitioning],
+          "the answer must come from the conf snapshot, not from the value read now, got " +
+            s"${union.head.outputPartitioning}")
       }
     }
   }

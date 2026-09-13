@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Fixes each [[UnionExec]]'s partitioning decision and the confs its codegen gate reads, at one
@@ -54,6 +55,34 @@ object StampUnionDecisions extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = {
     plan.foreach {
       case u: UnionExec => u.stampDecisions()
+      case _ =>
+    }
+    plan
+  }
+}
+
+/**
+ * Records on each [[UnionExec]] the `UNION_OUTPUT_PARTITIONING` value it answers from, before
+ * `EnsureRequirements` asks it what it reports.
+ *
+ * Without this, the two phases sample the conf separately: `EnsureRequirements` reads what the
+ * union reports under the value then, and [[StampUnionDecisions]] freezes the decision under the
+ * value one rule later. `conf` is the live session conf, so another thread turning it off in that
+ * window would let a parent drop an exchange over a concrete partitioning and then have the union
+ * concatenate, which puts one group in two partitions.
+ *
+ * Only the conf is recorded, never a partitioning. `EnsureRequirements` has not inserted the
+ * exchanges it adds yet, so a decision taken now would freeze plain on a union whose children only
+ * become co-partitioned there, which is why the decision itself waits for the barrier behind it.
+ *
+ * One read per plan, so every union in it answers from the same value. Writing the tag in place is
+ * safe for the reason given on [[StampUnionDecisions]].
+ */
+object SnapshotUnionOutputPartitioningConf extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = {
+    val enabled = plan.conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)
+    plan.foreach {
+      case u: UnionExec => u.snapshotOutputPartitioningConf(enabled)
       case _ =>
     }
     plan

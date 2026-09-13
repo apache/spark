@@ -626,7 +626,7 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
    * no barrier reached has no decision to answer from, so this read derives one from the conf as it
    * is now and comes back `UnknownPartitioning`. `UnionCodegenSuite` covers the stamping itself by
    * calling the rule directly, so it stays green if one of the post-hook listings is dropped; these
-   * pin the post-hook stamping in each pipeline, the two AQE listings jointly rather than one each.
+   * pin the post-hook stamping in each pipeline.
    */
   private def checkInjectedUnionIsStamped(
       extensions: Seq[SparkSessionExtensionsProvider], aqeEnabled: Boolean): Unit = {
@@ -662,13 +662,21 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-59122: a union an injected query stage prep rule adds is stamped before execution") {
-    // Attributed to the AQE pipeline rather than to one listing: the barrier in
-    // `postStageCreationRules` stands behind the one after the prep rules, so this case fails only
-    // when both are gone. What the earlier one adds is that the answer is fixed before the
-    // stage-optimizer rules read it, as `CoalesceShufflePartitions` does to decide whether a
-    // union's children have to be coalesced as one group.
+    // The barrier in `postStageCreationRules` stands behind the one after the prep rules, so the
+    // conf flip in `checkInjectedUnionIsStamped` cannot tell them apart. What only the earlier one
+    // can do is have the answer ready for the stage optimizers, which run in between and read it:
+    // `CoalesceShufflePartitions` asks whether a union's children have to be coalesced as one
+    // group. `ObserveUnionPartitioning` reads the node from there, so removing the earlier barrier
+    // fails this case.
+    val seen = ListBuffer.empty[Partitioning]
     checkInjectedUnionIsStamped(
-      create(_.injectQueryStagePrepRule(_ => WrapRootInUnion)), aqeEnabled = true)
+      create { extensions =>
+        extensions.injectQueryStagePrepRule(_ => WrapRootInUnion)
+        extensions.injectQueryStageOptimizerRule(_ => ObserveUnionPartitioning(seen))
+      }, aqeEnabled = true)
+    assert(seen.nonEmpty, "the stage optimizers must have seen the union")
+    assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
+      s"the barrier after the prep rules must decide before the stage optimizers read: $seen")
   }
 
   test("SPARK-59122: the barrier in AQE post stage creation stamps a union added there") {
@@ -1465,6 +1473,27 @@ object WrapRootInUnion extends Rule[SparkPlan] {
 /** The columnar-rule wrapper for `WrapRootInUnion`. */
 object WrapRootInUnionColumnarRule extends ColumnarRule {
   override def postColumnarTransitions: Rule[SparkPlan] = WrapRootInUnion
+}
+
+/**
+ * Records what each `UnionExec` reports while the AQE stage optimizers run, which is after the
+ * barrier at the end of the query stage preparation rules and before the one in
+ * `postStageCreationRules`. Reads it with `UNION_OUTPUT_PARTITIONING` turned off: the union an
+ * injected prep rule adds carries no recorded conf of its own, so a concrete answer can only come
+ * from a decision stamped earlier. Puts the conf back, so nothing downstream sees the flip.
+ */
+case class ObserveUnionPartitioning(seen: ListBuffer[Partitioning]) extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = {
+    plan.foreach {
+      case u: UnionExec =>
+        val enabled = u.conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)
+        u.conf.setConf(SQLConf.UNION_OUTPUT_PARTITIONING, false)
+        try seen += u.outputPartitioning
+        finally u.conf.setConf(SQLConf.UNION_OUTPUT_PARTITIONING, enabled)
+      case _ =>
+    }
+    plan
+  }
 }
 
 
