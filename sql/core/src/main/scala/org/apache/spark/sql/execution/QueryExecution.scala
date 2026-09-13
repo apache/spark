@@ -799,6 +799,9 @@ object QueryExecution {
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
       EnsureRequirements(),
+      // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
+      // the answer to fix is the one the exchanges around it were planned against.
+      StampUnionDecisions,
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       // `PushDownLocalSort` pushes a wider local sort down onto a narrower one below it, so a

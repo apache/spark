@@ -135,6 +135,10 @@ case class AdaptiveSparkPlanExec(
       CoalesceBucketsInJoin,
       RemoveRedundantProjects,
       ensureRequirements,
+      // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, so
+      // every rule below and the execution itself read the answer the exchanges above it were
+      // planned against.
+      StampUnionDecisions,
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       AdjustShuffleExchangePosition,
