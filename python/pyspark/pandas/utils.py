@@ -1061,7 +1061,8 @@ def _floor_divide_floating(c1: Column, c2: Column) -> Column:
         (remainder != 0) & ((remainder < 0) != (c2 < 0)), truncated - F.lit(1.0)
     ).otherwise(truncated)
     # The quotient is whole in exact arithmetic, but the division can leave it a few bits off, so
-    # round it back. F.floor cannot do this: it returns a bigint, which raises on an infinity.
+    # round it back. F.floor cannot do this: its bigint result raises on an infinity in ANSI mode
+    # and saturates otherwise.
     floor = quotient - F.pmod(quotient, F.lit(1.0))
     return (
         # An infinite quotient is its own floor, and has to be returned before the line above
@@ -1102,6 +1103,7 @@ def _floor_divide_func(c1: Column, c2: Column) -> Column:
     c1_double = c1.cast("double")
     c2_double = c2.cast("double")
     integral_types = ["tinyint", "smallint", "int", "bigint"]
+    floating_result = _floor_divide_floating(c1_double, c2_double)
 
     return (
         # Null, nan and a zero divisor are handled the same way for every operand type.
@@ -1135,10 +1137,10 @@ def _floor_divide_func(c1: Column, c2: Column) -> Column:
             )
             # Dividing a zero dividend keeps its sign, so -0.0 // 3.0 is -0.0.
             .when(c1_double == 0, c1_double / c2_double)
-            .otherwise(_floor_divide_floating(c1_double, c2_double)),
+            .otherwise(floating_result),
         )
         # A decimal cannot be matched by name: typeof reports its precision, as in decimal(10,2).
-        .otherwise(_floor_divide_floating(c1_double, c2_double))
+        .otherwise(floating_result)
     )
 
 

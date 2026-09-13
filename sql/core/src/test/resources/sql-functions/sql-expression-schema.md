@@ -580,6 +580,7 @@
 | org.apache.spark.sql.catalyst.expressions.variant.VariantFromEntries | variant_from_entries | SELECT variant_from_entries(array(struct('a', 1), struct('b', 2))) | struct<variant_from_entries(array(struct(a, 1), struct(b, 2))):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantGetExpressionBuilder | variant_get | SELECT variant_get(parse_json('{"a": 1}'), '$.a', 'int') | struct<variant_get(parse_json({"a": 1}), $.a):int> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantInsertExpressionBuilder | variant_insert | SELECT variant_insert(parse_json('{"a": 1}'), '$.b', 2) | struct<variant_insert(parse_json({"a": 1}), $.b, 2):variant> |
+| org.apache.spark.sql.catalyst.expressions.variant.VariantPick | variant_pick | SELECT variant_pick(parse_json('{"a": 1, "b": 2, "c": 3}'), '$.a', '$.c') | struct<variant_pick(parse_json({"a": 1, "b": 2, "c": 3}), $.a, $.c):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantSetExpressionBuilder | variant_set | SELECT variant_set(parse_json('{"a": 1}'), '$.a', 2) | struct<variant_set(parse_json({"a": 1}), $.a, 2, true):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantStripNullsExpressionBuilder | variant_strip_nulls | SELECT variant_strip_nulls(parse_json('{"a": 1, "b": null, "c": 3}')) | struct<variant_strip_nulls(parse_json({"a": 1, "b": null, "c": 3}), true):variant> |
 | org.apache.spark.sql.catalyst.expressions.xml.XPathBoolean | xpath_boolean | SELECT xpath_boolean('<a><b>1</b></a>','a/b') | struct<xpath_boolean(<a><b>1</b></a>, a/b):boolean> |

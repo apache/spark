@@ -469,9 +469,27 @@ class ExecutorPodsAllocator(
     }
   }
 
+  // Whether the user configured recovery mode. Only the switch an OOM makes is reverted when
+  // the application resumes: an application configured to run in recovery mode stays in it.
+  private val recoveryModeConfigured =
+    conf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).isDefined
+
   def setRecoveryMode(): Unit = {
     conf.setIfMissing(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
     warnIfRecoveryModeCannotIsolateSingleTask()
+  }
+
+  /**
+   * Leave the recovery mode an OOM turned on, so that the executors created afterwards are
+   * normal executors again. Called when a held application resumes: the hold drained the
+   * executors the OOM was reacting to, and the resumed application starts over.
+   */
+  def unsetRecoveryMode(): Unit = {
+    if (!recoveryModeConfigured &&
+        conf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).isDefined) {
+      conf.remove(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED)
+      logInfo("Recovery mode is turned off, so the executors created next are normal executors.")
+    }
   }
 
   // Recovery mode's single-task guarantee is enforced by announcing SPARK_EXECUTOR_CORES =

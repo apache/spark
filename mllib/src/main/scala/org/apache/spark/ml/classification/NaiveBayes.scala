@@ -435,6 +435,43 @@ class NaiveBayesModel private[ml] (
     this
   }
 
+  /**
+   * Bernoulli scoring requires log(condprob) if 1, log(1-condprob) if 0.
+   * This precomputes log(1.0 - exp(theta)) and its sum which are used for the linear algebra
+   * application of this condition (in predict function).
+   */
+  @transient private lazy val thetaMinusNegTheta = $(modelType) match {
+    case Bernoulli =>
+      NaiveBayesModel.bernoulliThetaMinusNegTheta(theta)
+    case _ =>
+      // This should never happen.
+      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
+        "Variables thetaMinusNegTheta should only be precomputed in Bernoulli NB.")
+  }
+
+  @transient private lazy val piMinusThetaSum = $(modelType) match {
+    case Bernoulli =>
+      NaiveBayesModel.bernoulliPiMinusThetaSum(pi, theta)
+    case _ =>
+      // This should never happen.
+      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
+        "Variables piMinusThetaSum should only be precomputed in Bernoulli NB.")
+  }
+
+  /**
+   * Gaussian scoring requires sum of log(Variance).
+   * This precomputes sum of log(Variance) which are used for the linear algebra
+   * application of this condition (in predict function).
+   */
+  @transient private lazy val logVarSum = $(modelType) match {
+    case Gaussian =>
+      NaiveBayesModel.gaussianLogVarSum(sigma)
+    case _ =>
+      // This should never happen.
+      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
+        "Variables logVarSum should only be precomputed in Gaussian NB.")
+  }
+
   @Since("1.6.0")
   override val numFeatures: Int = theta.numCols
 
@@ -442,20 +479,20 @@ class NaiveBayesModel private[ml] (
   override val numClasses: Int = pi.size
 
   override protected def predictRawColumn(features: Column): Column = {
-    val localPredictRaw =
-      NaiveBayesModel.predictRawFunction($(modelType), pi, theta, sigma)
+    val localPredictRaw = NaiveBayesModel.predictRawFunction(
+      $(modelType), pi, theta, sigma)
     udf((features: Vector) => localPredictRaw(features)).apply(features)
   }
 
   override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
     udf((rawPrediction: Vector) =>
-      NaiveBayesModel.raw2probability(rawPrediction)
+      NaiveBayesModel.raw2probabilityInPlace(rawPrediction.copy)
     ).apply(rawPrediction)
   }
 
   override protected def predictProbabilityColumn(features: Column): Column = {
-    val localPredictRaw =
-      NaiveBayesModel.predictRawFunction($(modelType), pi, theta, sigma)
+    val localPredictRaw = NaiveBayesModel.predictRawFunction(
+      $(modelType), pi, theta, sigma)
     udf((features: Vector) => {
       val rawPrediction = localPredictRaw(features)
       NaiveBayesModel.raw2probabilityInPlace(rawPrediction)
@@ -466,7 +503,7 @@ class NaiveBayesModel private[ml] (
     if (isDefined(thresholds)) {
       val localThresholds = getThresholds.clone()
       udf((rawPrediction: Vector) => {
-        val probability = NaiveBayesModel.raw2probability(rawPrediction)
+        val probability = NaiveBayesModel.raw2probabilityInPlace(rawPrediction.copy)
         ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
       }).apply(rawPrediction)
     } else {
@@ -475,8 +512,8 @@ class NaiveBayesModel private[ml] (
   }
 
   override protected def predictionColumn(features: Column): Column = {
-    val localPredictRaw =
-      NaiveBayesModel.predictRawFunction($(modelType), pi, theta, sigma)
+    val localPredictRaw = NaiveBayesModel.predictRawFunction(
+      $(modelType), pi, theta, sigma)
     if (isDefined(thresholds)) {
       val localThresholds = getThresholds.clone()
       udf((features: Vector) => {
@@ -497,9 +534,10 @@ class NaiveBayesModel private[ml] (
       case Complement =>
         NaiveBayesModel.complementCalculation(features, theta)
       case Bernoulli =>
-        NaiveBayesModel.bernoulliCalculation(features, pi, theta)
+        NaiveBayesModel.bernoulliCalculation(
+          features, piMinusThetaSum, thetaMinusNegTheta)
       case Gaussian =>
-        NaiveBayesModel.gaussianCalculation(features, pi, theta, sigma)
+        NaiveBayesModel.gaussianCalculation(features, pi, theta, sigma, logVarSum)
     }
   }
 
@@ -551,14 +589,14 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       case Complement =>
         features: Vector => complementCalculation(features, theta)
       case Bernoulli =>
-        val (piMinusThetaSum, thetaMinusNegTheta) = bernoulliPredictionState(pi, theta)
+        val localPiMinusThetaSum = bernoulliPiMinusThetaSum(pi, theta)
+        val localThetaMinusNegTheta = bernoulliThetaMinusNegTheta(theta)
         features: Vector =>
-          bernoulliCalculationWithPrecomputedState(
-            features, piMinusThetaSum, thetaMinusNegTheta)
+          bernoulliCalculation(features, localPiMinusThetaSum, localThetaMinusNegTheta)
       case Gaussian =>
-        val logVarSum = gaussianLogVarSum(sigma)
+        val localLogVarSum = gaussianLogVarSum(sigma)
         features: Vector =>
-          gaussianCalculationWithPrecomputedState(features, pi, theta, sigma, logVarSum)
+          gaussianCalculation(features, pi, theta, sigma, localLogVarSum)
     }
   }
 
@@ -597,18 +635,19 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
     Vectors.dense(probArray)
   }
 
-  private def bernoulliPredictionState(
-      pi: Vector,
-      theta: Matrix): (DenseVector, Matrix) = {
+  private def bernoulliThetaMinusNegTheta(theta: Matrix): Matrix = {
+    theta.map(value => value - math.log1p(-math.exp(value)))
+  }
+
+  private def bernoulliPiMinusThetaSum(pi: Vector, theta: Matrix): DenseVector = {
     val negTheta = theta.map(value => math.log1p(-math.exp(value)))
-    val thetaMinusNegTheta = theta.map(value => value - math.log1p(-math.exp(value)))
     val ones = new DenseVector(Array.fill(theta.numCols)(1.0))
     val piMinusThetaSum = pi.toDense.copy
     BLAS.gemv(1.0, negTheta, ones, 1.0, piMinusThetaSum)
-    (piMinusThetaSum, thetaMinusNegTheta)
+    piMinusThetaSum
   }
 
-  private def bernoulliCalculationWithPrecomputedState(
+  private def bernoulliCalculation(
       features: Vector,
       piMinusThetaSum: DenseVector,
       thetaMinusNegTheta: Matrix): Vector = {
@@ -618,44 +657,15 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
     prob
   }
 
-  private def bernoulliCalculation(
-      features: Vector,
-      pi: Vector,
-      theta: Matrix): Vector = {
-    requireZeroOneBernoulliValues(features)
-    val prob = Array.ofDim[Double](pi.size)
-    var i = 0
-    while (i < pi.size) {
-      var score = pi(i)
-      var j = 0
-      while (j < theta.numCols) {
-        val thetaValue = theta(i, j)
-        score += (if (features(j) == 1.0) {
-          thetaValue
-        } else {
-          math.log1p(-math.exp(thetaValue))
-        })
-        j += 1
-      }
-      prob(i) = score
-      i += 1
-    }
-    Vectors.dense(prob)
-  }
-
   private def gaussianLogVarSum(sigma: Matrix): Array[Double] = {
     Array.tabulate(sigma.numRows) { i =>
-      var sum = 0.0
-      var j = 0
-      while (j < sigma.numCols) {
-        sum += math.log(sigma(i, j))
-        j += 1
-      }
-      sum
+      Iterator.range(0, sigma.numCols).map { j =>
+        math.log(sigma(i, j))
+      }.sum
     }
   }
 
-  private def gaussianCalculationWithPrecomputedState(
+  private def gaussianCalculation(
       features: Vector,
       pi: Vector,
       theta: Matrix,
@@ -675,32 +685,6 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       i += 1
     }
     Vectors.dense(prob)
-  }
-
-  private def gaussianCalculation(
-      features: Vector,
-      pi: Vector,
-      theta: Matrix,
-      sigma: Matrix): Vector = {
-    val prob = Array.ofDim[Double](pi.size)
-    var i = 0
-    while (i < pi.size) {
-      var s = 0.0
-      var j = 0
-      while (j < theta.numCols) {
-        val d = features(j) - theta(i, j)
-        val variance = sigma(i, j)
-        s += d * d / variance + math.log(variance)
-        j += 1
-      }
-      prob(i) = pi(i) - s / 2
-      i += 1
-    }
-    Vectors.dense(prob)
-  }
-
-  private def raw2probability(rawPrediction: Vector): Vector = {
-    raw2probabilityInPlace(rawPrediction.copy)
   }
 
   private def raw2probabilityInPlace(rawPrediction: Vector): Vector = {

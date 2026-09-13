@@ -1820,6 +1820,73 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59273: read CHAR/VARCHAR values and arrays") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charArray = mock(classOf[java.sql.Array])
+      when(charArray.getArray).thenReturn(Array[AnyRef]("c", "dd"))
+      val varcharArray = mock(classOf[java.sql.Array])
+      when(varcharArray.getArray).thenReturn(Array[AnyRef]("e", "ff"))
+      val rs = mock(classOf[ResultSet])
+      when(rs.next()).thenReturn(true, false)
+      when(rs.getString(1)).thenReturn("a  ")
+      when(rs.getString(2)).thenReturn("bb")
+      when(rs.getArray(3)).thenReturn(charArray)
+      when(rs.getArray(4)).thenReturn(varcharArray)
+      val schema = StructType(Seq(
+        StructField("c", CharType(3)),
+        StructField("v", VarcharType(3)),
+        StructField("ca", ArrayType(CharType(2))),
+        StructField("va", ArrayType(VarcharType(2)))))
+
+      val rows = JdbcUtils.resultSetToSparkInternalRows(
+        rs, NoopDialect, schema, new InputMetrics).toArray
+      assert(rows.length === 1)
+      assert(rows.head.getUTF8String(0).toString === "a  ")
+      assert(rows.head.getUTF8String(1).toString === "bb")
+      assert(rows.head.getArray(2).toObjectArray(CharType(2)).map(_.toString).toSeq ===
+        Seq("c", "dd"))
+      assert(rows.head.getArray(3).toObjectArray(VarcharType(2)).map(_.toString).toSeq ===
+        Seq("e", "ff"))
+    }
+  }
+
+  test("SPARK-59273: first-class modes take precedence in JDBC schema inference") {
+    Seq(
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key,
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key).foreach { firstClassConfig =>
+      withSQLConf(
+          firstClassConfig -> "true",
+          SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        val df = spark.read.format("jdbc")
+          .option("url", urlWithUserAndPass)
+          .option("dbtable", "TEST.STRTYPES")
+          .load()
+
+        assert(df.schema("B").dataType === VarcharType(20))
+        assert(df.schema("D").dataType === CharType(20))
+        checkAnswer(df.select("B", "D"), Row("Sensitive", "Twenty-byte CHAR    "))
+      }
+    }
+  }
+
+  test("SPARK-59273: write CHAR/VARCHAR values") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val tableName = "char_varchar_write"
+      sql("SELECT CAST('a' AS CHAR(3)) AS c, CAST('bb' AS VARCHAR(3)) AS v")
+        .write.format("jdbc")
+        .mode("overwrite")
+        .option("url", urlWithUserAndPass)
+        .option("dbtable", tableName)
+        .save()
+
+      val rs = conn.createStatement().executeQuery(s"""SELECT "c", "v" FROM $tableName""")
+      assert(rs.next())
+      assert(rs.getString(1) === "a  ")
+      assert(rs.getString(2) === "bb")
+      rs.close()
+    }
+  }
+
   test("SPARK-58876: Oracle compileValue renders a LocalDateTime as a JDBC timestamp literal") {
     // Filters on an NTZ-mapped Oracle column push down a LocalDateTime; it must become a valid
     // Oracle literal rather than LocalDateTime.toString.
