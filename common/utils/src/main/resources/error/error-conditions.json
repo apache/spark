@@ -8134,6 +8134,12 @@
     },
     "sqlState" : "42601"
   },
+  "TABLES_OR_VIEWS_NOT_IN_SAME_DATABASE" : {
+    "message" : [
+      "Cannot retrieve tables or views that do not belong to the same database. Requested: <qualifiedTableNames>."
+    ],
+    "sqlState" : "0A000"
+  },
   "TABLE_LOCATION_URI_NOT_SPECIFIED" : {
     "message" : [
       "Table <identifier> did not specify locationUri."
@@ -10307,11 +10313,6 @@
   "_LEGACY_ERROR_TEMP_1071" : {
     "message" : [
       "Some existing schema fields (<nonExistentColumnNames>) are not present in the new schema. We don't support dropping columns yet."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1072" : {
-    "message" : [
-      "Only the tables/views belong to the same database can be retrieved. Querying tables/views are <qualifiedTableNames>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1079" : {
