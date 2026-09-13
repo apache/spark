@@ -3988,6 +3988,20 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             rounded = Float2Decimal(lit(1.234)).first().d
             self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
+    def test_decimal_round_half_up(self):
+        # A returned decimal is rescaled to the declared scale the way CAST does (HALF_UP)
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": False}
+        ):
+
+            @udtf(returnType="d: DECIMAL(10, 2)")
+            class Str2Decimal:
+                def eval(self, v: str):
+                    yield (Decimal(v),)
+
+            actual = [Str2Decimal(lit(v)).first().d for v in ["1.005", "1.025", "-1.005", "0.125"]]
+            self.assertEqual(actual, [Decimal(v) for v in ["1.01", "1.03", "-1.01", "0.13"]])
+
 
 class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
