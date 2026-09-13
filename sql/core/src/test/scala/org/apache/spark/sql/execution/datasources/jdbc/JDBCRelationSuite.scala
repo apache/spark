@@ -42,7 +42,10 @@ class JDBCRelationSuite extends SparkFunSuite {
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
           JDBCRelation.columnPartition(
-            new StructType().add("t", dataType), caseSensitiveResolution, "UTC", jdbcOptions)
+            new StructType().add("t", dataType),
+            caseSensitiveResolution,
+            timeZoneId = "UTC",
+            jdbcOptions = jdbcOptions)
         },
         condition = "INVALID_JDBC_PARTITION_BOUND",
         sqlState = Some("42616"),
@@ -58,12 +61,14 @@ class JDBCRelationSuite extends SparkFunSuite {
       val partitions = JDBCRelation.columnPartition(
         new StructType().add("t", dataType),
         caseSensitiveResolution,
-        "UTC",
-        new JDBCOptions(options))
+        timeZoneId = "UTC",
+        jdbcOptions = new JDBCOptions(options))
       val midpoint = if (dataType == DateType) "2020-01-02" else "2020-01-02 00:00:00"
-      assert(partitions.map(_.asInstanceOf[JDBCPartition].whereClause).toSeq === Seq(
+      assertResult(Seq(
         s""""t" < '$midpoint' or "t" is null""",
-        s""""t" >= '$midpoint'"""))
+        s""""t" >= '$midpoint'""")) {
+        partitions.map(_.asInstanceOf[JDBCPartition].whereClause).toSeq
+      }
     }
   }
 }
