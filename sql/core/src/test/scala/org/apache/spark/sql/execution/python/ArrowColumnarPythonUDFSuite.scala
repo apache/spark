@@ -149,6 +149,39 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     }
   }
 
+  test("Arrow-backed source: higher-order CHAR/VARCHAR output checks") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "arrow_hof_char_udf", returnType = CharType(4))
+      val varcharUDF = TestTypedScalarPandasUDF(
+        name = "arrow_hof_varchar_udf", returnType = VarcharType(3))
+      registerTestUDF(charUDF, spark)
+      registerTestUDF(varcharUDF, spark)
+
+      val df = readArrowSource(numRows = 10)
+      val padded = df.selectExpr(
+        "id", "name", "value", "data",
+        "transform(array(id), x -> arrow_hof_char_udf(x)) as udf_values")
+      val arrowExec = collectNodes[ArrowEvalPythonExec](
+        padded.queryExecution.executedPlan).head
+      assert(arrowExec.child.supportsColumnar,
+        "ArrowEvalPythonExec should retain its Arrow-backed columnar child")
+      assert(padded.collect().map(_.getSeq[String](4)).toSeq ===
+        (0 until 10).map(index => Seq(index.toString.padTo(4, ' ').mkString)))
+
+      val exception = intercept[SparkRuntimeException] {
+        df.selectExpr(
+          "id", "name", "value", "data",
+          "transform(array(name), x -> arrow_hof_varchar_udf(x)) as udf_values").collect()
+      }
+      assert(exception.getMessage.contains("EXCEED_LIMIT_LENGTH"))
+    }
+  }
+
   test("Arrow-backed source: legacy CHAR/VARCHAR output remains unchecked") {
     assume(shouldTestPandasUDFs)
     withSQLConf(
