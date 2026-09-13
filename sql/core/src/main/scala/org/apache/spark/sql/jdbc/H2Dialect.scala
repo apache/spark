@@ -26,7 +26,13 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
-import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{
+  IndexAlreadyExistsException,
+  NoSuchIndexException,
+  NoSuchItemExceptionHelper,
+  NoSuchNamespaceException,
+  NoSuchTableException,
+  TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
@@ -223,12 +229,17 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
               errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
               messageParameters = Map("relationName" -> quotedName),
               cause = Some(e))
-          // TABLE_OR_VIEW_NOT_FOUND_1
-          case 42102 =>
-            val relationName = messageParameters.getOrElse("tableName", "")
+          // TABLE_OR_VIEW_NOT_FOUND_1 and related object-not-found variants.
+          case 42102 | 42103 | 42104 =>
+            val relationName = messageParameters
+              .getOrElse("tableName", messageParameters.getOrElse("oldName", ""))
             throw new NoSuchTableException(
               errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-              messageParameters = Map("relationName" -> relationName),
+              messageParameters = Map(
+                "relationName" -> relationName,
+                // classifyException receives pre-rendered strings, so no resolution
+                // search path is threaded through this API.
+                "searchPath" -> NoSuchItemExceptionHelper.formatSearchPath(Seq.empty)),
               cause = Some(e))
           // SCHEMA_NOT_FOUND_1
           case 90079 =>

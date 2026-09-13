@@ -36,7 +36,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, EqualTo, IsNull, Literal, Or, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, EliminateLimits}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EmptyRelation, GlobalLimit, Join, JoinHint, LeafNode, LocalRelation, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.{CoalescedNullAwareHashPartitioning, SinglePartition}
 import org.apache.spark.sql.classic.Strategy
@@ -1983,8 +1983,9 @@ class AdaptiveQueryExecSuite
         SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
         SQLConf.SHUFFLE_PARTITIONS.key -> "100",
         SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
-        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
-        withTempView("skewData1", "skewData2") {
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800",
+        SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true") {
+        withTempView("skewData1", "skewData2", "skewData3") {
           spark
             .range(0, 1000, 1, 10)
             .select(
@@ -2000,6 +2001,11 @@ class AdaptiveQueryExecSuite
                 .otherwise($"id").as("key2"),
               $"id" as "value2")
             .createOrReplaceTempView("skewData2")
+          // one row per key, as a left single join errors on a second match
+          spark
+            .range(0, 1000, 1, 10)
+            .select($"id" as "key3", $"id" as "value3")
+            .createOrReplaceTempView("skewData3")
 
           def checkSkewJoin(
               joins: Seq[ShuffledJoin],
@@ -2038,6 +2044,24 @@ class AdaptiveQueryExecSuite
               "RIGHT OUTER JOIN skewData2 ON key1 = key2")
           val rightJoin = getJoinNode(rightAdaptivePlan)
           checkSkewJoin(rightJoin, 0, 1)
+
+          // skewed existence join optimization, splitting the left side like a left outer join
+          val (_, existenceAdaptivePlan) = runAdaptiveAndVerifyResult(
+            s"SELECT * FROM skewData1 WHERE EXISTS (SELECT /*+ $joinHint(skewData2) */ 1 " +
+              "FROM skewData2 WHERE key1 = key2) OR value1 < 0")
+          val existenceJoin = getJoinNode(existenceAdaptivePlan)
+          assert(existenceJoin.head.joinType.isInstanceOf[ExistenceJoin])
+          checkSkewJoin(existenceJoin, 2, 0)
+
+          // skewed left single join optimization, hash join only as it cannot sort-merge
+          if (joinHint == "SHUFFLE_HASH") {
+            val (_, singleAdaptivePlan) = runAdaptiveAndVerifyResult(
+              s"SELECT key1, value1, (SELECT /*+ $joinHint(skewData3) */ value3 " +
+                "FROM skewData3 WHERE key3 = key1) FROM skewData1")
+            val singleJoin = getJoinNode(singleAdaptivePlan)
+            assert(singleJoin.head.joinType == LeftSingle)
+            checkSkewJoin(singleJoin, 2, 0)
+          }
         }
       }
     }

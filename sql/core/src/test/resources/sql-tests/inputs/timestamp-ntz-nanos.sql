@@ -188,6 +188,17 @@ SELECT typeof(convert_timezone('Europe/Brussels', 'Europe/Moscow',
 -- NULL nanosecond timestamp.
 SELECT convert_timezone('America/Los_Angeles', 'UTC', CAST(NULL AS timestamp_ntz(9)));
 
+-- SPARK-59300: from_utc_timestamp / to_utc_timestamp over nanosecond-precision TIMESTAMP_NTZ. A
+-- zone shift moves only the whole-microsecond instant, so the sub-microsecond remainder is carried
+-- through unchanged and the result keeps the source's exact NTZ precision.
+SELECT from_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', 'America/Los_Angeles');
+SELECT to_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', 'America/Los_Angeles');
+SELECT typeof(
+    to_utc_timestamp('2015-07-24 00:00:00.1234567' :: timestamp_ntz(7), 'America/Los_Angeles'));
+-- NULL nanosecond timestamp and NULL zone both propagate.
+SELECT from_utc_timestamp(CAST(NULL AS timestamp_ntz(9)), 'America/Los_Angeles');
+SELECT to_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', CAST(NULL AS STRING));
+
 -- SPARK-57103: MAX / MIN over nanosecond-precision TIMESTAMP_NTZ. The aggregate preserves the
 -- nanosecond type and orders by the sub-microsecond remainder (two values share the same
 -- microsecond and differ only within it); NULLs are ignored.

@@ -387,12 +387,12 @@ jobs:
           ./dev/free_disk_space
         fi
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
     - name: Install Python 3.12
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       # We should install one Python that is higher than 3+ for SQL and Yarn because:
       # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
       # - Yarn has a Python specific test too, for example, YarnClusterSuite.
@@ -581,7 +581,7 @@ jobs:
         restore-keys: |
           coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -705,7 +705,7 @@ jobs:
       shell: 'script -q -e -c "bash {0}"'
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
@@ -861,7 +861,7 @@ jobs:
       continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -925,7 +925,7 @@ jobs:
         input: sql/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-4.0,subdir=sql/connect/common/src/main'
     - name: Install Python 3.12
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: '3.12'
     - name: Install dependencies for Python CodeGen check
@@ -987,7 +987,7 @@ jobs:
       continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1060,7 +1060,7 @@ jobs:
     timeout-minutes: 120
     steps:
     - uses: actions/checkout@v6
-    - uses: actions/setup-java@v5
+    - uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: 25
@@ -1080,8 +1080,8 @@ jobs:
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
-      PYSPARK_DRIVER_PYTHON: python3.9
-      PYSPARK_PYTHON: python3.9
+      PYSPARK_DRIVER_PYTHON: python3.12
+      PYSPARK_PYTHON: python3.12
       GITHUB_PREV_SHA: ${{ github.event.before }}
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
@@ -1123,7 +1123,7 @@ jobs:
       continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1152,14 +1152,6 @@ jobs:
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
-        export PYSPARK_DRIVER_PYTHON=python3.12
-        export PYSPARK_PYTHON=python3.12
-        # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
-        echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
-        echo "SKIP_SCALADOC: $SKIP_SCALADOC"
-        echo "SKIP_PYTHONDOC: $SKIP_PYTHONDOC"
-        echo "SKIP_RDOC: $SKIP_RDOC"
-        echo "SKIP_SQLDOC: $SKIP_SQLDOC"
         cd docs
         bundle exec jekyll build
     - name: Tar documentation
@@ -1207,7 +1199,7 @@ jobs:
         restore-keys: |
           coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1330,7 +1322,7 @@ jobs:
         restore-keys: |
           coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1408,7 +1400,7 @@ jobs:
             ./dev/free_disk_space
           fi
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
@@ -1496,7 +1488,7 @@ jobs:
             ./dev/free_disk_space
           fi
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}

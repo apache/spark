@@ -35,6 +35,7 @@ import org.apache.spark.sql.connect.common.ForeachWriterPacket
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.execution.python.PythonWorkerEnvironment
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.Utils
@@ -145,7 +146,9 @@ object StreamingForeachBatchHelper extends Logging {
       pythonFn,
       connectUrl,
       sessionHolder.sessionId,
-      "pyspark.sql.connect.streaming.worker.foreach_batch_worker")
+      "pyspark.sql.connect.streaming.worker.foreach_batch_worker",
+      // The worker lives as long as the query, so it keeps the values held at query start.
+      PythonWorkerEnvironment.readValidated(sessionHolder.session.sessionState.conf))
 
     logInfo(
       log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
