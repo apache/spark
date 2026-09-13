@@ -179,11 +179,9 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
           udfInputSchema, outputTypes, inputColumnIndices.get)
       } else {
         // Path 2 & 3: non-Arrow or complex expressions.
-        val directInputColumnIndices =
-          if (hasCharVarcharOutput) None else inputColumnIndices
         evalWithRowQueue(peekIter, context, pyFuncs, argMetas,
           allInputs.toSeq, udfInputSchema, outputTypes,
-          directInputColumnIndices)
+          inputColumnIndices)
       }
     }
 
