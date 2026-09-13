@@ -44,7 +44,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TruncatableTable
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo}
+import org.apache.spark.sql.execution.{CachedData, ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -2427,7 +2427,7 @@ class CachedTableSuite extends SharedSparkSession
       sql(s"CREATE TABLE $t (id int, data string) USING foo")
       sql(s"INSERT INTO $t VALUES (1, 'a')")
 
-      def cachedData(modeConf: Seq[(String, String)]) = {
+      def cachedData(modeConf: Seq[(String, String)]): CachedData = {
         withSQLConf(modeConf: _*) {
           cacheManager.lookupCachedData(sql(s"SELECT * FROM $t")).getOrElse {
             fail(s"Expected $t to be cached for $modeConf")
