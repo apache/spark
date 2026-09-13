@@ -1085,47 +1085,6 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     (thread, request)
   }
 
-  private def withIdentityBackend(
-      body: (SparkContext, CoarseGrainedSchedulerBackend) => Unit): Unit = {
-    val conf = new SparkConf()
-      .setMaster("local-cluster[2, 1, 1024]")
-      .setAppName("test")
-    sc = new SparkContext(conf)
-    body(sc, sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend])
-  }
-
-  test("SPARK-58322: RegisterExecutor rejects a missing driver instance ID") {
-    withIdentityBackend { (_, backend) =>
-      val ex = intercept[SparkException] {
-        backend.driverEndpoint.askSync[Boolean](
-          RegisterExecutor("exec-no-id", mock[RpcEndpointRef], "host", 1, Map.empty,
-            Map.empty, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
-      }
-      assert(ex.getCause.getMessage.contains(
-        "Executor did not supply a driver instance ID"))
-    }
-  }
-
-  test("SPARK-58322: accept RegisterExecutor with matching driver instance ID") {
-    withIdentityBackend { (_, backend) =>
-      assert(backend.driverEndpoint.askSync[Boolean](
-        RegisterExecutor("92", mock[RpcEndpointRef], "host", 1, Map.empty,
-          Map(DRIVER_INSTANCE_ID.key -> backend.driverInstanceId), Map.empty,
-          ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)))
-    }
-  }
-
-  test("SPARK-58322: legacy config fetch is rejected with a migration hint") {
-    withIdentityBackend { (_, backend) =>
-      val ex = intercept[SparkException] {
-        backend.driverEndpoint.askSync[SparkAppConfig](
-          RetrieveSparkAppConfig(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
-      }
-      assert(ex.getCause.getMessage.contains(
-        "Executor did not supply a driver instance ID"))
-    }
-  }
-
   test("SPARK-58322: reject stale executors after same-app-ID driver address reuse") {
     sc = new SparkContext(new SparkConf().setMaster("local").setAppName("identity-swap"))
     val scheduler = mock[TaskSchedulerImpl]
@@ -1172,6 +1131,16 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
               Map(DRIVER_INSTANCE_ID.key -> originalId), Map.empty, resourceProfileId))
           }
           assert(registrationError.getCause.getMessage.contains("does not match"))
+          val missingIdError = intercept[SparkException] {
+            driver.askSync[Boolean](RegisterExecutor(
+              "missing-id", null, "localhost", 1, Map.empty, Map.empty, Map.empty,
+              resourceProfileId))
+          }
+          assert(missingIdError.getCause.getMessage.contains("did not supply"))
+          val legacyError = intercept[SparkException] {
+            driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(resourceProfileId))
+          }
+          assert(legacyError.getCause.getMessage.contains("RetrieveSparkAppConfigWithIdentity"))
           assert(backend.getExecutorIds().isEmpty)
         }
       } finally {

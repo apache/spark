@@ -300,27 +300,20 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(executor.pod.getSpec.getRestartPolicy === "Always")
   }
 
-  for (deployMode <- Seq("client", "cluster")) {
-    test(s"SPARK-58322: driver instance ID reaches executor environment in $deployMode mode") {
-      baseConf.set("spark.submit.deployMode", deployMode)
-        .set("spark.driver.instanceId", "58322000-0000-4000-8000-000000000001")
-      val driverPod = if (deployMode == "cluster") {
-        Some(DRIVER_POD)
-      } else {
-        baseConf.remove(KUBERNETES_DRIVER_POD_NAME)
-        None
-      }
-      val executorConf = KubernetesTestConf.createExecutorConf(baseConf, driverPod = driverPod)
-      val step = new BasicExecutorFeatureStep(executorConf, new SecurityManager(baseConf),
-        defaultProfile)
-
-      val executor = step.configurePod(SparkPod.initialPod())
-      val javaOpts = executor.container.getEnv.asScala
-        .filter(_.getName.startsWith("SPARK_JAVA_OPT_"))
-        .map(_.getValue)
-      assert(javaOpts.contains(
-        "-Dspark.driver.instanceId=58322000-0000-4000-8000-000000000001"))
-    }
+  gridTest("SPARK-58322: driver instance ID reaches executor environment")(
+      Seq("client", "cluster")) { deployMode =>
+    baseConf.set("spark.submit.deployMode", deployMode)
+      .set("spark.driver.instanceId", "58322000-0000-4000-8000-000000000001")
+    val driverPod = if (deployMode == "cluster") Some(DRIVER_POD) else None
+    if (driverPod.isEmpty) baseConf.remove(KUBERNETES_DRIVER_POD_NAME)
+    val executorConf = KubernetesTestConf.createExecutorConf(baseConf, driverPod = driverPod)
+    val step = new BasicExecutorFeatureStep(executorConf, new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(executor.container.getEnv.asScala.exists { env =>
+      env.getName.startsWith("SPARK_JAVA_OPT_") &&
+        env.getValue == "-Dspark.driver.instanceId=58322000-0000-4000-8000-000000000001"
+    })
   }
 
   test("classpath and extra java options get translated into environment variables") {

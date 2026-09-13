@@ -31,9 +31,6 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class RetrieveSparkAppConfig(resourceProfileId: Int) extends CoarseGrainedClusterMessage
 
-  /**
-   * The driver validates the launch-time instance ID before returning bootstrap credentials.
-   */
   case class RetrieveSparkAppConfigWithIdentity(resourceProfileId: Int, driverInstanceId: String)
     extends CoarseGrainedClusterMessage
 
