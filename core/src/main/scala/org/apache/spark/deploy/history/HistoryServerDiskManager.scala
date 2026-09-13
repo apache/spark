@@ -340,8 +340,8 @@ private class HistoryServerDiskManager(
 
     private def releaseLease(): Unit = {
       if (!released) {
-        updateUsage(-leased)
         released = true
+        updateUsage(-leased)
       }
     }
 
