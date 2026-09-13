@@ -276,11 +276,13 @@ class CodegenContext extends Logging {
          |$computed = true;
        """.stripMargin
       // A definition that is or holds another `With` is the shape whose code doubles per level, and
-      // what this is aimed at. A definition referencing a sibling definition of the same `With`
-      // doubles the same way and is covered by the same arm, though nothing builds that tree today
-      // (`With.refsToBind` says why). The length arm keeps one body from being split once per
-      // reference; it fires in the band just under the threshold where `reduceCodeSize` applies,
-      // since `body` is assembled after `definition.genCode` already ran it.
+      // what this is aimed at. A definition reading a sibling definition of the same `With` doubles
+      // the same way, but not through this arm: a `CommonExpressionRef` carries `COMMON_EXPR_REF`,
+      // not `WITH_EXPRESSION`, so a short one reaches a method only through the length arm. Nothing
+      // builds that tree today (`With.refsToBind` says why). The length arm keeps one body from
+      // being split once per reference; it fires in the band just under the threshold where
+      // `reduceCodeSize` applies, since `body` is assembled after `definition.genCode` already ran
+      // it.
       val worthAMethod = definition.containsPattern(WITH_EXPRESSION) ||
         body.length > SQLConf.get.methodSplitThreshold
       (if (worthAMethod) methodArgs else None) match {
@@ -351,10 +353,10 @@ class CodegenContext extends Logging {
         // the body reads there cannot be told from the tree: `Expression.genCode` reads the state,
         // for a `With` as much as anything else since `With` overrides only `doGenCode`, while
         // `Alias`, `Collate` and an identity `Cast` override `genCode` and generate their child
-        // again -- two different parameter lists. Refusing also keeps what this collects within what
-        // `getLocalInputVariableValues` collects for the operator's whole expression, which stops at
-        // a state as well and computes the parameters of the methods `ExpandExec` and the aggregates
-        // move this call into.
+        // again -- two different parameter lists. Refusing also keeps what this collects within
+        // what `getLocalInputVariableValues` collects for the operator's whole expression, which
+        // stops at a state as well and computes the parameters of the methods `ExpandExec` and the
+        // aggregates move this call into.
         if (subExprEliminationExprs.contains(ExpressionEquals(next))) {
           possible = false
         } else {
