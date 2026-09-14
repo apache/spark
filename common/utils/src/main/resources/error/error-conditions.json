@@ -4542,6 +4542,12 @@
     ],
     "sqlState" : "46121"
   },
+  "INVALID_JDBC_PARTITION_BOUND" : {
+    "message" : [
+      "Cannot parse the value <value> for JDBC data source option <option> as <dataType>."
+    ],
+    "sqlState" : "42616"
+  },
   "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
     "message" : [
       "Invalid join type in joinWith: <joinType>."
@@ -4870,7 +4876,7 @@
       },
       "EXTENSION" : {
         "message" : [
-          "Invalid extension: <invalidValue>. Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"
+          "Invalid extension: <invalidValue>. Extension must be non-empty and contain only letters."
         ]
       },
       "HMAC_ALGORITHM" : {
@@ -9112,6 +9118,21 @@
       "LITERAL_TYPE" : {
         "message" : [
           "Literal for '<value>' of <type>."
+        ]
+      },
+      "MATERIALIZED_CTE_ALWAYS_INLINED" : {
+        "message" : [
+          "MATERIALIZED CTE <cteName> in a statement that always inlines its CTEs."
+        ]
+      },
+      "MATERIALIZED_CTE_IN_CORRELATED_SUBQUERY" : {
+        "message" : [
+          "MATERIALIZED CTE <cteName> in a correlated subquery."
+        ]
+      },
+      "MATERIALIZED_CTE_WITH_OUTER_REFERENCE" : {
+        "message" : [
+          "MATERIALIZED CTE referencing the outer query column <colName>."
         ]
       },
       "MULTIPLE_BUCKET_TRANSFORMS" : {

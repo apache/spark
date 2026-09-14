@@ -73,6 +73,7 @@ from pyspark.serializers import (
 from pyspark.sql.conversion import (
     ArrowBatchTransformer,
     ArrowTableToRowsConversion,
+    ArrowToPandasConversion,
     LocalDataToArrowConversion,
     PandasToArrowConversion,
 )
@@ -1332,7 +1333,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 for batch in data:
                     # Deserialize the Arrow batch into a list of pandas Series (one per
                     # input column), then call eval once per input row.
-                    series_list = ArrowBatchTransformer.to_pandas(
+                    series_list = ArrowToPandasConversion.to_pandas(
                         batch,
                         timezone=runner_conf.timezone,
                         schema=eval_conf.input_type,
@@ -1833,9 +1834,8 @@ def _elementwise_flatten_column(flat, element_type, is_pandas, runner_conf):
     """
     if not is_pandas:
         return flat
-    from pyspark.sql.conversion import ArrowArrayToPandasConversion
 
-    return ArrowArrayToPandasConversion.convert(
+    return ArrowToPandasConversion.convert(
         flat,
         element_type,
         timezone=runner_conf.timezone,
@@ -2341,7 +2341,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 if not batch_list:
                     continue
                 table = pa.Table.from_batches(batch_list).combine_chunks()
-                all_series = ArrowBatchTransformer.to_pandas(
+                all_series = ArrowToPandasConversion.to_pandas(
                     table,
                     timezone=runner_conf.timezone,
                     prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
@@ -2382,7 +2382,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             # Convert one RecordBatch to a pandas Series per column, then select args:
             # - pd.Series for a single column
             # - tuple[pd.Series, ...] for multiple columns
-            all_series = ArrowBatchTransformer.to_pandas(
+            all_series = ArrowToPandasConversion.to_pandas(
                 batch,
                 timezone=runner_conf.timezone,
                 prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
@@ -2593,7 +2593,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 if not batch_list:
                     continue
                 table = pa.Table.from_batches(batch_list).combine_chunks()
-                all_series = ArrowBatchTransformer.to_pandas(
+                all_series = ArrowToPandasConversion.to_pandas(
                     table,
                     timezone=runner_conf.timezone,
                     prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
@@ -2817,7 +2817,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     table = pa.Table.from_batches(all_batches).combine_chunks()
                 else:
                     table = pa.table({})
-                all_series = ArrowBatchTransformer.to_pandas(
+                all_series = ArrowToPandasConversion.to_pandas(
                     table,
                     timezone=runner_conf.timezone,
                     prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
@@ -2882,7 +2882,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             for group in data:
                 group_iter = iter(group)
                 # Read the first batch to extract grouping keys.
-                first_series = ArrowBatchTransformer.to_pandas(
+                first_series = ArrowToPandasConversion.to_pandas(
                     next(group_iter),
                     timezone=runner_conf.timezone,
                     prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
@@ -2891,7 +2891,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 def dataframe_iter():
                     yield pd.concat([first_series[o] for o in value_offsets], axis=1)
                     for batch in group_iter:
-                        series = ArrowBatchTransformer.to_pandas(
+                        series = ArrowToPandasConversion.to_pandas(
                             batch,
                             timezone=runner_conf.timezone,
                             prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
@@ -3003,7 +3003,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 # MapInBatchEvaluatorFactory); convert lazily so peakmem stays
                 # bounded by one batch.
                 for batch in data:
-                    yield ArrowBatchTransformer.to_pandas(
+                    yield ArrowToPandasConversion.to_pandas(
                         batch,
                         timezone=runner_conf.timezone,
                         prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
@@ -3076,12 +3076,12 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             for left_batches, right_batches in data:
                 left_table = pa.Table.from_batches(left_batches)
                 right_table = pa.Table.from_batches(right_batches)
-                left_series = ArrowBatchTransformer.to_pandas(
+                left_series = ArrowToPandasConversion.to_pandas(
                     left_table,
                     timezone=runner_conf.timezone,
                     prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
                 )
-                right_series = ArrowBatchTransformer.to_pandas(
+                right_series = ArrowToPandasConversion.to_pandas(
                     right_table,
                     timezone=runner_conf.timezone,
                     prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
@@ -3264,7 +3264,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             for input_batch in data:
                 # --- Input: Arrow -> pandas columns ---
-                pandas_columns = ArrowBatchTransformer.to_pandas(
+                pandas_columns = ArrowToPandasConversion.to_pandas(
                     input_batch,
                     timezone=runner_conf.timezone,
                     schema=eval_conf.input_type,
@@ -3743,7 +3743,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 num_rows = input_batch.num_rows
 
                 # --- Input: Arrow -> pandas Series (struct columns become DataFrames) ---
-                pandas_columns = ArrowBatchTransformer.to_pandas(
+                pandas_columns = ArrowToPandasConversion.to_pandas(
                     input_batch,
                     timezone=runner_conf.timezone,
                     struct_in_pandas="dict",
@@ -3815,7 +3815,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             def extract_args(batch: pa.RecordBatch):
                 nonlocal num_input_rows
                 # Input: Arrow -> pandas Series (struct columns become DataFrames)
-                pandas_columns = ArrowBatchTransformer.to_pandas(
+                pandas_columns = ArrowToPandasConversion.to_pandas(
                     batch,
                     timezone=runner_conf.timezone,
                     struct_in_pandas="dict",
@@ -3932,7 +3932,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         )
                         total_rows += batch.num_rows
                         average_arrow_row_size = total_bytes / total_rows
-                    data_pandas = ArrowBatchTransformer.to_pandas(
+                    data_pandas = ArrowToPandasConversion.to_pandas(
                         batch,
                         timezone=runner_conf.timezone,
                         prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
@@ -4077,7 +4077,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 return pa.Table.from_arrays(field_arrays, names=field_names)
 
             def to_pandas(table: "pa.Table") -> list:
-                return ArrowBatchTransformer.to_pandas(
+                return ArrowToPandasConversion.to_pandas(
                     table,
                     timezone=runner_conf.timezone,
                     prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
@@ -4267,7 +4267,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         )
 
         def to_pandas(batch: "pa.RecordBatch") -> list:
-            return ArrowBatchTransformer.to_pandas(
+            return ArrowToPandasConversion.to_pandas(
                 batch,
                 timezone=runner_conf.timezone,
                 struct_in_pandas="dict",
