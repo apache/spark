@@ -63,7 +63,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>extension</code></td>
     <td>csv</td>
-    <td>Sets the file extension for the output files. Limited to letters. Length must equal 3.</td>
+    <td>Sets the file extension for the output files. Must be non-empty and contain only letters. If it matches a compression codec suffix (for example, <code>gz</code> or <code>zst</code>), set <code>compression</code> too; otherwise Spark may try to decompress plain-text output when reading it back.</td>
     <td>write</td>
   </tr>
   <tr>
