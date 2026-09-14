@@ -28,7 +28,7 @@ import org.apache.datasketches.memory.Memory
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, HllSketchEstimate, HllUnion, Literal}
-import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, StringType, TimeType}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, StringType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -126,6 +126,25 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
       Seq[Any](timeSketch(3, Seq(nineAm, noon)), timeSketch(9, Seq(noon, fivePm))),
       allowDifferentLgConfigK = false)
     assert(estimateOf(merged) == 3L) // distinct {09:00, 12:00, 17:00}
+  }
+
+  test("hll_sketch_agg keeps AnyTimeType last in its input TypeCollection (SPARK-59440)") {
+    // ANSI implicit coercion walks the value TypeCollection in order, casting a non-accepted input
+    // to the first member that canANSIStoreAssign permits. A TIMESTAMP/TIMESTAMP_NTZ store-assigns
+    // to both STRING and TIME, so the string member MUST precede AnyTimeType; otherwise a datetime
+    // would coerce to TIME (nanos-of-day only) and silently under-count distinct values. This locks
+    // in the ordering so a future reorder cannot reintroduce that regression with green CI.
+    val members = new HllSketchAgg(BoundReference(0, IntegerType, nullable = true), 12)
+      .inputTypes.head match {
+        case TypeCollection(types) => types
+        case other => fail(s"expected the value input type to be a TypeCollection, got $other")
+      }
+    val stringIdx = members.indexWhere(_.acceptsType(StringType))
+    val timeIdx = members.indexWhere(_.acceptsType(TimeType(6)))
+    assert(stringIdx >= 0, "no string-accepting member in the input TypeCollection")
+    assert(timeIdx >= 0, "no TIME-accepting member in the input TypeCollection")
+    assert(stringIdx < timeIdx,
+      "the string member must precede AnyTimeType so datetimes coerce to STRING, not TIME")
   }
 
   test("Test lgMaxK results in downsampling sketches with larger lgConfigK") {

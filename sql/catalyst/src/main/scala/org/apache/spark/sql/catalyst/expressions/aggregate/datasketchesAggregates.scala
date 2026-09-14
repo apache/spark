@@ -116,6 +116,12 @@ case class HllSketchAgg(
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
+      // AnyTimeType MUST stay last. ANSI implicit coercion walks these members in order and casts
+      // an input the collection does not directly accept to the first that canANSIStoreAssign
+      // permits. A TIMESTAMP/TIMESTAMP_NTZ store-assigns to both STRING and TIME, so a TIME member
+      // ahead of StringType would coerce it to TIME (nanos-of-day only) and silently under-count;
+      // DATE would hit a TIME target that has no cast rule. TIME inputs are unaffected by the
+      // position (accepted via the order-independent acceptsType short-circuit). See SPARK-59440.
       TypeCollection(
         IntegerType,
         LongType,
