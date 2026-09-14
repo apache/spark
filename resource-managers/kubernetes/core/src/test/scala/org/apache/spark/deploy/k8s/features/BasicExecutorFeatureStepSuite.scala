@@ -307,8 +307,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val driverPod = if (deployMode == "cluster") Some(DRIVER_POD) else None
     if (driverPod.isEmpty) baseConf.remove(KUBERNETES_DRIVER_POD_NAME)
     val executorConf = KubernetesTestConf.createExecutorConf(baseConf, driverPod = driverPod)
-    val step = new BasicExecutorFeatureStep(executorConf, new SecurityManager(baseConf),
-      defaultProfile)
+    val step = new BasicExecutorFeatureStep(executorConf, defaultProfile)
     val executor = step.configurePod(SparkPod.initialPod())
     assert(executor.container.getEnv.asScala.exists { env =>
       env.getName.startsWith("SPARK_JAVA_OPT_") &&
