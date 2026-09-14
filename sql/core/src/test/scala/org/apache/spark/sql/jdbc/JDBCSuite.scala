@@ -1676,9 +1676,9 @@ class JDBCSuite extends SharedSparkSession {
     val oracleDialect = JdbcDialects.get("jdbc:oracle")
     val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", -127)
     assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ==
-      Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+      Some(DecimalType(DecimalType.MAX_PRECISION, DecimalType.DEFAULT_SCALE)))
     assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
-      Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+      Some(DecimalType(DecimalType.MAX_PRECISION, DecimalType.DEFAULT_SCALE)))
     assert(oracleDialect.getCatalystType(OracleDialect.BINARY_FLOAT, "BINARY_FLOAT", 0, null) ==
       Some(FloatType))
     assert(oracleDialect.getCatalystType(OracleDialect.BINARY_DOUBLE, "BINARY_DOUBLE", 0, null) ==
@@ -1687,6 +1687,19 @@ class JDBCSuite extends SharedSparkSession {
       Some(TimestampType))
     assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMP_LTZ, "TIMESTAMP", 0, null) ==
       Some(TimestampType))
+  }
+
+  test("SPARK-57925: Oracle bare NUMBER uses DEFAULT_SCALE instead of hardcoded 10") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    // Bare NUMBER (precision=0) should use DEFAULT_SCALE (18), not hardcoded 10
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
+      Some(DecimalType(DecimalType.MAX_PRECISION, DecimalType.DEFAULT_SCALE)))
+    // FLOAT (scale=-127) should also use DEFAULT_SCALE
+    val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", -127)
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ==
+      Some(DecimalType(DecimalType.MAX_PRECISION, DecimalType.DEFAULT_SCALE)))
+    // Explicit precision/scale columns are NOT affected (falls through to None)
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 10, null) == None)
   }
 
   test("SPARK-58876: Oracle stamps the NTZ wall-clock write marker, legacy-gated, even wrapped") {
