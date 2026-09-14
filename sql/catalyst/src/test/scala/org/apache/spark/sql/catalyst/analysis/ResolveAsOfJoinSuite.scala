@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, CreateNamedStruct, EqualTo, Expression, GreaterThan, If, LambdaFunction, LessThanOrEqual, Literal, Rand, Subtract, ZipWith}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, CreateNamedStruct, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, If, LambdaFunction, LessThan, LessThanOrEqual, Literal, Rand, Subtract, ZipWith}
 import org.apache.spark.sql.catalyst.plans.{GreaterThanOp, GreaterThanOrEqualOp, Inner, JoinType, LeftOuter, LessThanOp, LessThanOrEqualOp, MatchComparisonOperator}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
@@ -105,11 +105,17 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
     assert(resolved.resolved)
   }
 
-  test("materializes each MATCH_CONDITION comparison operator") {
-    Seq(GreaterThanOrEqualOp, GreaterThanOp, LessThanOrEqualOp, LessThanOp).foreach { op =>
+  test("materializes each MATCH_CONDITION comparison operator into its exact comparison") {
+    // The operator is the only thing that distinguishes the four cases, so pin the comparison
+    // node itself: a regression that always emits `>=` would pass a Boolean-type check.
+    Seq(
+      GreaterThanOrEqualOp -> GreaterThanOrEqual(la, rb),
+      GreaterThanOp -> GreaterThan(la, rb),
+      LessThanOrEqualOp -> LessThanOrEqual(la, rb),
+      LessThanOp -> LessThan(la, rb)).foreach { case (op, expected) =>
       val r = ResolveAsOfJoin.apply(asOf(operator = op)).asInstanceOf[AsOfJoin]
       assert(r.matchOperator.isEmpty, s"operator $op should be materialized")
-      assert(r.asOfCondition.dataType == BooleanType, s"operator $op")
+      assert(r.asOfCondition == expected, s"operator $op")
       assert(r.resolved, s"operator $op")
     }
   }
@@ -121,6 +127,17 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
     // `<` / `<=` flip the operands so the distance stays non-negative on the matching side.
     val le = ResolveAsOfJoin.apply(asOf(operator = LessThanOrEqualOp)).asInstanceOf[AsOfJoin]
     assert(le.orderExpression == Subtract(rb, la))
+  }
+
+  test("swaps operands written on the opposite join side and flips the operator") {
+    // Writing the right column first (rb <= la) must normalize to the same plan as la >= rb:
+    // normalizeMatchOperands swaps the pair and flips `<=` into `>=`. Every other test writes
+    // the left operand first, so this is the only case that exercises that branch.
+    val resolved = ResolveAsOfJoin.apply(
+      asOf(leftExpr = rb, operator = LessThanOrEqualOp, rightExpr = la)).asInstanceOf[AsOfJoin]
+    assert(resolved.matchOperator.isEmpty)
+    assert(resolved.asOfCondition == GreaterThanOrEqual(la, rb))
+    assert(resolved.orderExpression == Subtract(la, rb))
   }
 
   test("materializes a non-subtractable String operand into a signed comparison distance") {
@@ -178,7 +195,8 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
     val project = result.asInstanceOf[Project]
     val join = project.child.asInstanceOf[AsOfJoin]
     assert(join.usingColumns.isEmpty, "USING should be consumed")
-    assert(join.condition.isDefined, "USING should expand into an equi-join condition")
+    assert(join.condition.contains(EqualTo(lk, rk)),
+      s"USING (k) should expand into lk = rk, got ${join.condition}")
     assert(join.matchOperator.isEmpty, "the match condition should still be materialized")
     assert(project.getTagValue(Project.hiddenOutputTag).isDefined,
       "USING columns should be tagged as hidden output")
@@ -191,9 +209,10 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
     val project = result.asInstanceOf[Project]
     val join = project.child.asInstanceOf[AsOfJoin]
     assert(join.usingColumns.isEmpty)
-    // USING (k1, k2) expands to k1 = k1 AND k2 = k2: two equi-predicates.
-    assert(join.condition.get.collect { case e: EqualTo => e }.size == 2,
-      s"expected two equi-predicates, got ${join.condition}")
+    // USING (k1, k2) pairs each side's column by name: k1 = k1 AND k2 = k2.
+    val equiPredicates = join.condition.get.collect { case e: EqualTo => e }
+    assert(equiPredicates == Seq(EqualTo(lKey1, rKey1), EqualTo(lKey2, rKey2)),
+      s"expected lKey1 = rKey1 and lKey2 = rKey2, got $equiPredicates")
     assert(project.getTagValue(Project.hiddenOutputTag).isDefined)
   }
 
@@ -206,14 +225,24 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
   }
 
   test("Inner preserves right-side nullability; LEFT OUTER makes the right side nullable") {
+    // Nullability comes from AsOfJoin.computeOutput, not the rule, so also assert the match
+    // fields were cleared: that ties these checks to ResolveAsOfJoin having actually run.
     val inner = ResolveAsOfJoin.apply(asOf(joinType = Inner)).asInstanceOf[AsOfJoin]
+    assert(inner.matchOperator.isEmpty)
     assert(inner.output.map(_.nullable) == Seq(true, true, false, false))
     val leftOuter = ResolveAsOfJoin.apply(asOf(joinType = LeftOuter)).asInstanceOf[AsOfJoin]
+    assert(leftOuter.matchOperator.isEmpty)
     assert(leftOuter.output.map(_.nullable) == Seq(true, true, true, true))
   }
 
   test("rejects a MATCH_CONDITION operand referencing both join sides") {
     expectError(asOf(leftExpr = Add(la, rb)), "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE")
+  }
+
+  test("rejects a MATCH_CONDITION with both operands on the same join side") {
+    // A distinct throw site from the case above: normalizeMatchOperands rejects operands that
+    // do not straddle the two relations, rather than validateMatchConditionTableReferences.
+    expectError(asOf(leftExpr = la, rightExpr = la), "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE")
   }
 
   test("rejects a non-deterministic MATCH_CONDITION operand") {
