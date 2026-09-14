@@ -1428,10 +1428,7 @@ public class VariantBuilder {
   // `[0, SIZE_LIMIT]`.
   private int getIntegerSize(int value) {
     assert value >= 0 && value <= SIZE_LIMIT;
-    if (value <= U8_MAX) return 1;
-    if (value <= U16_MAX) return 2;
-    if (value <= U24_MAX) return 3;
-    return 4;
+    return minIntWidth(value);
   }
 
   private void parseFloatingPoint(JsonParser parser) throws IOException {
