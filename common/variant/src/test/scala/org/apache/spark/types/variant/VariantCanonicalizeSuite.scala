@@ -585,7 +585,8 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       build(_.appendBinary(Array[Byte](1, 2, 3, 4))),
       build(_.appendUuid(new java.util.UUID(1L, 2L))))
     for (v <- samples) {
-      assert(bytesEqual(v, canon(v)), "a pass-through scalar must be unchanged by canonicalize")
+      assert(bytesEqual(v, VariantBuilder.doCanonicalize(v)),
+        "a pass-through scalar must be unchanged by the rebuild")
       assert(isCanon(v), "a pass-through scalar must be recognized as canonical")
     }
   }
