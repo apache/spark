@@ -131,7 +131,7 @@ object SQLExecution extends Logging {
    * `SkipMigration` only marks the shuffle to skip decommission migration and keeps its files by
    * design.
    */
-  private def cleanupShuffleDependencies(
+  private[execution] def cleanupShuffleDependencies(
       queryExecution: QueryExecution,
       executionId: Long): Unit = {
     val sc = queryExecution.sparkSession.sparkContext
@@ -370,7 +370,13 @@ object SQLExecution extends Logging {
               } finally {
                 // Complete the observation whatever the block above threw, so an `Observation.get`
                 // waiter is never left hung. `promise.tryComplete` is idempotent.
-                sparkSession.observationManager.tryComplete(queryExecution)
+                try {
+                  sparkSession.observationManager.tryComplete(queryExecution)
+                } catch {
+                  case NonFatal(e) =>
+                    logWarning(log"Failed to complete observations for execution " +
+                      log"${MDC(EXECUTION_ID, executionId)}.", e)
+                }
               }
             }
           }

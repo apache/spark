@@ -616,16 +616,11 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
         assert(qe.shuffleCleanupMode == SkipMigration)
         assert(shuffleIds.nonEmpty)
 
-        // Initialize the session's ArtifactManager while SparkEnv is still available; in real
-        // teardown it is already initialized. Otherwise nulling SparkEnv below would NPE in
-        // withNewExecutionId0's setup (ArtifactManager.artifactRootURI) before the cleanup runs.
-        assert(qe.sparkSession.artifactManager != null)
-
         val appender = new LogAppender("skip migration cleanup")
         withLogAppender(appender, loggerNames = Seq(sqlExecutionLoggerName)) {
-          // `SparkEnv.get` can be null during teardown, before SkipMigration records the shuffle.
+          // Call the cleanup directly so the null `SparkEnv` is scoped to just this call.
           withUnavailableSparkEnv {
-            SQLExecution.withNewExecutionId(qe)("result")
+            SQLExecution.cleanupShuffleDependencies(qe, executionId = 0L)
           }
         }
         val warnings = appender.loggingEvents
