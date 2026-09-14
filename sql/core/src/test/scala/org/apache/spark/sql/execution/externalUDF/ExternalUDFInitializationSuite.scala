@@ -14,36 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.externalUDF
 
-import java.nio.ByteBuffer
+package org.apache.spark.sql.execution.externalUDF
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExternalUDFInitContext,
-  ExternalUserDefinedFunction, Literal, NamedArgumentExpression, NamedExpression, PythonUDF}
-import org.apache.spark.sql.execution.python.ArrowPythonRunner
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExternalUserDefinedFunction,
+  Literal, NamedArgumentExpression, NamedExpression}
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructField,
   StructType}
-import org.apache.spark.udf.worker.{DynamicConfigRequirement, Init, UDFWorkerDataFormat,
-  UDFWorkerSpecification, WorkerContextReference, WorkerSessionSpecification}
+import org.apache.spark.udf.worker.{Init, PropertyRequirement, UDFWorkerDataFormat,
+  UDFWorkerSpecification, WorkerSessionSpecification}
 
-class ExternalUDFInitializationSuite extends QueryTest with SharedSparkSession {
+class ExternalUDFInitializationSuite extends SparkFunSuite {
 
-  private def contextReference(
-      source: String,
-      defaultValue: Option[String] = None): WorkerContextReference = {
-    val builder = WorkerContextReference.newBuilder().setSource(source)
-    defaultValue.foreach(builder.setDefaultValue)
-    builder.build()
-  }
-
-  private def dynamicConfigRequirement(isRequired: Boolean): DynamicConfigRequirement = {
-    DynamicConfigRequirement.newBuilder().setIsRequired(isRequired).build()
+  private def propertyRequirement(isRequired: Boolean): PropertyRequirement = {
+    PropertyRequirement.newBuilder().setIsRequired(isRequired).build()
   }
 
   private def expectExternalUDF(expr: Expression): ExternalUserDefinedFunction = expr match {
@@ -52,15 +39,8 @@ class ExternalUDFInitializationSuite extends QueryTest with SharedSparkSession {
   }
 
   private def initContext(
-      taskContext: Map[String, String] = Map(
-        "partitionId" -> "3",
-        ExternalUDFInitContext.DRIVER_ID_CONTEXT_KEY -> "driver",
-        ExternalUDFInitContext.IS_DRIVER_CONTEXT_KEY -> "true"),
-      environmentVariables: Map[String, String] = Map.empty,
-      dynamicConfig: Map[String, String] = Map.empty,
-      resourceDirectories: Map[String, String] = Map(
-        PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY ->
-          "/var/resources/artifact-1"),
+      availableProperties: Map[String, String] = Map.empty,
+      resourceDirectories: Map[String, String] = Map.empty,
       timezone: String = "America/Los_Angeles"): ExternalUDFInitContext = {
     ExternalUDFInitContext(
       protocolVersion = 1,
@@ -68,77 +48,42 @@ class ExternalUDFInitializationSuite extends QueryTest with SharedSparkSession {
       inputSchema = Array[Byte](1, 2),
       outputSchema = Array[Byte](3, 4),
       timezone = timezone,
-      taskContext = taskContext,
-      environmentVariables = environmentVariables,
-      dynamicConfig = dynamicConfig,
+      availableProperties = availableProperties,
       resourceDirectories = resourceDirectories)
   }
 
-  private def pythonFunction(
-      command: Array[Byte] = Array[Byte](10, 20, 30),
-      pythonIncludes: Seq[String] = Seq("first.zip", "second.zip"),
-      pythonVersion: String = "3.12"): SimplePythonFunction = {
-    new SimplePythonFunction(
-      command = command,
-      envVars = Map.empty[String, String].asJava,
-      pythonIncludes = pythonIncludes.asJava,
-      pythonExec = "python3",
-      pythonVer = pythonVersion,
-      broadcastVars = null,
-      accumulator = null)
-  }
-
-  private def pythonUDF(
-      children: Seq[Expression],
-      evalType: Int = PythonEvalType.SQL_ARROW_BATCHED_UDF): PythonUDF = {
-    PythonUDF(
-      name = "plus_one",
-      func = pythonFunction(),
-      dataType = IntegerType,
-      children = children,
-      evalType = evalType,
-      udfDeterministic = true)
-  }
-
   private def genericFunction(
-      session: WorkerSessionSpecification.Builder): ExternalUserDefinedFunction = {
+      session: WorkerSessionSpecification.Builder,
+      children: Seq[Expression] = Seq(Literal(1))): ExternalUserDefinedFunction = {
     ExternalUserDefinedFunction(
       name = Some("generic"),
-      workerSpec = UDFWorkerSpecification.newBuilder().setSession(session).build(),
+      workerSpec = UDFWorkerSpecification.getDefaultInstance,
       payload = Array[Byte](5, 6),
       dataType = IntegerType,
-      children = Seq(Literal(1)),
+      children = children,
       udfDeterministic = true,
-      udfNullable = false)
+      udfNullable = false,
+      sessionSpec = session.build())
   }
 
-  private def pythonDynamicConfig: Map[String, String] = {
-    ArrowPythonRunner.getPythonRunnerConfMap(spark.sessionState.conf) -
-      SQLConf.SESSION_LOCAL_TIMEZONE.key
+  private def buildInit(
+      function: ExternalUserDefinedFunction,
+      context: ExternalUDFInitContext = initContext()): Init = {
+    ExternalUDFInitBuilder.build(function, context)
   }
 
-  private def hexBytes(value: String): Array[Byte] = {
-    value.grouped(2).map(pair => Integer.parseInt(pair, 16).toByte).toArray
-  }
-
-  test("generic Init resolves only worker-declared context") {
+  test("build Init from declared properties") {
     val session = WorkerSessionSpecification.newBuilder()
-      .putStaticConfig("static", "static-value")
-      .putEnvironmentVariableReferences("forwarded.env", contextReference("SOURCE_ENV"))
-      .putEnvironmentVariableReferences(
-        "defaulted.env",
-        contextReference("MISSING_ENV", Some("default-value")))
-      .putEnvironmentVariableReferences("optional.env", contextReference("MISSING_OPTIONAL_ENV"))
-      .putDynamicConfig("forwarded.dynamic", dynamicConfigRequirement(isRequired = true))
-      .putDynamicConfig("optional.dynamic", dynamicConfigRequirement(isRequired = false))
+      .putStaticProperties("static", "static-value")
+      .putPropertyRequirements("required", propertyRequirement(isRequired = true))
+      .putPropertyRequirements("optional", propertyRequirement(isRequired = false))
       .addRequiredResourceDirectories("inputs")
     val function = genericFunction(session)
 
-    val init = function.buildInit(initContext(
-      environmentVariables = Map("SOURCE_ENV" -> "env-value", "SECRET" -> "not-forwarded"),
-      dynamicConfig = Map(
-        "forwarded.dynamic" -> "dynamic-value",
-        "unrequested.dynamic" -> "not-forwarded"),
+    val init = buildInit(function, initContext(
+      availableProperties = Map(
+        "required" -> "required-value",
+        "unrequested" -> "not-forwarded"),
       resourceDirectories = Map(
         "inputs" -> "/var/resources/input-data",
         "unrequested" -> "/var/resources/private")))
@@ -148,202 +93,146 @@ class ExternalUDFInitializationSuite extends QueryTest with SharedSparkSession {
     assert(init.getInputSchema.toByteArray.sameElements(Array[Byte](1, 2)))
     assert(init.getOutputSchema.toByteArray.sameElements(Array[Byte](3, 4)))
     assert(init.getTimezone === "America/Los_Angeles")
-    assert(init.getTaskContextMap.asScala.toMap === Map(
-      "partitionId" -> "3",
-      ExternalUDFInitContext.DRIVER_ID_CONTEXT_KEY -> "driver",
-      ExternalUDFInitContext.IS_DRIVER_CONTEXT_KEY -> "true"))
-    assert(init.getEnvironmentVariablesMap.asScala.toMap ===
-      Map("forwarded.env" -> "env-value", "defaulted.env" -> "default-value"))
-    assert(init.getSessionConfMap.asScala.toMap === Map(
+    assert(init.getPropertiesMap.asScala.toMap === Map(
       "static" -> "static-value",
-      "forwarded.dynamic" -> "dynamic-value"))
+      "required" -> "required-value"))
     assert(init.getResourceDirectoriesMap.asScala.toMap ===
       Map("inputs" -> "/var/resources/input-data"))
     assert(init.getUdf.getName === "generic")
     assert(init.getUdf.getFormat === "raw-v1")
-    assert(init.getUdf.getInvocationId === function.resultId.id)
     assert(init.getUdf.getPayload.toByteArray.sameElements(Array[Byte](5, 6)))
-    assert(init.getUdf.getInput.getSchemaFormat === "spark-sql-data-type-json-v1")
     assert(init.getUdf.getInput.getArguments(0).getInputOffset === 0)
     assert(!init.getUdf.getInput.getArguments(0).hasName)
     assert(!init.getUdf.hasEvalType)
     assert(!init.hasParameters)
   }
 
-  test("generic Init rejects conflicting session context targets") {
-    val session = WorkerSessionSpecification.newBuilder()
-      .putStaticConfig("duplicate", "static")
-      .putDynamicConfig("duplicate", dynamicConfigRequirement(isRequired = false))
-    val function = genericFunction(session)
-
-    val error = intercept[IllegalArgumentException] {
-      function.buildInit(initContext())
-    }
-    assert(error.getMessage.contains("duplicate target keys: duplicate"))
-  }
-
-  test("generic Init rejects empty worker context references") {
-    val session = WorkerSessionSpecification.newBuilder()
-      .putEnvironmentVariableReferences("target", contextReference(""))
-    val function = genericFunction(session)
-
-    val error = intercept[IllegalArgumentException] {
-      function.buildInit(initContext())
-    }
-    assert(error.getMessage.contains("Empty worker context source for target"))
-
-    val emptyConfigName = WorkerSessionSpecification.newBuilder()
-      .putDynamicConfig("", dynamicConfigRequirement(isRequired = false))
+  test("reject empty and conflicting property declarations when constructing the UDF") {
+    val emptyName = WorkerSessionSpecification.newBuilder()
+      .putPropertyRequirements("", propertyRequirement(isRequired = false))
     val emptyNameError = intercept[IllegalArgumentException] {
-      genericFunction(emptyConfigName).buildInit(initContext())
+      genericFunction(emptyName)
     }
-    assert(emptyNameError.getMessage.contains("empty target key"))
+    assert(emptyNameError.getMessage === "requirement failed: " +
+      "Worker session contains an empty property name")
+
+    val conflicting = WorkerSessionSpecification.newBuilder()
+      .putStaticProperties("duplicate", "static")
+      .putPropertyRequirements("duplicate", propertyRequirement(isRequired = false))
+    val conflictingError = intercept[IllegalArgumentException] {
+      genericFunction(conflicting)
+    }
+    assert(conflictingError.getMessage === "requirement failed: " +
+      "Worker session contains properties declared as both static and dynamic: duplicate")
   }
 
-  test("generic Init enforces dynamic configuration requirements") {
+  test("enforce required properties and omit unavailable optional properties") {
     val session = WorkerSessionSpecification.newBuilder()
-      .putDynamicConfig("required.b", dynamicConfigRequirement(isRequired = true))
-      .putDynamicConfig("optional", dynamicConfigRequirement(isRequired = false))
-      .putDynamicConfig("required.a", dynamicConfigRequirement(isRequired = true))
+      .putPropertyRequirements("required.b", propertyRequirement(isRequired = true))
+      .putPropertyRequirements("optional", propertyRequirement(isRequired = false))
+      .putPropertyRequirements("required.a", propertyRequirement(isRequired = true))
     val function = genericFunction(session)
 
-    val error = intercept[IllegalArgumentException] {
-      function.buildInit(initContext(dynamicConfig = Map("optional" -> "present")))
+    val missingError = intercept[IllegalArgumentException] {
+      buildInit(function, initContext(availableProperties = Map("optional" -> "present")))
     }
-    assert(error.getMessage.contains(
-      "Missing required dynamic configuration: required.a, required.b"))
+    assert(missingError.getMessage ===
+      "requirement failed: Missing required properties: required.a, required.b")
 
-    val init = function.buildInit(initContext(dynamicConfig = Map(
+    val init = buildInit(function, initContext(availableProperties = Map(
       "required.a" -> "",
       "required.b" -> "value",
-      "optional" -> "optional-value",
       "unrequested" -> "not-forwarded")))
-    assert(init.getSessionConfMap.asScala.toMap === Map(
+    assert(init.getPropertiesMap.asScala.toMap === Map(
       "required.a" -> "",
-      "required.b" -> "value",
-      "optional" -> "optional-value"))
+      "required.b" -> "value"))
   }
 
-  test("generic Init validates required resource directories") {
-    def build(requiredNames: String*)(resources: Map[String, String]): Init = {
-      val session = WorkerSessionSpecification.newBuilder()
-        .addAllRequiredResourceDirectories(requiredNames.asJava)
-      genericFunction(session).buildInit(initContext(resourceDirectories = resources))
+  test("reject a null selected property value before calling protobuf") {
+    val session = WorkerSessionSpecification.newBuilder()
+      .putPropertyRequirements("property", propertyRequirement(isRequired = true))
+    val error = intercept[IllegalArgumentException] {
+      buildInit(
+        genericFunction(session),
+        initContext(availableProperties = Map("property" -> null)))
     }
+    assert(error.getMessage === "requirement failed: Null property value for property")
+  }
 
-    val emptyName = intercept[IllegalArgumentException] {
-      build("")(Map.empty)
+  test("reject invalid resource declarations when constructing the UDF") {
+    val emptyNameError = intercept[IllegalArgumentException] {
+      genericFunction(WorkerSessionSpecification.newBuilder()
+        .addRequiredResourceDirectories(""))
     }
-    assert(emptyName.getMessage.contains("empty required resource directory name"))
+    assert(emptyNameError.getMessage === "requirement failed: " +
+      "Worker session contains an empty required resource directory name")
 
-    val duplicateNames = intercept[IllegalArgumentException] {
-      build("input", "input")(Map("input" -> "/var/resources/input"))
+    val duplicateError = intercept[IllegalArgumentException] {
+      genericFunction(WorkerSessionSpecification.newBuilder()
+        .addRequiredResourceDirectories("input")
+        .addRequiredResourceDirectories("input"))
     }
-    assert(duplicateNames.getMessage.contains(
-      "duplicate required resource directories: input"))
+    assert(duplicateError.getMessage === "requirement failed: " +
+      "Worker session contains duplicate required resource directories: input")
+  }
 
-    val missing = intercept[IllegalArgumentException] {
-      build("input")(Map.empty)
+  test("reject missing and empty required resource directories") {
+    val function = genericFunction(WorkerSessionSpecification.newBuilder()
+      .addRequiredResourceDirectories("input"))
+
+    val missingError = intercept[IllegalArgumentException] {
+      buildInit(function)
     }
-    assert(missing.getMessage.contains("Missing required resource directories: input"))
+    assert(missingError.getMessage ===
+      "requirement failed: Missing required resource directories: input")
 
-    val emptyPath = intercept[IllegalArgumentException] {
-      build("input")(Map("input" -> ""))
+    Seq("", null).foreach { path =>
+      val emptyError = intercept[IllegalArgumentException] {
+        buildInit(function, initContext(resourceDirectories = Map("input" -> path)))
+      }
+      assert(emptyError.getMessage ===
+        "requirement failed: Empty required resource directories: input")
     }
-    assert(emptyPath.getMessage.contains("Empty required resource directories: input"))
+  }
 
-    assert(build()(Map("unrequested" -> "/var/resources/private"))
-      .getResourceDirectoriesMap.isEmpty)
-    val resolved = build("input", "cache")(Map(
+  test("forward only declared resource directories") {
+    val noResources = buildInit(genericFunction(WorkerSessionSpecification.newBuilder()),
+      initContext(resourceDirectories = Map("unrequested" -> "/var/resources/private")))
+    assert(noResources.getResourceDirectoriesMap.isEmpty)
+
+    val function = genericFunction(WorkerSessionSpecification.newBuilder()
+      .addRequiredResourceDirectories("input")
+      .addRequiredResourceDirectories("cache"))
+    val resolved = buildInit(function, initContext(resourceDirectories = Map(
       "input" -> "/var/resources/input",
       "cache" -> "/var/resources/cache",
-      "unrequested" -> "/var/resources/private"))
+      "unrequested" -> "/var/resources/private")))
     assert(resolved.getResourceDirectoriesMap.asScala.toMap === Map(
       "input" -> "/var/resources/input",
       "cache" -> "/var/resources/cache"))
   }
 
-  test("PySpark conversion uses generic Init and refreshes rewritten input metadata") {
-    val udf = pythonUDF(Seq(
-      Literal(1),
-      NamedArgumentExpression("named", Literal("value"))))
-    val workerSpec = PythonUDFWorkerSpecBuilder.build(
-      udf.func,
-      spark.sparkContext.getConf)
-    val external = PythonExternalUDFAdapter.toExternalUDF(
-      udf,
-      workerSpec)
-    val pythonTaskContext = Map(
-      "partitionId" -> "3",
-      ExternalUDFInitContext.DRIVER_ID_CONTEXT_KEY -> "driver",
-      ExternalUDFInitContext.IS_DRIVER_CONTEXT_KEY -> "false")
-    val currentDynamicConfig =
-      pythonDynamicConfig.updated(SQLConf.PYSPARK_BINARY_AS_BYTES.key, "false")
-    val init = external.buildInit(initContext(
-      taskContext = pythonTaskContext,
-      environmentVariables = Map("UNREQUESTED_SECRET" -> "not-forwarded"),
-      dynamicConfig = currentDynamicConfig))
+  test("rebuild logical input metadata after children are rewritten") {
+    val function = genericFunction(
+      WorkerSessionSpecification.newBuilder(),
+      Seq(Literal(1), NamedArgumentExpression("named", Literal("value"))))
+    val init = buildInit(function)
 
-    assert(external.getClass === classOf[ExternalUserDefinedFunction])
-    assert(init.getUdf.getName === "plus_one")
-    assert(init.getUdf.getFormat === "pyspark-udf-experimental")
-    assert(init.getUdf.getEvalType === PythonEvalType.SQL_ARROW_BATCHED_UDF.toString)
-    assert(init.getUdf.getInvocationId === udf.resultId.id)
-    assert(init.getEnvironmentVariablesMap.isEmpty)
-    assert(init.getTaskContextMap.get(
-      ExternalUDFInitContext.DRIVER_ID_CONTEXT_KEY) === "driver")
-    assert(init.getTaskContextMap.get(
-      ExternalUDFInitContext.IS_DRIVER_CONTEXT_KEY) === "false")
-    assert(init.getSessionConfMap.get(SQLConf.PYSPARK_BINARY_AS_BYTES.key) === "false")
-    assert((pythonDynamicConfig - SQLConf.PYSPARK_BINARY_AS_BYTES.key).forall { case (key, value) =>
-      init.getSessionConfMap.get(key) == value
-    })
-    assert(!init.getSessionConfMap.containsKey(SQLConf.SESSION_LOCAL_TIMEZONE.key))
-    assert(!init.hasParameters)
-
-    val nextTaskContext = pythonTaskContext
-      .updated("partitionId", "4")
-      .updated(ExternalUDFInitContext.IS_DRIVER_CONTEXT_KEY, "true")
-    val nextInit = external.buildInit(initContext(
-      taskContext = nextTaskContext,
-      dynamicConfig = pythonDynamicConfig,
-      resourceDirectories = Map(
-        PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY ->
-          "/var/resources/artifact-2"),
-      timezone = "UTC"))
-    assert(nextInit.getUdf === init.getUdf)
-    assert(nextInit.getTaskContextMap.get("partitionId") === "4")
-    assert(nextInit.getTaskContextMap.get(
-      ExternalUDFInitContext.DRIVER_ID_CONTEXT_KEY) === "driver")
-    assert(nextInit.getTaskContextMap.get(
-      ExternalUDFInitContext.IS_DRIVER_CONTEXT_KEY) === "true")
-    assert(nextInit.getResourceDirectoriesMap.get(
-      PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY) ===
-      "/var/resources/artifact-2")
-    assert(nextInit.getTimezone === "UTC")
-
-    val decoded = PythonUDFPayload.decode(external.payload)
-    assert(decoded.command.sameElements(Array[Byte](10, 20, 30)))
-    assert(decoded.pythonIncludes === Vector("first.zip", "second.zip"))
-    assert(decoded.pythonVersion === "3.12")
-
-    val inputSchema = DataType.fromJson(init.getUdf.getInput.getSchema.toStringUtf8)
+    val inputSchema = DataType.fromJson(init.getUdf.getInput.getSchemaJson)
     assert(inputSchema === StructType(Seq(
       StructField("_0", IntegerType, nullable = false),
       StructField("_1", StringType, nullable = false))))
-    assert(init.getUdf.getInput.getArgumentsList.asScala.map(_.getInputOffset) === Seq(0, 1))
-    assert(!init.getUdf.getInput.getArguments(0).hasName)
-    assert(init.getUdf.getInput.getArguments(1).getName === "named")
+    val arguments = init.getUdf.getInput.getArgumentsList.asScala.map { argument =>
+      (argument.getInputOffset, if (argument.hasName) Some(argument.getName) else None)
+    }
+    assert(arguments === Seq((0, None), (1, Some("named"))))
 
-    val rewritten = expectExternalUDF(external.withNewChildren(Seq(
+    val rewritten = expectExternalUDF(function.withNewChildren(Seq(
       Literal(1L),
       NamedArgumentExpression("renamed", Literal("value")))))
-    val rewrittenInit = rewritten.buildInit(initContext(dynamicConfig = pythonDynamicConfig))
-    val rewrittenSchema =
-      DataType.fromJson(rewrittenInit.getUdf.getInput.getSchema.toStringUtf8)
-    assert(rewritten.payload eq external.payload)
-    assert(rewrittenInit.getUdf.getInvocationId === init.getUdf.getInvocationId)
-    assert(rewrittenInit.getUdf.getInput.getSchemaFormat === "spark-sql-data-type-json-v1")
+    val rewrittenInit = buildInit(rewritten)
+    val rewrittenSchema = DataType.fromJson(rewrittenInit.getUdf.getInput.getSchemaJson)
+    assert(rewritten.payload eq function.payload)
     assert(rewrittenSchema === StructType(Seq(
       StructField("_0", LongType, nullable = false),
       StructField("_1", StringType, nullable = false))))
@@ -352,99 +241,9 @@ class ExternalUDFInitializationSuite extends QueryTest with SharedSparkSession {
     }
     assert(rewrittenArguments === Seq((0, None), (1, Some("renamed"))))
 
-    val canonicalized = expectExternalUDF(external.canonicalized)
+    val canonicalized = expectExternalUDF(function.canonicalized)
     assert(canonicalized.resultId.id === -1L)
-    assert(canonicalized.payload eq external.payload)
-    assert(external.semanticEquals(external.copy(resultId = NamedExpression.newExprId)))
-  }
-
-  test("Python worker specification declares its generic session requirements") {
-    val spec = PythonUDFWorkerSpecBuilder.build(
-      pythonFunction(),
-      spark.sparkContext.getConf)
-    val session = spec.getSession
-    val dynamicConfig = session.getDynamicConfigMap.asScala.toMap
-
-    val expectedDynamicKeys = ArrowPythonRunner.getPythonRunnerConfEntries
-      .map(_.key)
-      .filterNot(_ == SQLConf.SESSION_LOCAL_TIMEZONE.key)
-      .toSet
-    assert(dynamicConfig.keySet === expectedDynamicKeys)
-    val optionalKeys = Set(
-      SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL.key,
-      SQLConf.PYTHON_UDF_PROFILER.key,
-      SQLConf.PYTHON_DATA_SOURCE_PROFILER.key)
-    assert(dynamicConfig.forall { case (name, requirement) =>
-      requirement.getIsRequired === !optionalKeys.contains(name)
-    })
-    assert(session.getRequiredResourceDirectoriesList.asScala.toSeq ===
-      Seq(PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY))
-    assert(session.getStaticConfigMap.isEmpty)
-    val defaultFunction = PythonExternalUDFAdapter.toExternalUDF(
-      pythonUDF(Seq(Literal(1))),
-      spec)
-    val defaultInit = defaultFunction.buildInit(initContext(
-      dynamicConfig = pythonDynamicConfig,
-      resourceDirectories = Map(
-        PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY ->
-          "/var/resources/artifact-default")))
-    assert(defaultInit.getSessionConfMap.get(SQLConf.PYSPARK_BINARY_AS_BYTES.key) === "true")
-    assert(!defaultInit.getSessionConfMap.containsKey(
-      SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL.key))
-    assert(defaultInit.getResourceDirectoriesMap.get(
-      PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY) ===
-      "/var/resources/artifact-default")
-
-    val missingConfig = intercept[IllegalArgumentException] {
-      defaultFunction.buildInit(initContext())
-    }
-    assert(missingConfig.getMessage.contains("Missing required dynamic configuration"))
-
-    Seq(
-      Map.empty[String, String],
-      Map(PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY -> "")
-    ).foreach { resourceDirectories =>
-      val error = intercept[IllegalArgumentException] {
-        defaultFunction.buildInit(initContext(
-          dynamicConfig = pythonDynamicConfig,
-          resourceDirectories = resourceDirectories))
-      }
-      assert(error.getMessage.contains("resource director"))
-    }
-    assert(session.getEnvironmentVariableReferencesMap.isEmpty)
-  }
-
-  test("PySpark conversion rejects unsupported evaluation types") {
-    val udf = pythonUDF(Seq(Literal(1)), PythonEvalType.SQL_BATCHED_UDF)
-    val error = intercept[IllegalArgumentException] {
-      PythonExternalUDFAdapter.toExternalUDF(
-        udf,
-        UDFWorkerSpecification.getDefaultInstance)
-    }
-    assert(error.getMessage.contains("Unsupported Python external UDF eval type"))
-  }
-
-  test("experimental Python payload encoding has an explicit wire version") {
-    val payload = PythonUDFPayload.encode(pythonFunction(
-      command = Array[Byte](1),
-      pythonIncludes = Seq("x"),
-      pythonVersion = "v"))
-    val expectedPayload = hexBytes(
-      "505955440000000100000001010000000100000001780000000176")
-    assert(payload.sameElements(expectedPayload))
-
-    Seq(0, 2).foreach { version =>
-      val unsupportedVersion = payload.clone()
-      ByteBuffer.wrap(unsupportedVersion).putInt(Integer.BYTES, version)
-      assert(intercept[IllegalArgumentException] {
-        PythonUDFPayload.decode(unsupportedVersion)
-      }.getMessage.contains(s"unsupported version $version"))
-    }
-    assert(intercept[IllegalArgumentException] {
-      PythonUDFPayload.decode(payload :+ 0.toByte)
-    }.getMessage.contains("trailing bytes"))
-    assert(intercept[IllegalArgumentException] {
-      PythonUDFPayload.decode(payload.dropRight(1))
-    }.getMessage.contains("invalid Python version length"))
+    assert(canonicalized.payload eq function.payload)
+    assert(function.semanticEquals(function.copy(resultId = NamedExpression.newExprId)))
   }
 }

@@ -193,7 +193,18 @@ object ArrowPythonRunner {
     SQLConf.PYTHON_UDF_PROFILER,
     SQLConf.PYTHON_DATA_SOURCE_PROFILER)
 
-  private[sql] def getPythonRunnerConfEntries: Seq[ConfigEntry[_]] = pythonRunnerConfEntries
+  private[execution] final case class PythonRunnerConfRequirement(
+      key: String,
+      isRequired: Boolean)
+
+  private[execution] def pythonRunnerConfRequirements: Seq[PythonRunnerConfRequirement] = {
+    pythonRunnerConfEntries.map {
+      case entry: OptionalConfigEntry[_] =>
+        PythonRunnerConfRequirement(entry.key, isRequired = false)
+      case entry =>
+        PythonRunnerConfRequirement(entry.key, isRequired = true)
+    }
+  }
 
   /** Return Map with conf settings to be used in ArrowPythonRunner */
   def getPythonRunnerConfMap(conf: SQLConf): Map[String, String] = {

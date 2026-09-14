@@ -26,7 +26,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.api.python.SimplePythonFunction
-import org.apache.spark.sql.IntegratedUDFTestUtils
+import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.udf.worker.{Cancel, UDFWorkerSpecification}
 import org.apache.spark.udf.worker.core.{TestDirectWorkerDispatcher, WorkerConnection}
@@ -81,7 +82,7 @@ private class ConnectingTestDispatcher(spec: UDFWorkerSpecification)
  * exercised here.
  */
 class PythonUDFWorkerSpecBuilderSuite
-    extends SharedSparkSession {
+    extends QueryTest with SharedSparkSession {
 
   import IntegratedUDFTestUtils.{
     isPySparkAvailable, pythonExec, pythonVer,
@@ -142,6 +143,61 @@ class PythonUDFWorkerSpecBuilderSuite
     (moduleDir, moduleName)
   }
 
+  private def pythonFunction(
+      envVars: java.util.Map[String, String] =
+        new java.util.HashMap[String, String](),
+      executable: String = "python3",
+      version: String = "3"): SimplePythonFunction = {
+    new SimplePythonFunction(
+      command = Array.emptyByteArray,
+      envVars = envVars,
+      pythonIncludes = ArrayBuffer.empty[String].asJava,
+      pythonExec = executable,
+      pythonVer = version,
+      broadcastVars = null,
+      accumulator = null)
+  }
+
+  test("PythonUDFWorkerSpecBuilder.build declares named session property requirements") {
+    val result = PythonUDFWorkerSpecBuilder.build(
+      pythonFunction(),
+      spark.sparkContext.conf)
+    val session = result.sessionSpec
+    val requirements = session.getPropertyRequirementsMap.asScala.toMap
+
+    val requiredKeys = Set(
+      SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key,
+      SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION.key,
+      SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES.key,
+      SQLConf.PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key,
+      SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key,
+      SQLConf.PYTHON_UDF_MAP_IN_BATCH_LEGACY_ACCEPT_ANY_ITERABLE_ENABLED.key,
+      SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED.key,
+      SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE.key,
+      SQLConf.PYSPARK_BINARY_AS_BYTES.key)
+    val optionalKeys = Set(
+      SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL.key,
+      SQLConf.PYTHON_UDF_PROFILER.key,
+      SQLConf.PYTHON_DATA_SOURCE_PROFILER.key)
+
+    assert(requirements.keySet === requiredKeys ++ optionalKeys)
+    assert(requiredKeys.forall(requirements(_).getIsRequired))
+    assert(optionalKeys.forall(key => !requirements(key).getIsRequired))
+    assert(session.getStaticPropertiesMap.isEmpty)
+    assert(session.getRequiredResourceDirectoriesList.asScala.toSeq ===
+      Seq(PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY))
+  }
+
+  test("PythonUDFWorkerSpecBuilder.build validates Python environment values") {
+    val envVars = new java.util.HashMap[String, String]()
+    envVars.put("INVALID", null)
+    val error = intercept[IllegalArgumentException] {
+      PythonUDFWorkerSpecBuilder.build(pythonFunction(envVars), spark.sparkContext.conf)
+    }
+    assert(error.getMessage ===
+      "requirement failed: Python worker environment contains null values for: INVALID")
+  }
+
   test("PythonUDFWorkerSpecBuilder.build" +
       " produces a spec that spawns a Python worker") {
     assume(isPySparkAvailable,
@@ -155,27 +211,20 @@ class PythonUDFWorkerSpecBuilderSuite
     envVars.put("PYTHONPATH",
       s"${moduleDir.getAbsolutePath}:" +
         s"$pysparkPythonPath:$pythonPath")
-    val func = new SimplePythonFunction(
-      command = Array.emptyByteArray,
-      envVars = envVars,
-      pythonIncludes = ArrayBuffer.empty[String].asJava,
-      pythonExec = pythonExec,
-      pythonVer = pythonVer,
-      broadcastVars = null,
-      accumulator = null)
+    val func = pythonFunction(envVars, pythonExec, pythonVer)
 
     // Override the worker module config to use our test module
     val conf = spark.sparkContext.conf.clone()
     conf.set("spark.python.worker.module", moduleName)
 
     // Build the spec via the function under test
-    val workerSpec =
+    val worker =
       PythonUDFWorkerSpecBuilder.build(func, conf)
 
     // Verify the spec works end-to-end: the dispatcher spawns the Python
     // worker, waits for the socket, and opens a real UDS connection to it
     // (proving the worker is reachable, not just that the file exists).
-    val dispatcher = new ConnectingTestDispatcher(workerSpec)
+    val dispatcher = new ConnectingTestDispatcher(worker.workerSpec)
     try {
       val session = dispatcher.createSession(
         securityScope = None)

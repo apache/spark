@@ -131,12 +131,15 @@ class UnifiedExternalUDFPlanner(
       isBarrier: Boolean,
       profile: Option[ResourceProfile]): LogicalPlan = {
     val pythonUdf = func.asInstanceOf[PythonUDF]
-    val workerSpec =
+    val worker =
       PythonUDFWorkerSpecBuilder.build(
         pythonUdf.func, conf)
     val udf = ExternalUserDefinedFunction(
       name = Some(pythonUdf.name),
-      workerSpec = workerSpec,
+      workerSpec = worker.workerSpec,
+      sessionSpec = worker.sessionSpec,
+      // TODO(SPARK-59366): Support broadcast variables in unified UDF execution for PySpark
+      // parity.
       payload = pythonUdf.func.command.toArray,
       dataType = pythonUdf.dataType,
       children = Seq.empty,

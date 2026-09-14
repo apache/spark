@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.python.{MapInPandasExec,
   UserDefinedPythonFunction}
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType,
   StructField, StructType}
@@ -134,6 +134,18 @@ class UnifiedUDFPlanningSuite
   test("mapInPandas uses MapPartitionsExternalUDF logical node") {
     val result = applyMapInPandas()
     assertLogicalNode[MapPartitionsExternalUDF](result)
+  }
+
+  test("mapInPandas carries Python session requirements separately from worker launch") {
+    val result = applyMapInPandas()
+    val node = result.queryExecution.analyzed.collectFirst {
+      case external: MapPartitionsExternalUDF => external
+    }.getOrElse(fail("Expected MapPartitionsExternalUDF in logical plan"))
+    val session = node.function.sessionSpec
+
+    assert(session.getPropertyRequirementsMap.containsKey(SQLConf.PYSPARK_BINARY_AS_BYTES.key))
+    assert(session.getRequiredResourceDirectoriesList.asScala.toSeq ===
+      Seq(PythonUDFWorkerSpecBuilder.ARTIFACTS_RESOURCE_DIRECTORY))
   }
 
   test("mapInPandas uses MapPartitionsExternalUDFExec" +

@@ -151,8 +151,7 @@ message UdfControlResponse {
 //     flows on the wire for this session ([[data_format]] /
 //     [[input_schema]] / [[output_schema]] -- matching the worker
 //     spec, not the function's view) and what per-session
-//     context the worker needs ([[timezone]], [[session_conf]],
-//     [[task_context]], [[environment_variables]],
+//     context the worker needs ([[timezone]], [[properties]],
 //     [[resource_directories]], and [[parameters]]).
 //   * [[UdfPayload]] carries the serialized callable plus metadata
 //     for this invocation. The callable stays opaque; common
@@ -210,45 +209,31 @@ message Init {
     // bytes the engine expects on [[DataResponse.data]].
     optional bytes output_schema = 6;
 
-    // (Optional; defaults to an empty map.) Per-task context
-    // provided by the engine. Common keys identify the task instance
-    // for diagnostics, logging, and stateful workers -- e.g.
-    // partition id, task attempt id, stage id, micro-batch id.
-    // Spark physical execution must also include "driverId" (defaulting
-    // to "driver") and "isDriver" (derived from the local SparkEnv) for
-    // every external worker session.
-    // Engine and worker agree on the keys they share; the protocol
-    // does not enumerate them.
-    map<string, string> task_context = 7;
-
-    // (Optional; defaults to an empty map.) Worker-private configuration
-    // not already captured by typed fields above. This combines literal
-    // WorkerSessionSpecification.static_config values with the dynamic
-    // values selected by WorkerSessionSpecification.dynamic_config.
+    // (Optional; defaults to an empty map.) Named properties selected by
+    // the worker's session specification. This combines literal
+    // WorkerSessionSpecification.static_properties values with the dynamic
+    // values selected by WorkerSessionSpecification.property_requirements.
+    // The engine copies static literals from the specification. It owns dynamic
+    // property lookup and only exposes supported, authorized values under stable
+    // logical names.
     //
     // Any key that two languages converge on is a candidate for
     // promotion to a structured proto field -- once promoted, it gets
     // a typed field number from the reserved range right after this
-    // block and is removed from [[session_conf]]. [[timezone]] below
+    // block and is removed from [[properties]]. [[timezone]] below
     // is an example of a key that has already been promoted.
-    map<string, string> session_conf = 8;
+    map<string, string> properties = 8;
 
-    // (Optional) Session timezone, promoted out of [[session_conf]]
+    // (Optional) Session timezone, promoted out of [[properties]]
     // because every eval needs it for timestamp encoding/decoding.
     //
     // Format follows Spark's `spark.sql.session.timeZone` config --
     // typically an IANA TZ id (e.g. "America/Los_Angeles") or a
     // fixed offset (e.g. "+08:00"). The engine MUST pass the value
-    // it would resolve from the session conf without further
+    // it would resolve from the engine's session configuration without further
     // transformation, so the worker can interpret it the same way
     // Spark does.
     optional string timezone = 9;
-
-    // (Optional; defaults to an empty map.) Environment variables
-    // requested by the worker specification for this session. The
-    // engine only forwards explicitly requested names; it MUST NOT
-    // expose its complete process environment.
-    map<string, string> environment_variables = 10;
 
     // (Optional; defaults to an empty map.) Logical resource name -> fully
     // resolved local directory in the worker's filesystem view. The engine
@@ -257,8 +242,11 @@ message Init {
     // non-empty path, and MUST NOT include unrequested resources.
     map<string, string> resource_directories = 11;
 
+    reserved 7, 10;
+    reserved "task_context", "session_conf", "environment_variables";
+
     // Reserved for future typed Init fields, in particular keys
-    // graduated from [[session_conf]] (see the [[timezone]] precedent
+    // graduated from [[properties]] (see the [[timezone]] precedent
     // above). Numbers >= 100 are intentionally NOT reserved here; if
     // a future revision needs an opaque escape-hatch field, give it a
     // number >= 100 alongside [[parameters]] and add a field-level
@@ -269,7 +257,7 @@ message Init {
     // particular kind of UDF execution. The escape hatch for
     // anything the engine needs the worker to see at init time
     // that is not already captured by the typed fields above and
-    // does not fit naturally into [[task_context]]. The encoding
+    // does not fit naturally into [[properties]]. The encoding
     // is agreed between the engine and the worker; the protocol
     // does not interpret it. The matching response, also opaque
     // bytes, is returned via [[InitResponse.data]].
@@ -606,34 +594,31 @@ message UdfPayload {
     // explicitly.
     optional string eval_type = 5;
 
-    // (Optional) Engine-assigned identity of this UDF invocation.
-    // This is metadata about the invocation rather than part of the
-    // opaque language-specific payload.
-    optional int64 invocation_id = 7;
-
     // (Optional) Logical input metadata for this invocation. This is
     // distinct from Init.input_schema, which describes the encoded wire
     // data. The engine rebuilds this metadata when expression children
     // are rewritten.
     optional UdfInputMetadata input = 8;
+
+    reserved 7;
+    reserved "invocation_id";
 }
 
 // Language-independent description of a UDF invocation's logical inputs.
 message UdfInputMetadata {
-    // (Required, non-empty.) Format tag for [[schema]]. The client and
-    // worker agree on the format; Spark SQL uses
-    // "spark-sql-data-type-json-v1".
-    string schema_format = 1;
+    // (Required, non-empty.) Logical input schema encoded as Spark SQL
+    // DataType JSON. The value must represent a StructType.
+    string schema_json = 2;
 
-    // Logical input schema encoded in [[schema_format]].
-    bytes schema = 2;
-
-    // Positional and named bindings into [[schema]].
+    // Positional and named bindings into [[schema_json]].
     repeated UdfArgument arguments = 3;
+
+    reserved 1;
+    reserved "schema_format", "schema";
 }
 
 message UdfArgument {
-    // Zero-based field offset in [[UdfInputMetadata.schema]].
+    // Zero-based field offset in [[UdfInputMetadata.schema_json]].
     uint32 input_offset = 1;
 
     // Optional named-argument name supplied by the caller.
