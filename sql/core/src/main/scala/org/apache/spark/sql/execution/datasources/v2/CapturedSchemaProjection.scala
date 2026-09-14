@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, AttributeReference, CreateNamedStruct, Expression, GetStructField, If, IsNull, KnownNotNull, LambdaFunction, Literal, MetadataAttributeWithLogicalName, NamedLambdaVariable, TaggingExpression, TransformKeys, TransformValues, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, Metadata, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Rebinds a relation that reads a current table schema to output attributes captured from an
@@ -46,7 +46,7 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
     // The relation still carries the output captured at analysis time; only its table has been
     // swapped for the current one.
     val capturedOutput = relation.output
-    val resolver = conf.resolver
+    val caseSensitive = conf.caseSensitiveAnalysis
     val current = DataSourceV2Relation.create(
       relation.table,
       relation.catalog,
@@ -56,7 +56,7 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
     val currentMetadataOutput = current.metadataOutput
     val currentMetadata = capturedOutput.filter(_.isMetadataCol).map { captured =>
       val logicalName = metadataLogicalName(captured)
-      matchName(currentMetadataOutput, logicalName, resolver)(metadataLogicalName)
+      matchName(currentMetadataOutput, logicalName, caseSensitive)(metadataLogicalName)
         .map(pos => currentMetadataOutput(pos))
         .getOrElse {
           // The connector still reports this metadata column, so it can only be absent here
@@ -81,13 +81,13 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
       return relation
     }
 
-    val capturedIndex = new AttributeIndex(capturedOutput, resolver)
+    val capturedIndex = new AttributeIndex(capturedOutput, caseSensitive)
     val reboundOutput = currentOutput.map { currentAttr =>
       capturedIndex.get(currentAttr).filter(canReuse(_, currentAttr)).getOrElse(currentAttr)
     }
     val reboundRelation = relation.copy(output = reboundOutput)
 
-    val reboundIndex = new AttributeIndex(reboundOutput, resolver)
+    val reboundIndex = new AttributeIndex(reboundOutput, caseSensitive)
     val projectList = capturedOutput.map { capturedAttr =>
       val currentAttr = reboundIndex.get(capturedAttr).getOrElse {
         unexpectedSchemaChange(
@@ -102,7 +102,7 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
             s"nullability changed for captured column ${capturedAttr.name} in ${relation.name}")
         }
         val projected = projectToType(
-          currentAttr, currentAttr.dataType, capturedAttr.dataType, resolver)
+          currentAttr, currentAttr.dataType, capturedAttr.dataType, caseSensitive)
         if (projected.dataType != capturedAttr.dataType ||
           projected.nullable != capturedAttr.nullable) {
           unexpectedSchemaChange(
@@ -122,7 +122,7 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
       input: Expression,
       from: DataType,
       to: DataType,
-      resolver: Resolver): Expression = {
+      caseSensitive: Boolean): Expression = {
     if (from == to) {
       return input
     }
@@ -131,7 +131,7 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
       case (fromStruct: StructType, toStruct: StructType) =>
         val structInput = if (input.nullable) KnownNotNull(input) else input
         val fields = toStruct.fields.iterator.flatMap { targetField =>
-          val index = matchName(fromStruct, targetField.name, resolver)(_.name).getOrElse {
+          val index = matchName(fromStruct, targetField.name, caseSensitive)(_.name).getOrElse {
             unexpectedSchemaChange(
               s"captured struct field ${targetField.name} is missing from $fromStruct")
           }
@@ -140,7 +140,7 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
             GetStructField(structInput, index, Some(sourceField.name)),
             sourceField.dataType,
             targetField.dataType,
-            resolver)
+            caseSensitive)
           val namedValue = if (targetField.metadata == Metadata.empty) {
             // An empty captured value is still an explicit instruction not to inherit metadata
             // from the current GetStructField. CleanupAliases removes an empty-metadata Alias, so
@@ -172,7 +172,7 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
         ArrayTransform(
           input,
           LambdaFunction(
-            projectToType(element, fromElement, toElement, resolver), Seq(element)))
+            projectToType(element, fromElement, toElement, caseSensitive), Seq(element)))
 
       case (
             MapType(fromKey, fromValue, fromValueContainsNull),
@@ -197,7 +197,7 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
           // duplicate keys.
           TransformKeys(
             input,
-            LambdaFunction(projectToType(key, fromKey, toKey, resolver), Seq(key, value)))
+            LambdaFunction(projectToType(key, fromKey, toKey, caseSensitive), Seq(key, value)))
         } else {
           input
         }
@@ -214,7 +214,7 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
           TransformValues(
             withProjectedKeys,
             LambdaFunction(
-              projectToType(value, fromValue, toValue, resolver), Seq(key, value)))
+              projectToType(value, fromValue, toValue, caseSensitive), Seq(key, value)))
         } else {
           withProjectedKeys
         }
@@ -231,29 +231,23 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
   }
 
   /**
-   * Returns the position of the entry whose name matches `target`, if any.
+   * Returns the position of the first entry whose folded name matches `target`, if any.
    *
-   * An exact match wins so that a name binds to itself even when the resolver cannot tell it apart
-   * from another name in the same schema. Duplicate names are rejected by folding with
-   * `toLowerCase` while resolution compares with `equalsIgnoreCase`, so a schema can legally hold
-   * several names the resolver considers equal. Without an exact match the resolver match has to be
-   * unique: nothing here can decide which of two indistinguishable names the captured plan read.
+   * Matching on [[SchemaUtils.foldName]] rather than comparing with the resolver keeps rebinding on
+   * the identity rule the rest of resolution uses, so a captured name binds to the field that
+   * validation matched it to and the field a fresh query would resolve it to. The fold is also
+   * single-valued where the resolver is not: refresh validation rejects a schema holding two names
+   * that fold alike, so at most one candidate can match here.
    */
   private def matchName[T](
       candidates: Seq[T],
       target: String,
-      resolver: Resolver)(name: T => String): Option[Int] = {
-    val exact = candidates.indexWhere(candidate => name(candidate) == target)
-    if (exact >= 0) {
-      return Some(exact)
+      caseSensitive: Boolean)(name: T => String): Option[Int] = {
+    val foldedTarget = SchemaUtils.foldName(target, caseSensitive)
+    val pos = candidates.indexWhere { candidate =>
+      SchemaUtils.foldName(name(candidate), caseSensitive) == foldedTarget
     }
-    val matches = candidates.indices.filter(pos => resolver(name(candidates(pos)), target))
-    if (matches.length > 1) {
-      unexpectedSchemaChange(
-        s"captured name $target matches multiple current names " +
-          matches.map(pos => name(candidates(pos))).mkString("[", ", ", "]"))
-    }
-    matches.headOption
+    if (pos >= 0) Some(pos) else None
   }
 
   /**
@@ -261,7 +255,7 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
    * separately because a metadata attribute matches on its logical name, which a data column may
    * also carry.
    */
-  private class AttributeIndex(attributes: Seq[AttributeReference], resolver: Resolver) {
+  private class AttributeIndex(attributes: Seq[AttributeReference], caseSensitive: Boolean) {
     private val dataAttrs = attributes.filterNot(_.isMetadataCol)
     private val metadataAttrs = attributes.filter(_.isMetadataCol)
 
@@ -275,7 +269,7 @@ private[sql] object CapturedSchemaProjection extends SQLConfHelper {
 
     private def find(attrs: Seq[AttributeReference], targetName: String)(
         name: AttributeReference => String): Option[AttributeReference] = {
-      matchName(attrs, targetName, resolver)(name).map(pos => attrs(pos))
+      matchName(attrs, targetName, caseSensitive)(name).map(pos => attrs(pos))
     }
   }
 

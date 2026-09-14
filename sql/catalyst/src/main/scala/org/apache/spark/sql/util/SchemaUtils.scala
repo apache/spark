@@ -529,12 +529,23 @@ private[spark] object SchemaUtils {
     if (field.nullable) s"$name $dataType" else s"$name $dataType NOT NULL"
   }
 
+  /**
+   * Folds a name to the key used to decide whether two names refer to the same column or field.
+   *
+   * This is the identity rule name resolution is built on: `AttributeSeq` looks attributes up by
+   * this key and only then filters the candidates with the resolver, and the duplicate-name checks
+   * above reject a schema that holds two names folding to one key. Matching by folded name
+   * therefore finds exactly the field resolution would, while comparing with the resolver alone
+   * can match several fields a schema is allowed to keep apart (`equalsIgnoreCase` equates U+017F
+   * LONG S with `s`, which this fold does not).
+   */
+  def foldName(name: String, caseSensitiveAnalysis: Boolean): String = {
+    if (caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+  }
+
   private def index(fields: Array[StructField], resolver: Resolver): Map[String, StructField] = {
-    if (isCaseSensitiveAnalysis(resolver)) {
-      fields.map(field => field.name -> field).toMap
-    } else {
-      fields.map(field => field.name.toLowerCase(Locale.ROOT) -> field).toMap
-    }
+    val caseSensitive = isCaseSensitiveAnalysis(resolver)
+    fields.map(field => foldName(field.name, caseSensitive) -> field).toMap
   }
 
   /**

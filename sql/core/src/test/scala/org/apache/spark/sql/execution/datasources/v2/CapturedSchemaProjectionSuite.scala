@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.{GenericArrayData, MetadataColumnHelpe
 import org.apache.spark.sql.connector.catalog.{Column, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructField, StructType, VariantType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils, SchemaValidationMode}
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.unsafe.types.VariantVal
 
@@ -427,16 +427,17 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
       caseSensitive = true)
   }
 
-  test("use resolver semantics for top-level and nested field names") {
+  test("match names with the fold name resolution uses, not with the resolver") {
+    // U+0130 CAPITAL I WITH DOT separates the two identity rules: `equalsIgnoreCase` equates it
+    // with `i`, while folding with `toLowerCase` maps it to `i` plus a combining dot. Resolution
+    // and refresh validation both key on the fold, so this pair names two different columns and
+    // rebinding must report the captured one missing rather than bind it to the other.
     val capitalIWithDot = new String(Character.toChars(0x130))
     val capturedNested = StructType(Seq(StructField("i", StringType, nullable = false)))
     val currentNested =
       StructType(Seq(StructField(capitalIWithDot, StringType, nullable = false)))
     val currentTable = new TestTable(
       Array(Column.create(capitalIWithDot, currentNested, false)))
-    // Call rebinding directly so this test covers only the resolver semantics implemented by the
-    // new projection. The shared schema validator predates this change and uses different
-    // canonicalization for this Unicode pair.
     val relation = DataSourceV2Relation(
       table = currentTable,
       output = Seq(AttributeReference("i", capturedNested, nullable = false)()),
@@ -444,25 +445,36 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
       identifier = None,
       options = CaseInsensitiveStringMap.empty())
 
-    val rebound = CapturedSchemaProjection.rebindToCapturedSchema(relation).asInstanceOf[Project]
-    assert(rebound.child.output.head.name == capitalIWithDot)
-    assert(rebound.child.output.head.dataType == currentNested)
-    assert(rebound.output.head.name == "i")
-    assert(rebound.output.head.dataType == capturedNested)
+    // Refresh rejects this evolution before rebinding runs, so the internal error below reports a
+    // validation gap and is not reachable through a query.
+    val capturedSchema = StructType(Seq(StructField("i", capturedNested, nullable = false)))
+    val currentSchema =
+      StructType(Seq(StructField(capitalIWithDot, currentNested, nullable = false)))
+    Seq(false, true).foreach { caseSensitive =>
+      val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
+      assert(
+        SchemaUtils.validateSchemaCompatibility(
+          capturedSchema,
+          currentSchema,
+          resolver,
+          SchemaValidationMode.ALLOW_NEW_FIELDS,
+          checkFieldIds = false).nonEmpty,
+        s"validation must reject this pair (caseSensitive = $caseSensitive)")
 
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val e = intercept[SparkException] {
-        CapturedSchemaProjection.rebindToCapturedSchema(relation)
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val e = intercept[SparkException] {
+          CapturedSchemaProjection.rebindToCapturedSchema(relation)
+        }
+        assert(e.getCondition == "INTERNAL_ERROR")
+        assert(e.getMessage.contains("captured column i is missing from current table"))
       }
-      assert(e.getCondition == "INTERNAL_ERROR")
-      assert(e.getMessage.contains("captured column i is missing from current table"))
     }
   }
 
-  test("prefer an exact column name over one that only matches after case folding") {
-    // A table can hold both `s` and U+017F: the duplicate-name check folds names with
-    // `toLowerCase`, which keeps them apart, while the resolver compares with `equalsIgnoreCase`,
-    // which does not. The captured name must still read the column that carries it.
+  test("bind a captured column to the one that folds alike, not a resolver-equal sibling") {
+    // A table can legally hold both `s` and U+017F LONG S: the duplicate-name check folds names
+    // with `toLowerCase`, which keeps them apart, while the resolver compares with
+    // `equalsIgnoreCase`, which does not. The captured name must read the column it folds to.
     val longS = new String(Character.toChars(0x17f))
     val currentTable = new TestTable(Array(
       Column.create(longS, IntegerType),
@@ -483,7 +495,7 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
     assert(read.map(_.exprId) == Seq(rebound.child.output.last.exprId))
   }
 
-  test("prefer an exact nested field name over one that only matches after case folding") {
+  test("bind a captured field to the one that folds alike, not a resolver-equal sibling") {
     val longS = new String(Character.toChars(0x17f))
     val currentType = StructType(
       Seq(StructField(longS, IntegerType), StructField("s", IntegerType)))
@@ -494,19 +506,19 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
     checkEvaluation(projected, create_row(1))
   }
 
-  test("reject a captured name that several current names match") {
-    // Neither `S` nor U+017F is the captured name, both are equal to it under the resolver, and
-    // the duplicate-name check keeps them apart, so nothing here can choose between them.
+  test("bind a captured field to a case-renamed field beside a resolver-equal addition") {
+    // Capture `s`, rename it to `S`, then add U+017F LONG S. Folding with `toLowerCase` keeps `S`
+    // and U+017F apart, so validation matches captured `s` to `S` and takes U+017F as a new field,
+    // and a fresh query resolves `s` to `S` the same way. Rebinding has to agree: comparing with
+    // the resolver instead would find both current names equal to `s` and fail on a legal change.
     val longS = new String(Character.toChars(0x17f))
     val currentType = StructType(
       Seq(StructField("S", IntegerType), StructField(longS, IntegerType)))
     val capturedType = StructType(Seq(StructField("s", IntegerType)))
 
-    checkRejected(
-      Literal(create_row(1, 2), currentType),
-      currentType,
-      capturedType,
-      "captured name s matches multiple current names")
+    val projected = project(Literal(create_row(1, 2), currentType), currentType, capturedType)
+    assert(projected.dataType == capturedType)
+    checkEvaluation(projected, create_row(1))
   }
 
   test("keep the first ordinal when a struct has duplicate field names") {
@@ -691,8 +703,7 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
       from: DataType,
       to: DataType,
       caseSensitive: Boolean = false): Expression = {
-    val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
-    CapturedSchemaProjection.projectToType(input, from, to, resolver)
+    CapturedSchemaProjection.projectToType(input, from, to, caseSensitive)
   }
 
   private def checkRejected(

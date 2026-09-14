@@ -1585,6 +1585,12 @@ class DataSourceV2DataFrameSuite
     stripAQEPlan(qe.executedPlan).asInstanceOf[T]
   }
 
+  private def scanRelationOf(df: DataFrame): DataSourceV2ScanRelation = {
+    df.queryExecution.optimizedPlan.collectFirst {
+      case scan: DataSourceV2ScanRelation => scan
+    }.get
+  }
+
   private def checkDefaultValues(
       columns: Array[Column],
       expectedDefaultValues: Array[ColumnDefaultValue],
@@ -1726,6 +1732,36 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("rebind a captured column renamed beside an addition the resolver cannot tell apart") {
+    // U+017F LONG S folds to itself under `toLowerCase`, so it is a distinct column name to the
+    // fold that name resolution and refresh validation key on, while `equalsIgnoreCase` equates it
+    // with `s`. Renaming `s` to `S` and adding U+017F is therefore a compatible change, and the
+    // captured `s` must keep reading the renamed column rather than becoming ambiguous.
+    val longS = new String(Character.toChars(0x17f))
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, s INT) USING foo")
+
+      // Analyze the plan but do not execute it: a Dataset memoizes its optimized plan, so a collect
+      // before the change would refresh once and never see the change below.
+      val df = spark.table(t).filter("id > 0")
+      assert(df.queryExecution.analyzed.resolved)
+
+      // Spark's own DDL refuses both changes because it checks for an existing field with the
+      // resolver, so apply them through the catalog the way another engine would. Data is written
+      // afterwards because this fixture migrates rows by exact field name and so drops the values
+      // of a renamed column.
+      val cat = catalog("testcat")
+      cat.alterTable(testIdent, TableChange.renameColumn(Array("s"), "S"))
+      cat.alterTable(testIdent, TableChange.addColumn(Array(longS), IntegerType, true))
+      externalAppend(cat, testIdent, InternalRow(2, 20, 99))
+
+      // Reading 99 instead of 20 would mean the captured name bound to the addition.
+      checkAnswer(df, Seq(Row(2, 20)))
+      assert(df.queryExecution.optimizedPlan.output.map(_.name) == Seq("id", "s"))
+    }
+  }
+
   test("refresh reconciles a wider partially-pruned scan with stored temp view output") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1777,6 +1813,57 @@ class DataSourceV2DataFrameSuite
         Row(1, Row("Alice")),
         Row(2, Row("Bob")),
         Row(3, null)))
+    }
+  }
+
+  test("refresh recreates a captured nested schema without nested pruning or filter pushdown") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, city: STRING>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'city', 'SF'))")
+
+      def nestedQuery(): DataFrame =
+        spark.table(t).where("person.name = 'Alice'").select("person.name")
+
+      def personFieldsRead(df: DataFrame): Seq[String] = {
+        val readSchema = scanRelationOf(df).scan.readSchema()
+        readSchema("person").dataType.asInstanceOf[StructType].fieldNames.toSeq
+      }
+
+      // Every filter this source reports is one Spark managed to translate and hand to
+      // `pushFilters`. The scan relation's own `pushedFilters` cannot be used here: it keeps only
+      // fully-pushed filters, and this source evaluates none on an unpartitioned table.
+      def filtersReachingSource(df: DataFrame): Seq[String] = {
+        scanRelationOf(df).scan match {
+          case scan: InMemoryBaseTable#InMemoryBatchScan =>
+            scan.pushedFilters.map(_.toString).toSeq
+          case other =>
+            fail(s"unexpected scan type ${other.getClass.getName}")
+        }
+      }
+
+      // capture the plan, then add a field inside the struct
+      val captured = nestedQuery()
+      assert(captured.queryExecution.analyzed.resolved)
+      sql(s"ALTER TABLE $t ADD COLUMN person.age INT FIRST")
+      sql(s"INSERT INTO $t VALUES (2, named_struct('age', 25, 'name', 'Bob', 'city', 'NY'))")
+
+      val fresh = nestedQuery()
+      checkAnswer(captured, Seq(Row("Alice")))
+      checkAnswer(fresh, Seq(Row("Alice")))
+
+      // a plan analyzed after the change prunes to the one field it reads and translates the
+      // predicate down to the source
+      assert(personFieldsRead(fresh) == Seq("name"))
+      assert(filtersReachingSource(fresh).nonEmpty)
+
+      // Rebinding rebuilds the struct as `If(IsNull(person), null, CreateNamedStruct(...))`, which
+      // the extraction, schema-pruning and pushdown rules cannot see through, so the captured plan
+      // reads the whole current struct and its predicate never reaches the source. Results stay
+      // correct, only wider than necessary. Tighten both assertions to match `fresh` once the
+      // projection uses an optimizer-friendly null-preserving form.
+      assert(personFieldsRead(captured) == Seq("age", "name", "city"))
+      assert(filtersReachingSource(captured).isEmpty)
     }
   }
 
@@ -3988,9 +4075,13 @@ class DataSourceV2DataFrameSuite
       assert(spark.sharedState.cacheManager.numCachedEntries == 1)
 
       // Rebinding an already rebound plan adds a second projection rather than replacing the first,
-      // so this entry no longer matches the single projection a query rebuilds from its own
-      // captured output and stops being reused. Derived queries must still return the captured
-      // schema and the latest data.
+      // so the retained entry no longer matches the single projection a derived query rebuilds from
+      // its own captured output, and stops being reused. Assert that directly: the entry surviving
+      // is not the same claim as the entry being usable. Flip this back to `assertCached` once
+      // refresh replaces the generated projection instead of nesting inside it.
+      assertNotCached(df.filter("id > 0"))
+
+      // Derived queries must still return the captured schema and the latest data.
       checkAnswer(df.filter("id > 0"), Seq(Row(1, 10), Row(2, 20), Row(3, 30), Row(4, 40)))
 
       // verify latest schema is propagated again
