@@ -197,12 +197,18 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
     }
   }
 
-  // Called by Java when deserializing an object
+  // Called by Java when deserializing an object. Must not publish `this`, see `readResolve`.
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
-    if (atDriverSide) {
-      atDriverSide = false
+    atDriverSide = !atDriverSide
+  }
 
+  // Called by Java after the whole object, including subclass fields, has been deserialized.
+  // Registering from `readObject` instead published a half-built accumulator to the task's
+  // list while subclass fields were still null, and the heartbeater's `isZero` call then NPEd
+  // and stopped heartbeats (SPARK-20977, SPARK-59451). Final so a subclass cannot shadow it.
+  final protected def readResolve(): AnyRef = {
+    if (!atDriverSide) {
       // Automatically register the accumulator when it is deserialized with the task closure.
       // This is for external accumulators and internal ones that do not represent task level
       // metrics, e.g. internal SQL metrics, which are per-operator.
@@ -210,9 +216,8 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
       if (taskContext != null) {
         taskContext.registerAccumulator(this)
       }
-    } else {
-      atDriverSide = true
     }
+    this
   }
 
   override def toString: String = {
