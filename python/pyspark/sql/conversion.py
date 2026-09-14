@@ -361,6 +361,7 @@ class PandasToArrowConversion:
         import pandas as pd
         import pyarrow as pa
 
+        from pyspark.errors import PySparkTypeError
         from pyspark.sql.pandas.types import to_arrow_type
 
         # Handle empty schema (0 columns)
@@ -405,7 +406,7 @@ class PandasToArrowConversion:
                 )
                 # Wrap the nested RecordBatch as a single StructArray column
                 converted.append(ArrowBatchTransformer.wrap_struct(nested_batch).column(0))
-            else:
+            elif isinstance(col, pd.Series):
                 converted.append(
                     cls._convert_column(
                         col,
@@ -418,6 +419,14 @@ class PandasToArrowConversion:
                         ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
                         use_legacy_error_handling=use_legacy_error_handling,
                     )
+                )
+            else:
+                raise PySparkTypeError(
+                    errorClass="UDF_RETURN_TYPE",
+                    messageParameters={
+                        "expected": "pandas.Series or pandas.DataFrame",
+                        "actual": type(col).__name__,
+                    },
                 )
 
         # pa.Array.from_pandas returns a pa.ChunkedArray for a chunked arrow-backed Series
@@ -440,6 +449,7 @@ class PandasToArrowConversion:
         use_legacy_error_handling: bool = False,
     ) -> Union["pa.Array", "pa.ChunkedArray"]:
         """Dispatch a pandas column to its conversion strategy."""
+        # Future NumPy and PyArrow strategies will be selected here; use legacy for now.
         return cls._convert_column_legacy(
             series,
             field,
