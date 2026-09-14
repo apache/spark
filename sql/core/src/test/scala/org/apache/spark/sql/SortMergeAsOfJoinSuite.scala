@@ -638,6 +638,20 @@ class SortMergeAsOfJoinSuite extends QueryTest
     )
   }
 
+  // Runs checkAnswer, then confirms the right-side buffer actually spilled (spillSize > 0).
+  // Catches a broken spill-size metric that a result-only check would miss.
+  private def checkAnswerAndSpill(df: classic.DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    checkAnswer(df, expectedAnswer)
+    val op = collectFirst(df.queryExecution.executedPlan) {
+      case s: SortMergeAsOfJoinExec => s
+    }
+    assert(op.isDefined,
+      s"Expected SortMergeAsOfJoinExec in plan:\n${df.queryExecution.executedPlan}")
+    assert(op.get.metrics("spillSize").value > 0,
+      s"Expected the right-side buffer to spill (spillSize > 0), " +
+        s"got ${op.get.metrics("spillSize").value}")
+  }
+
   test("backward join - spill to disk") {
     // Force spill by setting in-memory threshold to 1 row.
     // Verifies that ExternalAppendOnlyUnsafeRowArray's spill path
@@ -647,7 +661,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
-      checkAnswer(
+      checkAnswerAndSpill(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
@@ -677,7 +691,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
-      checkAnswer(
+      checkAnswerAndSpill(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
@@ -719,7 +733,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
-      checkAnswer(
+      checkAnswerAndSpill(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
@@ -760,7 +774,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
-      checkAnswer(
+      checkAnswerAndSpill(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
           joinType = "leftouter", tolerance = null,

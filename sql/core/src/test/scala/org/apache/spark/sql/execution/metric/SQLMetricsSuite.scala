@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, InsertIntoHadoopFsRelationCommand, SQLHadoopMapReduceCommitProtocol, V1WriteCommand}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec}
 import org.apache.spark.sql.execution.window.WindowGroupLimitExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
@@ -443,6 +443,37 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           enableWholeStage
         )
       }
+    }
+  }
+
+  test("SortMergeAsOfJoin metrics") {
+    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+      // Left key 0 has no backward match: INNER drops it, LEFT OUTER keeps it null-padded.
+      // So the two counts differ (2 vs 3), which pins the null-pad numOutputRows increment.
+      val left = Seq((0, 0), (5, 5), (10, 10)).toDF("a", "left_val")
+      val right = Seq((1, 1), (3, 3), (7, 7)).toDF("a", "right_val")
+
+      val innerDf = left.joinAsOf(
+        right, left.col("a"), right.col("a"), usingColumns = Seq.empty,
+        joinType = "inner", tolerance = null,
+        allowExactMatches = true, direction = "backward")
+      innerDf.collect()
+      val innerOp = innerDf.queryExecution.executedPlan.collectFirst {
+        case s: SortMergeAsOfJoinExec => s
+      }
+      assert(innerOp.isDefined, "The query plan should have SortMergeAsOfJoin")
+      testMetricsInSparkPlanOperator(innerOp.get, Map("numOutputRows" -> 2L))
+
+      val leftOuterDf = left.joinAsOf(
+        right, left.col("a"), right.col("a"), usingColumns = Seq.empty,
+        joinType = "leftouter", tolerance = null,
+        allowExactMatches = true, direction = "backward")
+      leftOuterDf.collect()
+      val leftOuterOp = leftOuterDf.queryExecution.executedPlan.collectFirst {
+        case s: SortMergeAsOfJoinExec => s
+      }
+      assert(leftOuterOp.isDefined, "The query plan should have SortMergeAsOfJoin")
+      testMetricsInSparkPlanOperator(leftOuterOp.get, Map("numOutputRows" -> 3L))
     }
   }
 
