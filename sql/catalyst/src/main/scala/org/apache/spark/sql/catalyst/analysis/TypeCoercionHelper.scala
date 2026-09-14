@@ -695,21 +695,18 @@ abstract class TypeCoercionHelper {
    */
   object ImplicitTypeCoercion {
     def apply(expression: Expression): Expression = expression match {
-      case b @ BinaryOperator(left, right)
-          if canHandleTypeCoercion(left.dataType, right.dataType) =>
-        findTightestCommonType(left.dataType, right.dataType)
-          .map { commonType =>
-            if (b.inputType.acceptsType(commonType)) {
-              // If the expression accepts the tightest common type, cast to that.
-              val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
-              val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
-              b.withNewChildren(Seq(newLeft, newRight))
-            } else {
-              // Otherwise, don't do anything with the expression.
-              b
-            }
-          }
-          .getOrElse(b) // If there is no applicable conversion, leave expression unchanged.
+      case b: BinaryOperator if canHandleTypeCoercion(b.left.dataType, b.right.dataType) =>
+        findTightestCommonType(b.left.dataType, b.right.dataType) match {
+          case Some(commonType) if b.inputType.acceptsType(commonType) =>
+            // If the expression accepts the tightest common type, cast to that.
+            val newLeft = if (b.left.dataType == commonType) b.left else Cast(b.left, commonType)
+            val newRight =
+              if (b.right.dataType == commonType) b.right else Cast(b.right, commonType)
+            b.withNewChildren(Seq(newLeft, newRight))
+          case _ =>
+            // If there is no applicable conversion, leave the expression unchanged.
+            b
+        }
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
