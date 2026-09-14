@@ -174,9 +174,9 @@ case class AnalysisContext(
     // in a scalar subquery) in `verifyTemporaryObjectsNotExists` at run time. When
     // `spark.sql.legacy.allowSessionVariableInPersistedView` is set, the persisted paths simply
     // discard the set. The single-pass resolver has no IDENTIFIER-clause resolution of its own, so
-    // there is no second writer to keep in sync. LinkedHashSet keeps insertion order so the recorded
-    // names (and any error naming them) are deterministic when more than one variable is read via an
-    // IDENTIFIER clause.
+    // there is no second writer to keep in sync. LinkedHashSet keeps insertion order so the
+    // recorded names (and any error naming them) are deterministic when more than one variable is
+    // read via an IDENTIFIER clause.
     referredTempVariableNamesUnderIdentifier: mutable.Set[Seq[String]] =
       mutable.LinkedHashSet.empty,
     outerPlan: Option[LogicalPlan] = None,
@@ -270,9 +270,9 @@ object AnalysisContext {
       referredTempViewNames = viewDesc.viewReferredTempViewNames,
       referredTempFunctionNames = mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
       referredTempVariableNames = viewDesc.viewReferredTempVariableNames,
-      // Reset rather than share: a temporary nested view records its own IDENTIFIER-clause variables
-      // in its own metadata, and a persisted one does not carry them at all, so in neither case may
-      // they be attributed to the object whose creation is driving this analysis.
+      // Reset rather than share: a temporary nested view records its own IDENTIFIER-clause
+      // variables in its own metadata, and a persisted one does not carry them at all, so in
+      // neither case may they be attributed to the object whose creation is driving this analysis.
       referredTempVariableNamesUnderIdentifier = mutable.LinkedHashSet.empty,
       collation = viewDesc.collation)
     context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
@@ -287,8 +287,8 @@ object AnalysisContext {
       resolutionPathEntries = function.functionStoredResolutionPath
         .map(CatalogManager.deserializePathEntriesOrFail(
           _, "SQL function", function.name.unquotedString)),
-      // Unlike `withAnalysisContext(viewDesc)`, do NOT reset this accumulator. A SQL function has no
-      // IDENTIFIER-variable metadata of its own, so a variable its body reads through an IDENTIFIER
+      // Unlike `withAnalysisContext(viewDesc)`, do NOT reset this accumulator. A SQL function has
+      // no IDENTIFIER-variable metadata of its own, so a variable its body reads through IDENTIFIER
       // clause is part of the enclosing object's definition (e.g. the temporary view or CACHE TABLE
       // AS SELECT that selects the function), and must be recorded there. Sharing the caller's set
       // records it; a nested view, by contrast, stores its own and so is reset.
@@ -535,8 +535,8 @@ class Analyzer(
    *
    * It runs the fixed-point analyzer directly (in a context it owns, so the accumulator stays
    * readable). The only caller analyzes a metric-view placeholder, which is explicitly unsupported
-   * by the single-pass resolver (see the resolver's unsupported-feature list), so [[executeAndCheck]]
-   * would fall back to this same fixed-point path anyway.
+   * by the single-pass resolver (see the resolver's unsupported-feature list), so
+   * [[executeAndCheck]] would fall back to this same fixed-point path anyway.
    */
   def executeAndCheckReferredTempVariablesUnderIdentifier(
       plan: LogicalPlan,
