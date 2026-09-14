@@ -358,7 +358,24 @@ class DataFrameCreationTests(
     DataFrameCreationTestsMixin,
     ReusedSQLTestCase,
 ):
-    pass
+    def test_char_varchar_explicit_schema_captures_legacy_policy(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("nested", ArrayType(VarcharType(3))),
+            ]
+        )
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            df = self.spark.createDataFrame([("ab", ["abcd"])], schema)
+
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            self.assertEqual(df.first(), Row(c="ab", nested=["abcd"]))
 
 
 if __name__ == "__main__":
