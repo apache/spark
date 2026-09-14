@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckSuccess
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_UDF, TreePattern}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.udf.worker.UDFWorkerSpecification
+import org.apache.spark.udf.worker.{UDFWorkerSpecification, WorkerSessionSpecification}
 
 /**
  * :: Experimental ::
@@ -40,15 +42,22 @@ import org.apache.spark.udf.worker.UDFWorkerSpecification
  * operator (e.g. [[org.apache.spark.sql.execution.externalUDF.MapPartitionsExternalUDFExec]])
  * to execute.
  *
- * @param name             Optional name of the UDF.
- * @param workerSpec       Specification of the worker that executes this UDF.
- * @param payload          Opaque serialized function definition.
- * @param dataType         Return type of the UDF.
- * @param children         Input argument expressions.
- * @param inputTypes       Optional declared input types for validation.
+ * The session specification declares the named properties and resources needed for each worker
+ * session. Physical execution combines it with engine-owned values when constructing the
+ * initialization message.
+ *
+ * @param name Optional name of the UDF.
+ * @param workerSpec Specification of the worker that executes this UDF.
+ * @param payload Opaque serialized function definition.
+ * @param dataType Return type of the UDF.
+ * @param children Input argument expressions.
+ * @param inputTypes Optional declared input types for validation.
  * @param udfDeterministic Whether this UDF is deterministic.
- * @param udfNullable      Whether this UDF can return null.
- * @param resultId         Unique expression ID for this invocation.
+ * @param udfNullable Whether this UDF can return null.
+ * @param resultId Unique Catalyst expression ID.
+ * @param payloadFormat Format tag identifying the opaque payload encoding.
+ * @param evalType Optional worker-specific dispatch hint.
+ * @param sessionSpec Named properties and resources required to initialize a worker session.
  */
 @Experimental
 case class ExternalUserDefinedFunction(
@@ -60,8 +69,18 @@ case class ExternalUserDefinedFunction(
     inputTypes: Option[Seq[DataType]] = None,
     udfDeterministic: Boolean,
     udfNullable: Boolean,
-    resultId: ExprId = NamedExpression.newExprId)
+    resultId: ExprId = NamedExpression.newExprId,
+    payloadFormat: String = ExternalUserDefinedFunction.DEFAULT_PAYLOAD_FORMAT,
+    evalType: Option[String] = None,
+    sessionSpec: WorkerSessionSpecification = WorkerSessionSpecification.getDefaultInstance)
   extends Expression with NonSQLExpression with Unevaluable {
+
+  require(payload != null, "External UDF payload must not be null")
+  require(
+    payloadFormat != null && payloadFormat.nonEmpty,
+    "External UDF payload format must be non-empty")
+  require(sessionSpec != null, "External UDF session specification must not be null")
+  ExternalUserDefinedFunction.validateSessionSpecification(sessionSpec)
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
@@ -97,4 +116,35 @@ case class ExternalUserDefinedFunction(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): ExternalUserDefinedFunction =
     copy(children = newChildren)
+}
+
+object ExternalUserDefinedFunction {
+  val DEFAULT_PAYLOAD_FORMAT: String = "raw-v1"
+
+  private def validateSessionSpecification(session: WorkerSessionSpecification): Unit = {
+    val staticProperties = session.getStaticPropertiesMap.keySet.asScala.toSet
+    val requiredProperties = session.getPropertyRequirementsMap.keySet.asScala.toSet
+    require(
+      !(staticProperties ++ requiredProperties).contains(""),
+      "Worker session contains an empty property name")
+
+    val duplicateProperties = staticProperties.intersect(requiredProperties).toSeq.sorted
+    require(
+      duplicateProperties.isEmpty,
+      s"Worker session contains properties declared as both static and dynamic: " +
+        duplicateProperties.mkString(", "))
+
+    val resourceDirectories = session.getRequiredResourceDirectoriesList.asScala.toSeq
+    require(
+      !resourceDirectories.contains(""),
+      "Worker session contains an empty required resource directory name")
+    val duplicateResources = resourceDirectories.groupBy(identity)
+      .collect { case (name, occurrences) if occurrences.size > 1 => name }
+      .toSeq
+      .sorted
+    require(
+      duplicateResources.isEmpty,
+      s"Worker session contains duplicate required resource directories: " +
+        duplicateResources.mkString(", "))
+  }
 }

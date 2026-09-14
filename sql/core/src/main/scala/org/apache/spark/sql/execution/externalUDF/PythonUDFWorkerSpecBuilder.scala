@@ -19,15 +19,16 @@ package org.apache.spark.sql.execution.externalUDF
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkConf
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.python.{PythonFunction, PythonUtils}
 import org.apache.spark.internal.config.Python.PYTHON_WORKER_MODULE
+import org.apache.spark.sql.execution.python.ArrowPythonRunner
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.udf.worker._
 
 /**
- * :: Experimental ::
- * Builds a [[UDFWorkerSpecification]] for Python UDFs from a
- * [[PythonFunction]] and [[SparkConf]].
+ * Builds worker-launch and session specifications for Python UDFs from a [[PythonFunction]] and
+ * [[SparkConf]]. This helper adapts Python metadata without adding Python-specific behavior to
+ * the language-neutral worker protocol.
  *
  * Reuses the same information the existing
  * [[org.apache.spark.api.python.PythonWorkerFactory]] uses:
@@ -37,13 +38,16 @@ import org.apache.spark.udf.worker._
  *    Spark's built-in Python path and the system `PYTHONPATH`
  *  - Worker module from `spark.python.worker.module`
  *
- * Note: `pythonIncludes` are not added to the process
- * environment. They are sent over the data channel to the
- * already-running worker by the runner (see
- * [[org.apache.spark.api.python.PythonRunner]]).
+ * Note: `pythonIncludes` are not added to the process environment. Worker-side unified execution
+ * support will define how to provide them when it consumes the UDF payload.
  */
-@Experimental
-object PythonUDFWorkerSpecification {
+private[externalUDF] object PythonUDFWorkerSpecBuilder {
+
+  final case class Result(
+      workerSpec: UDFWorkerSpecification,
+      sessionSpec: WorkerSessionSpecification)
+
+  private[externalUDF] val ARTIFACTS_RESOURCE_DIRECTORY: String = "artifacts"
 
   /**
    * Creates a [[UDFWorkerSpecification]] from a [[PythonFunction]].
@@ -51,25 +55,25 @@ object PythonUDFWorkerSpecification {
    * @param func the Python function containing pythonExec, env vars,
    *             and includes
    * @param conf the SparkConf for reading the worker module config
-   * @return a fully populated [[UDFWorkerSpecification]]
+   * @return the worker-launch and per-session specifications
    */
-  def fromPythonFunction(
+  def build(
       func: PythonFunction,
-      conf: SparkConf): UDFWorkerSpecification = {
+      conf: SparkConf): Result = {
 
     val workerModule = conf.get(PYTHON_WORKER_MODULE)
       .getOrElse("pyspark.worker")
+    val functionEnv = validatedEnvironmentVariables(func.envVars)
 
     // Assemble PYTHONPATH the same way PythonWorkerFactory does
     val pythonPath = PythonUtils.mergePythonPaths(
       PythonUtils.sparkPythonPath,
-      func.envVars.asScala
-        .getOrElse("PYTHONPATH", ""),
+      functionEnv.getOrElse("PYTHONPATH", ""),
       sys.env.getOrElse("PYTHONPATH", ""))
 
     // Merge func.envVars with the assembled PYTHONPATH
     val envVars = new java.util.HashMap[String, String]()
-    envVars.putAll(func.envVars)
+    envVars.putAll(functionEnv.asJava)
     envVars.put("PYTHONPATH", pythonPath)
     // Match PythonWorkerFactory behavior
     envVars.put("PYTHONUNBUFFERED", "YES")
@@ -77,7 +81,7 @@ object PythonUDFWorkerSpecification {
     envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
     // Enable the execution mode supporting the new UDF execution
     // framework.
-    // TODO [SPARK-55278]: Enable this on the python code
+    // TODO(SPARK-59368): Enable this in the Python worker.
     envVars.put("PYTHON_WORKER_UNIFIED_EXECUTION_ENABLED", "YES")
 
     // Build the ProcessCallable:
@@ -86,8 +90,8 @@ object PythonUDFWorkerSpecification {
     callable.addCommand(func.pythonExec)
     callable.addCommand("-m")
     callable.addCommand(workerModule)
-    // TODO [SPARK-55278]: Add additional, python specific env vars
-    // or transform them into init-message fields
+    // TODO(SPARK-59368): Define the remaining Python initialization metadata with the
+    // worker consumer.
     envVars.forEach((k, v) => callable.putEnvironmentVariables(k, v))
 
     // Capabilities: ARROW data format, bidirectional streaming
@@ -107,10 +111,44 @@ object PythonUDFWorkerSpecification {
       .setRunner(callable)
       .setProperties(props)
 
-    UDFWorkerSpecification.newBuilder()
+    val session = WorkerSessionSpecification.newBuilder()
+      .addRequiredResourceDirectories(ARTIFACTS_RESOURCE_DIRECTORY)
+    val pythonPropertyRequirements = ArrowPythonRunner.pythonRunnerConfRequirements
+      .filterNot(_.key == SQLConf.SESSION_LOCAL_TIMEZONE.key)
+    val duplicateKeys = pythonPropertyRequirements.groupBy(_.key)
+      .collect { case (key, entries) if entries.size > 1 => key }
+      .toSeq
+      .sorted
+    require(
+      duplicateKeys.isEmpty,
+      s"Duplicate Python runner property requirements: ${duplicateKeys.mkString(", ")}")
+    pythonPropertyRequirements.sortBy(_.key).foreach { requirement =>
+      session.putPropertyRequirements(
+        requirement.key,
+        propertyRequirement(requirement.isRequired))
+    }
+
+    val workerSpec = UDFWorkerSpecification.newBuilder()
       .setEnvironment(WorkerEnvironment.newBuilder())
       .setCapabilities(caps)
       .setDirect(direct)
       .build()
+    Result(workerSpec, session.build())
+  }
+
+  private def validatedEnvironmentVariables(
+      environmentVariables: java.util.Map[String, String]): Map[String, String] = {
+    val variables = Option(environmentVariables).map(_.asScala.toMap).getOrElse(Map.empty)
+    require(!variables.contains(null), "Python worker environment contains a null name")
+    require(!variables.contains(""), "Python worker environment contains an empty name")
+    val nullValues = variables.collect { case (name, null) => name }.toSeq.sorted
+    require(
+      nullValues.isEmpty,
+      s"Python worker environment contains null values for: ${nullValues.mkString(", ")}")
+    variables
+  }
+
+  private def propertyRequirement(isRequired: Boolean): PropertyRequirement = {
+    PropertyRequirement.newBuilder().setIsRequired(isRequired).build()
   }
 }

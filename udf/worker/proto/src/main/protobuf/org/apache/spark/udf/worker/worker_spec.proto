@@ -41,6 +41,48 @@ message UDFWorkerSpecification {
     oneof worker {
         DirectWorker direct = 3;
     }
+
+    reserved 4;
+    reserved "session";
+}
+
+// Static values and named engine properties required to initialize one
+// execution session on a worker. The engine copies static literals and resolves
+// supported, authorized dynamic property and resource names when it constructs
+// Init. A declaration selects a dynamic value but does not grant access to it.
+message WorkerSessionSpecification {
+    // Non-empty logical name -> static value copied to Init.properties.
+    // Static property names and property requirement names must be disjoint.
+    //
+    // (Optional)
+    map<string, string> static_properties = 1;
+
+    // Non-empty logical name -> dynamic property requirement. The engine looks
+    // up the same stable name in its authorized properties and, when available,
+    // copies the value to Init.properties under that name. How the engine
+    // derives the value is outside this protocol.
+    //
+    // (Optional)
+    map<string, PropertyRequirement> property_requirements = 3;
+
+    // Non-empty, unique logical names of local resource directories required
+    // in Init.resource_directories. The engine resolves each name to a fully
+    // qualified path in the worker's filesystem view. A declaration selects an
+    // engine-authorized resource; it does not grant filesystem access.
+    //
+    // (Optional)
+    repeated string required_resource_directories = 4;
+
+    reserved 2;
+    reserved "static_config", "environment_variable_references", "dynamic_config";
+}
+
+message PropertyRequirement {
+    // Whether session initialization must fail when the engine cannot provide
+    // this named value. Missing optional values are omitted from Init.
+    //
+    // (Optional; defaults to false.)
+    bool is_required = 1;
 }
 
 // Set of callables that can be used to setup, verify,
