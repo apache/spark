@@ -909,14 +909,16 @@ case class Cast(
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
       if (ansiEnabled) {
-        buildCast[Double](_, d => doubleToTimestampAnsi(d, getContextOrNull()))
+        buildCast[Double](_, d =>
+          doubleToTimestampAnsi(d, d, from, getContextOrNull()))
       } else {
         buildCast[Double](_, d => doubleToTimestamp(d))
       }
     // TimestampWritable.floatToTimestamp
     case FloatType =>
       if (ansiEnabled) {
-        buildCast[Float](_, f => doubleToTimestampAnsi(f.toDouble, getContextOrNull()))
+        buildCast[Float](_, f =>
+          doubleToTimestampAnsi(f.toDouble, f, from, getContextOrNull()))
       } else {
         buildCast[Float](_, f => doubleToTimestamp(f.toDouble))
       }
@@ -2026,10 +2028,12 @@ case class Cast(
       (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>
       val result = ctx.freshVariable("result", classOf[Double])
+      val sourceType = ctx.addReferenceObj("sourceType", from, classOf[DataType].getName)
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
           val errorContext = getContextOrNullCode(ctx)
-          code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi($c, $errorContext);"
+          code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi(" +
+            code"$c, $c, $sourceType, $errorContext);"
         } else {
           code"""
             if (Double.isNaN($c) || Double.isInfinite($c)) {
@@ -2046,10 +2050,12 @@ case class Cast(
         }
     case FloatType =>
       val result = ctx.freshVariable("result", classOf[Double])
+      val sourceType = ctx.addReferenceObj("sourceType", from, classOf[DataType].getName)
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
           val errorContext = getContextOrNullCode(ctx)
-          code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi((double)$c, $errorContext);"
+          code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi(" +
+            code"(double)$c, $c, $sourceType, $errorContext);"
         } else {
           code"""
             if (Float.isNaN($c) || Float.isInfinite($c)) {

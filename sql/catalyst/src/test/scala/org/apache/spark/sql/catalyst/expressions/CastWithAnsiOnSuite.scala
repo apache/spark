@@ -934,9 +934,9 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         cast(Literal(value), TimestampType),
         "CAST_OVERFLOW",
         Map(
-          "value" -> s"${value * 1000000.0}D",
-          "sourceType" -> "\"DOUBLE\"",
-          "targetType" -> "\"BIGINT\"",
+          "value" -> toSQLValue(value, DoubleType),
+          "sourceType" -> toSQLType(DoubleType),
+          "targetType" -> toSQLType(TimestampType),
           "ansiConfig" -> "\"spark.sql.ansi.enabled\""
         ))
     }
@@ -965,9 +965,9 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         cast(Literal(value), TimestampType),
         "CAST_OVERFLOW",
         Map(
-          "value" -> s"${value.toDouble * 1000000.0}D",
-          "sourceType" -> "\"DOUBLE\"",
-          "targetType" -> "\"BIGINT\"",
+          "value" -> toSQLValue(value, FloatType),
+          "sourceType" -> toSQLType(FloatType),
+          "targetType" -> toSQLType(TimestampType),
           "ansiConfig" -> "\"spark.sql.ansi.enabled\""
         ))
     }

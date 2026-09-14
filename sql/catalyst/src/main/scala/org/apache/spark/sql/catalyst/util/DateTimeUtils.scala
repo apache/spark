@@ -29,7 +29,7 @@ import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentExcep
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{
-  Decimal, DoubleExactNumeric, DoubleType, LongType, TimestampNTZType, TimestampType}
+  DataType, Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
@@ -72,14 +72,19 @@ object DateTimeUtils extends SparkDateTimeUtils {
   // the "GMT" string. For example, it returns 2000-01-01T00:00+01:00 for 2000-01-01T00:00GMT+01:00.
   def cleanLegacyTimestampStr(s: UTF8String): UTF8String = s.replace(gmtUtf8, UTF8String.EMPTY_UTF8)
 
-  def doubleToTimestampAnsi(d: Double, context: QueryContext): Long = {
+  def doubleToTimestampAnsi(
+      d: Double,
+      inputValue: Any,
+      sourceType: DataType,
+      context: QueryContext): Long = {
     if (d.isNaN || d.isInfinite) {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(d, TimestampType, context)
     } else {
       val result = d * MICROS_PER_SECOND
       // Long.MaxValue cannot be represented exactly as a Double and is rounded to 2^63.
       if (result < Long.MinValue.toDouble || result >= Long.MaxValue.toDouble) {
-        throw QueryExecutionErrors.castingCauseOverflowError(result, DoubleType, LongType)
+        throw QueryExecutionErrors.castingCauseOverflowError(
+          inputValue, sourceType, TimestampType)
       }
       DoubleExactNumeric.toLong(result)
     }
