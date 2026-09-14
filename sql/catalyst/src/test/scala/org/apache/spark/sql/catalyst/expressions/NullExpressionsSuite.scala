@@ -158,13 +158,33 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test(
     "SPARK-56840: NullIf accepts unresolved nested fields during inlined function construction") {
     withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "true") {
-      val nullIf = FunctionRegistry.builtin.lookupFunction(
+      val unresolvedNullIf = FunctionRegistry.builtin.lookupFunction(
         FunctionIdentifier("nullif"),
         Seq(
           UnresolvedAttribute(Seq("c", "provider")),
           Lower(Literal("ERROR_MULTIPLE_PROVIDERS"))))
+        .asInstanceOf[NullIf]
 
-      assert(nullIf.isInstanceOf[NullIf])
+      assert(unresolvedNullIf.exists(_.isInstanceOf[TypedNullLiteral]))
+
+      val resolvedNullIf = unresolvedNullIf.transformUp {
+        case _: UnresolvedAttribute => Literal("lit")
+      }
+
+      assert(!resolvedNullIf.exists(_.isInstanceOf[TypedNullLiteral]))
+    }
+  }
+
+  test("NullIf avoids an extra copy of its resolved left operand") {
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "true") {
+      val depth = 8
+      val nestedNullIf = (1 to depth).foldLeft[Expression](Literal(0)) {
+        case (left, right) => new NullIf(left, Literal(right))
+      }
+
+      assert(!nestedNullIf.exists(_.isInstanceOf[TypedNullLiteral]))
+      // Each resolved NullIf should double the nested subtree instead of tripling it.
+      assert(nestedNullIf.collect { case _: NullIf => 1 }.size == (1 << depth) - 1)
     }
   }
 

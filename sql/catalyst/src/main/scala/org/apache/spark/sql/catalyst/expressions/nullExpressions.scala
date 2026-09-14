@@ -187,8 +187,18 @@ private case class TypedNullLiteral(child: Expression)
 
   override lazy val replacement: Expression = Literal.create(null, child.dataType)
 
-  override protected def withNewChildInternal(newChild: Expression): TypedNullLiteral =
-    copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    TypedNullLiteral.create(newChild)
+}
+
+private object TypedNullLiteral {
+  def create(child: Expression): Expression = {
+    if (child.resolved) {
+      Literal.create(null, child.dataType)
+    } else {
+      TypedNullLiteral(child)
+    }
+  }
 }
 
 @ExpressionDescription(
@@ -214,10 +224,10 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
     this(left, right,
       if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
         With(left) { case Seq(ref) =>
-          If(EqualTo(ref, right), TypedNullLiteral(ref), ref)
+          If(EqualTo(ref, right), TypedNullLiteral.create(ref), ref)
         }
       } else {
-        If(EqualTo(left, right), TypedNullLiteral(left), left)
+        If(EqualTo(left, right), TypedNullLiteral.create(left), left)
       }
     )
   }
