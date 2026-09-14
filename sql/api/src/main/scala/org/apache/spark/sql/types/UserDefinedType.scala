@@ -158,5 +158,5 @@ private[sql] class PythonUserDefinedType(
     case _ => false
   }
 
-  override def hashCode(): Int = Objects.hashCode(pyUDT, sqlType)
+  override def hashCode(): Int = Objects.hash(pyUDT, sqlType)
 }
