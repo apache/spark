@@ -81,12 +81,12 @@ CREATE VIEW default.recent_orders AS SELECT * FROM orders WHERE order_date > cur
 CREATE TEMPORARY VIEW recent_orders AS SELECT * FROM orders WHERE order_date = current_date;
 
 DROP VIEW session.recent_orders;             -- drops the temporary view
-DROP VIEW default.recent_orders;             -- drops the persistent view
 
 -- Drop only temporary views. The persistent view remains after the local temporary view is gone.
 CREATE TEMPORARY VIEW recent_orders AS SELECT * FROM orders WHERE order_date = current_date;
 DROP TEMPORARY VIEW recent_orders;
 DROP TEMPORARY VIEW IF EXISTS recent_orders; -- does not drop default.recent_orders
+DROP VIEW default.recent_orders;             -- drops the persistent view
 
 -- Drop a global temporary view. `global_temp` is configurable with
 -- `spark.sql.globalTempDatabase`.
