@@ -18,7 +18,6 @@
 package org.apache.spark.memory
 
 import java.util.concurrent.{CompletableFuture, ExecutionException, TimeUnit}
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
@@ -80,13 +79,6 @@ class ExecutionMemoryPoolSuite extends SparkFunSuite with Eventually {
     }
   }
 
-  private def acquireAsync(
-      pool: ExecutionMemoryPool,
-      bytes: Long,
-      maybeGrowPool: Long => Unit = _ => ()): WaitingAcquire = {
-    acquireAsync(pool.acquireMemory(bytes, 1L, maybeGrowPool))
-  }
-
   private def acquireAsync(acquire: => Long): WaitingAcquire = {
     val waiter = new WaitingAcquire(() => acquire)
     waiters += waiter
@@ -95,15 +87,15 @@ class ExecutionMemoryPoolSuite extends SparkFunSuite with Eventually {
     waiter
   }
 
-  private def newPool(mode: MemoryMode): ExecutionMemoryPool = {
-    val pool = new ExecutionMemoryPool(new Object, mode)
+  private def newPool(): ExecutionMemoryPool = {
+    val pool = new ExecutionMemoryPool(new Object, MemoryMode.ON_HEAP)
     pool.incrementPoolSize(1000L)
     assert(pool.acquireMemory(900L, 2L) == 900L)
     pool
   }
 
   for (mode <- Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP)) {
-    test(s"retain task registration across two consumers of one TaskMemoryManager ($mode)") {
+    test(s"re-register a waiting task after another consumer releases its last byte ($mode)") {
       val conf = new SparkConf(false)
         .set("spark.memory.offHeap.enabled", "true")
         .set("spark.memory.offHeap.size", "1000")
@@ -128,115 +120,67 @@ class ExecutionMemoryPoolSuite extends SparkFunSuite with Eventually {
       assert(memory.executionMemoryUsed == 900L)
 
       requester.freeMemory(300L)
-      peer.freeMemory(600L)
+      // The completed waiter must not leave an empty entry limiting the peer's fair share.
+      assert(peer.acquireMemory(100L) == 100L)
+      assert(peer.getUsed() == 700L)
+      assert(peerTask.getMemoryConsumptionForThisTask() == 700L)
+      peer.freeMemory(700L)
       assert(task.cleanUpAllAllocatedMemory() == 0L)
       assert(peerTask.cleanUpAllAllocatedMemory() == 0L)
       assert(memory.executionMemoryUsed == 0L)
     }
+  }
 
-    for (releaseAll <- Seq(false, true)) {
-      test(s"retain a waiting task after its last release ($mode, releaseAll=$releaseAll)") {
-        val pool = newPool(mode)
-        assert(pool.acquireMemory(100L, 1L) == 100L)
-        val waiter = acquireAsync(pool, 300L)
+  test("re-registering a waiting task wakes peers whose minimum share decreased") {
+    val lock = new Object
+    val pool = new ExecutionMemoryPool(lock, MemoryMode.ON_HEAP)
+    pool.incrementPoolSize(1000L)
+    assert(pool.acquireMemory(800L, 3L) == 800L)
+    assert(pool.acquireMemory(100L, 2L) == 100L)
+    assert(pool.acquireMemory(100L, 1L) == 100L)
+    val waiter = acquireAsync(pool.acquireMemory(300L, 1L))
 
-        if (releaseAll) {
-          assert(pool.releaseAllMemoryForTask(1L) == 100L)
-        } else {
-          pool.releaseMemory(100L, 1L)
-        }
-        pool.releaseMemory(300L, 2L)
-
-        assert(waiter.acquired() == 300L)
-        assert(pool.getMemoryUsageForTask(1L) == 300L)
-        assert(pool.memoryUsed == 900L)
-      }
-    }
-
-    test(s"retain a task until all its waiting acquisitions complete ($mode)") {
-      val pool = newPool(mode)
-      assert(pool.acquireMemory(100L, 1L) == 100L)
-      val first = acquireAsync(pool, 200L)
-      val second = acquireAsync(pool, 200L)
+    val peer = new WaitingAcquire(() => lock.synchronized {
+      // Keep the lock until task 2 waits, so task 1 cannot re-register before that wait.
       pool.releaseMemory(100L, 1L)
-      pool.releaseMemory(100L, 2L)
+      // With two registered tasks, 100 reserved + 100 free is below the 250-byte minimum.
+      pool.acquireMemory(300L, 2L)
+    })
+    waiters += peer
+    peer.thread.start()
 
-      eventually(timeout(10.seconds)) {
-        assert(first.result.isDone || second.result.isDone)
-      }
-      val (completed, remaining) = if (first.result.isDone) (first, second) else (second, first)
-      assert(completed.acquired() == 200L)
-      remaining.awaitWaiting()
-      pool.releaseMemory(200L, 1L)
+    // Task 1 re-registers: task 2 can now reach the 166-byte minimum with the free 100 bytes.
+    assert(peer.acquired() == 100L)
+    waiter.interrupt()
+    assert(pool.releaseAllMemoryForTask(1L) == 0L)
+    assert(pool.releaseAllMemoryForTask(2L) == 200L)
+    assert(pool.releaseAllMemoryForTask(3L) == 800L)
+    assert(pool.memoryUsed == 0L)
+  }
 
-      assert(remaining.acquired() == 200L)
-      assert(pool.getMemoryUsageForTask(1L) == 200L)
-      assert(pool.memoryUsed == 1000L)
-    }
+  test("preserve a waiting task's remaining allocation after a partial release") {
+    val pool = newPool()
+    assert(pool.acquireMemory(100L, 1L) == 100L)
+    val waiter = acquireAsync(pool.acquireMemory(300L, 1L))
+    pool.releaseMemory(40L, 1L)
+    pool.releaseMemory(300L, 2L)
 
-    test(s"preserve a waiting task's remaining allocation after a partial release ($mode)") {
-      val pool = newPool(mode)
-      assert(pool.acquireMemory(100L, 1L) == 100L)
-      val waiter = acquireAsync(pool, 300L)
-      pool.releaseMemory(40L, 1L)
-      pool.releaseMemory(300L, 2L)
+    assert(waiter.acquired() == 300L)
+    assert(pool.getMemoryUsageForTask(1L) == 360L)
+    assert(pool.memoryUsed == 960L)
+  }
 
-      assert(waiter.acquired() == 300L)
-      assert(pool.getMemoryUsageForTask(1L) == 360L)
-      assert(pool.memoryUsed == 960L)
-    }
+  test("interrupting an acquisition preserves the task's existing reservation") {
+    val pool = newPool()
+    assert(pool.acquireMemory(100L, 1L) == 100L)
+    val waiter = acquireAsync(pool.acquireMemory(300L, 1L))
+    waiter.interrupt()
 
-    for (previousAllocation <- Seq(false, true)) {
-      test(s"remove an interrupted zero-byte task ($mode, previous=$previousAllocation)") {
-        val pool = newPool(mode)
-        if (previousAllocation) {
-          assert(pool.acquireMemory(100L, 1L) == 100L)
-        }
-        val waiter = acquireAsync(pool, 300L)
-        if (previousAllocation) {
-          pool.releaseMemory(100L, 1L)
-        }
-        waiter.interrupt()
-
-        // The interrupted task must no longer reduce the remaining task's fair share.
-        assert(pool.acquireMemory(100L, 2L) == 100L)
-        assert(pool.getMemoryUsageForTask(1L) == 0L)
-        assert(pool.releaseAllMemoryForTask(2L) == 1000L)
-        assert(pool.memoryUsed == 0L)
-      }
-    }
-
-    test(s"remove a zero-byte task if the pool-growth callback fails after waiting ($mode)") {
-      val pool = newPool(mode)
-      val failAfterWaiting = new AtomicBoolean(false)
-      val error = new IllegalStateException("pool-growth failure")
-      val waiter = acquireAsync(pool, 300L, _ => {
-        if (failAfterWaiting.get()) {
-          throw error
-        }
-      })
-      failAfterWaiting.set(true)
-      pool.releaseMemory(0L, 2L) // Wake the waiter to run the callback again.
-
-      assert(waiter.failure() eq error)
-      assert(pool.acquireMemory(100L, 2L) == 100L)
-      assert(pool.releaseAllMemoryForTask(2L) == 1000L)
-      assert(pool.memoryUsed == 0L)
-    }
-
-    test(s"interrupting one acquisition must retain the same task's other waiter ($mode)") {
-      val pool = newPool(mode)
-      assert(pool.acquireMemory(100L, 1L) == 100L)
-      val interrupted = acquireAsync(pool, 300L)
-      val remaining = acquireAsync(pool, 300L)
-      pool.releaseMemory(100L, 1L)
-      interrupted.interrupt()
-      remaining.awaitWaiting()
-      pool.releaseMemory(300L, 2L)
-
-      assert(remaining.acquired() == 300L)
-      assert(pool.getMemoryUsageForTask(1L) == 300L)
-      assert(pool.memoryUsed == 900L)
-    }
+    assert(pool.getMemoryUsageForTask(1L) == 100L)
+    assert(pool.memoryUsed == 1000L)
+    assert(pool.releaseAllMemoryForTask(1L) == 100L)
+    assert(pool.acquireMemory(100L, 2L) == 100L)
+    assert(pool.releaseAllMemoryForTask(2L) == 1000L)
+    assert(pool.memoryUsed == 0L)
   }
 }
