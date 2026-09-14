@@ -288,16 +288,33 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
     val query =
       """
         |SELECT bitmap_contains(
-        |  CASE WHEN id = 1 THEN CAST(NULL AS BINARY) ELSE X'01' END,
-        |  CASE WHEN id = 2 THEN CAST(NULL AS BIGINT) ELSE 0L END)
+        |  CASE WHEN id = 0 THEN CAST(NULL AS BINARY) ELSE X'01' END,
+        |  CASE WHEN id = 0 THEN CAST(18446744073709551617 AS DECIMAL(20, 0))
+        |       ELSE 0L END)
         |FROM range(3)
         |""".stripMargin
+    val overflowQuery =
+      """
+        |SELECT bitmap_contains(
+        |  X'01',
+        |  CASE WHEN id = 0 THEN CAST(18446744073709551617 AS DECIMAL(20, 0))
+        |       ELSE 0L END)
+        |FROM range(1)
+        |""".stripMargin
 
-    Seq(true, false).foreach { wholeStageCodegenEnabled =>
-      withSQLConf(
-        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageCodegenEnabled.toString) {
-        checkAnswer(spark.sql(query), Seq(Row(true), Row(null), Row(null)))
-      }
+    Seq("CODEGEN_ONLY" -> "true", "NO_CODEGEN" -> "false").foreach {
+      case (codegenMode, wholeStageCodegenEnabled) =>
+        withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageCodegenEnabled,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+          checkAnswer(spark.sql(query), Seq(Row(null), Row(true), Row(true)))
+
+          val error = intercept[SparkArithmeticException] {
+            spark.sql(overflowQuery).collect()
+          }
+          assert(error.getCondition == "CAST_OVERFLOW")
+        }
     }
 
     checkAnswer(
