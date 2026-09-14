@@ -127,6 +127,13 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(sourceTableRefs(sql).isEmpty)
   }
 
+  test("DROP TEMPORARY VIEW with a dynamic identifier classifies as DROP VIEW") {
+    val sql = "DROP TEMPORARY VIEW IDENTIFIER(lower('SYSTEM.SESSION.V'))"
+    val drop = obj(sql)
+    assert(drop \ "statement_identifier" === JString("DROP VIEW"))
+    assert(drop \ "statement_code" === JInt(36))
+  }
+
   test("dynamic INSERT targets retain query metadata") {
     val sql = "INSERT INTO IDENTIFIER(lower('T')) SELECT a AS result FROM src"
     val insert = obj(sql)

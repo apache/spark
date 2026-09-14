@@ -481,7 +481,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // ViewCatalog catalogs, so they fall through here. `DropViewExec` calls
     // `ViewCatalog.dropView` and surfaces `EXPECT_VIEW_NOT_TABLE` if the identifier resolves to
     // a table in a mixed catalog.
-    case DropView(r @ ResolvedIdentifier(catalog: ViewCatalog, ident), ifExists) =>
+    case DropView(r @ ResolvedIdentifier(catalog: ViewCatalog, ident), ifExists, false) =>
       val invalidateFunc = () => CommandUtils.uncacheTableOrView(session, r)
       DropViewExec(catalog, ident, ifExists, invalidateFunc) :: Nil
 

@@ -321,7 +321,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   private def normalizeDropTempViewIdentifier(
       viewIdentifier: Seq[String],
-      ctx: ParserRuleContext): Identifier = {
+      ctx: ParserRuleContext): Seq[String] = {
     val namespace = viewIdentifier.init
     val validNamespace = namespace match {
       case Seq() => true
@@ -338,7 +338,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       throw QueryParsingErrors.invalidTempObjQualifierError(
         "VIEW", viewIdentifier.last, namespace.mkString("."), ctx)
     }
-    Identifier.of(namespace.toArray, viewIdentifier.last)
+    viewIdentifier
   }
 
   /**
@@ -894,11 +894,15 @@ class SparkSqlAstBuilder extends AstBuilder {
     if (ctx.TEMPORARY == null) {
       super.visitDropView(ctx).asInstanceOf[LogicalPlan]
     } else {
-      withIdentClause(ctx.identifierReference(), ident => {
-        DropTempViewCommand(
-          normalizeDropTempViewIdentifier(ident, ctx),
-          ifExists = ctx.EXISTS != null)
-      })
+      DropView(
+        withIdentClause(ctx.identifierReference(), ident => {
+          val nameParts = normalizeDropTempViewIdentifier(ident, ctx)
+          ResolvedIdentifier(
+            FakeSystemCatalog,
+            Identifier.of(nameParts.init.toArray, nameParts.last))
+        }),
+        ifExists = ctx.EXISTS != null,
+        isTemp = true)
     }
   }
 

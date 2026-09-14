@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, SchemaCompensation, UnresolvedAttribute, UnresolvedIdentifier, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, FakeSystemCatalog, GlobalTempView,
+  LocalTempView, ResolvedIdentifier, SchemaCompensation, UnresolvedAttribute,
+  UnresolvedIdentifier, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
@@ -536,20 +538,30 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   test("drop temporary view") {
     val globalTempDB = spark.sharedState.globalTempDB
     Seq(
-      "DROP TEMPORARY VIEW v" -> Identifier.of(Array.empty, "v"),
-      "DROP TEMPORARY VIEW session.v" -> Identifier.of(Array("session"), "v"),
+      "DROP TEMPORARY VIEW v" -> Seq("v"),
+      "DROP TEMPORARY VIEW session.v" -> Seq("session", "v"),
       "DROP TEMPORARY VIEW system.session.v" ->
-        Identifier.of(Array("system", "session"), "v"),
-      s"DROP TEMPORARY VIEW $globalTempDB.v" -> Identifier.of(Array(globalTempDB), "v"),
+        Seq("system", "session", "v"),
+      s"DROP TEMPORARY VIEW $globalTempDB.v" -> Seq(globalTempDB, "v"),
       "DROP TEMPORARY VIEW IDENTIFIER('session.v')" ->
-        Identifier.of(Array("session"), "v")
-    ).foreach { case (sqlText, ident) =>
-      comparePlans(parser.parsePlan(sqlText), DropTempViewCommand(ident))
+        Seq("session", "v")
+    ).foreach { case (sqlText, nameParts) =>
+      comparePlans(
+        parser.parsePlan(sqlText),
+        DropView(
+          ResolvedIdentifier(
+            FakeSystemCatalog,
+            Identifier.of(nameParts.init.toArray, nameParts.last)),
+          ifExists = false,
+          isTemp = true))
     }
 
     comparePlans(
       parser.parsePlan("DROP TEMPORARY VIEW IF EXISTS v"),
-      DropTempViewCommand(Identifier.of(Array.empty, "v"), ifExists = true))
+      DropView(
+        ResolvedIdentifier(FakeSystemCatalog, Identifier.of(Array.empty, "v")),
+        ifExists = true,
+        isTemp = true))
 
     comparePlans(
       parser.parsePlan("DROP VIEW v"),

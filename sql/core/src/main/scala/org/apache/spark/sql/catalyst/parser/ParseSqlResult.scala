@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryConte
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.command.{CreateViewCommand, DescribeQueryCommand,
-  DropTempViewCommand, ExplainCommand}
+  ExplainCommand}
 import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
 
 /**
@@ -351,9 +351,11 @@ object ParseSqlResult {
         case u: UnresolvedView => add(u.multipartIdentifier)
         case u: UnresolvedTableOrView => add(u.multipartIdentifier)
         case u: UnresolvedIdentifier if role == TableRefRole.Target => add(u.nameParts)
+        case ResolvedIdentifier(FakeSystemCatalog, ident)
+            if role == TableRefRole.Target =>
+          add(identifierParts(ident))
         case c: CreateViewCommand => addTarget(tableIdentifierParts(c.name))
         case c: CreateTempViewUsing => addTarget(tableIdentifierParts(c.tableIdent))
-        case c: DropTempViewCommand => addTarget(identifierParts(c.ident))
         case c: CacheTable if c.multipartIdentifier.nonEmpty =>
           addTarget(c.multipartIdentifier)
         case u: UnresolvedTableValuedFunction => addFunction(u.name)

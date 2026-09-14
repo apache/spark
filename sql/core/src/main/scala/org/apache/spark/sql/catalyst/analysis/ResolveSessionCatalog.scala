@@ -360,24 +360,23 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       DropTempViewCommand(ident)
 
     // Session-qualified temp view: same execution path as FakeSystemCatalog DROP VIEW.
-    case DropView(ResolvedTempView(ident, _), ifExists) =>
+    case DropView(ResolvedTempView(ident, _), ifExists, _) =>
       DropTempViewCommand(ident, ifExists)
 
-    case DropView(DropViewInSessionCatalog(ident), ifExists) =>
+    case DropView(DropViewInSessionCatalog(ident), ifExists, false) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
+
+    case DropView(ResolvedIdentifier(FakeSystemCatalog, ident), ifExists, _) =>
+      DropTempViewCommand(ident, ifExists)
 
     // ViewCatalog catalogs fall through to `DataSourceV2Strategy`, which routes DROP VIEW to
     // `ViewCatalog.dropView` (this also covers METRIC_VIEW since metric views are persisted
     // through the same ViewCatalog interface). Other non-session catalogs get
     // `MISSING_CATALOG_ABILITY.VIEWS`, matching the error raised from `CheckViewReferences` for
     // CREATE/ALTER VIEW and from the analyzer gate on UnresolvedView.
-    case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists)
+    case DropView(ResolvedIdentifier(catalog, _), _, false)
         if !catalog.isInstanceOf[ViewCatalog] =>
-      if (catalog == FakeSystemCatalog) {
-        DropTempViewCommand(ident, ifExists)
-      } else {
-        throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
-      }
+      throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
 
     case c @ CreateNamespace(DatabaseNameInSessionCatalog(name), _, _) if conf.useV1Command =>
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)

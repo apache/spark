@@ -1864,7 +1864,8 @@ object ShowPartitions {
  */
 case class DropView(
     child: LogicalPlan,
-    ifExists: Boolean) extends UnaryCommand {
+    ifExists: Boolean,
+    isTemp: Boolean = false) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): DropView =
     copy(child = newChild)
 }
