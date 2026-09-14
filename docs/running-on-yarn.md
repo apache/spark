@@ -262,11 +262,14 @@ To use a custom metrics.properties for the application master and executors, upd
     authentication filter establishes the user. (Leaving the request with no user instead would not
     help: a null user passes every view and modify ACL check.) The AM always installs its own
     filter first, so this option is meant for client mode, where a separate authentication filter
-    set in <code>spark.ui.filters</code> runs after it and, if it wraps the request, supplies the
-    real user and overrides the sentinel. In cluster mode the AM replaces
-    <code>spark.ui.filters</code> with its own filter, so no other filter runs and, with the cookie
-    not trusted, all proxied requests are denied while ACLs are enabled. Only set it to
-    <code>false</code> in client mode together with such an authentication filter.
+    set in <code>spark.ui.filters</code> runs after it and supplies the real user. That filter must
+    reject unauthenticated requests, not merely wrap them: one that wraps the request but leaves
+    the user null (as Hadoop's <code>AuthenticationFilter</code> does for anonymous requests)
+    replaces the sentinel with a null user, and a null user passes every ACL check. In cluster mode
+    the AM replaces <code>spark.ui.filters</code> with its own filter, so no other filter runs and,
+    with the cookie not trusted, all proxied requests are denied while ACLs are enabled. Only set it
+    to <code>false</code> in client mode together with such an authentication filter that rejects
+    unauthenticated requests.
   </td>
  <td>4.3.0</td>
 </tr>

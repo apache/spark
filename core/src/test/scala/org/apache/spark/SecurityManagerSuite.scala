@@ -40,6 +40,18 @@ class DummyGroupMappingServiceProvider extends GroupMappingServiceProvider {
   }
 }
 
+class CountingGroupMappingServiceProvider extends GroupMappingServiceProvider {
+
+  override def getGroups(username: String): Set[String] = {
+    CountingGroupMappingServiceProvider.calls += 1
+    Set[String]("group1")
+  }
+}
+
+object CountingGroupMappingServiceProvider {
+  @volatile var calls = 0
+}
+
 class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security with conf") {
@@ -93,6 +105,21 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     // BogusServiceProvider cannot be loaded and an error is logged returning an empty group set
     assert(!securityManager3.checkUIViewPermissions("user1"))
     assert(!securityManager3.checkUIViewPermissions("user2"))
+  }
+
+  test("SPARK-59312: no group ACLs means no group lookup") {
+    // When no group ACLs are configured, a user that is not in the user ACLs is denied without
+    // ever consulting the group mapping provider. Besides being wasteful, the lookup shells out
+    // (ShellBasedGroupsMappingProvider), which for a user that cannot exist -- such as the YARN
+    // AM's untrusted-proxy sentinel -- forks a process and logs an ERROR on every denied request.
+    CountingGroupMappingServiceProvider.calls = 0
+    val conf = new SparkConf()
+      .set(ACLS_ENABLE, true)
+      .set(UI_VIEW_ACLS, Seq("alice"))
+      .set(USER_GROUPS_MAPPING, classOf[CountingGroupMappingServiceProvider].getName)
+    val securityManager = new SecurityManager(conf)
+    assert(!securityManager.checkUIViewPermissions("bob"))
+    assert(CountingGroupMappingServiceProvider.calls === 0)
   }
 
   test("set security with api") {
