@@ -378,6 +378,22 @@ object StaticSQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val AVRO_SCHEMA_URL_ALLOWED_SCHEMES =
+    buildStaticConf("spark.sql.avro.schemaUrlAllowedSchemes")
+      .internal()
+      .doc("A comma-separated allowlist of URI schemes permitted for the 'avroSchemaUrl' Avro " +
+        "option. Empty by default, which permits any scheme and preserves the previous behavior; " +
+        "when non-empty, an avroSchemaUrl whose scheme is not listed is rejected before it is " +
+        "opened. As a static configuration it can only be set when starting the driver, and not " +
+        "from a session. It restricts the scheme an avroSchemaUrl may name; it does not restrict " +
+        "which file system serves that scheme. That is decided by fs.<scheme>.impl, which a " +
+        "session can still set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   val KAFKA_DISALLOWED_OPTIONS =
     buildStaticConf("spark.sql.kafka.disallowedOptions")
       .internal()
