@@ -582,7 +582,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def unableToCreateDatabaseAsFailedToCreateDirectoryError(
       dbDefinition: CatalogDatabase, e: IOException): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2033",
+      errorClass = "UNABLE_TO_CREATE_DATABASE_DIRECTORY",
       messageParameters = Map(
         "name" -> dbDefinition.name,
         "locationUri" -> dbDefinition.locationUri.toString()),
@@ -3234,8 +3234,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "parameter" -> toSQLId("extension"),
-        "fileExtension" -> toSQLId(extension),
-        "acceptable" -> "Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"))
+        "invalidValue" -> toSQLId(extension)))
   }
 
   def invalidCharsetError(functionName: String, charset: String): RuntimeException = {
@@ -3259,7 +3258,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def invalidWriterCommitMessageError(details: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "INVALID_WRITER_COMMIT_MESSAGE",
-      messageParameters = Map("details" -> details))
+      messageParameters = Map("detail" -> details))
   }
 
   def codecNotAvailableError(codecName: String, availableCodecs: String): Throwable = {

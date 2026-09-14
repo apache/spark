@@ -213,7 +213,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.BIT => BooleanType // @see JdbcDialect for quirks
     case java.sql.Types.BLOB => BinaryType
     case java.sql.Types.BOOLEAN => BooleanType
-    case java.sql.Types.CHAR if conf.charVarcharAsString => StringType
+    case java.sql.Types.CHAR
+        if conf.charVarcharAsString && !conf.charVarcharFirstClassTypes => StringType
     case java.sql.Types.CHAR => CharType(precision)
     case java.sql.Types.CLOB => StringType
     case java.sql.Types.DATE => DateType
@@ -261,7 +262,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       } else getTimestampType(isTimestampNTZ)
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
-    case java.sql.Types.VARCHAR if conf.charVarcharAsString => StringType
+    case java.sql.Types.VARCHAR
+        if conf.charVarcharAsString && !conf.charVarcharFirstClassTypes => StringType
     case java.sql.Types.VARCHAR => VarcharType(precision)
     case java.sql.Types.NULL => NullType
     case _ =>
@@ -469,8 +471,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case LongType => JDBCValueGetter.LongGetter
     case ShortType => JDBCValueGetter.ShortGetter
     case ByteType => JDBCValueGetter.ByteGetter
-    case StringType if metadata.contains("rowid") => JDBCValueGetter.RowIdGetter
-    case StringType => JDBCValueGetter.StringGetter
+    case _: StringType if metadata.contains("rowid") => JDBCValueGetter.RowIdGetter
+    case _: StringType => JDBCValueGetter.StringGetter
     case TimestampType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeGetter
     case TimestampType => JDBCValueGetter.TimestampGetter(dialect)
@@ -530,7 +532,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setBoolean(pos + 1, row.getBoolean(pos))
 
-    case StringType =>
+    case _: StringType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setString(pos + 1, row.getString(pos))
 

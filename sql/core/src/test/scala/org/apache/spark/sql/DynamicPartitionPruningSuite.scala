@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, InMemoryTableCatalystRuntimeFilterCatalog, InMemoryTableWithV2FilterCatalog}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryTableCatalog, InMemoryTableCatalystRuntimeFilterCatalog, InMemoryTableWithV2FilterCatalog}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -2659,11 +2659,122 @@ class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
 }
 
 abstract class DynamicPartitionPruningV2Suite extends DynamicPartitionPruningDataSourceSuiteBase {
+  import testImplicits._
+
   override protected def runAnalyzeColumnCommands: Boolean = false
 
   override protected def initState(): Unit = {
     spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.defaultCatalog", "testcat")
+  }
+
+  private def collectFactScan(df: DataFrame): BatchScanExec = {
+    val scans = collectWithSubqueries(df.queryExecution.executedPlan) {
+      case b: BatchScanExec if b.runtimeFilters.nonEmpty => b
+    }
+    assert(scans.size == 1, s"expected exactly 1 scan with runtime filters, got:\n$scans")
+    scans.head
+  }
+
+  test("SPARK-59250: DPP prunes all DSv2 partitions when the runtime IN filter is empty",
+    DisableAdaptiveExecution("an empty build side collapses the join under AQE")) {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      // no dim rows match, so the runtime filter degenerates into store_id IN ()
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id FROM fact_sk f
+          |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'XX'
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, withSubquery = true, withBroadcast = false)
+      checkAnswer(df, Nil)
+
+      val scan = collectFactScan(df)
+      assert(scan.filteredPartitions.flatten.isEmpty,
+        s"expected all partitions pruned by the empty runtime filter, " +
+          s"got ${scan.filteredPartitions.flatten.size} of ${scan.inputPartitions.size}")
+    }
+  }
+
+  test("SPARK-59250: DPP prunes all DSv2 partitions when the runtime IN filter " +
+    "on a cast key is empty",
+    DisableAdaptiveExecution("an empty build side collapses the join under AQE")) {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      withTable("dim_big") {
+        Seq[(Long, String)]((1L, "NL"), (2L, "NL"), (3L, "DE"), (4L, "US"), (5L, "US"))
+          .toDF("store_id", "country")
+          .write
+          .format(tableFormat)
+          .saveAsTable("dim_big")
+
+        // the BIGINT dim key adds cast(f.store_id as bigint) on the pruning key, and no dim
+        // rows match, so the runtime filter degenerates into cast(store_id) IN ()
+        val df = sql(
+          """
+            |SELECT f.date_id, f.store_id FROM fact_sk f
+            |JOIN dim_big s ON f.store_id = s.store_id AND s.country = 'XX'
+          """.stripMargin)
+
+        checkPartitionPruningPredicate(df, withSubquery = true, withBroadcast = false)
+        checkAnswer(df, Nil)
+
+        val scan = collectFactScan(df)
+        assert(scan.filteredPartitions.flatten.isEmpty,
+          s"expected all partitions pruned by the empty runtime filter, " +
+            s"got ${scan.filteredPartitions.flatten.size} of ${scan.inputPartitions.size}")
+      }
+    }
+  }
+
+  test("SPARK-59301: DPP prunes DSv2 partitions when the pruning key is wrapped in a cast") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      withTable("dim_big") {
+        // the BIGINT keys of NL include one that does not fit in the INT partition column
+        Seq[(Long, String)](
+          (1L, "NL"), (2L, "NL"), (Int.MaxValue + 1L, "NL"), (3L, "DE"), (Int.MaxValue + 2L, "XX"))
+          .toDF("store_id", "country")
+          .write
+          .format(tableFormat)
+          .saveAsTable("dim_big")
+
+        // the BIGINT dim key adds cast(f.store_id as bigint) on the pruning key, which the
+        // runtime filter translation unwraps, dropping the key that does not fit in INT
+        val df = sql(
+          """
+            |SELECT f.date_id, f.store_id FROM fact_sk f
+            |JOIN dim_big s ON f.store_id = s.store_id AND s.country = 'NL'
+          """.stripMargin)
+
+        checkPartitionPruningPredicate(df, withSubquery = true, withBroadcast = false)
+        checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+
+        val partitionKeys = collectFactScan(df).filteredPartitions.flatten
+          .map(_.asInstanceOf[BufferedRows].keyString())
+        assert(partitionKeys.toSet === Set("1", "2"),
+          s"expected the runtime filter to keep partitions 1 and 2, got $partitionKeys")
+
+        // no key fits in INT, so no partition can match
+        val df2 = sql(
+          """
+            |SELECT f.date_id, f.store_id FROM fact_sk f
+            |JOIN dim_big s ON f.store_id = s.store_id AND s.country = 'XX'
+          """.stripMargin)
+
+        checkPartitionPruningPredicate(df2, withSubquery = true, withBroadcast = false)
+        checkAnswer(df2, Nil)
+
+        val scan = collectFactScan(df2)
+        assert(scan.filteredPartitions.flatten.isEmpty,
+          s"expected all partitions pruned by the runtime filter, " +
+            s"got ${scan.filteredPartitions.flatten.size} of ${scan.inputPartitions.size}")
+      }
+    }
   }
 }
 
