@@ -16,6 +16,7 @@
 #
 
 import array as pyarray
+import unittest
 
 from numpy import arange, array, array_equal, inf, ones, tile, zeros
 
@@ -318,6 +319,27 @@ class VectorTests(MLlibTestCase):
 
         tmp = SparseVector(4, [0, 2], [3, 0])
         self.assertEqual(tmp.numNonzeros(), 1)
+
+
+class SparseVectorNormTests(unittest.TestCase):
+    def test_zero_vector_infinity_norm(self):
+        for size in [1, 3, 1000000]:
+            for vector in [SparseVector(size, [], []), SparseVector(size, [0], [0.0])]:
+                with self.subTest(size=size, vector=vector):
+                    self.assertEqual(vector.norm(inf), 0.0)
+                    self.assertEqual(Vectors.norm(vector, inf), 0.0)
+        self.assertEqual(DenseVector([0.0, 0.0, 0.0]).norm(inf), 0.0)
+
+    def test_other_norms(self):
+        vector = SparseVector(3, [], [])
+        for order in [0, 1, 2]:
+            with self.subTest(order=order):
+                self.assertEqual(vector.norm(order), 0.0)
+        self.assertEqual(SparseVector(3, [1], [-2.0]).norm(inf), 2.0)
+        with self.assertRaises(ValueError):
+            vector.norm("invalid")
+        with self.assertRaises(ValueError):
+            SparseVector(0, [], []).norm(inf)
 
 
 class VectorUDTTests(MLlibTestCase):
