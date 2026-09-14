@@ -953,7 +953,9 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       ("-99999999999999999999", 38, 0),
       ("99999999999999999999.999999", 38, 6),
       ("9223372036854.775808", 19, 6),
-      ("-9223372036854.775809", 19, 6)
+      ("-9223372036854.775809", 19, 6),
+      ("9223372036854.7758085", 20, 7),
+      ("-9223372036854.7758095", 20, 7)
     ).foreach { case (value, precision, scale) =>
       checkEvaluation(cast(decimal(value, precision, scale), TimestampType, UTC_OPT), null)
     }
@@ -1005,6 +1007,13 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     assert(!Cast.forceNullable(safeDecimal, TimestampType))
     assert(Cast.forceNullable(overflowingDecimal, TimestampType))
 
+    assert(!Cast.forceNullable(DecimalType(12, 0), TimestampType))
+    assert(Cast.forceNullable(DecimalType(13, 0), TimestampType))
+    assert(!Cast.forceNullable(DecimalType(19, 7), TimestampType))
+    assert(Cast.forceNullable(DecimalType(19, 6), TimestampType))
+    assert(!Cast.forceNullable(DecimalType(20, 8), TimestampType))
+    assert(Cast.forceNullable(DecimalType(20, 7), TimestampType))
+
     val safeMap = MapType(safeDecimal, StringType, valueContainsNull = false)
     val overflowingMap = MapType(overflowingDecimal, StringType, valueContainsNull = false)
     val timestampMap = MapType(TimestampType, StringType, valueContainsNull = false)
@@ -1012,6 +1021,31 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     assert(Cast.canTryCast(safeMap, timestampMap))
     assert(!Cast.canCast(overflowingMap, timestampMap))
     assert(!Cast.canTryCast(overflowingMap, timestampMap))
+
+    val safeArray = ArrayType(safeDecimal, containsNull = false)
+    val overflowingArray = ArrayType(overflowingDecimal, containsNull = false)
+    val nonNullableTimestampArray = ArrayType(TimestampType, containsNull = false)
+    val nullableTimestampArray = ArrayType(TimestampType, containsNull = true)
+    assert(Cast.canCast(safeArray, nonNullableTimestampArray))
+    assert(Cast.canTryCast(safeArray, nonNullableTimestampArray))
+    assert(!Cast.canCast(overflowingArray, nonNullableTimestampArray))
+    assert(!Cast.canTryCast(overflowingArray, nonNullableTimestampArray))
+    assert(Cast.canCast(overflowingArray, nullableTimestampArray))
+    assert(Cast.canTryCast(overflowingArray, nullableTimestampArray))
+
+    val safeStruct = StructType(StructField("value", safeDecimal, nullable = false) :: Nil)
+    val overflowingStruct =
+      StructType(StructField("value", overflowingDecimal, nullable = false) :: Nil)
+    val nonNullableTimestampStruct =
+      StructType(StructField("value", TimestampType, nullable = false) :: Nil)
+    val nullableTimestampStruct =
+      StructType(StructField("value", TimestampType, nullable = true) :: Nil)
+    assert(Cast.canCast(safeStruct, nonNullableTimestampStruct))
+    assert(Cast.canTryCast(safeStruct, nonNullableTimestampStruct))
+    assert(!Cast.canCast(overflowingStruct, nonNullableTimestampStruct))
+    assert(!Cast.canTryCast(overflowingStruct, nonNullableTimestampStruct))
+    assert(Cast.canCast(overflowingStruct, nullableTimestampStruct))
+    assert(Cast.canTryCast(overflowingStruct, nullableTimestampStruct))
 
     withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
       assert(!Cast.forceNullable(DecimalType(1, -12), TimestampType))

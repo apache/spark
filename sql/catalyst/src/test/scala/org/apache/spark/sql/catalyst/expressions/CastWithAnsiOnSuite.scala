@@ -551,6 +551,23 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
 
     Seq(
+      ("9223372036854.7758085", "9223372036854.7758085BD"),
+      ("-9223372036854.7758095", "-9223372036854.7758095BD")
+    ).foreach { case (value, formattedValue) =>
+      val boundaryDecimal = Literal(Decimal(
+        new java.math.BigDecimal(value), 20, 7))
+      checkErrorInExpression[SparkArithmeticException](
+        cast(boundaryDecimal, TimestampType),
+        "CAST_OVERFLOW",
+        Map(
+          "value" -> formattedValue,
+          "sourceType" -> "\"DECIMAL(20,7)\"",
+          "targetType" -> "\"TIMESTAMP\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+        ))
+    }
+
+    Seq(
       ("9223372036854.7758075", Long.MaxValue),
       ("-9223372036854.7758085", Long.MinValue)
     ).foreach { case (value, expected) =>

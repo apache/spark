@@ -93,6 +93,29 @@ class DecimalTimestampCastSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-58217: try_cast decimal to timestamp overflow in SQL execution") {
+    withTempView("decimal_try_values") {
+      decimalDataFrame(
+        Seq(
+          "9223372036854.7758075",
+          "-9223372036854.7758085",
+          "9223372036854.7758085",
+          "-9223372036854.7758095"),
+        DecimalType(20, 7)).createOrReplaceTempView("decimal_try_values")
+
+      codegenModes.foreach { mode =>
+        withSQLConf((Seq(SQLConf.ANSI_ENABLED.key -> "true") ++ mode): _*) {
+          checkAnswer(
+            spark.sql("""
+              SELECT unix_micros(TRY_CAST(value AS TIMESTAMP))
+              FROM decimal_try_values
+            """),
+            Row(Long.MaxValue) :: Row(Long.MinValue) :: Row(null) :: Row(null) :: Nil)
+        }
+      }
+    }
+  }
+
   test("SPARK-58217: decimal to timestamp fractional Long boundaries") {
     withTempView("decimal_boundaries") {
       decimalDataFrame(
