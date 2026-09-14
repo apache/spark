@@ -1137,6 +1137,47 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58968: single-child clustering respects expressions, collections and counts") {
+    val key = AttributeReference("key", IntegerType)()
+    val extra = AttributeReference("extra", IntegerType)()
+    val transformedKey = bucket(4, key)
+    val subset = KeyGroupedPartitioning(Seq(key, extra), 3)
+    val full = KeyGroupedPartitioning(Seq(key), 3)
+    val required = ClusteredDistribution(Seq(key), requireAllClusterKeys = false,
+      requiredNumPartitions = Some(3))
+
+    val cases = Seq(
+      (subset, required, true),
+      (full, required, false),
+      (KeyGroupedPartitioning(Seq(transformedKey), 3), required, false),
+      (KeyGroupedPartitioning(Seq(transformedKey, extra), 3), required, true),
+      (KeyGroupedPartitioning(Seq(transformedKey), 3),
+        required.copy(clustering = Seq(transformedKey), requireAllClusterKeys = true), false),
+      (PartitioningCollection(Seq(subset, HashPartitioning(Seq(key), 3))), required, false),
+      (PartitioningCollection(Seq(subset, full)), required, false),
+      (PartitioningCollection(Seq(subset, subset)), required, true),
+      (full, required.copy(requiredNumPartitions = Some(4)), true))
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      cases.foreach { case (partitioning, distribution, needsShuffle) =>
+        val child = DummySparkPlan(outputPartitioning = partitioning)
+        val parent = DummySparkPlan(children = Seq(child),
+          requiredChildDistribution = Seq(distribution), requiredChildOrdering = Seq(Nil))
+        val result = EnsureRequirements.apply(parent).children.head
+        withClue(s"$partitioning, $distribution: ") {
+          if (needsShuffle) {
+            val shuffle = result.asInstanceOf[ShuffleExchangeExec]
+            assert(shuffle.child == child)
+            assert(shuffle.outputPartitioning ==
+              HashPartitioning(distribution.clustering, distribution.requiredNumPartitions.get))
+          } else {
+            assert(result == child)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-42168: FlatMapCoGroupInPandas and Window function with differing key order") {
     val lKey = AttributeReference("key", IntegerType)()
     val lKey2 = AttributeReference("key2", IntegerType)()
