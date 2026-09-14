@@ -60,8 +60,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
     (df1, df2)
   }
 
-  // Runs checkAnswer, then confirms the right-side buffer actually spilled (spillSize > 0).
-  // Catches a broken spill-size metric that a result-only check would miss.
+  // Like checkAnswer, but also asserts the right-side buffer spilled (spillSize > 0).
   private def checkAnswerAndSpill(df: classic.DataFrame, expectedAnswer: Seq[Row]): Unit = {
     checkAnswer(df, expectedAnswer)
     val op = collectFirst(df.queryExecution.executedPlan) {

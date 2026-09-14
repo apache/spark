@@ -447,9 +447,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("SortMergeAsOfJoin metrics") {
-    // Checks numOutputRows only. The other metric, spillSize, is covered by the
-    // spill tests in SortMergeAsOfJoinSuite (checkAnswerAndSpill).
-    // Runs `df`, then asserts the SortMergeAsOfJoin operator's numOutputRows metric.
+    // Only numOutputRows here; spillSize is covered in SortMergeAsOfJoinSuite.
     def checkNumOutputRows(df: DataFrame, expected: Long): Unit = {
       df.collect()
       val op = df.queryExecution.executedPlan.collectFirst {
@@ -460,9 +458,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
 
     withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
-      // No equi-key path. Left key 0 has no backward match: INNER drops it, LEFT
-      // OUTER keeps it null-padded. The differing counts (2 vs 3) pin the no-match
-      // null-pad increment.
+      // No equi-key. Left key 0 has no match: INNER drops it (2), LEFT OUTER null-pads (3).
       val left = Seq((0, 0), (5, 5), (10, 10)).toDF("a", "left_val")
       val right = Seq((1, 1), (3, 3), (7, 7)).toDF("a", "right_val")
       checkNumOutputRows(
@@ -478,9 +474,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           allowExactMatches = true, direction = "backward"),
         3L)
 
-      // Equi-key path with a NULL left key. Under EqualTo semantics a NULL key
-      // never matches, so LEFT OUTER null-pads it. This pins the null-key null-pad
-      // increment, a separate code path the no-equi-key cases above never reach.
+      // NULL left equi-key never matches, so LEFT OUTER null-pads it (a separate path).
       val nullLeft = Seq((Some(1), 5), (None, 5), (None, 10)).toDF("grp", "ts")
       val nullRight = Seq((Some(1), 4), (None, 3), (None, 8)).toDF("grp", "ts")
       checkNumOutputRows(
