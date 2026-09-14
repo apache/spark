@@ -752,14 +752,18 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>4.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.archives.avoidDownloadSchemes</code></td>
+  <td><code>spark.kubernetes.archives.executorDirectFetchSchemes</code></td>
   <td><code>(none)</code></td>
   <td>
-    Comma-separated list of schemes for which archives will NOT be downloaded to the
-    driver local disk prior to be distributed to executors, only for kubernetes deployment.
+    Comma-separated list of schemes for which archives are fetched by the executors
+    directly from the remote file system instead of being served through the driver's
+    file server. Only takes effect in kubernetes cluster mode, where the driver runs
+    inside the driver pod. The driver still downloads these archives and extracts them
+    into its working directory. Archives with a 'file' or 'local' scheme are always
+    served through the driver's file server.
     For use in cases when the archives are big and executor counts are high,
     concurrent download causes network saturation and timeouts.
-    Wildcard '*' is denoted to not downloading archives for any the schemes.
+    Wildcard '*' matches any scheme.
   </td>
   <td>4.3.0</td>
 </tr>

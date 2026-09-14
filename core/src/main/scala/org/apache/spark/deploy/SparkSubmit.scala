@@ -427,15 +427,22 @@ private[spark] class SparkSubmit extends Logging {
         // SPARK-47475: make download to driver optional so executors may fetch resource from remote
         // url directly to avoid overwhelming driver network when resource is big and executor count
         // is high
+        // SPARK-55077: for archives the driver download is not skipped, since the archives must
+        // still be extracted into the driver's working directory; only the URI passed on to the
+        // executors is kept remote
         val workingDirectory = "."
         childClasspath += workingDirectory
+        // Resources matching `skipDownload` are not materialized on the driver at all, while
+        // resources matching `executorDirectFetch` are still materialized on the driver but keep
+        // their remote URI so that the executors fetch them directly.
         def downloadResourcesToCurrentDirectory(
             uris: String,
             isArchive: Boolean = false,
-            avoidDownload: String => Boolean = _ => false): String = {
+            skipDownload: String => Boolean = _ => false,
+            executorDirectFetch: String => Boolean = _ => false): String = {
           val resolvedUris = Utils.stringToSeq(uris).map(Utils.resolveURI)
-          val (avoidDownloads, toDownloads) =
-            resolvedUris.partition(uri => avoidDownload(uri.getScheme))
+          val (skippedDownloads, toDownloads) =
+            resolvedUris.partition(uri => skipDownload(uri.getScheme))
           val localResources = downloadFileList(
             toDownloads.map(
               Utils.getUriBuilder(_).fragment(null).build().toString).mkString(","),
@@ -458,31 +465,44 @@ private[spark] class SparkSubmit extends Logging {
                 Files.copy(source.toPath, dest.toPath)
                 dest.toURI
               }
-              // Keep the URIs of local files with the given fragments.
-              Utils.getUriBuilder(
-                resourceUri).fragment(resolvedUri.getFragment).build().toString
-          } ++ avoidDownloads.map(_.toString)).mkString(",")
+              if (executorDirectFetch(resolvedUri.getScheme)) {
+                // SPARK-55077: the archive is unpacked into the driver's working directory above,
+                // but the remote URI is kept so that executors fetch it from the remote file
+                // system directly instead of going through the driver's file server.
+                resolvedUri.toString
+              } else {
+                // Keep the URIs of local files with the given fragments.
+                Utils.getUriBuilder(
+                  resourceUri).fragment(resolvedUri.getFragment).build().toString
+              }
+          } ++ skippedDownloads.map(_.toString)).mkString(",")
         }
 
+        def matchesSchemes(schemes: Seq[String])(scheme: String): Boolean =
+          schemes.contains("*") || schemes.contains(scheme)
+
         val avoidJarDownloadSchemes = sparkConf.get(KUBERNETES_JARS_AVOID_DOWNLOAD_SCHEMES)
+        val avoidJarDownload: String => Boolean = matchesSchemes(avoidJarDownloadSchemes)
 
-        def avoidJarDownload(scheme: String): Boolean =
-          avoidJarDownloadSchemes.contains("*") || avoidJarDownloadSchemes.contains(scheme)
+        val executorDirectFetchArchiveSchemes =
+          sparkConf.get(KUBERNETES_ARCHIVES_EXECUTOR_DIRECT_FETCH_SCHEMES)
 
-        val avoidArchiveDownloadSchemes = sparkConf.get(KUBERNETES_ARCHIVES_AVOID_DOWNLOAD_SCHEMES)
-
-        def avoidArchiveDownload(scheme: String): Boolean =
-          avoidArchiveDownloadSchemes.contains("*") || avoidArchiveDownloadSchemes.contains(scheme)
+        // Archives that already live on the driver cannot be fetched from a remote file system:
+        // `DependencyUtils.downloadFile` returns `file` and `local` paths unchanged, so their
+        // URIs always stay local and the executors always read them from the driver's file server.
+        val executorDirectFetchArchive: String => Boolean = scheme =>
+          scheme != "file" && scheme != "local" &&
+            matchesSchemes(executorDirectFetchArchiveSchemes)(scheme)
 
         val filesLocalFiles = Option(args.files).map {
           downloadResourcesToCurrentDirectory(_)
         }.orNull
         val updatedJars = Option(args.jars).map {
-          downloadResourcesToCurrentDirectory(_, avoidDownload = avoidJarDownload)
+          downloadResourcesToCurrentDirectory(_, skipDownload = avoidJarDownload)
         }.orNull
         val archiveLocalFiles = Option(args.archives).map {
           downloadResourcesToCurrentDirectory(_, isArchive = true,
-            avoidDownload = avoidArchiveDownload)
+            executorDirectFetch = executorDirectFetchArchive)
         }.orNull
         val pyLocalFiles = Option(args.pyFiles).map {
           downloadResourcesToCurrentDirectory(_)

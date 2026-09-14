@@ -1632,13 +1632,17 @@ package object config {
       .toSequence
       .createWithDefault(Nil)
 
-  private[spark] val KUBERNETES_ARCHIVES_AVOID_DOWNLOAD_SCHEMES =
-    ConfigBuilder("spark.kubernetes.archives.avoidDownloadSchemes")
-      .doc("Comma-separated list of schemes for which archives will NOT be downloaded to the " +
-        "driver local disk prior to be distributed to executors, only for kubernetes deployment. " +
+  private[spark] val KUBERNETES_ARCHIVES_EXECUTOR_DIRECT_FETCH_SCHEMES =
+    ConfigBuilder("spark.kubernetes.archives.executorDirectFetchSchemes")
+      .doc("Comma-separated list of schemes for which archives are fetched by the executors " +
+        "directly from the remote file system instead of being served through the driver's " +
+        "file server. Only takes effect in kubernetes cluster mode, where the driver runs " +
+        "inside the driver pod. The driver still downloads these archives and extracts them " +
+        "into its working directory. Archives with a 'file' or 'local' scheme are always " +
+        "served through the driver's file server. " +
         "For use in cases when the archives are big and executor counts are high, " +
         "concurrent download causes network saturation and timeouts. " +
-        "Wildcard '*' is denoted to not downloading archives for any the schemes.")
+        "Wildcard '*' matches any scheme.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf

@@ -605,106 +605,110 @@ class SparkSubmitSuite
     }
   }
 
-  test("SPARK-55077: Avoid archives download if scheme matches " +
-    "spark.kubernetes.archives.avoidDownloadSchemes " +
-    "in k8s client mode & driver runs inside a POD") {
+  /**
+   * Submits a real zip archive served by a fake `s3a` file system as
+   * `--archives s3a://...#fragment`, in k8s client mode with the driver running inside a pod,
+   * with `spark.kubernetes.archives.executorDirectFetchSchemes` set to `schemes`.
+   *
+   * Returns the resolved conf and the remote URI that was passed to `--archives`.
+   */
+  private def prepareArchiveSubmitEnvironment(
+      tmpDir: File,
+      archivePrefix: String,
+      fragment: String,
+      schemes: String,
+      withOtherResources: Boolean = false): (SparkConf, String) = {
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
+    val archiveEntry = File.createTempFile(archivePrefix, ".txt", tmpDir)
+    val archive = File.createTempFile(archivePrefix, ".zip", tmpDir)
+    TestUtils.createJar(Seq(archiveEntry), archive)
+    val remoteArchiveFile = s"s3a://${archive.getAbsolutePath}#$fragment"
+
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--proxy-user", "test.user",
+      "--master", "k8s://host:port",
+      "--class", "org.SomeClass",
+      "--conf", "spark.kubernetes.submitInDriver=true",
+      "--conf", s"spark.kubernetes.archives.executorDirectFetchSchemes=$schemes",
+      "--conf", "spark.hadoop.fs.s3a.impl=org.apache.spark.deploy.TestFileSystem",
+      "--conf", "spark.hadoop.fs.s3a.impl.disable.cache=true") ++
+      (if (withOtherResources) {
+        Seq(
+          "--files", "src/test/resources/test_metrics_config.properties",
+          "--py-files", "src/test/resources/test_metrics_system.properties")
+      } else {
+        Nil
+      }) ++
+      Seq("--archives", remoteArchiveFile, "/home/jarToIgnore.jar", "arg1")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
+    conf.get("spark.master") should be("k8s://https://host:port")
+    (conf, remoteArchiveFile)
+  }
+
+  test("SPARK-55077: Archives matching " +
+    "spark.kubernetes.archives.executorDirectFetchSchemes are still extracted into the " +
+    "driver working directory in k8s client mode & driver runs inside a POD") {
     withTempDir { tmpDir =>
-      val notToDownloadArchive = File.createTempFile("NotToDownloadArchive", ".zip", tmpDir)
-      val remoteArchiveFile = s"s3a://${notToDownloadArchive.getAbsolutePath}"
-      val tmpJar = File.createTempFile("TestUDTF", ".jar", tmpDir)
-
-      val clArgs = Seq(
-        "--deploy-mode", "client",
-        "--proxy-user", "test.user",
-        "--master", "k8s://host:port",
-        "--class", "org.SomeClass",
-        "--conf", "spark.kubernetes.submitInDriver=true",
-        "--conf", "spark.kubernetes.archives.avoidDownloadSchemes=s3a",
-        "--conf", "spark.hadoop.fs.s3a.impl=org.apache.spark.deploy.TestFileSystem",
-        "--conf", "spark.hadoop.fs.s3a.impl.disable.cache=true",
-        "--files", "src/test/resources/test_metrics_config.properties",
-        "--py-files", "src/test/resources/test_metrics_system.properties",
-        "--archives", s"src/test/resources/log4j2.properties,$remoteArchiveFile",
-        "--jars", tmpJar.getAbsolutePath,
-        "/home/jarToIgnore.jar",
-        "arg1")
-      val appArgs = new SparkSubmitArguments(clArgs)
-      val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
-      conf.get("spark.master") should be("k8s://https://host:port")
-      conf.get("spark.archives").contains(remoteArchiveFile) shouldBe true
-      conf.get("spark.archives").contains("log4j2.properties") shouldBe true
-
-      Files.exists(Paths.get("test_metrics_config.properties")) should be(true)
-      Files.exists(Paths.get("test_metrics_system.properties")) should be(true)
-      Files.exists(Paths.get("log4j2.properties")) should be(true)
-      Files.exists(Paths.get(tmpJar.getName)) should be(true)
-      Files.exists(Paths.get(notToDownloadArchive.getName)) should be(false)
-      Files.delete(Paths.get("test_metrics_config.properties"))
-      Files.delete(Paths.get("test_metrics_system.properties"))
-      Files.delete(Paths.get("log4j2.properties"))
-      Files.delete(Paths.get(tmpJar.getName))
+      val fragment = "remote_archives"
+      val (conf, remoteArchiveFile) =
+        prepareArchiveSubmitEnvironment(tmpDir, "RemoteArchive", fragment, "s3a",
+          withOtherResources = true)
+      try {
+        // The remote URI is kept so that executors fetch the archive from the remote file
+        // system directly instead of going through the driver's file server.
+        conf.get("spark.archives").contains(remoteArchiveFile) shouldBe true
+        Files.exists(Paths.get("test_metrics_config.properties")) should be(true)
+        Files.exists(Paths.get("test_metrics_system.properties")) should be(true)
+        // The archive is still unpacked into the driver's working directory (SPARK-33748).
+        Files.isDirectory(Paths.get(fragment)) should be(true)
+      } finally {
+        Utils.deleteRecursively(new File(fragment))
+        Files.deleteIfExists(Paths.get("test_metrics_config.properties"))
+        Files.deleteIfExists(Paths.get("test_metrics_system.properties"))
+      }
     }
   }
 
-  test("SPARK-55077: Avoid archives download for wildcard scheme " +
-    "spark.kubernetes.archives.avoidDownloadSchemes " +
-    "in k8s client mode & driver runs inside a POD") {
-    val hadoopConf = new Configuration()
-    updateConfWithFakeS3Fs(hadoopConf)
+  test("SPARK-55077: Archives matching the wildcard scheme in " +
+    "spark.kubernetes.archives.executorDirectFetchSchemes are still extracted into the " +
+    "driver working directory in k8s client mode & driver runs inside a POD") {
     withTempDir { tmpDir =>
-      val notToDownloadArchive = File.createTempFile("NotToDownloadArchiveWildcard", ".zip", tmpDir)
-      val remoteArchiveFile = s"s3a://${notToDownloadArchive.getAbsolutePath}"
-
-      val clArgs = Seq(
-        "--deploy-mode", "client",
-        "--proxy-user", "test.user",
-        "--master", "k8s://host:port",
-        "--class", "org.SomeClass",
-        "--conf", "spark.kubernetes.submitInDriver=true",
-        "--conf", "spark.kubernetes.archives.avoidDownloadSchemes=*",
-        "--conf", "spark.hadoop.fs.s3a.impl=org.apache.spark.deploy.TestFileSystem",
-        "--conf", "spark.hadoop.fs.s3a.impl.disable.cache=true",
-        "--archives", remoteArchiveFile,
-        "/home/jarToIgnore.jar",
-        "arg1")
-      val appArgs = new SparkSubmitArguments(clArgs)
-      val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
-      conf.get("spark.master") should be("k8s://https://host:port")
-      conf.get("spark.archives").contains(remoteArchiveFile) shouldBe true
-      Files.exists(Paths.get(notToDownloadArchive.getName)) should be(false)
+      val fragment = "remote_archives_wildcard"
+      val (conf, remoteArchiveFile) =
+        prepareArchiveSubmitEnvironment(tmpDir, "RemoteArchiveWildcard", fragment, "*")
+      try {
+        conf.get("spark.archives").contains(remoteArchiveFile) shouldBe true
+        Files.isDirectory(Paths.get(fragment)) should be(true)
+      } finally {
+        Utils.deleteRecursively(new File(fragment))
+      }
     }
   }
 
   test("SPARK-55077: Download archives if scheme does not match " +
-    "spark.kubernetes.archives.avoidDownloadSchemes " +
+    "spark.kubernetes.archives.executorDirectFetchSchemes " +
     "in k8s client mode & driver runs inside a POD") {
-    val hadoopConf = new Configuration()
-    updateConfWithFakeS3Fs(hadoopConf)
     withTempDir { tmpDir =>
-      val toDownloadArchive = File.createTempFile("ToDownloadArchive", ".properties", tmpDir)
-      Files.write(toDownloadArchive.toPath, Array[Byte](1, 2, 3))
-      val remoteArchiveFile = s"s3a://${toDownloadArchive.getAbsolutePath}"
-
-      val clArgs = Seq(
-        "--deploy-mode", "client",
-        "--proxy-user", "test.user",
-        "--master", "k8s://host:port",
-        "--class", "org.SomeClass",
-        "--conf", "spark.kubernetes.submitInDriver=true",
-        "--conf", "spark.kubernetes.archives.avoidDownloadSchemes=hdfs",
-        "--conf", "spark.hadoop.fs.s3a.impl=org.apache.spark.deploy.TestFileSystem",
-        "--conf", "spark.hadoop.fs.s3a.impl.disable.cache=true",
-        "--archives", remoteArchiveFile,
-        "/home/jarToIgnore.jar",
-        "arg1")
-      val appArgs = new SparkSubmitArguments(clArgs)
-      val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
-      conf.get("spark.master") should be("k8s://https://host:port")
-      conf.get("spark.archives").contains(remoteArchiveFile) shouldBe false
-      Files.exists(Paths.get(toDownloadArchive.getName)) should be(true)
-      Files.delete(Paths.get(toDownloadArchive.getName))
+      val fragment = "to_download_archive"
+      val (conf, remoteArchiveFile) =
+        prepareArchiveSubmitEnvironment(tmpDir, "ToDownloadArchive", fragment, "hdfs")
+      try {
+        conf.get("spark.archives").contains(remoteArchiveFile) shouldBe false
+        // The archive is rewritten to the local file the driver downloaded it to, and that file
+        // is unpacked into the driver's working directory.
+        val archives = Utils.stringToSeq(conf.get("spark.archives"))
+        archives.size should be(1)
+        val resolvedArchive = Utils.resolveURI(archives.head)
+        resolvedArchive.getScheme should be("file")
+        resolvedArchive.getFragment should be(fragment)
+        Files.exists(Paths.get(resolvedArchive.getPath)) should be(true)
+        Files.isDirectory(Paths.get(fragment)) should be(true)
+      } finally {
+        Utils.deleteRecursively(new File(fragment))
+      }
     }
   }
 
