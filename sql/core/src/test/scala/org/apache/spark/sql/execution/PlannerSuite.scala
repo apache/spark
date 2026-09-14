@@ -747,9 +747,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-59438: as-of join with no equi-keys requires a single partition") {
-    // SortMergeAsOfJoinExec overrides requiredChildDistribution to AllTuples on both
-    // sides when there are no equi-keys, so EnsureRequirements must shuffle each side
-    // to a single partition (rather than hash-partition on join keys).
+    // No equi-keys: distribution is AllTuples, so both sides shuffle to one partition.
     val asOfExec = SortMergeAsOfJoinExec(
       leftKeys = Nil,
       rightKeys = Nil,
@@ -761,12 +759,36 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       condition = None,
       left = planA,
       right = planB)
+    assert(asOfExec.requiredChildOrdering == Seq(Seq(orderingA), Seq(orderingB)))
     val outputPlan = EnsureRequirements.apply(asOfExec)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     val exchanges = outputPlan.collect { case e: ShuffleExchangeExec => e }
     assert(exchanges.length == 2, s"Expected a shuffle on each side:\n$outputPlan")
     assert(exchanges.forall(_.outputPartitioning == SinglePartition),
       s"Both sides must be shuffled to a single partition:\n$outputPlan")
+  }
+
+  test("SPARK-59438: as-of join with equi-keys hash-partitions on the keys") {
+    // With equi-keys: distribution is Clustered, so each side hash-partitions on its key.
+    val asOfExec = SortMergeAsOfJoinExec(
+      leftKeys = exprC :: Nil,
+      rightKeys = exprC :: Nil,
+      leftSortExprs = exprA :: Nil,
+      rightSortExprs = exprB :: Nil,
+      asOfCondition = GreaterThanOrEqual(exprA, exprB),
+      orderExpression = Subtract(exprA, exprB),
+      joinType = Inner,
+      condition = None,
+      left = planA,
+      right = planB)
+    assert(asOfExec.requiredChildOrdering ==
+      Seq(Seq(orderingC, orderingA), Seq(orderingC, orderingB)))
+    val outputPlan = EnsureRequirements.apply(asOfExec)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    val exchanges = outputPlan.collect { case e: ShuffleExchangeExec => e }
+    assert(exchanges.length == 2, s"Expected a shuffle on each side:\n$outputPlan")
+    assert(exchanges.forall(_.outputPartitioning.isInstanceOf[HashPartitioning]),
+      s"Both sides must hash-partition on the equi-key:\n$outputPlan")
   }
 
   test("SPARK-24500: create union with stream of children") {

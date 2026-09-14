@@ -603,12 +603,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
   }
 
   test("null-safe equi-key (<=>) in ON matches null keys, unlike EqualTo") {
-    // The AsOfJoinSelection strategy excludes EqualNullSafe from the equi-keys and
-    // routes it to the residual condition, so - unlike the EqualTo case above where
-    // null equi-keys never match - null keys on both sides DO match under <=>.
-    // Reuses the EqualTo sibling's data so only the ON predicate differs. The null-key
-    // left row at ts=10 has two null candidates (ts=3, ts=8); the scanner must keep the
-    // closest (ts=8), so a "keep first match" bug on the residual path fails here.
+    // <=> is a residual (empty equi-keys), so null keys match, unlike EqualTo.
     val schema1 = StructType(
       StructField("grp", IntegerType, nullable = true) ::
         StructField("ts", IntegerType) ::
@@ -629,17 +624,11 @@ class SortMergeAsOfJoinSuite extends QueryTest
     checkAnswer(
       joined,
       Seq(
-        // grp=null <=> grp=null is true, so null keys match (EqualTo would drop these)
         Row(null, 5, "a", null, 3, "x"),
-        // grp=1: right.ts=4 <= left.ts=5 -> match
         Row(1, 5, "b", 1, 4, "y"),
-        // grp=null, left.ts=10: two null candidates (ts=3, ts=8); keep the closest, ts=8
         Row(null, 10, "c", null, 8, "z")
       )
     )
-    // Pin the routing the comment describes: <=> is a residual, not an equi-key, so the
-    // operator has empty equi-keys. Treating <=> as a null-safe equi-key would give the same
-    // rows but non-empty keys, so checkAnswer alone cannot tell the two apart.
     val plan = joined.queryExecution.executedPlan
     val asOfExecs = collectWithSubqueries(plan) { case j: SortMergeAsOfJoinExec => j }
     assert(asOfExecs.length == 1, s"expected one SortMergeAsOfJoinExec in:\n$plan")
