@@ -250,11 +250,15 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         collation = schema.string.collation if schema.string.collation != "" else "UTF8_BINARY"
         return StringType(collation)
     elif schema.HasField("char"):
-        collation = schema.char.collation if schema.char.HasField("collation") else None
-        return CharType(schema.char.length, collation)
+        return CharType(
+            schema.char.length,
+            schema.char.collation if schema.char.HasField("collation") else None,
+        )
     elif schema.HasField("var_char"):
-        collation = schema.var_char.collation if schema.var_char.HasField("collation") else None
-        return VarcharType(schema.var_char.length, collation)
+        return VarcharType(
+            schema.var_char.length,
+            schema.var_char.collation if schema.var_char.HasField("collation") else None,
+        )
     elif schema.HasField("date"):
         return DateType()
     elif schema.HasField("time"):
