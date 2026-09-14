@@ -869,6 +869,47 @@ class CsvFunctionsSuite extends SharedSparkSession {
       Seq(Row(s"""{null, $largeInput}""")))
   }
 
+  test("from_csv with variant: variantRespectInferSchema controls scalar inference") {
+    // from_csv shares the CSV parser, so it observes inferSchema only when
+    // variantRespectInferSchema is enabled: with inferSchema off the variant scalar stays a
+    // string, otherwise it is inferred. Without the flag, from_csv ignores inferSchema entirely.
+    val df = Seq("100").toDF("value")
+
+    // With variantRespectInferSchema enabled and inferSchema off the scalar is preserved as a
+    // string. inferSchema defaults to false, so setting the flag alone behaves the same.
+    for (options <- Seq(
+        Map("singleVariantColumn" -> "v", "variantRespectInferSchema" -> "true",
+          "inferSchema" -> "false"),
+        Map("singleVariantColumn" -> "v", "variantRespectInferSchema" -> "true"))) {
+      checkAnswer(
+        df.select(from_csv($"value", StructType.fromDDL("v variant"), options).cast("string")),
+        Seq(Row("""{{"_c0":"100"}}""")))
+    }
+
+    // Without variantRespectInferSchema, the scalar is inferred regardless of inferSchema.
+    // Both the default and explicitly configured inferSchema setting should result in inferred
+    // scalar values. Values should also be inferred when both options are enabled.
+    for (options <- Seq(
+        Map("singleVariantColumn" -> "v"),
+        Map("singleVariantColumn" -> "v", "inferSchema" -> "true"),
+        Map("singleVariantColumn" -> "v", "variantRespectInferSchema" -> "true",
+          "inferSchema" -> "true"))) {
+      checkAnswer(
+        df.select(from_csv($"value", StructType.fromDDL("v variant"), options).cast("string")),
+        Seq(Row("""{{"_c0":100}}""")))
+    }
+
+    // Explicit VariantType columns should behave the same. schema_of_variant tells the string
+    // "100" from the inferred long.
+    checkAnswer(
+      df.selectExpr("schema_of_variant(from_csv(value, 'a variant', " +
+        "map('variantRespectInferSchema', 'true', 'inferSchema', 'false')).a)"),
+      Seq(Row("STRING")))
+    checkAnswer(
+      df.selectExpr("schema_of_variant(from_csv(value, 'a variant').a)"),
+      Seq(Row("BIGINT")))
+  }
+
   test("from_csv with variant: extreme negative scale decimal does not hang") {
     // A value like "1E99999" parses to a BigDecimal with scale=-99999.
     // Calling setScale(0) on it would hang, so it should fall through to string.

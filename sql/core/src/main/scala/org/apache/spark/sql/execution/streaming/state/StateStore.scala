@@ -1174,17 +1174,32 @@ object StateStoreProvider extends Logging {
   private[state] def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
     val env = SparkEnv.get
     if (env != null) {
-      val isDriver = SparkContext.isDriver(env.executorId)
-      // If running locally, then the coordinator reference in stateStoreCoordinatorRef may have
-      // become inactive as SparkContext + SparkEnv may have been restarted. Hence, when running in
-      // driver, always recreate the reference.
-      if (isDriver || stateStoreCoordinatorRef == null) {
-        logDebug("Getting StateStoreCoordinatorRef")
-        stateStoreCoordinatorRef = StateStoreCoordinatorRef.forExecutor(env)
+      try {
+        val isDriver = SparkContext.isDriver(env.executorId)
+        // If running locally, then the coordinator reference in stateStoreCoordinatorRef may have
+        // become inactive as SparkContext + SparkEnv may have been restarted. Hence, when running
+        // in driver, always recreate the reference.
+        if (isDriver || stateStoreCoordinatorRef == null) {
+          logDebug("Getting StateStoreCoordinatorRef")
+          stateStoreCoordinatorRef = StateStoreCoordinatorRef.forExecutor(env)
+        }
+        logInfo(log"Retrieved reference to StateStoreCoordinator: " +
+          log"${MDC(LogKeys.STATE_STORE_COORDINATOR, stateStoreCoordinatorRef)}")
+        Some(stateStoreCoordinatorRef)
+      } catch {
+        // SPARK-58973: The StateStoreCoordinator endpoint is only registered when
+        // StreamingQueryManager is initialized (lazy val in SessionState since SPARK-29423).
+        // In non-streaming batch reads of state stores (e.g., spark.read.format("statestore")),
+        // the coordinator may not exist. Return None to make snapshot upload reporting
+        // best-effort rather than failing the read.
+        case e: SparkException if e.getCause != null &&
+            e.getCause.getMessage != null &&
+            e.getCause.getMessage.contains("Cannot find endpoint") =>
+          logWarning(log"StateStoreCoordinator endpoint not available: " +
+            log"${MDC(LogKeys.ERROR, e.getMessage)}")
+          stateStoreCoordinatorRef = null
+          None
       }
-      logInfo(log"Retrieved reference to StateStoreCoordinator: " +
-        log"${MDC(LogKeys.STATE_STORE_COORDINATOR, stateStoreCoordinatorRef)}")
-      Some(stateStoreCoordinatorRef)
     } else {
       stateStoreCoordinatorRef = null
       None

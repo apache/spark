@@ -1999,6 +1999,15 @@ class DataFrame(ParentDataFrame):
         return self._to_pandas()
 
     def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
+        # SPARK-57462: the Arrow-based nanosecond timestamp value path is a pending follow-up.
+        # Connect overrides _to_pandas and goes straight to client.to_pandas, so the guard on the
+        # classic PandasConversionMixin is not reached; reject here too so the behavior is
+        # deterministic (and consistent with classic toPandas and to_arrow_type) rather than
+        # emitting unhandled pandas nanosecond / wrong-time-zone values.
+        from pyspark.sql.pandas.types import _reject_timestamp_nanos_conversion
+
+        _reject_timestamp_nanos_conversion(self.schema)
+
         query = self._plan.to_proto(self._session.client)
         pdf, ei = self._session.client.to_pandas(query, self._plan.observations, **kwargs)
         self._execution_info = ei

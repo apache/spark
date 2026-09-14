@@ -98,7 +98,7 @@ class Strategy @Since("1.3.0") (
    */
   @Since("1.2.0")
   def isMulticlassWithCategoricalFeatures: Boolean = {
-    isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
+    isMulticlassClassification && (categoricalFeaturesInfo.nonEmpty)
   }
 
   // scalastyle:off argcount

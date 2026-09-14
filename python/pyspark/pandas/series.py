@@ -4321,7 +4321,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             window = (
                 Window.orderBy(
                     asc_func(self.spark.column),
-                    asc_func(F.col(NATURAL_ORDER_COLUMN_NAME)),
+                    F.col(NATURAL_ORDER_COLUMN_NAME).asc(),
                 )
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
