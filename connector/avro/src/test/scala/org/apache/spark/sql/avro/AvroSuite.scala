@@ -50,6 +50,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
@@ -1263,7 +1264,7 @@ abstract class AvroSuite
     val avroSchemaUrl = testFile("test_sub.avsc")
     val hadoopConf = spark.sessionState.newHadoopConf()
     val conf = new SQLConf()
-    conf.setConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
+    conf.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
     SQLConf.withExistingConf(conf) {
       val options = new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
       assert(options.schema.isDefined)
@@ -1279,7 +1280,7 @@ abstract class AvroSuite
     // folding: dropping the fold on the scheme leaves no lower-case "s3a" in the message.
     val hadoopConf = spark.sessionState.newHadoopConf()
     val conf = new SQLConf()
-    conf.setConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
+    conf.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
     SQLConf.withExistingConf(conf) {
       val e = intercept[AnalysisException] {
         new AvroOptions(Map("avroSchemaUrl" -> "S3A://bucket/user.avsc"), hadoopConf)
@@ -1297,7 +1298,7 @@ abstract class AvroSuite
     // The empty default skips the scheme check entirely, preserving the previous behavior.
     val conf = new SQLConf()
     SQLConf.withExistingConf(conf) {
-      assert(conf.getConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES).isEmpty)
+      assert(conf.getConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES).isEmpty)
       val options = new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
       assert(options.schema.isDefined)
     }
@@ -1309,7 +1310,7 @@ abstract class AvroSuite
     // Allowlist entries and the URL scheme are compared case-insensitively: an upper-case "FILE"
     // entry still permits the "file" scheme. Dropping the allowlist's case folding fails this.
     val conf = new SQLConf()
-    conf.setConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("FILE"))
+    conf.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("FILE"))
     SQLConf.withExistingConf(conf) {
       val options = new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
       assert(options.schema.isDefined)
@@ -1325,13 +1326,13 @@ abstract class AvroSuite
     val hadoopConf = spark.sessionState.newHadoopConf()
     // The default file system is "file", so allowing "file" permits the scheme-less path ...
     val allowed = new SQLConf()
-    allowed.setConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
+    allowed.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
     SQLConf.withExistingConf(allowed) {
       assert(new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf).schema.isDefined)
     }
     // ... and an allowlist without it rejects the same path, reporting the resolved "file" scheme.
     val disallowed = new SQLConf()
-    disallowed.setConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("s3a"))
+    disallowed.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("s3a"))
     SQLConf.withExistingConf(disallowed) {
       val e = intercept[AnalysisException] {
         new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
@@ -1347,7 +1348,7 @@ abstract class AvroSuite
     // that looks like it should be allowed. Echoing what the config parsed to is what makes the
     // message readable, so pin it: dropping the parsed allowlist from the message fails here.
     val conf = new SQLConf()
-    conf.setConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file://"))
+    conf.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file://"))
     SQLConf.withExistingConf(conf) {
       val e = intercept[AnalysisException] {
         new AvroOptions(Map("avroSchemaUrl" -> testFile("test_sub.avsc")), hadoopConf)
@@ -4315,7 +4316,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
 class AvroSchemaUrlAllowlistSuite extends QueryTest with SharedSparkSession {
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key, "file")
+    super.sparkConf.set(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key, "file")
 
   private val testAvro = testFile("test.avro")
 
@@ -4339,7 +4340,7 @@ class AvroSchemaUrlAllowlistSuite extends QueryTest with SharedSparkSession {
   test("SPARK-59329: a session cannot relax the avroSchemaUrl scheme allowlist") {
     // buildStaticConf makes the allowlist an operator-level boundary: neither the DataFrame conf
     // API nor SQL SET can widen it at runtime.
-    val key = SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key
+    val key = StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key
     Seq[() => Unit](
       () => spark.conf.set(key, "s3a"),
       () => spark.sql(s"SET $key=s3a").collect()

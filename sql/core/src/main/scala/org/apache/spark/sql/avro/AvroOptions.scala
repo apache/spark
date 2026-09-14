@@ -29,7 +29,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
  * Options for Avro Reader and Writer stored in case insensitive manner.
@@ -83,7 +83,7 @@ private[sql] class AvroOptions(
         // instantiated, so a disallowed scheme is rejected with a clear error rather than a
         // lower-level failure while opening it. A scheme-less URL takes the default file system's
         // scheme, so it can be permitted by allowing that scheme.
-        val allowedSchemes = SQLConf.get.getConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES)
+        val allowedSchemes = SQLConf.get.getConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES)
           .map(_.toLowerCase(Locale.ROOT))
         if (allowedSchemes.nonEmpty) {
           // FileSystem.getDefaultUri always carries a scheme (it throws otherwise), so a
@@ -96,7 +96,7 @@ private[sql] class AvroOptions(
               AVRO_SCHEMA_URL,
               s"The scheme '$scheme' of avroSchemaUrl '$url' is not in the allowlist " +
                 s"${allowedSchemes.mkString("[", ", ", "]")} configured by " +
-                s"${SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key}.")
+                s"${StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key}.")
           }
         }
         val fs = FileSystem.get(uri, conf)

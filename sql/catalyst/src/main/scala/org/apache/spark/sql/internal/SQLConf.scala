@@ -7016,24 +7016,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  // Kept here with the other `spark.sql.avro.*` entries rather than in `StaticSQLConf`, though it
-  // is static: `buildStaticConf` registers the static key wherever it is declared.
-  val AVRO_SCHEMA_URL_ALLOWED_SCHEMES =
-    buildStaticConf("spark.sql.avro.schemaUrlAllowedSchemes")
-      .internal()
-      .doc("A comma-separated allowlist of URI schemes permitted for the 'avroSchemaUrl' Avro " +
-        "option. Empty by default, which permits any scheme and preserves the previous behavior; " +
-        "when non-empty, an avroSchemaUrl whose scheme is not listed is rejected before it is " +
-        "opened. This is a static configuration fixed when the SparkSession is created and not " +
-        "modifiable at runtime. It restricts the scheme an avroSchemaUrl may name; it does not " +
-        "restrict which file system serves that scheme. That is decided by fs.<scheme>.impl, " +
-        "which a session can still set.")
-      .version("4.3.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .stringConf
-      .toSequence
-      .createWithDefault(Nil)
-
   val JSON_ENABLE_PARTIAL_RESULTS =
     buildConf("spark.sql.json.enablePartialResults")
       .internal()
