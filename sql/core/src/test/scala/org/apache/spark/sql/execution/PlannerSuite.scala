@@ -790,8 +790,10 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     assertDistributionRequirementsAreSatisfied(outputPlan)
     val exchanges = outputPlan.collect { case e: ShuffleExchangeExec => e }
     assert(exchanges.length == 2, s"Expected a shuffle on each side:\n$outputPlan")
-    assert(exchanges.forall(_.outputPartitioning.isInstanceOf[HashPartitioning]),
-      s"Both sides must hash-partition on the equi-key:\n$outputPlan")
+    assert(exchanges.forall(_.outputPartitioning match {
+      case h: HashPartitioning => h.expressions == Seq(exprC)
+      case _ => false
+    }), s"Both sides must hash-partition on the equi-key:\n$outputPlan")
   }
 
   test("SPARK-24500: create union with stream of children") {
