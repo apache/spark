@@ -96,8 +96,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
       attr
     }
   }
-  private val hasCheckedCharVarcharOutput =
-    udfs.exists(udf => udf.hasCharVarcharResult && udf.applyCharVarcharChecks)
+  private val hasCharVarcharOutput = udfs.exists(_.hasCharVarcharResult)
   private val physicalOutputSchema = ColumnarArrowEvalPythonEvaluatorFactory
     .toPhysicalType(outputSchema)
     .asInstanceOf[StructType]
@@ -173,7 +172,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
           batch.column(0).isInstanceOf[ArrowColumnVector]
       }
 
-      if (inputColumnIndices.isDefined && isArrow && !hasCheckedCharVarcharOutput) {
+      if (inputColumnIndices.isDefined && isArrow && !hasCharVarcharOutput) {
         // Path 1: Arrow columnar -- full optimization.
         evalArrowColumnar(peekIter, context, pyFuncs, argMetas,
           udfInputSchema, outputTypes, inputColumnIndices.get)
