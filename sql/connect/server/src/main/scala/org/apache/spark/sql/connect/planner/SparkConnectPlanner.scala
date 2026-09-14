@@ -1649,6 +1649,7 @@ class SparkConnectPlanner(
         val proj = UnsafeProjection.create(project.projectList, project.child.output)
         def restoreFieldNames(actual: DataType, requested: DataType): DataType =
           (actual, requested) match {
+            case (_, requestedUdt: UserDefinedType[_]) => requestedUdt
             case (StructType(actualFields), StructType(requestedFields)) =>
               StructType(
                 actualFields.zip(requestedFields).map { case (actualField, requestedField) =>
