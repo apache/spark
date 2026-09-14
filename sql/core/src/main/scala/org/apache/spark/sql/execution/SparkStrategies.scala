@@ -200,8 +200,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         joinType: JoinType,
         hint: JoinHint,
         isBroadcast: Boolean): Unit = {
+      // Only the strategy is rejected here, so report only that facet of the hint.
       def invalidBuildSideInHint(hintInfo: HintInfo, buildSide: String): Unit = {
-        hintErrorHandler.joinHintNotSupported(hintInfo,
+        hintErrorHandler.joinHintNotSupported(hintInfo.copy(runtimeFilterSource = false),
           s"build $buildSide for ${joinType.sql.toLowerCase(Locale.ROOT)} join")
       }
 
@@ -220,8 +221,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     private def checkHintNonEquiJoin(hint: JoinHint): Unit = {
       if (hintToShuffleHashJoin(hint) || hintToSortMergeJoin(hint)) {
-        assert(hint.leftHint.orElse(hint.rightHint).isDefined)
-        hintErrorHandler.joinHintNotSupported(hint.leftHint.orElse(hint.rightHint).get,
+        val strategyHint = hint.leftHint.filter(_.strategy.isDefined).orElse(hint.rightHint)
+        assert(strategyHint.isDefined)
+        hintErrorHandler.joinHintNotSupported(strategyHint.get.copy(runtimeFilterSource = false),
           "no equi-join keys")
       }
     }

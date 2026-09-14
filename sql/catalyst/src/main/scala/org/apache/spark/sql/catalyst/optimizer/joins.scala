@@ -18,13 +18,14 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
+import scala.util.{Left, Right}
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{HASH_JOIN_KEYS, JOIN_CONDITION}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, ExtractSingleColumnNullAwareAntiJoin}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, ExtractSingleColumnNullAwareAntiJoin, NodeWithOnlyDeterministicProjectAndFilter}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -579,6 +580,44 @@ trait JoinSelectionHelper extends Logging {
     hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_AND_REPLICATION))
   }
 
+  def hintToRuntimeFilterSourceLeft(hint: JoinHint): Boolean = {
+    hint.leftHint.exists(_.runtimeFilterSource)
+  }
+
+  def hintToRuntimeFilterSourceRight(hint: JoinHint): Boolean = {
+    hint.rightHint.exists(_.runtimeFilterSource)
+  }
+
+  /**
+   * The join side a [[RuntimeFilterHint]] names as the runtime filter source, i.e. the side a
+   * runtime filter is built from to prune the other side. `None` when neither side is hinted, and
+   * also when both are: each side would then have to be the other's source, so the hint is
+   * ambiguous and ignored, see [[isRuntimeFilterHintAmbiguous]].
+   */
+  def runtimeFilterSourceSide(hint: JoinHint): Option[BuildSide] = {
+    (hintToRuntimeFilterSourceLeft(hint), hintToRuntimeFilterSourceRight(hint)) match {
+      case (true, false) => Some(BuildLeft)
+      case (false, true) => Some(BuildRight)
+      case _ => None
+    }
+  }
+
+  def isRuntimeFilterHintAmbiguous(hint: JoinHint): Boolean = {
+    hintToRuntimeFilterSourceLeft(hint) && hintToRuntimeFilterSourceRight(hint)
+  }
+
+  /**
+   * Why `plan` cannot serve as the source of a runtime filter on its join key `key`, or None when
+   * it can, see [[RuntimeFilterSourceAnalysis]].
+   */
+  def runtimeFilterSourceRejection(plan: LogicalPlan, key: Expression): Option[String] = {
+    RuntimeFilterSourceAnalysis.rejection(plan, key)
+  }
+
+  def isRepeatableRuntimeFilterSource(plan: LogicalPlan, key: Expression): Boolean = {
+    runtimeFilterSourceRejection(plan, key).isEmpty
+  }
+
   private def getBuildSide(
       canBuildLeft: Boolean,
       canBuildRight: Boolean,
@@ -641,6 +680,217 @@ private[sql] object NullAwareAntiJoinPlanning extends JoinSelectionHelper {
       BroadcastHash
     } else {
       BroadcastNestedLoop
+    }
+  }
+}
+
+/**
+ * Decides whether a plan can serve as the source of a runtime filter on a join key. A runtime
+ * filter evaluates its source separately from the join, so the key values the source produces
+ * must be the same in both evaluations, or the filter could prune rows the join itself matches.
+ * `deterministic` is not enough for that: Spark flags order-dependent computations such as
+ * first, last, row_number or an unordered LIMIT as deterministic.
+ *
+ * The plan is walked bottom-up, tracking the output attributes whose values are unstable: they
+ * come from a non-deterministic expression, an order-dependent aggregate or window function, or
+ * an expression over such an attribute. The plan is rejected outright when its row set is
+ * unstable: a filter, join condition or grouping consumes an unstable attribute, an inner
+ * generate uses an unstable generator, a sample is unseeded or over anything but a scan, or a
+ * limit is over anything but a total order; and, with its own reason, when an operator's effect
+ * on the rows is not analyzed. The source qualifies when the key references no unstable
+ * attribute. Values that are unstable but only carried to the output (a `first(name)` next to a
+ * `GROUP BY id`, a row number next to the key) do not disqualify it.
+ */
+private[optimizer] object RuntimeFilterSourceAnalysis extends AliasHelper {
+
+  /**
+   * @param unstable output attributes whose values depend on evaluation order or on chance.
+   * @param totallyOrdered whether the rows are in a total order on stable keys, so that a limit
+   *                       over them keeps the same rows every time.
+   */
+  private case class Taint(unstable: AttributeSet, totallyOrdered: Boolean = false)
+
+  private val NotRepeatable =
+    "the hinted side may produce different rows or join keys when evaluated again"
+
+  /** Why `plan` is not a repeatable source of `key`, or None when it is. */
+  def rejection(plan: LogicalPlan, key: Expression): Option[String] = {
+    if (plan.isStreaming) {
+      Some("the hinted side is a stream")
+    } else if (!key.deterministic) {
+      Some(NotRepeatable)
+    } else {
+      analyze(plan) match {
+        case Left(reason) => Some(reason)
+        case Right(t) if key.references.intersect(t.unstable).nonEmpty => Some(NotRepeatable)
+        case _ => None
+      }
+    }
+  }
+
+  /**
+   * Whether `e` yields the same value on every evaluation. A subquery counts as deterministic
+   * when its plan is, which is the very check this analysis replaces, so its plan is analyzed
+   * too.
+   */
+  private def isStable(e: Expression, unstable: AttributeSet): Boolean = {
+    e.deterministic && e.references.intersect(unstable).isEmpty && !e.exists {
+      case s: SubqueryExpression => s.plan.isStreaming ||
+        analyze(s.plan).forall(t => s.plan.outputSet.intersect(t.unstable).nonEmpty)
+      case _ => false
+    }
+  }
+
+  /** Returns the taint of `plan`'s output, or the reason its row set is not repeatable. */
+  private def analyze(plan: LogicalPlan): Either[String, Taint] = plan match {
+    case _: LeafNode => Right(Taint(AttributeSet.empty))
+
+    case p: Project => analyze(p.child).map { t =>
+      Taint(
+        AttributeSet(p.projectList.filterNot(isStable(_, t.unstable)).map(_.toAttribute)),
+        t.totallyOrdered)
+    }
+
+    case f: Filter => analyze(f.child).flatMap { t =>
+      if (isStable(f.condition, t.unstable)) Right(t) else Left(NotRepeatable)
+    }
+
+    case j: Join => analyze(j.left).flatMap { l =>
+      analyze(j.right).flatMap { r =>
+        val unstable = l.unstable ++ r.unstable
+        if (j.condition.forall(isStable(_, unstable))) {
+          Right(Taint(unstable))
+        } else {
+          Left(NotRepeatable)
+        }
+      }
+    }
+
+    case a: Aggregate => analyze(a.child).map { t =>
+      // Grouping on an unstable value changes which rows form a group, so every aggregate result
+      // then depends on it; a grouping expression's own value is as stable as its input.
+      val stableGroups = a.groupingExpressions.forall(isStable(_, t.unstable))
+      val unstable = a.aggregateExpressions.filter { e =>
+        !isStable(e, t.unstable) ||
+          (e.exists(_.isInstanceOf[AggregateExpression]) &&
+            (!stableGroups || !isOrderIrrelevantAggregate(e)))
+      }
+      Taint(AttributeSet(unstable.map(_.toAttribute)))
+    }
+
+    case w: Window => analyze(w.child).map { t =>
+      val stablePartitions = w.partitionSpec.forall(isStable(_, t.unstable))
+      val unstable = w.windowExpressions.filter { e =>
+        !stablePartitions || !isStable(e, t.unstable) || !isOrderIrrelevantWindow(e)
+      }
+      Taint(t.unstable ++ AttributeSet(unstable.map(_.toAttribute)))
+    }
+
+    case u: Union =>
+      val taints = u.children.map(analyze)
+      taints.collectFirst { case Left(reason) => Left(reason) }.getOrElse {
+        val unstable = u.output.zipWithIndex.collect {
+          case (attr, i) if u.children.zip(taints).exists {
+            case (child, Right(taint)) => taint.unstable.contains(child.output(i))
+            case _ => false
+          } => attr
+        }
+        Right(Taint(AttributeSet(unstable)))
+      }
+
+    // An inner generate drops the rows for which the generator yields nothing, so an unstable
+    // generator changes the row set; an outer generate keeps them.
+    case g: Generate => analyze(g.child).flatMap { t =>
+      if (isStable(g.generator, t.unstable)) {
+        Right(t)
+      } else if (g.outer) {
+        Right(Taint(t.unstable ++ AttributeSet(g.generatorOutput)))
+      } else {
+        Left(NotRepeatable)
+      }
+    }
+
+    case e: Expand => analyze(e.child).map { t =>
+      val unstable = e.output.zipWithIndex.collect {
+        case (attr, i) if e.projections.exists(p => !isStable(p(i), t.unstable)) => attr
+      }
+      Taint(AttributeSet(unstable))
+    }
+
+    case s: Sort => analyze(s.child).map { t =>
+      val stableOrder = s.order.forall(o => isStable(o.child, t.unstable))
+      Taint(t.unstable, totallyOrdered = s.global && stableOrder &&
+        sortedOnUniqueKey(s.child, s.order.map(_.child)))
+    }
+
+    // A limit keeps whichever rows arrive first unless the order is total.
+    case l @ (_: GlobalLimit | _: LocalLimit | _: Offset | _: Tail) =>
+      analyze(l.children.head).flatMap { t =>
+        if (t.totallyOrdered) Right(t) else Left(NotRepeatable)
+      }
+
+    // A sample draws a fresh seed per evaluation unless one is given, and depends on the input
+    // row order even then: only a seeded sample over a scan, through projections and filters
+    // that keep the row order, is repeatable.
+    case s: Sample =>
+      val overScan = NodeWithOnlyDeterministicProjectAndFilter.unapply(s.child)
+        .exists(_.isInstanceOf[LeafNode])
+      if (s.seed.isDefined && overScan) analyze(s.child) else Left(NotRepeatable)
+
+    // The rows and their values are unchanged; a shuffle loses the order.
+    case _: Distinct | _: SubqueryAlias | _: Repartition | _: RepartitionByExpression |
+         _: RebalancePartitions =>
+      analyze(plan.children.head).map(t => Taint(t.unstable))
+
+    // Observed metrics do not touch the rows.
+    case c: CollectMetrics => analyze(c.child)
+
+    // Anything else, e.g. a typed operator or a script transformation, is not analyzed.
+    case _ =>
+      Left(s"the hinted side contains ${plan.nodeName}, which cannot be checked for repeatability")
+  }
+
+  /**
+   * Whether an aggregate expression's value is independent of the input order. Spark's own
+   * allowlist covers the SQL functions; a Bloom filter aggregate, which this rule injects for an
+   * inner join, merges commutatively.
+   */
+  private def isOrderIrrelevantAggregate(e: NamedExpression): Boolean = e match {
+    case Alias(AggregateExpression(_: BloomFilterAggregate, _, _, _, _), _) => true
+    case _ => EliminateSorts.isOrderIrrelevantAggs(Seq(e))
+  }
+
+  /**
+   * A window function's value depends on the row order within its frame, unless the frame is
+   * the whole partition and the function is order-irrelevant.
+   */
+  private def isOrderIrrelevantWindow(e: NamedExpression): Boolean = e match {
+    case Alias(WindowExpression(_: AggregateExpression, spec), _) =>
+      val wholePartition = spec.orderSpec.isEmpty && (spec.frameSpecification match {
+        case UnspecifiedFrame => true
+        case SpecifiedWindowFrame(_, UnboundedPreceding, UnboundedFollowing) => true
+        case _ => false
+      })
+      wholePartition && EliminateSorts.isOrderIrrelevantAggs(Seq(e))
+    case _ => false
+  }
+
+  /**
+   * Whether `sortKeys` cover a key of `plan` that is proven unique, so that sorting on them is a
+   * total order. The only uniqueness Catalyst can establish is an aggregate's grouping keys.
+   */
+  private def sortedOnUniqueKey(plan: LogicalPlan, sortKeys: Seq[Expression]): Boolean = {
+    plan match {
+      case p: Project =>
+        val aliases = getAliasMap(p)
+        sortedOnUniqueKey(p.child, sortKeys.map(replaceAlias(_, aliases)))
+      case Filter(_, child) => sortedOnUniqueKey(child, sortKeys)
+      case a: Aggregate =>
+        val aliases = getAliasMap(a)
+        val keys = sortKeys.map(replaceAlias(_, aliases))
+        a.groupingExpressions.nonEmpty &&
+          a.groupingExpressions.forall(g => keys.exists(_.semanticEquals(g)))
+      case _ => false
     }
   }
 }
