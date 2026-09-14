@@ -621,12 +621,13 @@ class SortMergeAsOfJoinSuite extends QueryTest
       List(Row(null, 5, "a"), Row(1, 5, "b"), Row(null, 10, "c")).asJava, schema1)
     val df2 = spark.createDataFrame(
       List(Row(null, 3, "x"), Row(1, 4, "y"), Row(null, 8, "z")).asJava, schema2)
+    val joined = df1.joinAsOf(
+      df2, df1.col("ts"), df2.col("ts"),
+      joinExprs = df1.col("grp") <=> df2.col("grp"),
+      joinType = "inner", tolerance = null,
+      allowExactMatches = true, direction = "backward")
     checkAnswer(
-      df1.joinAsOf(
-        df2, df1.col("ts"), df2.col("ts"),
-        joinExprs = df1.col("grp") <=> df2.col("grp"),
-        joinType = "inner", tolerance = null,
-        allowExactMatches = true, direction = "backward"),
+      joined,
       Seq(
         // grp=null <=> grp=null is true, so null keys match (EqualTo would drop these)
         Row(null, 5, "a", null, 3, "x"),
@@ -636,6 +637,14 @@ class SortMergeAsOfJoinSuite extends QueryTest
         Row(null, 10, "c", null, 8, "z")
       )
     )
+    // Pin the routing the comment describes: <=> is a residual, not an equi-key, so the
+    // operator has empty equi-keys. Treating <=> as a null-safe equi-key would give the same
+    // rows but non-empty keys, so checkAnswer alone cannot tell the two apart.
+    val plan = joined.queryExecution.executedPlan
+    val asOfExecs = collectWithSubqueries(plan) { case j: SortMergeAsOfJoinExec => j }
+    assert(asOfExecs.length == 1, s"expected one SortMergeAsOfJoinExec in:\n$plan")
+    assert(asOfExecs.head.leftKeys.isEmpty && asOfExecs.head.rightKeys.isEmpty,
+      s"<=> must be a residual, so equi-keys must be empty, got ${asOfExecs.head}")
   }
 
   test("residual condition via joinExprs") {
