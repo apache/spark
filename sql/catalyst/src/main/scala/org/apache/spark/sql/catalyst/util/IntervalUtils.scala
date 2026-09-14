@@ -540,14 +540,25 @@ object IntervalUtils extends SparkIntervalUtils {
     }
   }
 
+  // 10^0 .. 10^8: scales a 1..9 digit fraction up to nanosecond precision without
+  // building a zero-padded temporary string.
+  private val nanosMultiplier: Array[Long] =
+    Array(1L, 10L, 100L, 1000L, 10000L, 100000L, 1000000L, 10000000L, 100000000L)
+
   // Parses a string with nanoseconds, truncates the result and returns microseconds
   private def parseNanos(nanos: String, isNegative: Boolean): Long = {
     if (nanos != null) {
       val maxNanosLen = 9
-      val alignedStr = if (nanos.length < maxNanosLen) {
-        (nanos + "000000000").substring(0, maxNanosLen)
-      } else nanos
-      val nanoSecond = toLongWithRange(nanosStr, alignedStr, 0L, 999999999L)
+      // Parse the fraction directly and scale by the missing trailing zeros instead of
+      // building a padded string. `raw` is in [0, 999999999]. The modern grammar bounds the
+      // fraction to 1..9 digits, but the legacy day-time parser
+      // (spark.sql.legacy.fromDayTimeString) captures an unbounded fraction, so a 10+ digit
+      // value (e.g. "0000000001") is possible; there `raw` is already at nanosecond scale,
+      // so return it directly.
+      val raw = toLongWithRange(nanosStr, nanos, 0L, 999999999L)
+      val nanoSecond =
+        if (nanos.length >= maxNanosLen) raw
+        else raw * nanosMultiplier(maxNanosLen - nanos.length)
       val microSecond = nanoSecond / NANOS_PER_MICROS
       if (isNegative) -microSecond else microSecond
     } else {
