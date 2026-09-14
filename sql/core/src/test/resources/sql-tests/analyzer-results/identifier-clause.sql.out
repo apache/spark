@@ -2980,7 +2980,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42K0F",
   "messageParameters" : {
     "obj" : "VIEW",
-    "objName" : "`unknown`",
+    "objName" : "`spark_catalog`.`identifier_clause_test_schema`.`identifier_perm_view`",
     "tempObj" : "VARIABLE",
     "tempObjName" : "`identifier_perm_name`"
   }

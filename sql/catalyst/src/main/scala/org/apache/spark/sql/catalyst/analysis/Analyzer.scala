@@ -167,14 +167,16 @@ case class AnalysisContext(
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     // Like `referredTempFunctionNames`, this is populated only by fixed-point analysis (by
-    // `ResolveIdentifierClause`, the sole writer). It is consumed when a temporary view, temporary
-    // ALTER VIEW, or CACHE TABLE AS SELECT is created: the names are stored in the temporary view
-    // metadata so they resolve when the stored view text is analyzed again. For a persisted view
-    // these variables are instead rejected by default (`verifyTemporaryObjectsNotExists`), unless
-    // `spark.sql.legacy.allowSessionVariableInPersistedView` permits them. The single-pass resolver
-    // has no IDENTIFIER-clause resolution of its own, so there is no second writer to keep in sync.
-    // LinkedHashSet keeps insertion order so the recorded names (and any error naming them) are
-    // deterministic when more than one variable is read via an IDENTIFIER clause.
+    // `ResolveIdentifierClause`, the sole writer). A temporary view, temporary ALTER VIEW, or
+    // CACHE TABLE AS SELECT stores the names in its metadata so they resolve when the stored view
+    // text is analyzed again. A persisted CREATE/ALTER VIEW instead rejects them -- usually in
+    // `ResolveIdentifierClause` while resolving the body, and otherwise (e.g. an IDENTIFIER nested
+    // in a scalar subquery) in `verifyTemporaryObjectsNotExists` at run time. When
+    // `spark.sql.legacy.allowSessionVariableInPersistedView` is set, the persisted paths simply
+    // discard the set. The single-pass resolver has no IDENTIFIER-clause resolution of its own, so
+    // there is no second writer to keep in sync. LinkedHashSet keeps insertion order so the recorded
+    // names (and any error naming them) are deterministic when more than one variable is read via an
+    // IDENTIFIER clause.
     referredTempVariableNamesUnderIdentifier: mutable.Set[Seq[String]] =
       mutable.LinkedHashSet.empty,
     outerPlan: Option[LogicalPlan] = None,
@@ -268,8 +270,9 @@ object AnalysisContext {
       referredTempViewNames = viewDesc.viewReferredTempViewNames,
       referredTempFunctionNames = mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
       referredTempVariableNames = viewDesc.viewReferredTempVariableNames,
-      // A nested view records its own IDENTIFIER clause variables in its own metadata, so they must
-      // not be attributed to the object whose creation is driving this analysis.
+      // Reset rather than share: a temporary nested view records its own IDENTIFIER-clause variables
+      // in its own metadata, and a persisted one does not carry them at all, so in neither case may
+      // they be attributed to the object whose creation is driving this analysis.
       referredTempVariableNamesUnderIdentifier = mutable.LinkedHashSet.empty,
       collation = viewDesc.collation)
     context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)

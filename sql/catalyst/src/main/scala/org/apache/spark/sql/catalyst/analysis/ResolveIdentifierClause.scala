@@ -49,8 +49,17 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
           val analyzedChild = apply0(createView.child, recordUnderIdentifier = false)
           val analyzedQuery = apply0(createView.query, Some(referredTempVars))
           if (referredTempVars.nonEmpty) {
+            // Report the resolved target so this early rejection names the same view as the
+            // run-time `verifyTemporaryObjectsNotExists` path (which handles e.g. an IDENTIFIER
+            // nested in a scalar subquery), rather than a placeholder.
+            val viewName = analyzedChild match {
+              case r: ResolvedIdentifier =>
+                r.catalog.name +: (r.identifier.namespace.toSeq :+ r.identifier.name)
+              case u: UnresolvedIdentifier => u.nameParts
+              case _ => Seq("unknown")
+            }
             throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferencingTempVarError(
-              Seq("unknown"),
+              viewName,
               referredTempVars.head
             )
           }
@@ -104,9 +113,9 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
         // instead supplies the *name* of a command (e.g. the target of
         // `CREATE TEMPORARY VIEW IDENTIFIER(v) AS ...`), the evaluated plan is that command and `v`
         // names the object rather than a variable it refers to, so recording it would wrongly
-        // persist it as a dependency. The commands that consume the recorded set are temporary-view
-        // create/ALTER and CACHE TABLE AS SELECT, which store it as metadata, and persisted
-        // CREATE/ALTER VIEW, which validate against it.
+        // persist it as a dependency. The recorded set is consumed by temporary-view create/ALTER
+        // and CACHE TABLE AS SELECT (stored as metadata) and by persisted CREATE/ALTER VIEW
+        // (rejected -- unless the legacy flag makes the persisted paths discard it instead).
         if (recordUnderIdentifier && !resolvedPlan.isInstanceOf[Command]) {
           recordTemporaryVariablesUnderIdentifier(p.identifierExpr)
         }
