@@ -145,6 +145,13 @@ public abstract class UnsafeWriter {
 
     if (input == null) {
       BitSetMethods.set(getBuffer(), startingOffset, ordinal);
+      // Zero the reserved 16-byte payload so that a null interval is byte-identical no matter what
+      // stale bytes the reused buffer holds. The projection buffer is not cleared between rows, so
+      // without this two null keys can carry different bytes and split into separate groups (a
+      // nullable CalendarInterval GROUP BY / join key would produce several null groups). Mirrors
+      // the in-place null-update path UnsafeRow#setInterval, which zeroes the payload the same way.
+      Platform.putLong(getBuffer(), cursor(), 0L);
+      Platform.putLong(getBuffer(), cursor() + 8, 0L);
     } else {
       // Write the months, days and microseconds fields of interval to the variable length portion.
       long longVal =

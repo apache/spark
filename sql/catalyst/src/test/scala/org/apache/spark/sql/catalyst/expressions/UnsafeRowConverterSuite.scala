@@ -73,6 +73,33 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with Expressio
     assert(unsafeRow2.getInt(2) === 2)
   }
 
+  testBothCodegenAndInterpreted(
+      "null interval keys are byte-identical regardless of prior rows") {
+    // CalendarInterval occupies a 16-byte variable-length payload. The projection reuses its output
+    // buffer across rows, so a null value must zero that payload; otherwise it inherits the prior
+    // non-null value's bytes and two null rows compare unequal -- which splits a nullable interval
+    // GROUP BY / join key into several null groups.
+    val fieldTypes: Array[DataType] = Array(CalendarIntervalType)
+    val converter = UnsafeProjection.create(fieldTypes)
+    val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
+
+    // Dirty the reused buffer with one non-null value, then project a null.
+    row.update(0, new CalendarInterval(3, 1, 1000L))
+    converter.apply(row)
+    row.setNullAt(0)
+    val nullAfterA = converter.apply(row).copy()
+
+    // Dirty the buffer with a *different* non-null value, then project a null again.
+    row.update(0, new CalendarInterval(7, 9, 987654321L))
+    converter.apply(row)
+    row.setNullAt(0)
+    val nullAfterB = converter.apply(row).copy()
+
+    assert(nullAfterA.isNullAt(0) && nullAfterB.isNullAt(0))
+    assert(nullAfterA == nullAfterB,
+      "two null interval projections must be byte-identical but differed (stale payload)")
+  }
+
   testBothCodegenAndInterpreted("basic conversion with primitive, string and binary types") {
     val factory = UnsafeProjection
     val fieldTypes: Array[DataType] = Array(LongType, StringType, BinaryType)
