@@ -523,6 +523,48 @@ class Analyzer(
   private def executeSameContext(plan: LogicalPlan): LogicalPlan =
     runWithSessionConf(super.execute(plan))
 
+  /**
+   * Like [[executeAndCheck]], but also returns the temporary variables recorded via IDENTIFIER
+   * clauses during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`).
+   *
+   * Those variables are absent from the analyzed plan (the placeholder is replaced by the plan
+   * built from the evaluated name), and the accumulator that holds them is discarded when the
+   * analysis scope exits. A caller that separately validates a freshly analyzed body against
+   * persisted-view rules (metric-view creation) therefore cannot recover them afterwards, so this
+   * entry point reads them inside the owning scope and freezes them into the returned result.
+   *
+   * It runs the fixed-point analyzer directly (in a context it owns, so the accumulator stays
+   * readable). The only caller analyzes a metric-view placeholder, which is explicitly unsupported
+   * by the single-pass resolver (see the resolver's unsupported-feature list), so [[executeAndCheck]]
+   * would fall back to this same fixed-point path anyway.
+   */
+  def executeAndCheckReferredTempVariablesUnderIdentifier(
+      plan: LogicalPlan,
+      tracker: QueryPlanningTracker): (LogicalPlan, Seq[Seq[String]]) = {
+    if (plan.analyzed) {
+      (plan, Seq.empty)
+    } else {
+      def analyze(): (LogicalPlan, Seq[Seq[String]]) = AnalysisHelper.markInAnalyzer {
+        val analyzed = QueryPlanningTracker.withTracker(tracker) {
+          executeSameContext(plan)
+        }
+        // Read the accumulator before the surrounding context is reset / restored below.
+        val referredTempVariablesUnderIdentifier =
+          AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq
+        checkAnalysis(analyzed)
+        (analyzed, referredTempVariablesUnderIdentifier)
+      }
+      if (AnalysisContext.get.isDefault) {
+        AnalysisContext.reset()
+        try analyze() finally AnalysisContext.reset()
+      } else {
+        AnalysisContext.withNewAnalysisContext {
+          analyze()
+        }
+      }
+    }
+  }
+
   def resolver: Resolver = conf.resolver
 
   /**
