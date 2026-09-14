@@ -407,7 +407,7 @@ class PandasToArrowConversion:
                 converted.append(ArrowBatchTransformer.wrap_struct(nested_batch).column(0))
             else:
                 converted.append(
-                    cls.convert(
+                    cls._convert_column(
                         col,
                         field,
                         timezone=timezone,
@@ -426,7 +426,7 @@ class PandasToArrowConversion:
         return pa.RecordBatch.from_arrays(arrays, schema.names)
 
     @classmethod
-    def convert(
+    def _convert_column(
         cls,
         series: "pd.Series",
         field: StructField,
@@ -439,8 +439,8 @@ class PandasToArrowConversion:
         ignore_unexpected_complex_type_values: bool = False,
         use_legacy_error_handling: bool = False,
     ) -> Union["pa.Array", "pa.ChunkedArray"]:
-        """Convert a pandas Series to an Arrow Array or ChunkedArray."""
-        return cls.convert_legacy(
+        """Dispatch a pandas column to its conversion strategy."""
+        return cls._convert_column_legacy(
             series,
             field,
             timezone=timezone,
@@ -453,7 +453,7 @@ class PandasToArrowConversion:
         )
 
     @classmethod
-    def convert_legacy(
+    def _convert_column_legacy(
         cls,
         series: "pd.Series",
         field: StructField,
@@ -466,7 +466,7 @@ class PandasToArrowConversion:
         ignore_unexpected_complex_type_values: bool = False,
         use_legacy_error_handling: bool = False,
     ) -> Union["pa.Array", "pa.ChunkedArray"]:
-        """Convert a pandas Series to an Arrow Array or ChunkedArray."""
+        """Convert a pandas column using the legacy conversion strategy."""
         import pandas as pd
         import pyarrow as pa
 
