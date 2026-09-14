@@ -72,14 +72,17 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
   /**
    * Build `Filter(min <> max, Aggregate(equiKeys, child))`, taking MIN and MAX over the neq column.
    * `MIN(neqCol) <> MAX(neqCol)` is true exactly when the group holds two or more distinct non-null
-   * values -- the same test as `COUNT(DISTINCT neqCol) > 1`, but avoids the distinct-dedup
-   * aggregation stages and supports partial aggregation.
+   * values.
    *
    * The `IsNotNull(equiKeys)` filter preserves the equi-join's NULL semantics: `=` never matches a
    * NULL key, but GROUP BY would fold all NULL keys into one group that can leak NULL into a
    * `NOT IN`. The neq column needs no filter -- MIN/MAX ignore NULL, and a group with fewer than
    * two non-null values has `min = max` (or both NULL, which makes `<>` NULL), so `<>` is never
    * true for it and the group is dropped.
+   *
+   * Sound only because the rule fires under `InSubquery`: IN / NOT IN membership is insensitive to
+   * duplicate rows in the subquery result, and it binds columns by position (`equalsStructurally`),
+   * so the A2 branch's column rename is harmless.
    */
   private def buildAggregateHavingMultipleDistinct(
       equiKeys: Seq[Attribute],
@@ -287,16 +290,12 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
             case Some((newWrapper, remap)) => (newWrapper, remap)
             case None => return None
           }
-        case None if projectListOpt.isEmpty =>
-          // Fail closed: with no wrapper and no top-level Project, `Project(equiKeys, filtered)`
-          // shrinks the outer join's arity and RewritePredicateSubquery's positional zip misbinds.
-          return None
         case None =>
-          // Top-level Project preserves arity via `outputRemap`; remap sjRight equi-refs to sjLeft
-          // (same output position in a valid self-join).
-          val newP = Project(sjLeftEquiAttrs, filtered)
-          val remap: Map[ExprId, Attribute] = equiPairs.map { case (l, r) => r.exprId -> l }.toMap
-          (newP, remap)
+          // A bare self-join side (no wrapper Project) is not produced for a fireable A2 by the
+          // normal optimizer pipeline: only equi keys are referenced above the self-join, so
+          // ColumnPruning inserts a wrapper Project to drop the unused neq column, leaving
+          // selfJoinProjectOpt = Some. Fail closed on the non-standard bare shape.
+          return None
       }
 
     val newOuterCond = outerCond.transformUp {
@@ -397,12 +396,13 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
     // A single inequality only: MIN/MAX over one column cannot represent multiple neqs.
     if (neqPairs.size != 1) return None
 
-    // The rewrite swaps comparison equality (`=`/`<>`) for grouping and MIN/MAX ordering equality,
-    // so gate every equi-key and the neq column -- both ends of each pair, since canonicalization
-    // drops the metadata that `isSafeComparisonGroupingAttribute` reads and the two ends may differ
-    // -- on a positive type allowlist. Fail closed on anything not proven safe.
-    val keyAttrs = (equiPairs ++ neqPairs).flatMap { case (l, r) => Seq(l, r) }
-    if (!keyAttrs.forall(isSafeComparisonGroupingAttribute)) return None
+    // Equi-keys move into grouping equality, the neq column into MIN/MAX ordering equality -- two
+    // different gates (below). Check both ends of each pair, since canonicalization can drop the
+    // metadata the gate reads. Fail closed on anything not proven.
+    val equiAttrs = equiPairs.flatMap { case (l, r) => Seq(l, r) }
+    val neqAttrs = neqPairs.flatMap { case (l, r) => Seq(l, r) }
+    if (!equiAttrs.forall(isSafeEquiKeyAttribute)) return None
+    if (!neqAttrs.forall(isSafeNeqColumnAttribute)) return None
 
     // The rewrite expresses "two or more distinct values" as MIN(neq) <> MAX(neq), so the neq
     // column must be orderable. The allowlist above already implies this, but assert Spark's own
@@ -422,30 +422,27 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
     if (leftEquiOrdinals.exists(_ < 0)) return None
     if (leftEquiOrdinals.distinct.size != leftEquiOrdinals.size) return None
 
-    // Reject when the neq column overlaps an equi-key column (e.g. `t1.k = t2.k AND t1.k <> t2.k`).
+    // The neq column must map to an output position of the left self-join input.
     val neqLeftOrdinal = outputOrdinal(leftPlan, neqPairs.head._1)
-    if (neqLeftOrdinal < 0 || leftEquiOrdinals.contains(neqLeftOrdinal)) return None
+    if (neqLeftOrdinal < 0) return None
     Some((equiPairs, neqPairs))
   }
 
-  /**
-   * Type gate applied to each equi-key and the neq column. CHAR/VARCHAR reach the optimizer as
-   * StringType with the declared type recorded in the attribute metadata, so recover the raw type
-   * from metadata (falling back to `dataType`) before running the datatype allowlist -- otherwise
-   * they would slip through the StringType branch.
-   */
-  private def isSafeComparisonGroupingAttribute(attr: Attribute): Boolean = {
-    val rawType = CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType)
-    isSafeComparisonGroupingType(rawType)
-  }
+  // CHAR/VARCHAR reach the optimizer as StringType with the declared type in metadata; read it back
+  // (falling back to `dataType`) so they don't slip through the StringType branch of the gates.
+  private def rawType(attr: Attribute): DataType =
+    CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType)
 
-  /**
-   * Positive allowlist of types where comparison equality (`=`/`<>`) provably coincides with
-   * grouping and MIN/MAX ordering equality, so a key can move into GROUP BY / MIN-MAX. Float/Double
-   * (NaN, signed zero), CHAR/VARCHAR (declared-type/padding), non-binary collated strings, complex
-   * types, UDTs / Variant and unknown types fail closed.
-   */
-  private def isSafeComparisonGroupingType(dt: DataType): Boolean = dt match {
+  private def isSafeEquiKeyAttribute(attr: Attribute): Boolean =
+    isSafeEquiKeyType(rawType(attr))
+
+  private def isSafeNeqColumnAttribute(attr: Attribute): Boolean =
+    isSafeNeqColumnType(rawType(attr))
+
+  // Allowlist for equi-keys, which move into GROUP BY: `=` must coincide with grouping equality;
+  // fail closed otherwise. Float/Double are excluded conservatively (NormalizeFloatingNumbers
+  // already reconciles NaN/signed zero), not out of necessity.
+  private def isSafeEquiKeyType(dt: DataType): Boolean = dt match {
     case ByteType | ShortType | IntegerType | LongType => true
     case _: DecimalType => true
     case BooleanType => true
@@ -454,6 +451,20 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
     case BinaryType => true
     case _: CharType | _: VarcharType => false
     case st: StringType if st.supportsBinaryEquality => true
+    case _ => false
+  }
+
+  // Neq column moves into MIN/MAX, which compare by ORDERING, so a collated string needs
+  // supportsBinaryOrdering (not the weaker supportsBinaryEquality).
+  private def isSafeNeqColumnType(dt: DataType): Boolean = dt match {
+    case ByteType | ShortType | IntegerType | LongType => true
+    case _: DecimalType => true
+    case BooleanType => true
+    case DateType => true
+    case TimestampType | TimestampNTZType => true
+    case BinaryType => true
+    case _: CharType | _: VarcharType => false
+    case st: StringType if st.supportsBinaryOrdering => true
     case _ => false
   }
 
@@ -475,13 +486,8 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
   /**
    * Operator/leaf allowlist for repeatable row bags; everything unknown fails closed. Kept narrow:
    * the target shape needs only a Parquet scan optionally wrapped in Project / Filter /
-   * SubqueryAlias plus the self-join. Row ordering is irrelevant to the row-bag contract.
-   *
-   * The narrowness is deliberate, not a correctness requirement, but it stays intentionally
-   * conservative: the exact-`ParquetFileFormat` leaf check admits only stock Parquet scans. Other
-   * file formats (ORC, JSON, CSV) reach the same FileSourceScan but remain rejected until each is
-   * separately validated, and likewise for inverting the allowlist into a leaf blocklist. This
-   * keeps the rule fail-closed on any leaf not proven repeatable.
+   * SubqueryAlias plus the self-join. The exact-`ParquetFileFormat` leaf check is deliberate:
+   * other formats (ORC/JSON/CSV) reach the same scan but stay rejected until separately validated.
    */
   private def isRowBagRepeatable(plan: LogicalPlan): Boolean = !plan.exists {
     // Whitelisted operator => false ("does not break repeatability"); negating `exists` then means
@@ -514,15 +520,8 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
   private def isRepeatableExpression(expr: Expression): Boolean = expr match {
     case _: Attribute | _: Literal =>
       true
-    // A STRING -> TIMESTAMP_LTZ cast (micro or nanosecond precision) is not repeatable: for a
-    // time-only string SparkDateTimeUtils fills the missing date from LocalDate.now(zoneId), which
-    // ComputeCurrentTime does not stabilize on this path, so two scans that straddle midnight can
-    // produce different timestamps while the rewrite folds them into a single evaluation. The NTZ
-    // parse is clock-independent (it returns null for a time-only string), so only the LTZ
-    // directions are rejected. Reject whenever such a conversion appears at any nesting level,
-    // including inside array/map/struct element casts -- e.g. CAST(CAST(ss AS ARRAY<TIMESTAMP>) AS
-    // STRING). Each nested Cast node is itself visited here, so a per-node check catches the inner
-    // conversion. Fail closed.
+    // A clock-dependent STRING/VARIANT -> TIMESTAMP_LTZ cast is not repeatable at any
+    // nesting level; see castHasClockDependentStringToTimestamp. Fail closed.
     case c: Cast if castHasClockDependentStringToTimestamp(c.child.dataType, c.dataType) =>
       false
     case _: Alias | _: Cast | _: Add | _: Subtract | _: Multiply | _: Divide | _: Remainder |
@@ -534,18 +533,17 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
   }
 
   /**
-   * True when casting `from` to `to` performs a clock-dependent STRING -> TIMESTAMP_LTZ conversion
-   * (microsecond or nanosecond precision) at any nesting level: directly, or inside matching
-   * array / map / struct element casts. Such a cast supplies a time-only string's missing date from
-   * the runtime clock, so it is not repeatable; see [[isRepeatableExpression]]. The scalar
-   * String-source decision is delegated to [[Cast.needsTimeZone]], which enumerates exactly the
-   * zone-dependent (hence LTZ, hence clock-dependent for a bare time) String conversions and stays
-   * in sync as Spark adds timestamp types; String -> TIMESTAMP_NTZ is clock-independent and absent
-   * there.
+   * True when casting `from` to `to` does a clock-dependent STRING -> TIMESTAMP_LTZ conversion at
+   * any nesting level (directly or inside array/map/struct casts). A time-only string's missing
+   * date comes from the runtime clock, so two folded scans can disagree; TIMESTAMP_NTZ is clock-
+   * free. The scalar decision is delegated to `Cast.needsTimeZone`. A VariantType source is handled
+   * separately: `Cast.needsTimeZone(VariantType, _)` is unconditionally true, but a Variant cast
+   * may parse a runtime String.
    */
   private def castHasClockDependentStringToTimestamp(from: DataType, to: DataType): Boolean =
     (from, to) match {
       case (s: StringType, t) => Cast.needsTimeZone(s, t)
+      case (_: VariantType, t) => variantTargetHasClockDependentStringToTimestamp(t)
       case (ArrayType(fromEl, _), ArrayType(toEl, _)) =>
         castHasClockDependentStringToTimestamp(fromEl, toEl)
       case (MapType(fromKey, fromVal, _), MapType(toKey, toVal, _)) =>
@@ -558,6 +556,18 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
         }
       case _ => false
     }
+
+  // True when the Variant cast target holds, at any nesting level, a leaf a runtime String parse
+  // would turn into a clock-dependent TIMESTAMP_LTZ (via Cast.needsTimeZone(StringType, leaf)).
+  private def variantTargetHasClockDependentStringToTimestamp(to: DataType): Boolean = to match {
+    case ArrayType(toEl, _) => variantTargetHasClockDependentStringToTimestamp(toEl)
+    case MapType(toKey, toVal, _) =>
+      variantTargetHasClockDependentStringToTimestamp(toKey) ||
+        variantTargetHasClockDependentStringToTimestamp(toVal)
+    case StructType(toFields) =>
+      toFields.exists(f => variantTargetHasClockDependentStringToTimestamp(f.dataType))
+    case t => Cast.needsTimeZone(StringType, t)
+  }
 
   /** True iff `left`/`right` are the same plan modulo canonicalization AND each is repeatable. */
   private def isSameBaseRelation(left: LogicalPlan, right: LogicalPlan): Boolean = {

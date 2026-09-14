@@ -20,8 +20,8 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, EqualTo, InSubquery, ListQuery, Not}
 import org.apache.spark.sql.catalyst.optimizer.ReorderJoin
-import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -33,16 +33,12 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
  *
  * `assert(!ruleFired(plan))` on its own only proves the rewrite did not happen -- not that it was
  * the guard under test that stopped it. A fixture whose two self-join sides are not structurally
- * identical is rejected by `isSameBaseRelation` before any predicate is even parsed, and such a
- * test passes while covering nothing. So six important rejection paths -- the predicate parser, the
- * single-inequality requirement, output-position identity, the nondeterminism guard, the
- * leaf-source allowlist (LogicalRDD vs Parquet), and the expression-type allowlist (`abs(v)` vs
- * `v + 1`) -- are tested as single-variable pairs: the same fixture and the same query shape, one
- * control query that must fire and one variant that changes only the feature under test and must
- * not. A firing control does not pin the rejection to a particular line, but it does rule out an
- * unrelated fixture mismatch as the reason its partner was rejected. The row-bag whitelist
- * (Aggregate, Window) stays a plain negative: dropping the operator would change the query shape
- * rather than one feature.
+ * identical is rejected by `isSameBaseRelation` before any predicate is parsed, so such a test
+ * passes while covering nothing. Rejection paths are therefore tested as single-variable pairs:
+ * the same fixture and query shape, one control that must fire and one variant changing only the
+ * tested feature that must not. A firing control does not pin the rejection to a line, but rules
+ * out an unrelated fixture mismatch as why its partner was rejected. (The `LIMIT` case is such a
+ * pair: a Limit's expressions are all allowlisted, so the operator whitelist alone can reject it.)
  *
  * Self-joined fixtures are real tables, not temp views over VALUES. Spark deduplicates a self-join
  * over a [[org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation]] via `newInstance()`,
@@ -72,6 +68,12 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
   /** Require BOTH aliases: a rewrite that emitted MIN but dropped MAX is still a bug. */
   private def ruleFired(plan: LogicalPlan): Boolean =
     hasAlias(plan, MinNeqAlias) && hasAlias(plan, MaxNeqAlias)
+
+  /** Total count of a signature alias across the plan and its subqueries: one per rewrite. */
+  private def countAlias(plan: LogicalPlan, name: String): Int =
+    plan.collectWithSubqueries {
+      case p => p.expressions.map(_.collect { case a: Alias if a.name == name => a }.size).sum
+    }.sum
 
   private def assertRuleFired(sql: String): Unit = {
     withSQLConf(rewriteConf -> "true") {
@@ -165,8 +167,11 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
           |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
 
       assertRuleFired(sql)
+      assertMinMaxRewriteShape(optimizedPlanWith(sql, rewrite = true))
       val (on, off) = runBoth(sql)
       assert(on == off, s"rewrite ON $on != OFF $off")
+      // `setupTable()` seeds duplicate-only groups and NULL neq values, so this also pins the neq
+      // 3VL: k=4 (v={70,NULL}) and k=5 (v={NULL,NULL}) do not satisfy SQL `<>`, leaving {1,3,6}.
       assert(on == Set(Row(1), Row(3), Row(6)), s"expected {1,3,6}, got $on")
     }
   }
@@ -174,10 +179,9 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
   test("InSubquery in a SELECT-list CASE WHEN is rewritten, not only in a WHERE predicate") {
     withTable("T") {
       // `apply` rewrites via transformAllExpressionsWithPruning, so an InSubquery anywhere in the
-      // plan is a candidate -- not just a WHERE filter. A Project is a valid host for an InSubquery
-      // (see ValidateSubqueryExpression), so pin that the rewrite fires when the same uncorrelated
-      // self-join subquery sits inside a projected CASE WHEN. Moving it out of WHERE is the only
-      // change from the Pattern A' control above.
+      // plan is a candidate -- not just a WHERE filter. A Project is a valid host (see
+      // ValidateSubqueryExpression), so pin that the rewrite fires with the same self-join subquery
+      // inside a projected CASE WHEN. Moving it out of WHERE is the only change from Pattern A'.
       setupTable()
       val subquery =
         """SELECT s1.k FROM T s1 JOIN T s2
@@ -195,9 +199,8 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
   test("Rewrite is idempotent: a second application on the rewritten plan is a no-op") {
     withTable("T") {
       // After the rewrite the outer `k IN (...)` is still an InSubquery, now over the aggregate, so
-      // the rule revisits it on any later pass. Applying the rule to its own output must change
-      // nothing: the aggregate no longer matches the self-join shape, so the second pass returns
-      // the plan unchanged.
+      // the rule revisits it on later passes. Its output must be a no-op: the aggregate no longer
+      // matches the self-join shape, so the second pass returns the plan unchanged.
       setupTable()
       val sql =
         """SELECT k FROM T outer_t WHERE k IN (
@@ -228,6 +231,7 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
             |  WHERE d.k = sj.k)""".stripMargin
 
         assertRuleFired(sql)
+        assertMinMaxRewriteShape(optimizedPlanWith(sql, rewrite = true))
         val (on, off) = runBoth(sql)
         assert(on == off, s"Pattern A2 rewrite ON $on != OFF $off")
         assert(on == Set(Row(1), Row(3), Row(6)))
@@ -256,6 +260,38 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
         val (on, off) = runBoth(sql)
         assert(on == off, s"Pattern A2 (self-join on left) rewrite ON $on != OFF $off")
         assert(on == Set(Row(1), Row(3), Row(6)))
+      }
+    }
+  }
+
+  test("Q95-shaped query: both IN subqueries (Pattern A' and A2) are rewritten") {
+    withTable("T") {
+      withTempView("D") {
+        // TPC-DS Q95 feeds a self-join-inequality CTE into two IN subqueries: one selects the CTE
+        // directly (Pattern A') and one joins it with another relation (Pattern A2). Like real Q95,
+        // the CTE also projects the two neq-side columns (wh1/wh2) that both INs never consume, so
+        // the rewrite fires only if OptimizeSubqueries first drops them (ColumnPruning) and merges
+        // the projections (CollapseProject). Asserting two MIN and two MAX aliases pins both that
+        // upstream chain and that both subqueries rewrite.
+        setupTable()
+        spark.sql(
+          """CREATE OR REPLACE TEMP VIEW D AS SELECT * FROM VALUES
+            |  (1), (3), (6) AS D(k)""".stripMargin)
+        val sql =
+          """WITH ws_wh AS (
+            |  SELECT s1.k AS ordn, s1.v AS wh1, s2.v AS wh2 FROM T s1 JOIN T s2
+            |    ON s1.k = s2.k AND s1.v <> s2.v)
+            |SELECT o.k FROM T o
+            |WHERE o.k IN (SELECT ordn FROM ws_wh)
+            |  AND o.k IN (SELECT d.k FROM D d, ws_wh WHERE d.k = ws_wh.ordn)""".stripMargin
+
+        val plan = optimizedPlanWith(sql, rewrite = true)
+        assert(
+          countAlias(plan, MinNeqAlias) == 2 && countAlias(plan, MaxNeqAlias) == 2,
+          s"expected both IN subqueries rewritten (2 MIN + 2 MAX signature aliases):\n$plan")
+        val (on, off) = runBoth(sql)
+        assert(on == off, s"Q95-shaped rewrite ON $on != OFF $off")
+        assert(on == Set(Row(1), Row(3), Row(6)), s"expected {1,3,6}, got $on")
       }
     }
   }
@@ -289,9 +325,7 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
       // (LocalDate.now), so two self-join scans that straddle midnight can disagree while the
       // rewrite folds them into one evaluation. The neq column here is derived by such a cast, so
       // the rewrite must not fire. Isolate the cast as the sole cause with a same-shape control
-      // whose derived neq column uses a benign INT -> BIGINT cast (which does fire), and cover the
-      // nested form CAST(CAST(t AS ARRAY<TIMESTAMP>) AS STRING) where the timestamp conversion
-      // hides inside an array element cast and the final column type is STRING.
+      // whose derived neq column uses a benign INT -> BIGINT cast (which does fire).
       createTable(
         "TTs",
         "k INT, v INT, t STRING",
@@ -308,9 +342,8 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
       // Same wrapper shape with a repeatable cast fires, proving the shape itself is supported.
       assertRuleFired(wrapped("CAST(v AS BIGINT)"))
 
-      // Direct and array-nested STRING -> TIMESTAMP casts are both fail-closed.
+      // A direct STRING -> TIMESTAMP cast is fail-closed.
       assertRuleNotFired(wrapped("CAST(t AS TIMESTAMP)"))
-      assertRuleNotFired(wrapped("CAST(CAST(ARRAY(t) AS ARRAY<TIMESTAMP>) AS STRING)"))
 
       // STRING -> TIMESTAMP_NTZ stays supported: it does not consult the session time zone and a
       // time-only string parses to NULL deterministically rather than borrowing the runtime date,
@@ -319,13 +352,85 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
     }
   }
 
+  test("Clock-dependent nested STRING -> TIMESTAMP casts (array/map/struct) are fail-closed") {
+    withTable("TNest") {
+      // castHasClockDependentStringToTimestamp recurses into ARRAY/MAP/STRUCT casts, so a
+      // clock-dependent STRING -> TIMESTAMP_LTZ hidden at any nesting level must fail closed. The
+      // cast rides in a WHERE filter as `CAST(nested AS <ts>) IS NOT NULL` (tree IsNotNull -> Cast
+      // -> Attribute, all allowlisted) rather than the neq column, which the neq-column type gate
+      // would reject wholesale and mask the recursion. So only the clock-dependent-cast guard can
+      // decline it. For each shape the TIMESTAMP_NTZ control must fire before the LTZ variant is
+      // required not to, so deleting a recursion arm turns the matching negative red.
+      createTable(
+        "TNest",
+        "k INT, v INT, arr ARRAY<STRING>, mp MAP<STRING, STRING>, st STRUCT<x: STRING>",
+        """  (1, 10, ARRAY('01:00:00'), MAP('a', '01:00:00'), NAMED_STRUCT('x', '01:00:00')),
+          |  (1, 20, ARRAY('02:00:00'), MAP('a', '02:00:00'), NAMED_STRUCT('x', '02:00:00')),
+          |  (2, 30, ARRAY('03:00:00'), MAP('a', '03:00:00'), NAMED_STRUCT('x', '03:00:00'))"""
+          .stripMargin)
+
+      def wrapped(filterExpr: String): String =
+        s"""SELECT k FROM TNest outer_t WHERE k IN (
+           |  SELECT s1.k FROM
+           |    (SELECT k, v FROM TNest WHERE $filterExpr) s1
+           |    JOIN (SELECT k, v FROM TNest WHERE $filterExpr) s2
+           |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
+
+      Seq(
+        "CAST(arr AS ARRAY<TIMESTAMP>)" -> "CAST(arr AS ARRAY<TIMESTAMP_NTZ>)",
+        "CAST(mp AS MAP<STRING, TIMESTAMP>)" -> "CAST(mp AS MAP<STRING, TIMESTAMP_NTZ>)",
+        "CAST(st AS STRUCT<x: TIMESTAMP>)" -> "CAST(st AS STRUCT<x: TIMESTAMP_NTZ>)"
+      ).foreach { case (ltz, ntz) =>
+        assertRuleFired(wrapped(s"$ntz IS NOT NULL"))
+        assertRuleNotFired(wrapped(s"$ltz IS NOT NULL"))
+      }
+    }
+  }
+
+  test("VARIANT casts to LTZ-containing targets are fail-closed") {
+    // Same WHERE-filter shape and NTZ-control-fires-first setup as the nested STRING-cast test
+    // above (guard coverage at plan level, not a runtime nested-Variant conversion). Variant
+    // specifics: a Variant cast parses a runtime string, so a target with a TIMESTAMP_LTZ leaf at
+    // any nesting level is clock-dependent and must fail closed, while TIMESTAMP_NTZ stays allowed.
+    // `Cast.needsTimeZone(VariantType, _)` is unconditionally true, so the guard uses
+    // variantTargetHasClockDependentStringToTimestamp, which recurses the TARGET type only.
+    // pushVariantIntoScan is disabled so the Cast reaches the rule rather than being folded into a
+    // scan-level struct-field extraction.
+    withSQLConf("spark.sql.variant.pushVariantIntoScan" -> "false") {
+      withTable("TVar") {
+        createTable(
+          "TVar",
+          "k INT, v INT, vt VARIANT",
+          """  (1, 10, parse_json('"01:00:00"')), (1, 20, parse_json('"02:00:00"')),
+            |  (2, 30, parse_json('"03:00:00"'))""".stripMargin)
+
+        def wrapped(filterExpr: String): String =
+          s"""SELECT k FROM TVar outer_t WHERE k IN (
+             |  SELECT s1.k FROM
+             |    (SELECT k, v FROM TVar WHERE $filterExpr) s1
+             |    JOIN (SELECT k, v FROM TVar WHERE $filterExpr) s2
+             |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
+
+        Seq(
+          "CAST(vt AS TIMESTAMP)" -> "CAST(vt AS TIMESTAMP_NTZ)",
+          "CAST(vt AS ARRAY<TIMESTAMP>)" -> "CAST(vt AS ARRAY<TIMESTAMP_NTZ>)",
+          "CAST(vt AS MAP<STRING, TIMESTAMP>)" -> "CAST(vt AS MAP<STRING, TIMESTAMP_NTZ>)",
+          "CAST(vt AS STRUCT<x: TIMESTAMP>)" -> "CAST(vt AS STRUCT<x: TIMESTAMP_NTZ>)"
+        ).foreach { case (ltz, ntz) =>
+          assertRuleFired(wrapped(s"$ntz IS NOT NULL"))
+          assertRuleNotFired(wrapped(s"$ltz IS NOT NULL"))
+        }
+      }
+    }
+  }
+
   test("Pattern A': multi-equi tuple IN with sjRight key remap is rewritten") {
     withTable("TM") {
       // Exercises the multi-equi-key path: two equi keys (k1, k2) drive the GROUP BY, and the tuple
       // IN projects `s1.k1, s2.k2` -- so the second output column comes from the RIGHT self-join
-      // side and must be remapped to its sjLeft counterpart by `canonicalizeWrapper`. This one case
-      // covers multiple equi keys, tuple IN output arity, the two injected IsNotNull(equiKey)
-      // filters, and the sjRight-attribute remap at once.
+      // side and must be remapped to its sjLeft counterpart by `canonicalizeWrapper`. Covers
+      // multiple equi keys, tuple IN arity, the two injected IsNotNull(equiKey) filters, and the
+      // sjRight remap at once.
       createTable(
         "TM",
         "k1 INT, k2 INT, v INT",
@@ -346,22 +451,6 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
       // (NULL,1) and (3,NULL): NULL equi key filtered out by the injected IsNotNull. ->
       // {(1,1),(2,1)}
       assert(on == Set(Row(1, 1), Row(2, 1)), s"expected {(1,1),(2,1)}, got $on")
-    }
-  }
-
-  test("NULL / 3VL on inequality column is preserved") {
-    withTable("T") {
-      setupTable()
-      val sql =
-        """SELECT k FROM T outer_t WHERE k IN (
-          |  SELECT s1.k FROM T s1 JOIN T s2
-          |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
-
-      assertRuleFired(sql)
-      val (on, off) = runBoth(sql)
-      // k=4 (v={70,NULL}) and k=5 (v={NULL,NULL}) do not satisfy plain SQL <>.
-      assert(on == Set(Row(1), Row(3), Row(6)), s"expected {1,3,6}, got $on")
-      assert(off == on, s"NULL/3VL semantics diverge between rewrite ON and OFF: $on vs $off")
     }
   }
 
@@ -396,9 +485,7 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
     withTable("AliasBase") {
       // The guard under test is `sameOutputPosition`. Both queries alias the same two base columns
       // to the names `k` and `v` on both sides, so a rule that compares attribute names would fire
-      // on both; only the output ordinal tells them apart. The control fires, which is what makes
-      // the negative case evidence that the ordinal check -- not a structural mismatch -- rejected
-      // the swapped one.
+      // on both; only the output ordinal tells them apart.
       createTable("AliasBase", "a INT, b INT", "  (1, 10), (1, 20), (2, 30)")
 
       val alignedSql =
@@ -434,10 +521,9 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
       // The guard under test is `isSameBaseRelation`: it must reject a join between two DIFFERENT
       // base tables even when they share a schema and column names. Distinct Parquet tables
       // canonicalize to distinct `rootPaths`, so `left.canonicalized == right.canonicalized` is
-      // false and the rewrite must not fire. This pins a real correctness boundary, not just a
-      // missed optimization: rewriting `TLeft JOIN TRight` as MIN(v) <> MAX(v) over TLeft alone
-      // would drop TRight's rows and change the answer, so removing the guard would make ON diverge
-      // from OFF here.
+      // false and the rewrite must not fire. This is a correctness boundary, not a missed
+      // optimization: rewriting `TLeft JOIN TRight` as MIN(v) <> MAX(v) over TLeft alone would drop
+      // TRight's rows and change the answer.
       createTable("TLeft", "k INT, v INT", "  (1, 10), (1, 10), (2, 30)")
       createTable("TRight", "k INT, v INT", "  (1, 20), (1, 20), (2, 30)")
       val sql =
@@ -455,12 +541,11 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
   // ==================== Positive: rewritten plan is structurally the aggregate ================
   //
   // Result parity (ON == OFF) does not prove the rewrite produced the GROUP BY + HAVING
-  // MIN(v) <> MAX(v) shape rather than leaving the self-join and happening to agree. These controls
-  // assert that shape directly. A full canonicalized-plan comparison against hand-written aggregate
-  // SQL would be wrong here: InferFiltersFromConstraints adds isnotnull(min)/isnotnull(max) to a
-  // hand-written HAVING but not to the rule's own filter (created in a later batch), so it would
-  // fail on redundant null predicates -- and matching it by hardening the rule would be the wrong
-  // fix.
+  // MIN(v) <> MAX(v) shape rather than leaving the self-join and happening to agree, so these
+  // controls assert the shape directly. A full plan comparison against hand-written aggregate SQL
+  // would be wrong: InferFiltersFromConstraints adds isnotnull(min)/isnotnull(max) to a
+  // hand-written HAVING but not to the rule's filter (a later batch), so it would fail on redundant
+  // null predicates.
 
   private def optimizedPlanWith(sql: String, rewrite: Boolean): LogicalPlan =
     withSQLConf(rewriteConf -> rewrite.toString) {
@@ -468,10 +553,9 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
     }
 
   // The rewrite shape: an Aggregate emitting both signature aliases, with a Filter on top whose
-  // condition includes Not(EqualTo(min, max)). Match the two operands by ExprId (Catalyst attribute
-  // identity), not by name -- the rule itself never trusts names -- so a same-named attribute from
-  // elsewhere cannot satisfy it. `exists` on the condition, not exact match, because
-  // InferFiltersFromConstraints may fold redundant isnotnull(min/max) into the same Filter.
+  // condition includes Not(EqualTo(min, max)). Match the two operands by ExprId, not by name, so a
+  // same-named attribute from elsewhere cannot satisfy it. `exists` on the condition (not exact
+  // match) because InferFiltersFromConstraints may fold redundant isnotnull(min/max) into it.
   private def assertMinMaxRewriteShape(plan: LogicalPlan): Unit = {
     val found = plan.collectFirstWithSubqueries {
       case Filter(cond, agg: Aggregate)
@@ -493,64 +577,7 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
     assert(found.isDefined, s"expected a MIN(v) <> MAX(v) aggregate rewrite shape:\n$plan")
   }
 
-  test("Pattern A' rewritten plan is structurally the equivalent aggregate") {
-    withTable("T") {
-      setupTable()
-      val selfJoinSql =
-        """SELECT k FROM T outer_t WHERE k IN (
-          |  SELECT s1.k FROM T s1 JOIN T s2
-          |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
-
-      val actual = optimizedPlanWith(selfJoinSql, rewrite = true)
-      assert(ruleFired(actual), s"precondition: rewrite should fire:\n$actual")
-      assertMinMaxRewriteShape(actual)
-    }
-  }
-
-  test("Pattern A2 rewritten plan is structurally the equivalent aggregate") {
-    withTable("T") {
-      withTempView("D") {
-        setupTable()
-        spark.sql(
-          """CREATE OR REPLACE TEMP VIEW D AS SELECT * FROM VALUES
-            |  (1), (3), (6) AS D(k)""".stripMargin)
-        val selfJoinSql =
-          """SELECT k FROM T outer_t WHERE k IN (
-            |  SELECT d.k
-            |  FROM D d, (SELECT s1.k FROM T s1 JOIN T s2
-            |             ON s1.k = s2.k AND s1.v <> s2.v) sj
-            |  WHERE d.k = sj.k)""".stripMargin
-
-        val actual = optimizedPlanWith(selfJoinSql, rewrite = true)
-        assert(ruleFired(actual), s"precondition: rewrite should fire:\n$actual")
-        assertMinMaxRewriteShape(actual)
-      }
-    }
-  }
-
   // ==================== Negative: rewrite must produce equivalent results (or bail) ==========
-
-  test("Plain InnerJoin at top level: results unchanged (rewrite must not touch it)") {
-    withTable("T") {
-      setupTable()
-      val sql =
-        """SELECT ws1.k FROM T ws1 JOIN T ws2
-          |ON ws1.k = ws2.k AND ws1.v <> ws2.v""".stripMargin
-      // Row-multiplicity matters here; using count() to catch any drop or dup.
-      var onCount: Long = -1L
-      var offCount: Long = -1L
-      withSQLConf(rewriteConf -> "true") {
-        onCount = spark.sql(sql).count()
-      }
-      withSQLConf(rewriteConf -> "false") {
-        offCount = spark.sql(sql).count()
-      }
-      assert(
-        onCount == offCount,
-        s"plain InnerJoin row-count differs: rewrite=$onCount vs baseline=$offCount")
-      assertRuleNotFired(sql)
-    }
-  }
 
   test("Bare-Join subquery (no wrapper Project) fails closed: Pattern A' arity guard") {
     withTable("T") {
@@ -579,9 +606,9 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
   test("Bare-Join nested self-join (no Project anywhere) fails closed: Pattern A2 arity guard") {
     withTable("T") {
       withTempView("D") {
-        // The guard under test is the `case None if projectListOpt.isEmpty => return None` bail in
-        // `rewriteNestedSelfJoin`: with no wrapper Project and no top-level Project, changing the
-        // self-join output arity would misbind the positional semi-predicate zip. `SELECT *` plus a
+        // The guard under test is the `case None => return None` bail in `rewriteNestedSelfJoin`:
+        // with no wrapper Project over the self-join, changing its output arity would misbind the
+        // positional semi-predicate zip, so the rule fails closed. `SELECT *` plus a
         // tuple IN over every column lets RemoveNoopOperators expose the bare nested self-join.
         // ReorderJoin is excluded (a valid config) so the bare nested self-join deterministically
         // reaches this rule rather than being reshaped away; the shape is then asserted so the test
@@ -702,32 +729,12 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
     }
   }
 
-  test("LeftOuter join is outside existence context: results unchanged") {
+  test("LeftOuter self-join inside the IN subquery is rejected by the join-type guard") {
     withTable("T") {
-      setupTable()
-      val sql =
-        """SELECT ws1.k FROM T ws1 LEFT OUTER JOIN T ws2
-          |ON ws1.k = ws2.k AND ws1.v <> ws2.v""".stripMargin
-      // Row multiplicity matters here.
-      var onCount: Long = -1L
-      var offCount: Long = -1L
-      withSQLConf(rewriteConf -> "true") {
-        onCount = spark.sql(sql).count()
-      }
-      withSQLConf(rewriteConf -> "false") {
-        offCount = spark.sql(sql).count()
-      }
-      assert(onCount == offCount, s"LeftOuter row-count differs: $onCount vs $offCount")
-      assertRuleNotFired(sql)
-    }
-  }
-
-  test("Join hint on the self-join is fail-closed") {
-    withTable("T") {
-      // The guard under test is `hint != JoinHint.NONE`. The rewrite deletes the self-join, so a
-      // hint on it is a directive about a join that would vanish; fail closed instead. Control (no
-      // hint) fires; the same query with a BROADCAST hint on the inner self-join -- the only change
-      // -- must not fire. A hint never changes rows, so results are identical either way.
+      // The guard under test is `joinType == Inner`. The MIN(v) <> MAX(v) collapse is valid only
+      // for the INNER shape: a LEFT OUTER self-join preserves unmatched left rows, so its subquery
+      // returns every left key; rewriting it to a per-key aggregate drops keys and changes IN
+      // membership. The INNER control and LEFT OUTER variant differ only in join type.
       setupTable()
       val controlSql =
         """SELECT k FROM T outer_t WHERE k IN (
@@ -735,28 +742,80 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
           |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
       assertRuleFired(controlSql)
 
-      val hintedSql =
+      val leftOuterSql =
         """SELECT k FROM T outer_t WHERE k IN (
-          |  SELECT /*+ BROADCAST(s2) */ s1.k FROM T s1 JOIN T s2
+          |  SELECT s1.k FROM T s1 LEFT OUTER JOIN T s2
           |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
-      assertRuleNotFired(hintedSql)
-      val (on, off) = runBoth(hintedSql)
-      assert(on == off, s"hinted self-join semantics diverge: ON=$on OFF=$off")
-      assert(on == Set(Row(1), Row(3), Row(6)), s"expected {1,3,6}, got $on")
+      // Confirm the optimizer keeps it LEFT OUTER, so the join-type guard is what declines it and
+      // not some rule having reshaped the join away.
+      assert(
+        optimizedInSubqueryPlan(leftOuterSql).exists {
+          case j: Join if j.joinType == LeftOuter => true
+          case _ => false
+        },
+        "expected the subquery to still contain a LEFT OUTER join")
+      assertRuleNotFired(leftOuterSql)
+      val (on, off) = runBoth(leftOuterSql)
+      assert(on == off, s"LeftOuter-in-IN semantics diverge: ON=$on OFF=$off")
     }
   }
 
-  test("Inequality column overlapping an equi-key is rejected") {
+  test("Join hint on the self-join is fail-closed (direct and nested)") {
     withTable("T") {
-      setupTable()
-      val sql =
-        """SELECT k FROM T outer_t WHERE k IN (
-          |  SELECT s1.k FROM T s1 JOIN T s2
-          |    ON s1.k = s2.k AND s1.k <> s2.k)""".stripMargin
-      val (on, off) = runBoth(sql)
-      assert(on == off, s"unsatisfiable predicate diverges: ON=$on OFF=$off")
-      assert(on.isEmpty, s"unsatisfiable predicate should produce empty set, got $on")
-      assertRuleNotFired(sql)
+      withTempView("D") {
+        // The guard is `hint.isEmpty`, checked in two places: rewriteDirectSelfJoin for a top-level
+        // self-join (Pattern A') and tryExtractSelfJoin for a self-join nested under an outer join
+        // (Pattern A2). The rewrite deletes the self-join, so a hint on it is a directive about a
+        // join that would vanish -- fail closed in both. A hint never changes rows, so results are
+        // identical.
+        setupTable()
+        spark.sql(
+          """CREATE OR REPLACE TEMP VIEW D AS SELECT * FROM VALUES
+            |  (1), (3), (6) AS D(k)""".stripMargin)
+
+        // Pattern A': hint on the top-level self-join (rewriteDirectSelfJoin).
+        val directControl =
+          """SELECT k FROM T outer_t WHERE k IN (
+            |  SELECT s1.k FROM T s1 JOIN T s2
+            |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
+        assertRuleFired(directControl)
+        val directHinted =
+          """SELECT k FROM T outer_t WHERE k IN (
+            |  SELECT /*+ BROADCAST(s2) */ s1.k FROM T s1 JOIN T s2
+            |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
+        assertRuleNotFired(directHinted)
+        val (dOn, dOff) = runBoth(directHinted)
+        assert(dOn == dOff, s"direct-hint semantics diverge: ON=$dOn OFF=$dOff")
+        assert(dOn == Set(Row(1), Row(3), Row(6)), s"expected {1,3,6}, got $dOn")
+
+        // Pattern A2: hint on the nested self-join (tryExtractSelfJoin).
+        val nestedControl =
+          """SELECT k FROM T outer_t WHERE k IN (
+            |  SELECT d.k
+            |  FROM D d, (SELECT s1.k FROM T s1 JOIN T s2
+            |             ON s1.k = s2.k AND s1.v <> s2.v) sj
+            |  WHERE d.k = sj.k)""".stripMargin
+        assertRuleFired(nestedControl)
+        val nestedHinted =
+          """SELECT k FROM T outer_t WHERE k IN (
+            |  SELECT d.k
+            |  FROM D d, (SELECT /*+ BROADCAST(s2) */ s1.k FROM T s1 JOIN T s2
+            |             ON s1.k = s2.k AND s1.v <> s2.v) sj
+            |  WHERE d.k = sj.k)""".stripMargin
+        // Confirm a hinted self-join actually survives into the subquery the rule inspects, so the
+        // decline is attributable to the `hint.isEmpty` guard and not to the hint reshaping the
+        // plan so that tryExtractSelfJoin never sees a candidate.
+        assert(
+          optimizedInSubqueryPlan(nestedHinted).exists {
+            case j: Join if j.left.sameResult(j.right) && !j.hint.isEmpty => true
+            case _ => false
+          },
+          "expected a hinted nested self-join to survive into the optimized subquery")
+        assertRuleNotFired(nestedHinted)
+        val (nOn, nOff) = runBoth(nestedHinted)
+        assert(nOn == nOff, s"nested-hint semantics diverge: ON=$nOn OFF=$nOff")
+        assert(nOn == Set(Row(1), Row(3), Row(6)), s"expected {1,3,6}, got $nOn")
+      }
     }
   }
 
@@ -794,9 +853,9 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
             |  SELECT s1.k FROM T s1 JOIN T s2
             |    ON s1.k = s2.k AND s1.v <> s2.v
             |  WHERE s2.k = o.k)""".stripMargin
-        // Precondition: the InSubquery is genuinely correlated -- its ListQuery carries outer
-        // references -- so the not-fired result exercises the `lq.children.isEmpty` fail-closed
-        // guard in `apply`, not an unrelated shape mismatch that would leave this test vacuous.
+        // Precondition: the InSubquery is genuinely correlated (its ListQuery carries outer
+        // references), so the not-fired result exercises the `lq.children.isEmpty` guard in `apply`
+        // rather than an unrelated shape mismatch.
         val analyzed = spark.sql(sql).queryExecution.analyzed
         var sawCorrelated = false
         analyzed.foreach { node =>
@@ -816,50 +875,56 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
   // ==================== Repeatability whitelist: unknown operators fail-closed ==============
 
-  test("Aggregate (first) inside subquery breaks row-bag repeatability: rule bails out") {
-    // FIRST() is order-dependent and its aggregate result is not row-bag repeatable across
-    // two evaluations, yet Catalyst's Expression.deterministic returns true. The whitelist
-    // in `isRowBagRepeatable` must reject any Aggregate node inside the subquery plan.
-    // range(...) avoids ConvertToLocalRelation folding the Aggregate away.
-    val sql =
-      """SELECT k FROM (SELECT CAST(id AS INT) AS k, CAST(id AS INT) AS v FROM range(100)) t
-        |WHERE k IN (
-        |  SELECT s1.k FROM (
-        |      SELECT CAST(id % 10 AS INT) AS k, first(CAST(id AS INT)) AS v
-        |      FROM range(200) GROUP BY id % 10
-        |    ) s1
-        |  JOIN (
-        |      SELECT CAST(id % 10 AS INT) AS k, first(CAST(id AS INT)) AS v
-        |      FROM range(200) GROUP BY id % 10
-        |    ) s2
-        |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
-    assertRuleNotFired(sql)
-  }
+  test("LIMIT inside the self-join subtrees breaks row-bag repeatability: rule bails out") {
+    withTable("T") {
+      // The guard under test is the operator whitelist in `isRowBagRepeatable`: a `LIMIT` without a
+      // total order returns an arbitrary row subset that two scans need not agree on, so it is not
+      // row-bag repeatable. A `LIMIT` node carries only a `Literal`, so every expression is
+      // allowlisted and `hasRepeatableExpressions` passes; with the precondition below proving the
+      // two self-join inputs are still `sameResult`, the operator whitelist (which does not list
+      // Limit) is the relevant remaining rejection point. A control without `LIMIT` fires on the
+      // same shape.
+      setupTable()
+      val controlSql =
+        """SELECT k FROM T outer_t WHERE k IN (
+          |  SELECT s1.k FROM (SELECT k, v FROM T) s1
+          |  JOIN (SELECT k, v FROM T) s2
+          |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
+      assertRuleFired(controlSql)
+      val (controlOn, controlOff) = runBoth(controlSql)
+      assert(controlOn == controlOff, s"LIMIT control diverges: ON=$controlOn OFF=$controlOff")
+      assert(controlOn == Set(Row(1), Row(3), Row(6)), s"expected {1,3,6}, got $controlOn")
 
-  test("Window (row_number) inside subquery breaks row-bag repeatability: rule bails out") {
-    // ROW_NUMBER over non-total order breaks ties nondeterministically. Whitelist rejects
-    // any Window node inside the subquery plan.
-    val sql =
-      """SELECT k FROM (SELECT CAST(id AS INT) AS k, CAST(id AS INT) AS v FROM range(100)) t
-        |WHERE k IN (
-        |  SELECT s1.k FROM (
-        |      SELECT k, ROW_NUMBER() OVER (PARTITION BY k ORDER BY grp) AS v
-        |      FROM (SELECT CAST(id % 10 AS INT) AS k, CAST(id % 3 AS INT) AS grp FROM range(200))
-        |    ) s1
-        |  JOIN (
-        |      SELECT k, ROW_NUMBER() OVER (PARTITION BY k ORDER BY grp) AS v
-        |      FROM (SELECT CAST(id % 10 AS INT) AS k, CAST(id % 3 AS INT) AS grp FROM range(200))
-        |    ) s2
-        |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
-    assertRuleNotFired(sql)
+      val sql =
+        """SELECT k FROM T outer_t WHERE k IN (
+          |  SELECT s1.k FROM (SELECT k, v FROM T LIMIT 2) s1
+          |  JOIN (SELECT k, v FROM T LIMIT 2) s2
+          |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
+      // Precondition: both self-join inputs stay `sameResult`, ruling out a structural mismatch,
+      // and both still contain a Limit. Since Limit carries only an allowlisted Literal expression,
+      // the non-firing result pins the row-bag operator whitelist.
+      def containsLimit(plan: LogicalPlan): Boolean =
+        plan.exists {
+          case _: GlobalLimit | _: LocalLimit => true
+          case _ => false
+        }
+      val before = optimizedInSubqueryPlan(sql)
+      assert(
+        before.exists {
+          case j: Join if j.joinType == Inner && j.left.sameResult(j.right) &&
+              containsLimit(j.left) && containsLimit(j.right) => true
+          case _ => false
+        },
+        s"expected a sameResult self-join whose inputs both contain a Limit:\n$before")
+      assertRuleNotFired(sql)
+    }
   }
 
   test("Nondeterministic self-join input is rejected") {
     // The guard under test is `plan.deterministic` inside `isRepeatablePlan`. Both sides use the
-    // same explicit seed, so the two subplans do have the same canonical shape and the rejection
-    // cannot come from `isSameBaseRelation`. The control replaces `rand(41) < 0.5` with a
-    // deterministic filter and nothing else, proving this Range/Filter/Project shape does reach
-    // the rewrite.
+    // same explicit seed, so the subplans share a canonical shape and the rejection is not from
+    // `isSameBaseRelation`. The control replaces `rand(41) < 0.5` with a deterministic filter,
+    // proving this Range/Filter/Project shape reaches the rewrite.
     val controlSql =
       """SELECT k FROM (SELECT CAST(id AS INT) AS k, CAST(id AS INT) AS v FROM range(100)) t
         |WHERE k IN (
@@ -900,12 +965,8 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
         // The guard under test is the leaf allowlist in `isRowBagRepeatable`: a Parquet
         // `LogicalRelation` is trusted, but a `LogicalRDD` (createDataFrame over an RDD) wraps an
         // arbitrary RDD lineage whose runtime row bag Catalyst cannot prove repeatable, so it must
-        // fail closed even though `plan.deterministic` is true. Both fixtures are
-        // MultiInstanceRelation leaves, so each self-join dedups into two structurally identical
-        // sides without a rename-only Project -- the rejection therefore comes from the leaf
-        // allowlist, not `isSameBaseRelation`. The Parquet control uses the same schema, data and
-        // query shape and fires, which is what makes the LogicalRDD negative evidence that the leaf
-        // allowlist -- not a structural mismatch -- rejected it.
+        // fail closed even though `plan.deterministic` is true. The Parquet control uses the same
+        // schema, data and query shape and fires, pinning the rejection to the leaf allowlist.
         createTable("RddCtl", "k INT, v INT", "  (1, 10), (1, 20), (2, 30)")
         val controlSql =
           """SELECT k FROM RddCtl outer_t WHERE k IN (
@@ -934,19 +995,11 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
   test("Non-allowlisted deterministic expression (Abs) fails closed") {
     withTable("T") {
       // The guard under test is the expression allowlist in `isRepeatableExpression`: it trusts
-      // expression TYPES, not merely `deterministic`. Abs is deterministic, but is intentionally
-      // not yet part of the expression allowlist; until its repeatability contract is explicitly
-      // admitted there, a self-join whose side projects abs(v) fails closed -- a missed
-      // optimization, not a correctness bug. This test verifies that an unknown-but-deterministic
-      // expression is not silently let through by `plan.deterministic`.
-      //
-      // Control and negative are a single-variable pair: both project one derived column and differ
-      // ONLY in its expression. The control uses `v + 1` (Add over Attribute + Literal, all
-      // allowlisted) and fires; wrapping the same column in abs() -- the sole change -- makes it
-      // not fire, so the rejection is attributable to the expression allowlist rather than a
-      // structural mismatch. `+ 1` (not `+ 0`) is used so the Add survives arithmetic
-      // simplification and the control genuinely exercises a compound allowlisted expression. v is
-      // INT here, so the Add is a plain `Add(v, 1)` with no decimal PromotePrecision /
+      // expression TYPES, not merely `deterministic`. Abs is deterministic but not (yet)
+      // allowlisted, so a self-join side projecting abs(v) fails closed -- a missed optimization,
+      // not a bug. The control uses `v + 1` (not `+ 0`, so the Add survives arithmetic
+      // simplification) and fires; wrapping the same column in abs() is the sole change and makes
+      // it not fire. v is INT, so the Add is a plain `Add(v, 1)` with no decimal PromotePrecision /
       // CheckOverflow wrappers.
       setupTable()
 
@@ -978,23 +1031,19 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
   // ==================== Data-type safety: comparison vs grouping/MIN-MAX equality =============
   //
-  // The rewrite turns `<>` into MIN(v) <> MAX(v) and `=` into GROUP BY, so it is only sound on
-  // types where SQL comparison equality coincides with grouping/MIN-MAX ordering equality.
-  // `parseSelfJoinCondition` gates BOTH the neq column and every equi-key through
-  // `isSafeComparisonGroupingType` (a positive allowlist, not `RowOrdering.isOrderable`). These
-  // tests pin the boundary for the risky types.
+  // The rewrite turns `<>` into MIN(v) <> MAX(v) and `=` into GROUP BY, so it is only sound where
+  // comparison equality coincides with grouping/MIN-MAX ordering equality. The two roles differ: an
+  // equi key needs grouping equality (binary equality for strings), the neq column needs MIN/MAX
+  // ordering equality (binary ordering for strings). Both are positive allowlists, not
+  // `RowOrdering.isOrderable`. These tests pin the boundary for the risky types.
 
   test("Float/Double neq column is rejected (comparison-vs-MIN-MAX contract, defensive)") {
     withTable("TFloat") {
-      // The guard under test is `isSafeComparisonGroupingType` on the NEQ column. Control and
-      // negative differ only in which column feeds the inequality: `vi` (Int, allowlisted) fires,
-      // `vd` (Double) does not. Double fails closed defensively: the rewrite depends on comparison
-      // equality and grouping/MIN-MAX ordering equality agreeing, and for floating point that
-      // agreement on signed zero and NaN rests on normalization details (NormalizeFloatingNumbers)
-      // that need not match across Spark versions or native backends. On current Spark, comparison
-      // semantics and aggregation normalization are aligned for these cases, so the OFF baseline of
-      // the negative query is {1}; the rule does not fire, so ON matches it. The test pins
-      // fail-closed behavior, not a divergence in current Spark.
+      // This pins the neq-column type gate: `vi` (Int, allowlisted) fires, `vd` (Double) does not.
+      // Double fails closed defensively -- comparison vs grouping/MIN-MAX agreement on signed zero
+      // and NaN rests on normalization details (NormalizeFloatingNumbers) that need not match
+      // across Spark versions or native backends. Current Spark aligns them, so OFF is {1} and the
+      // non-firing ON matches it: the test pins fail-closed behavior, not a divergence.
       createTable(
         "TFloat",
         "k INT, vi INT, vd DOUBLE",
@@ -1025,10 +1074,9 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
   test("Float/Double equi-key is rejected (defensive fail-closed)") {
     withTable("TFloatKey") {
-      // The guard under test is `isSafeComparisonGroupingType` on the EQUI key. Current Spark
-      // aligns floating-point comparison semantics with grouping normalization here, but the rule
-      // does not depend on that implementation contract, so it fails closed. Control and negative
-      // differ only in the equi-key column: `ki` (Int) fires, `kd` (Double) does not.
+      // This pins the equi-key type gate: `ki` (Int) fires, `kd` (Double) does not. Current Spark
+      // aligns floating-point comparison with grouping normalization here, but the rule does not
+      // depend on that implementation contract, so it fails closed.
       createTable(
         "TFloatKey",
         "kd DOUBLE, ki INT, v INT",
@@ -1057,8 +1105,8 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
   test("Complex-type neq column (array/struct) is rejected wholesale") {
     withTable("TCplx") {
-      // The guard under test is the wholesale rejection of complex types by
-      // `isSafeComparisonGroupingType`, which also covers any Float/Double nested inside them.
+      // The neq-column type gate rejects complex types wholesale, which also covers any
+      // Float/Double nested inside them.
       // Control (`v` Int) fires; the ARRAY<DOUBLE> and STRUCT<..DOUBLE> variants -- identical query
       // shape, only the neq column changed -- do not.
       createTable(
@@ -1097,16 +1145,13 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
   test("String neq/equi key: default (UTF8_BINARY) fires, non-binary collation fails closed") {
     withTable("TStrBin", "TStrCiNeq", "TStrCiEqui") {
-      // The guard under test is the StringType branch of `isSafeComparisonGroupingType`: only
-      // `supportsBinaryEquality` (byte-wise) strings are admitted, because a non-binary collation
-      // (Spark 4.0+) routes comparison and grouping through different code paths. The control uses
-      // a default-collation table for BOTH the equi key and the neq column and fires -- proving
-      // plain strings are not rejected wholesale.
-      //
-      // The two negatives collate exactly ONE column each, so each pins the rejection to a specific
-      // gate: a UTF8_LCASE NEQ column exercises the neq-side check, a UTF8_LCASE EQUI key exercises
-      // the equi-side check. Collating both at once would leave it ambiguous which gate fired and
-      // stay green if either were deleted -- mirroring the split Float neq / Float equi coverage.
+      // On strings the two type gates diverge: an equi key is admitted only under binary equality
+      // and a neq column only under binary ordering (both byte-wise), because a non-binary
+      // collation (Spark 4.0+) routes comparison and grouping through different code paths.
+      // UTF8_LCASE satisfies neither, so it is rejected in either role; the default-collation
+      // control fires. The two negatives collate exactly ONE column each so each pins its gate: a
+      // UTF8_LCASE NEQ column the neq-side check, a UTF8_LCASE EQUI key the equi-side check.
+      // Collating both at once would leave it ambiguous which gate fired.
       createTable(
         "TStrBin",
         "k STRING, v STRING",
@@ -1153,14 +1198,11 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
   test("CHAR/VARCHAR join keys are rejected via declared-type metadata") {
     withTable("TStr", "TCharVarchar") {
-      // The guard under test is isSafeComparisonGroupingAttribute: CHAR/VARCHAR table columns reach
-      // the optimizer as annotated StringType (CharVarcharUtils records the declared type in the
-      // attribute metadata), so a dataType-only check would admit them through the StringType
-      // branch. The rule recovers the declared raw type from the metadata and fails closed.
-      // Control: a plain STRING table -- identical query shape and data -- fires, proving strings
-      // are not rejected wholesale; the CHAR(5) and VARCHAR(5) variants, differing only in the
-      // declared column type, do not. Both the equi key `k` and the neq column `v` are
-      // CHAR/VARCHAR, so both gate paths are pinned.
+      // CHAR/VARCHAR columns reach the optimizer as annotated StringType (CharVarcharUtils records
+      // the declared type in the metadata). Recovering the declared type from the metadata keeps
+      // them out of the StringType allowlist, where a dataType-only check would admit them. The
+      // plain-STRING control fires while the CHAR(5) and VARCHAR(5) variants fail closed. (Both `k`
+      // and `v` are CHAR/VARCHAR, so this exercises the metadata read, not which gate rejects.)
       createTable(
         "TStr",
         "k STRING, v STRING",
@@ -1194,14 +1236,11 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
   test("ANSI: rewrite preserves observable error behavior (throw-or-succeed parity)") {
     withTable("TAnsi") {
-      // The guard under test is not a rejection but a parity property: the expression allowlist
-      // admits Cast, which can throw under ANSI. The rewrite evaluates the projected `CAST(s AS
-      // INT)` once per row inside the Aggregate, while the baseline self-join evaluates it per row
-      // on each side -- the same set of rows either way -- so a malformed value must make BOTH
-      // forms behave the same. k=2 holds a non-numeric 's'.
-      //
-      // Parity is checked as observable behavior, not just "an exception happened": both succeed
-      // with equal rows, or both throw with the same error class. A one-sided throw is a blocker.
+      // Not a rejection but a parity property: the allowlist admits Cast, which can throw under
+      // ANSI. It evaluates `CAST(s AS INT)` once per row inside the Aggregate, the baseline
+      // self-join per row on each side -- the same rows -- so a malformed value must make
+      // BOTH forms behave the same (both succeed with equal rows, or both throw the same error
+      // class; a one-sided throw is a blocker). k=2 holds a non-numeric 's'.
       createTable(
         "TAnsi",
         "k INT, s STRING",
@@ -1216,8 +1255,7 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
       Seq("false", "true").foreach { ansi =>
         withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
-          // The rule still fires at plan level regardless of ANSI (the cast throws only at
-          // runtime).
+          // The rule fires at plan level regardless of ANSI (the cast throws only at runtime).
           assertRuleFired(sql)
           val on = runOutcome(sql, rewrite = true)
           val off = runOutcome(sql, rewrite = false)
@@ -1225,9 +1263,8 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
             case (Right(onRows), Right(offRows)) =>
               assert(onRows == offRows,
                 s"ANSI=$ansi both succeeded but diverged: ON=$onRows OFF=$offRows")
-              // Concrete positive signal under ANSI off: the cast is defined (yields NULL, does not
-              // throw) for every surviving row, so the rewrite must return the real membership {1},
-              // not merely agree with OFF.
+              // Positive signal under ANSI off: the cast is defined (yields NULL) for every
+              // surviving row, so ON must return the real membership {1}, not just match OFF.
               if (ansi == "false") {
                 assert(onRows == Set(Row(1)), s"ANSI=false expected {1}, got $onRows")
               }
@@ -1246,39 +1283,17 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
     }
   }
 
-  test("ANSI: Remainder neq column preserves error behavior; Divide is type-gated") {
+  test("ANSI: Remainder neq column preserves error behavior") {
     withTable("TAnsiDiv") {
-      // Cast is not the only allowlisted expression that can throw under ANSI. This pins the two
-      // arithmetic ops the review asked about:
-      //   - Remainder (`%`) on INT operands stays INT, an allowlisted type, so the rule fires. It
-      // can raise DIVIDE_BY_ZERO under ANSI, so it exercises the throw-parity property directly,
-      // not resting it on the Cast test alone: the rewrite evaluates `v % w` once per row inside
-      // the Aggregate and the baseline self-join evaluates it per row on each side -- the same rows
-      // -- so a `% 0` must make BOTH forms behave identically.
-      //   - Divide (`/`) is admitted by the expression allowlist (`isRepeatableExpression` trusts
-      // it wherever it appears in the scanned plan), but a Divide-derived NEQ KEY is stopped one
-      // layer later by the type guard: `/` always widens INT operands to a Double result, which
-      // `isSafeComparisonGroupingType` rejects, so a `v / w` neq column never fires. There is thus
-      // no runtime Divide path to check for parity; the type gate stops it first. (Decimal operands
-      // would keep a Decimal result but wrap the Divide in CheckOverflow, which the expression
-      // allowlist rejects, so a Decimal `/` neq key has no firing path.) The two layers are
-      // independent: allowlisting Divide as repeatable is not the same as admitting a Divide result
-      // as a safe comparison/grouping key. Row (2, 30, 0) forces `30 % 0`, which throws under ANSI
-      // and yields NULL otherwise.
+      // Cast is not the only allowlisted expression that can throw under ANSI. Remainder (`%`) on
+      // INT operands stays INT (allowlisted), so the rule fires, and it can raise REMAINDER_BY_ZERO
+      // under ANSI -- exercising throw-parity directly rather than resting on the Cast test alone.
+      // Row (2, 30, 0) forces `30 % 0`, which throws under ANSI and yields NULL otherwise.
       createTable(
         "TAnsiDiv",
         "k INT, v INT, w INT",
         """  (1, 10, 3), (1, 20, 7),
           |  (2, 30, 0), (2, 40, 4)""".stripMargin)
-
-      // Divide: Double result -> rejected by the data-type allowlist regardless of ANSI.
-      val divSql =
-        """SELECT k FROM TAnsiDiv outer_t WHERE k IN (
-          |  SELECT s1.k
-          |  FROM (SELECT k, v / w AS x FROM TAnsiDiv) s1
-          |  JOIN (SELECT k, v / w AS x FROM TAnsiDiv) s2
-          |    ON s1.k = s2.k AND s1.x <> s2.x)""".stripMargin
-      assertRuleNotFired(divSql)
 
       // Remainder: INT result -> fires; assert throw-or-succeed parity under ANSI off and on.
       val remSql =
@@ -1321,12 +1336,11 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
   test("ANSI: NULL equi-key row with a throwing neq expression preserves error parity") {
     withTable("TAnsiNull") {
       // The rewrite excludes NULL equi keys with an injected `IsNotNull(k)` Filter, whereas the
-      // baseline self-join excludes them only through `s1.k = s2.k`. These are different mechanisms
-      // that the optimizer may place differently relative to the throwing `CAST(s AS INT)`, so this
-      // pins that the injected filter does not change WHETHER the cast throws: both forms must
-      // throw with the same error class, or both succeed with equal rows. The NULL-key row carries
-      // the bad value 'bad', so it is exactly the row the injected filter could drop before the
-      // cast runs.
+      // baseline self-join excludes them only through `s1.k = s2.k` -- a different mechanism the
+      // optimizer may place differently relative to the throwing `CAST(s AS INT)`. This pins that
+      // the injected filter does not change WHETHER the cast throws (same error class, or both
+      // succeed with equal rows). The NULL-key row carries the bad value 'bad' -- exactly the
+      // row the filter could drop before the cast runs.
       createTable(
         "TAnsiNull",
         "k INT, s STRING",
@@ -1348,9 +1362,8 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
             case (Right(onRows), Right(offRows)) =>
               assert(onRows == offRows,
                 s"ANSI=$ansi both succeeded but diverged: ON=$onRows OFF=$offRows")
-              // Concrete positive signal under ANSI off: the cast is defined (yields NULL, does not
-              // throw) for every surviving row, so the rewrite must return the real membership {1},
-              // not merely agree with OFF.
+              // Positive signal under ANSI off: the cast is defined (yields NULL) for every
+              // surviving row, so ON must return the real membership {1}, not just match OFF.
               if (ansi == "false") {
                 assert(onRows == Set(Row(1)), s"ANSI=false expected {1}, got $onRows")
               }
