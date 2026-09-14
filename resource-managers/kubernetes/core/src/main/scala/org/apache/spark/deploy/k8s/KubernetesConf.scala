@@ -32,9 +32,14 @@ import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
+ * :: DeveloperApi ::
+ *
  * Structure containing metadata for Kubernetes logic to build Spark pods.
  */
-private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
+@Unstable
+@DeveloperApi
+@Since("4.4.0")
+abstract class KubernetesConf(val sparkConf: SparkConf) {
 
   val resourceNamePrefix: String
   def labels: Map[String, String]
