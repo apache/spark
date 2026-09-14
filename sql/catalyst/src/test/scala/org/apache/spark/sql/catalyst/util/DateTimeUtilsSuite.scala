@@ -568,6 +568,45 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("getZoneId zero-pads single-digit UTC offsets (checked against a regex reference)") {
+    // An independent regex-based reference for the expected normalization.
+    val singleHourTz = java.util.regex.Pattern.compile("(\\+|\\-)(\\d):")
+    val singleMinuteTz = java.util.regex.Pattern.compile("(\\+|\\-)(\\d\\d):(\\d)$")
+    def refNormalize(tz: String): String = {
+      val h = singleHourTz.matcher(tz).replaceFirst("$10$2:")
+      singleMinuteTz.matcher(h).replaceFirst("$1$2:0$3")
+    }
+
+    val prefixes = Seq("", "GMT", "UTC", "UT")
+    val hours = Seq("0", "5", "00", "05", "08", "13", "18")
+    val minutes = Seq("", "0", "3", "00", "03", "30", "59")
+    val generated = for (p <- prefixes; s <- Seq("+", "-"); h <- hours; m <- minutes)
+      yield if (m.isEmpty) s"$p$s$h" else s"$p$s$h:$m"
+    val extras = Seq(
+      "Z", "UTC", "GMT", "America/New_York", "Asia/Kolkata", "Europe/Moscow",
+      "+7:30", "-1:0", "+07:3", "+08:0", "+07:30", "+0730", "+08:00:00",
+      "GMT+8:00", "UTC-01:00", "", "not-a-zone", "+9:99")
+    // A non-ASCII digit (U+0661 ARABIC-INDIC DIGIT ONE): Character.isDigit accepts it but
+    // ZoneId.of rejects it, so getZoneId must still raise INVALID_TIMEZONE.
+    val nonAsciiDigit = s"+${0x0661.toChar}:30"
+
+    (generated ++ extras :+ nonAsciiDigit).distinct.foreach { tz =>
+      // Reference: does ZoneId.of accept the regex-normalized form, and to which zone?
+      val reference =
+        try Some(ZoneId.of(refNormalize(tz), ZoneId.SHORT_IDS))
+        catch { case _: DateTimeException => None }
+      reference match {
+        case Some(expected) =>
+          assert(getZoneId(tz) === expected, s"zone mismatch for '$tz'")
+        case None =>
+          checkError(
+            exception = intercept[SparkDateTimeException](getZoneId(tz)),
+            condition = "INVALID_TIMEZONE",
+            parameters = Map("timeZone" -> tz))
+      }
+    }
+  }
+
   test("date add interval with day precision") {
     val input = days(1997, 2, 28)
     assert(dateAddInterval(input, new CalendarInterval(36, 0, 0)) === days(2000, 2, 28))
