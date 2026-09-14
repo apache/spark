@@ -7025,7 +7025,9 @@ object SQLConf {
         "option. Empty by default, which permits any scheme and preserves the previous behavior; " +
         "when non-empty, an avroSchemaUrl whose scheme is not listed is rejected before it is " +
         "opened. This is a static configuration fixed when the SparkSession is created and not " +
-        "modifiable at runtime, so it is an operator-level boundary that a session cannot relax.")
+        "modifiable at runtime. It restricts the scheme an avroSchemaUrl may name; it does not " +
+        "restrict which file system serves that scheme. That is decided by fs.<scheme>.impl, " +
+        "which a session can still set.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf

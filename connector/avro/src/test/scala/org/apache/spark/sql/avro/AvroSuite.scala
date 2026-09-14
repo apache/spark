@@ -1340,6 +1340,23 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-59329: the allowlist rejection echoes the parsed allowlist") {
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    // "file://" is the shape an operator is most likely to write by mistake: it parses to one
+    // entry ("file://", not "file") that matches nothing, so every read then fails with a scheme
+    // that looks like it should be allowed. Echoing what the config parsed to is what makes the
+    // message readable, so pin it: dropping the parsed allowlist from the message fails here.
+    val conf = new SQLConf()
+    conf.setConf(SQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file://"))
+    SQLConf.withExistingConf(conf) {
+      val e = intercept[AnalysisException] {
+        new AvroOptions(Map("avroSchemaUrl" -> testFile("test_sub.avsc")), hadoopConf)
+      }
+      assert(e.getMessage.contains("The scheme 'file'"))
+      assert(e.getMessage.contains("not in the allowlist [file://]"))
+    }
+  }
+
   test("support user provided avro schema with defaults for missing fields") {
     val avroSchema =
       """
