@@ -33,49 +33,18 @@ import org.apache.spark.util.ArrayImplicits._
  * @param changeArgs The CDC flow configuration.
  * @param resolvedSequencingType The post-analysis [[DataType]] of the sequencing column, derived
  *                               from the flow's resolved DataFrame at flow setup time.
+ * @param strategy Strategy used to reconcile the microbatch.
  */
 case class Scd1BatchProcessor(
     changeArgs: ChangeArgs,
-    resolvedSequencingType: DataType) {
+    resolvedSequencingType: DataType,
+    strategy: Scd1ReconciliationStrategy = Scd1RowLevelReconciliation) {
 
-  /**
-   * Reconcile a CDC microbatch into the canonical form that the auxiliary- and target-table
-   * merges consume. Composes the per-step transforms in the only order that produces correct
-   * SCD1 semantics:
-   *
-   *   1. [[deduplicateMicrobatch]]: collapse same-key events to the latest by sequence.
-   *   2. [[extendMicrobatchRowsWithCdcMetadata]]: project the operational `_cdc_metadata` column
-   *      (must run before column selection, which may drop inputs the metadata expressions
-   *      reference).
-   *   3. [[projectTargetColumnsOntoMicrobatch]]: apply the user-defined column selection while
-   *      preserving the CDC metadata column.
-   *   4. [[applyTombstonesToMicrobatch]]: filter out late-arriving events superseded by
-   *      tombstones already recorded in the auxiliary table.
-   *
-   * The per-step methods are kept package-visible so that focused unit tests can pin each
-   * transform's behavior independently. This method itself is package-visible so that
-   * [[Scd1ForeachBatchHandler]] can call it after running [[ScdBatchValidator.validateMicrobatch]]
-   * - validation is intentionally not folded in here, as it must run before any of these
-   * transforms touch the data.
-   *
-   * @param batchDf          The validated incoming CDC microbatch.
-   * @param auxiliaryTableDf A snapshot of the auxiliary table for tombstone reconciliation.
-   *                         Must contain at minimum the key columns + `_cdc_metadata`.
-   * @return The reconciled microbatch, ready to be merged onto both tables.
-   */
+  /** Reconciles a CDC microbatch into the form consumed by the table merges. */
   private[autocdc] def reconcileMicrobatch(
       batchDf: DataFrame,
-      auxiliaryTableDf: DataFrame): DataFrame = {
-    val deduplicated = deduplicateMicrobatch(validatedMicrobatch = batchDf)
-    val withCdcMetadata = extendMicrobatchRowsWithCdcMetadata(validatedMicrobatch = deduplicated)
-    val projected = projectTargetColumnsOntoMicrobatch(
-      microbatchWithCdcMetadataDf = withCdcMetadata
-    )
-    applyTombstonesToMicrobatch(
-      microbatchDf = projected,
-      auxiliaryTableDf = auxiliaryTableDf
-    )
-  }
+      auxiliaryTableDf: DataFrame): DataFrame =
+    strategy.reconcileMicrobatch(this, batchDf, auxiliaryTableDf)
 
   /**
    * Deduplicate the incoming CDC microbatch by key, keeping the most recent event per key
