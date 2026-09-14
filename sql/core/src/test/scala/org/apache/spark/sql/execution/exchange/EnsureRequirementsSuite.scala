@@ -1779,11 +1779,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val right = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyedPartitioning(Seq(days(aR), years(bR)), rightKeys))
 
-    // `pushPartValues` is left at its default (on), which is all the push branch needs, so this is
-    // what a user gets out of the box. `partition.filter` is varied to cover both settings: off
-    // pushes the union of the two key sets, on (the default) their intersection.
-    Seq(3 -> false, 1 -> true).foreach { case (expected, filter) =>
-      withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString) {
+    // `pushPartValues` stays at its default (on), which is all the push branch needs. The first
+    // arm leaves `partition.filter` unset, so it exercises the shipped default and would fail if
+    // `createWithDefault(true)` were reverted; the second arm pins the off rollback.
+    val filterKey = SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key
+    Seq(1 -> Option.empty[String], 3 -> Some("false")).foreach { case (expected, filterOverride) =>
+      withSQLConf(filterOverride.map(filterKey -> _).toSeq: _*) {
         val smj = SortMergeJoinExec(Seq(xL, yL), Seq(aR, bR), Inner, None, left, right)
         val planned = EnsureRequirements.apply(smj)
 
@@ -1794,7 +1795,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           "the second member pairs with the other side, so neither side is shuffled")
         assert(groupPartitionsNodes(planned).map(_.expectedPartitionKeys.map(_.size)) ===
           Seq(Some(expected), Some(expected)),
-          s"both sides are pushed the ${if (filter) "intersection" else "union"} of the key sets")
+          if (filterOverride.isEmpty) "the unset default pushes the intersection of the key sets"
+          else "filtering off pushes the union of the key sets")
       }
     }
   }
