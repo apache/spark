@@ -1366,6 +1366,12 @@ def reconcile_jira_affects_versions(
     jira_ops.update_affects_versions(issue, new_names)
 
 
+def maybe_reconcile_jira_affects_versions(issue, fix_version_names, affects_available):
+    """Reconcile the Affects Version/s only when they fail to precede the fix version(s)."""
+    if fix_precedes_affects(fix_version_names, [v.name for v in issue.fields.versions]):
+        reconcile_jira_affects_versions(issue, fix_version_names, affects_available)
+
+
 def get_jira_issue(prompt, default_jira_id=""):
     jira_id = bold_input("%s [%s]: " % (prompt, default_jira_id))
     if jira_id == "":
@@ -1449,8 +1455,12 @@ def resolve_jira_issue(
         )
         if all_inferred_present:
             print(
-                "JIRA issue %s already contains all inferred fix versions; no update needed."
-                % issue.key
+                "JIRA issue %s already contains all inferred fix versions; no fix version "
+                "update needed." % issue.key
+            )
+            # A re-run may still have Affects Version/s sitting above the unchanged fix set.
+            maybe_reconcile_jira_affects_versions(
+                issue, existing_fix_version_names, affects_available
             )
             return
         if default_fix_list:
@@ -1459,6 +1469,11 @@ def resolve_jira_issue(
                 % (issue.key, existing_fix_version_names, default_fix_list)
             )
             if get_input("Add these fix version(s)? (y/N): ", ["y", "n", ""]) != "y":
+                # Declining the addition still leaves any Affects Version/s that sit above
+                # the already-recorded fix version(s) to reconcile.
+                maybe_reconcile_jira_affects_versions(
+                    issue, existing_fix_version_names, affects_available
+                )
                 return
         else:
             # Nothing inferred, so there is nothing to confirm; fall through to the prompt.
@@ -1494,11 +1509,9 @@ def resolve_jira_issue(
             print("Error setting fix version(s), try again (or leave blank and fix manually)")
 
     # On a fresh resolve, offer to update the Affects Version/s when they sit above the fix
-    # version(s) just chosen; the backport path above handles the already-resolved case.
-    if not is_resolved and fix_precedes_affects(
-        fix_versions, [v.name for v in issue.fields.versions]
-    ):
-        reconcile_jira_affects_versions(issue, fix_versions, affects_available)
+    # version(s) just chosen; the already-resolved paths handle their own cases.
+    if not is_resolved:
+        maybe_reconcile_jira_affects_versions(issue, fix_versions, affects_available)
 
     def get_version_json(version_str):
         return list(filter(lambda v: v.name == version_str, versions))[0].raw
@@ -1510,12 +1523,14 @@ def resolve_jira_issue(
         jira_fix_versions = [v for v in jira_fix_versions if v["name"] not in existing_names]
         if not jira_fix_versions:
             print("No new fix versions selected for JIRA issue %s; no update needed." % issue.key)
+            maybe_reconcile_jira_affects_versions(
+                issue, existing_fix_version_names, affects_available
+            )
             return
         # A backport adds an earlier fix line, which usually means that line is affected too;
         # offer to extend the Affects Version/s down when they miss the full fix set.
         full_fix_names = existing_fix_version_names + [v["name"] for v in jira_fix_versions]
-        if fix_precedes_affects(full_fix_names, [v.name for v in issue.fields.versions]):
-            reconcile_jira_affects_versions(issue, full_fix_names, affects_available)
+        maybe_reconcile_jira_affects_versions(issue, full_fix_names, affects_available)
         jira_ops.add_fix_versions(issue, existing_fix_versions, jira_fix_versions)
         return
 
