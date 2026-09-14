@@ -1742,7 +1742,7 @@ class ArrowToPandasConversion:
             schema = from_arrow_schema(batch.schema)
 
         return [
-            cls.convert(
+            cls._convert_column(
                 batch.column(i),
                 schema[i].dataType,
                 ser_name=schema[i].name,
@@ -1756,7 +1756,7 @@ class ArrowToPandasConversion:
         ]
 
     @classmethod
-    def convert(
+    def _convert_column(
         cls,
         arr: Union["pa.Array", "pa.ChunkedArray"],
         spark_type: DataType,
@@ -1799,7 +1799,7 @@ class ArrowToPandasConversion:
             returns a DataFrame with columns corresponding to struct fields.
         """
         if cls._prefer_convert_numpy(spark_type, df_for_struct):
-            return cls.convert_numpy(
+            return cls._convert_column_numpy(
                 arr,
                 spark_type,
                 ser_name=ser_name,
@@ -1810,7 +1810,7 @@ class ArrowToPandasConversion:
                 df_for_struct=df_for_struct,
             )
 
-        return cls.convert_legacy(
+        return cls._convert_column_legacy(
             arr,
             spark_type,
             timezone=timezone,
@@ -1820,7 +1820,7 @@ class ArrowToPandasConversion:
         )
 
     @classmethod
-    def convert_legacy(
+    def _convert_column_legacy(
         cls,
         arr: Union["pa.Array", "pa.ChunkedArray"],
         spark_type: DataType,
@@ -1833,8 +1833,7 @@ class ArrowToPandasConversion:
         """
         Convert a PyArrow Array or ChunkedArray to a pandas Series or DataFrame.
 
-        This is the lower-level conversion method that requires explicit Spark type
-        specification. For a more convenient API, see :meth:`convert`.
+        See :meth:`_convert_column` for column conversion with strategy selection.
 
         Parameters
         ----------
@@ -1881,7 +1880,7 @@ class ArrowToPandasConversion:
             )
 
             series = [
-                cls.convert_legacy(
+                cls._convert_column_legacy(
                     field_arr,
                     spark_type=field.dataType,
                     timezone=timezone,
@@ -1949,7 +1948,7 @@ class ArrowToPandasConversion:
             return isinstance(spark_type, supported_types)
 
     @classmethod
-    def convert_numpy(
+    def _convert_column_numpy(
         cls,
         arr: Union["pa.Array", "pa.ChunkedArray"],
         spark_type: DataType,
@@ -1974,7 +1973,7 @@ class ArrowToPandasConversion:
 
             return pd.concat(
                 [
-                    cls.convert_numpy(
+                    cls._convert_column_numpy(
                         field_arr,
                         spark_type=field.dataType,
                         ser_name=field.name,
