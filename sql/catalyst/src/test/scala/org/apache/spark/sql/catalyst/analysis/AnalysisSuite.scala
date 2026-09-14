@@ -630,6 +630,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val direct = DeduplicateRelations.deduplicateRight(semanticPlan, semanticPlan)
     comparePlans(direct, throughJoin, checkAnalysis = false)
 
+    val nestedUnion = Union(Seq(semanticPlan, semanticPlan))
+    val nestedUnionThroughJoin = DeduplicateRelations(
+      Join(nestedUnion, nestedUnion, Inner, None, JoinHint.NONE)).children(1)
+    val directNestedUnion = DeduplicateRelations.deduplicateRight(nestedUnion, nestedUnion)
+    comparePlans(directNestedUnion, nestedUnionThroughJoin, checkAnalysis = false)
+
     val bean = ManagementFactory.getThreadMXBean.asInstanceOf[com.sun.management.ThreadMXBean]
     if (!bean.isThreadAllocatedMemoryEnabled) {
       bean.setThreadAllocatedMemoryEnabled(true)
