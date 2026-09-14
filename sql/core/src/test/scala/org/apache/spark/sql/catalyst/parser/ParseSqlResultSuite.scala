@@ -57,6 +57,7 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(SqlStatementCodes.CreateTable.statementCode === 77)
     assert(SqlStatementCodes.CreateView.statementCode === 84)
     assert(SqlStatementCodes.DropTable.statementCode === 32)
+    assert(SqlStatementCodes.DropView.statementCode === 36)
     assert(SqlStatementCodes.AlterTable.statementCode === 4)
     assert(SqlStatementCodes.TruncateTable.statementCode === 139)
     assert(SqlStatementCodes.Unrecognized.statementCode === 0)
@@ -115,6 +116,15 @@ class ParseSqlResultSuite extends SparkFunSuite {
 
     assert(targetTableRefs("DROP TABLE t") === Set(Seq("t")))
     assert(sourceTableRefs("DROP TABLE t").isEmpty)
+  }
+
+  test("DROP TEMPORARY VIEW classifies as DROP VIEW and reports its target") {
+    val sql = "DROP TEMPORARY VIEW system.session.v"
+    val drop = obj(sql)
+    assert(drop \ "statement_identifier" === JString("DROP VIEW"))
+    assert(drop \ "statement_code" === JInt(36))
+    assert(targetTableRefs(sql) === Set(Seq("system", "session", "v")))
+    assert(sourceTableRefs(sql).isEmpty)
   }
 
   test("dynamic INSERT targets retain query metadata") {

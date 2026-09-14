@@ -140,7 +140,7 @@ object SqlStatementCodes {
     case _: CreateTable | _: CreateTableLike | _: ReplaceTable => CreateTable
     case _: CreateView | _: CreateViewCommand | _: CreateTempViewUsing => CreateView
     case _: DropTable => DropTable
-    case _: DropView => DropView
+    case _: DropView | _: DropTempViewCommand => DropView
     case _: CreateNamespace => CreateSchema
     case _: DropNamespace => DropSchema
     case _: SetCatalogAndNamespace | _: SetNamespaceCommand => SetSchema

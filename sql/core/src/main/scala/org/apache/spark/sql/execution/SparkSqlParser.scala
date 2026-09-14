@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
@@ -311,6 +311,34 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.invalidTempObjQualifierError(
           "VIEW", viewIdentifier.last, viewIdentifier.init.mkString("."), ctx)
     }
+  }
+
+  /**
+   * Normalizes a multi-part identifier for DROP TEMPORARY VIEW.
+   * Allows local temporary views (v, session.v, system.session.v) and global temporary views
+   * (global_temp.v, where global_temp is configurable). Preserves the namespace so execution can
+   * distinguish local and global temporary views.
+   */
+  private def normalizeDropTempViewIdentifier(
+      viewIdentifier: Seq[String],
+      ctx: ParserRuleContext): Identifier = {
+    val namespace = viewIdentifier.init
+    val validNamespace = namespace match {
+      case Seq() => true
+      case Seq(ns) =>
+        ns.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) ||
+          ns.equalsIgnoreCase(conf.globalTempDatabase)
+      case Seq(catalog, ns) =>
+        catalog.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+          ns.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+      case _ => false
+    }
+
+    if (!validNamespace) {
+      throw QueryParsingErrors.invalidTempObjQualifierError(
+        "VIEW", viewIdentifier.last, namespace.mkString("."), ctx)
+    }
+    Identifier.of(namespace.toArray, viewIdentifier.last)
   }
 
   /**
@@ -855,6 +883,21 @@ class SparkSqlAstBuilder extends AstBuilder {
           ctx.EXISTS != null,
           ctx.REPLACE != null,
           viewType = viewType)
+      })
+    }
+  }
+
+  /**
+   * Create a DROP VIEW or DROP TEMPORARY VIEW command.
+   */
+  override def visitDropView(ctx: DropViewContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.TEMPORARY == null) {
+      super.visitDropView(ctx).asInstanceOf[LogicalPlan]
+    } else {
+      withIdentClause(ctx.identifierReference(), ident => {
+        DropTempViewCommand(
+          normalizeDropTempViewIdentifier(ident, ctx),
+          ifExists = ctx.EXISTS != null)
       })
     }
   }

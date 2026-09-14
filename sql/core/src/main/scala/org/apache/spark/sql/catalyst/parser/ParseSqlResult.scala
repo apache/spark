@@ -29,7 +29,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryContext}
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.execution.command.{CreateViewCommand, DescribeQueryCommand, ExplainCommand}
+import org.apache.spark.sql.execution.command.{CreateViewCommand, DescribeQueryCommand,
+  DropTempViewCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
 
 /**
@@ -286,6 +287,9 @@ object ParseSqlResult {
   private def tableIdentifierParts(id: org.apache.spark.sql.catalyst.TableIdentifier): Seq[String] =
     id.catalog.toSeq ++ id.database.toSeq :+ id.table
 
+  private def identifierParts(id: org.apache.spark.sql.connector.catalog.Identifier): Seq[String] =
+    id.namespace().toSeq :+ id.name()
+
   private final case class PlanReferences(
       targetTables: Seq[Seq[String]],
       sourceTables: Seq[Seq[String]],
@@ -349,6 +353,7 @@ object ParseSqlResult {
         case u: UnresolvedIdentifier if role == TableRefRole.Target => add(u.nameParts)
         case c: CreateViewCommand => addTarget(tableIdentifierParts(c.name))
         case c: CreateTempViewUsing => addTarget(tableIdentifierParts(c.tableIdent))
+        case c: DropTempViewCommand => addTarget(identifierParts(c.ident))
         case c: CacheTable if c.multipartIdentifier.nonEmpty =>
           addTarget(c.multipartIdentifier)
         case u: UnresolvedTableValuedFunction => addFunction(u.name)

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.{JsonTuple, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -530,6 +531,43 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         fragment = v3,
         start = 0,
         stop = 36))
+  }
+
+  test("drop temporary view") {
+    val globalTempDB = spark.sharedState.globalTempDB
+    Seq(
+      "DROP TEMPORARY VIEW v" -> Identifier.of(Array.empty, "v"),
+      "DROP TEMPORARY VIEW session.v" -> Identifier.of(Array("session"), "v"),
+      "DROP TEMPORARY VIEW system.session.v" ->
+        Identifier.of(Array("system", "session"), "v"),
+      s"DROP TEMPORARY VIEW $globalTempDB.v" -> Identifier.of(Array(globalTempDB), "v"),
+      "DROP TEMPORARY VIEW IDENTIFIER('session.v')" ->
+        Identifier.of(Array("session"), "v")
+    ).foreach { case (sqlText, ident) =>
+      comparePlans(parser.parsePlan(sqlText), DropTempViewCommand(ident))
+    }
+
+    comparePlans(
+      parser.parsePlan("DROP TEMPORARY VIEW IF EXISTS v"),
+      DropTempViewCommand(Identifier.of(Array.empty, "v"), ifExists = true))
+
+    comparePlans(
+      parser.parsePlan("DROP VIEW v"),
+      DropView(UnresolvedIdentifier(Seq("v"), allowTemp = true), ifExists = false))
+
+    Seq(
+      "DROP TEMPORARY VIEW default.v" -> "default",
+      "DROP TEMPORARY VIEW system.builtin.v" -> "system.builtin"
+    ).foreach { case (sqlText, qualifier) =>
+      checkError(
+        exception = parseException(sqlText),
+        condition = "INVALID_TEMP_OBJ_QUALIFIER",
+        parameters = Map(
+          "objectType" -> "VIEW",
+          "objectName" -> "`v`",
+          "qualifier" -> qualifier.split("\\.").map(part => s"`$part`").mkString(".")),
+        context = ExpectedContext(sqlText, 0, sqlText.length - 1))
+    }
   }
 
   test("create temp view - full") {

@@ -22,24 +22,37 @@ license: |
 ### Description
 
 `DROP VIEW` removes the metadata associated with a specified view from the catalog.
+`DROP TEMPORARY VIEW` removes only a local or global temporary view and never removes a
+persistent view.
 
 ### Syntax
 
 ```sql
-DROP VIEW [ IF EXISTS ] view_identifier
+DROP [ TEMPORARY ] VIEW [ IF EXISTS ] view_identifier
 ```
 
 ### Parameter
 
 * **IF EXISTS**
 
-    If specified, no exception is thrown when the view does not exist.
+    If specified, no exception is thrown when the targeted view does not exist. For
+    `DROP TEMPORARY VIEW`, this only suppresses a missing temporary view; a persistent view with
+    the same name is not dropped.
+
+* **TEMPORARY**
+
+    Restricts the command to temporary views. An unqualified name targets a local temporary view.
+    The `session` and `system.session` qualifiers also target a local temporary view. The configured
+    global temporary database name targets a global temporary view; its default is `global_temp`
+    and it is controlled by `spark.sql.globalTempDatabase`. Any other qualifier raises
+    `INVALID_TEMP_OBJ_QUALIFIER`.
 
 * **view_identifier**
 
     Specifies the view name to be dropped. The name may be optionally qualified with a database
     name (or a catalog and database). A name qualified with `session` or `system.session`
-    targets a temporary view.
+    targets a temporary view. When `TEMPORARY` is specified, only the qualifiers described above
+    are allowed.
 
     **Syntax:** `[ catalog_name. ] [ database_name. ] view_name`
 
@@ -69,6 +82,16 @@ CREATE TEMPORARY VIEW recent_orders AS SELECT * FROM orders WHERE order_date = c
 
 DROP VIEW session.recent_orders;             -- drops the temporary view
 DROP VIEW default.recent_orders;             -- drops the persistent view
+
+-- Drop only temporary views. The persistent view remains after the local temporary view is gone.
+CREATE TEMPORARY VIEW recent_orders AS SELECT * FROM orders WHERE order_date = current_date;
+DROP TEMPORARY VIEW recent_orders;
+DROP TEMPORARY VIEW IF EXISTS recent_orders; -- does not drop default.recent_orders
+
+-- Drop a global temporary view. `global_temp` is configurable with
+-- `spark.sql.globalTempDatabase`.
+CREATE GLOBAL TEMPORARY VIEW active_orders AS SELECT * FROM orders WHERE status = 'active';
+DROP TEMPORARY VIEW global_temp.active_orders;
 ```
 
 ### Related Statements

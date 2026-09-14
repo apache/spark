@@ -141,8 +141,8 @@ SELECT count(*) FROM recent_orders;
 SELECT count(*) FROM session.recent_orders;
 SELECT count(*) FROM system.session.recent_orders;
 
--- DROP VIEW accepts the same qualifiers (there is no DROP TEMPORARY VIEW form):
-DROP VIEW session.recent_orders;
+-- DROP TEMPORARY VIEW accepts the same local temporary view qualifiers:
+DROP TEMPORARY VIEW session.recent_orders;
 
 -- Any other qualifier on a TEMPORARY view is rejected.
 CREATE TEMPORARY VIEW mydb.bad_temp AS SELECT 1;

@@ -254,4 +254,71 @@ class RelationQualificationSuite extends SharedSparkSession {
         "searchPath" -> "[`system`.`session`]"),
       context = ExpectedContext("system.session.no_such_view_xyz"))
   }
+
+  test("SECTION 15: DROP TEMPORARY VIEW supports local temporary view qualifiers") {
+    Seq(
+      "drop_temp_unqualified" -> "drop_temp_unqualified",
+      "drop_temp_session" -> "session.drop_temp_session",
+      "drop_temp_system_session" -> "system.session.drop_temp_system_session"
+    ).foreach { case (viewName, dropName) =>
+      sql(s"CREATE TEMPORARY VIEW $viewName AS SELECT 1")
+      sql(s"DROP TEMPORARY VIEW $dropName")
+      checkErrorTableNotFound(
+        intercept[AnalysisException](sql(s"SELECT * FROM $viewName")),
+        s"`$viewName`",
+        ExpectedContext(viewName))
+    }
+
+    sql("CREATE TEMPORARY VIEW drop_temp_identifier AS SELECT 1")
+    spark.sql(
+      "DROP TEMPORARY VIEW IDENTIFIER(:view_name)",
+      Map("view_name" -> "session.drop_temp_identifier"))
+    checkErrorTableNotFound(
+      intercept[AnalysisException](sql("SELECT * FROM drop_temp_identifier")),
+      "`drop_temp_identifier`",
+      ExpectedContext("drop_temp_identifier"))
+  }
+
+  test("SECTION 16: DROP TEMPORARY VIEW drops global temporary views") {
+    val globalTempDB = spark.sharedState.globalTempDB
+    withGlobalTempView("drop_global_temp") {
+      sql("CREATE GLOBAL TEMPORARY VIEW drop_global_temp AS SELECT 1")
+      sql(s"DROP TEMPORARY VIEW $globalTempDB.drop_global_temp")
+      checkErrorTableNotFound(
+        intercept[AnalysisException](sql(s"SELECT * FROM $globalTempDB.drop_global_temp")),
+        s"`$globalTempDB`.`drop_global_temp`",
+        ExpectedContext(s"$globalTempDB.drop_global_temp"))
+    }
+  }
+
+  test("SECTION 17: DROP TEMPORARY VIEW never drops a persistent view") {
+    withView("default.drop_temp_collision") {
+      sql("CREATE VIEW default.drop_temp_collision AS SELECT 1 AS id")
+      sql("CREATE TEMPORARY VIEW drop_temp_collision AS SELECT 2 AS id")
+
+      sql("DROP TEMPORARY VIEW drop_temp_collision")
+      checkAnswer(sql("SELECT * FROM drop_temp_collision"), Row(1))
+
+      sql("DROP TEMPORARY VIEW IF EXISTS drop_temp_collision")
+      checkAnswer(sql("SELECT * FROM default.drop_temp_collision"), Row(1))
+    }
+  }
+
+  test("SECTION 18: DROP TEMPORARY VIEW errors") {
+    val missingSql = "DROP TEMPORARY VIEW missing_temp_view"
+    checkErrorTableNotFound(
+      intercept[AnalysisException](sql(missingSql)),
+      "`missing_temp_view`")
+    sql("DROP TEMPORARY VIEW IF EXISTS missing_temp_view")
+
+    val invalidSql = "DROP TEMPORARY VIEW default.invalid_temp_view"
+    checkError(
+      exception = intercept[AnalysisException](sql(invalidSql)),
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      parameters = Map(
+        "objectType" -> "VIEW",
+        "objectName" -> "`invalid_temp_view`",
+        "qualifier" -> "`default`"),
+      context = ExpectedContext(invalidSql, 0, invalidSql.length - 1))
+  }
 }

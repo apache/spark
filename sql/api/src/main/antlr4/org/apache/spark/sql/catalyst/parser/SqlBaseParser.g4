@@ -321,7 +321,7 @@ statement
         DROP CONSTRAINT (IF EXISTS)? name=identifier
         (RESTRICT | CASCADE)?                                     #dropTableConstraint
     | DROP TABLE (IF EXISTS)? identifierReference PURGE?               #dropTable
-    | DROP VIEW (IF EXISTS)? identifierReference                       #dropView
+    | DROP TEMPORARY? VIEW (IF EXISTS)? identifierReference            #dropView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
         VIEW (IF errorCapturingNot EXISTS)? identifierReference
         identifierCommentList?
