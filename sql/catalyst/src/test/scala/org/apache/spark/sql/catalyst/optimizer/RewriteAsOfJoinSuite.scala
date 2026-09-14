@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{CreateStruct, Expression, GetStructField, If, Literal, OuterReference, ScalarSubquery}
 import org.apache.spark.sql.catalyst.expressions.aggregate.MinBy
-import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Inner, JoinType, LeftOuter, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, GreaterThanOrEqualOp, Inner, JoinType, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -306,6 +306,20 @@ class RewriteAsOfJoinSuite extends PlanTest {
     }
   }
 
+  test("no rewrite for a SQL MATCH_CONDITION join built by fromMatchCondition") {
+    // fromMatchCondition sets requiresSortMergeAsOfJoin = true (the SQL path). The analyzer must
+    // keep it so RewriteAsOfJoin leaves the join for the sort-merge operator. Other tests set the
+    // flag with .copy on a plain node; building via the factory catches it being dropped on SQL.
+    val query = AsOfJoin.fromMatchCondition(
+      left, right, left.output(0), GreaterThanOrEqualOp, right.output(0), None, Inner)
+    val analyzed = query.analyze
+
+    assert(analyzed.collectFirst { case a: AsOfJoin => a }.exists(_.requiresSortMergeAsOfJoin),
+      "fromMatchCondition should keep requiresSortMergeAsOfJoin = true through analysis")
+
+    comparePlans(RewriteAsOfJoin(analyzed), analyzed)
+  }
+
   test("references above the join are remapped to the rewritten output") {
     // A Project above the join selects a right-side column, which the rewrite gives a fresh
     // exprId (a GetStructField alias). The parent reference must be remapped onto it, or the
@@ -323,5 +337,14 @@ class RewriteAsOfJoinSuite extends PlanTest {
     }
     assert(!rewritten.references.exists(_.exprId == originalRightExprId),
       "expected the parent projection to be remapped off the original AsOfJoin output")
+
+    // The two checks above pass even if the parent were remapped onto the wrong live column, so
+    // pin the exact plan: the projection must select the rewritten right column `d`, not just
+    // some live attribute. Reuses the same expectedRewrite helper as the positive tests.
+    val fullExpected = expectedRewrite(
+      filter = OuterReference(left.output(0)) >= right.output(0),
+      orderExpression = OuterReference(left.output(0)) - right.output(0),
+      joinType = Inner)
+    comparePlans(rewritten, fullExpected.select(fullExpected.output.last), checkAnalysis = false)
   }
 }

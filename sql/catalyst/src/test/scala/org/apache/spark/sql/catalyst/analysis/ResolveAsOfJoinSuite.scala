@@ -21,7 +21,6 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, CreateNamedStruct, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, If, LambdaFunction, LessThan, LessThanOrEqual, Literal, Rand, Subtract, ZipWith}
 import org.apache.spark.sql.catalyst.plans.{GreaterThanOp, GreaterThanOrEqualOp, Inner, JoinType, LeftOuter, LessThanOp, LessThanOrEqualOp, MatchComparisonOperator}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LocalRelation, LogicalPlan, Project}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -45,6 +44,12 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
   private val rmap = AttributeReference("m", MapType(StringType, IntegerType))()
   private val leftMap: LogicalPlan = LocalRelation(lmap)
   private val rightMap: LogicalPlan = LocalRelation(rmap)
+
+  // Incompatible but orderable operands (timestamp vs boolean) for the areOperandsCompatible arm.
+  private val lts = AttributeReference("t", TimestampType)()
+  private val rbool = AttributeReference("bl", BooleanType, nullable = false)()
+  private val leftTs: LogicalPlan = LocalRelation(lts)
+  private val rightBool: LogicalPlan = LocalRelation(rbool)
 
   // Two shared key columns on each side (plus a distinct match operand) for multi-column USING.
   private val lOp = AttributeReference("lop", IntegerType)()
@@ -95,13 +100,18 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
       s"expected condition '$condition' but got '${ex.getCondition}'")
   }
 
-  test("materializes MATCH_CONDITION into asOfCondition and clears the match fields") {
+  test("materializes MATCH_CONDITION into the executable fields and clears the match fields") {
     val resolved = ResolveAsOfJoin.apply(asOf()).asInstanceOf[AsOfJoin]
     assert(resolved.matchLeftOperand.isEmpty)
     assert(resolved.matchOperator.isEmpty)
     assert(resolved.matchRightOperand.isEmpty)
     assert(resolved.asOfCondition.dataType == BooleanType)
     assert(resolved.asOfCondition.resolved)
+    // `resolved` ignores the sort lists (empty passes), so pin them and the SQL factory's flag:
+    // the sort-merge operator needs these sort exprs, and a dropped flag would reroute SQL ASOF.
+    assert(resolved.leftSortExprs == Seq(la))
+    assert(resolved.rightSortExprs == Seq(rb))
+    assert(resolved.requiresSortMergeAsOfJoin)
     assert(resolved.resolved)
   }
 
@@ -188,6 +198,13 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
     // One Subtract distance per struct field, kept together in a composite struct.
     assert(fields.size == 2)
     assert(fields.forall(_.isInstanceOf[Subtract]), s"expected per-field Subtracts, got $fields")
+    // Field names differ, so each side is decomposed into a positional struct for the compare,
+    // not the raw struct. A regression that ordered fields right but compared raw structs would
+    // slip past the orderExpression checks above, so pin the comparison operands too.
+    val ge = resolved.asOfCondition.asInstanceOf[GreaterThanOrEqual]
+    assert(ge.left.isInstanceOf[CreateNamedStruct] && ge.right.isInstanceOf[CreateNamedStruct],
+      s"expected decomposed struct operands, got ${ge.left} >= ${ge.right}")
+    assert(ge.left != lstruct && ge.right != rstruct)
   }
 
   test("expands USING into an equi-join predicate wrapped in a Project") {
@@ -256,14 +273,22 @@ class ResolveAsOfJoinSuite extends AnalysisTest {
       "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE")
   }
 
+  test("rejects incompatible MATCH_CONDITION operand types that are each orderable") {
+    // timestamp and boolean are each orderable, so this hits areOperandsCompatible, not the
+    // isValidOperandType arm the MAP case above exercises.
+    expectError(
+      asOf(leftExpr = lts, rightExpr = rbool, l = leftTs, r = rightBool),
+      "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE")
+  }
+
   test("AsOfJoin survives the full Analyzer and CheckAnalysis") {
-    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
-      // Unresolved operands here: the generic ResolveReferences resolves them, then
-      // ResolveAsOfJoin materializes the match condition.
-      val plan = AsOfJoin.fromMatchCondition(
-        left, right, UnresolvedAttribute("a"), GreaterThanOrEqualOp,
-        UnresolvedAttribute("b"), None, Inner)
-      assertAnalysisSuccess(plan)
-    }
+    // No withSQLConf needed: SQL_ASOF_JOIN_ENABLED is read only in the parser, and this builds
+    // the node directly. ResolveAsOfJoin is always in the analyzer batch.
+    // Unresolved operands here: the generic ResolveReferences resolves them, then
+    // ResolveAsOfJoin materializes the match condition.
+    val plan = AsOfJoin.fromMatchCondition(
+      left, right, UnresolvedAttribute("a"), GreaterThanOrEqualOp,
+      UnresolvedAttribute("b"), None, Inner)
+    assertAnalysisSuccess(plan)
   }
 }
