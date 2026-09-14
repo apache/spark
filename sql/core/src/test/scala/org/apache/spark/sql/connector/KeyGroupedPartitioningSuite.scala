@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
-import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{RDDScanExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -238,9 +238,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       table: String,
       columns: Array[Column],
       partitions: Array[Transform],
-      catalog: InMemoryTableCatalog = catalog): Unit = {
+      catalog: InMemoryTableCatalog = catalog,
+      ordering: Array[SortOrder] = Array.empty): Unit = {
     catalog.createTable(Identifier.of(Array("ns"), table),
-      columns, partitions, emptyProps, Distributions.unspecified(), Array.empty, None, None,
+      columns, partitions, emptyProps, Distributions.unspecified(), ordering, None, None,
       numRowsPerSplit = 1)
   }
 
@@ -3106,6 +3107,83 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         Row("bbb", 20, 250.0),
         Row("bbb", 20, 350.0),
         Row("ccc", 30, 400.50)))
+    }
+  }
+
+  for (fullKey <- Seq(false, true)) {
+    test(s"SPARK-55411: scan ordering after SPJ key projection, fullKey=$fullKey") {
+      val orderedColumns = Array("discard", "k", "id")
+        .map(name => Column.create(name, IntegerType))
+      val partitionKeys = if (fullKey) Array("k", "id") else Array("discard", "k")
+      val ordering = Array("k", "id").map(name => Expressions.sort(
+        Expressions.column(name), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+      createTable("ordered", orderedColumns, partitionKeys.map(identity), ordering = ordering)
+      // Each split has one row and truthfully reports (k, id) ordering. Grouping on k concatenates
+      // the discard=0 and discard=1 partitions into ids 5, 1, which requires sorting before SMJ.
+      sql("INSERT INTO testcat.ns.ordered VALUES (0, 1, 5), (1, 1, 1)")
+      createTable("unordered", orderedColumns.drop(1), Array.empty)
+      sql("INSERT INTO testcat.ns.unordered VALUES (1, 1), (1, 5)")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+          SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false") {
+        val df = sql(
+          """SELECT /*+ MERGE(l, r) */ l.discard, l.k, l.id, r.id
+            |FROM testcat.ns.ordered l JOIN testcat.ns.unordered r
+            |ON l.k = r.k AND l.id = r.id
+            |""".stripMargin)
+        checkAnswer(df, Seq(Row(0, 1, 5, 5), Row(1, 1, 1, 1)))
+        val Seq(join) = collect(df.queryExecution.executedPlan) { case j: SortMergeJoinExec => j }
+        val Seq(scan) = collectScans(join.left)
+        assert(scan.partitions.size == 2 && scan.partitions.forall(_.size == 1))
+        assert(scan.ordering.exists(_.nonEmpty))
+        assert(scan.spjParams.joinKeyPositions ==
+          Some(if (fullKey) Seq(0, 1) else Seq(1)))
+        assert(scan.inputRDD.partitions.length == (if (fullKey) 2 else 1))
+        assert(scan.outputOrdering.isEmpty == !fullKey)
+        assert(collect(join.left) { case s: SortExec => s }.size == (if (fullKey) 0 else 1))
+        assert(collectAllShuffles(join.left).isEmpty)
+        assert(collectAllShuffles(join.right).size == 1)
+      }
+    }
+  }
+
+  test("SPARK-55411: scan ordering after SPJ partition-key reduction") {
+    val bucketColumns = Array(Column.create("k", LongType))
+    val ordering = Array(Expressions.sort(
+      Expressions.column("k"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable("ordered_buckets", bucketColumns, Array(bucket(8, "k")), ordering = ordering)
+    createTable("coarse_buckets", bucketColumns, Array(bucket(4, "k")), ordering = ordering)
+    // The test bucket function maps 9 to bucket 1 and 5 to bucket 5. Each fine bucket has one
+    // ordered split, but reducing both to bucket 1 concatenates rows into the order 9, 5.
+    sql("INSERT INTO testcat.ns.ordered_buckets VALUES (9), (5)")
+    sql("INSERT INTO testcat.ns.coarse_buckets VALUES (9), (5)")
+
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false") {
+      val df = sql(
+        """SELECT /*+ MERGE(l, r) */ l.k, r.k
+          |FROM testcat.ns.ordered_buckets l JOIN testcat.ns.coarse_buckets r ON l.k = r.k
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row(5L, 5L), Row(9L, 9L)))
+      val Seq(join) = collect(df.queryExecution.executedPlan) { case j: SortMergeJoinExec => j }
+      val Seq(scan) = collectScans(join.left)
+      assert(scan.partitions.size == 2 && scan.partitions.forall(_.size == 1))
+      assert(scan.ordering.exists(_.nonEmpty))
+      assert(scan.spjParams.joinKeyPositions.isEmpty)
+      assert(scan.spjParams.reducers.exists(_.exists(_.isDefined)))
+      assert(scan.inputRDD.partitions.length == 1)
+      assert(scan.outputOrdering.isEmpty)
+      assert(collect(join.left) { case s: SortExec => s }.size == 1)
+      assert(collectAllShuffles(join).isEmpty)
     }
   }
 
