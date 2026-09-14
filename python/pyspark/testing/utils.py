@@ -704,7 +704,7 @@ def assertSchemaEqual(
             elif dt1.typeName() == "struct":
                 return compare_schemas_ignore_nullable(dt1, dt2)
             else:
-                return True
+                return dt1 == dt2
         else:
             return False
 
