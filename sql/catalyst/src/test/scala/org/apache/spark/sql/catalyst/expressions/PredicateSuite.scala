@@ -362,9 +362,35 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       // Long and Int both probe a sorted primitive array via the boxing-free binarySearch overload.
       assert(genCode(LongType, HashSet[Any](1L, 2L, 3L)).contains(bs))
       assert(genCode(IntegerType, HashSet[Any](1, 2, 3)).contains(bs))
+      // Decimal also uses binarySearch (Object[] overload).
+      assert(genCode(DecimalType(12, 1), HashSet[Any](Decimal(1), Decimal(2))).contains(bs))
       // The kill-switch falls back to the generic boxed Set.contains(Object) path.
       withSQLConf(SQLConf.OPTIMIZER_INSET_BINARY_SEARCH_ENABLED.key -> "false") {
         assert(!genCode(LongType, HashSet[Any](1L, 2L, 3L)).contains(bs))
+      }
+    }
+  }
+
+  test("InSet uses a sorted-array binary search for decimal types") {
+    def check(dt: DecimalType): Unit = {
+      def d(v: Int): Decimal = Decimal(BigDecimal(v), dt.precision, dt.scale)
+      val values = Seq(d(1), d(2), d(3)).toSet[Any]
+      val present = Literal(d(2))
+      val absent = Literal(d(9))
+      val nullLit = Literal(null, dt)
+      require(present.dataType == dt && absent.dataType == dt)
+      checkEvaluation(InSet(nullLit, values), expected = null)
+      checkEvaluation(InSet(nullLit, values + null), expected = null)
+      checkEvaluation(InSet(present, values), expected = true)
+      checkEvaluation(InSet(present, values + null), expected = true)
+      checkEvaluation(InSet(absent, values), expected = false)
+      checkEvaluation(InSet(absent, values + null), expected = null)
+    }
+    // compact (precision <= 18, long-backed) and BigDecimal-backed (precision > 18); flag on/off.
+    Seq(DecimalType(12, 1), DecimalType(30, 7)).foreach { dt =>
+      check(dt)
+      withSQLConf(SQLConf.OPTIMIZER_INSET_BINARY_SEARCH_ENABLED.key -> "false") {
+        check(dt)
       }
     }
   }

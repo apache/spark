@@ -672,11 +672,11 @@ object SQLConf {
   val OPTIMIZER_INSET_BINARY_SEARCH_ENABLED =
     buildConf("spark.sql.optimizer.inSetBinarySearch.enabled")
       .internal()
-      .doc("When true, InSet probes a sorted primitive array with binary search in generated " +
-        "code for integral and date/time types, avoiding the per-row autoboxing of the generic " +
-        "Set path. This does not apply to the switch path (bytes/shorts/ints/dates below " +
-        "inSetSwitchThreshold) or to float/double/string/decimal. Set to false to fall back to " +
-        "the generic Set path.")
+      .doc("When true, InSet probes a sorted array with binary search in generated code for " +
+        "integral, date/time, and decimal types, avoiding the per-row autoboxing (integral/" +
+        "date-time) or Decimal.hashCode allocation (decimal) of the generic Set path. This does " +
+        "not apply to the switch path (bytes/shorts/ints/dates below inSetSwitchThreshold) or to " +
+        "float/double/string. Set to false to fall back to the generic Set path.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(true)

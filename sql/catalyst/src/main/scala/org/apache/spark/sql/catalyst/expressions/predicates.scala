@@ -704,11 +704,11 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ (hset - null)
   }
 
-  // A sorted primitive array (long[] or int[]) used only by genCodeWithPrimitiveSet, built once on
-  // the driver from hset. The generated code probes it with a boxing-free, allocation-free
-  // java.util.Arrays.binarySearch. null is skipped (hasNull tracks it separately) and Byte/Short
-  // are widened to Int to match the probe. Returned as AnyRef; addReferenceObj embeds the backing
-  // Java long[]/int[] and the probe casts to it.
+  // A sorted array (long[]/int[] for integral and date/time types, Decimal[] for decimals) used
+  // only by genCodeWithPrimitiveSet, built once on the driver from hset. The generated code probes
+  // it with a boxing-free java.util.Arrays.binarySearch. null is skipped (hasNull tracks it
+  // separately) and Byte/Short are widened to Int to match the probe. Returned as AnyRef;
+  // addReferenceObj embeds the backing Java array and the probe casts to it.
   @transient private[this] lazy val specializedSortedArray: AnyRef = child.dataType match {
     case LongType | TimestampType | TimestampNTZType =>
       val arr = hset.iterator.filter(_ != null).map(_.asInstanceOf[Long]).toArray
@@ -721,6 +721,12 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     case ByteType | ShortType =>
       val arr = hset.iterator.filter(_ != null).map(_.asInstanceOf[Number].intValue).toArray
       java.util.Arrays.sort(arr)
+      arr
+    case _: DecimalType =>
+      // Decimal is Ordered; compareTo == compare, which is value-correct across scales and
+      // consistent with Decimal.equals (compare(d) == 0). Sort by it via the Object[] overload.
+      val arr = hset.iterator.filter(_ != null).map(_.asInstanceOf[Decimal]).toArray
+      java.util.Arrays.sort(arr.asInstanceOf[Array[AnyRef]])
       arr
     case other =>
       throw SparkException.internalError(s"InSet has no specialized array for data type $other")
@@ -750,16 +756,18 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     case _ => false
   }
 
-  // For integral/temporal types whose Catalyst internal representation is a primitive int or long,
-  // the membership check can probe a sorted primitive array (see specializedSortedArray) with a
-  // boxing-free java.util.Arrays.binarySearch instead of the boxed Set. Returns the backing Java
-  // array type and the value cast to apply in the generated probe, or None for types that keep the
-  // boxed Set path. Float/Double are intentionally excluded: their NaN and -0.0/+0.0 SQL equality
-  // semantics require handling the boxed path already provides. See the genCodeWithSet NaN branch.
+  // For integral, date/time, and decimal types the membership check can probe a sorted array (see
+  // specializedSortedArray) with a boxing-free java.util.Arrays.binarySearch instead of the boxed
+  // Set. Returns the backing Java array type and the value cast to apply in the generated probe, or
+  // None for types that keep the boxed Set path. Float/Double are intentionally excluded: their NaN
+  // and -0.0/+0.0 SQL equality semantics require handling the boxed path already provides (see the
+  // genCodeWithSet NaN branch). String is excluded: it has no boxing to remove and its hash beats a
+  // binary search.
   private def specializedSetSpec: Option[(String, String)] = child.dataType match {
     case LongType | TimestampType | TimestampNTZType => Some(("long[]", ""))
     case IntegerType | DateType => Some(("int[]", ""))
     case ByteType | ShortType => Some(("int[]", "(int) "))
+    case _: DecimalType => Some(("org.apache.spark.sql.types.Decimal[]", ""))
     case _ => None
   }
 
@@ -797,11 +805,12 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     })
   }
 
-  // Boxing-free variant of genCodeWithSet for the integral/temporal types reported by
-  // specializedSetSpec. The subject stays a primitive and we probe a sorted primitive array with
-  // java.util.Arrays.binarySearch (a primitive overload: no autoboxing, no allocation), instead of
-  // the boxed Set[Any].contains(Object). There is no NaN branch: the eligible types have no NaN.
-  // The 3VL structure matches genCodeWithSet.
+  // Boxing-free variant of genCodeWithSet for the types reported by specializedSetSpec. For
+  // integral/date/time types the subject stays a primitive and we use the primitive
+  // java.util.Arrays.binarySearch overload (no autoboxing, no allocation). For Decimal we use the
+  // Object[] overload, which compares via Decimal.compareTo (== compare) and, crucially, avoids the
+  // boxed Set path's per-row Decimal.hashCode (= toBigDecimal.hashCode, which allocates). There is
+  // no NaN branch: none of the eligible types have NaN. The 3VL structure matches genCodeWithSet.
   private def genCodeWithPrimitiveSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val (arrayType, valueCast) = specializedSetSpec.get
     nullSafeCodeGen(ctx, ev, c => {
@@ -813,8 +822,13 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
         ""
       }
 
+      val probe = child.dataType match {
+        case _: DecimalType => s"java.util.Arrays.binarySearch((Object[]) $arrTerm, $c) >= 0"
+        case _ => s"java.util.Arrays.binarySearch($arrTerm, $valueCast$c) >= 0"
+      }
+
       s"""
-         |${ev.value} = java.util.Arrays.binarySearch($arrTerm, $valueCast$c) >= 0;
+         |${ev.value} = $probe;
          |$setIsNull
        """.stripMargin
     })
