@@ -945,20 +945,18 @@ case class EnsureRequirements(
     // `KeyLayout.describesSameKeys` asks exactly that, and it compares the key types as well as
     // the rows.
     //
-    // Only the push branch rebuilds the children, so only it has to be asked. Where it did not run,
-    // the children are the ones the pairing read: `KeyedShuffleSpec.isCompatibleWith` already ends
-    // in `describesSameKeys`, and all keyed members of a `PartitioningCollection` share one
-    // `KeyLayout`, so whichever member the spec matched on declares what the representative does.
+    // Both routes to `newLeft`/`newRight` build, so both are asked. On the base this was the push
+    // branch's question alone, because the other route left the children exactly as the pairing
+    // read them. Here `groupIfNeeded` can wrap a side that is not grouped, and that node gives up
+    // the claim for the same reason the pushed one does.
     val (newLeft, newRight) =
       pushed.getOrElse((groupIfNeeded(rawLeft), groupIfNeeded(rawRight)))
     def declaredLayout(plan: SparkPlan): Option[KeyLayout] =
       PartitioningCollection.representativeOf(plan.outputPartitioning).map(_.layout)
-    def sidesDeclareSameKeys: Boolean =
-      (declaredLayout(newLeft), declaredLayout(newRight)) match {
-        case (Some(left), Some(right)) => left.describesSameKeys(right)
-        case _ => false
-      }
-    val committed = if (pushCommonValues) sidesDeclareSameKeys else compatibleAsIs
+    val committed = (declaredLayout(newLeft), declaredLayout(newRight)) match {
+      case (Some(left), Some(right)) => left.describesSameKeys(right)
+      case _ => false
+    }
     // Announced here rather than where the branch runs, since the gate can still discard what it
     // built, and a log that names a pushdown should name one that happens.
     if (pushCommonValues) {
@@ -1079,7 +1077,7 @@ case class EnsureRequirements(
         // earlier pass already projected.
         assert(g.expectedKeyCount.isEmpty && g.reducers.isEmpty && !g.distributePartitions,
           "expected a grouping this rule inserted for a co-partitioned child")
-        val composed = g.joinKeyPositions.fold(positions)(positions.map(_))
+        val composed = g.joinKeyPositions.fold(positions)(old => positions.map(old))
         val newGroupPartitions =
           GroupPartitionsExec(g.child, Some(composed), enableSortedMerge = g.enableSortedMerge)
         newGroupPartitions.copyTagsFrom(g)

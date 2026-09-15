@@ -39,6 +39,11 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * where multiple input partitions share the same partition key. It's commonly used in
  * storage-partitioned joins to align partitions from different sides of the join.
  *
+ * Everything that says how the node was decided is `@transient`, since only the driver plans and
+ * the executors read the groups through [[GroupedPartitionCoalescer]] rather than through this
+ * node. The two partitionings are not, matching `ShuffleExchangeExec`'s, since they are what the
+ * node claims rather than how it arrived at the claim.
+ *
  * @param child The child plan providing bucketed/partitioned input
  * @param grouping What this node does to the child's partitions, derived once at planning time by
  *                 `GroupPartitionsExec.apply`. See that factory for the rule about keeping it in
@@ -441,9 +446,9 @@ private[sql] object GroupPartitionsExec {
    * Builds a node over `child`, deriving `grouping` and `plannedPartitioning` from the parameters.
    *
    * **Both are derived, and neither `copy` nor the generated `apply` re-derives them**, so a change
-   * to `child`, `joinKeyPositions`, `expectedPartitionKeys`, `reducers` or `distributePartitions`
-   * has to come back through here. `enableSortedMerge` is not an input to either, which is why
-   * `tryEnableSortedMerge` may `copy` it.
+   * to `child`, `joinKeyPositions`, `expectedPartitionKeys` (stored as `expectedKeyCount`),
+   * `reducers` or `distributePartitions` has to come back through here. `enableSortedMerge` is not
+   * an input to either, which is why `tryEnableSortedMerge` may `copy` it.
    *
    * Two other `copy` calls in this file are deliberate. `withNewChildInternal` carries both fields
    * over a child rewrite, and a child that turns out to report something else is what
