@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.DateType
 
 /**
  * SQL ASOF JOIN surface tests (parser, analysis, and feature gating).
@@ -191,7 +192,7 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       """
         |SELECT t.trade_time
         |FROM trades t ASOF JOIN quotes q
-        |  MATCH_CONDITION (t.trade_time >= q.symbol)
+        |  MATCH_CONDITION (t.trade_time >= q.bid_price)
         |  ON t.symbol = q.symbol
         |""".stripMargin
     checkError(
@@ -200,14 +201,41 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       sqlState = Some("42K09"),
       parameters = Map(
         "type1" -> "\"TIMESTAMP\"",
-        "type2" -> "\"STRING\""),
+        "type2" -> "\"DECIMAL(5,2)\""),
       queryContext = Array(
         ExpectedContext(
           fragment = """ASOF JOIN quotes q
-                       |  MATCH_CONDITION (t.trade_time >= q.symbol)
+                       |  MATCH_CONDITION (t.trade_time >= q.bid_price)
                        |  ON t.symbol = q.symbol""".stripMargin,
           start = 35,
-          stop = 122)))
+          stop = 125)))
+  }
+
+  // SPARK-59527 reproduces with ANSI on and off, so both are checked.
+  Seq(true, false).foreach { ansi =>
+    test(s"MATCH_CONDITION coerces DATE vs STRING like the comparison operator (ansi=$ansi)") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        // `l.d >= r.s` type-checks: the string is coerced to DATE, the same as a bare `>=`
+        // comparison. Before SPARK-59527 this failed with INVALID_TYPE.
+        val sqlText =
+          """
+            |SELECT l.d, r.s
+            |FROM VALUES (DATE '2024-01-03') AS l(d) ASOF JOIN
+            |     VALUES ('2024-01-01') AS r(s)
+            |  MATCH_CONDITION (l.d >= r.s)
+            |""".stripMargin
+        val asOfJoin = sql(sqlText).queryExecution.analyzed.collectFirst {
+          case j: AsOfJoin => j
+        }.get
+        assert(asOfJoin.asOfCondition.resolved)
+        // Both sort keys carry DATE so the sort-merge order matches the coerced comparison; a raw
+        // STRING sort key would order lexicographically and pick the wrong as-of match.
+        assert(asOfJoin.leftSortExprs.nonEmpty && asOfJoin.rightSortExprs.nonEmpty)
+        assert(asOfJoin.leftSortExprs.forall(_.dataType == DateType))
+        assert(asOfJoin.rightSortExprs.forall(_.dataType == DateType))
+        checkAnswer(sql(sqlText), Row(java.sql.Date.valueOf("2024-01-03"), "2024-01-01"))
+      }
+    }
   }
 
   test("MATCH_CONDITION accepts CURRENT_TIMESTAMP as left operand") {

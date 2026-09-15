@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -2688,11 +2688,38 @@ object AsOfJoin {
       rightOperand: Expression,
       normalizedOp: MatchComparisonOperator)
       : (Expression, Expression, Seq[Expression], Seq[Expression]) = {
+    val (coercedLeft, coercedRight) = coerceMatchLeafOperands(leftOperand, rightOperand)
     val (asOfCondition, orderExpression) =
-      buildMatchExpressions(leftOperand, rightOperand, normalizedOp)
-    val (leftSortExprs, rightSortExprs) = matchSortExpressions(leftOperand, rightOperand)
+      buildMatchExpressions(coercedLeft, coercedRight, normalizedOp)
+    val (leftSortExprs, rightSortExprs) = matchSortExpressions(coercedLeft, coercedRight)
     (asOfCondition, orderExpression, leftSortExprs, rightSortExprs)
   }
+
+  /**
+   * Casts a scalar operand pair to the common type the comparison operator would use, so the
+   * comparison, ordering distance, and per-side sort keys all agree. This is required for a
+   * string vs DATE/TIMESTAMP/number pair: the sort-merge scan sorts the right buffer by its raw
+   * sort key, and only a shared type keeps that order consistent with the coerced comparison.
+   * STRUCT and ARRAY operands are left untouched; their sort key is the whole value, so a
+   * per-field cast could not reach it.
+   */
+  private def coerceMatchLeafOperands(
+      leftOperand: Expression,
+      rightOperand: Expression): (Expression, Expression) = {
+    (leftOperand.dataType, rightOperand.dataType) match {
+      case (_: StructType, _) | (_, _: StructType) | (_: ArrayType, _) | (_, _: ArrayType) =>
+        (leftOperand, rightOperand)
+      case (leftType, rightType) =>
+        MatchConditionTypes.matchComparisonCommonType(leftType, rightType) match {
+          case Some(commonType) =>
+            (castMatchOperand(leftOperand, commonType), castMatchOperand(rightOperand, commonType))
+          case None => (leftOperand, rightOperand)
+        }
+    }
+  }
+
+  private def castMatchOperand(operand: Expression, targetType: DataType): Expression =
+    if (operand.dataType == targetType) operand else Cast(operand, targetType)
 
   /**
    * Shared MATCH_CONDITION operand type rules used by analysis validation and by expression
@@ -2703,7 +2730,56 @@ object AsOfJoin {
     def isValidOperandType(dataType: DataType): Boolean =
       RowOrdering.isOrderable(dataType) && !containsEmptyStructType(dataType)
 
+    /**
+     * Top-level operand compatibility. A scalar pair is compatible when the comparison operator
+     * would accept it, so DATE/TIMESTAMP vs STRING (and string vs number) coerce like `>=`.
+     * STRUCT/ARRAY operands keep the stricter widening rule via [[areFieldTypesCompatible]],
+     * because their sort key is the whole value and cannot carry a per-field string cast.
+     */
     def areOperandsCompatible(leftType: DataType, rightType: DataType): Boolean = {
+      if (!isValidOperandType(leftType) || !isValidOperandType(rightType)) {
+        false
+      } else {
+        (leftType, rightType) match {
+          case (_: StructType, _) | (_, _: StructType) | (_: ArrayType, _) | (_, _: ArrayType) =>
+            areFieldTypesCompatible(leftType, rightType)
+          case _ =>
+            matchComparisonCommonType(leftType, rightType).isDefined ||
+              TypeCoercion.findWiderTypeForTwo(leftType, rightType).isDefined
+        }
+      }
+    }
+
+    /**
+     * The type both scalar operands are cast to before comparison, ordering, and sort, mirroring
+     * the comparison operator's string coercion in the active mode (ANSI or default). Only a
+     * string vs non-string pair needs it: string sorts lexicographically while its target sorts
+     * by value, so the two must share a type. Other widenings preserve order, so this returns
+     * [[None]] for them and they keep their raw operands.
+     */
+    private[catalyst] def matchComparisonCommonType(
+        leftType: DataType,
+        rightType: DataType): Option[DataType] = {
+      val exactlyOneString =
+        leftType.isInstanceOf[StringType] != rightType.isInstanceOf[StringType]
+      if (!exactlyOneString) {
+        None
+      } else {
+        val commonType = if (SQLConf.get.ansiEnabled) {
+          AnsiStringPromotionTypeCoercion.findWiderTypeForString(leftType, rightType)
+        } else {
+          TypeCoercion.findCommonTypeForBinaryComparison(leftType, rightType, SQLConf.get)
+        }
+        commonType.filter(isValidOperandType)
+      }
+    }
+
+    /**
+     * Compatibility for STRUCT fields, ARRAY elements, and STRUCT/ARRAY operands. Fields widen
+     * only (string vs temporal stays rejected), since the whole-value sort key cannot apply a
+     * per-field cast.
+     */
+    private def areFieldTypesCompatible(leftType: DataType, rightType: DataType): Boolean = {
       if (!isValidOperandType(leftType) || !isValidOperandType(rightType)) {
         false
       } else if (isStringTemporalMismatch(leftType, rightType)) {
@@ -2763,7 +2839,7 @@ object AsOfJoin {
         case (leftStruct: StructType, rightStruct: StructType)
             if usesStructDecomposition(leftType, rightType) =>
           leftStruct.zip(rightStruct).forall { case (leftField, rightField) =>
-            areOperandsCompatible(leftField.dataType, rightField.dataType)
+            areFieldTypesCompatible(leftField.dataType, rightField.dataType)
           }
         case _ => false
       }

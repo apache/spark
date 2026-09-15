@@ -29,9 +29,39 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(!MatchConditionTypes.usesStructDecomposition(IntegerType, LongType))
   }
 
-  test("string and temporal types are incompatible") {
-    assert(!MatchConditionTypes.areOperandsCompatible(StringType, TimestampType))
-    assert(!MatchConditionTypes.areOperandsCompatible(DateType, StringType))
+  test("scalar string and temporal types coerce like the comparison operator") {
+    // SPARK-59527: a scalar string vs DATE/TIMESTAMP pair is accepted and coerced, matching `>=`.
+    assert(MatchConditionTypes.areOperandsCompatible(StringType, TimestampType))
+    assert(MatchConditionTypes.areOperandsCompatible(DateType, StringType))
+    // The shared common type is the temporal type (string is cast to it), not string, so the
+    // sort-merge sort key and the comparison order agree.
+    assert(MatchConditionTypes.matchComparisonCommonType(DateType, StringType).contains(DateType))
+    assert(
+      MatchConditionTypes.matchComparisonCommonType(StringType, TimestampType)
+        .contains(TimestampType))
+  }
+
+  test("scalar string and numeric types coerce like the comparison operator") {
+    // Accepted before SPARK-59527 too, but the common type must be numeric (not string) so the
+    // right buffer sorts by value; a string sort key picks the wrong as-of match.
+    assert(MatchConditionTypes.areOperandsCompatible(IntegerType, StringType))
+    assert(MatchConditionTypes.matchComparisonCommonType(IntegerType, StringType).nonEmpty)
+    assert(
+      !MatchConditionTypes.matchComparisonCommonType(IntegerType, StringType).contains(StringType))
+  }
+
+  test("struct fields keep the strict rule: string vs temporal field is rejected") {
+    // The coercion is scoped to scalar top-level operands; a whole-struct sort key cannot apply
+    // a per-field cast, so a string vs temporal STRUCT field stays incompatible.
+    val leftStruct = StructType(StructField("f", DateType) :: Nil)
+    val rightStruct = StructType(StructField("g", StringType) :: Nil)
+    assert(!MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
+  }
+
+  test("array elements keep the strict rule: string vs numeric element is rejected") {
+    val intArray = ArrayType(IntegerType)
+    val stringArray = ArrayType(StringType)
+    assert(!MatchConditionTypes.areOperandsCompatible(intArray, stringArray))
   }
 
   test("positional struct operands with different field names are compatible") {

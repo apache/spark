@@ -73,9 +73,9 @@ SELECT * FROM VALUES (MAP('a', 1)) AS t(m) ASOF JOIN VALUES (MAP('a', 1)) AS r(m
 SELECT * FROM VALUES (ARRAY(MAP('a', 1))) AS t(a) ASOF JOIN VALUES (ARRAY(MAP('a', 1))) AS r(a)
   MATCH_CONDITION (t.a >= r.a);
 
--- FVT-ASOF-3-012: incompatible types in MATCH_CONDITION
+-- FVT-ASOF-3-012: incompatible types in MATCH_CONDITION (TIMESTAMP vs DECIMAL has no common type)
 SELECT * FROM trades t ASOF JOIN quotes q
-  MATCH_CONDITION (t.trade_time >= q.symbol)
+  MATCH_CONDITION (t.trade_time >= q.bid_price)
   ON t.symbol = q.symbol;
 
 -- FVT-ASOF-3-013: STRUCT with non-orderable field rejected
