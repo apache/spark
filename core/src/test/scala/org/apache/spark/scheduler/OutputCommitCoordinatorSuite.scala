@@ -113,9 +113,13 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
             execId: String,
             host: String,
             locality: TaskLocality.Value,
-            speculative: Boolean): Option[(Int, TaskLocality.Value, Boolean)] = {
+            speculative: Boolean,
+            taskCpus: BigDecimal,
+            availCpus: BigDecimal,
+            offerTotalCores: Option[Int]): Option[(Int, TaskLocality.Value, Boolean)] = {
           if (!speculative) {
-            super.dequeueTaskHelper(execId, host, locality, speculative)
+            super.dequeueTaskHelper(
+              execId, host, locality, speculative, taskCpus, availCpus, offerTotalCores)
           } else if (hasDequeuedSpeculatedTask) {
             None
           } else {

@@ -21,6 +21,8 @@ import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 
+import scala.collection.mutable
+
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -59,6 +61,12 @@ private[spark] class LocalEndpoint(
 
   private var freeCores: BigDecimal = CpuAmount.normalize(BigDecimal(totalCores))
 
+  // The actual number of cpus charged for each launched task, so that completion refunds exactly
+  // what launch charged. An OOM retry (see spark.task.oomRetryCpusIncrement) can use more than
+  // CPUS_PER_TASK, and the StatusUpdate message carries only the task id, so a fixed refund of
+  // CPUS_PER_TASK would leak or double-count cores and let the local executor be oversubscribed.
+  private val runningTaskCpus = new mutable.HashMap[Long, BigDecimal]()
+
   val localExecutorId = SparkContext.DRIVER_IDENTIFIER
   val localExecutorHostname = Utils.localCanonicalHostName()
 
@@ -74,7 +82,7 @@ private[spark] class LocalEndpoint(
     case StatusUpdate(taskId, state, serializedData) =>
       scheduler.statusUpdate(taskId, state, serializedData)
       if (TaskState.isFinished(state)) {
-        freeCores += scheduler.CPUS_PER_TASK
+        freeCores += runningTaskCpus.remove(taskId).getOrElse(scheduler.CPUS_PER_TASK)
         reviveOffers()
       }
 
@@ -97,9 +105,10 @@ private[spark] class LocalEndpoint(
   def reviveOffers(): Unit = {
     // local mode doesn't support extra resources like GPUs right now
     val offers = IndexedSeq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores,
-      Some(rpcEnv.address.hostPort)))
+      Some(rpcEnv.address.hostPort), totalCores = totalCores))
     for (task <- scheduler.resourceOffers(offers, true).flatten) {
-      freeCores -= scheduler.CPUS_PER_TASK
+      freeCores -= task.cpus
+      runningTaskCpus(task.taskId) = task.cpus
       executor.launchTask(executorBackend, task)
     }
   }
