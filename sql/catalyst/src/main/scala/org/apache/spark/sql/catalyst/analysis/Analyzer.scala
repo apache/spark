@@ -171,12 +171,13 @@ case class AnalysisContext(
     // CACHE TABLE AS SELECT stores the names in its metadata so they resolve when the stored view
     // text is analyzed again. A persisted CREATE/ALTER VIEW instead rejects them -- usually in
     // `ResolveIdentifierClause` while resolving the body, and otherwise (e.g. an IDENTIFIER nested
-    // in a scalar subquery) in `verifyTemporaryObjectsNotExists` at run time. When
-    // `spark.sql.legacy.allowSessionVariableInPersistedView` is set, the persisted paths simply
-    // discard the set. The single-pass resolver has no IDENTIFIER-clause resolution of its own, so
-    // there is no second writer to keep in sync. LinkedHashSet keeps insertion order so the
-    // recorded names (and any error naming them) are deterministic when more than one variable is
-    // read via an IDENTIFIER clause.
+    // in a scalar subquery) by persisted-view validation: `verifyTemporaryObjectsNotExists`, which
+    // the v1 runnable commands call while executing and the v2 commands reach during analysis via
+    // `CheckViewReferences`. When `spark.sql.legacy.allowSessionVariableInPersistedView` is set,
+    // the persisted paths simply discard the set. The single-pass resolver has no IDENTIFIER-clause
+    // resolution of its own, so there is no second writer to keep in sync. LinkedHashSet keeps
+    // insertion order so the recorded names (and any error naming them) are deterministic when more
+    // than one variable is read via an IDENTIFIER clause.
     referredTempVariableNamesUnderIdentifier: mutable.Set[Seq[String]] =
       mutable.LinkedHashSet.empty,
     outerPlan: Option[LogicalPlan] = None,
@@ -533,16 +534,21 @@ class Analyzer(
    * persisted-view rules (metric-view creation) therefore cannot recover them afterwards, so this
    * entry point reads them inside the owning scope and freezes them into the returned result.
    *
-   * It runs the fixed-point analyzer directly (in a context it owns, so the accumulator stays
-   * readable). The only caller analyzes a metric-view placeholder, which is explicitly unsupported
-   * by the single-pass resolver (see the resolver's unsupported-feature list), so
-   * [[executeAndCheck]] would fall back to this same fixed-point path anyway.
+   * When single-pass resolution is forced on, this defers to [[executeAndCheck]] so the configured
+   * routing is preserved: the only caller analyzes a metric-view placeholder, which is explicitly
+   * unsupported by the single-pass resolver, and forced mode must surface that incompatibility
+   * rather than silently succeeding through fixed-point analysis (no IDENTIFIER variables are
+   * captured on that path -- the call fails before persisted-view validation is reached).
+   * Otherwise it runs the fixed-point analyzer directly, in a context it owns so the accumulator
+   * stays readable.
    */
   def executeAndCheckReferredTempVariablesUnderIdentifier(
       plan: LogicalPlan,
       tracker: QueryPlanningTracker): (LogicalPlan, Seq[Seq[String]]) = {
     if (plan.analyzed) {
       (plan, Seq.empty)
+    } else if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED)) {
+      (executeAndCheck(plan, tracker), Seq.empty)
     } else {
       def analyze(): (LogicalPlan, Seq[Seq[String]]) = AnalysisHelper.markInAnalyzer {
         val analyzed = QueryPlanningTracker.withTracker(tracker) {

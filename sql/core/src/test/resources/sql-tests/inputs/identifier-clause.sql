@@ -518,8 +518,9 @@ DROP SCHEMA ivt_schema;
 -- A temporary view whose body reads a variable via an IDENTIFIER clause in expression position
 -- (here as a column name). Unlike the table-position case above, this identifier expression
 -- resolves to a bare variable reference, so recording it requires visiting the root of the
--- expression tree. If it is not recorded, the variable is missing from the stored view text and
--- reading the view back fails.
+-- expression tree. If it is not recorded, the variable is missing from the view's referred-variable
+-- metadata (the stored view text still names it via IDENTIFIER), so view-context re-analysis cannot
+-- resolve the reference and reading the view back fails.
 DECLARE OR REPLACE VARIABLE identifier_expr_col STRING DEFAULT 'c1';
 CREATE OR REPLACE TEMPORARY VIEW identifier_expr_view AS
 SELECT IDENTIFIER(identifier_expr_col) AS x FROM VALUES(1) AS t(c1);
@@ -554,6 +555,21 @@ SELECT * FROM identifier_named_view2;
 DROP VIEW identifier_named_view2;
 DROP TEMPORARY VARIABLE identifier_name_part;
 DROP TEMPORARY VARIABLE identifier_body_part;
+
+-- A PERSISTED view whose NAME is supplied by an IDENTIFIER variable, with a body that has no
+-- temporary dependency, is created successfully: the target-name variable is not part of the view
+-- definition. Were it wrongly recorded, this persisted CREATE would be rejected with
+-- INVALID_TEMP_OBJ_REFERENCE, so this case hard-locks the target-name exclusion (the temporary
+-- cases above only surface a leak through the analyzer-results referred-variable metadata).
+CREATE SCHEMA identifier_named_perm_schema;
+USE identifier_named_perm_schema;
+DECLARE OR REPLACE VARIABLE identifier_perm_view_name STRING DEFAULT 'identifier_named_perm_view';
+CREATE VIEW IDENTIFIER(identifier_perm_view_name) AS SELECT 1 AS c1;
+SELECT * FROM identifier_named_perm_view;
+DROP VIEW identifier_named_perm_view;
+DROP TEMPORARY VARIABLE identifier_perm_view_name;
+USE default;
+DROP SCHEMA identifier_named_perm_schema;
 
 -- ALTER VIEW honors `spark.sql.legacy.allowSessionVariableInPersistedView` just like CREATE VIEW:
 -- with it set, the DDL is allowed instead of rejected (the legacy permissive behavior). The flag

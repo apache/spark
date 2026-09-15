@@ -3636,6 +3636,73 @@ DropVariable false
 
 
 -- !query
+CREATE SCHEMA identifier_named_perm_schema
+-- !query analysis
+CreateNamespace false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_named_perm_schema]
+
+
+-- !query
+USE identifier_named_perm_schema
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_named_perm_schema]
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_perm_view_name STRING DEFAULT 'identifier_named_perm_view'
+-- !query analysis
+CreateVariable default(cast(identifier_named_perm_view as string), sql=''identifier_named_perm_view''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_perm_view_name
+
+
+-- !query
+CREATE VIEW IDENTIFIER(identifier_perm_view_name) AS SELECT 1 AS c1
+-- !query analysis
+CreateViewCommand `spark_catalog`.`identifier_named_perm_schema`.`identifier_named_perm_view`, SELECT 1 AS c1, false, false, PersistedView, COMPENSATION, true
+   +- Project [1 AS c1#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT * FROM identifier_named_perm_view
+-- !query analysis
+Project [c1#x]
++- SubqueryAlias spark_catalog.identifier_named_perm_schema.identifier_named_perm_view
+   +- View (`spark_catalog`.`identifier_named_perm_schema`.`identifier_named_perm_view`, [c1#x])
+      +- Project [cast(c1#x as int) AS c1#x]
+         +- Project [1 AS c1#x]
+            +- OneRowRelation
+
+
+-- !query
+DROP VIEW identifier_named_perm_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`identifier_named_perm_schema`.`identifier_named_perm_view`, false, true, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_perm_view_name
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_perm_view_name
+
+
+-- !query
+USE default
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [default]
+
+
+-- !query
+DROP SCHEMA identifier_named_perm_schema
+-- !query analysis
+DropNamespace false, false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_named_perm_schema]
+
+
+-- !query
 SET spark.sql.legacy.allowSessionVariableInPersistedView=true
 -- !query analysis
 SetCommand (spark.sql.legacy.allowSessionVariableInPersistedView,Some(true))

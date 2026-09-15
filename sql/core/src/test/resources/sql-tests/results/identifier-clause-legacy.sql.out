@@ -4045,6 +4045,78 @@ struct<>
 
 
 -- !query
+CREATE SCHEMA identifier_named_perm_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE identifier_named_perm_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE identifier_perm_view_name STRING DEFAULT 'identifier_named_perm_view'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE VIEW IDENTIFIER(identifier_perm_view_name) AS SELECT 1 AS c1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM identifier_named_perm_view
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW identifier_named_perm_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_perm_view_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP SCHEMA identifier_named_perm_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SET spark.sql.legacy.allowSessionVariableInPersistedView=true
 -- !query schema
 struct<key:string,value:string>

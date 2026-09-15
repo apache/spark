@@ -111,6 +111,25 @@ abstract class MetricViewSuite extends QueryTest {
     }
   }
 
+  test("metric view creation preserves configured analyzer routing under forced single-pass") {
+    // `MetricViewPlaceholder` is explicitly unsupported by the single-pass resolver. Metric-view
+    // creation analyzes the source through `executeAndCheckReferredTempVariablesUnderIdentifier`,
+    // which must route through HybridAnalyzer when single-pass is forced on so that incompatibility
+    // surfaces, rather than silently analyzing through fixed-point.
+    val metricView = MetricView(
+      "0.1",
+      SQLSource("SELECT region, count FROM test_table"),
+      None,
+      Seq(
+        Column("region", DimensionExpression("region"), 0),
+        Column("count_sum", MeasureExpression("sum(count)"), 1)))
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      intercept[Exception] {
+        createMetricView("mv_single_pass_view", metricView)
+      }
+    }
+  }
+
   test("test source type") {
     val sources = Seq(
       AssetSource(testTableName),
