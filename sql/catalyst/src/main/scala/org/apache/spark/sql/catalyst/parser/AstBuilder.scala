@@ -2378,7 +2378,14 @@ class AstBuilder extends DataTypeAstBuilder
 
     // exclude null values by default
     val filtered = if (ctx.nullOperator == null || ctx.nullOperator.EXCLUDE() != null) {
-      Filter(IsNotNull(Coalesce(valueColumnNames.map(UnresolvedAttribute(_)))), unpivot)
+      val valueColumns = valueColumnNames.map(UnresolvedAttribute(_))
+      // Multiple value columns can have unrelated types, so test each for null independently.
+      val condition = if (valueColumns.length == 1) {
+        IsNotNull(Coalesce(valueColumns))
+      } else {
+        valueColumns.map(IsNotNull).reduceLeft(Or)
+      }
+      Filter(condition, unpivot)
     } else {
       unpivot
     }
