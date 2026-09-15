@@ -26,7 +26,7 @@ import scala.concurrent.Future
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState, VersionedCredentials}
+import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskKilled, TaskState, VersionedCredentials}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.UserCredentialManager
 import org.apache.spark.errors.SparkCoreErrors
@@ -468,7 +468,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
                 s"${RPC_MESSAGE_MAX_SIZE.key} (%d bytes). Consider increasing " +
                 s"${RPC_MESSAGE_MAX_SIZE.key} or using broadcast variables for large values."
               msg = msg.format(task.taskId, task.index, serializedTask.limit(), maxRpcMessageSize)
-              taskSetMgr.abort(msg)
+              try {
+                taskSetMgr.abort(msg)
+              } finally {
+                // The task was registered with the scheduler but will never report its status.
+                // Do not send a backend StatusUpdate, since no resources were allocated above.
+                val reason = scheduler.sc.env.closureSerializer.newInstance()
+                  .serialize(TaskKilled(msg))
+                scheduler.statusUpdate(task.taskId, TaskState.KILLED, reason)
+              }
             } catch {
               case e: Exception => logError("Exception in error callback", e)
             }

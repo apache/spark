@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.executor.ExecutorExitCode
+import org.apache.spark.util.SparkExitCode
 
 /**
  * Represents an explanation for an executor or whole process failing or exiting.
@@ -29,7 +30,10 @@ class ExecutorLossReason(val message: String) extends Serializable {
 
 private[spark]
 case class ExecutorExited(exitCode: Int, exitCausedByApp: Boolean, reason: String)
-  extends ExecutorLossReason(reason)
+  extends ExecutorLossReason(reason) {
+  private[spark] var isOutOfMemoryError: Boolean =
+    exitCausedByApp && exitCode == SparkExitCode.OOM
+}
 
 private[spark] object ExecutorExited {
   def apply(exitCode: Int, exitCausedByApp: Boolean): ExecutorExited = {
