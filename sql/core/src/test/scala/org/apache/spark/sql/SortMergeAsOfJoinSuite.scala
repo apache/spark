@@ -671,7 +671,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           Row(10, "z", "c", 7, "z", 7)
         )
       )
-      // With equi-key (bufferRightGroup path)
+      // Equi-key (bufferRightGroup): at most one right row per group, so it does not spill.
       checkAnswer(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq("b"),
