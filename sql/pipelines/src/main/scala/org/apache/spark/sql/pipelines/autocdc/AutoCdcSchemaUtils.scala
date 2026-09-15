@@ -22,14 +22,16 @@ import org.apache.spark.sql.types.StructType
 private[autocdc] object AutoCdcSchemaUtils {
 
   /**
-   * Enumerates every leaf path in `schema`, in schema order, as its sequence of name parts.
-   * Structs unfold recursively; every other type (including arrays and maps) is an opaque leaf.
+   * Returns field-name paths after recursively flattening nested structs, preserving schema order.
+   *
+   * Fields of every other data type, including arrays and maps, remain a single path. Their
+   * element, key, and value types are not traversed.
    */
-  def extractLeafPaths(schema: StructType): Seq[Seq[String]] =
+  def flattenStructFieldPaths(schema: StructType): Seq[Seq[String]] =
     schema.fields.toSeq.flatMap { field =>
       field.dataType match {
         case nested: StructType =>
-          extractLeafPaths(nested).map(field.name +: _)
+          flattenStructFieldPaths(nested).map(field.name +: _)
         case _ => Seq(Seq(field.name))
       }
     }

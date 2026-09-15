@@ -937,7 +937,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     Seq(
       // Include only value: removed is outside ignore-null and its padded null is authored.
       (ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value"))), true),
-      // Exclude value: removed is inside ignore-null and its padded null is declined.
+      // Exclude value: the upsert event leaves removed's padded null unauthored.
       (ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("value"))), false)
     )
   ) { case (ignoreNullSelection, expectedAuthorship) =>

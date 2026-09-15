@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import scala.util.chaining._
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
@@ -206,9 +208,6 @@ case class Scd2BatchProcessor(
 
   /**
    * Populates the version map on each microbatch row, recording which leaves the event authored.
-   * Null leaves in ignore-null columns get a `false` entry (declined); null leaves in other
-   * columns get `true` (authored null); non-null leaves need no entry. No-op when ignore-null
-   * is off.
    *
    * Delete-encoded rows (those matching [[ChangeArgs.deleteCondition]]) receive a null version
    * map: their data-column values are not part of the SCD2 contract, so authorship tracking
@@ -227,12 +226,6 @@ case class Scd2BatchProcessor(
       case Some(ignoreNullSelection) =>
         val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)
         val resolver = alignedDf.sparkSession.sessionState.conf.resolver
-        val schemaEligibleForNullAuthorshipTracking =
-          Scd2BatchProcessor.computeUserDataSchema(
-            schema = alignedDf.schema,
-            changeArgs = changeArgs,
-            resolver = resolver
-          )
 
         // Only upsert rows get a populated version map. By convention, delete-encoded
         // rows always maintain a null version map. We detect deletes via endAt rather
@@ -240,7 +233,9 @@ case class Scd2BatchProcessor(
         // dropped the column the delete condition references.
         val isUpsertRow = F.col(Scd2BatchProcessor.endAtColName).isNull
         val versionMap = F.when(isUpsertRow, Scd2VersionMap.buildVersionMap(
-          schema = schemaEligibleForNullAuthorshipTracking,
+          schema = alignedDf.schema
+            .pipe(Scd2BatchProcessor.filterOutKeyColumns(_, changeArgs.keys, resolver))
+            .pipe(Scd2BatchProcessor.filterOutReservedFrameworkColumns(_, resolver)),
           ignoreNullSelection = ignoreNullSelection,
           resolver = resolver
         ))
@@ -1512,7 +1507,9 @@ object Scd2BatchProcessor {
     ColumnSelection
       .applyToSchema(
         schemaName = "trackHistorySelection",
-        schema = computeUserDataSchema(schema, changeArgs, resolver),
+        schema = schema
+          .pipe(filterOutKeyColumns(_, changeArgs.keys, resolver))
+          .pipe(filterOutReservedFrameworkColumns(_, resolver)),
         columnSelection = changeArgs.trackHistorySelection,
         resolver = resolver
       )
@@ -1520,26 +1517,25 @@ object Scd2BatchProcessor {
       .toImmutableArraySeq
 
   /**
-   * The subset of `schema` that is user data a column selection may act on: every field that is
-   * neither a framework reserved column nor one of [[ChangeArgs.keys]]. Field order is preserved.
-   *
-   * Both [[ChangeArgs.trackHistorySelection]] and [[ChangeArgs.ignoreNullSelection]] resolve
-   * against this, so an exclude-list in either cannot pick up a key or a framework column, and
-   * an include-list naming one fails as not found.
-   *
-   * `schema` is expected to have already been narrowed by [[ChangeArgs.columnSelection]] and then
-   * aligned to the persisted target schema. This method does not re-apply the selection.
+   * Returns `schema` without fields matching the configured key columns, preserving field order.
    */
-  private[pipelines] def computeUserDataSchema(
+  private def filterOutKeyColumns(
       schema: StructType,
-      changeArgs: ChangeArgs,
+      keyColumns: Seq[UnqualifiedColumnName],
       resolver: Resolver): StructType = {
-    val keyColNames = changeArgs.keys.map(_.name)
-    StructType(schema.fields.filterNot { field =>
-      reservedFrameworkColNames.exists(resolver(_, field.name)) ||
-        keyColNames.exists(resolver(_, field.name))
-    })
+    val keyColumnNames = keyColumns.map(_.name)
+    StructType(schema.fields.filterNot(field => keyColumnNames.exists(resolver(_, field.name))))
   }
+
+  /**
+   * Returns `schema` without fields matching SCD2's reserved framework columns, preserving field
+   * order.
+   */
+  private def filterOutReservedFrameworkColumns(
+      schema: StructType,
+      resolver: Resolver): StructType =
+    StructType(schema.fields.filterNot(field =>
+      reservedFrameworkColNames.exists(resolver(_, field.name))))
 
   /**
    * Name of temporary column projected onto microbatch to compute the min sequencing value per

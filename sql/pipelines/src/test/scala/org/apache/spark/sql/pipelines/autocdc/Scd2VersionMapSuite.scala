@@ -126,13 +126,13 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     checkAnswer(result, Row(Map(encodedPath("a") -> true)))
   }
 
-  // Contract case 2: null in event + part of ignore-null -> (column, false) = unauthored null
-  test("contract case 2 - null leaf in ignore-null selection is declined (false)") {
+  // Contract case 2: null in event + part of ignore-null -> false because event did not author null
+  test("contract case 2 - event leaves null leaf unauthored under ignore-null (false)") {
     val df = singleRow(flatSchema)(null, "hello", 2.0)
     val selection = ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("a")))
     val result = df.select(
       Scd2VersionMap.buildVersionMap(flatSchema, selection, resolver).as("vm"))
-    // a is null + in ignore-null -> false (declined)
+    // a is null + in ignore-null -> false (the upsert event left a unauthored)
     checkAnswer(result, Row(Map(encodedPath("a") -> false)))
   }
 
@@ -146,7 +146,8 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val selection = ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("a")))
     val result = df.select(
       Scd2VersionMap.buildVersionMap(narrowSchema, selection, resolver).as("vm"))
-    // Only "a" appears (declined); a future column "b" added by schema evolution has no entry.
+    // Only "a" appears (the upsert event left it unauthored); a future schema-evolved "b" has no
+    // entry.
     checkAnswer(result, Row(Map(encodedPath("a") -> false)))
   }
 
@@ -176,7 +177,7 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       encodedPath("c") -> true)))
   }
 
-  test("flat schema - all null, all in ignore-null -> all declined (false)") {
+  test("flat schema - all null, all in ignore-null -> event leaves all unauthored (false)") {
     val df = singleRow(flatSchema)(null, null, null)
     val selection = ColumnSelection.IncludeColumns(
       Seq(UnqualifiedColumnName("a"), UnqualifiedColumnName("b"), UnqualifiedColumnName("c")))
@@ -240,8 +241,8 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       Scd2VersionMap.buildVersionMap(nestedSchema, selection, resolver).as("vm"))
     checkAnswer(result, Row(Map(
       encodedPath("x") -> true, // null + not ignore-null -> authored
-      encodedPath("address", "city") -> false, // null + ignore-null -> declined
-      encodedPath("address", "zip") -> false))) // null + ignore-null -> declined
+      encodedPath("address", "city") -> false, // event left null unauthored under ignore-null
+      encodedPath("address", "zip") -> false))) // event left null unauthored under ignore-null
   }
 
   test("deeply nested schema - three-level path tracked correctly") {
@@ -265,7 +266,7 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val result = df.select(
       Scd2VersionMap.buildVersionMap(arrayAndMapSchema, selection, resolver).as("vm"))
     checkAnswer(result, Row(Map(
-      encodedPath("tags") -> false, // null + ignore-null -> declined
+      encodedPath("tags") -> false, // event left null unauthored under ignore-null
       encodedPath("props") -> true, // null + not ignore-null -> authored
       encodedPath("plain") -> true))) // null + not ignore-null -> authored
   }
@@ -364,7 +365,7 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val selection = ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("b")))
     val result = df.select(
       Scd2VersionMap.buildVersionMap(flatSchema, selection, resolver).as("vm"))
-    // a,c are in ignore-null -> declined (false); b is NOT -> authored (true).
+    // The event left a,c unauthored under ignore-null (false), but authored b's null (true).
     checkAnswer(result, Row(Map(
       encodedPath("a") -> false,
       encodedPath("b") -> true,
@@ -376,7 +377,7 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     val selection = ColumnSelection.ExcludeColumns(Seq.empty)
     val result = df.select(
       Scd2VersionMap.buildVersionMap(flatSchema, selection, resolver).as("vm"))
-    // Exclude nothing -> ignore-null applies to all columns -> all nulls are declined.
+    // Exclude nothing -> ignore-null applies to all columns -> event leaves all nulls unauthored.
     checkAnswer(result, Row(Map(
       encodedPath("a") -> false,
       encodedPath("b") -> false,

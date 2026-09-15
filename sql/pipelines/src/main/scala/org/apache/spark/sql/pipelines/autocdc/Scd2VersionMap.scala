@@ -102,8 +102,9 @@ private[pipelines] object Scd2VersionMap {
     compact(JArray(path.map(JString(_)).toList))
 
   /**
-   * Builds the ingest-time version map column for a microbatch. Each row's map records which
-   * null leaves are authored vs declined, based on the active ignore-null selection.
+   * Builds the ingest-time version map column for a microbatch. For each null leaf, the map
+   * records whether the upsert event represented by the row authored that null or left the leaf
+   * unauthored under the active ignore-null selection.
    *
    * @param schema The schema whose leaves the version map covers. Null-authorship is tracked
    *   for every leaf column in this schema, as per the version map contract.
@@ -122,13 +123,13 @@ private[pipelines] object Scd2VersionMap {
       columnSelection = Some(ignoreNullSelection),
       resolver = resolver
     )
-    val ignoreNullLeafPaths = AutoCdcSchemaUtils.extractLeafPaths(ignoreNullColumns).toSet
+    val ignoreNullLeafPaths = AutoCdcSchemaUtils.flattenStructFieldPaths(ignoreNullColumns).toSet
 
     // For each leaf, build a nullable struct (key, value). The struct is non-null only when
     // the leaf column's runtime value is null (meaning the leaf needs a version map entry).
-    // The value is a non-nullable BooleanType literal indicating authorship: true if the null
-    // is authored, false if declined.
-    val candidateEntries = AutoCdcSchemaUtils.extractLeafPaths(schema).map { path =>
+    // The value is a non-nullable BooleanType literal indicating authorship: true if the upsert
+    // event authored the null, false if the event left the leaf unauthored.
+    val candidateEntries = AutoCdcSchemaUtils.flattenStructFieldPaths(schema).map { path =>
       val encodedPath = encodePath(path)
       val isIgnoreNullLeaf = ignoreNullLeafPaths.contains(path)
       val leafIsNull = F.col(QuotingUtils.quoteNameParts(path)).isNull

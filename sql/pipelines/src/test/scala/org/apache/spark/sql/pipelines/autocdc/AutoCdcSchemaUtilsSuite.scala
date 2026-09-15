@@ -22,48 +22,48 @@ import org.apache.spark.sql.types._
 
 class AutoCdcSchemaUtilsSuite extends SparkFunSuite {
 
-  test("extractLeafPaths returns single-element paths for flat columns") {
+  test("flattenStructFieldPaths returns single-element paths for flat columns") {
     val schema = new StructType()
       .add("a", IntegerType)
       .add("b", StringType)
       .add("c", DoubleType)
 
-    assert(AutoCdcSchemaUtils.extractLeafPaths(schema) ===
+    assert(AutoCdcSchemaUtils.flattenStructFieldPaths(schema) ===
       Seq(Seq("a"), Seq("b"), Seq("c")))
   }
 
-  test("extractLeafPaths returns leaves rather than intermediate structs") {
+  test("flattenStructFieldPaths returns nested fields rather than intermediate structs") {
     val schema = new StructType()
       .add("x", IntegerType)
       .add("address", new StructType()
         .add("city", StringType)
         .add("zip", IntegerType))
 
-    assert(AutoCdcSchemaUtils.extractLeafPaths(schema) ===
+    assert(AutoCdcSchemaUtils.flattenStructFieldPaths(schema) ===
       Seq(Seq("x"), Seq("address", "city"), Seq("address", "zip")))
   }
 
-  test("extractLeafPaths returns full paths for deeply nested structs") {
+  test("flattenStructFieldPaths returns full paths for deeply nested structs") {
     val schema = new StructType()
       .add("top", new StructType()
         .add("mid", new StructType()
           .add("leaf", StringType)))
 
-    assert(AutoCdcSchemaUtils.extractLeafPaths(schema) ===
+    assert(AutoCdcSchemaUtils.flattenStructFieldPaths(schema) ===
       Seq(Seq("top", "mid", "leaf")))
   }
 
-  test("extractLeafPaths treats arrays and maps as opaque leaves") {
+  test("flattenStructFieldPaths does not traverse arrays or maps") {
     val schema = new StructType()
       .add("tags", ArrayType(StringType))
       .add("props", MapType(StringType, IntegerType))
       .add("plain", IntegerType)
 
-    assert(AutoCdcSchemaUtils.extractLeafPaths(schema) ===
+    assert(AutoCdcSchemaUtils.flattenStructFieldPaths(schema) ===
       Seq(Seq("tags"), Seq("props"), Seq("plain")))
   }
 
-  test("extractLeafPaths returns an empty sequence for an empty schema") {
-    assert(AutoCdcSchemaUtils.extractLeafPaths(new StructType()) === Seq.empty)
+  test("flattenStructFieldPaths returns an empty sequence for an empty schema") {
+    assert(AutoCdcSchemaUtils.flattenStructFieldPaths(new StructType()) === Seq.empty)
   }
 }
