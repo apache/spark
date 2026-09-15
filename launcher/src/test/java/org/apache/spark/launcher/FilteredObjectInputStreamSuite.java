@@ -22,9 +22,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.ObjectOutputStream;
 import java.io.ObjectStreamClass;
-import java.util.ArrayList;
-import java.util.HashMap;
 
+import org.apache.spark.launcher.testpkg.SubpackageAllowed;
 import org.apache.spark.launchermalicious.LauncherPrefixSpoof;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -67,33 +66,13 @@ public class FilteredObjectInputStreamSuite extends BaseSuite {
     assertEquals(original.appId, deserialized.appId);
   }
 
+  // resolveClass rejects purely on desc.getName() failing both allowed-prefix checks, so a
+  // class in any unrelated package - HashMap, ArrayList, File, or anything else - takes the
+  // same path; one representative case is enough. See
+  // testDisallowedLauncherPrefixSpoofIsRejected below for the one genuinely different rejection
+  // path: a user-defined class spoofing the allow-listed prefix rather than an unrelated one.
   @Test
-  public void testDisallowedHashMapIsRejected() throws Exception {
-    HashMap<String, String> payload = new HashMap<>();
-    payload.put("k", "v");
-    byte[] bytes = serialize(payload);
-    IllegalArgumentException thrown = assertThrows(
-        IllegalArgumentException.class,
-        () -> deserializeFiltered(bytes));
-    assertTrue(thrown.getMessage().contains("Unexpected class in stream"));
-    assertTrue(thrown.getMessage().contains("java.util.HashMap"));
-  }
-
-  @Test
-  public void testDisallowedArrayListIsRejected() throws Exception {
-    ArrayList<String> payload = new ArrayList<>();
-    payload.add("a");
-    byte[] bytes = serialize(payload);
-    IllegalArgumentException thrown = assertThrows(
-        IllegalArgumentException.class,
-        () -> deserializeFiltered(bytes));
-    assertTrue(thrown.getMessage().contains("Unexpected class in stream"));
-    assertTrue(thrown.getMessage().contains("java.util.ArrayList"));
-  }
-
-  @Test
-  public void testDisallowedCustomClassIsRejected() throws Exception {
-    // File is Serializable but lives in java.io, not in the allow-list.
+  public void testDisallowedJavaIoFileIsRejected() throws Exception {
     File payload = new File("/tmp/evil");
     byte[] bytes = serialize(payload);
     IllegalArgumentException thrown = assertThrows(
@@ -130,7 +109,7 @@ public class FilteredObjectInputStreamSuite extends BaseSuite {
   // the java.lang package itself. The original SPARK-20922 PR's stated intent was "just
   // two packages" (an exact-package match), so this is a real gap between intent and
   // implementation, not a design choice made in this PR; fixing resolveClass itself is
-  // intentionally out of scope here (see SPARK-58785 discussion) and left for a follow-up.
+  // intentionally out of scope here and tracked as a follow-up in SPARK-59544.
   //
   // None of Field, MethodHandle, or WeakReference are actually serializable (constructing
   // them for a round-trip throws NotSerializableException), so this boundary can't be
@@ -160,6 +139,18 @@ public class FilteredObjectInputStreamSuite extends BaseSuite {
     try (FilteredObjectInputStream in = newFilteredStream()) {
       assertEquals(java.lang.ref.WeakReference.class, in.resolveClass(desc));
     }
+  }
+
+  // The "org.apache.spark.launcher." prefix has the same subpackage over-admission as
+  // "java.lang." above: SubpackageAllowed lives in org.apache.spark.launcher.testpkg, not in
+  // org.apache.spark.launcher itself, but its FQCN still starts with the allow-listed prefix.
+  // Unlike java.lang.*, the JVM does not block user-defined classes from such a package, so
+  // this can be exercised with a normal round trip instead of a synthetic descriptor.
+  @Test
+  public void testLauncherSubpackageIsCurrentlyAllowed() throws Exception {
+    SubpackageAllowed original = new SubpackageAllowed();
+    Object deserialized = roundTrip(original);
+    assertEquals(SubpackageAllowed.class, deserialized.getClass());
   }
 
   // Helpers
