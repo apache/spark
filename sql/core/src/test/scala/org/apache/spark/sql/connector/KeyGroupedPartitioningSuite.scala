@@ -8247,13 +8247,22 @@ class KeyGroupedPartitioningSuite
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         val df = sql(query)
         checkAnswer(df, expected)
-        // The regrouped marked side can no longer claim the hash-routing contract, so the final
-        // join re-shuffles it instead of storage-partitioning. Three one-side shuffles, all keyed
-        // with unknown partition keys: rt onto the union, rt2 onto ra2, and the final join's
-        // re-shuffle of the regrouped side. Before the fix the final join storage-partitioned
-        // (only the first two shuffles) and silently lost the id=5 row.
+        // The regrouped marked side can no longer claim the hash-routing contract. Four one-side
+        // shuffles, all keyed with unknown partition keys: rt onto the union, rs onto the marked
+        // side once the second join declines, rt2 onto ra2, and the final join's re-shuffle of the
+        // side that was regrouped. Before SPARK-59050 the final join storage-partitioned (only the
+        // first, third and fourth shuffles) and silently lost the id=5 row.
+        //
+        // The second join's shuffle is this fix's. The give-up happens inside the node, so it used
+        // to arrive after that join had already committed to the pairing and skipped both
+        // shuffles, leaving a plan `ValidateRequirements` rejects, which every AQEShuffleReadRule
+        // and OptimizeSkewedJoin then refuses to touch. The join now asks its two built children
+        // whether they still declare the same aligned keys, and declines when they do not. The
+        // validation assert comes first, because it names the reason the shuffle below exists.
+        assert(ValidateRequirements.validate(df.queryExecution.executedPlan),
+          "the executed plan must satisfy every operator's required distribution")
         assertShuffleMayContainUnknownPartitionKeys(df.queryExecution.executedPlan,
-          Seq(true, true, true))
+          Seq(true, true, true, true))
       }
     }
   }
