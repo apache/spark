@@ -41,10 +41,14 @@ private[spark] case class InstanceBlock(
     labels: Array[Double],
     weights: Array[Double],
     matrix: Matrix) {
-  require(labels.length == matrix.numRows)
-  require(matrix.isTransposed)
+  require(labels.length == matrix.numRows,
+    s"The number of labels (${labels.length}) must match the number of matrix rows " +
+    s"(${matrix.numRows}).")
+  require(matrix.isTransposed, "The matrix must be transposed (stored in row-major order).")
   if (weights.nonEmpty) {
-    require(labels.length == weights.length)
+    require(labels.length == weights.length,
+      s"The number of weights (${weights.length}) must match the number of labels " +
+      s"(${labels.length}).")
   }
 
   def size: Int = labels.length
@@ -147,7 +151,7 @@ private[spark] object InstanceBlock {
   def blokifyWithMaxMemUsage(
       instanceIterator: Iterator[Instance],
       maxMemUsage: Long): Iterator[InstanceBlock] = {
-    require(maxMemUsage > 0)
+    require(maxMemUsage > 0, s"maxMemUsage must be positive but got $maxMemUsage.")
 
     new Iterator[InstanceBlock]() {
       private var numCols = -1L
@@ -164,7 +168,9 @@ private[spark] object InstanceBlock {
         while (instanceIterator.hasNext && blockMemUsage < maxMemUsage) {
           val instance = instanceIterator.next()
           if (numCols < 0L) numCols = instance.features.size
-          require(numCols == instance.features.size)
+          require(numCols == instance.features.size,
+            "All instances must have the same number of features, but got " +
+            s"${instance.features.size} != $numCols.")
 
           buff += instance
           buffCnt += 1L
@@ -183,7 +189,7 @@ private[spark] object InstanceBlock {
   def blokifyWithMaxMemUsage(
       instances: RDD[Instance],
       maxMemUsage: Long): RDD[InstanceBlock] = {
-    require(maxMemUsage > 0)
+    require(maxMemUsage > 0, s"maxMemUsage must be positive but got $maxMemUsage.")
     instances.mapPartitions(iter => blokifyWithMaxMemUsage(iter, maxMemUsage))
   }
 }
