@@ -38,7 +38,7 @@ object UnionEstimation {
   private def isTypeSupported(dt: DataType): Boolean = dt match {
     case ByteType | IntegerType | ShortType | FloatType | LongType |
          DoubleType | DateType | _: DecimalType | TimestampType | TimestampNTZType |
-         _: AnsiIntervalType => true
+         _: AnsiIntervalType | _: TimeType => true
     case _ => false
   }
 
