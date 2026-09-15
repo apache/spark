@@ -922,16 +922,26 @@ final class ShuffleBlockFetcherIterator(
               }
             } catch {
               case e: IOException =>
-                // When shuffle checksum is enabled, for a block that is corrupted twice,
-                // we'd calculate the checksum of the block by consuming the remaining data
-                // in the buf. So, we should release the buf later.
-                if (!(checksumEnabled && corruptedBlocks.contains(blockId))) {
+                // When shuffle checksum is enabled, for a block that is corrupted twice or for a
+                // corrupted shuffle chunk, we'd calculate the checksum of the block by consuming
+                // the remaining data in the buf. So, we should release the buf later.
+                if (!(checksumEnabled &&
+                    (corruptedBlocks.contains(blockId) || blockId.isShuffleChunk))) {
                   buf.release()
                 }
 
                 if (blockId.isShuffleChunk) {
                   shuffleMetrics.incCorruptMergedBlockChunks(1)
-                  // TODO (SPARK-36284): Add shuffle checksum support for push-based shuffle
+                  if (checksumEnabled) {
+                    // Diagnose the cause of data corruption if shuffle checksum is enabled. The
+                    // diagnosis is only informational since the fallback below recovers from the
+                    // corruption either way.
+                    try {
+                      logWarning(diagnoseCorruption(checkedIn, address, blockId))
+                    } finally {
+                      buf.release()
+                    }
+                  }
                   // Retrying a corrupt block may result again in a corrupt block. For shuffle
                   // chunks, we opt to fallback on the original shuffle blocks that belong to that
                   // corrupt shuffle chunk immediately instead of retrying to fetch the corrupt
@@ -1122,46 +1132,25 @@ final class ShuffleBlockFetcherIterator(
     logInfo("Start corruption diagnosis.")
     blockId match {
       case shuffleBlock: ShuffleBlockId =>
-        val startTimeNs = System.nanoTime()
-        val buffer = new Array[Byte](ShuffleChecksumHelper.CHECKSUM_CALCULATION_BUFFER)
-        // consume the remaining data to calculate the checksum
-        var cause: Cause = null
-        try {
-          while (checkedIn.read(buffer) != -1) {}
-          val checksum = checkedIn.getChecksum.getValue
-          cause = shuffleClient.diagnoseCorruption(address.host, address.port, address.executorId,
+        diagnoseCorruptionWithChecksum(checkedIn, blockId, "Block") { checksum =>
+          shuffleClient.diagnoseCorruption(address.host, address.port, address.executorId,
             shuffleBlock.shuffleId, shuffleBlock.mapId, shuffleBlock.reduceId, checksum,
             checksumAlgorithm)
-        } catch {
-          case e: Exception =>
-            logWarning("Unable to diagnose the corruption cause of the corrupted block", e)
-            cause = Cause.UNKNOWN_ISSUE
         }
-        val duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
-        val diagnosisResponse = cause match {
-          case Cause.UNSUPPORTED_CHECKSUM_ALGORITHM =>
-            s"Block $blockId is corrupted but corruption diagnosis failed due to " +
-              s"unsupported checksum algorithm: $checksumAlgorithm"
-
-          case Cause.CHECKSUM_VERIFY_PASS =>
-            s"Block $blockId is corrupted but checksum verification passed"
-
-          case Cause.UNKNOWN_ISSUE =>
-            s"Block $blockId is corrupted but the cause is unknown"
-
-          case otherCause =>
-            s"Block $blockId is corrupted due to $otherCause"
-        }
-        logInfo(log"Finished corruption diagnosis in ${MDC(DURATION, duration)} ms. " +
-          log"${MDC(STATUS, diagnosisResponse)}")
-        diagnosisResponse
       case shuffleBlockChunk: ShuffleBlockChunkId =>
-        // TODO SPARK-36284 Add shuffle checksum support for push-based shuffle
-        logWarning(log"BlockChunk ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockChunk)} " +
-          log"is corrupted but corruption diagnosis is skipped due to lack of shuffle " +
-          log"checksum support for push-based shuffle.")
-        s"BlockChunk $shuffleBlockChunk is corrupted but corruption " +
-          s"diagnosis is skipped due to lack of shuffle checksum support for push-based shuffle."
+        // A shuffle chunk is always merged and served by an external shuffle service, but the
+        // address of a push-merged-local chunk carries the port of the block manager of this
+        // executor instead of the one of the shuffle service.
+        val port = if (pushBasedFetchHelper.isLocalPushMergedBlockAddress(address)) {
+          blockManager.externalShuffleServicePort
+        } else {
+          address.port
+        }
+        diagnoseCorruptionWithChecksum(checkedIn, blockId, "BlockChunk") { checksum =>
+          shuffleClient.diagnoseShuffleChunkCorruption(address.host, port,
+            shuffleBlockChunk.shuffleId, shuffleBlockChunk.shuffleMergeId,
+            shuffleBlockChunk.reduceId, shuffleBlockChunk.chunkId, checksum, checksumAlgorithm)
+        }
       case shuffleBlockBatch: ShuffleBlockBatchId =>
         logWarning(log"BlockBatch ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockBatch)} is corrupted " +
           log"but corruption diagnosis is skipped due to lack of shuffle checksum support for " +
@@ -1172,6 +1161,53 @@ final class ShuffleBlockFetcherIterator(
         throw SparkException.internalError(
           s"Unexpected type of BlockId, $unexpected", category = "STORAGE")
     }
+  }
+
+  /**
+   * Consumes the remaining data of the corrupted block to get the checksum calculated by this
+   * reader, asks the server which wrote the block for the cause of the corruption, and turns the
+   * cause into the diagnosis message.
+   *
+   * @param checkedIn the [[CheckedInputStream]] which is used to calculate the checksum.
+   * @param blockId the blockId of the corrupted block.
+   * @param blockKind how the corrupted block is named in the diagnosis message.
+   * @param diagnose sends the diagnosis request for the given reader checksum to the server.
+   * @return The corruption diagnosis response for different causes.
+   */
+  private def diagnoseCorruptionWithChecksum(
+      checkedIn: CheckedInputStream,
+      blockId: BlockId,
+      blockKind: String)(diagnose: Long => Cause): String = {
+    val startTimeNs = System.nanoTime()
+    val buffer = new Array[Byte](ShuffleChecksumHelper.CHECKSUM_CALCULATION_BUFFER)
+    // consume the remaining data to calculate the checksum
+    var cause: Cause = null
+    try {
+      while (checkedIn.read(buffer) != -1) {}
+      cause = diagnose(checkedIn.getChecksum.getValue)
+    } catch {
+      case e: Exception =>
+        logWarning("Unable to diagnose the corruption cause of the corrupted block", e)
+        cause = Cause.UNKNOWN_ISSUE
+    }
+    val duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
+    val diagnosisResponse = cause match {
+      case Cause.UNSUPPORTED_CHECKSUM_ALGORITHM =>
+        s"$blockKind $blockId is corrupted but corruption diagnosis failed due to " +
+          s"unsupported checksum algorithm: $checksumAlgorithm"
+
+      case Cause.CHECKSUM_VERIFY_PASS =>
+        s"$blockKind $blockId is corrupted but checksum verification passed"
+
+      case Cause.UNKNOWN_ISSUE =>
+        s"$blockKind $blockId is corrupted but the cause is unknown"
+
+      case otherCause =>
+        s"$blockKind $blockId is corrupted due to $otherCause"
+    }
+    logInfo(log"Finished corruption diagnosis in ${MDC(DURATION, duration)} ms. " +
+      log"${MDC(STATUS, diagnosisResponse)}")
+    diagnosisResponse
   }
 
   def toCompletionIterator: Iterator[(BlockId, InputStream)] = {

@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.spark.network.shuffle.checksum.Cause;
 import org.apache.spark.network.shuffle.protocol.*;
 
 /** Verifies that all BlockTransferMessages can be serialized correctly. */
@@ -60,6 +61,15 @@ public class BlockTransferMessagesSuite {
       assertTrue(resultMap.containsKey(e.getKey()));
       assertArrayEquals(e.getValue(), resultMap.get(e.getKey()));
     }
+  }
+
+  @Test
+  public void testDiagnosisMessages() {
+    checkSerializeDeserialize(
+      new DiagnoseCorruption("app-1", "exec-2", 0, 1L, 2, 12345L, "ADLER32"));
+    checkSerializeDeserialize(
+      new DiagnoseShuffleChunkCorruption("app-1", 0, 1, 2, 3, 12345L, "ADLER32"));
+    checkSerializeDeserialize(new CorruptionCause(Cause.DISK_ISSUE));
   }
 
   private BlockTransferMessage checkSerializeDeserialize(BlockTransferMessage msg) {
