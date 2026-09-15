@@ -3448,10 +3448,16 @@ case class Flatten(child: Expression) extends UnaryExpression
       ctx: CodegenContext,
       childVariableName: String) : (String, String) = {
     val variableName = ctx.freshName("numElements")
+    // The upper bound is checked here rather than left to the array allocation so that this path
+    // reports the same error as `eval`. Without it the allocation fails with an internal error.
     val code = s"""
       |long $variableName = 0;
       |for (int z = 0; z < $childVariableName.numElements(); z++) {
       |  $variableName += $childVariableName.getArray(z).numElements();
+      |}
+      |if ($variableName > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+      |  throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+      |    "$prettyName", $variableName);
       |}
       """.stripMargin
     (code, variableName)
