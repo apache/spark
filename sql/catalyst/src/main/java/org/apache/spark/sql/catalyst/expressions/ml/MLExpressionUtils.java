@@ -28,6 +28,84 @@ public class MLExpressionUtils {
 
   private MLExpressionUtils() {}
 
+  public static double dotProduct(InternalRow left, InternalRow right) {
+    byte leftType = left.getByte(0);
+    ArrayData leftValues = left.getArray(3);
+    int leftSize = vectorSize(left, leftType, leftValues);
+    byte rightType = right.getByte(0);
+    ArrayData rightValues = right.getArray(3);
+    int rightSize = vectorSize(right, rightType, rightValues);
+    if (leftSize != rightSize) {
+      throw new IllegalArgumentException(
+        "requirement failed: VectorDotProduct was given vectors with non-matching sizes:" +
+          " left.size = " + leftSize + ", right.size = " + rightSize);
+    }
+
+    if (leftType == DENSE_VECTOR_TYPE && rightType == DENSE_VECTOR_TYPE) {
+      return dotDenseDense(leftValues, rightValues);
+    } else if (leftType == SPARSE_VECTOR_TYPE && rightType == DENSE_VECTOR_TYPE) {
+      return dotSparseDense(left.getArray(2), leftValues, rightValues);
+    } else if (leftType == DENSE_VECTOR_TYPE && rightType == SPARSE_VECTOR_TYPE) {
+      return dotSparseDense(right.getArray(2), rightValues, leftValues);
+    } else {
+      return dotSparseSparse(left.getArray(2), leftValues, right.getArray(2), rightValues);
+    }
+  }
+
+  private static int vectorSize(InternalRow vector, byte vectorType, ArrayData values) {
+    if (vectorType == SPARSE_VECTOR_TYPE) {
+      return vector.getInt(1);
+    } else if (vectorType == DENSE_VECTOR_TYPE) {
+      return values.numElements();
+    } else {
+      throw new IllegalArgumentException("Unknown vector type " + vectorType + ".");
+    }
+  }
+
+  private static double dotDenseDense(ArrayData left, ArrayData right) {
+    double sum = 0.0;
+    for (int index = 0; index < left.numElements(); index++) {
+      sum += left.getDouble(index) * right.getDouble(index);
+    }
+    return sum;
+  }
+
+  private static double dotSparseDense(
+      ArrayData sparseIndices,
+      ArrayData sparseValues,
+      ArrayData denseValues) {
+    double sum = 0.0;
+    for (int index = 0; index < sparseIndices.numElements(); index++) {
+      sum += sparseValues.getDouble(index) *
+        denseValues.getDouble(sparseIndices.getInt(index));
+    }
+    return sum;
+  }
+
+  private static double dotSparseSparse(
+      ArrayData leftIndices,
+      ArrayData leftValues,
+      ArrayData rightIndices,
+      ArrayData rightValues) {
+    double sum = 0.0;
+    int leftIndex = 0;
+    int rightIndex = 0;
+    int leftNumActives = leftIndices.numElements();
+    int rightNumActives = rightIndices.numElements();
+    while (leftIndex < leftNumActives && rightIndex < rightNumActives) {
+      int index = leftIndices.getInt(leftIndex);
+      while (rightIndex < rightNumActives && rightIndices.getInt(rightIndex) < index) {
+        rightIndex++;
+      }
+      if (rightIndex < rightNumActives && rightIndices.getInt(rightIndex) == index) {
+        sum += leftValues.getDouble(leftIndex) * rightValues.getDouble(rightIndex);
+        rightIndex++;
+      }
+      leftIndex++;
+    }
+    return sum;
+  }
+
   public static InternalRow scaleShift(
       InternalRow vector,
       ArrayData scale,
