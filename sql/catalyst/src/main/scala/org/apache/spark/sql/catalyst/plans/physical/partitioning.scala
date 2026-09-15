@@ -910,11 +910,16 @@ case class KeyedPartitioning(
     val result = KeyedShuffleSpec(this, distribution)
     if (SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
-      // The projection coarsens the declared set, which a marked claim cannot survive (see the
-      // `@param`). Return the unprojected spec: its extra expressions map to no clustering key,
-      // so `areKeysCompatible` refuses it as a partner and `canCreatePartitioning` refuses it as
-      // a shuffle template, and the child falls back to the ordinary shuffle.
-      if (mayContainUnknownPartitionKeys && joinKeyPositions.length < expressions.length) {
+      // A marked claim is never projected. The claim says the undeclared rows sit at
+      // `hash(key) % numPartitions` over *these* keys in *this* order, and both halves of the
+      // projection below break it: narrowing coarsens the declared set, and `toGrouped` sorts it,
+      // which sends a consumer's undeclared rows where this side does not hold them. Producing
+      // either would also need a `GroupPartitionsExec` on this side, and that node gives the keyed
+      // claim up rather than perform a non-identity regrouping of a marked layout.
+      //
+      // The unprojected spec that comes back is still usable, and is what a consumer is offered:
+      // the other child is laid out on the keys in the order this one reports them.
+      if (mayContainUnknownPartitionKeys) {
         return result
       }
       // If allowing operation keys to be a subset of partition keys, create a new
@@ -924,8 +929,7 @@ case class KeyedPartitioning(
       // `KeyedPartitioning.groupedKeyRowOrdering`). Otherwise, when only the keyed side is
       // grouped and the other side is re-shuffled using this spec, the two `KeyedPartitioning`s
       // carry the same keys in a different order and `PartitioningCollection.fromPartitionings`
-      // rejects them. `project` carries the unknown-keys marker across: only an identity
-      // projection reaches here when it is set, the refusal above turns away the narrowing one.
+      // rejects them.
       val projectedPartitioning = project(joinKeyPositions).toGrouped
       // Report a projection only where it changed something, so that `joinKeyPositions.isEmpty`
       // means "this is the child's own layout" (see the `@param`).
@@ -1767,10 +1771,11 @@ case class IdentityReducer(transform: TransformExpression) extends Reducer[Any, 
  *                         the child reports, and a consumer needs no `GroupPartitionsExec` to
  *                         produce it. Only `v2BucketingAllowKeysSubsetOfPartitionKeys` projects at
  *                         all, and it reaches `None` two ways: an identity projection over already
- *                         grouped and sorted keys rebuilds the same partitioning, and a narrowing
- *                         one over a marked claim is refused outright. Only the first says the
- *                         child is grouped on the operation keys; the second leaves a spec that
- *                         `areKeysCompatible` and `canCreatePartitioning` both turn away. See
+ *                         grouped and sorted keys rebuilds the same partitioning, and a marked
+ *                         claim is refused outright, since neither narrowing nor sorting its keys
+ *                         leaves the routing it promises for its undeclared rows. Both say the
+ *                         child is grouped on the operation keys as it stands, and both leave a
+ *                         spec a consumer can be laid out on. See
  *                         `KeyedPartitioning.createShuffleSpec`.
  */
 case class KeyedShuffleSpec(

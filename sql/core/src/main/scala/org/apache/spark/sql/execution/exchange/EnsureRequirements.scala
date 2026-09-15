@@ -592,16 +592,15 @@ case class EnsureRequirements(
     // compatible with each other.
     val compatibleAsIs =
       bothUnprojected(leftSpec, rightSpec) && leftSpec.isCompatibleWith(rightSpec)
-    // Entering the push branch is the same as taking it. The keys agree for this pair by
+    // Entering the push branch is not the same as taking it. The keys agree for this pair by
     // construction, since `agreeingPairs` filtered on exactly that and an empty result returned
-    // above, so what the branch pushes always applies.
+    // above, so what the branch pushes always applies to the pair it was chosen for. The gate at
+    // the end can still discard the result, when a node it builds gives up its keyed claim.
     val pushCommonValues =
       (!compatibleAsIs || conf.v2BucketingPartiallyClusteredDistributionEnabled) &&
         (conf.v2BucketingPushPartValuesEnabled ||
           conf.v2BucketingAllowKeysSubsetOfPartitionKeys)
     if (pushCommonValues) {
-      logInfo("Pushing common partition values for storage-partitioned join")
-
       // Partition expressions are compatible. Regardless of whether partition values
       // match from both sides of children, we can calculate a superset of partition values and
       // push-down to respective data sources so they can adjust their output partitioning by
@@ -811,16 +810,30 @@ case class EnsureRequirements(
     // Through `KeyLayout.describesSameKeys`, which carries the reason the key types are compared as
     // well as the rows.
     //
-    // Nothing is refused that was accepted before this check on the `compatibleAsIs` path, where
+    // Only the push branch rebuilds the children, so only it has to be asked. Where it did not run,
     // the children are the ones the pairing read: `KeyedShuffleSpec.isCompatibleWith` already ends
     // in `describesSameKeys`, and all keyed members of a `PartitioningCollection` share one
     // `KeyLayout`, so whichever member the spec matched on declares what the representative does.
+    // Asking again there would walk both sides' partition keys for an answer that cannot be no.
     def declaredLayout(plan: SparkPlan): Option[KeyLayout] =
       PartitioningCollection.representativeOf(plan.outputPartitioning).map(_.layout)
-    Option.when((compatibleAsIs || pushCommonValues) &&
-      declaredLayout(newLeft).exists { left =>
-        declaredLayout(newRight).exists(left.describesSameKeys)
-      })(Seq(newLeft, newRight))
+    def sidesDeclareSameKeys: Boolean =
+      (declaredLayout(newLeft), declaredLayout(newRight)) match {
+        case (Some(left), Some(right)) => left.describesSameKeys(right)
+        case _ => false
+      }
+    val committed = if (pushCommonValues) sidesDeclareSameKeys else compatibleAsIs
+    // Announced here rather than where the branch runs, since the gate can still discard what it
+    // built, and a log that names a pushdown should name one that happens.
+    if (pushCommonValues) {
+      if (committed) {
+        logInfo("Pushing common partition values for storage-partitioned join")
+      } else {
+        logInfo("Not storage-partitioning this join after all: the two sides no longer declare " +
+          "the same partition keys once regrouped onto the merged partition values")
+      }
+    }
+    Option.when(committed)(Seq(newLeft, newRight))
   }
 
   private def checkShufflePartitionIdPassThroughCompatible(
