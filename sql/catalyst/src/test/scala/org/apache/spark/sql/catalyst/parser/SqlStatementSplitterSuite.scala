@@ -229,7 +229,7 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     assert(result.partialStatement.isEmpty)
   }
 
-  test("nested bracketed comment containing a hint-shaped comment") {
+  test("SPARK-59536: nested bracketed comment containing a hint-shaped comment") {
     val result = split("SELECT 1; /* outer /*+ inner; */ outer tail */; SELECT 2;")
     assert(result.completeStatements == Seq(statement("SELECT 1"), statement("SELECT 2")))
     assert(result.partialStatement.isEmpty)

@@ -197,7 +197,7 @@ class PlanParserSuite extends AnalysisTest {
       """.stripMargin, plan)
   }
 
-  test("nested bracketed comment containing a hint") {
+  test("SPARK-59536: nested bracketed comment containing a hint") {
     val plan = OneRowRelation().select(Literal(1).as("col1"))
     assertEqual("SELECT /* outer /*+ inner */ outer tail */ 1 AS col1", plan)
     assertEqual(
