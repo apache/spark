@@ -19,6 +19,7 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{functions => F, AnalysisException, Column, QueryTest, Row}
+import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -919,7 +920,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     // Upsert rows always get a populated version map. The third row is a delete (null
     // version map) only when deleteCondition is set; otherwise it is an upsert too.
-    val valueVersionMapKey = Scd2VersionMap.encodePath(Seq("value"))
+    val valueVersionMapKey = QuotingUtils.quoteNameParts(Seq("value"))
     val expectedDeleteRowMap: Any =
       if (deleteCondition.isDefined) null else Map(valueVersionMapKey -> false)
 
@@ -970,7 +971,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
           F.col(AutoCdcReservedNames.cdcMetadataColName)).as("vm")),
       expectedAnswer = Row(
         null,
-        Map(Scd2VersionMap.encodePath(Seq("removed")) -> expectedAuthorship))
+        Map(QuotingUtils.quoteNameParts(Seq("removed")) -> expectedAuthorship))
     )
   }
 
@@ -1006,7 +1007,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
           F.col(AutoCdcReservedNames.cdcMetadataColName)).as("vm")),
       expectedAnswer = Row(
         Row(1, null),
-        Map(Scd2VersionMap.encodePath(Seq("value", "removed")) -> false))
+        Map(QuotingUtils.quoteNameParts(Seq("value", "removed")) -> false))
     )
   }
 
@@ -1041,7 +1042,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       assert(preprocessedValueName == targetValueName)
       assert(preprocessedValueName == "value")
 
-      val expectedVersionMapKey = Scd2VersionMap.encodePath(Seq(preprocessedValueName))
+      val expectedVersionMapKey = QuotingUtils.quoteNameParts(Seq(preprocessedValueName))
       checkAnswer(
         df = result.select(Scd2BatchProcessor.versionMapOf(
           F.col(AutoCdcReservedNames.cdcMetadataColName)).as("vm")),

@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.json4s.JsonAST.{JArray, JString}
-import org.json4s.jackson.JsonMethods.parse
-
 import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -75,33 +74,7 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
     spark.createDataFrame(
       spark.sparkContext.parallelize(Seq(Row.fromSeq(values))), schema)
 
-  private def encodedPath(path: String*): String = Scd2VersionMap.encodePath(path)
-
-  // =========================================================================
-  // encodePath
-  // =========================================================================
-
-  test("encodePath - writes name parts as a compact JSON array") {
-    assert(Scd2VersionMap.encodePath(Seq("a")) === """["a"]""")
-    assert(Scd2VersionMap.encodePath(Seq("address", "city")) ===
-      """["address","city"]""")
-  }
-
-  test("encodePath - distinguishes nested paths from names containing periods") {
-    assert(Scd2VersionMap.encodePath(Seq("a", "b")) === """["a","b"]""")
-    assert(Scd2VersionMap.encodePath(Seq("a.b")) === """["a.b"]""")
-  }
-
-  test("encodePath - escapes JSON delimiters and control characters") {
-    val encoded = Scd2VersionMap.encodePath(
-      Seq("quote\"", "back\\slash", "null" + 0.toChar + "byte"))
-    assert(encoded === "[\"quote\\\"\",\"back\\\\slash\",\"null\\" + "u0000byte\"]")
-  }
-
-  test("encodePath - round trips arbitrary name parts") {
-    val path = Seq("", "a.b", "has space", "back`tick", "quote\"", "back\\slash")
-    assert(parse(Scd2VersionMap.encodePath(path)) === JArray(path.map(JString(_)).toList))
-  }
+  private def encodedPath(path: String*): String = QuotingUtils.quoteNameParts(path)
 
   // =========================================================================
   // mapType
@@ -315,7 +288,7 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       encodedPath("col_two") -> true)))
   }
 
-  test("special-character path parts survive version map encoding") {
+  test("special-character path parts round-trip through version map keys") {
     val specialNames =
       Seq("a.b", "has space", "back`tick", "quote\"", "back\\slash", "null" + 0.toChar + "byte")
     val schema = new StructType()
@@ -327,19 +300,10 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       .select(F.map_keys(Scd2VersionMap.buildVersionMap(schema, selection, resolver)))
       .head()
       .getSeq[String](0)
-    val decodedPaths = encodedKeys.map { encodedKey =>
-      parse(encodedKey) match {
-        case JArray(parts) =>
-          parts.map {
-            case JString(part) => part
-            case other => fail(s"Expected a JSON string path part, but found $other")
-          }
-        case other => fail(s"Expected a JSON array version map key, but found $other")
-      }
-    }
+    val decodedPaths = encodedKeys.map(key => CatalystSqlParser.parseMultipartIdentifier(key))
 
     val expectedPaths = specialNames.map(name => Seq("wrapper", name)).toSet
-    assert(decodedPaths.map(_.toSeq).toSet === expectedPaths)
+    assert(decodedPaths.toSet === expectedPaths)
   }
 
   // =========================================================================

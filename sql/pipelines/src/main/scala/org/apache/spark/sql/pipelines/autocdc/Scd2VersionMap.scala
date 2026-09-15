@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.json4s.JsonAST.{JArray, JString}
-import org.json4s.jackson.JsonMethods.compact
-
 import org.apache.spark.sql.{functions => F, Column}
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.util.QuotingUtils
@@ -83,11 +80,10 @@ private[pipelines] object Scd2VersionMap {
   /**
    * Schema of the version map: `Map(String, Boolean)`.
    *
-   * Keys are compact JSON arrays of the name parts of *leaf* columns that received a null
-   * value in their upsert event (e.g. `["address","city"]`). Keeping
-   * name parts separate distinguishes a nested path from a column whose name contains dots
-   * and keeps persisted keys independent of SQL identifier quoting rules. Name parts use the
-   * persisted target schema's canonical spelling.
+   * Keys are field paths rendered as fully quoted multipart identifiers using
+   * [[QuotingUtils.quoteNameParts]]. Quoting each name part distinguishes a nested path from a
+   * column whose name contains dots. Name parts use the persisted target schema's canonical
+   * spelling.
    *
    * Values indicate authorship: `true` means authored-null, `false` means unauthored-null.
    * Null values never appear in the map.
@@ -96,10 +92,6 @@ private[pipelines] object Scd2VersionMap {
    * schema-evolved with an unauthored-null.
    */
   def mapType: MapType = MapType(StringType, BooleanType, valueContainsNull = false)
-
-  /** Encodes a leaf path as the compact JSON string persisted as its version map key. */
-  private[autocdc] def encodePath(path: Seq[String]): String =
-    compact(JArray(path.map(JString(_)).toList))
 
   /**
    * Builds the ingest-time version map column for a microbatch. For each null leaf, the map
@@ -130,14 +122,14 @@ private[pipelines] object Scd2VersionMap {
     // The value is a non-nullable BooleanType literal indicating authorship: true if the upsert
     // event authored the null, false if the event left the leaf unauthored.
     val candidateEntries = AutoCdcSchemaUtils.flattenStructFieldPaths(schema).map { path =>
-      val encodedPath = encodePath(path)
+      val versionMapKey = QuotingUtils.quoteNameParts(path)
       val isIgnoreNullLeaf = ignoreNullLeafPaths.contains(path)
-      val leafIsNull = F.col(QuotingUtils.quoteNameParts(path)).isNull
+      val leafIsNull = F.col(versionMapKey).isNull
 
       // If the leaf is not null, this candidate entry will simply resolve to null and will not be
       // added to the version map during construction below.
       F.when(leafIsNull, F.struct(
-        F.lit(encodedPath).as("key"),
+        F.lit(versionMapKey).as("key"),
         F.lit(!isIgnoreNullLeaf).as("value")
       ))
     }
