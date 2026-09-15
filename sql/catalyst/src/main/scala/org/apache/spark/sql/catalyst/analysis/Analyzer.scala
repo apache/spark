@@ -2105,54 +2105,56 @@ class Analyzer(
      * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
      * should only apply to builtin functions, not to user-defined functions.
      *
-     * When the effective SQL PATH puts `system.session` before `system.builtin`, temp
-     * functions shadow builtins, so an unqualified name that matches a temp function
-     * should NOT be treated as builtin.
+     * Mirrors function resolution precedence, including SQL PATH shadowing for unqualified names
+     * and `spark.sql.legacy.persistentCatalogFirst` for two-part `builtin.name` references.
      */
-    private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
-      if (!FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)) {
-        return false
-      }
-      if (nameParts.size == 1 && functionResolution.isSessionBeforeBuiltinInPath) {
-        val v1Catalog = catalogManager.v1SessionCatalog
-        !v1Catalog.isTemporaryFunction(FunctionIdentifier(nameParts.head))
-      } else {
-        true
-      }
-    }
+    private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean =
+      functionResolution.functionNameResolvesToBuiltin(nameParts, expectedName)
 
     /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
-        case f0: UnresolvedFunction if !f0.isDistinct &&
-          matchesFunctionName(f0.nameParts, "count") &&
-          isCountStarExpansionAllowed(f0.arguments) =>
-          // Transform COUNT(*) into COUNT(1).
-          // We do not normalize the name to "count"; we keep the original name parts
-          // (e.g. builtin.count, system.builtin.count) so that resolution still sees
-          // the same qualification.
-          f0.copy(arguments = Seq(Literal(1)))
-        case f1: UnresolvedFunction if containsStar(f1.arguments) =>
-          // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
-          // be expanded while count(*) will be converted to count(1). They will produce different
-          // results and confuse users if there are any null values. For count(t1.*, t2.*), it is
-          // still allowed, since it's well-defined in spark.
-          if (!conf.allowStarWithSingleTableIdentifierInCount &&
-              matchesFunctionName(f1.nameParts, "count") &&
-              f1.arguments.length == 1) {
-            f1.arguments.foreach {
-              case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
-                throw QueryCompilationErrors
-                  .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
-              case _ => // do nothing
-            }
+        case f: UnresolvedFunction if containsStar(f.arguments) =>
+          // A routed SQL/JSON function (json_array(*)) forbids a direct star argument -- a bare `*`
+          // or a qualified `t.*` -- so reject it rather than expand below. A star nested in another
+          // expression (json_array(array(*))) is expanded bottom-up before we get here, so only a
+          // direct star reaches this guard.
+          if (functionResolution.resolvesToStarDisallowedJsonConstructor(f.nameParts)) {
+            throw QueryCompilationErrors.invalidStarUsageError(
+              s"expression `${f.prettyName}`", extractStar(f.arguments))
           }
-          f1.copy(arguments = f1.arguments.flatMap {
-            case s: Star => expand(s, child)
-            case o => o :: Nil
-          })
+          // The count owner probe can hit an external functionExists lookup on a persistent-first
+          // PATH, so compute it once (lazily, after the cheap star-shape check) and reuse it for
+          // the count(*) rewrite and the count(tbl.*) guard, as `FunctionResolverUtils` does.
+          lazy val resolvesToCountBuiltin = matchesFunctionName(f.nameParts, "count")
+          if (!f.isDistinct && isCountStarExpansionAllowed(f.arguments) && resolvesToCountBuiltin) {
+            // Transform COUNT(*) into COUNT(1).
+            // We do not normalize the name to "count"; we keep the original name parts
+            // (e.g. builtin.count, system.builtin.count) so that resolution still sees
+            // the same qualification.
+            f.copy(arguments = Seq(Literal(1)))
+          } else {
+            // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*)
+            // will be expanded while count(*) will be converted to count(1). They will produce
+            // different results and confuse users if there are any null values. For
+            // count(t1.*, t2.*), it is still allowed, since it's well-defined in spark.
+            if (!conf.allowStarWithSingleTableIdentifierInCount &&
+                resolvesToCountBuiltin &&
+                f.arguments.length == 1) {
+              f.arguments.foreach {
+                case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
+                  throw QueryCompilationErrors
+                    .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
+                case _ => // do nothing
+              }
+            }
+            f.copy(arguments = f.arguments.flatMap {
+              case s: Star => expand(s, child)
+              case o => o :: Nil
+            })
+          }
         case c: CreateNamedStruct if containsStar(c.valExprs) =>
           val newChildren = c.children.grouped(2).flatMap {
             case Seq(k, s : Star) => CreateStruct(expand(s, child)).children
