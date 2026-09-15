@@ -67,9 +67,30 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(MatchConditionTypes.usesStructDecomposition(leftStruct, rightStruct))
   }
 
-  test("array operands require identical element types") {
+  test("array operands with identical element types are compatible") {
     val leftArray = ArrayType(IntegerType)
     val rightArray = ArrayType(IntegerType)
+    assert(MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
+    assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
+  }
+
+  test("array operands with coercible element types are compatible") {
+    // Element types widen the same way the comparison operator does, so ARRAY<INT> and
+    // ARRAY<BIGINT> match even though the element types differ (SPARK-59528).
+    val intArray = ArrayType(IntegerType)
+    val longArray = ArrayType(LongType)
+    assert(MatchConditionTypes.areOperandsCompatible(intArray, longArray))
+    assert(MatchConditionTypes.usesArrayOrderExpression(intArray, longArray))
+    // Coercion is symmetric and covers other widenings (e.g. INT vs DOUBLE).
+    assert(MatchConditionTypes.areOperandsCompatible(longArray, intArray))
+    assert(MatchConditionTypes.areOperandsCompatible(intArray, ArrayType(DoubleType)))
+    // String promotion applies to array elements too, matching the comparison operator.
+    assert(MatchConditionTypes.areOperandsCompatible(intArray, ArrayType(StringType)))
+  }
+
+  test("nested array operands with coercible element types are compatible") {
+    val leftArray = ArrayType(ArrayType(IntegerType))
+    val rightArray = ArrayType(ArrayType(LongType))
     assert(MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
     assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
   }
@@ -89,9 +110,11 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
   }
 
-  test("array operands with different element types are rejected") {
+  test("array operands with non-coercible element types are rejected") {
+    // INT and BINARY have no wider type and are not positional structs, so the arrays are
+    // rejected even though both element types are individually orderable.
     val leftArray = ArrayType(IntegerType)
-    val rightArray = ArrayType(StringType)
+    val rightArray = ArrayType(BinaryType)
     assert(!MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
     assert(!MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
   }

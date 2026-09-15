@@ -2768,17 +2768,12 @@ object AsOfJoin {
     def usesArrayOrderExpression(leftType: DataType, rightType: DataType): Boolean =
       (leftType, rightType) match {
         case (ArrayType(leftElem, _), ArrayType(rightElem, _)) =>
-          areArrayElementsCompatible(leftElem, rightElem)
+          // Array operands compare element-wise, so elements use the same rules as top-level
+          // operands: identical, coercible (INT vs BIGINT), or positional structs. This matches
+          // the comparison operator, which widens array element types the same way.
+          areOperandsCompatible(leftElem, rightElem)
         case _ => false
       }
-
-    private def areArrayElementsCompatible(leftElem: DataType, rightElem: DataType): Boolean = {
-      if (DataTypeUtils.sameType(leftElem, rightElem)) {
-        RowOrdering.isOrderable(leftElem)
-      } else {
-        arePositionalStructsCompatible(leftElem, rightElem)
-      }
-    }
 
     /** Positional struct operands with the same field count (names may differ). */
     def usesStructDecomposition(leftType: DataType, rightType: DataType): Boolean =
@@ -2911,13 +2906,13 @@ object AsOfJoin {
       rightOperand: Expression,
       operator: MatchComparisonOperator): Expression = {
     (leftOperand.dataType, rightOperand.dataType) match {
-      case (ArrayType(elementType, _), _)
+      case (_: ArrayType, _)
           if MatchConditionTypes.usesArrayOrderExpression(
             leftOperand.dataType, rightOperand.dataType) =>
         // MATCH_CONDITION array comparison uses Spark lexicographic ordering (including length).
         // The ordering distance below is element-wise via ZipWith, padding the shorter side with
         // null when lengths differ (e.g. [0, null]), not a lexicographic length tie-break.
-        buildArrayOrderExpression(leftOperand, rightOperand, elementType, operator)
+        buildArrayOrderExpression(leftOperand, rightOperand, operator)
       case (leftType, rightType)
           if MatchConditionTypes.usesStructDecomposition(leftType, rightType) =>
         buildFlattenedStructOrderExpression(
@@ -2988,8 +2983,27 @@ object AsOfJoin {
   private def buildArrayOrderExpression(
       leftOperand: Expression,
       rightOperand: Expression,
-      elementType: DataType,
       operator: MatchComparisonOperator): Expression = {
+    val leftElementType = leftOperand.dataType.asInstanceOf[ArrayType].elementType
+    val rightElementType = rightOperand.dataType.asInstanceOf[ArrayType].elementType
+    // The ZipWith lambda variables and both array inputs must share one element type. Coercible
+    // element types (e.g. INT vs BIGINT) widen to their common type and both arrays are cast to
+    // it, mirroring the comparison operator. Positional structs whose fields match by position
+    // but not name have no wider type; they keep the left element type and compare element-wise
+    // by ordinal (their field types are read-compatible).
+    val (leftArray, rightArray, elementType) =
+      if (DataTypeUtils.sameType(leftElementType, rightElementType)) {
+        (leftOperand, rightOperand, leftElementType)
+      } else {
+        TypeCoercion.findWiderTypeForTwo(leftElementType, rightElementType) match {
+          case Some(widerElementType) =>
+            (castArrayElementType(leftOperand, widerElementType),
+              castArrayElementType(rightOperand, widerElementType),
+              widerElementType)
+          case None =>
+            (leftOperand, rightOperand, leftElementType)
+        }
+      }
     elementType match {
       case struct: StructType =>
         val leftElement = NamedLambdaVariable("left_elem", struct, nullable = true)
@@ -3001,17 +3015,27 @@ object AsOfJoin {
           leafDiffs,
           ArrayType(struct, containsNull = true))
         ZipWith(
-          leftOperand,
-          rightOperand,
+          leftArray,
+          rightArray,
           LambdaFunction(elementOrder, Seq(leftElement, rightElement)))
       case _ =>
         val leftElement = NamedLambdaVariable("left_elem", elementType, nullable = true)
         val rightElement = NamedLambdaVariable("right_elem", elementType, nullable = true)
         val elementOrder = buildLeafOrderExpression(leftElement, rightElement, operator)
         ZipWith(
-          leftOperand,
-          rightOperand,
+          leftArray,
+          rightArray,
           LambdaFunction(elementOrder, Seq(leftElement, rightElement)))
+    }
+  }
+
+  /** Cast an array operand to the given element type, keeping its own `containsNull`. */
+  private def castArrayElementType(operand: Expression, elementType: DataType): Expression = {
+    val arrayType = operand.dataType.asInstanceOf[ArrayType]
+    if (DataTypeUtils.sameType(arrayType.elementType, elementType)) {
+      operand
+    } else {
+      Cast(operand, ArrayType(elementType, arrayType.containsNull))
     }
   }
 

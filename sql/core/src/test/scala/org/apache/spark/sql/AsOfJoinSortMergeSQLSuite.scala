@@ -385,6 +385,25 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(Seq(1, 2)) :: Nil)
   }
 
+  test("ARRAY<INT> vs ARRAY<BIGINT> coercible MATCH_CONDITION") {
+    // SPARK-59528: element types differ but coerce to BIGINT. [1, 3] >= [1, 2] holds while
+    // [1, 3] >= [1, 4] does not, so the closest match is [1, 2]. Reproduces under ANSI on and off.
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        checkSortMergeAsOf(
+          sql(
+            """
+              |SELECT r.a
+              |FROM VALUES (ARRAY(1, 3)) AS t(a)
+              |ASOF JOIN VALUES (ARRAY(CAST(1 AS BIGINT), CAST(2 AS BIGINT))),
+              |                 (ARRAY(CAST(1 AS BIGINT), CAST(4 AS BIGINT))) AS r(a)
+              |MATCH_CONDITION (t.a >= r.a)
+              |""".stripMargin),
+          Row(Seq(1L, 2L)) :: Nil)
+      }
+    }
+  }
+
   test("ARRAY<STRUCT> whole column MATCH_CONDITION") {
     checkSortMergeAsOf(
       sql(
