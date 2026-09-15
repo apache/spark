@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.window
 import org.apache.spark.TaskContext
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, FrameType, MutableProjection, RangeFrame, RowFrame, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, FrameType, GroupFrame, MutableProjection, RangeFrame, RowFrame, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -62,8 +62,8 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     numSegmentTreeFallbackFrames: Option[SQLMetric] = None)
   extends WindowFunctionFrame with AutoCloseable {
 
-  require(frameType == RowFrame || frameType == RangeFrame,
-    s"SegmentTreeWindowFunctionFrame supports RowFrame or RangeFrame, got $frameType")
+  require(frameType == RowFrame || frameType == RangeFrame || frameType == GroupFrame,
+    s"SegmentTreeWindowFunctionFrame supports RowFrame, RangeFrame or GroupFrame, got $frameType")
 
   // True when this is a shrinking-frame (UnboundedFollowing) instance.
   // Shorthand to avoid repeated `ubound.isEmpty` reads in hot loops.
@@ -87,18 +87,19 @@ private[window] final class SegmentTreeWindowFunctionFrame(
   private[this] var boundIter: Iterator[UnsafeRow] = _
   private[this] var nextRow: UnsafeRow = _
 
-  // ---- RangeFrame-only driver state ----
+  // ---- Value/group-bound driver state ----
   // Two cursors over `rowArray`; `lowerRow` / `upperRow` hold the buffered
-  // head of each cursor, pre-fetched in `prepare` so
-  // `RangeBoundOrdering.compare` is never called with a null row on round 0.
+  // head of each cursor, pre-fetched in `prepare` so the bound's `compare`
+  // is never called with a null row on round 0.
   //
   // Spill-safety invariant: when `rowArray` spills, its iterator reuses a
   // single `UnsafeRow` whose pointer is rebound on each `next()`. Tolerated
-  // here because the cursor is **read-before-advance**: each `writeRange`
+  // here because the cursor is **read-before-advance**: each `writeOrdered`
   // iteration reads `lowerRow` / `upperRow` for comparison before calling
   // `getNextOrNull(...)`. DO NOT cache a historical row into a separate
   // field without an explicit `.copy()`; the shared reusable UnsafeRow
-  // would silently mutate.
+  // would silently mutate. `PeerGroupCursor` retains a copy of the current
+  // peer group's projected ordering key.
   private[this] var lowerIter: Iterator[UnsafeRow] = _
   private[this] var upperIter: Iterator[UnsafeRow] = _
   private[this] var lowerRow: UnsafeRow = _
@@ -168,13 +169,15 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     // Count only on the successful segtree path: if `tree.build` throws,
     // the counter is not bumped.
     numSegmentTreeFrames.foreach(_ += 1)
+    lbound.prepare()
+    ubound.foreach(_.prepare())
     if (shrinking) {
       // Upper bound pinned to partition end; never moves.
       upperBound = tree.size
       frameType match {
         case RowFrame =>
           // RowFrame lower-bound advance is pure index arithmetic; no iterator.
-        case RangeFrame =>
+        case RangeFrame | GroupFrame =>
           lowerIter = rows.generateIterator()
           lowerRow = WindowFunctionFrame.getNextOrNull(lowerIter)
       }
@@ -183,13 +186,12 @@ private[window] final class SegmentTreeWindowFunctionFrame(
         case RowFrame =>
           boundIter = rows.generateIterator()
           nextRow = WindowFunctionFrame.getNextOrNull(boundIter)
-        case RangeFrame =>
+        case RangeFrame | GroupFrame =>
           lowerIter = rows.generateIterator()
           upperIter = rows.generateIterator()
-          // Pre-seed cursor heads so `RangeBoundOrdering.compare` never
-          // dereferences null on round 0. Either may be null if `rows` is
-          // empty; the advance loops' `!= null` / `< upperBound` guards
-          // handle that.
+          // Pre-seed cursor heads so the bound's `compare` never dereferences
+          // null on round 0. Either may be null if `rows` is empty; the advance
+          // loops' `!= null` / `< upperBound` guards handle that.
           lowerRow = WindowFunctionFrame.getNextOrNull(lowerIter)
           upperRow = WindowFunctionFrame.getNextOrNull(upperIter)
       }
@@ -217,11 +219,11 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     }
     frameType match {
       case RowFrame => writeRow(index, current)
-      case RangeFrame => writeRange(index, current)
+      case RangeFrame | GroupFrame => writeOrdered(index, current)
     }
   }
 
-  // `writeRow`/`writeRange` maintain the `(lowerBound, upperBound)` monotone
+  // `writeRow`/`writeOrdered` maintain the `(lowerBound, upperBound)` monotone
   // cursor invariant for both sliding and shrinking frame shapes:
   //
   //   - Sliding (`ubound.isDefined`, mirrors `SlidingWindowFunctionFrame.write`):
@@ -230,7 +232,7 @@ private[window] final class SegmentTreeWindowFunctionFrame(
   //     loop advances `lowerBound`. Any future fix to Sliding's boundary
   //     semantics must be mirrored here; equivalence is guarded by
   //     `SegmentTreeWindowFunctionSuite` flag-on/off tests
-  //     (`checkRangeEquivalence`, `feature flag off ...`, fallback tests)
+  //     (`checkSqlEquivalence`, `feature flag off ...`, fallback tests)
   //     against the Sliding baseline.
   //
   //   - Shrinking (`ubound.isEmpty`, upper is `tree.size`): drop-only. The admit
@@ -272,13 +274,13 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     }
   }
 
-  private def writeRange(index: Int, current: InternalRow): Unit = {
+  private def writeOrdered(index: Int, current: InternalRow): Unit = {
     var boundsChanged = index == 0
 
     if (!shrinking) {
       val ub = ubound.get
       // admit loop (upper edge). `RangeBoundOrdering.compare` ignores its index
-      // arguments; we pass `upperBound` for API symmetry with RowBoundOrdering.
+      // arguments; `GroupBoundOrdering` uses them to place the row in a peer group.
       while (upperRow != null &&
           ub.compare(upperRow, upperBound, current, index) <= 0) {
         upperBound += 1

@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, GroupFrame, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
@@ -70,6 +70,9 @@ trait WindowEvaluatorFactoryBase {
    * used to determine which input row lies within the frame boundaries of an output row.
    *
    * This method uses Code Generation. It can only be used on the executor side.
+   *
+   * GROUPS bounds go through [[createSoleBoundOrdering]] or [[createBoundOrderingPair]], which
+   * decide whether the bound owns or shares its output cursor.
    *
    * @param frame to evaluate. This can either be a Row or Range frame.
    * @param bound with respect to the row.
@@ -133,6 +136,63 @@ trait WindowEvaluatorFactoryBase {
       case (RangeFrame, _) =>
         throw SparkException.internalError("Non-Zero range offsets are not supported for windows " +
           "with multiple order expressions.")
+
+      case (GroupFrame, _) =>
+        // Unreachable; guards a future caller against giving a paired bound its own cursor.
+        throw SparkException.internalError("GROUPS bound orderings must be created by " +
+          "createSoleBoundOrdering or createBoundOrderingPair")
+    }
+  }
+
+  /** The peer-group offset of an analyzed GROUPS bound; CURRENT ROW is offset zero. */
+  private def groupsOffset(bound: Expression): Int = bound match {
+    case CurrentRow => 0
+    case IntegerLiteral(offset) => offset
+    case _ => throw SparkException.internalError(s"Unhandled GROUPS window frame bound: $bound")
+  }
+
+  /** Creates the projected ordering keys and an ordering over their positions. */
+  private def createGroupOrdering(): (Ordering[InternalRow], UnsafeProjection) = {
+    val projection = UnsafeProjection.create(orderSpec.map(_.child), childOutput)
+    val ordering = orderSpec.zipWithIndex.map { case (sort, ordinal) =>
+      SortOrder(BoundReference(ordinal, sort.child.dataType, sort.child.nullable),
+        sort.direction, sort.nullOrdering, Seq.empty)
+    }
+    (RowOrdering.create(ordering, Nil), projection)
+  }
+
+  /**
+   * Creates the single bound ordering of a one-sided frame, whose other edge is unbounded. A
+   * GROUPS bound owns its output cursor here because, being the only bound, it is consulted on
+   * every output row; two-sided frames must use [[createBoundOrderingPair]].
+   */
+  private def createSoleBoundOrdering(
+      frameType: FrameType, bound: Expression, timeZone: String): BoundOrdering = {
+    frameType match {
+      case GroupFrame =>
+        val (ordering, projection) = createGroupOrdering()
+        GroupBoundOrdering(ordering, projection, groupsOffset(bound))
+      case _ => createBoundOrdering(frameType, bound, timeZone)
+    }
+  }
+
+  /**
+   * Creates both bound orderings of a two-sided frame. GROUPS bounds are built as a pair
+   * because [[GroupBoundOrdering]] requires them to share an output cursor.
+   */
+  private def createBoundOrderingPair(
+      frameType: FrameType,
+      lower: Expression,
+      upper: Expression,
+      timeZone: String): (BoundOrdering, BoundOrdering) = {
+    frameType match {
+      case GroupFrame =>
+        val (ordering, projection) = createGroupOrdering()
+        GroupBoundOrdering.paired(ordering, projection, groupsOffset(lower), groupsOffset(upper))
+
+      case _ =>
+        (createBoundOrdering(frameType, lower, timeZone),
+          createBoundOrdering(frameType, upper, timeZone))
     }
   }
 
@@ -276,7 +336,7 @@ trait WindowEvaluatorFactoryBase {
               new UnboundedPrecedingWindowFunctionFrame(
                 target,
                 processor,
-                createBoundOrdering(frameType, upper, timeZone))
+                createSoleBoundOrdering(frameType, upper, timeZone))
             }
 
           // Shrinking Frame.
@@ -305,7 +365,7 @@ trait WindowEvaluatorFactoryBase {
                       "an active TaskContext")
                 }
                 val tmm = tc.taskMemoryManager()
-                val lb = createBoundOrdering(frameType, lower, timeZone)
+                val lb = createSoleBoundOrdering(frameType, lower, timeZone)
                 new SegmentTreeWindowFunctionFrame(
                   target,
                   processor,
@@ -328,7 +388,7 @@ trait WindowEvaluatorFactoryBase {
                 new UnboundedFollowingWindowFunctionFrame(
                   target,
                   processor,
-                  createBoundOrdering(frameType, lower, timeZone))
+                  createSoleBoundOrdering(frameType, lower, timeZone))
               }
             }
 
@@ -349,8 +409,7 @@ trait WindowEvaluatorFactoryBase {
                       "an active TaskContext")
                 }
                 val tmm = tc.taskMemoryManager()
-                val lb = createBoundOrdering(frameType, lower, timeZone)
-                val ub = createBoundOrdering(frameType, upper, timeZone)
+                val (lb, ub) = createBoundOrderingPair(frameType, lower, upper, timeZone)
                 new SegmentTreeWindowFunctionFrame(
                   target,
                   processor,
@@ -370,11 +429,8 @@ trait WindowEvaluatorFactoryBase {
               }
             } else {
               target: InternalRow => {
-                new SlidingWindowFunctionFrame(
-                  target,
-                  processor,
-                  createBoundOrdering(frameType, lower, timeZone),
-                  createBoundOrdering(frameType, upper, timeZone))
+                val (lb, ub) = createBoundOrderingPair(frameType, lower, upper, timeZone)
+                new SlidingWindowFunctionFrame(target, processor, lb, ub)
               }
             }
 
@@ -412,10 +468,11 @@ trait WindowEvaluatorFactoryBase {
     // RANGE accepted only for single-column order specs. Multi-column RANGE
     // with non-zero offset is already rejected by `createBoundOrdering`, so
     // gating here on `orderSpec.size == 1` matches the Sliding-path invariant.
+    //
+    // GROUPS supports peer equality over multiple order expressions.
     val frameTypeOk = frameType match {
-      case RowFrame => true
+      case RowFrame | GroupFrame => true
       case RangeFrame => orderSpec.size == 1
-      case _ => false
     }
     conf.windowSegmentTreeEnabled &&
       frameTypeOk &&
@@ -432,9 +489,10 @@ trait WindowEvaluatorFactoryBase {
     // RANGE the frame width is data-dependent (defined by order-key distance,
     // not row count), so no static width inference is possible; fall back to
     // a default budget and rely on the runtime LRU + TMM spiller.
-    assert(frameType == RowFrame || frameType == RangeFrame,
-      s"estimateMaxCachedBlocks expects RowFrame or RangeFrame, got $frameType")
-    if (frameType == RangeFrame) {
+    assert(frameType == RowFrame || frameType == RangeFrame || frameType == GroupFrame,
+      s"estimateMaxCachedBlocks expects RowFrame, RangeFrame or GroupFrame, got $frameType")
+    // GROUPS frame width is also data-dependent.
+    if (frameType == RangeFrame || frameType == GroupFrame) {
       return Some(8)
     }
     val w: Option[Int] = (lower, upper) match {
