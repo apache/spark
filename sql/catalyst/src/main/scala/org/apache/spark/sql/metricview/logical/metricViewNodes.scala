@@ -50,10 +50,11 @@ case class MeasureInputColumn(
 /**
  * Logical plan for `CREATE VIEW ... WITH METRICS`. This is the v1/v2-agnostic representation
  * the parser returns; downstream analysis decides which runnable form it becomes:
- *  - For the session catalog: [[org.apache.spark.sql.execution.command.CreateMetricViewCommand]]
- *    via an analyzer rule that fires once the identifier is resolved.
- *  - For non-session v2 [[org.apache.spark.sql.connector.catalog.ViewCatalog]]s: a
- *    `CreateV2MetricViewExec` produced by `DataSourceV2Strategy`.
+ *  - For session catalogs without
+ *    [[org.apache.spark.sql.connector.catalog.ViewCatalog]]:
+ *    [[org.apache.spark.sql.execution.command.CreateMetricViewCommand]].
+ *  - For [[org.apache.spark.sql.connector.catalog.ViewCatalog]]s, including custom session
+ *    catalogs: a `CreateV2MetricViewExec` produced by `DataSourceV2Strategy`.
  *
  * Splitting this from the runnable command lets the parser return a single logical shape
  * regardless of target catalog (instead of pre-committing to a runnable command at parse
