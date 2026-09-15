@@ -875,7 +875,10 @@ trait SparkDateTimeUtils {
     segments(9) = nanosWithinMicro
 
     // This step also validates time zone part
-    val zoneId = tz.map(zoneName => getZoneId(zoneName.trim))
+    val zoneId = tz match {
+      case Some(zoneName) => Some(getZoneId(zoneName.trim))
+      case None => None
+    }
     segments(0) *= yearSign.getOrElse(1)
     (segments, zoneId, justTime)
   }
