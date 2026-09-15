@@ -425,8 +425,16 @@ class SparseVectorNormTests(unittest.TestCase):
         self.assertEqual(SparseVector(3, [1], [-2.0]).norm(inf), 2.0)
         with self.assertRaises(ValueError):
             vector.norm("invalid")
-        with self.assertRaises(ValueError):
-            SparseVector(0, [], []).norm(inf)
+
+    def test_zero_dimension_matches_dense_vector(self):
+        # NumPy 2.3 changed the infinity norm of empty arrays from an error to zero.
+        try:
+            expected = DenseVector([]).norm(inf)
+        except ValueError:
+            with self.assertRaises(ValueError):
+                SparseVector(0, [], []).norm(inf)
+        else:
+            self.assertEqual(SparseVector(0, [], []).norm(inf), expected)
 
 
 class VectorUDTTests(MLlibTestCase):
