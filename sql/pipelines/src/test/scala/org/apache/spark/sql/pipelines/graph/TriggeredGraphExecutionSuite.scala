@@ -17,13 +17,23 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
+
+import scala.jdk.CollectionConverters._
+
 import org.scalatest.time.{Seconds, Span}
 
+import org.apache.spark.SparkContext
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{functions, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
+import org.apache.spark.sql.pipelines.PipelineExecutionMetadata._
 import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
 import org.apache.spark.sql.pipelines.graph.TriggeredGraphExecution.StreamState
 import org.apache.spark.sql.pipelines.logging.{EventLevel, FlowProgress}
@@ -32,6 +42,90 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession {
+
+  test("batch flow execution attribution is exposed on Spark jobs") {
+    val session = spark
+    import session.implicits._
+
+    val jobStarts = new ConcurrentLinkedQueue[SparkListenerJobStart]()
+    val sqlExecutionStarts = new ConcurrentLinkedQueue[SparkListenerSQLExecutionStart]()
+    val listener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = jobStarts.add(jobStart)
+
+      override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+        case start: SparkListenerSQLExecutionStart => sqlExecutionStarts.add(start)
+        case _ =>
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+
+    try {
+      val pipelineDef = new TestGraphRegistrationContext(spark) {
+        registerMaterializedView("attributed_batch", query = dfFlowFunc(Seq(1, 2).toDF("value")))
+      }
+      val graph = pipelineDef.toDataflowGraph
+      val flowIdentifier = fullyQualifiedIdentifier("attributed_batch")
+      val callerProperty = "spark.sql.pipelines.test.caller"
+
+      def runPipeline(callerValue: String, callerTag: String): String = {
+        spark.sparkContext.setLocalProperty(callerProperty, callerValue)
+        spark.sparkContext.addJobTag(callerTag)
+        try {
+          val updateContext = TestPipelineUpdateContext(spark, graph, storageRoot)
+          updateContext.pipelineExecution.runPipeline()
+          updateContext.pipelineExecution.awaitCompletion()
+          updateContext.pipelineExecution.graphExecution.get
+            .flowExecutions(flowIdentifier)
+            .executionId
+        } finally {
+          spark.sparkContext.setLocalProperty(callerProperty, null)
+          spark.sparkContext.removeJobTag(callerTag)
+        }
+      }
+
+      val firstExecutionId = runPipeline("first", "first-caller-tag")
+      val secondExecutionId = runPipeline("second", "second-caller-tag")
+      val expectedCallerState = Map(
+        firstExecutionId -> ("first", "first-caller-tag"),
+        secondExecutionId -> ("second", "second-caller-tag"))
+      assert(expectedCallerState.size == 2)
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+
+      val attributedJobs = jobStarts.asScala.filter { event =>
+        event.properties.getProperty(FLOW_IDENTIFIER_PROPERTY) == flowIdentifier.quotedString
+      }.toSeq
+      assert(attributedJobs.nonEmpty)
+
+      val executionIds = attributedJobs.map(
+        _.properties.getProperty(FLOW_EXECUTION_ID_PROPERTY)).toSet
+      assert(executionIds == expectedCallerState.keySet)
+      executionIds.foreach(UUID.fromString)
+
+      attributedJobs.foreach { event =>
+        val executionId = event.properties.getProperty(FLOW_EXECUTION_ID_PROPERTY)
+        val (callerValue, callerTag) = expectedCallerState(executionId)
+        val tags = event.properties
+          .getProperty(SparkContext.SPARK_JOB_TAGS)
+          .split(SparkContext.SPARK_JOB_TAGS_SEP)
+          .toSet
+        assert(tags.contains(flowExecutionIdTag(executionId)))
+        assert(tags.contains(callerTag))
+        assert((tags intersect Set("first-caller-tag", "second-caller-tag")) == Set(callerTag))
+        assert(event.properties.getProperty(callerProperty) == callerValue)
+
+        val sqlExecutionId = event.properties.getProperty(SQLExecution.EXECUTION_ID_KEY).toLong
+        val sqlExecutionStart = sqlExecutionStarts.asScala.find(
+          _.executionId == sqlExecutionId).get
+        assert(sqlExecutionStart.jobTags.contains(flowExecutionIdTag(executionId)))
+        assert(sqlExecutionStart.jobTags.contains(callerTag))
+        assert(
+          (sqlExecutionStart.jobTags intersect Set("first-caller-tag", "second-caller-tag")) ==
+            Set(callerTag))
+      }
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
 
   /** Returns a Dataset of Longs from the table with the given identifier. */
   private def getTable(identifier: TableIdentifier): Dataset[Long] = {
