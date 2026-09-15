@@ -415,7 +415,6 @@ object MultiLineJsonDataSource extends JsonDataSource {
       parser.options.columnNameOfCorruptRecord)
 
     val input = CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
-    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => input.close()))
     if (parser.options.streamMultilineTopLevelArray) {
       safeParser.parseIterator(
         input,

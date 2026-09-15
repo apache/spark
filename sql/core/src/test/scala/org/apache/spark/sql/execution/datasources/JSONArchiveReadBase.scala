@@ -166,6 +166,16 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
       extraOptions = Map("multiLine" -> "true"))
   }
 
+  test("JSON: streaming multi-line top-level arrays match a directory read") {
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      assertArchiveMatchesDir(
+        Seq(
+          "a.json" -> jsonBytes("""[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]"""),
+          "b.json" -> jsonBytes("""[{"id":3,"name":"Carol"}]""")),
+        extraOptions = Map("multiLine" -> "true"))
+    }
+  }
+
   test("JSON: a malformed record in an archive entry matches a directory read (both modes)") {
     // Permissive mode (the default): a malformed record parses to nulls with its raw text echoed
     // into `_corrupt_record`. The archive path wires its own FailureSafeParser in `readStream` --

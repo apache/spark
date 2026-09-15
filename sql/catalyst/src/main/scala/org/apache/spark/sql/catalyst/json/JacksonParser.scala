@@ -761,7 +761,17 @@ class JacksonParser(
     val streamArray = allowArrayAsStructs && schema.isInstanceOf[StructType] &&
       options.singleVariantColumn.isEmpty && options.explodeEmbeddedArray.isEmpty
     val elementConverter = if (streamArray) makeConverter(schema) else null
-    val jsonParser = createParser(factory, record)
+    val jsonParser = try {
+      createParser(factory, record)
+    } catch {
+      case e: SparkUpgradeException => throw e
+      case e: CharConversionException if options.encoding.isEmpty =>
+        throw badRecord(e, () => recordLiteral(record))
+      case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
+          _: PartialResultException | _: PartialResultArrayException |
+          _: PartialArrayDataResultException | _: PartialMapDataResultException) =>
+        throw badRecord(e, () => recordLiteral(record))
+    }
     def fail(error: Throwable): Nothing = {
       try jsonParser.close() catch {
         case NonFatal(closeError) => error.addSuppressed(closeError)
@@ -772,9 +782,13 @@ class JacksonParser(
       try operation catch {
         case e: SparkUpgradeException => fail(e)
         case e: CharConversionException if options.encoding.isEmpty => fail(e)
+        case e: PartialResultException if options.parseMode != FailFastMode =>
+          throw badRecord(e, () => recordLiteral(record)).copy(recoverable = true)
+        case e: PartialResultException =>
+          fail(badRecord(e, () => recordLiteral(record)))
         case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
-            _: PartialResultException | _: PartialResultArrayException |
-            _: PartialArrayDataResultException | _: PartialMapDataResultException) => fail(e)
+            _: PartialResultArrayException | _: PartialArrayDataResultException |
+            _: PartialMapDataResultException) => fail(e)
       }
     }
 

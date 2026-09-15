@@ -73,11 +73,17 @@ class FailureSafeParser[IN](
     }
     new Iterator[InternalRow] {
       private def handleFailure[T](operation: Iterator[InternalRow] => T): T = {
-        try operation(delegate) catch {
-          case e: BadRecordException =>
-            delegate = parseFailure(e)
-            operation(delegate)
+        while (true) {
+          try {
+            return operation(delegate)
+          } catch {
+            case e: BadRecordException =>
+              val source = delegate
+              val recovery = parseFailure(e)
+              delegate = if (e.recoverable) recovery ++ source else recovery
+          }
         }
+        throw new IllegalStateException("unreachable")
       }
 
       override def hasNext: Boolean = handleFailure(_.hasNext)

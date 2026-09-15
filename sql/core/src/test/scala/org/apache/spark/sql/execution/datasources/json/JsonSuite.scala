@@ -1160,6 +1160,66 @@ abstract class JsonSuite
     }
   }
 
+  gridTest("multiline top level JSON array resumes after a partial element")(
+      Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST")) { mode =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      withTempPath { file =>
+        val document = """[{"a":"bad"},{"a":2}]"""
+        Files.write(file.toPath, document.getBytes(StandardCharsets.UTF_8))
+        val schema = StructType(Seq(
+          StructField("a", IntegerType),
+          StructField("_corrupt_record", StringType)))
+        val df = spark.read
+          .schema(schema)
+          .option("multiLine", true)
+          .option("mode", mode)
+          .json(file.getCanonicalPath)
+
+        mode match {
+          case "PERMISSIVE" =>
+            checkAnswer(df, Seq(Row(null, document), Row(2, null)))
+          case "DROPMALFORMED" =>
+            checkAnswer(df, Row(2, null))
+          case "FAILFAST" =>
+            val error = intercept[SparkException](df.collect())
+            assert(error.getCause.asInstanceOf[SparkException].getCondition ===
+              "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+        }
+      }
+    }
+  }
+
+  gridTest("multiline JSON parser creation failures honor parse mode")(
+      Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST")) { mode =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      withTempPath { file =>
+        Files.write(file.toPath, Array[Byte](0, 0, 0xff.toByte, 0xfe.toByte))
+        val schema = StructType(Seq(
+          StructField("a", IntegerType),
+          StructField("_corrupt_record", StringType)))
+        val df = spark.read
+          .schema(schema)
+          .option("multiLine", true)
+          .option("mode", mode)
+          .json(file.getCanonicalPath)
+
+        mode match {
+          case "PERMISSIVE" =>
+            val rows = df.collect()
+            assert(rows.length === 1)
+            assert(rows.head.isNullAt(0))
+            assert(!rows.head.isNullAt(1))
+          case "DROPMALFORMED" =>
+            checkAnswer(df, Nil)
+          case "FAILFAST" =>
+            val error = intercept[SparkException](df.collect())
+            assert(error.getCause.asInstanceOf[SparkException].getCondition ===
+              "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+        }
+      }
+    }
+  }
+
   test("Corrupt records: FAILFAST mode") {
     // `FAILFAST` mode should throw an exception for corrupt records.
     checkError(
