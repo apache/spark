@@ -18,8 +18,10 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.sql.{functions => sf}
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.types.{ArrayType, IntegerType}
 
 // scalastyle:off
 @Since("3.0.0")
@@ -43,6 +45,45 @@ object functions {
    * @since 3.1.0
    */
   def array_to_vector(v: Column): Column = Column.internalFn("array_to_vector", v)
+
+  /**
+   * Creates a new row for each index-value pair in the given vector column. This expression is
+   * dedicated only for Spark ML. It always emits a marker row with index `-1 - vector.size` and
+   * value `Double.NaN` before each non-null vector.
+   * @param v: the column of MLlib sparse/dense vectors
+   * @param mode: `dense` emits all elements, and `sparse` emits nonzero elements
+   * @return the index and value columns of the vector elements
+   * @since 4.4.0
+   */
+  private[ml] def vector_posexplode(
+      v: Column,
+      mode: String = "sparse"): Column = {
+    Column.internalFn("ml_vector_posexplode", sf.unwrap_udt(v), sf.lit(mode))
+  }
+
+  private[ml] def vector_dot_product(left: Column, right: Column): Column =
+    Column.internalFn("ml_vector_dot_product", sf.unwrap_udt(left), sf.unwrap_udt(right))
+
+  private[ml] def vector_dot_product(left: Column, right: Vector): Column = {
+    val rightStruct = right match {
+      case sparse: SparseVector =>
+        sf.struct(
+          sf.lit(0.toByte).alias("type"),
+          sf.lit(sparse.size).alias("size"),
+          sf.lit(sparse.indices).alias("indices"),
+          sf.lit(sparse.values).alias("values"))
+      case dense: DenseVector =>
+        sf.struct(
+          sf.lit(1.toByte).alias("type"),
+          sf.lit(null).cast(IntegerType).alias("size"),
+          sf.lit(null).cast(ArrayType(IntegerType)).alias("indices"),
+          sf.lit(dense.values).alias("values"))
+    }
+    Column.internalFn(
+      "ml_vector_dot_product",
+      sf.unwrap_udt(left),
+      rightStruct)
+  }
 
   private[ml] def array_binary_search(a: Column, v: Column): Column =
     Column.internalFn("array_binary_search", a, v)

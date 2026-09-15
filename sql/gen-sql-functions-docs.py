@@ -22,9 +22,7 @@ from collections import namedtuple
 
 # To avoid adding a new direct dependency, we import markdown from within mkdocs.
 from mkdocs.structure.pages import markdown
-
 from pyspark.java_gateway import launch_gateway
-
 
 ExpressionInfo = namedtuple("ExpressionInfo", "name usage examples group")
 
@@ -59,10 +57,7 @@ def _list_grouped_function_infos(jvm):
         if (name == "raise_error"):
             continue
 
-        # SPARK-45232: convert lambda_funcs to collection_funcs in doc generation
         group = jinfo.getGroup()
-        if group == "lambda_funcs":
-            group = "collection_funcs"
 
         usage = jinfo.getUsage()
         usage = usage.replace("_FUNC_", name) if usage is not None else usage

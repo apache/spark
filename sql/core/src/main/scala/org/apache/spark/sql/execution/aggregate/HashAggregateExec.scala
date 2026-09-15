@@ -33,8 +33,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.{truncatedString, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
-import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
@@ -60,6 +60,8 @@ case class HashAggregateExec(
   extends AggregateCodegenSupport {
 
   require(Aggregate.supportsHashAggregate(aggregateBufferAttributes, groupingExpressions))
+  require(!isStreaming ||
+    groupingExpressions.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType)))
 
   override def allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
@@ -162,12 +164,20 @@ case class HashAggregateExec(
    * may bypass partial aggregation at runtime and pass the remaining input rows through as
    * single-row partial buffers (see [[SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED]]). It only
    * applies to a pre-shuffle partial aggregation with grouping keys:
-   *   - `Partial` mode only: the downstream `Final` aggregation merges the passed-through
-   *     single-row buffers. `Final`/`Complete` produce the result themselves and have no such
-   *     downstream. `PartialMerge` does have one and could be
-   *     supported by passing its incoming buffer through unchanged, but that is left for later.
-   *     The mode check is also what excludes the intermediate phase of a DISTINCT plan, whose
-   *     modes are `PartialMerge ++ Partial`.
+   *   - `Partial` and `PartialMerge` modes only: the downstream `Final` aggregation merges the
+   *     passed-through single-row buffers. `Final`/`Complete` produce the result themselves and
+   *     have no such downstream. A `PartialMerge` member is the non-distinct aggregate of the
+   *     DISTINCT intermediate phase (`AggUtils.planAggregateWithOneDistinct`): its input row is
+   *     already a partial buffer, so the pass-through applies the merge to an empty buffer, which
+   *     leaves the incoming buffer unchanged, and the downstream `Final` re-merges it. A pure
+   *     `PartialMerge` phase (the de-duplication on keys ++ distinct columns) must not bypass, or
+   *     duplicate (key, distinct column) rows would over-count DISTINCT. The built-in planner
+   *     never emits such a phase without a required distribution, so the
+   *     `requiredChildDistributionExpressions` check below already keeps it out. The
+   *     `exists(_.mode == Partial)` check is a defensive guard on top of it, and only for a
+   *     de-duplication phase that carries non-distinct aggregates: one with none at all has an
+   *     empty `aggregateExpressions`, is admitted by the `isEmpty` disjunct, and still relies on
+   *     the distribution check alone.
    *   - grouping keys present: a global aggregation produces a single output row, so partial
    *     aggregation achieves the maximum reduction and must never be bypassed.
    *   - no required distribution: with no aggregate functions (a group-by-only aggregate) the
@@ -176,9 +186,10 @@ case class HashAggregateExec(
    *     not. It is not a general pre-shuffle test, because `AggUtils.planAggregateWithOneDistinct`
    *     leaves it `None` on a post-shuffle aggregate. DISTINCT aggregate functions are allowed:
    *     the phase that de-duplicates on (keys ++ distinct columns) requires a distribution, so
-   *     this check keeps it out, while the distinct `Partial` phase that groups on the keys
-   *     alone is eligible even though it sits after a shuffle: another `Exchange` and a `Final`
-   *     follow it, so its passed-through buffers are still merged.
+   *     this check keeps it out, while the distinct partial phase that groups on the keys alone
+   *     (carrying the non-distinct aggregates as `PartialMerge`) is eligible even though it sits
+   *     after a shuffle: another `Exchange` and a `Final` follow it, so its passed-through
+   *     buffers are still merged.
    *   - batch only: a streaming partial aggregate keeps state across batches, and it is built
    *     with all-`Partial` modes and no required distribution, so it would otherwise qualify.
    *     A batch `session_window` grouping likewise qualifies, but its partial aggregate feeds a
@@ -191,7 +202,8 @@ case class HashAggregateExec(
       groupingExpressions.nonEmpty &&
       !isStreaming &&
       !groupingExpressions.exists(_.metadata.contains(SessionWindow.marker)) &&
-      aggregateExpressions.forall(a => a.mode == Partial) &&
+      aggregateExpressions.forall(a => a.mode == Partial || a.mode == PartialMerge) &&
+      (aggregateExpressions.exists(_.mode == Partial) || aggregateExpressions.isEmpty) &&
       requiredChildDistributionExpressions.isEmpty
   }
 
@@ -363,7 +375,7 @@ case class HashAggregateExec(
           var findNextGroup = false
           while (!findNextGroup && sortedIter.next()) {
             val key = sortedIter.getKey
-            if (currentKey.equals(key)) {
+            if (hashMap.keysEqual(currentKey, key)) {
               mergeProjection(joinedRow(currentRow, sortedIter.getValue))
             } else {
               // We find a new group.
@@ -494,6 +506,7 @@ case class HashAggregateExec(
    */
   private def checkIfFastHashMapSupported(): Boolean = {
     val isSupported =
+      groupingExpressions.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType)) &&
       (groupingKeySchema ++ bufferSchema).forall(f => CodeGenerator.isPrimitiveType(f.dataType) ||
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType] ||
         f.dataType.isInstanceOf[CalendarIntervalType])
@@ -898,7 +911,6 @@ case class HashAggregateExec(
     val fastRowKeys = ctx.generateExpressions(
       bindReferences[Expression](groupingExpressions, child.output))
     val unsafeRowKeys = unsafeRowKeyCode.value
-    val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
     val fastRowBuffer = ctx.freshName("fastAggBuffer")
 
@@ -957,28 +969,32 @@ case class HashAggregateExec(
       // per regular-map row (see below); emitting it in more than one runtime branch is unsafe
       // because the projection's subexpression/writer state assigned in one branch would be read
       // stale from another (e.g. the adaptive pass-through path would reuse the last probed key).
+      val (computeKeyHash, lookupBuffer) =
+        if (UnsafeRowUtils.isBinaryStable(groupingKeySchema)) {
+          val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
+          (s"int $unsafeRowKeyHash = ${unsafeRowKeyCode.value}.hashCode();",
+            s"$hashMapTerm.getAggregationBufferFromUnsafeRow(" +
+              s"$unsafeRowKeys, $unsafeRowKeyHash)")
+        } else {
+          ("", s"$hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys)")
+        }
       val probeRegularMap =
         s"""
-           |int $unsafeRowKeyHash = ${unsafeRowKeyCode.value}.hashCode();
+           |$computeKeyHash
            |if ($checkFallbackForBytesToBytesMap) {
            |  // try to get the buffer from hash map
-           |  $unsafeRowBuffer =
-           |    $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, $unsafeRowKeyHash);
+           |  $unsafeRowBuffer = $lookupBuffer;
            |}
          """.stripMargin
 
       val spillMap =
         s"""
-           |if ($sorterTerm == null) {
-           |  $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
-           |} else {
-           |  $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
-           |}
+           |$sorterTerm = org.apache.spark.sql.execution.aggregate.HashAggregateExec
+           |  .spillHashMapToSorter($hashMapTerm, $sorterTerm);
            |$resetCounter
            |// the hash map had been spilled, so it should have enough memory now,
            |// try to allocate buffer again.
-           |$unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
-           |  $unsafeRowKeys, $unsafeRowKeyHash);
+           |$unsafeRowBuffer = $lookupBuffer;
            |if ($unsafeRowBuffer == null) {
            |  // failed to allocate the first page
            |  throw QueryExecutionErrors.aggregateOutOfMemoryError();
@@ -1343,4 +1359,27 @@ case class HashAggregateExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): HashAggregateExec =
     copy(child = newChild)
+}
+
+object HashAggregateExec {
+  /**
+   * Spills the in-memory hash map to disk and returns the sorter holding the spilled data. Called
+   * by the generated code of [[HashAggregateExec]] (through the static forwarder) when a buffer
+   * cannot be allocated from the hash map: the first spill destructs the map into a new sorter, and
+   * later spills merge into the existing one. Returning the sorter lets the generated code keep it
+   * in a single mutable field.
+   *
+   * Extracting this type-independent spill machinery into a shared helper keeps it compiled once
+   * per JVM instead of being re-emitted into every HashAggregateExec stage's generated code.
+   */
+  def spillHashMapToSorter(
+      hashMap: UnsafeFixedWidthAggregationMap,
+      sorter: UnsafeKVExternalSorter): UnsafeKVExternalSorter = {
+    if (sorter == null) {
+      hashMap.destructAndCreateExternalSorter()
+    } else {
+      sorter.merge(hashMap.destructAndCreateExternalSorter())
+      sorter
+    }
+  }
 }

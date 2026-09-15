@@ -20,8 +20,8 @@ import unittest
 
 from pyspark.testing.utils import (
     PySparkBaseTestCase,
-    have_grimp,
     grimp_requirement_message,
+    have_grimp,
 )
 
 # A test module and modules it does / does not import (transitively). These relationships are

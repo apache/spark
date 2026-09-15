@@ -793,6 +793,96 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(infos.last.requestTime.isEmpty)
   }
 
+  test("SPARK-58828: New registered executor should be decommissioned while held") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+    val mockEndpointRef = new MockExecutorRpcEndpointRef(conf)
+    val mockAddress = mock[RpcAddress]
+
+    backend.setExecutorsHeld(true)
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map(), Map(),
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+
+    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+    assert(mockEndpointRef.decommissionReceived)
+    // The zero requirement is re-published without touching the requested totals
+    assert(backend.getRequestedTotalExecutors().isEmpty)
+  }
+
+  test("SPARK-58828: reset clears the explicit request record with the requested totals") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+    val defaultProf = sc.resourceProfileManager.defaultResourceProfile
+    sc.requestTotalExecutors(2, 0, Map.empty)
+    assert(backend.hasExplicitExecutorRequests)
+
+    // While held, reset() preserves the requested totals and the explicit record
+    backend.setExecutorsHeld(true)
+    backend.reset()
+    assert(backend.hasExplicitExecutorRequests)
+    assert(backend.getRequestedTotalExecutors().getOrElse(defaultProf, -1) === 2)
+
+    // Not held, reset() clears both
+    backend.setExecutorsHeld(false)
+    backend.reset()
+    assert(!backend.hasExplicitExecutorRequests)
+    assert(backend.getRequestedTotalExecutors().isEmpty)
+  }
+
+  test("SPARK-58828: the restore sentinel is published without being recorded") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+    val defaultProf = sc.resourceProfileManager.defaultResourceProfile
+    assert(backend.publishTotalsWithoutRecording(Map(defaultProf -> Int.MaxValue)))
+    // Neither the totals nor the explicit-request record change, so killExecutors' empty-map
+    // seeding and a later hold's kill-seeded restore keep their pre-hold behavior
+    assert(backend.getRequestedTotalExecutors().isEmpty)
+    assert(!backend.hasExplicitExecutorRequests)
+  }
+
+  test("SPARK-58828: executor requests made while held are retained until resume") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+    val defaultProf = sc.resourceProfileManager.defaultResourceProfile
+    assert(!backend.hasExplicitExecutorRequests)
+
+    backend.setExecutorsHeld(true)
+    // Both public request APIs keep recording the requested totals while held
+    sc.requestTotalExecutors(3, 0, Map.empty)
+    assert(backend.getRequestedTotalExecutors().getOrElse(defaultProf, -1) === 3)
+    sc.requestExecutors(2)
+    assert(backend.getRequestedTotalExecutors().getOrElse(defaultProf, -1) === 5)
+    assert(backend.hasExplicitExecutorRequests)
+
+    // A held reassertion publishes zero but does not overwrite the requested totals
+    backend.reassertHeldRequirement()
+    assert(backend.getRequestedTotalExecutors().getOrElse(defaultProf, -1) === 5)
+
+    // Resume republishes the requested totals as-is, and a stale reassertion after the hold
+    // is lifted leaves them alone
+    backend.setExecutorsHeld(false)
+    assert(backend.republishRequestedTotals())
+    backend.reassertHeldRequirement()
+    assert(backend.getRequestedTotalExecutors().getOrElse(defaultProf, -1) === 5)
+  }
+
   test("UpdateUserCredentials is broadcast to all registered executors") {
     val conf = new SparkConf()
       .setMaster("local-cluster[0, 3, 1024]")

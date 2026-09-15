@@ -15,33 +15,33 @@
 # limitations under the License.
 #
 
-import os
-import struct
-import sys
-import unittest
 import difflib
 import faulthandler
 import functools
-from decimal import Decimal
-from time import time, sleep
+import os
 import signal
+import struct
+import sys
+import unittest
+from decimal import Decimal
+from itertools import zip_longest
+from time import sleep, time
 from typing import (
     Any,
-    Optional,
-    Union,
+    Callable,
     Dict,
     List,
-    Callable,
+    Optional,
+    Union,
 )
-from itertools import zip_longest
 
 from pyspark import SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException, PySparkTypeError
 from pyspark.errors.exceptions.base import QueryContextType
-from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
-from pyspark.sql.types import StructType, StructField, VariantVal
+from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import col, when
+from pyspark.sql.types import StructField, StructType, VariantVal
 
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
@@ -738,6 +738,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import pandas
+
     import pyspark.pandas
 
 
@@ -1282,8 +1283,9 @@ def assertDataFrameEqual(
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.testing.utils
+    from pyspark.sql import SparkSession
 
     globs = pyspark.testing.utils.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("testing.utils tests").getOrCreate()

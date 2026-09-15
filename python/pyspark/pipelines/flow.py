@@ -17,9 +17,8 @@
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Literal, Optional
 
-from pyspark.sql import DataFrame
-from pyspark.sql import Column
 from pyspark.pipelines.source_code_location import SourceCodeLocation
+from pyspark.sql import Column, DataFrame
 
 QueryFunction = Callable[[], DataFrame]
 

@@ -16,7 +16,7 @@
 #
 
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
+from pyspark.testing.connectutils import ReusedMixedTestCase, should_test_connect
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 if should_test_connect:

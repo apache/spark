@@ -93,6 +93,97 @@ class BitmapExpressionUtilsSuite extends SparkFunSuite {
     assert(BitmapExpressionUtils.bitmapCount(bitmap) == 15L)
   }
 
+  test("scalar bitmap binary operations") {
+    val bitmap1 = Array(0xf0.toByte, 0x0f.toByte)
+    val bitmap2 = Array(0x70.toByte)
+    val originalBitmap1 = bitmap1.clone()
+    val originalBitmap2 = bitmap2.clone()
+
+    val results = Seq(
+      BitmapExpressionUtils.bitmapAnd(bitmap1, bitmap2),
+      BitmapExpressionUtils.bitmapOr(bitmap1, bitmap2),
+      BitmapExpressionUtils.bitmapAndNot(bitmap1, bitmap2),
+      BitmapExpressionUtils.bitmapXor(bitmap1, bitmap2))
+    val expected = Seq(
+      Seq(0x70.toByte, 0x00.toByte),
+      Seq(0xf0.toByte, 0x0f.toByte),
+      Seq(0x80.toByte, 0x0f.toByte),
+      Seq(0x80.toByte, 0x0f.toByte))
+
+    results.zip(expected).foreach { case (result, expectedBytes) =>
+      assert(result.length == BitmapExpressionUtils.NUM_BYTES)
+      assert(result.take(expectedBytes.length).toSeq == expectedBytes)
+      assert(result.drop(expectedBytes.length).forall(_ == 0))
+    }
+    assert(bitmap1.sameElements(originalBitmap1))
+    assert(bitmap2.sameElements(originalBitmap2))
+  }
+
+  test("scalar bitmap binary operations with a longer right input") {
+    val bitmap1 = Array(0xf0.toByte)
+    val bitmap2 = Array(0x70.toByte, 0x0f.toByte)
+    val originalBitmap1 = bitmap1.clone()
+    val originalBitmap2 = bitmap2.clone()
+
+    val results = Seq(
+      BitmapExpressionUtils.bitmapAnd(bitmap1, bitmap2),
+      BitmapExpressionUtils.bitmapOr(bitmap1, bitmap2),
+      BitmapExpressionUtils.bitmapAndNot(bitmap1, bitmap2),
+      BitmapExpressionUtils.bitmapXor(bitmap1, bitmap2))
+    val expected = Seq(
+      Seq(0x70.toByte, 0x00.toByte),
+      Seq(0xf0.toByte, 0x0f.toByte),
+      Seq(0x80.toByte, 0x00.toByte),
+      Seq(0x80.toByte, 0x0f.toByte))
+
+    results.zip(expected).foreach { case (result, expectedBytes) =>
+      assert(result.length == BitmapExpressionUtils.NUM_BYTES)
+      assert(result.take(expectedBytes.length).toSeq == expectedBytes)
+      assert(result.drop(expectedBytes.length).forall(_ == 0))
+    }
+    assert(bitmap1.sameElements(originalBitmap1))
+    assert(bitmap2.sameElements(originalBitmap2))
+  }
+
+  test("scalar bitmap binary operations with boundary lengths") {
+    val expectedBytes = Seq(0x80.toByte, 0xff.toByte, 0x00.toByte, 0x7f.toByte)
+    Seq(0, 1, BitmapExpressionUtils.NUM_BYTES - 1, BitmapExpressionUtils.NUM_BYTES).foreach {
+      size =>
+        val bitmap1 = Array.fill[Byte](size)(0x80.toByte)
+        val bitmap2 = Array.fill[Byte](size)(0xff.toByte)
+        val results = Seq(
+          BitmapExpressionUtils.bitmapAnd(bitmap1, bitmap2),
+          BitmapExpressionUtils.bitmapOr(bitmap1, bitmap2),
+          BitmapExpressionUtils.bitmapAndNot(bitmap1, bitmap2),
+          BitmapExpressionUtils.bitmapXor(bitmap1, bitmap2))
+
+        results.zip(expectedBytes).foreach { case (result, expectedByte) =>
+          assert(result.length == BitmapExpressionUtils.NUM_BYTES)
+          assert(result.take(size).forall(_ == expectedByte))
+          assert(result.drop(size).forall(_ == 0))
+        }
+    }
+  }
+
+  test("scalar bitmap binary operations satisfy set operation properties") {
+    val bitmap = Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0x5a.toByte)
+    val other = Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0xa5.toByte)
+    val empty = Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0)
+
+    assert(BitmapExpressionUtils.bitmapAnd(bitmap, bitmap).sameElements(bitmap))
+    assert(BitmapExpressionUtils.bitmapOr(bitmap, bitmap).sameElements(bitmap))
+    assert(BitmapExpressionUtils.bitmapXor(bitmap, bitmap).sameElements(empty))
+    assert(BitmapExpressionUtils.bitmapAndNot(bitmap, bitmap).sameElements(empty))
+    assert(BitmapExpressionUtils.bitmapAndNot(bitmap, empty).sameElements(bitmap))
+    assert(BitmapExpressionUtils.bitmapAndNot(empty, bitmap).sameElements(empty))
+    assert(BitmapExpressionUtils.bitmapOr(bitmap, empty).sameElements(bitmap))
+    assert(BitmapExpressionUtils.bitmapXor(bitmap, empty).sameElements(bitmap))
+    assert(BitmapExpressionUtils.bitmapOr(bitmap, other).sameElements(
+      BitmapExpressionUtils.bitmapOr(other, bitmap)))
+    assert(BitmapExpressionUtils.bitmapXor(bitmap, other).sameElements(
+      BitmapExpressionUtils.bitmapXor(other, bitmap)))
+  }
+
   test("bitmap_xor_merge equal length") {
     val bitmap1 = Array[Byte](0x10, 0x30, 0x40)
     val bitmap2 = Array[Byte](0x10, 0x20, 0x40)

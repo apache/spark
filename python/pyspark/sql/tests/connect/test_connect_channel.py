@@ -20,15 +20,16 @@ import uuid
 
 from pyspark.errors import PySparkValueError
 from pyspark.testing.connectutils import (
-    should_test_connect,
     connect_requirement_message,
+    should_test_connect,
 )
 
 if should_test_connect:
     import grpc
-    from pyspark.sql.connect.client import DefaultChannelBuilder, ChannelBuilder
-    from pyspark.sql.connect.client.core import SparkConnectClient
+
     from pyspark.errors.exceptions.connect import SparkConnectException
+    from pyspark.sql.connect.client import ChannelBuilder, DefaultChannelBuilder
+    from pyspark.sql.connect.client.core import SparkConnectClient
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

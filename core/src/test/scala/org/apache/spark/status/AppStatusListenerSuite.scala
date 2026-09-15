@@ -322,7 +322,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
 
       val execs = KVUtils.viewToSeq(store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
         .first(key(stages.head)).last(key(stages.head)))
-      assert(execs.size > 0)
+      assert(execs.nonEmpty)
       execs.foreach { exec =>
         assert(exec.info.memoryBytesSpilled === s1Tasks.size * value / 2)
       }

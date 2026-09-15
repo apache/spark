@@ -310,9 +310,7 @@ class InMemoryRowLevelOperationTable private (
     with CatalystRuntimeFilteringScan {
 
     override def filterAttributes(): Array[NamedReference] = {
-      val scanFields = readSchema.fields.map(_.name).toSet
-      partitioning.flatMap(_.references())
-        .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
+      identityPartitionAttributes
     }
   }
 }

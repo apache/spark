@@ -16,20 +16,21 @@
 #
 import sys
 from abc import ABC, abstractmethod
-from typing import Any, cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple, Union, cast, overload
 
-from pyspark.util import is_remote_only
-from pyspark.sql.types import StructType
-from pyspark.sql import utils
-from pyspark.sql.utils import to_str
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.sql import utils
+from pyspark.sql.types import StructType
+from pyspark.sql.utils import to_str
+from pyspark.util import is_remote_only
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
     from pyspark.core.rdd import RDD
-    from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
-    from pyspark.sql.session import SparkSession
+    from pyspark.sql._typing import ColumnOrName, OptionalPrimitiveType
     from pyspark.sql.dataframe import DataFrame
+    from pyspark.sql.session import SparkSession
     from pyspark.sql.streaming import StreamingQuery
 
 __all__ = ["DataFrameReader", "DataFrameWriter", "DataFrameWriterV2"]
@@ -2531,7 +2532,7 @@ class DataFrameWriterV2:
 
         .. versionadded:: 3.1.0
         """
-        from pyspark.sql.classic.column import _to_seq, _to_java_column
+        from pyspark.sql.classic.column import _to_java_column, _to_seq
 
         col = _to_java_column(col)
         cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
@@ -2618,10 +2619,12 @@ class DataFrameWriterV2:
 def _test() -> None:
     import doctest
     import os
+
     import py4j
+
+    import pyspark.sql.readwriter
     from pyspark.core.context import SparkContext
     from pyspark.sql import SparkSession
-    import pyspark.sql.readwriter
 
     os.chdir(os.environ["SPARK_HOME"])
 

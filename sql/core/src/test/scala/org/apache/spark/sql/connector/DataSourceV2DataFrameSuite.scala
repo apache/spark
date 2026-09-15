@@ -1750,6 +1750,32 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("SPARK-59014: detect a data column hiding a captured metadata column after analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      // this table suppresses metadata/data name conflicts instead of renaming them, which is the
+      // default in SupportsMetadataColumns and the case where the metadata column becomes lost
+      sql(s"CREATE TABLE $t (id INT, data STRING) USING foo " +
+        "TBLPROPERTIES ('rename-conflicting-metadata-columns' = 'false')")
+      sql(s"INSERT INTO $t VALUES (1, 'a')")
+
+      // create DataFrame projecting the metadata column and trigger analysis
+      val table = spark.table(t)
+      val df = table.select($"id", table.metadataColumn("index"))
+
+      // a data column takes the metadata column's name after the plan was analyzed
+      sql(s"ALTER TABLE $t ADD COLUMN `index` INT")
+
+      // execution should fail instead of silently reading the data column's values
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.METADATA_COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "- `index` metadata column is hidden by a data column with the same name"))
+    }
+  }
+
   test("SPARK-54157: cached temp view allows top-level column additions") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {

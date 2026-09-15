@@ -18,18 +18,22 @@
 package org.apache.spark
 
 import java.io.File
+import java.net.URI
+import java.util.Properties
 
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileAlreadyExistsException, LocalFileSystem, Path, RawLocalFileSystem}
 
 import org.apache.spark.internal.config.CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SerializableConfiguration
 import org.apache.spark.util.Utils
 
 trait RDDCheckpointTester { self: SparkFunSuite =>
@@ -669,6 +673,34 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("SPARK-58750: checkpointing tolerates FileAlreadyExistsException on part file rename") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf().set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.hadoopConfiguration.set(
+        "fs.faee.impl", classOf[FileAlreadyExistsRenameFileSystem].getName)
+      val broadcastedConf = SerializableConfiguration.broadcast(sc, sc.hadoopConfiguration)
+      val outputDir = s"faee://${checkpointDir.getAbsolutePath}"
+
+      def writePartition(taskAttemptId: Long, attemptNumber: Int): Unit = {
+        val ctx = new TaskContextImpl(0, 0, 0, taskAttemptId, attemptNumber, 1,
+          new TaskMemoryManager(sc.env.memoryManager, 0L), new Properties, sc.env.metricsSystem)
+        ReliableCheckpointRDD.writePartitionToCheckpointFile[Int](
+          outputDir, broadcastedConf)(ctx, Iterator(1, 2, 3))
+      }
+
+      writePartition(taskAttemptId = 0L, attemptNumber = 0)
+      // A speculative or retried attempt of the same partition finds the part file already
+      // committed by the first attempt. On filesystems that raise FileAlreadyExistsException
+      // from rename (S3A, ABFS), this must be treated as success rather than fail the task.
+      writePartition(taskAttemptId = 1L, attemptNumber = 1)
+
+      val fs = new Path(outputDir).getFileSystem(sc.hadoopConfiguration)
+      val fileNames = fs.listStatus(new Path(outputDir)).map(_.getPath.getName)
+      assert(fileNames === Array("part-00000"))
+    }
+  }
+
   test("SPARK-48268: checkpoint directory via configuration") {
     withTempDir { checkpointDir =>
       val conf = new SparkConf()
@@ -683,5 +715,89 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       assert(flatMappedRDD.dependencies.head.rdd != parCollection)
       assert(flatMappedRDD.collect() === result)
     }
+  }
+
+  test("checkpoint() without a checkpoint directory") {
+    sc = new SparkContext("local", "test", new SparkConf().set(UI_ENABLED.key, "false"))
+    checkError(
+      exception = intercept[SparkException](sc.makeRDD(1 to 4).checkpoint()),
+      condition = "CHECKPOINT_DIRECTORY_NOT_SET",
+      sqlState = Some("55019"))
+  }
+
+  test("reading a checkpoint directory with a missing partition file") {
+    withTempDir { checkpointDir =>
+      sc = new SparkContext("local", "test", new SparkConf().set(UI_ENABLED.key, "false"))
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+      assert(rdd.collect().toSeq === (1 to 20))
+
+      // Drop a middle partition file so the remaining names are no longer part-00000..part-0000N.
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+      assert(fs.delete(new Path(checkpointPath, "part-00001"), false))
+
+      val recovered = sc.checkpointFile[Int](checkpointPath.toString)
+      checkError(
+        exception = intercept[SparkException](recovered.partitions),
+        condition = "INVALID_CHECKPOINT_DIRECTORY",
+        sqlState = Some("58030"),
+        parameters = Map(
+          "path" -> checkpointPath.toString,
+          "expectedFileName" -> "part-00001",
+          "fileName" -> "part-00002"))
+    }
+  }
+
+  test("checkpoint path that cannot be created") {
+    withTempDir { checkpointDir =>
+      // MkdirsFailingFilesystem refuses to create the per-RDD directory and reports it the way
+      // HDFS and S3A do, by returning false rather than throwing.
+      val conf = new SparkConf()
+        .set("spark.hadoop.fs.file.impl", classOf[MkdirsFailingFilesystem].getName)
+        .set("spark.hadoop.fs.file.impl.disable.cache", "true")
+        .set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 4)
+      val rddPath = ReliableRDDCheckpointData.checkpointPath(sc, rdd.id).get
+
+      rdd.checkpoint()
+      checkError(
+        exception = intercept[SparkException](rdd.collect()),
+        condition = "FAILED_CREATE_CHECKPOINT_DIRECTORY",
+        sqlState = Some("58030"),
+        parameters = Map("path" -> rddPath.toString))
+    }
+  }
+}
+
+/**
+ * A filesystem that refuses to create a per-RDD checkpoint directory, returning false from
+ * `mkdirs` instead of throwing. `LocalFileSystem` throws `FileAlreadyExistsException` when the
+ * path is taken, while HDFS and S3A can report the failure through the return value, which is
+ * what `ReliableCheckpointRDD` checks.
+ */
+class MkdirsFailingFilesystem extends LocalFileSystem {
+  override def mkdirs(f: Path): Boolean = {
+    if (f.getName.startsWith("rdd-")) false else super.mkdirs(f)
+  }
+}
+
+/**
+ * A local filesystem mimicking how some Hadoop FileSystem implementations report a rename onto
+ * an existing file: by raising FileAlreadyExistsException (e.g. S3A since HADOOP-16721, ABFS)
+ * rather than returning false as HDFS does.
+ */
+class FileAlreadyExistsRenameFileSystem extends RawLocalFileSystem {
+  override def getUri: URI = URI.create("faee:///")
+
+  override def rename(src: Path, dst: Path): Boolean = {
+    if (exists(dst)) {
+      throw new FileAlreadyExistsException(
+        s"Failed to rename $src to $dst; destination file exists")
+    }
+    super.rename(src, dst)
   }
 }

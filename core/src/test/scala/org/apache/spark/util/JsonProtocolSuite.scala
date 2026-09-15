@@ -836,6 +836,19 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(JsonProtocol.sparkEventFromJson(unknownFieldsJson) === expected)
   }
 
+  test("unknown event types are rejected without static initialization") {
+    val eventJson =
+      """{
+        |  "Event" : "org.apache.spark.util.JsonProtocolStaticInitProbe$"
+        |}""".stripMargin
+    val e = intercept[SparkException] {
+      JsonProtocol.sparkEventFromJson(eventJson)
+    }
+    assert(e.getMessage.contains("Unknown event type"))
+    assert(!JsonProtocolStaticInitProbeFlag.triggered,
+      "static initializer of a non-SparkListenerEvent class must not run")
+  }
+
   test("SPARK-42204: spark.eventLog.includeTaskMetricsAccumulators config") {
     val includeConf = new JsonProtocolOptions(
       new SparkConf().set(EVENT_LOG_INCLUDE_TASK_METRICS_ACCUMULATORS, true))
@@ -3241,3 +3254,17 @@ private[spark] object JsonProtocolSuite extends Assertions {
 }
 
 case class TestListenerEvent(foo: String, bar: Int) extends SparkListenerEvent
+
+/** Records whether [[JsonProtocolStaticInitProbe]] has been statically initialized. */
+private[util] object JsonProtocolStaticInitProbeFlag {
+  @volatile var triggered = false
+}
+
+/**
+ * Probe used to verify that JsonProtocol does not run static initializers of classes named by
+ * the Event field. Only ever referenced by (string) name, so that initialization is observable
+ * exclusively through [[JsonProtocolStaticInitProbeFlag]].
+ */
+private[util] object JsonProtocolStaticInitProbe {
+  JsonProtocolStaticInitProbeFlag.triggered = true
+}

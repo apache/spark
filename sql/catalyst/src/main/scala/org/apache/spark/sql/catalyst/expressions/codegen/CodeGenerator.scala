@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.WITH_EXPRESSION
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil, UnsafeRowUtils}
@@ -205,6 +206,239 @@ class CodegenContext extends Logging {
     currentLambdaVars.getOrElse(
       id,
       throw QueryExecutionErrors.lambdaVariableNotDefinedError(id))
+  }
+
+  /**
+   * The slots a `CommonExpressionRef` reads: the value and its nullness, plus the flag saying
+   * whether this row has computed them yet, and the definition to compute them from.
+   */
+  case class CommonExprSlots(
+      value: ExprCode,
+      computed: String,
+      definition: Expression) {
+
+    // Not constructor parameters: a mutable one takes part in `equals`/`hashCode`/`copy`, so a
+    // slot's hash would change as it is filled and a `copy` would carry another scope's code.
+    private var fillCode: Option[Block] = None
+    private var filling: Boolean = false
+
+    /**
+     * The code that computes the definition into the slots and sets `computed`, which a reference
+     * emits behind that flag. Cached, so every reference shares whatever mutable state the
+     * definition allocated, such as an RNG.
+     *
+     * The cache lives on the slot, so it lasts exactly as long as the scope: the code names the
+     * `INPUT_ROW` and `currentVars` in effect when it was generated. `GenerateOrdering` generates
+     * its key once per comparison side under a different row variable, so a slot shared between the
+     * sides would read the wrong row, or not compile where `Expression.reduceCodeSize` has hoisted
+     * the reference into a method taking one row.
+     *
+     * `filling` catches a definition that references its own id, which would otherwise re-enter and
+     * recurse, since `fillCode` is set only after `definition.genCode` returns.
+     *
+     * The body goes into a method where it is worth it -- a definition that is or holds another
+     * `With`, or a body past the split threshold -- so it is emitted once per scope rather than
+     * once per reference, which for nested `With`s would double per level. `methodArgs` says what
+     * the method takes, and which definitions cannot have one.
+     */
+    def fill: Block = {
+      if (fillCode.isEmpty) {
+        if (filling) {
+          throw SparkException.internalError(
+            "Cannot generate a common expression whose definition references it: " +
+              definition.toString)
+        }
+        filling = true
+        try {
+          fillCode = Some(build)
+        } finally {
+          filling = false
+        }
+      }
+      fillCode.get
+    }
+
+    private def build: Block = {
+      val defGen = definition.genCode(CodegenContext.this)
+      // Whether the isNull slot exists is decided by the definition, so it is read off the slot
+      // rather than off a reference's own `nullable`: taking it from both would let the two
+      // disagree, and either emit `false = <isNull>;`, which does not compile, or leave the slot
+      // holding the previous row's nullness.
+      val assignIsNull = if (value.isNull == FalseLiteral) {
+        ""
+      } else {
+        s"${value.isNull} = ${defGen.isNull};"
+      }
+      val body = code"""
+         |${defGen.code}
+         |$assignIsNull
+         |${value.value} = ${defGen.value};
+         |$computed = true;
+       """.stripMargin
+      // A definition that is or holds another `With` is the shape whose code doubles per level, and
+      // what this is aimed at. A definition reading a sibling definition of the same `With` doubles
+      // the same way, but not through this arm: a `CommonExpressionRef` carries `COMMON_EXPR_REF`,
+      // not `WITH_EXPRESSION`, so a short one reaches a method only through the length arm. Nothing
+      // builds that tree today (`With.refsToBind` says why). The length arm keeps one body from
+      // being split once per reference; it fires in the band just under the threshold where
+      // `reduceCodeSize` applies, since `body` is assembled after `definition.genCode` already ran
+      // it.
+      val worthAMethod = definition.containsPattern(WITH_EXPRESSION) ||
+        body.length > SQLConf.get.methodSplitThreshold
+      (if (worthAMethod) methodArgs else None) match {
+        case Some(args) =>
+          val funcName = freshName("computeCommonExpr")
+          val params = args.map(a => s"${typeName(a.javaType)} ${a.variableName}").mkString(", ")
+          val funcFullName = addNewFunction(funcName,
+            s"""
+               |private void $funcName($params) {
+               |  $body
+               |}
+           """.stripMargin)
+          code"$funcFullName(${args.map(_.variableName).mkString(", ")});"
+        case None =>
+          body
+      }
+    }
+
+    /**
+     * The locals to pass the method, or None where a method is not possible. What it collects are
+     * the values the body would otherwise read from the scope the call replaces it in: the input
+     * row, and an input variable the operator evaluated before generating this expression. Those
+     * variables are declared by code the operator emits ahead of this expression, so they enclose
+     * every reference to this definition; the input row is taken on the operator's word that
+     * `INPUT_ROW` names something in scope where it has this expression generated, which is what
+     * `Expression.reduceCodeSize` takes it on as well.
+     *
+     * A definition that reads an input variable the operator has *not* evaluated yet gets no
+     * method: that variable's code cannot travel into one, since it was generated by the operator
+     * producing the row, against that operator's scope, so it names a local of that scope -- the
+     * column batch's row index, or the input adapter's row. Nor can it be hoisted to before the
+     * call, the way `getLocalInputVariableValues` does for subexpression elimination, since that
+     * evaluates it on rows that reach no reference.
+     *
+     * Nor does a definition that is or holds a node subexpression elimination has computed, for
+     * which see the walk below. The two remaining refusals are local: `canPass` on a value no
+     * parameter can name, and the descriptor length at the end.
+     */
+    private def methodArgs: Option[Seq[VariableValue]] = {
+      val args = mutable.LinkedHashMap.empty[String, VariableValue]
+      // False for a value no parameter can carry: `ExpandExec` hands out a `VariableValue` naming a
+      // slot of a compacted mutable state array, and a `SimpleExprValue` is an expression rather
+      // than a name -- `posexplode_outer` gives its position the nullness `index == -1`, and a
+      // `Byte` or `Short` literal's value is `(byte)1`. A field or a literal needs no parameter and
+      // is read as it stands.
+      def canPass(v: ExprValue): Boolean = v match {
+        case local: VariableValue =>
+          val name = local.variableName
+          val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
+            name.forall(Character.isJavaIdentifierPart)
+          if (isName) {
+            args.getOrElseUpdate(name, local)
+          }
+          isName
+        case _: GlobalValue | _: LiteralValue => true
+        case _ => false
+      }
+      var possible = INPUT_ROW == null ||
+        canPass(JavaCode.variable(INPUT_ROW, classOf[InternalRow]))
+      val visited = mutable.HashSet.empty[Long]
+      // The definitions of a `With` in the tree walked here, which reach `currentCommonExprs` only
+      // once that `With` is generated. Ids come from one counter, so one map serves every scope.
+      val nestedDefs = mutable.HashMap.empty[Long, Expression]
+      val toVisit = mutable.Stack[Expression](definition)
+      while (possible && toVisit.nonEmpty) {
+        val next = toVisit.pop()
+        // A node subexpression elimination has computed keeps the definition inline. Which values
+        // the body reads there cannot be told from the tree: `Expression.genCode` reads the state,
+        // for a `With` as much as anything else since `With` overrides only `doGenCode`, while
+        // `Alias`, `Collate` and an identity `Cast` override `genCode` and generate their child
+        // again -- two different parameter lists. Refusing also keeps what this collects within
+        // what `getLocalInputVariableValues` collects for the operator's whole expression, which
+        // stops at a state as well and computes the parameters of the methods `ExpandExec` and the
+        // aggregates move this call into.
+        if (subExprEliminationExprs.contains(ExpressionEquals(next))) {
+          possible = false
+        } else {
+          next match {
+            case ref: BoundReference if currentVars != null && currentVars(ref.ordinal) != null =>
+              val input = currentVars(ref.ordinal)
+              possible = input.code == EmptyBlock && canPass(input.value) && canPass(input.isNull)
+            case w: With =>
+              // Only `child` is generated: a definition is generated where a reference reaches it,
+              // so one no reference reaches is not in the body, and what it reads decides nothing.
+              w.defs.foreach(d => nestedDefs.put(d.id.id, d.child))
+              toVisit.push(w.child)
+            case ref: CommonExpressionRef =>
+              // The definition this reference fills, which it does inside this method, so what
+              // that definition reads has to come in as well. One belonging to a `With` in the
+              // tree walked here is in `nestedDefs`; a sibling of this definition, or one of an
+              // enclosing scope, is registered in `currentCommonExprs`.
+              if (visited.add(ref.id.id)) {
+                nestedDefs.get(ref.id.id)
+                  .orElse(currentCommonExprs.get(ref.id.id).map(_.definition))
+                  .foreach(toVisit.push)
+              }
+            case e => toVisit.pushAll(e.children)
+          }
+        }
+      }
+      val params = args.values.toSeq
+      Option.when(
+        possible && isValidParamLength(calculateParamLengthFromExprValues(params)))(params)
+    }
+  }
+
+  /**
+   * Holding a map of the common expressions of the `With` expressions currently being generated,
+   * the same way [[currentLambdaVars]] holds the variables of the enclosing lambdas.
+   */
+  var currentCommonExprs: mutable.Map[Long, CommonExprSlots] = mutable.HashMap.empty
+
+  /**
+   * Allocates a value slot and a `computed` flag per definition, generates `f` with them in scope,
+   * then takes them out of scope again. A reference generated inside `f` reads the slots back by
+   * id and fills them the first time it is reached on a row -- the enclosing `With` only clears the
+   * flags.
+   */
+  def withCommonExprs(defs: Seq[CommonExpressionDef])(f: Seq[CommonExprSlots] => ExprCode)
+    : ExprCode = {
+    // The ids this call registered, so the cleanup takes back exactly those: the duplicate-id check
+    // below throws partway, and removing by the whole `defs` list would take that duplicate out of
+    // the enclosing scope that still owns it. Allocating inside the `try` is what runs the cleanup
+    // at all -- otherwise the slots allocated before the throw stay registered, and a later
+    // `getCommonExpr` for one of those ids resolves an orphan instead of reporting it out of scope.
+    val added = mutable.ArrayBuffer.empty[Long]
+    try {
+      val slots = defs.map { d =>
+        val id = d.id.id
+        if (currentCommonExprs.contains(id)) {
+          throw SparkException.internalError(s"Common expression $id is already being generated")
+        }
+        val isNull = if (d.nullable) {
+          JavaCode.isNullGlobal(addMutableState(JAVA_BOOLEAN, "commonExprIsNull"))
+        } else {
+          FalseLiteral
+        }
+        val value = addMutableState(javaType(d.dataType), "commonExprValue")
+        val slot = CommonExprSlots(
+          ExprCode(isNull, JavaCode.global(value, d.dataType)),
+          addMutableState(JAVA_BOOLEAN, "commonExprComputed"),
+          d.child)
+        currentCommonExprs.put(id, slot)
+        added += id
+        slot
+      }
+      f(slots)
+    } finally {
+      added.foreach(currentCommonExprs.remove)
+    }
+  }
+
+  def getCommonExpr(id: Long): CommonExprSlots = {
+    currentCommonExprs.getOrElse(
+      id,
+      throw SparkException.internalError(s"Common expression $id is not in scope"))
   }
 
   /**

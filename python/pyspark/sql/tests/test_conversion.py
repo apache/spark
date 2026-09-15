@@ -22,11 +22,11 @@ from zoneinfo import ZoneInfo
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.sql.conversion import (
-    ArrowArrayToPandasConversion,
-    ArrowTableToRowsConversion,
-    LocalDataToArrowConversion,
     ArrowArrayConversion,
     ArrowBatchTransformer,
+    ArrowTableToRowsConversion,
+    ArrowToPandasConversion,
+    LocalDataToArrowConversion,
     PandasToArrowConversion,
 )
 from pyspark.sql.types import (
@@ -46,6 +46,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampNTZType,
     TimestampType,
     UserDefinedType,
     VariantType,
@@ -405,8 +406,9 @@ class PandasToArrowConversionTests(unittest.TestCase):
 
     def test_convert_decimal(self):
         """Test int to decimal coercion."""
-        import pandas as pd
         from decimal import Decimal
+
+        import pandas as pd
 
         # DataFrame with integers, schema expects decimal
         df = pd.DataFrame({"a": [1, 2, 3]})
@@ -540,12 +542,19 @@ class ConversionTests(unittest.TestCase):
             (IntegerType(), (1,), (None,)),
             ((IntegerType(), {"nullable": False}), (1,)),
             (StringType(), ("a",)),
+            # bool coerced to string matches the JVM (EvaluatePython.makeFromJava).
+            (StringType(), (True, "true"), (False, "false")),
             (BinaryType(), (b"a",)),
             (GeographyType("ANY"), (None,)),
             (GeometryType("ANY"), (None,)),
             (ArrayType(IntegerType()), ([1, None],)),
             (ArrayType(IntegerType(), containsNull=False), ([1, 2],)),
             (ArrayType(BinaryType()), ([b"a", b"b"],)),
+            # array<string> with already-str, coerced (int/bool) and null elements.
+            (
+                ArrayType(StringType()),
+                (["ok", 42, True, False, None], ["ok", "42", "true", "false", None]),
+            ),
             (MapType(StringType(), IntegerType()), ({"a": 1, "b": None},)),
             (
                 MapType(StringType(), IntegerType(), valueContainsNull=False),
@@ -764,7 +773,21 @@ class ConversionTests(unittest.TestCase):
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-class ArrowArrayToPandasConversionTests(unittest.TestCase):
+class ArrowToPandasConversionTests(unittest.TestCase):
+    def test_convert_numpy_ser_name_survives_preprocess_time(self):
+        # convert_numpy reads the Arrow field name before preprocess_time, because the
+        # pa.compute kernels it runs for timestamps return a new array with no field name.
+        import pyarrow as pa
+
+        for pa_type in [pa.timestamp("us", tz="UTC"), pa.timestamp("s"), pa.timestamp("ns")]:
+            ts = pa.array([datetime.datetime(2020, 6, 15, 12, 30)], type=pa.timestamp("us")).cast(
+                pa_type
+            )
+            col = pa.RecordBatch.from_arrays([ts], ["tscol"]).column(0)
+            spark_type = TimestampType() if pa_type.tz is not None else TimestampNTZType()
+            result = ArrowToPandasConversion.convert_numpy(col, spark_type, timezone="UTC")
+            self.assertEqual(result.name, "tscol", f"name lost for {pa_type}")
+
     def test_udt_convert_numpy(self):
         import pyarrow as pa
 
@@ -772,7 +795,7 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
 
         # basic conversion with nulls
         arr = pa.array([[1.0, 2.0], None, [3.0, 4.0]], type=pa.list_(pa.float64()))
-        result = ArrowArrayToPandasConversion.convert_numpy(arr, udt, ser_name="my_point")
+        result = ArrowToPandasConversion.convert_numpy(arr, udt, ser_name="my_point")
         self.assertIsInstance(result.iloc[0], ExamplePoint)
         self.assertEqual(result.iloc[0], ExamplePoint(1.0, 2.0))
         self.assertIsNone(result.iloc[1])
@@ -780,13 +803,13 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         self.assertEqual(result.name, "my_point")
 
         # empty
-        result = ArrowArrayToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion.convert_numpy(
             pa.array([], type=pa.list_(pa.float64())), udt
         )
         self.assertEqual(len(result), 0)
 
         # PythonOnlyUDT
-        result = ArrowArrayToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion.convert_numpy(
             pa.array([[5.0, 6.0]], type=pa.list_(pa.float64())), PythonOnlyUDT()
         )
         self.assertIsInstance(result.iloc[0], PythonOnlyPoint)
@@ -798,7 +821,7 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         chunk1 = pa.array([[1.0, 2.0]], type=pa.list_(pa.float64()))
         chunk2 = pa.array([[3.0, 4.0]], type=pa.list_(pa.float64()))
         chunked = pa.chunked_array([chunk1, chunk2])
-        result = ArrowArrayToPandasConversion.convert_numpy(chunked, ExamplePointUDT())
+        result = ArrowToPandasConversion.convert_numpy(chunked, ExamplePointUDT())
         self.assertEqual(result.iloc[0], ExamplePoint(1.0, 2.0))
         self.assertEqual(result.iloc[1], ExamplePoint(3.0, 4.0))
 
@@ -821,7 +844,7 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
             ],
             type=variant_type,
         )
-        result = ArrowArrayToPandasConversion.convert_numpy(arr, VariantType(), ser_name="v")
+        result = ArrowToPandasConversion.convert_numpy(arr, VariantType(), ser_name="v")
         self.assertIsInstance(result.iloc[0], VariantVal)
         self.assertEqual(result.iloc[0].value, b"\x01")
         self.assertEqual(result.iloc[0].metadata, b"\x02")
@@ -831,7 +854,7 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         self.assertEqual(result.name, "v")
 
         # empty
-        result = ArrowArrayToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion.convert_numpy(
             pa.array([], type=variant_type), VariantType()
         )
         self.assertEqual(len(result), 0)
@@ -863,14 +886,14 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
             ],
             type=geography_type,
         )
-        result = ArrowArrayToPandasConversion.convert_numpy(arr, GeographyType(4326), ser_name="g")
+        result = ArrowToPandasConversion.convert_numpy(arr, GeographyType(4326), ser_name="g")
         self.assertEqual(result.iloc[0], Geography(wkb1, 4326))
         self.assertIsNone(result.iloc[1])
         self.assertEqual(result.iloc[2], Geography(wkb2, 4326))
         self.assertEqual(result.name, "g")
 
         # empty
-        result = ArrowArrayToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion.convert_numpy(
             pa.array([], type=geography_type), GeographyType(4326)
         )
         self.assertEqual(len(result), 0)
@@ -902,14 +925,14 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
             ],
             type=geometry_type,
         )
-        result = ArrowArrayToPandasConversion.convert_numpy(arr, GeometryType(0), ser_name="g")
+        result = ArrowToPandasConversion.convert_numpy(arr, GeometryType(0), ser_name="g")
         self.assertEqual(result.iloc[0], Geometry(wkb1, 0))
         self.assertIsNone(result.iloc[1])
         self.assertEqual(result.iloc[2], Geometry(wkb2, 0))
         self.assertEqual(result.name, "g")
 
         # empty
-        result = ArrowArrayToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion.convert_numpy(
             pa.array([], type=geometry_type), GeometryType(0)
         )
         self.assertEqual(len(result), 0)

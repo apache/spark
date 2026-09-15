@@ -21,14 +21,14 @@ from typing import cast
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.sql import Column
 from pyspark.testing.connectutils import (
-    should_test_connect,
     connect_requirement_message,
+    should_test_connect,
 )
 
 if should_test_connect:
     from pyspark import pipelines as dp
-    from pyspark.pipelines.graph_element_registry import graph_element_registration_context
     from pyspark.pipelines.flow import AutoCdcFlow
+    from pyspark.pipelines.graph_element_registry import graph_element_registration_context
     from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
     from pyspark.sql.connect.functions.builtin import col, expr
 

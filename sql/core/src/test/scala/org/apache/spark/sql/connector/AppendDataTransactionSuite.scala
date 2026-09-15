@@ -175,6 +175,30 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
         Row(4, 400, "finance")))
   }
 
+  test("SQL INSERT INTO with function-valued IDENTIFIER and transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+
+    val baseTargetLoadCount = catalog.loadTableCalls.count {
+      case (context, _) => !context.writePrivileges().isEmpty
+    }
+    val (txn, txnTables) = executeTransaction {
+      sql(s"INSERT INTO IDENTIFIER(lower('$tableNameAsString')) $targetOptionsClause " +
+        "VALUES (2, 200, 'software')")
+    }
+
+    assert(txn.currentState === Committed)
+    assert(txn.isClosed)
+    assert(txnTables.isEmpty)
+    assert(catalog.loadTableCalls.count {
+      case (context, _) => !context.writePrivileges().isEmpty
+    } === baseTargetLoadCount)
+    assertTargetLoadAndWriteOptions(txn, java.util.Set.of(TableWritePrivilege.INSERT))
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(Row(1, 100, "hr"), Row(2, 200, "software")))
+  }
+
   for (isDynamic <- Seq(false, true))
   test(s"SQL INSERT OVERWRITE with transactional checks - isDynamic: $isDynamic") {
     // create table with initial data; table is partitioned by dep

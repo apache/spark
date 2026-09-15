@@ -15,44 +15,44 @@
 # limitations under the License.
 #
 import json
-
-from typing import Any, Dict, Optional, List
-
-from pyspark.sql.types import (
-    DataType,
-    ByteType,
-    ShortType,
-    IntegerType,
-    FloatType,
-    DateType,
-    TimeType,
-    TimestampType,
-    TimestampNTZType,
-    DayTimeIntervalType,
-    YearMonthIntervalType,
-    CalendarIntervalType,
-    MapType,
-    StringType,
-    CharType,
-    VarcharType,
-    StructType,
-    StructField,
-    ArrayType,
-    DoubleType,
-    LongType,
-    DecimalType,
-    BinaryType,
-    BooleanType,
-    NullType,
-    NumericType,
-    VariantType,
-    GeographyType,
-    GeometryType,
-    UserDefinedType,
-)
-from pyspark.errors import PySparkAssertionError, PySparkValueError
+from typing import Any, Dict, List, Optional
 
 import pyspark.sql.connect.proto as pb2
+from pyspark.errors import PySparkAssertionError, PySparkValueError
+from pyspark.sql.types import (
+    ArrayType,
+    BinaryType,
+    BooleanType,
+    ByteType,
+    CalendarIntervalType,
+    CharType,
+    DataType,
+    DateType,
+    DayTimeIntervalType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    GeographyType,
+    GeometryType,
+    IntegerType,
+    LongType,
+    MapType,
+    NullType,
+    NumericType,
+    ShortType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampLTZNanosType,
+    TimestampNTZNanosType,
+    TimestampNTZType,
+    TimestampType,
+    TimeType,
+    UserDefinedType,
+    VarcharType,
+    VariantType,
+    YearMonthIntervalType,
+)
 
 
 class UnparsedDataType(DataType):
@@ -161,6 +161,10 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.timestamp.CopyFrom(pb2.DataType.Timestamp())
     elif isinstance(data_type, TimestampNTZType):
         ret.timestamp_ntz.CopyFrom(pb2.DataType.TimestampNTZ())
+    elif isinstance(data_type, TimestampNTZNanosType):
+        ret.timestamp_ntz_nanos.precision = data_type.precision
+    elif isinstance(data_type, TimestampLTZNanosType):
+        ret.timestamp_ltz_nanos.precision = data_type.precision
     elif isinstance(data_type, DayTimeIntervalType):
         ret.day_time_interval.start_field = data_type.startField
         ret.day_time_interval.end_field = data_type.endField
@@ -253,6 +257,19 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         return TimestampType()
     elif schema.HasField("timestamp_ntz"):
         return TimestampNTZType()
+    elif schema.HasField("timestamp_ntz_nanos"):
+        # `precision` is optional on the wire; per types.proto it defaults to 9 when omitted.
+        return (
+            TimestampNTZNanosType(schema.timestamp_ntz_nanos.precision)
+            if schema.timestamp_ntz_nanos.HasField("precision")
+            else TimestampNTZNanosType()
+        )
+    elif schema.HasField("timestamp_ltz_nanos"):
+        return (
+            TimestampLTZNanosType(schema.timestamp_ltz_nanos.precision)
+            if schema.timestamp_ltz_nanos.HasField("precision")
+            else TimestampLTZNanosType()
+        )
     elif schema.HasField("day_time_interval"):
         start: Optional[int] = (
             schema.day_time_interval.start_field

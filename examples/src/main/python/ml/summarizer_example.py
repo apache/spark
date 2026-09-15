@@ -20,11 +20,12 @@ An example for summarizer.
 Run with:
   bin/spark-submit examples/src/main/python/ml/summarizer_example.py
 """
-from pyspark.sql import SparkSession
+from pyspark.ml.linalg import Vectors
+
 # $example on$
 from pyspark.ml.stat import Summarizer
-from pyspark.sql import Row
-from pyspark.ml.linalg import Vectors
+from pyspark.sql import Row, SparkSession
+
 # $example off$
 
 if __name__ == "__main__":

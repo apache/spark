@@ -1396,6 +1396,147 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTargetForDefaultProfileId(manager) === 20) // limit reached
   }
 
+  test("SPARK-58828: suspend and resume executor allocation") {
+    val clock = new ManualClock(2020L)
+    val manager = createManager(createConf(0, 20, 0), clock = clock)
+    post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
+
+    // Ramp up the target normally first
+    onSchedulerBacklogged(manager)
+    clock.advance(schedulerBacklogTimeout * 1000)
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    clock.advance(sustainedSchedulerBacklogTimeout * 1000)
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1 + 2)
+
+    // Suspending lowers the target to zero and stops the ramp-up
+    manager.suspend()
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+    clock.advance(sustainedSchedulerBacklogTimeout * 1000)
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+    clock.advance(sustainedSchedulerBacklogTimeout * 1000)
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+
+    // Resuming ramps the target up again for the still-pending tasks
+    manager.resume()
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    clock.advance(sustainedSchedulerBacklogTimeout * 1000)
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1 + 2)
+  }
+
+  test("SPARK-58828: suspend keeps a zero target across reset()") {
+    val manager = createManager(createConf(1, 10, 3))
+    post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
+    manager.suspend()
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+    manager.reset()
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+    manager.resume()
+    manager.reset()
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 3)
+  }
+
+  test("SPARK-58828: resume before the first stage restores the initial target") {
+    val manager = createManager(createConf(1, 10, 3))
+    manager.suspend()
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+    manager.resume()
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 3)
+  }
+
+  test("SPARK-58828: a new resource profile submitted while suspended gets a zero target") {
+    val manager = createManager(createConf(1, 10, 1))
+    post(SparkListenerStageSubmitted(createStageInfo(0, 1000, rp = defaultProfile)))
+    manager.suspend()
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+    val rp1 = new ResourceProfileBuilder()
+    val execReqs = new ExecutorResourceRequests().cores(4).resource("gpu", 4)
+    val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
+    rp1.require(execReqs).require(taskReqs)
+    val rprof1 = rp1.build()
+    rpManager.addResourceProfile(rprof1)
+    post(SparkListenerStageSubmitted(createStageInfo(1, 1000, rp = rprof1)))
+    assert(numExecutorsTarget(manager, rprof1.id) === 0)
+    // After resume, the new profile is restored to the minimum and ramps up like any other
+    manager.resume()
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsTarget(manager, rprof1.id) === 1)
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(numExecutorsTarget(manager, rprof1.id) === 2)
+  }
+
+  test("SPARK-58828: resume restores at least the minimum target when idle") {
+    val manager = createManager(createConf(2, 10, 2))
+    post(SparkListenerStageSubmitted(createStageInfo(0, 8)))
+    post(SparkListenerStageCompleted(createStageInfo(0, 8)))
+    manager.suspend()
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+    manager.resume()
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+  }
+
+  test("SPARK-58828: a rejected suspend push is retried from the schedule loop") {
+    val manager = createManager(createConf(1, 10, 3))
+    post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
+    when(client.requestTotalExecutors(any(), any(), any())).thenReturn(false)
+    clearInvocations(client)
+    assert(!manager.suspend())
+    verify(client).requestTotalExecutors(mockitoEq(Map(defaultProfile.id -> 0)), any(), any())
+    // Rejected: re-pushed on every tick until acknowledged, then no more
+    when(client.requestTotalExecutors(any(), any(), any())).thenReturn(true)
+    clearInvocations(client)
+    schedule(manager)
+    verify(client).requestTotalExecutors(mockitoEq(Map(defaultProfile.id -> 0)), any(), any())
+    clearInvocations(client)
+    schedule(manager)
+    verify(client, never()).requestTotalExecutors(any(), any(), any())
+  }
+
+  test("SPARK-58828: deferred target pushes back off exponentially") {
+    val manager = createManager(createConf(1, 10, 3))
+    post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
+    when(client.requestTotalExecutors(any(), any(), any())).thenReturn(false)
+    clearInvocations(client)
+    assert(!manager.suspend()) // first push fails; the next retry is immediate
+    verify(client).requestTotalExecutors(any(), any(), any())
+    clearInvocations(client)
+    schedule(manager) // immediate retry fails; the next retry waits a tick
+    verify(client).requestTotalExecutors(any(), any(), any())
+    clearInvocations(client)
+    schedule(manager) // backing off
+    verify(client, never()).requestTotalExecutors(any(), any(), any())
+    schedule(manager) // retried after the backoff
+    verify(client).requestTotalExecutors(any(), any(), any())
+  }
+
+  test("SPARK-58828: reset while suspended defers the zero-target push to the schedule loop") {
+    // Keep DYN_ALLOCATION_TESTING on: turning it off would start the real polling thread
+    // (`start()` ignores TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED when not testing) and its
+    // background ticks would race with the assertions below.
+    val manager = createManager(createConf(1, 10, 3))
+    when(client.requestTotalExecutors(any(), any(), any())).thenReturn(true)
+    post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
+    manager.suspend()
+    clearInvocations(client)
+    // reset() itself must not talk to the cluster manager: it may run inside a cluster
+    // manager RPC handler (e.g. YARN's RegisterClusterManager) where a synchronous request
+    // would self-deadlock.
+    manager.reset()
+    verify(client, never()).requestTotalExecutors(any(), any(), any())
+    // The zero target is pushed from the schedule loop instead, exactly once
+    schedule(manager)
+    verify(client).requestTotalExecutors(mockitoEq(Map(defaultProfile.id -> 0)), any(), any())
+    clearInvocations(client)
+    schedule(manager)
+    verify(client, never()).requestTotalExecutors(any(), any(), any())
+  }
+
   test("mock polling loop remove behavior") {
     val clock = new ManualClock(2020L)
     val manager = createManager(createConf(1, 20, 1), clock = clock)
