@@ -376,7 +376,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest
     )
   }
 
-  test("dedup event-time projected away") {
+  test("SPARK-58979: dedup event-time projected away") {
     val input = MemoryStream[(String, Long)]
     val result = input.toDF()
       .selectExpr("_1 AS id", "CAST(_2 AS TIMESTAMP) AS ts")
@@ -392,7 +392,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest
     )
   }
 
-  test("dedup event-time retained") {
+  test("SPARK-58979: dedup event-time retained") {
     val input = MemoryStream[(String, Long)]
     val result = input.toDF()
       .selectExpr("_1 AS id", "CAST(_2 AS TIMESTAMP) AS ts")
