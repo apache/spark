@@ -251,7 +251,7 @@ class SystemMetadataSuite
     val stSystemMetadata = FlowSystemMetadata(updateContext, stFlow, graph)
     val schema2StSystemMetadata = FlowSystemMetadata(updateContext, schema2StFlow, graph)
     assert(
-      stSystemMetadata.flowCheckpointsDirOpt() != schema2StSystemMetadata.flowCheckpointsDirOpt()
+      stSystemMetadata.flowCheckpointsDir() != schema2StSystemMetadata.flowCheckpointsDir()
     )
   }
 }
