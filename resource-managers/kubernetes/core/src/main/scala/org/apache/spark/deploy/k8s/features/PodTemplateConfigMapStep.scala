@@ -25,6 +25,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.util.DependencyUtils.downloadFile
 import org.apache.spark.util.Utils
 
@@ -81,6 +82,8 @@ private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
       val uri = downloadFile(podTemplateFile, Utils.createTempDir(), conf.sparkConf, hadoopConf)
       val file = new java.net.URI(uri).getPath
       val podTemplateString = Files.readString(new File(file).toPath)
+      KubernetesClientUtils.validateConfigMapSize(
+        Map(POD_TEMPLATE_KEY -> podTemplateString), conf.sparkConf)
       Seq(new ConfigMapBuilder()
           .withNewMetadata()
             .withName(configmapName)
