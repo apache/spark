@@ -1884,6 +1884,32 @@ class UtilsTestsMixin:
             assertSchemaEqual(s1, StructType([StructField("ts", TimestampNTZNanosType(7), True)]))
 
 
+class RowComparisonTests(unittest.TestCase):
+    def test_different_row_lengths(self):
+        pairs = [(Row(), Row(x=1)), (Row(x=1), Row(x=1, y=2))]
+        for left, right in pairs:
+            for actual, expected in [(left, right), (right, left)]:
+                for wrap in [
+                    lambda row: row,
+                    lambda row: Row(nested=row),
+                    lambda row: Row(items=[row]),
+                    lambda row: Row(mapping={"key": row}),
+                ]:
+                    for ordered in [False, True]:
+                        with self.subTest(actual=actual, expected=expected, ordered=ordered):
+                            with self.assertRaises(PySparkAssertionError) as error:
+                                assertDataFrameEqual(
+                                    [wrap(actual)], [wrap(expected)], checkRowOrder=ordered
+                                )
+                            self.assertEqual(error.exception.getCondition(), "DIFFERENT_ROWS")
+
+    def test_equal_row_lengths(self):
+        for row in [Row(), Row(x=1), Row(nested=Row(x=1, y=2))]:
+            assertDataFrameEqual([row], [row])
+        with self.assertRaises(PySparkAssertionError):
+            assertDataFrameEqual([Row(x=1)], [Row(x=2)])
+
+
 class UtilsTests(UtilsTestsMixin, ReusedSQLTestCase):
     pass
 
