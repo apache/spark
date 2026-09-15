@@ -2390,6 +2390,27 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59289: an aligned grouping is wrapped by withJoinKeyPositions, not rebuilt") {
+    // The rebuild reads `g.child` and reproduces a plain grouping, which is neither a merged key
+    // count, nor a reducer, nor a replication. So a node carrying one of those is wrapped instead:
+    // the positions index what it reports, and that is what the node built over it projects.
+    //
+    // This was an assert. The shape it guarded against is one a re-run can construct, and a
+    // planner crash is the wrong answer where a sound plan is available.
+    val leaf = DummySparkPlan(outputPartitioning =
+      KeyedPartitioning(Seq(exprA, exprB), Seq(InternalRow(1, 1), InternalRow(1, 1))))
+    val aligned = GroupPartitionsExec(leaf, expectedPartitionKeys = Some(Seq(
+      (InternalRowComparableWrapper(InternalRow(1, 1), Seq(exprA, exprB)), 2))))
+    assert(aligned.expectedKeyCount.isDefined, "test setup: this is an aligned node")
+
+    EnsureRequirements.withJoinKeyPositions(aligned, Seq(0)) match {
+      case g: GroupPartitionsExec =>
+        assert(g.joinKeyPositions === Some(Seq(0)))
+        assert(g.child eq aligned, "the aligned node keeps its merge and stays below the new one")
+      case other => fail(s"expected a wrapping GroupPartitionsExec, got $other")
+    }
+  }
+
   test("SPARK-58996: reusing a GroupPartitionsExec keeps its tags") {
     // Tags are instance state that a `copy` does not carry, so every rewrite must copy them
     // back onto the new node. The join path no longer rewrites a node, it peels the old one off

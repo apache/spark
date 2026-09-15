@@ -1055,17 +1055,20 @@ case class EnsureRequirements(
   }
 
   /**
-   * Applies join key positions to a plan by wrapping or updating GroupPartitionsExec.
+   * Applies join key positions to a plan by rebuilding a plain grouping node, or by wrapping
+   * anything else in a new one.
    *
    * Unlike `peelGroupPartitions`, this does not descend. It serves every multi-child operator,
    * not just joins, so a `GroupPartitionsExec` below the top is not known to be this rule's own.
    */
   private[exchange] def withJoinKeyPositions(plan: SparkPlan, positions: Seq[Int]): SparkPlan = {
     plan match {
-      case g: GroupPartitionsExec =>
+      // Only a plain grouping is rebuilt. An aligned one carries a merged key count, a reducer or
+      // a replication, none of which this rebuild reproduces, so it is wrapped below instead.
+      case g: GroupPartitionsExec
+          if g.expectedKeyCount.isEmpty && g.reducers.isEmpty && !g.distributePartitions =>
         // Rebuilt rather than copied: the positions are an input to the node's grouping, and a
-        // `copy` would keep the grouping derived from the old ones. Rebuilding from `g.child`
-        // discards whatever else `g` carried, and the assert says what that may be.
+        // `copy` would keep the grouping derived from the old ones.
         //
         // `positions` index the layout `g` reports, while `g.child` holds the raw partition
         // expressions, so they are composed rather than replaced. The two index spaces differ
@@ -1075,13 +1078,15 @@ case class EnsureRequirements(
         // also keeps an expression that *is* a cluster key, where `KeyedShuffleSpec.keyPositions`
         // reads an expression's reference. And a re-run reads the positions off a report an
         // earlier pass already projected.
-        assert(g.expectedKeyCount.isEmpty && g.reducers.isEmpty && !g.distributePartitions,
-          "expected a grouping this rule inserted for a co-partitioned child")
         val composed = g.joinKeyPositions.fold(positions)(old => positions.map(old))
         val newGroupPartitions =
           GroupPartitionsExec(g.child, Some(composed), enableSortedMerge = g.enableSortedMerge)
         newGroupPartitions.copyTagsFrom(g)
         newGroupPartitions
+      // Everything else is wrapped, an aligned grouping included. `positions` index what `plan`
+      // reports, which is exactly what the node built here projects, so the two line up with no
+      // composition. This used to be an assert on the aligned case, which crashes the planner
+      // where a sound plan was available.
       case _ => GroupPartitionsExec(plan, joinKeyPositions = Some(positions))
     }
   }
