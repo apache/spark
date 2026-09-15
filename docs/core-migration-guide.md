@@ -42,6 +42,8 @@ license: |
 
 - Since Spark 4.3, a positive `spark.executor.pyspark.memory` allocation that is too small to give each concurrent task slot at least 1 MiB fails the Python task with an error instead of silently running the workers without any memory limit. Setting `spark.executor.pyspark.memory=0` still disables the limit. To restore a working memory limit, increase `spark.executor.pyspark.memory` or reduce the executor's concurrent task capacity.
 
+- Since Spark 4.3, an executor pod template that names a service account in `serviceAccountName` keeps it: Spark applies `spark.kubernetes.authenticate.executor.serviceAccountName`, or the driver's account as a fallback, only when the template names no account in either `serviceAccount` or `serviceAccountName`. Earlier versions decided by reading the deprecated `serviceAccount` field alone, so a template that named the account in `serviceAccountName` had it overwritten. Spark logs a warning when `spark.kubernetes.authenticate.executor.serviceAccountName` named an account the template displaced.
+
 ## Upgrading from Core 4.1 to 4.2
 
 - Since Spark 4.2, Spark Master REST API uses Java 21 virtual threads by default when running on Java 21 or later. To restore the legacy behavior, you can set `spark.master.rest.virtualThread.enabled` to `false`.

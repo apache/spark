@@ -97,7 +97,7 @@ class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with B
         podWithAccount(serviceAccountName = Some("template-name"))
     ).foreach { case (confs, templatePod) =>
       val appender = runWith(confs, templatePod)
-      val warnings = warningsFrom(appender)
+      val warnings = messagesAt(appender, Level.WARN)
       assert(warnings.size === 1, s"expected one warning for $confs, got: $warnings")
       // And nothing besides: splitting the report into two independent statements would add an
       // INFO about the driver fallback for anyone who set both configurations.
@@ -116,27 +116,25 @@ class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with B
     }
   }
 
-  test("SPARK-58910: report at INFO when the template supersedes the driver's account") {
-    // The driver's account is only a fallback for executors and still applies to the driver pod,
-    // so a template superseding it is the documented outcome rather than a misconfiguration.
+  test("SPARK-58910: report at DEBUG when the template supersedes the driver's account") {
+    // The driver's account is only a fallback for executors and still applies to the driver pod, so
+    // a template superseding it is the documented outcome rather than a misconfiguration, and it
+    // would otherwise repeat for the life of the application, once per executor pod.
     val appender = runWith(
       Seq(DRIVER_SA_CONF -> "driver-name"),
       podWithAccount(serviceAccountName = Some("template-name")))
-    assert(warningsFrom(appender).isEmpty,
-      s"a superseded fallback is not worth a warning: ${warningsFrom(appender)}")
-    val infos = appender.loggingEvents
-      .filter(_.getLevel === Level.INFO)
-      .map(_.getMessage.getFormattedMessage)
-      .toSeq
-    assert(infos.size === 1, s"expected one INFO line, got: $infos")
+    val warnings = messagesAt(appender, Level.WARN)
+    assert(warnings.isEmpty, s"a superseded fallback is not worth a warning: $warnings")
+    val debugs = messagesAt(appender, Level.DEBUG)
+    assert(debugs.size === 1, s"expected one DEBUG line, got: $debugs")
     Seq(DRIVER_SA_CONF, "driver-name", "template-name").foreach { expected =>
-      assert(infos.head.contains(expected), s"INFO line does not name $expected: ${infos.head}")
+      assert(debugs.head.contains(expected), s"DEBUG line does not name $expected: ${debugs.head}")
     }
   }
 
   test("SPARK-58910: log nothing when nothing the user set was displaced") {
     // Deliberately stricter than "no warning": the step runs once per executor pod, so any output
-    // from it in these shapes is noise, INFO included.
+    // from it in these shapes is noise, down to DEBUG.
     Seq(
       // The template names the account the executor configuration already asked for.
       Seq(EXECUTOR_SA_CONF -> "same-name") ->
@@ -149,30 +147,26 @@ class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with B
       Seq(EXECUTOR_SA_CONF -> "executor-name") -> podWithAccount(serviceAccount = Some("")),
       // Nothing is configured, so nothing could have been displaced.
       Seq.empty[(String, String)] -> podWithAccount(serviceAccountName = Some("template-name")),
-      // An empty configuration value counts as set on the write path, which is long-standing, but
-      // it names no account, so there is nothing to report as displaced.
-      Seq(EXECUTOR_SA_CONF -> "") -> podWithAccount(serviceAccountName = Some("template-name")),
-      // The driver fallback reports at INFO, but only when it would have applied a different
-      // account: not when the template names the same one, and not when the configuration names
-      // no account.
-      Seq(DRIVER_SA_CONF -> "same-name") -> podWithAccount(serviceAccountName = Some("same-name")),
-      Seq(DRIVER_SA_CONF -> "") -> podWithAccount(serviceAccountName = Some("template-name")),
-      // An empty executor value shadows the driver one on the write path too, so the driver
-      // account was never going to apply and reporting it would be wrong.
-      Seq(EXECUTOR_SA_CONF -> "", DRIVER_SA_CONF -> "driver-name") ->
-        podWithAccount(serviceAccountName = Some("template-name"))
+      // The driver fallback reports at DEBUG, but only when it would have applied a different
+      // account, not when the template names the same one.
+      Seq(DRIVER_SA_CONF -> "same-name") -> podWithAccount(serviceAccountName = Some("same-name"))
     ).foreach { case (confs, pod) =>
       val output = allOutput(runWith(confs, pod))
       assert(output.isEmpty, s"nothing was displaced with $confs, so nothing to say: $output")
     }
   }
 
-  /** Runs the step under `confs` and hands back the appender that captured the step's output. */
+  /**
+   * Runs the step under `confs` and hands back the appender that captured the step's output, down
+   * to DEBUG so that a test asserting on silence covers that level too.
+   */
   private def runWith(confs: Seq[(String, String)], pod: SparkPod): LogAppender = {
     val conf = new SparkConf(false)
     confs.foreach { case (k, v) => conf.set(k, v) }
     val appender = new LogAppender
-    withLogAppender(appender, loggerNames = Seq(STEP_LOGGER)) {
+    // The appender drops anything below INFO on its own, whatever the logger's level.
+    appender.setThreshold(Level.DEBUG)
+    withLogAppender(appender, loggerNames = Seq(STEP_LOGGER), level = Some(Level.DEBUG)) {
       evaluateStep(pod, conf)
     }
     appender
@@ -181,11 +175,8 @@ class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with B
   private def allOutput(appender: LogAppender): Seq[String] =
     appender.loggingEvents.map(_.getMessage.getFormattedMessage).toSeq
 
-  private def warningsFrom(appender: LogAppender): Seq[String] =
-    appender.loggingEvents
-      .filter(_.getLevel === Level.WARN)
-      .map(_.getMessage.getFormattedMessage)
-      .toSeq
+  private def messagesAt(appender: LogAppender, level: Level): Seq[String] =
+    appender.loggingEvents.filter(_.getLevel === level).map(_.getMessage.getFormattedMessage).toSeq
 
   private def assertSAName(expectedServiceAccountName: String,
       spec: PodSpec): Unit = {

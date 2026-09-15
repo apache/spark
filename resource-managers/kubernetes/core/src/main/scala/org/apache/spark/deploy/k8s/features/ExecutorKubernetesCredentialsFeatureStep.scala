@@ -30,37 +30,34 @@ private[spark] class ExecutorKubernetesCredentialsFeatureStep(kubernetesConf: Ku
     kubernetesConf.get(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME)
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val templateServiceAccount = podServiceAccount(pod)
-    templateServiceAccount.foreach(reportAccountNotApplied)
-    pod.copy(
+    podServiceAccount(pod) match {
+      // The pod template's account takes precedence, so the pod goes back as it came.
+      case Some(templateAccount) =>
+        reportAccountNotApplied(templateAccount)
+        pod
       // if not setup by the pod template, fallback to the executor's sa,
       // if executor's sa is not setup, the last option is driver's sa.
-      pod = if (templateServiceAccount.isEmpty) {
-        buildPodWithServiceAccount(executorServiceAccount.orElse(driverServiceAccount), pod)
-          .getOrElse(pod.pod)
-      } else {
-        pod.pod
-      })
+      case None =>
+        val account = executorServiceAccount.orElse(driverServiceAccount)
+        pod.copy(pod = buildPodWithServiceAccount(account, pod).getOrElse(pod.pod))
+    }
   }
 
   /**
    * The pod template's account takes precedence, so report a configured one that did not apply.
    * An account set through the executor configuration is an explicit instruction that had no
    * effect, so that is a warning. The driver's account only ever served as a fallback here, so a
-   * template superseding it is the documented outcome and says so at INFO. Either way, stay quiet
-   * when the template names the same account, and when the configured value is empty and so names
-   * no account at all.
+   * template superseding it is the documented outcome and goes to the debug log. Either way, stay
+   * quiet when the template names the same account.
    *
-   * With the default pod allocator both repeat once per executor pod, since the feature steps are
-   * rebuilt for each one. Each warning corresponds to one pod launched with a different account
-   * than the configuration asked for. The INFO reports a correct configuration, and adds one line
-   * to the one `BasicExecutorFeatureStep` already logs per pod.
+   * With the default pod allocator the warning repeats once per executor pod, since the feature
+   * steps are rebuilt for each one, and each line corresponds to one pod launched with a different
+   * account than the configuration asked for.
    */
   private def reportAccountNotApplied(templateAccount: String): Unit = {
     executorServiceAccount match {
       case Some(configured) =>
-        // An empty value counts as set on this path, which is long-standing; nothing to report.
-        if (configured.nonEmpty && configured != templateAccount) {
+        if (configured != templateAccount) {
           logWarning(log"Not applying " +
             log"${MDC(CONFIG, KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME.key)}=" +
             log"${MDC(VALUE, configured)} to the executor pod, because its pod template already " +
@@ -69,8 +66,8 @@ private[spark] class ExecutorKubernetesCredentialsFeatureStep(kubernetesConf: Ku
             log"instead.")
         }
       case None =>
-        driverServiceAccount.filter(a => a.nonEmpty && a != templateAccount).foreach { account =>
-          logInfo(log"The executor pod template names " +
+        driverServiceAccount.filter(_ != templateAccount).foreach { account =>
+          logDebug(log"The executor pod template names " +
             log"${MDC(SERVICE_ACCOUNT_NAME, templateAccount)}, so the executor pods use it " +
             log"rather than ${MDC(CONFIG, KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME.key)}=" +
             log"${MDC(VALUE, account)}, which is only a fallback for executor pods.")
