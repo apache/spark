@@ -361,6 +361,33 @@ values (0), (1) lhs(a)
 |> limit 2
 |> select lhs.a, rhs.a, z2;
 
+-- A table alias still refers to the original row value of a column affected by SET.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select t.a;
+
+-- The unqualified name refers to the assigned value and the qualified name to the original one.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select a, t.a, t.b;
+
+-- The retained source column stays out of the output schema unless it is named explicitly.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select *;
+
+-- Qualified access to a column affected by SET, through an alias added by the AS operator.
+table t
+|> as u
+|> set x = x + 1
+|> select x, u.x;
+
+-- The alias keeps pointing at the original source value across a sequence of SET operators.
+values (1) as t(a)
+|> set a = a + 1
+|> set a = a + 1
+|> select a, t.a;
+
 -- SET operators: negative tests.
 ---------------------------------
 

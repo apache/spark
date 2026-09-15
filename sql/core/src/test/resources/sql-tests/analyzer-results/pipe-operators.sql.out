@@ -993,6 +993,65 @@ Project [a#x, a#x, z2#x]
 
 
 -- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select t.a
+-- !query analysis
+Project [a#x]
++- Project [(a#x + 1) AS a#x, b#x, a#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select a, t.a, t.b
+-- !query analysis
+Project [a#x, a#x, b#x]
++- Project [(a#x + 1) AS a#x, b#x, a#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select *
+-- !query analysis
+Project [a#x, b#x]
++- Project [(a#x + 1) AS a#x, b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
+
+
+-- !query
+table t
+|> as u
+|> set x = x + 1
+|> select x, u.x
+-- !query analysis
+Project [x#x, x#x]
++- Project [(x#x + 1) AS x#x, y#x, x#x]
+   +- SubqueryAlias u
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+values (1) as t(a)
+|> set a = a + 1
+|> set a = a + 1
+|> select a, t.a
+-- !query analysis
+Project [a#x, a#x]
++- Project [(a#x + 1) AS a#x, a#x]
+   +- Project [(a#x + 1) AS a#x, a#x]
+      +- SubqueryAlias t
+         +- LocalRelation [a#x]
+
+
+-- !query
 table t
 |> set z = 1
 -- !query analysis

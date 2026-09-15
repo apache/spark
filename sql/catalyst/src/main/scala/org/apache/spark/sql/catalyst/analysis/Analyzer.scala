@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils, GeneratedColumn}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils, GeneratedColumn, MetadataColumnHelper}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 // `View` is aliased to `V2View` to avoid clashing with the logical-plan `View` imported via
 // `org.apache.spark.sql.catalyst.plans.logical._`.
@@ -1701,6 +1701,7 @@ class Analyzer(
         if (expanded.projectList.size < p.projectList.size) {
           checkTrailingCommaInSelect(expanded, starRemoved = true)
         }
+        retainExceptedColumnsAsHiddenOutput(p, expanded)
         expanded
       // If the filter list contains Stars, expand it.
       case p: Filter if containsStar(Seq(p.condition)) =>
@@ -2083,6 +2084,29 @@ class Analyzer(
         case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
         case o => o :: Nil
       }.map(_.asInstanceOf[NamedExpression])
+    }
+
+    /**
+     * The SQL pipe SET operator is implemented as a star expansion that excludes the assigned
+     * column and appends a replacement of the same name. That drops the original attribute from
+     * the project list, which would also make it unreachable through its table alias, contradicting
+     * the documented behavior that table aliases keep referring to the original row values after an
+     * assignment. Retain the excluded attributes as hidden output instead, the same way USING joins
+     * hide their duplicated join keys (SPARK-59146).
+     */
+    private def retainExceptedColumnsAsHiddenOutput(original: Project, expanded: Project): Unit = {
+      val retain = original.projectList.exists {
+        case s: UnresolvedStarExceptOrReplace => s.retainExceptedColumnsAsHidden
+        case _ => false
+      }
+      if (retain) {
+        val excepted = expanded.child.output.filterNot(expanded.outputSet.contains)
+        if (excepted.nonEmpty) {
+          expanded.setTagValue(
+            Project.hiddenOutputTag,
+            excepted.map(_.markAsQualifiedAccessOnly()) ++ expanded.child.metadataOutput)
+        }
+      }
     }
 
     /**
