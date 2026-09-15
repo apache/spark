@@ -22,7 +22,7 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
 from pyspark.sql.conversion import ArrowBatchTransformer
-from pyspark.sql.eval_handlers import BatchEvalTypeHandler
+from pyspark.sql.eval_handlers._base import BatchEvalTypeHandler
 from pyspark.sql.eval_handlers.verification import verify_scalar_result
 from pyspark.sql.pandas.types import to_arrow_schema
 from pyspark.sql.types import StructField, StructType
