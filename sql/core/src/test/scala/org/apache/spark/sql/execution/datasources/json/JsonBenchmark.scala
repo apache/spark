@@ -17,6 +17,8 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.time.{Instant, LocalDate}
 
 import org.apache.spark.benchmark.Benchmark
@@ -578,8 +580,46 @@ object JsonBenchmark extends SqlBasedBenchmark {
     benchmark.run()
   }
 
+  private def topLevelArrayBenchmark(
+      rowsNum: Int,
+      payloadSize: Int,
+      numIters: Int): Unit = {
+    val payload = "x" * payloadSize
+    val document = (0 until rowsNum)
+      .map(i => s"""{"a":$i,"payload":"$payload"}""")
+      .mkString("[", ",", "]")
+    val schema = new StructType().add("a", IntegerType).add("payload", StringType)
+    val benchmark = new Benchmark(
+      s"Top-level JSON array with $payloadSize-byte payloads", rowsNum, output = output)
+
+    withTempPath { path =>
+      Files.write(path.toPath, document.getBytes(StandardCharsets.UTF_8))
+
+      Seq(false, true).foreach { enabled =>
+        benchmark.addCase(s"streaming enabled: $enabled", numIters) { _ =>
+          withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> enabled.toString) {
+            spark.read
+              .option("multiLine", true)
+              .schema(schema)
+              .json(path.getCanonicalPath)
+              .noop()
+          }
+        }
+      }
+
+      benchmark.run()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numIters = 3
+    if (mainArgs.contains("top-level-array")) {
+      runBenchmark("Benchmark for top-level JSON array parsing") {
+        topLevelArrayBenchmark(rowsNum = 100000, payloadSize = 0, numIters = numIters)
+        topLevelArrayBenchmark(rowsNum = 1000, payloadSize = 64 * 1024, numIters = numIters)
+      }
+      return
+    }
     runBenchmark("Benchmark for performance of JSON parsing") {
       schemaInferring(5 * 1000 * 1000, numIters)
       countShortColumn(5 * 1000 * 1000, numIters)
@@ -595,6 +635,8 @@ object JsonBenchmark extends SqlBasedBenchmark {
       // TODO (SPARK-32325): Add benchmarks for filters with nested column attributes.
       filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)
       partialResultBenchmark(rowsNum = 10000, numIters)
+      topLevelArrayBenchmark(rowsNum = 100000, payloadSize = 0, numIters = numIters)
+      topLevelArrayBenchmark(rowsNum = 1000, payloadSize = 64 * 1024, numIters = numIters)
     }
   }
 }

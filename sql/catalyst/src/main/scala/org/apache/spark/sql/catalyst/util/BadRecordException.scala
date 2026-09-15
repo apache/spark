@@ -76,11 +76,13 @@ case class PartialResultArrayException(
  * @param cause the actual exception about why the record is bad and can't be parsed. It's better
  *                      to use `LazyBadRecordCauseWrapper` here to delay heavy cause construction
  *                      until it's needed.
+ * @param recoverable whether the parser can resume at the next record after handling this failure
  */
 case class BadRecordException(
     @transient record: () => UTF8String,
     @transient partialResults: () => Array[InternalRow] = () => Array.empty[InternalRow],
-    cause: Throwable) extends Exception(cause) {
+    cause: Throwable,
+    recoverable: Boolean = false) extends Exception(cause) {
   override def getStackTrace(): Array[StackTraceElement] = new Array[StackTraceElement](0)
   override def fillInStackTrace(): Throwable = this
 }
