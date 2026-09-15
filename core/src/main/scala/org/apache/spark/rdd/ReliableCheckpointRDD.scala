@@ -74,7 +74,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     // listStatus can throw exception if path does not exist.
     val inputFiles = fs.listStatus(cpath)
       .map(_.getPath)
-      .filter(_.getName.startsWith("part-"))
+      .filter(path => ReliableCheckpointRDD.isCheckpointFile(path.getName))
       .sortBy(_.getName.stripPrefix("part-").toInt)
     // Fail fast if input files are invalid
     inputFiles.zipWithIndex.foreach { case (path, i) =>
@@ -131,6 +131,12 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
 }
 
 private[spark] object ReliableCheckpointRDD extends Logging {
+
+  private def isCheckpointFile(fileName: String): Boolean = {
+    val partitionId = fileName.stripPrefix("part-")
+    fileName.startsWith("part-") && partitionId.nonEmpty &&
+      partitionId.forall(c => c >= '0' && c <= '9')
+  }
 
   /**
    * Return the checkpoint file name for the given partition.
