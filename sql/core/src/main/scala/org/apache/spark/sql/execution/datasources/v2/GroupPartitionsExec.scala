@@ -47,12 +47,10 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  *                         keys of a storage-partitioned join or the `PARTITION BY` and grouping
  *                         keys of a single-child operator. The name is historical, the projection
  *                         is not join-specific.
- * @param expectedPartitionKeys Optional sequence of expected partition key values and their
- *                              split counts
+ * @param expectedPartitionKeys Optional sequence of [[ExpectedPartitionKey]]s: the keys the
+ *                              alignment emits, each with its reserved output partition count
+ *                              and this side's per-key mode
  * @param reducers Optional reducers to apply to partition keys for grouping compatibility
- * @param distributePartitions When true, splits for a key are distributed across the expected
- *                             partitions (padding with empty partitions). When false, all splits
- *                             are replicated to every expected partition for that key.
  * @param enableSortedMerge When true, uses [[SortedMergeCoalescedRDD]] to perform a k-way merge
  *                          of the coalesced partitions, preserving the child's output ordering
  *                          end-to-end. Set by [[EnsureRequirements]] when a parent operator
@@ -65,9 +63,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 case class GroupPartitionsExec(
     child: SparkPlan,
     @transient joinKeyPositions: Option[Seq[Int]] = None,
-    @transient expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
+    @transient expectedPartitionKeys: Option[Seq[ExpectedPartitionKey]] = None,
     @transient reducers: Option[Seq[Option[KeyReducer]]] = None,
-    @transient distributePartitions: Boolean = false,
     @transient enableSortedMerge: Boolean = false
   ) extends UnaryExecNode {
 
@@ -163,9 +160,10 @@ case class GroupPartitionsExec(
    * only the intersection. Which keys are expected is orthogonal to the mode: an
    * `OrderedDistribution` producer expects the child's own keys and so never prunes, while a
    * join producer can prune in either mode. The replicated count is the reads that happen
-   * again: in the replicate mode of partial clustering every expected partition of a held key
-   * re-reads all its splits, counted beyond the first pass (3 splits over 2 slots count 3).
-   * Total input reads = `numInputPartitions` - pruned + replicated.
+   * again: in the replicate mode every expected partition of a held key re-reads all its
+   * splits, counted beyond the first pass (3 splits over 2 slots count 3). Partial clustering
+   * and the per-key skew split both produce that mode. Total input reads =
+   * `numInputPartitions` - pruned + replicated.
    */
   private def alignToExpectedKeys(
       keyMap: Map[InternalRowComparableWrapper, Seq[Int]],
@@ -175,7 +173,8 @@ case class GroupPartitionsExec(
     // Splits the alignment references, accumulated over the expected keys. Every producer of
     // `expectedPartitionKeys` deduplicates the keys, so no split is counted twice here.
     var numMatchedPartitions = 0
-    val alignedPartitions = expectedPartitionKeys.get.flatMap { case (key, numSplits) =>
+    val alignedPartitions = expectedPartitionKeys.get.flatMap {
+      case ExpectedPartitionKey(key, numSplits, distribute, _) =>
       // Every producer derives the split counts from a `groupBy` size or the literal 1; a
       // non-positive count would emit a different partition count for the key than the other
       // side expects, breaking the pairing this alignment exists for.
@@ -183,10 +182,20 @@ case class GroupPartitionsExec(
       if (numSplits > 1) isGrouped = false
       val splits = keyMap.getOrElse(key, Seq.empty)
       numMatchedPartitions += splits.size
-      if (distributePartitions) {
-        // Distribute splits across expected partitions, padding with empty sequences
-        val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
-        paddedSplits.map((key, _))
+      if (distribute) {
+        if (numSplits == 1) {
+          // A single expected partition leaves nothing to spread over: the splits concatenate
+          // into it, the same shape the replicate mode produces for the key.
+          Seq((key, splits))
+        } else {
+          // Spread the splits over the expected partitions: one split per partition while the
+          // slots suffice, otherwise contiguous chunks of ceil(size / numSplits), the count
+          // counterpart of the AQE skew join's contiguous map ranges. Padding the leftover
+          // slots keeps the emitted count exactly the reserved one, whatever the ratio of
+          // splits to slots.
+          val chunkSize = math.ceil(splits.size.toDouble / numSplits).toInt.max(1)
+          splits.grouped(chunkSize).padTo(numSplits, Seq.empty).map((key, _)).toSeq
+        }
       } else {
         // The slots beyond the first re-read the whole group. A key this side does not hold
         // has no splits to re-read, so the product is 0 and no explicit guard is needed.
@@ -268,8 +277,8 @@ case class GroupPartitionsExec(
       // child's keys rather than its partitions is what tells such a merge from a source that
       // reports several splits per key.
       val keptGroups = expectedPartitionKeys match {
-        case Some(expected) => expected.view.flatMap { case (key, _) =>
-          keyToPartitionIndices.get(key)
+        case Some(expected) => expected.view.flatMap { expectedKey =>
+          keyToPartitionIndices.get(expectedKey.key)
         }
         case None => keyToPartitionIndices.values.view
       }
@@ -319,9 +328,16 @@ case class GroupPartitionsExec(
 
   @transient private lazy val hasCoalescing: Boolean = groupedPartitions.exists(_._2.size > 1)
 
+  // Whether any expected key puts this side in the distribute mode, for the plan summary. Reads
+  // the constructor field only, like `planSummaryParts`. Without expected keys it reports
+  // false, what the historical side-wide flag reported for an unaligned node.
+  @transient private lazy val distributePartitions: Boolean =
+    expectedPartitionKeys.exists(_.exists(_.distribute))
+
   // All values are computed on the driver by `grouping`, so they are reported through
   // `sendDriverMetrics` rather than task-side accumulators. Registration reads constructor
-  // parameters only: replication needs an expected key with several slots, which the expected
+  // parameters only: replication needs an expected key with several slots in the replicate
+  // mode, and the skewed count needs a key the skew-split decision marked, which the expected
   // keys themselves show. Pruning is registered over the whole alignment path; the ordering
   // producer expects the child's own keys and so never prunes, but no constructor parameter
   // separates it from the join producers that can. Coalescing can happen in any mode and
@@ -334,9 +350,17 @@ case class GroupPartitionsExec(
       SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"),
     "maxPartitionsPerGroup" ->
       SQLMetrics.createMetric(sparkContext, "max partitions per group")) ++ {
-    if (expectedPartitionKeys.exists(_.exists(_._2 > 1)) && !distributePartitions) {
+    if (expectedPartitionKeys.exists(
+        _.exists(e => e.numSplits > 1 && !e.distribute))) {
       Map("numReplicatedPartitionReads" -> SQLMetrics.createMetric(sparkContext,
         "number of replicated input partition reads"))
+    } else {
+      Map.empty[String, SQLMetric]
+    }
+  } ++ {
+    if (expectedPartitionKeys.exists(_.exists(_.skewed))) {
+      Map("numSkewedKeyGroups" ->
+        SQLMetrics.createMetric(sparkContext, "number of skewed key groups"))
     } else {
       Map.empty[String, SQLMetric]
     }
@@ -443,11 +467,13 @@ case class GroupPartitionsExec(
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val driverAccumUpdates = ArrayBuffer.empty[(Long, Long)]
     // `metrics` is the single source of truth for what this node reports: an unregistered name
-    // is skipped here instead of its registration condition being repeated. `SparkPlan.execute`
-    // memoizes `doExecute` per instance, so this posts at most once.
-    def set(name: String, value: Long): Unit = metrics.get(name).foreach { metric =>
-      metric.set(value)
-      driverAccumUpdates += (metric.id -> value)
+    // is skipped here instead of its registration condition being repeated, and its value is
+    // by-name so a skipped metric costs no computation. `SparkPlan.execute` memoizes `doExecute`
+    // per instance, so this posts at most once.
+    def set(name: String, value: => Long): Unit = metrics.get(name).foreach { metric =>
+      val computed = value
+      metric.set(computed)
+      driverAccumUpdates += (metric.id -> computed)
     }
     // A single pass for the three per-group counts; an empty group and a coalesced one are
     // mutually exclusive.
@@ -472,6 +498,7 @@ case class GroupPartitionsExec(
     set("maxPartitionsPerGroup", maxPartitionsPerGroup)
     set("numReplicatedPartitionReads", grouping.numReplicatedPartitionReads)
     set("numPrunedPartitions", grouping.numPrunedPartitions)
+    set("numSkewedKeyGroups", expectedPartitionKeys.getOrElse(Nil).count(_.skewed))
     SQLMetrics.postDriverMetricsUpdatedByValue(
       sparkContext, executionId, driverAccumUpdates.toSeq)
   }
@@ -574,6 +601,29 @@ case class GroupPartitionsExec(
     joinKeyStr ++ expectedStr ++ reducersStr ++ distributeStr ++ sortedMergeStr
   }
 }
+
+/**
+ * One expected partition key of a [[GroupPartitionsExec]] alignment. Both sides of a join derive
+ * their entries from one shared list of keys and split counts, which is what pairs their output
+ * partitions; the mode is per side.
+ *
+ * @param key The partition key value the alignment reserves output partitions for.
+ * @param numSplits The number of output partitions reserved for the key, the same on both sides.
+ * @param distribute This side's mode for the key. In the distribute mode (`true`), the side's
+ *                   splits for the key are spread across the expected partitions, one split per
+ *                   partition while the slots suffice and in contiguous chunks otherwise, padded
+ *                   with empty ones; a single expected partition concatenates them instead, like
+ *                   the other mode. In the replicate mode (`false`), all splits are
+ *                   concatenated into one group and re-read by every expected partition.
+ * @param skewed Whether the count and modes of this key came from the skew-split decision, which
+ *               is what the skew metrics of [[GroupPartitionsExec]] count. The spreads the other
+ *               producers reserve are not skew and leave it false.
+ */
+case class ExpectedPartitionKey(
+    key: InternalRowComparableWrapper,
+    numSplits: Int,
+    distribute: Boolean,
+    skewed: Boolean = false)
 
 /**
  * What a [[GroupPartitionsExec]] computes once and reports from several members: which of the

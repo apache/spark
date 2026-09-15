@@ -24,7 +24,7 @@ import org.apache.spark.rdd.SortedMergeCoalescedRDD
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, ExprId, Literal, TransformExpression}
-import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle}
+import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalystRuntimeFilterCatalog, InMemoryTableCatalog}
@@ -708,9 +708,13 @@ class KeyGroupedPartitioningSuite
         assert(collectAllShuffles(joins.head).isEmpty,
           "should not add shuffle for both sides of the join")
         val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
-        val distributed = sides.map(_.map(_.distributePartitions))
+        val distributed = sides.map(_.map { g =>
+          val modes = g.expectedPartitionKeys.getOrElse(Nil).map(_.distribute).distinct
+          assert(modes.size <= 1, s"expected a uniform per-key distribute mode, got $modes")
+          modes.headOption.getOrElse(false)
+        })
         assert(distributed == Seq(Seq(expectedLeftDistributed), Seq(false)),
-          s"left/right distributePartitions with partially clustered $partiallyClustered: " +
+          s"left/right distribute modes with partially clustered $partiallyClustered: " +
             distributed)
         val numPartitions = sides.flatten.map(_.outputPartitioning.numPartitions)
         assert(numPartitions == Seq(expectedNumPartitions, expectedNumPartitions),
@@ -7310,13 +7314,630 @@ class KeyGroupedPartitioningSuite
         s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id")
       val plan = df.queryExecution.executedPlan
 
-      val distributing = collectAllGroupPartitions(plan).filter(_.distributePartitions)
+      val distributing = collectAllGroupPartitions(plan).filter {
+        _.expectedPartitionKeys.exists(_.exists(_.distribute))
+      }
       assert(distributing.nonEmpty, "this test needs a distributing GroupPartitionsExec")
       val keyed = keyedPartitioningsOf(distributing)
       assert(keyed.nonEmpty && keyed.forall(_.isCollapsed),
         "dropping `name` merged two distinct keys, however the splits are laid out afterwards")
       checkAnswer(df, Seq(Row(1, "aa", 42.0), Row(1, "aa", 44.0),
         Row(1, "bb", 42.0), Row(1, "bb", 44.0), Row(2, "cc", 11.0)))
+    }
+  }
+
+  test("SPARK-59436: skewed group split spreads a many-splits key and replicates the other side") {
+    // The join key `id` is coarser than the items side's `(id, name)` partitioning, so key 1
+    // collects 8 input splits there against 1 on purchases; key 2 is even. With the split on,
+    // the items side holding more of that key's splits keeps its 8 splits over 8 output
+    // partitions while purchases replicates its group to each, and key 2 coalesces as usual.
+    // The replicated reads must not change the answer.
+    createTable(items, itemsColumns, Array(identity("id"), identity("name")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      (1 to 8).map(n => s"(1, 'n$n', ${40.0 + n}, cast('2020-01-01' as timestamp))")
+        .mkString("", ", ", ", ") +
+      s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 11.0, cast('2020-01-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
+        // Group counts: [9, 2], median 5. The default threshold would hide the split.
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD.key -> "4",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "1.0") {
+      val df = sql(s"${selectWithMergeJoinHint("i", "p")} i.id, i.name, p.price " +
+        s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id")
+      val plan = df.queryExecution.executedPlan
+
+      val joins = collect(plan) { case j: ShuffledJoin => j }
+      assert(joins.size == 1, s"expected one join in\n$plan")
+      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+      assert(collectAllGroupPartitions(plan).size == 2,
+        s"one aligned grouping per join side:\n$plan")
+      val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+      val splitsAndModes = sides.map(_.flatMap { g =>
+        g.expectedPartitionKeys.get.map(e => (e.numSplits, e.distribute, e.skewed))
+      })
+      assert(splitsAndModes ==
+          Seq(Seq((8, true, true), (1, false, false)), Seq((8, false, true), (1, false, false))),
+        s"left/right splits, modes and skew marks: $splitsAndModes")
+
+      val expected = (1 to 8).map(n => Row(1, s"n$n", 42.0)) ++ Seq(Row(2, "cc", 11.0))
+      checkAnswer(df, expected)
+      // The 8 replicas of the purchases group of key 1 re-read its single split 7 times beyond
+      // the first pass; both sides report the one skewed key.
+      assert(sides(1).head.metrics("numReplicatedPartitionReads").value === 7)
+      sides.flatten.foreach { g =>
+        assert(g.metrics("numSkewedKeyGroups").value === 1)
+      }
+    }
+  }
+
+  test("SPARK-59436: skewed group split survives adaptive re-planning") {
+    // The same shape as the test above with AQE on: stage preparation hands whole trees back to
+    // `EnsureRequirements`, and the re-runs must reproduce the first pass's split instead of
+    // regrouping it away.
+    createTable(items, itemsColumns, Array(identity("id"), identity("name")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      (1 to 8).map(n => s"(1, 'n$n', ${40.0 + n}, cast('2020-01-01' as timestamp))")
+        .mkString("", ", ", ", ") +
+      s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 11.0, cast('2020-01-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD.key -> "4",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "1.0") {
+      val df = sql(s"${selectWithMergeJoinHint("i", "p")} i.id, i.name, p.price " +
+        s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id")
+      val expected = (1 to 8).map(n => Row(1, s"n$n", 42.0)) ++ Seq(Row(2, "cc", 11.0))
+      checkAnswer(df, expected)
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+
+      val joins = collect(plan) { case j: ShuffledJoin => j }
+      assert(joins.size == 1, s"expected one join in\n$plan")
+      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+      assert(collectAllGroupPartitions(plan).size == 2,
+        s"one aligned grouping per join side:\n$plan")
+      val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+      val splitsAndModes = sides.map(_.flatMap { g =>
+        g.expectedPartitionKeys.get.map(e => (e.numSplits, e.distribute, e.skewed))
+      })
+      assert(splitsAndModes ==
+          Seq(Seq((8, true, true), (1, false, false)), Seq((8, false, true), (1, false, false))),
+        s"left/right splits, modes and skew marks: $splitsAndModes")
+      assert(sides(1).head.metrics("numReplicatedPartitionReads").value === 7)
+    }
+  }
+
+  test("SPARK-59436: skewed group split honors the advisory input partitions per slot") {
+    // The eight splits of key 1 spread over ceil(8 / 3) = 3 output partitions in contiguous
+    // chunks instead of eight, and purchases replicates its group 3 times instead of 8; the
+    // answer is unchanged.
+    withSkewSplitTables(withUnmatched = false) {
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SKEW_JOIN_ADVISORY_INPUT_PARTITIONS_PER_OUTPUT_PARTITION.key ->
+            "3") {
+        val df = sql(s"${selectWithMergeJoinHint("i", "p")} i.id, i.name, p.price " +
+          s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id")
+        val expected = (1 to 8).map(n => Row(1, s"n$n", 42.0)) ++ Seq(Row(2, "cc", 11.0))
+        checkAnswer(df, expected)
+        val plan = stripAQEPlan(df.queryExecution.executedPlan)
+        val joins = collect(plan) { case j: ShuffledJoin => j }
+        assert(joins.size == 1, s"expected one join in\n$plan")
+        assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+        assert(collectAllGroupPartitions(plan).size == 2,
+          s"one aligned grouping per join side:\n$plan")
+        val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+        val splitsAndModes = sides.map(_.flatMap { g =>
+          g.expectedPartitionKeys.get.map(e => (e.numSplits, e.distribute, e.skewed))
+        })
+        assert(splitsAndModes ==
+            Seq(Seq((3, true, true), (1, false, false)),
+              Seq((3, false, true), (1, false, false))),
+          s"left/right splits, modes and skew marks: $splitsAndModes")
+        assert(sides(1).head.metrics("numReplicatedPartitionReads").value === 2)
+        sides.flatten.foreach { g =>
+          assert(g.metrics("numSkewedKeyGroups").value === 1)
+        }
+      }
+    }
+  }
+
+  /**
+   * `items` partitioned by `(id, name)` holds eight splits under key 1 and one under key 2, plus
+   * an unmatched key 3 when `withUnmatched`; `purchases` partitioned by `item_id` holds one split
+   * per key. Key 1's group then towers over the median and the split fires on it alone, under
+   * the same threshold and factor as the two tests above.
+   */
+  private def withSkewSplitTables(withUnmatched: Boolean)(body: => Unit): Unit = {
+    createTable(items, itemsColumns, Array(identity("id"), identity("name")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      (1 to 8).map(n => s"(1, 'n$n', ${40.0 + n}, cast('2020-01-01' as timestamp))")
+        .mkString("", ", ", ", ") +
+      s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))" +
+      (if (withUnmatched) s", (3, 'dd', 12.0, cast('2020-01-01' as timestamp))" else ""))
+
+    createTable(purchases, purchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 11.0, cast('2020-01-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
+        // The expected keys counted below are the unfiltered merge's; pin the filter so a
+        // change of its default cannot reshape them.
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD.key -> "4",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "1.0")(body)
+  }
+
+  test("SPARK-59436: skewed group split keeps an aggregate over the join exact") {
+    // join -> agg: the aggregate reads the join output, where every row exists exactly once
+    // despite the replicated purchases reads below, so its counts and sums must not see the
+    // replication.
+    withSkewSplitTables(withUnmatched = false) {
+      val df = sql(s"${selectWithMergeJoinHint("i", "p")} i.id, count(*), sum(p.price) " +
+        s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id " +
+        s"GROUP BY i.id")
+      checkAnswer(df, Seq(Row(1, 8, 336.0), Row(2, 1, 11.0)))
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val joins = collect(plan) { case j: ShuffledJoin => j }
+      assert(joins.size == 1, s"expected one join in\n$plan")
+      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+      // One aligned grouping per join side, plus the regrouping the aggregate stacks over the
+      // join's non-grouped output layout.
+      assert(collectAllGroupPartitions(plan).size == 3,
+        s"join sides plus the aggregate's regrouping:\n$plan")
+      val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+      val splitsAndModes = sides.map(_.flatMap { g =>
+        g.expectedPartitionKeys.get.map(e => (e.numSplits, e.distribute, e.skewed))
+      })
+      assert(splitsAndModes ==
+          Seq(Seq((8, true, true), (1, false, false)), Seq((8, false, true), (1, false, false))),
+        s"left/right splits, modes and skew marks: $splitsAndModes")
+    }
+  }
+
+  test("SPARK-59436: skewed group split survives a second join over the first") {
+    // join -> join: the second join reads the first one's output, whose split key repeats in
+    // the reported layout. It must re-align that layout against the third table, re-splitting
+    // the skewed key, without a shuffle and without duplicating or losing rows.
+    withSkewSplitTables(withUnmatched = false) {
+      val others = "others"
+      createTable(others,
+        Array(Column.create("item_id", LongType), Column.create("tag", StringType)),
+        Array(identity("item_id")))
+      sql(s"INSERT INTO testcat.ns.$others VALUES (1, 'x'), (2, 'y')")
+
+      val df = sql(s"SELECT /*+ MERGE(p), MERGE(o) */ i.id, i.name, p.price, o.tag " +
+        s"FROM testcat.ns.$items i " +
+        s"JOIN testcat.ns.$purchases p ON p.item_id = i.id " +
+        s"JOIN testcat.ns.$others o ON o.item_id = i.id")
+      val expected = (1 to 8).map(n => Row(1, s"n$n", 42.0, "x")) ++
+        Seq(Row(2, "cc", 11.0, "y"))
+      checkAnswer(df, expected)
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val joins = collect(plan) { case j: ShuffledJoin => j }
+      assert(joins.size == 2, s"expected two joins in\n$plan")
+      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+      // Two aligned groupings per join: the second join re-aligns the first one's output
+      // against the third table.
+      val groupings = collectAllGroupPartitions(plan)
+      assert(groupings.size == 4, s"two aligned groupings per join:\n$plan")
+      assert(groupings.forall(_.expectedPartitionKeys.exists(_.exists(_.skewed))),
+        s"both joins re-split the skewed key on both sides:\n$plan")
+    }
+  }
+
+  test("SPARK-59436: aggregate and window over the join reuse the layout shuffle-free") {
+    // join -> agg -> window: the aggregate regroups the join's non-grouped output through a
+    // stacked GroupPartitionsExec instead of an exchange, the window reuses the aggregate's
+    // clustered output, and the whole pipeline stays shuffle-free with the skew split on.
+    withSkewSplitTables(withUnmatched = false) {
+      val df = sql(
+        s"""
+           |SELECT id, cnt, rank() OVER (PARTITION BY id ORDER BY cnt) AS rnk FROM (
+           |  ${selectWithMergeJoinHint("i", "p")} i.id, count(*) AS cnt
+           |  FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id
+           |  GROUP BY i.id)
+           |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, 8, 1), Row(2, 1, 1)))
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val joins = collect(plan) { case j: ShuffledJoin => j }
+      assert(joins.size == 1, s"expected one join in\n$plan")
+      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+      // One aligned grouping per join side, plus the regrouping the aggregate stacks over the
+      // join's output layout; the window needs none.
+      assert(collectAllGroupPartitions(plan).size == 3,
+        s"join sides plus the aggregate's regrouping:\n$plan")
+      val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+      val splitsAndModes = sides.map(_.flatMap { g =>
+        g.expectedPartitionKeys.get.map(e => (e.numSplits, e.distribute, e.skewed))
+      })
+      assert(splitsAndModes ==
+          Seq(Seq((8, true, true), (1, false, false)), Seq((8, false, true), (1, false, false))),
+        s"left/right splits, modes and skew marks: $splitsAndModes")
+    }
+  }
+
+  test("SPARK-59436: skewed group split coexists with partially clustered distribution") {
+    // Both features on, with layouts that visibly differ per key: key 1 is skewed (9 combined
+    // splits over the median of 6) and takes the per-key split; key 2 totals 4 and stays on
+    // the partially clustered layout, which spreads the items side's 3 splits instead of
+    // coalescing them. The purchases side replicates for both, 7 reads beyond the first for
+    // key 1 and 2 for key 2.
+    createTable(items, itemsColumns, Array(identity("id"), identity("name")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      (1 to 8).map(n => s"(1, 'n$n', ${40.0 + n}, cast('2020-01-01' as timestamp))")
+        .mkString("", ", ", ", ") +
+      s"(2, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'bb', 11.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 12.0, cast('2020-01-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 11.0, cast('2020-01-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
+        // Group counts: [9, 4], median 6; only key 1 exceeds max(4, 6).
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD.key -> "4",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "1.0") {
+      val df = sql(s"${selectWithMergeJoinHint("i", "p")} i.id, i.name, p.price " +
+        s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id")
+      val expected = (1 to 8).map(n => Row(1, s"n$n", 42.0)) ++
+        Seq(Row(2, "aa", 11.0), Row(2, "bb", 11.0), Row(2, "cc", 11.0))
+      checkAnswer(df, expected)
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val joins = collect(plan) { case j: ShuffledJoin => j }
+      assert(joins.size == 1, s"expected one join in\n$plan")
+      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+      assert(collectAllGroupPartitions(plan).size == 2,
+        s"one aligned grouping per join side:\n$plan")
+      val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+      val splitsAndModes = sides.map(_.flatMap { g =>
+        g.expectedPartitionKeys.get.map(e => (e.numSplits, e.distribute, e.skewed))
+      })
+      assert(splitsAndModes ==
+          Seq(Seq((8, true, true), (3, true, false)), Seq((8, false, true), (3, false, false))),
+        s"left/right splits, modes and skew marks: $splitsAndModes")
+      assert(sides(1).head.metrics("numReplicatedPartitionReads").value === 9)
+      sides.flatten.foreach { g =>
+        assert(g.metrics("numSkewedKeyGroups").value === 1)
+      }
+    }
+  }
+
+  test("SPARK-59436: skewed group split flips the partially clustered side per key") {
+    // Both features on, and the per-key choice disagrees with the whole-side one: the partial
+    // clustering distributes the items side (11 splits against 9), but key 1 holds 7 of its
+    // splits on the purchases side against 1, so the split flips that key -- purchases keeps
+    // its 7 and items replicates its single split over them -- while key 2 splits over the
+    // items side as the partial clustering already picked and key 3 stays below the threshold.
+    createTable(items, itemsColumns, Array(identity("id"), identity("name")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'zz', 30.0, cast('2020-01-01' as timestamp)), " +
+      (1 to 9).map(n => s"(2, 'm$n', ${40.0 + n}, cast('2020-01-01' as timestamp))")
+        .mkString("", ", ", ", ") +
+      s"(3, 'q', 20.0, cast('2020-01-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      (1 to 7).map(n => s"(1, ${50.0 + n}, cast('2020-01-01' as timestamp))")
+        .mkString("", ", ", ", ") +
+      s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+      s"(3, 13.0, cast('2020-01-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
+        // Group counts: [8, 10, 2], median 8; with the factor at 0.5 the threshold is
+        // max(4, 4) = 4, so keys 1 and 2 split and key 3 stays on the clustered layout.
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD.key -> "4",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "0.5") {
+      val df = sql(s"${selectWithMergeJoinHint("i", "p")} i.id, i.name, p.price " +
+        s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id")
+      val expected = (1 to 7).map(n => Row(1, "zz", 50.0 + n)) ++
+        (1 to 9).map(n => Row(2, s"m$n", 11.0)) ++
+        Seq(Row(3, "q", 13.0))
+      checkAnswer(df, expected)
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val joins = collect(plan) { case j: ShuffledJoin => j }
+      assert(joins.size == 1, s"expected one join in\n$plan")
+      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+      assert(collectAllGroupPartitions(plan).size == 2,
+        s"one aligned grouping per join side:\n$plan")
+      val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+      val splitsAndModes = sides.map(_.flatMap { g =>
+        g.expectedPartitionKeys.get.map(e => (e.numSplits, e.distribute, e.skewed))
+      })
+      assert(splitsAndModes ==
+          Seq(Seq((7, false, true), (9, true, true), (1, true, false)),
+            Seq((7, true, true), (9, false, true), (1, false, false))),
+        s"left/right splits, modes and skew marks: $splitsAndModes")
+      // The items side replicates its key-1 split over 7 slots (6 reads beyond the first) and
+      // the purchases side its key-2 split over 9 (8 beyond the first).
+      assert(sides.head.head.metrics("numReplicatedPartitionReads").value === 6)
+      assert(sides(1).head.metrics("numReplicatedPartitionReads").value === 8)
+      sides.flatten.foreach { g =>
+        assert(g.metrics("numSkewedKeyGroups").value === 2)
+      }
+    }
+  }
+
+  test("SPARK-59436: partially clustered and skew split survive adaptive re-planning") {
+    // Both features on under AQE: the mixed layout, the per-key split on the skewed key and the
+    // partially clustered spread on the other key, must be re-derived on every re-planning of
+    // the join instead of being regrouped away.
+    createTable(items, itemsColumns, Array(identity("id"), identity("name")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      (1 to 8).map(n => s"(1, 'n$n', ${40.0 + n}, cast('2020-01-01' as timestamp))")
+        .mkString("", ", ", ", ") +
+      s"(2, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'bb', 11.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 12.0, cast('2020-01-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 11.0, cast('2020-01-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false",
+        // Group counts: [9, 4], median 6; only key 1 exceeds max(4, 6).
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD.key -> "4",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "1.0") {
+      val df = sql(s"${selectWithMergeJoinHint("i", "p")} i.id, i.name, p.price " +
+        s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id")
+      val expected = (1 to 8).map(n => Row(1, s"n$n", 42.0)) ++
+        Seq(Row(2, "aa", 11.0), Row(2, "bb", 11.0), Row(2, "cc", 11.0))
+      checkAnswer(df, expected)
+
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val joins = collect(plan) { case j: ShuffledJoin => j }
+      assert(joins.size == 1, s"expected one join in\n$plan")
+      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+      assert(collectAllGroupPartitions(plan).size == 2,
+        s"one aligned grouping per join side:\n$plan")
+      val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+      val splitsAndModes = sides.map(_.flatMap { g =>
+        g.expectedPartitionKeys.get.map(e => (e.numSplits, e.distribute, e.skewed))
+      })
+      assert(splitsAndModes ==
+          Seq(Seq((8, true, true), (3, true, false)), Seq((8, false, true), (3, false, false))),
+        s"left/right splits, modes and skew marks: $splitsAndModes")
+      assert(sides(1).head.metrics("numReplicatedPartitionReads").value === 9)
+    }
+  }
+
+  test("SPARK-59436: skewed group split does not duplicate semi join rows") {
+    // The right side's group reaches every left split as a replica; a left row matching in its
+    // partition must come out exactly once. Replicating the left side of a semi join is what
+    // would duplicate rows, and the join-type gate is what keeps the split on the other shape.
+    withSkewSplitTables(withUnmatched = true) {
+      val df = sql(s"${selectWithMergeJoinHint("i", "p")} i.id, i.name " +
+        s"FROM testcat.ns.$items i LEFT SEMI JOIN testcat.ns.$purchases p ON p.item_id = i.id")
+      val expected = (1 to 8).map(n => Row(1, s"n$n")) ++ Seq(Row(2, "cc"))
+      checkAnswer(df, expected)
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val joins = collect(plan) { case j: ShuffledJoin if j.joinType == LeftSemi => j }
+      assert(joins.size == 1, s"expected one semi join in\n$plan")
+      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+      assert(collectAllGroupPartitions(plan).size == 2,
+        s"one aligned grouping per join side:\n$plan")
+      val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+      val splitsAndModes = sides.map(_.flatMap { g =>
+        g.expectedPartitionKeys.get.map(e => (e.numSplits, e.distribute, e.skewed))
+      })
+      assert(splitsAndModes ==
+          Seq(Seq((8, true, true), (1, false, false), (1, false, false)),
+            Seq((8, false, true), (1, false, false), (1, false, false))),
+        s"left/right splits, modes and skew marks: $splitsAndModes")
+    }
+  }
+
+  test("SPARK-59436: skewed group split keeps left outer join rows and null padding") {
+    // Left outer: every left row comes out exactly once, matched or null-padded. The unmatched
+    // key 3 is held by the left side alone, so the right side replicates an empty group for it.
+    withSkewSplitTables(withUnmatched = true) {
+      val df = sql(s"${selectWithMergeJoinHint("i", "p")} i.id, i.name, p.price " +
+        s"FROM testcat.ns.$items i LEFT OUTER JOIN testcat.ns.$purchases p ON p.item_id = i.id")
+      val expected = (1 to 8).map(n => Row(1, s"n$n", 42.0)) ++
+        Seq(Row(2, "cc", 11.0), Row(3, "dd", null))
+      checkAnswer(df, expected)
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val joins = collect(plan) { case j: ShuffledJoin if j.joinType == LeftOuter => j }
+      assert(joins.size == 1, s"expected one left outer join in\n$plan")
+      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+      assert(collectAllGroupPartitions(plan).size == 2,
+        s"one aligned grouping per join side:\n$plan")
+      val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+      val splitsAndModes = sides.map(_.flatMap { g =>
+        g.expectedPartitionKeys.get.map(e => (e.numSplits, e.distribute, e.skewed))
+      })
+      assert(splitsAndModes ==
+          Seq(Seq((8, true, true), (1, false, false), (1, false, false)),
+            Seq((8, false, true), (1, false, false), (1, false, false))),
+        s"left/right splits, modes and skew marks: $splitsAndModes")
+    }
+  }
+
+  test("SPARK-59436: skewed group split stands down over a marked child end to end") {
+    // A real plan reaches the marked shape: the unpartitioned side is shuffled onto `t`'s keyed
+    // partitioning, which marks the shuffle output, and a left outer join reports its left
+    // side's partitioning, so `j` keeps the marker into the second join. That join pairs it with
+    // a side holding eight splits of one key, where the marked side can only be the replicating
+    // one: replicating it makes its grouping a non-identity one and the node stops reporting the
+    // keyed partitioning the join is planned on. The split stands down and the claim survives.
+    val t = "t"
+    val flat = "flat"
+    withTable(t, flat, items) {
+      createTable(t, Array(Column.create("id", LongType)), Array(identity("id")))
+      sql(s"INSERT INTO testcat.ns.$t VALUES (1), (2)")
+      createTable(flat, Array(Column.create("id", LongType)), Array.empty)
+      sql(s"INSERT INTO testcat.ns.$flat VALUES (1), (2)")
+      createTable(items, itemsColumns, Array(identity("id"), identity("name")))
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        (1 to 8).map(n => s"(1, 'n$n', ${40.0 + n}, cast('2020-01-01' as timestamp))")
+          .mkString("", ", ", ", ") +
+        s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
+          // Group counts of the second join: [9, 2], median 5, so the default threshold would
+          // hide the split the marked side must not take.
+          SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD.key -> "4",
+          SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "1.0") {
+        val df = sql(
+          s"""${selectWithMergeJoinHint("i", "j")} i.id, i.name, j.id
+             |FROM testcat.ns.$items i
+             |JOIN (SELECT /*+ MERGE(f, t) */ f.id AS id
+             |      FROM testcat.ns.$flat f LEFT OUTER JOIN testcat.ns.$t t ON f.id = t.id) j
+             |ON i.id = j.id
+             |""".stripMargin)
+        val expected = (1 to 8).map(n => Row(1L, s"n$n", 1L)) ++ Seq(Row(2L, "cc", 2L))
+        checkAnswer(df, expected)
+
+        val plan = stripAQEPlan(df.queryExecution.executedPlan)
+        val shuffles = collectAllShuffles(plan)
+        assert(shuffles.size == 1,
+          s"only the shuffle that lays the unpartitioned side onto the keyed one:\n$plan")
+        val marked = keyedPartitioningsOf(shuffles)
+        assert(marked.nonEmpty && marked.forall(_.mayContainUnknownPartitionKeys),
+          s"test setup: the shuffled side must carry the marker, got $marked")
+        // The stand-down is what keeps the marked side's grouping an identity one, and with it
+        // the keyed partitioning the second join takes as satisfied. A split would reserve
+        // several partitions for the one skewed key and the node would report an
+        // `UnknownPartitioning` instead.
+        val outer = collect(plan) { case j: ShuffledJoin => j }.head
+        assert(keyedPartitioningsOf(Seq(outer.right)).exists(_.mayContainUnknownPartitionKeys),
+          s"the marked side must keep its claim:\n$plan")
+        assert(outer.right.outputPartitioning.numPartitions == 2,
+          s"one partition per key, nothing reserved for a split:\n$plan")
+        assert(collectAllGroupPartitions(plan).forall(
+            _.expectedPartitionKeys.get.forall(!_.skewed)),
+          s"no key is marked skewed:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-59436: skewed group split keeps right outer join rows and null padding") {
+    // A right outer join may replicate the left side but not the right, so the side holding
+    // more of the skewed key's splits is the right one, which spreads them while the left
+    // replicates its group. The right-only key 9 pads the left with a null row.
+    createTable(items, itemsColumns, Array(identity("id")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array(identity("item_id"), identity("price")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      (1 to 8).map(n => s"(1, ${50.0 + n}, cast('2020-01-01' as timestamp))")
+        .mkString("", ", ", ", ") +
+      s"(9, 99.0, cast('2020-01-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false",
+        // Group counts: [9, 1, 1], median 1; only key 1 exceeds max(4, 1).
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD.key -> "4",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "1.0") {
+      val df = sql(s"${selectWithMergeJoinHint("i", "p")} i.id, i.name, p.price " +
+        s"FROM testcat.ns.$items i RIGHT OUTER JOIN testcat.ns.$purchases p ON p.item_id = i.id")
+      val expected = (1 to 8).map(n => Row(1, "aa", 50.0 + n)) ++ Seq(Row(null, null, 99.0))
+      checkAnswer(df, expected)
+
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val joins = collect(plan) { case j: ShuffledJoin if j.joinType == RightOuter => j }
+      assert(joins.size == 1, s"expected one right outer join in\n$plan")
+      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+      assert(collectAllGroupPartitions(plan).size == 2,
+        s"one aligned grouping per join side:\n$plan")
+      val sides = Seq(joins.head.left, joins.head.right).map(collectAllGroupPartitions)
+      val splitsAndModes = sides.map(_.flatMap { g =>
+        g.expectedPartitionKeys.get.map(e => (e.numSplits, e.distribute, e.skewed))
+      })
+      assert(splitsAndModes ==
+          Seq(Seq((8, false, true), (1, false, false), (1, false, false)),
+            Seq((8, true, true), (1, false, false), (1, false, false))),
+        s"left/right splits, modes and skew marks: $splitsAndModes")
+      assert(sides(0).head.metrics("numReplicatedPartitionReads").value === 7)
+    }
+  }
+
+  test("SPARK-59436: full outer join keeps both sides' unmatched rows coalesced") {
+    // A full outer join may replicate neither side, so the skewed key stands down and both keys
+    // coalesce; each side's unmatched key pads the other with nulls.
+    createTable(items, itemsColumns, Array(identity("id"), identity("name")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      (1 to 8).map(n => s"(1, 'n$n', ${40.0 + n}, cast('2020-01-01' as timestamp))")
+        .mkString("", ", ", ", ") +
+      s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp)), " +
+      s"(3, 'dd', 12.0, cast('2020-01-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(9, 99.0, cast('2020-01-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_PARTITIONS_PER_GROUP_THRESHOLD.key -> "4",
+        SQLConf.V2_BUCKETING_SKEW_JOIN_SKEWED_GROUP_FACTOR.key -> "1.0") {
+      val df = sql(s"${selectWithMergeJoinHint("i", "p")} i.id, i.name, p.price " +
+        s"FROM testcat.ns.$items i FULL OUTER JOIN testcat.ns.$purchases p ON p.item_id = i.id")
+      val expected = (1 to 8).map(n => Row(1, s"n$n", 42.0)) ++
+        Seq(Row(2, "cc", null), Row(3, "dd", null), Row(null, null, 99.0))
+      checkAnswer(df, expected)
+
+      val plan = stripAQEPlan(df.queryExecution.executedPlan)
+      val joins = collect(plan) { case j: ShuffledJoin if j.joinType == FullOuter => j }
+      assert(joins.size == 1, s"expected one full outer join in\n$plan")
+      assert(collectAllShuffles(plan).size == 0, s"the whole plan must not shuffle:\n$plan")
+      val groupings = collectAllGroupPartitions(plan)
+      assert(groupings.size == 2, s"one aligned grouping per join side:\n$plan")
+      groupings.foreach { g =>
+        assert(g.expectedPartitionKeys.get.forall(e => e.numSplits == 1 && !e.skewed),
+          s"neither side can replicate, so nothing splits:\n$plan")
+        assert(!g.metrics.contains("numSkewedKeyGroups"),
+          s"no key may be marked skewed:\n$plan")
+      }
     }
   }
 
