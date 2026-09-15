@@ -52,11 +52,38 @@ class PartitionPredicateImplSuite extends SparkFunSuite {
     checkNestedPartitionPathReferencesAfterSerialization(serializer)
   }
 
+  test("non-identity partition field: predicate binds by ordinal and never references it") {
+    val ref = DataTypeUtils.toAttribute(StructField("p", StringType, nullable = true))
+    val fields = Seq(
+      PartitionPredicateField(Seq("bucket(4, id)"), None),
+      PartitionPredicateField(Seq("p"), Some(ref)))
+    val predicate = PartitionPredicateImpl(GreaterThan(ref, Literal("m")), fields).get
+
+    // The partition key carries one value per field; the bucket value at ordinal 0 is skipped.
+    assert(predicate.eval(InternalRow(3, UTF8String.fromString("z"))) === true)
+    assert(predicate.eval(InternalRow(3, UTF8String.fromString("a"))) === false)
+    assert(refsWithOrdinals(predicate.references.toSeq) === Seq(("p", 1)))
+
+    // A filter on the source column of the bucket transform has no field to bind to.
+    val id = DataTypeUtils.toAttribute(StructField("id", IntegerType, nullable = true))
+    assert(PartitionPredicateImpl(GreaterThan(id, Literal(1)), fields).isEmpty)
+
+    Seq(new JavaSerializer(new SparkConf()), new KryoSerializer(new SparkConf())).foreach { s =>
+      val serializer = s.newInstance()
+      val deserialized = serializer.deserialize[PartitionPredicateImpl](
+        serializer.serialize(predicate))
+      assert(deserialized.eval(InternalRow(3, UTF8String.fromString("z"))) === true)
+      assert(deserialized.eval(InternalRow(3, UTF8String.fromString("a"))) === false)
+      assert(refsWithOrdinals(deserialized.references.toSeq) === Seq(("p", 1)))
+      assert(deserialized.equals(predicate))
+    }
+  }
+
   private def checkPartitionPredicateImplAfterSerialization(
       serializer: SerializerInstance): Unit = {
     val ref = DataTypeUtils.toAttribute(StructField("p", IntegerType, nullable = true))
     val expr = GreaterThan(ref, Literal(5))
-    val fields = Seq(PartitionPredicateField(Seq("p"), ref))
+    val fields = Seq(PartitionPredicateField(Seq("p"), Some(ref)))
     val predicate = PartitionPredicateImpl(expr, fields).get
 
     val deserialized = serializer.deserialize[PartitionPredicateImpl](
@@ -77,7 +104,7 @@ class PartitionPredicateImplSuite extends SparkFunSuite {
       serializer: SerializerInstance): Unit = {
     val ref = DataTypeUtils.toAttribute(StructField("ts.timezone", StringType, nullable = false))
     val expr = GreaterThan(ref, Literal("x"))
-    val fields = Seq(PartitionPredicateField(Seq("ts", "timezone"), ref))
+    val fields = Seq(PartitionPredicateField(Seq("ts", "timezone"), Some(ref)))
     val predicate = PartitionPredicateImpl(expr, fields).get
 
     val deserialized = serializer.deserialize[PartitionPredicateImpl](
