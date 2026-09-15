@@ -22,6 +22,7 @@ import static org.apache.spark.sql.types.DataTypes.IntegerType;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.column.values.RequiresPreviousReader;
 import org.apache.parquet.column.values.ValuesReader;
+import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
@@ -71,6 +72,24 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
     return Binary.fromConstantByteArray(binaryValVector.getBinary(0));
   }
 
+  /**
+   * The prefix length is read from the file, so validate it against the previous value before
+   * using it to copy bytes out of that value. A corrupt page must fail the read instead of
+   * producing a malformed value.
+   */
+  private void checkPrefixLength(int prefixLength) {
+    if (prefixLength < 0) {
+      throw new ParquetDecodingException(
+        "Corrupted DELTA_BYTE_ARRAY page: negative prefix length: " + prefixLength);
+    }
+    int previousLength = previous == null ? 0 : previous.remaining();
+    if (prefixLength > previousLength) {
+      throw new ParquetDecodingException(
+        "Corrupted DELTA_BYTE_ARRAY page: prefix length " + prefixLength
+          + " is larger than the previous value's length " + previousLength);
+    }
+  }
+
   private void readValues(int total, WritableColumnVector c, int rowId) {
     for (int i = 0; i < total; i++) {
       // NOTE: due to PARQUET-246, it is important that we
@@ -79,6 +98,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       // value of the page should have an empty prefix, it may not
       // because of PARQUET-246.
       int prefixLength = prefixLengthVector.getInt(currentRow);
+      checkPrefixLength(prefixLength);
       ByteBuffer suffix = suffixReader.getBytes(currentRow);
       byte[] suffixArray = suffix.array();
       int suffixLength = suffix.limit() - suffix.position();
@@ -120,6 +140,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
      WKBConverterStrategy converter) {
     for (int i = 0; i < total; i++) {
       int prefixLength = prefixLengthVector.getInt(currentRow);
+      checkPrefixLength(prefixLength);
       ByteBuffer suffix = suffixReader.getBytes(currentRow);
       int suffixLength = suffix.limit() - suffix.position();
       int length = prefixLength + suffixLength;
@@ -165,6 +186,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
 
     for (int i = 0; i < total; i++) {
       int prefixLength = prefixLengthVector.getInt(currentRow);
+      checkPrefixLength(prefixLength);
       ByteBuffer suffix = suffixReader.getBytes(currentRow);
       byte[] suffixArray = suffix.array();
       int suffixLength = suffix.limit() - suffix.position();
