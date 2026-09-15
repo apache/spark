@@ -1345,16 +1345,18 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
     partitionings.exists(_.satisfies(required))
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
-    // `maySatisfyAfterGrouping`, not `satisfies`. A spec says what its partitioning could
-    // co-partition on, and a `KeyedPartitioning` that needs a `GroupPartitionsExec` first still
-    // can. The strict question would drop a member whose keys are coarser than the operation's,
-    // which is narrower than what this filter admitted before `satisfies` became strict.
+    // `maySatisfyAfterProjection`, not `satisfies`. A spec says what its partitioning could
+    // co-partition on, and a grouped `KeyedPartitioning` whose keys are coarser than the
+    // operation's still can, through the projection a `GroupPartitionsExec` performs. The strict
+    // question would drop it, which is narrower than what this filter admitted before `satisfies`
+    // became strict.
     //
-    // `ValidateRequirements` builds a spec from a finished plan through here too, and this stays
-    // sound for it. A member that is not grouped reports its own ungrouped keys, duplicates and
-    // all, so it can only pair with a side holding the same sequence, which is co-partitioned.
-    // `KeyedShuffleSpec.canCreatePartitioning` gates on `isGrouped` separately, so such a member
-    // is never a shuffle template either.
+    // It is not wider either. `ValidateRequirements` builds a spec from a finished plan through
+    // here, and is the gate that makes AQE drop a rewrite that breaks co-partitioning, so this
+    // admits exactly what it admitted before and no more. `checkKeyedPartitioningInvariant` forces
+    // one `KeyLayout` on all keyed members, so `isGrouped` is uniform across them and the filter
+    // either keeps every keyed member or none: the latter only for a partitioning that does not
+    // serve the distribution through a keyed member at all, which neither caller passes.
     //
     // Every admitted member has to stay, because `isCompatibleWith` answers for any of them and
     // the collection cannot know which one the other side matched. That has a cost worth knowing:
@@ -1364,7 +1366,7 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
     // operator is known to report that mixture, since `EnsureRequirements` groups a keyed child
     // before it can reach a join's output.
     val filtered =
-      partitionings.filter(PartitioningCollection.maySatisfyAfterGrouping(_, distribution))
+      partitionings.filter(PartitioningCollection.maySatisfyAfterProjection(_, distribution))
     ShuffleSpecCollection(filtered.map(_.createShuffleSpec(distribution)))
   }
 
@@ -1398,23 +1400,28 @@ object PartitioningCollection {
     representativeOf(partitioning).map(_.numPartitions)
 
   /**
-   * Whether `p` can serve `required`, if necessary after a [[GroupPartitionsExec]] that groups or
-   * projects a [[KeyedPartitioning]]'s keys. `satisfies` asks whether it does so as it stands, and
-   * only a keyed partitioning answers the two differently. `keysMaySatisfy` subsumes the strict
-   * answer for a `ClusteredDistribution`, which is all the one caller passes, so the loose question
-   * is the whole test.
+   * Whether `p` can serve `required` once a [[GroupPartitionsExec]] has projected a
+   * [[KeyedPartitioning]]'s keys down to the cluster keys. `satisfies` asks whether it serves as it
+   * stands, and only a keyed partitioning answers the two differently.
+   *
+   * A partitioning that is not grouped is not admitted, even though a node would also group it.
+   * This is the admission set `satisfies` gave the one caller before it became strict, and the
+   * caller feeds `ValidateRequirements` as well as the planner, so it does not widen what a
+   * finished plan is checked against. `EnsureRequirements.createKeyedShuffleSpecs` is where the
+   * planner asks the wider question, for a child it is about to group itself.
    *
    * A required partition count still has to match, which is what `satisfies` applies to every other
    * partitioning. A node changes the count, so the pre-grouping one is not a bound on what it will
    * be. This clause is here for consistency with the strict question, not as a prediction.
    */
-  private[sql] def maySatisfyAfterGrouping(
+  private[sql] def maySatisfyAfterProjection(
       p: Partitioning,
       required: ClusteredDistribution): Boolean = p match {
     case k: KeyedPartitioning =>
-      required.requiredNumPartitions.forall(_ == k.numPartitions) && k.keysMaySatisfy(required)
+      k.isGrouped && required.requiredNumPartitions.forall(_ == k.numPartitions) &&
+        k.keysMaySatisfy(required)
     case pc: PartitioningCollection =>
-      pc.partitionings.exists(maySatisfyAfterGrouping(_, required))
+      pc.partitionings.exists(maySatisfyAfterProjection(_, required))
     case other => other.satisfies(required)
   }
 
