@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.Breaks._
@@ -33,7 +35,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{APP_ID, APP_NAME, SUBMISSION_ID}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * Encapsulates arguments to the submission client.
@@ -84,6 +86,23 @@ private[spark] object ClientArguments {
   }
 }
 
+// SPARK-38079: thin, injectable wrapper around ShutdownHookManager's add/remove functions,
+// used only by the cleanup-hook wiring in Client.run(). Bundled into one case class (rather
+// than two separate constructor parameters on Client) so tests can override both together with
+// a single fake, and so the real default (`ShutdownHookOps.default`) is defined in exactly one
+// place. See the `shutdownHookOpsOverride` parameter on Client below for why this needs to be
+// overridable at all: actually triggering a JVM shutdown hook from a test is impractical, so
+// tests instead inject fakes here to assert Client.run() registers and removes a hook at the
+// right times, without needing a real JVM shutdown.
+private[submit] case class ShutdownHookOps(
+    addHook: (() => Unit) => AnyRef,
+    removeHook: AnyRef => Boolean)
+
+private[submit] object ShutdownHookOps {
+  def default: ShutdownHookOps =
+    ShutdownHookOps(ShutdownHookManager.addShutdownHook, ShutdownHookManager.removeShutdownHook)
+}
+
 /**
  * Submits a Spark application to run on Kubernetes by creating the driver pod and starting a
  * watcher that monitors and logs the application status. Waits for the application to terminate if
@@ -94,12 +113,45 @@ private[spark] object ClientArguments {
  *                implemented features.
  * @param kubernetesClient the client to talk to the Kubernetes API server
  * @param watcher a watcher that monitors and logs the application status
+ * @param recoveryClientFactoryOverride overrides how the SPARK-38079 shutdown-hook cleanup path
+ *                                      (see run()) builds the fresh Kubernetes client it uses to
+ *                                      best-effort delete pre-resources left orphaned by an
+ *                                      abrupt termination. Not reused from `kubernetesClient`
+ *                                      because that one may already be closed, or concurrently
+ *                                      in use, by the time the hook runs. Exposed only for
+ *                                      testing; `None` (the default) builds a real client the
+ *                                      same way KubernetesClientApplication.run() builds
+ *                                      `kubernetesClient`. A plain default value can't itself
+ *                                      call `conf.sparkConf` here, since `conf` is a
+ *                                      constructor parameter, not yet a class member, at the
+ *                                      point default values are evaluated.
+ * @param shutdownHookOpsOverride overrides how the SPARK-38079 cleanup hook (see run()) is
+ *                                 registered/removed. Exposed only for testing -- actually
+ *                                 triggering a JVM shutdown hook from a test is impractical, so
+ *                                 tests instead inject fakes here to assert that run() registers
+ *                                 a hook before applying pre-resources and removes that exact
+ *                                 hook once it is done with them (success or failure). `None`
+ *                                 (the default) delegates to the real `ShutdownHookManager`.
  */
 private[spark] class Client(
     conf: KubernetesDriverConf,
     builder: KubernetesDriverBuilder,
     kubernetesClient: KubernetesClient,
-    watcher: LoggingPodStatusWatcher) extends Logging {
+    watcher: LoggingPodStatusWatcher,
+    recoveryClientFactoryOverride: Option[() => KubernetesClient] = None,
+    shutdownHookOpsOverride: Option[ShutdownHookOps] = None) extends Logging {
+
+  private val recoveryClientFactory: () => KubernetesClient = recoveryClientFactoryOverride
+    .getOrElse(() => SparkKubernetesClientFactory.createKubernetesClient(
+      KubernetesUtils.parseMasterUrl(conf.sparkConf.get("spark.master")),
+      Some(conf.namespace),
+      KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX,
+      SparkKubernetesClientFactory.ClientType.Submission,
+      conf.sparkConf,
+      None))
+
+  private val shutdownHookOps: ShutdownHookOps =
+    shutdownHookOpsOverride.getOrElse(ShutdownHookOps.default)
 
   def run(): Unit = {
     val resolvedDriverSpec = builder.buildFromFeatures(conf, kubernetesClient)
@@ -136,43 +188,75 @@ private[spark] class Client(
     val driverPodName = resolvedDriverPod.getMetadata.getName
 
     // setup resources before pod creation
-    val preKubernetesResources = resolvedDriverSpec.driverPreKubernetesResources
-    try {
-      kubernetesClient.resourceList(preKubernetesResources: _*).forceConflicts().serverSideApply()
-    } catch {
-      case NonFatal(e) =>
-        logError("Please check \"kubectl auth can-i create [resource]\" first." +
-          " It should be yes. And please also check your feature step implementation.")
-        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
-        throw e
-    }
+    // SPARK-38079: the driver's own base config map (mounted as SPARK_CONF_VOLUME_DRIVER
+    // above) must also be created before the pod itself, to avoid a "configmap ... not
+    // found" mount race between the driver pod and the config map it depends on.
+    val preKubernetesResources = resolvedDriverSpec.driverPreKubernetesResources ++ Seq(configMap)
+
+    // SPARK-38079: some of the pre-resources above (e.g. the Kerberos keytab/delegation token
+    // secrets, the driver Kubernetes credentials secret) carry credentials. They are created
+    // here without an owner reference -- the owner reference is only added once the driver pod
+    // exists (see "Refresh all pre-resources' owner references" below), since Kubernetes owner
+    // references require the owner's UID, which does not exist before the pod is created. If
+    // this process is terminated abruptly in that window (e.g. Ctrl-C, SIGTERM, or a fatal JVM
+    // error), the pre-resources would otherwise be silently orphaned in the namespace forever,
+    // since Kubernetes only garbage-collects via owner references. This shutdown hook makes a
+    // best-effort attempt to delete them (and the driver pod, if this submission created it) in
+    // that case. It is a no-op -- and removed entirely, see the `finally` below -- once the
+    // owner-reference refresh has completed; from that point on the existing owner references
+    // make normal Kubernetes garbage collection sufficient, and e.g. Ctrl-C while waiting for
+    // the application to complete must keep today's behavior of just detaching.
+    val preResourcesApplied = new AtomicBoolean(false)
+    val podCreatedByUs = new AtomicBoolean(false)
+    val cleanupHookRef = shutdownHookOps.addHook(() => cleanupOrphanedPreResources(
+      preKubernetesResources, driverPodName, preResourcesApplied.get(), podCreatedByUs.get()))
 
     var watch: Watch = null
     var createdDriverPod: Pod = null
     try {
-      createdDriverPod =
-        kubernetesClient.pods().inNamespace(conf.namespace).resource(resolvedDriverPod).create()
-    } catch {
-      case NonFatal(e) =>
-        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
-        logError("Please check \"kubectl auth can-i create pod\" first. It should be yes.")
-        throw e
-    }
+      try {
+        kubernetesClient.resourceList(preKubernetesResources: _*).forceConflicts().serverSideApply()
+        preResourcesApplied.set(true)
+      } catch {
+        case NonFatal(e) =>
+          logError("Please check \"kubectl auth can-i create [resource]\" first." +
+            " It should be yes. And please also check your feature step implementation.")
+          kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+          throw e
+      }
 
-    // Refresh all pre-resources' owner references
-    try {
-      addOwnerReference(createdDriverPod, preKubernetesResources)
-      kubernetesClient.resourceList(preKubernetesResources: _*).forceConflicts().serverSideApply()
-    } catch {
-      case NonFatal(e) =>
-        kubernetesClient.pods().resource(createdDriverPod).delete()
-        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
-        throw e
+      try {
+        createdDriverPod =
+          kubernetesClient.pods().inNamespace(conf.namespace).resource(resolvedDriverPod).create()
+        podCreatedByUs.set(true)
+      } catch {
+        case NonFatal(e) =>
+          kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+          logError("Please check \"kubectl auth can-i create pod\" first. It should be yes.")
+          throw e
+      }
+
+      // Refresh all pre-resources' owner references
+      try {
+        addOwnerReference(createdDriverPod, preKubernetesResources)
+        kubernetesClient.resourceList(preKubernetesResources: _*).forceConflicts().serverSideApply()
+      } catch {
+        case NonFatal(e) =>
+          kubernetesClient.pods().resource(createdDriverPod).delete()
+          kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+          throw e
+      }
+    } finally {
+      // Past this point, the pre-resources either have an owner reference (success) or have
+      // already been explicitly deleted by one of the catch blocks above (failure) -- either
+      // way, the shutdown hook has nothing left to do, so remove it instead of leaving a no-op
+      // hook registered for the remaining lifetime of this process.
+      shutdownHookOps.removeHook(cleanupHookRef)
     }
 
     // setup resources after pod creation, and refresh all resources' owner references
     try {
-      val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
+      val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources
       addOwnerReference(createdDriverPod, otherKubernetesResources)
       kubernetesClient.resourceList(otherKubernetesResources: _*).forceConflicts().serverSideApply()
     } catch {
@@ -207,6 +291,54 @@ private[spark] class Client(
       logInfo(log"Deployed Spark application ${MDC(APP_NAME, conf.appName)} with " +
         log"application ID ${MDC(APP_ID, conf.appId)} and " +
         log"submission ID ${MDC(SUBMISSION_ID, sId)} into Kubernetes")
+    }
+  }
+
+  // SPARK-38079: best-effort cleanup for pre-resources (and the driver pod, if it was created)
+  // that were left without an owner reference because this process was terminated abruptly
+  // before the owner-reference refresh in run() completed. See the comment above the shutdown
+  // hook registration in run() for why this window exists and why it must stop mattering once
+  // that refresh completes.
+  //
+  // package-private (rather than private) so it can be unit-tested directly -- actually
+  // triggering a JVM shutdown hook from a test is impractical, so tests instead call this
+  // method directly with injected pre/post-state and a fake recoveryClientFactory.
+  private[submit] def cleanupOrphanedPreResources(
+      preResources: Seq[HasMetadata],
+      driverPodName: String,
+      preResourcesApplied: Boolean,
+      podCreatedByUs: Boolean): Unit = {
+    if (preResourcesApplied) {
+      try {
+        Utils.tryWithResource(recoveryClientFactory()) { recoveryClient =>
+          try {
+            recoveryClient.resourceList(preResources: _*).delete()
+            // Deliberately logged even on the success path (unlike the rest of this class,
+            // which only logs failures): this runs during shutdown, so it is otherwise the
+            // only signal an operator has that pre-resources were left behind by an abrupt
+            // termination and had to be cleaned up here, rather than via the normal
+            // owner-reference-based garbage collection.
+            logInfo("Cleaned up orphaned pre-resources left behind by an abrupt shutdown.")
+          } catch {
+            case NonFatal(e) =>
+              logWarning("Failed to clean up orphaned pre-resources on shutdown.", e)
+          }
+          if (podCreatedByUs) {
+            try {
+              recoveryClient.pods().inNamespace(conf.namespace).withName(driverPodName).delete()
+              logInfo("Cleaned up the orphaned driver pod left behind by an abrupt shutdown.")
+            } catch {
+              case NonFatal(e) =>
+                logWarning("Failed to clean up the orphaned driver pod on shutdown.", e)
+            }
+          }
+        }
+      } catch {
+        case NonFatal(e) =>
+          // Best-effort only: e.g. building the recovery client itself failed. There is
+          // nothing more we can do here.
+          logWarning("Failed to clean up orphaned pre-resources on shutdown.", e)
+      }
     }
   }
 }

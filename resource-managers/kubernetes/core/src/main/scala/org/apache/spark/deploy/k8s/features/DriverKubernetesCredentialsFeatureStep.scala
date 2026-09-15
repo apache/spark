@@ -167,7 +167,12 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
       }.getOrElse(Map.empty)
   }
 
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
+  // SPARK-38079: this secret is mounted by the driver pod (see configurePod above), so it
+  // must be created as a pre-resource (before the pod itself) to avoid a "secret ... not
+  // found" mount race. Unlike MountVolumesFeatureStep, this class is driver-only (executors
+  // use ExecutorKubernetesCredentialsFeatureStep instead), so it is safe to only override
+  // the pre-resource hook here.
+  override def getAdditionalPreKubernetesResources(): Seq[HasMetadata] = {
     if (shouldMountSecret) {
       Seq(createCredentialsSecret())
     } else {
