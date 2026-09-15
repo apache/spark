@@ -2001,6 +2001,43 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("refresh does not evaluate an unselected sibling with a narrowed map key") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""CREATE TABLE $t (
+           |  payload STRUCT<x: INT, m: MAP<STRUCT<name: STRING>, INT>>)
+           |USING foo
+           |""".stripMargin)
+
+      val selectedMap = spark.table(t).select("payload.m")
+      val selectedSibling = spark.table(t).select("payload.x")
+      assert(selectedMap.queryExecution.analyzed.resolved)
+      assert(selectedSibling.queryExecution.analyzed.resolved)
+
+      sql(s"ALTER TABLE $t ADD COLUMN payload.m.key.id INT")
+      sql(
+        s"""INSERT INTO $t SELECT named_struct(
+           |  'x', 1,
+           |  'm', map(
+           |    named_struct('name', 'a', 'id', 1), 10,
+           |    named_struct('name', 'a', 'id', 2), 20))
+           |""".stripMargin)
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.EXCEPTION.toString) {
+        // Reading the map proves that this row's keys collapse under the captured key type.
+        val error = intercept[SparkRuntimeException] {
+          selectedMap.collect()
+        }
+        assert(error.getCondition == "DUPLICATED_MAP_KEY")
+
+        // Reading only the sibling must not evaluate the unused map reconstruction.
+        checkAnswer(selectedSibling, Seq(Row(1)))
+      }
+    }
+  }
+
   test("refresh preserves a captured metadata column across a wider partially-pruned scan") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
