@@ -193,11 +193,14 @@ private[sql] case class TypedNullLiteral(child: Expression)
 
 private[sql] object TypedNullLiteral {
   /**
-   * Replaces a resolved child with a typed null marker to avoid 3^n growth in nested `NullIf`
-   * plans.
+   * Collapses resolved subtrees to avoid 3^n growth in nested `NullIf` plans, while retaining
+   * common expression references whose types and collations may change.
    */
-  def create(child: Expression): TypedNullLiteral = TypedNullLiteral(
-    if (child.resolved) Literal.create(null, child.dataType) else child)
+  def create(child: Expression): TypedNullLiteral = TypedNullLiteral(child match {
+    case _: CommonExpressionRef => child
+    case _ if child.resolved => Literal.create(null, child.dataType)
+    case _ => child
+  })
 }
 
 @ExpressionDescription(

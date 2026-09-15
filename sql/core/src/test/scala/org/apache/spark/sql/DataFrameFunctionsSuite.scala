@@ -376,6 +376,24 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("nullif preserves operand collation during single-pass view resolution") {
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      withTable("t") {
+        withView("v") {
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false") {
+            sql("CREATE TABLE t (c STRING) USING parquet")
+            sql("INSERT INTO t VALUES ('a')")
+            sql("CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS " +
+              "SELECT lower(nullif(c, c)) AS n FROM t")
+          }
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+            QueryTest.checkAnswer(sql("SELECT * FROM v"), Seq(Row(null)), checkToRDD = false)
+          }
+        }
+      }
+    }
+  }
+
   test("equal_null function") {
     val df = Seq[(Integer, Integer)]((null, 8)).toDF("a", "b")
     checkAnswer(df.selectExpr("equal_null(a, b)"), Seq(Row(false)))
