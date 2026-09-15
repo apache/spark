@@ -307,6 +307,7 @@ abstract class InMemoryBaseTable(
       case BucketTransform(numBuckets, cols, _) =>
         val hash: Long = cols.foldLeft(0L) { (acc, col) =>
           val valueHash = extractor(col.fieldNames, cleanedSchema, row) match {
+            case (null, _) => 0L
             case (value: Byte, _: ByteType) => value.toLong
             case (value: Short, _: ShortType) => value.toLong
             case (value: Int, _: IntegerType) => value.toLong
