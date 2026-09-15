@@ -43,8 +43,15 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * @param grouping What this node does to the child's partitions, derived once at planning time by
  *                 `GroupPartitionsExec.apply`. See that factory for the rule about keeping it in
  *                 step with the parameters it was derived from.
- * @param outputPartitioning What this node reports, derived at planning time from the child's
- *                           partitioning and the grouping. Same rule.
+ * @param plannedPartitioning What this node was planned to report, derived at planning time from
+ *                            `childPartitioning` and the grouping. Same rule. Reported only while
+ *                            the child still reports what it was planned over, see
+ *                            `outputPartitioning`.
+ * @param childPartitioning The child's partitioning this node was decided for. Kept so that a node
+ *                          handed a different child can say so. A `Partitioning` that is an
+ *                          `Expression` is in the case class product on purpose, so that
+ *                          `QueryPlan.doCanonicalize` normalizes its exprIds along with
+ *                          `plannedPartitioning`'s and the comparison stays meaningful.
  * @param joinKeyPositions Optional projection selecting a subset of the partitioning key positions,
  *                         so that partitions sharing the projected key are coalesced. Used whenever
  *                         the cluster keys are a subset of the partition keys, either the join
@@ -73,13 +80,42 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 case class GroupPartitionsExec(
     child: SparkPlan,
     @transient grouping: PartitionGrouping,
-    override val outputPartitioning: Partitioning,
+    plannedPartitioning: Partitioning,
+    childPartitioning: Partitioning,
     @transient joinKeyPositions: Option[Seq[Int]],
     @transient expectedKeyCount: Option[Int],
     @transient reducers: Option[Seq[Option[KeyReducer]]],
     @transient distributePartitions: Boolean,
     @transient enableSortedMerge: Boolean
   ) extends UnaryExecNode {
+
+  /**
+   * The layout this node was planned to produce, but only while its child still reports the one it
+   * was planned over.
+   *
+   * A node is decided for one child partitioning: `grouping` indexes that child's partitions and
+   * `plannedPartitioning` rebuilds its keyed members on top of the grouping. A rule that hands this
+   * node a child reporting something else invalidates both, so the keyed claim is dropped and only
+   * the physical output count is reported. `ValidateRequirements` then finds the parent's
+   * distribution unsatisfied and `AdaptiveSparkPlanExec` reverts the rewrite, which is what an
+   * `AQEShuffleReadExec` landing over a keyed shuffle stage relies on.
+   *
+   * Re-deriving from the new child instead would be worse. The recipe was chosen for a pairing, and
+   * applying it to a different child yields a claim nothing validated against the other side. It
+   * would also buy nothing today: no rule in the tree is known to report a *different*
+   * `KeyedPartitioning`, so the two reachable outcomes are an equal one, where this check passes,
+   * and `UnknownPartitioning`, where re-deriving reports exactly what this reports.
+   *
+   * Asked on the read rather than in `withNewChildInternal` because plan canonicalization rebuilds
+   * this node over a canonicalized child and never reads its partitioning, which it cannot: a
+   * canonicalized `BatchScanExec` throws from `reportedKeyedPartitioning`.
+   */
+  @transient override lazy val outputPartitioning: Partitioning =
+    if (child.outputPartitioning == childPartitioning) {
+      plannedPartitioning
+    } else {
+      UnknownPartitioning(grouping.partitions.size)
+    }
 
   override def doCanonicalize(): SparkPlan = {
     // `KeyReducer` is a plain case class, not an `Expression`, so plan canonicalization does not
@@ -402,7 +438,7 @@ private[sql] case class PartitionGrouping(
 private[sql] object GroupPartitionsExec {
 
   /**
-   * Builds a node over `child`, deriving `grouping` and `outputPartitioning` from the parameters.
+   * Builds a node over `child`, deriving `grouping` and `plannedPartitioning` from the parameters.
    *
    * **Both are derived, and neither `copy` nor the generated `apply` re-derives them**, so a change
    * to `child`, `joinKeyPositions`, `expectedPartitionKeys`, `reducers` or `distributePartitions`
@@ -410,10 +446,10 @@ private[sql] object GroupPartitionsExec {
    * `tryEnableSortedMerge` may `copy` it.
    *
    * Two other `copy` calls in this file are deliberate. `withNewChildInternal` carries both fields
-   * over a child rewrite, which holds because nothing in the tree hands this node a child that
-   * reports a different partitioning. And `doCanonicalize` rewrites `reducers` without re-deriving,
-   * which holds because neither field carries an exprId, so normalizing the reducers cannot change
-   * what they describe.
+   * over a child rewrite, and a child that turns out to report something else is what
+   * `outputPartitioning` answers for, so the carried pair is never reported as if it still held.
+   * And `doCanonicalize` rewrites `reducers` without re-deriving, which holds because neither field
+   * carries an exprId, so normalizing the reducers cannot change what they describe.
    */
   def apply(
       child: SparkPlan,
@@ -433,7 +469,7 @@ private[sql] object GroupPartitionsExec {
     val grouping = computeGrouping(
       childKp, joinKeyPositions, expectedPartitionKeys, reducers, distributePartitions)
     GroupPartitionsExec(child, grouping,
-      computeOutputPartitioning(childExpr, grouping, joinKeyPositions, reducers),
+      computeOutputPartitioning(childExpr, grouping, joinKeyPositions, reducers), childPartitioning,
       joinKeyPositions, expectedPartitionKeys.map(_.size), reducers, distributePartitions,
       enableSortedMerge)
   }

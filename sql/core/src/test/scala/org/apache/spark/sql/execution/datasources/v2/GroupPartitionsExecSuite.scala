@@ -639,6 +639,37 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(gpe.metrics("numEmptyPartitions").value === 0)
     assert(gpe.metrics("numPrunedPartitions").value === 0)
   }
+
+  test("SPARK-59289: the keyed claim goes when the child no longer reports what was planned") {
+    val childKp = KeyedPartitioning(Seq(exprA), Seq(row(1), row(1), row(2)))
+    val gpe = GroupPartitionsExec(DummySparkPlan(outputPartitioning = childKp))
+    assert(gpe.outputPartitioning.isInstanceOf[KeyedPartitioning],
+      "test setup: the node was planned over a keyed child and claims a keyed layout")
+    assert(gpe.outputPartitioning.numPartitions === 2, "test setup: the two 1s are grouped")
+
+    // A wrapper that passes the child's partitioning through keeps the claim, which is every
+    // rewrite the columnar and codegen rules perform.
+    val sameKp = gpe.withNewChildren(
+      Seq(DummySparkPlan(outputPartitioning = childKp))).asInstanceOf[GroupPartitionsExec]
+    assert(sameKp.outputPartitioning === gpe.outputPartitioning)
+
+    // An `AQEShuffleReadExec` over a keyed shuffle stage reports `UnknownPartitioning`, and a
+    // one-mapper-per-task local read reports the pre-shuffle partitioning. Either way the grouping
+    // indexes partitions the child no longer has, so the node stops claiming a keyed layout and
+    // `ValidateRequirements` refuses the plan, which is what makes AQE revert the rewrite.
+    Seq(
+      UnknownPartitioning(4),
+      KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(3))),
+      KeyedPartitioning(Seq(exprB), Seq(row(1), row(1), row(2)))
+    ).foreach { changed =>
+      val rebuilt = gpe.withNewChildren(
+        Seq(DummySparkPlan(outputPartitioning = changed))).asInstanceOf[GroupPartitionsExec]
+      assert(rebuilt.outputPartitioning === UnknownPartitioning(2),
+        s"a child reporting $changed invalidates the grouping, so the claim goes")
+      assert(rebuilt.plannedPartitioning === gpe.outputPartitioning,
+        "what it was planned to report is still carried, it is just no longer reported")
+    }
+  }
 }
 
 private case class DummyLeafSparkPlan(
