@@ -27,7 +27,7 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.feature
+import org.apache.spark.mllib.feature.{IDF => OldIDF}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -93,7 +93,7 @@ final class IDF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
       case Row(v: Vector) => OldVectors.fromML(v)
     }
-    val oldModel = new feature.IDF($(minDocFreq)).fit(input)
+    val oldModel = new OldIDF($(minDocFreq)).fit(input)
     copyValues(new IDFModel(
       uid, oldModel.idf.asML, oldModel.docFreq, oldModel.numDocs).setParent(this))
   }
