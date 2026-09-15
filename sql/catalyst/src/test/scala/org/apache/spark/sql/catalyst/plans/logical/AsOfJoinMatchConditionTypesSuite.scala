@@ -30,9 +30,43 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(!MatchConditionTypes.usesStructDecomposition(IntegerType, LongType))
   }
 
-  test("string and temporal types are incompatible") {
-    assert(!MatchConditionTypes.areOperandsCompatible(StringType, TimestampType))
-    assert(!MatchConditionTypes.areOperandsCompatible(DateType, StringType))
+  test("scalar string and temporal types coerce like the comparison operator") {
+    assert(MatchConditionTypes.areOperandsCompatible(StringType, TimestampType))
+    assert(MatchConditionTypes.areOperandsCompatible(DateType, StringType))
+    // Common type is the temporal type (string cast to it), so sort and comparison agree.
+    assert(MatchConditionTypes.matchComparisonCommonType(DateType, StringType).contains(DateType))
+    assert(
+      MatchConditionTypes.matchComparisonCommonType(StringType, TimestampType)
+        .contains(TimestampType))
+  }
+
+  test("scalar string and numeric types coerce like the comparison operator") {
+    // Common type must be numeric, not string, so the buffer sorts by value.
+    assert(MatchConditionTypes.areOperandsCompatible(IntegerType, StringType))
+    assert(MatchConditionTypes.matchComparisonCommonType(IntegerType, StringType).nonEmpty)
+    assert(
+      !MatchConditionTypes.matchComparisonCommonType(IntegerType, StringType).contains(StringType))
+  }
+
+  test("scalar string vs interval is rejected, matching the comparison operator") {
+    // No comparison common type exists, so reject it like `>=` rather than leave it uncoerced.
+    val interval = DayTimeIntervalType()
+    assert(!MatchConditionTypes.areOperandsCompatible(StringType, interval))
+    assert(!MatchConditionTypes.areOperandsCompatible(YearMonthIntervalType(), StringType))
+    assert(MatchConditionTypes.matchComparisonCommonType(StringType, interval).isEmpty)
+  }
+
+  test("struct fields keep the strict rule: string vs temporal field is rejected") {
+    // Coercion is scoped to scalar operands, so a string vs temporal STRUCT field stays rejected.
+    val leftStruct = StructType(StructField("f", DateType) :: Nil)
+    val rightStruct = StructType(StructField("g", StringType) :: Nil)
+    assert(!MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
+  }
+
+  test("array elements keep the strict rule: string vs numeric element is rejected") {
+    val intArray = ArrayType(IntegerType)
+    val stringArray = ArrayType(StringType)
+    assert(!MatchConditionTypes.areOperandsCompatible(intArray, stringArray))
   }
 
   test("orderable scalars with no common type are incompatible") {

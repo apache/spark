@@ -127,6 +127,25 @@ FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
      VALUES (TIMESTAMP_NTZ '2026-06-29 09:00:00') AS r(ts_ntz)
   MATCH_CONDITION (t.ts >= r.ts_ntz);
 
+-- FVT-ASOF-4-016a: coercion DATE vs STRING (SPARK-59527), coerced like the >= operator
+SELECT t.d, r.s AS matched_s
+FROM VALUES (DATE '2026-06-29') AS t(d) ASOF JOIN
+     VALUES ('2026-06-28'), ('2026-06-29') AS r(s)
+  MATCH_CONDITION (t.d >= r.s);
+
+-- FVT-ASOF-4-016b: coercion TIMESTAMP vs STRING (SPARK-59527)
+SELECT t.ts, r.s AS matched_s
+FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
+     VALUES ('2026-06-29 09:00:00'), ('2026-06-29 10:00:00') AS r(s)
+  MATCH_CONDITION (t.ts >= r.s);
+
+-- FVT-ASOF-4-016c: coercion INT vs STRING sorts the right buffer by value, not lexicographically.
+-- '9' sorts after '10'/'20' as text but 9 < 10 < 20 by value; the as-of match for 20 must be 20.
+SELECT t.k, r.s AS matched_s
+FROM VALUES (20) AS t(k) ASOF JOIN
+     VALUES ('9'), ('10'), ('20') AS r(s)
+  MATCH_CONDITION (t.k >= r.s);
+
 -- FVT-ASOF-4-017: ARRAY<INT> operand
 SELECT t.a, r.a AS matched_a
 FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN

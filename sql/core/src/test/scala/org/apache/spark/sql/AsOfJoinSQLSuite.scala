@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DateType, IntegerType, LongType}
 
 /**
  * SQL ASOF JOIN surface tests (parser, analysis, and feature gating).
@@ -185,13 +186,36 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
           stop = 120)))
   }
 
+  // A numeric MATCH_CONDITION must sort by value, not lexicographically (the string case is the
+  // only one that shows it). ANSI widens INT vs STRING to LONG, the default mode to INT.
+  Seq(true -> LongType, false -> IntegerType).foreach { case (ansi, sortType) =>
+    test(s"MATCH_CONDITION coerces INT vs STRING to a numeric sort key (ansi=$ansi)") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        val sqlText =
+          """
+            |SELECT t.k, r.s
+            |FROM VALUES (20) AS t(k) ASOF JOIN
+            |     VALUES ('9'), ('10'), ('20') AS r(s)
+            |  MATCH_CONDITION (t.k >= r.s)
+            |""".stripMargin
+        val asOfJoin = sql(sqlText).queryExecution.analyzed.collectFirst {
+          case j: AsOfJoin => j
+        }.get
+        assert(asOfJoin.leftSortExprs.forall(_.dataType == sortType))
+        assert(asOfJoin.rightSortExprs.forall(_.dataType == sortType))
+        // A lexicographic STRING sort key would order '9' last and wrongly match it for k = 20.
+        checkAnswer(sql(sqlText), Row(20, "20"))
+      }
+    }
+  }
+
   test("MATCH_CONDITION rejects incompatible operand types") {
     setupTradeQuoteViews()
     val sqlText =
       """
         |SELECT t.trade_time
         |FROM trades t ASOF JOIN quotes q
-        |  MATCH_CONDITION (t.trade_time >= q.symbol)
+        |  MATCH_CONDITION (t.trade_time >= q.bid_price)
         |  ON t.symbol = q.symbol
         |""".stripMargin
     checkError(
@@ -200,14 +224,39 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       sqlState = Some("42K09"),
       parameters = Map(
         "type1" -> "\"TIMESTAMP\"",
-        "type2" -> "\"STRING\""),
+        "type2" -> "\"DECIMAL(5,2)\""),
       queryContext = Array(
         ExpectedContext(
           fragment = """ASOF JOIN quotes q
-                       |  MATCH_CONDITION (t.trade_time >= q.symbol)
+                       |  MATCH_CONDITION (t.trade_time >= q.bid_price)
                        |  ON t.symbol = q.symbol""".stripMargin,
           start = 35,
-          stop = 122)))
+          stop = 125)))
+  }
+
+  // SPARK-59527 reproduces with ANSI on and off, so both are checked.
+  Seq(true, false).foreach { ansi =>
+    test(s"MATCH_CONDITION coerces DATE vs STRING like the comparison operator (ansi=$ansi)") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        // Coerced to DATE like `>=`; before SPARK-59527 this failed with INVALID_TYPE.
+        val sqlText =
+          """
+            |SELECT l.d, r.s
+            |FROM VALUES (DATE '2024-01-03') AS l(d) ASOF JOIN
+            |     VALUES ('2024-01-01') AS r(s)
+            |  MATCH_CONDITION (l.d >= r.s)
+            |""".stripMargin
+        val asOfJoin = sql(sqlText).queryExecution.analyzed.collectFirst {
+          case j: AsOfJoin => j
+        }.get
+        assert(asOfJoin.asOfCondition.resolved)
+        // Both sort keys are DATE, so the sort order matches the coerced comparison.
+        assert(asOfJoin.leftSortExprs.nonEmpty && asOfJoin.rightSortExprs.nonEmpty)
+        assert(asOfJoin.leftSortExprs.forall(_.dataType == DateType))
+        assert(asOfJoin.rightSortExprs.forall(_.dataType == DateType))
+        checkAnswer(sql(sqlText), Row(java.sql.Date.valueOf("2024-01-03"), "2024-01-01"))
+      }
+    }
   }
 
   test("MATCH_CONDITION accepts CURRENT_TIMESTAMP as left operand") {
