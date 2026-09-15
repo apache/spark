@@ -2082,3 +2082,70 @@ case class JsonTypeof(child: Expression)
   override protected def withNewChildInternal(newChild: Expression): JsonTypeof =
     copy(child = newChild)
 }
+
+// Shape qualifier for IS [NOT] JSON: which top-level JSON type to require.
+sealed trait IsJsonShape
+object IsJsonShape {
+  // Per ANSI SQL:2016 T801, IS JSON VALUE is semantically equivalent to bare IS JSON:
+  // both accept any well-formed JSON value (object, array, or scalar). They are kept as
+  // separate shapes so the sql() output round-trips faithfully.
+  case object Any extends IsJsonShape    // IS JSON (no qualifier)
+  case object Value extends IsJsonShape  // IS JSON VALUE
+  case object Scalar extends IsJsonShape // IS JSON SCALAR -- primitives only (not object/array)
+  case object Array extends IsJsonShape  // IS JSON ARRAY
+  case object Object extends IsJsonShape // IS JSON OBJECT
+}
+
+case class IsJson(child: Expression, shape: IsJsonShape = IsJsonShape.Any)
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def dataType: DataType = BooleanType
+  // NULL input propagates as NULL (three-valued logic); a non-null operand always yields a
+  // definite true/false. StaticInvoke's null propagation gives us exactly this: it skips the
+  // call and returns NULL when the operand is NULL, and otherwise `JsonExpressionUtils.isJson`
+  // returns a non-null boolean.
+  override def nullable: Boolean = true
+
+  override def prettyName: String = "is_json"
+
+  override def sql: String = {
+    val shapeSql = shape match {
+      case IsJsonShape.Any => ""
+      case IsJsonShape.Value => " VALUE"
+      case IsJsonShape.Object => " OBJECT"
+      case IsJsonShape.Array => " ARRAY"
+      case IsJsonShape.Scalar => " SCALAR"
+    }
+    s"(${child.sql} IS JSON$shapeSql)"
+  }
+
+  // Delegate to a single validation helper that reads the operand exactly once. Evaluating the
+  // child a single time is required for correctness with non-deterministic inputs (e.g.
+  // `IF(rand() < 0.5, NULL, '{}') IS JSON`): a plan that referenced `child` in more than one
+  // place could observe two different values and return a wrong result. The helper also uses a
+  // strict ANSI JSON parser rather than the Hive-compatible one, so inputs like `{'a':1}`
+  // (single quotes) are correctly rejected.
+  override def replacement: Expression = {
+    val shapeCode = shape match {
+      case IsJsonShape.Any | IsJsonShape.Value => JsonExpressionUtils.SHAPE_ANY
+      case IsJsonShape.Object => JsonExpressionUtils.SHAPE_OBJECT
+      case IsJsonShape.Array => JsonExpressionUtils.SHAPE_ARRAY
+      case IsJsonShape.Scalar => JsonExpressionUtils.SHAPE_SCALAR
+    }
+    StaticInvoke(
+      classOf[JsonExpressionUtils],
+      BooleanType,
+      "isJson",
+      Seq(child, Literal(shapeCode)),
+      Seq(inputTypes.head, IntegerType),
+      returnNullable = true)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): IsJson =
+    copy(child = newChild)
+}
