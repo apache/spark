@@ -339,7 +339,18 @@ case object PostProcessor extends SqlBaseParserBaseListener {
 
   private def replaceTokenByIdentifier(ctx: ParserRuleContext, stripMargins: Int)(
       f: CommonToken => CommonToken = identity): Unit = {
+    // ANTLR's generated rule methods call `exitRule` from a `finally` block, so this listener also
+    // runs while an error such as a StackOverflowError unwinds the parser. If the error struck
+    // inside this very method - after the context was detached from its parent and before the
+    // replacement token was attached - the parser's current context is left pointing at `ctx`,
+    // and every enclosing rule's `finally` calls `exitRule` on it again. Rewrite only when the
+    // parent still holds `ctx` as its last child, which is the state every normal exit is in;
+    // otherwise leave the tree alone and let the original error propagate.
     val parent = ctx.getParent
+    if (ctx.getChildCount == 0 || parent == null || parent.getChildCount == 0 ||
+      (parent.getChild(parent.getChildCount - 1) ne ctx)) {
+      return
+    }
     parent.removeLastChild()
     val token = ctx.getChild(0).getPayload.asInstanceOf[Token]
     val newToken = new CommonToken(
