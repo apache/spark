@@ -474,7 +474,7 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
 
   protected def getSparkSettings(comments: Array[String]): Array[(String, String)] = {
     val settingLines = comments.filter(_.startsWith("--SET ")).map(_.substring(6))
-    settingLines.flatMap(_.split(",").map { kv =>
+    settingLines.flatMap(_.split(",(?=[\\w.]+=)").map { kv =>
       val (conf, value) = kv.span(_ != '=')
       conf.trim -> value.substring(1).trim
     })
