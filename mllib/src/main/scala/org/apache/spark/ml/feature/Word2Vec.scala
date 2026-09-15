@@ -31,7 +31,7 @@ import org.apache.spark.ml.linalg.{BLAS, SQLDataTypes, Vector, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.feature
+import org.apache.spark.mllib.feature.{Word2Vec => OldWord2Vec, Word2VecModel => OldWord2VecModel}
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -177,7 +177,7 @@ final class Word2Vec @Since("1.4.0") (
     transformSchema(dataset.schema, logging = true)
     val input =
       dataset.select($(inputCol)).rdd.map(_.getSeq[String](0))
-    val wordVectors = new feature.Word2Vec()
+    val oldModel: OldWord2VecModel = new OldWord2Vec()
       .setLearningRate($(stepSize))
       .setMinCount($(minCount))
       .setNumIterations($(maxIter))
@@ -188,7 +188,7 @@ final class Word2Vec @Since("1.4.0") (
       .setMaxSentenceLength($(maxSentenceLength))
       .fit(input)
     copyValues(new Word2VecModel(
-      uid, wordVectors.wordIndex, wordVectors.wordVectors).setParent(this))
+      uid, oldModel.wordIndex, oldModel.wordVectors).setParent(this))
   }
 
   @Since("1.4.0")
@@ -213,8 +213,8 @@ object Word2Vec extends DefaultParamsReadable[Word2Vec] {
 @Since("1.4.0")
 class Word2VecModel private[ml] (
     @Since("1.4.0") override val uid: String,
-    @transient private val wordIndex: Map[String, Int],
-    @transient private val wordVectors: Array[Float])
+    private val wordIndex: Map[String, Int],
+    private val wordVectors: Array[Float])
   extends Model[Word2VecModel] with Word2VecBase with MLWritable {
 
   import Word2VecModel._
@@ -233,9 +233,11 @@ class Word2VecModel private[ml] (
 
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize
-    if (wordIndex != null && wordVectors != null) {
+    if (wordIndex != null) {
       // wordIndex: Map[String, Int]
       size += SizeEstimator.estimate(wordIndex)
+    }
+    if (wordVectors != null) {
       // wordVectors: Array[Float]
       size += SizeEstimator.estimate(wordVectors)
     }

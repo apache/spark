@@ -33,6 +33,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ALPHA, COUNT, NUM_TRAIN_WORD, VOCAB_SIZE}
 import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
+import org.apache.spark.ml.feature.{Word2VecModel => NewWord2VecModel}
 import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -559,7 +560,7 @@ class Word2VecModel private[spark] (
   @Since("1.1.0")
   def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
     val vector = transform(word)
-    org.apache.spark.ml.feature.Word2VecModel.findSynonyms(
+    NewWord2VecModel.findSynonyms(
       wordIndex, wordVectors, wordVecInvNorms, vector.toArray, num, Some(word))
   }
 
@@ -573,7 +574,7 @@ class Word2VecModel private[spark] (
    */
   @Since("1.1.0")
   def findSynonyms(vector: Vector, num: Int): Array[(String, Double)] = {
-    org.apache.spark.ml.feature.Word2VecModel.findSynonyms(
+    NewWord2VecModel.findSynonyms(
       wordIndex, wordVectors, wordVecInvNorms, vector.toArray, num, None)
   }
 
