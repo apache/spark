@@ -21,8 +21,8 @@ import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUns
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
@@ -1642,13 +1642,15 @@ case class CreateUserDefinedFunction(
     collation: Option[String],
     isDeterministic: Option[Boolean],
     containsSQL: Option[Boolean],
-    language: RoutineLanguage,
+    language: org.apache.spark.sql.catalyst.catalog.RoutineLanguage,
     isTableFunc: Boolean,
+    isTemp: Boolean,
     ignoreIfExists: Boolean,
     replace: Boolean) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): CreateUserDefinedFunction =
     copy(child = newChild)
 }
+
 
 /**
  * The logical plan of the DROP FUNCTION command.
