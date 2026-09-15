@@ -2576,6 +2576,74 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       s"EnsureRequirements must satisfy the required distribution:\n${newChild.treeString}")
   }
 
+  test("SPARK-59272: a join that skips both shuffles leaves the two sides on the same keys") {
+    // A generated sweep asserting the invariant rather than a count. Whatever the planner decides
+    // for a pair of shapes, two children whose shuffles it both skipped have to declare the same
+    // partition key sequence, or the join reads rows that are not co-located. The shapes that make
+    // this fail are the marked ones, where a `GroupPartitionsExec` gives up the keyed claim while
+    // regrouping, which is an answer that arrives after the pairing has been chosen.
+    def keyRows(keys: Seq[Int]*): Seq[InternalRow] =
+      keys.map(k => InternalRow.fromSeq(k.map(_.asInstanceOf[Any])))
+
+    def shapes(a: Attribute): Seq[(String, Partitioning)] = {
+      val keySets = Seq(
+        "12" -> keyRows(Seq(1), Seq(2)),
+        "123" -> keyRows(Seq(1), Seq(2), Seq(3)),
+        "45" -> keyRows(Seq(4), Seq(5)))
+      val exprSets = Seq(
+        "id" -> Seq[Expression](a),
+        "bucket4" -> Seq[Expression](bucket(4, a)),
+        "years" -> Seq[Expression](years(a)))
+      for {
+        (keyName, keys) <- keySets
+        (exprName, exprs) <- exprSets
+        // A marked layout pins rows outside the declared keys to `hash(key) % numPartitions`, so
+        // regrouping one moves them and the node stops claiming the layout.
+        marked <- Seq(false, true)
+      } yield {
+        val kp = KeyedPartitioning(exprs, keys)
+        val p = if (marked) kp.withLayout(_.copy(mayContainUnknownPartitionKeys = true)) else kp
+        (s"$exprName/$keyName${if (marked) "/marked" else ""}", p.asInstanceOf[Partitioning])
+      }
+    }
+
+    def declaredKeys(plan: SparkPlan): Option[Seq[InternalRowComparableWrapper]] =
+      PartitioningCollection.representativeOf(plan.outputPartitioning).map(_.partitionKeys)
+
+    val joinTypes = Seq(Inner, LeftOuter, RightOuter, FullOuter, LeftSemi, LeftAnti)
+    val configCells = for {
+      pushPartValues <- Seq(false, true)
+      subsetKeys <- Seq(false, true)
+      partitionFilter <- Seq(false, true)
+    } yield Seq(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushPartValues.toString,
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> subsetKeys.toString,
+      SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> partitionFilter.toString)
+
+    configCells.foreach { settings =>
+      withSQLConf(settings: _*) {
+        for {
+          (leftName, leftPartitioning) <- shapes(exprA)
+          (rightName, rightPartitioning) <- shapes(exprB)
+          joinType <- joinTypes
+        } {
+          val smj = SortMergeJoinExec(Seq(exprA), Seq(exprB), joinType, None,
+            DummySparkPlan(outputPartitioning = leftPartitioning),
+            DummySparkPlan(outputPartitioning = rightPartitioning))
+          val planned = EnsureRequirements.apply(smj)
+          val shuffled = planned.children.map(_.exists(_.isInstanceOf[ShuffleExchangeLike]))
+          if (!shuffled.head && !shuffled(1)) {
+            val left = declaredKeys(planned.children.head)
+            assert(left.isDefined && left == declaredKeys(planned.children(1)),
+              s"neither side was shuffled, so both must declare the same partition keys. " +
+                s"left=$leftName right=$rightName joinType=$joinType " +
+                s"settings=${settings.mkString(",")}\n${planned.treeString}")
+          }
+        }
+      }
+    }
+  }
+
   private def anyGpeEnabled(plan: SparkPlan): Boolean =
     plan.collectFirst { case gpe: GroupPartitionsExec if gpe.enableSortedMerge => true }.isDefined
 
