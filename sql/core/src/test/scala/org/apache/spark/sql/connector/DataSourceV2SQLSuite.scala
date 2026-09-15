@@ -178,6 +178,29 @@ abstract class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-58970: LEFT SEMI join over an aggregate over a DSv2 table plans " +
+      "without reading pre-pushdown statistics") {
+    val fact = s"${catalogAndNamespace}semi_agg_fact"
+    val dim = s"${catalogAndNamespace}semi_agg_dim"
+    withTable(fact, dim) {
+      sql(s"CREATE TABLE $fact (key INT, value INT)")
+      sql(s"INSERT INTO $fact VALUES (1, 10), (1, 20), (2, 30), (3, 40), (3, 50)")
+      sql(s"CREATE TABLE $dim (key INT)")
+      sql(s"INSERT INTO $dim VALUES (1), (3)")
+
+      // The small dim side makes the join broadcast-eligible, the precondition for pushing it
+      // below the Aggregate (SPARK-34081). Before SPARK-58970 that ran before scan pushdown, so the
+      // broadcast decision read pre-pushdown DSv2 stats and failed; the rule now runs afterwards.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
+        val df = sql(
+          s"""SELECT g.key, g.total
+             |FROM (SELECT key, sum(value) AS total FROM $fact GROUP BY key) g
+             |LEFT SEMI JOIN $dim d ON g.key = d.key""".stripMargin)
+        checkAnswer(df, Seq(Row(1, 30L), Row(3, 90L)))
+      }
+    }
+  }
+
   private def checkExplain(query: String, relationPattern: Regex): Unit = {
     val explain = spark.sql(s"EXPLAIN EXTENDED $query").head().getString(0)
     val relations = explain.split("\n").filter(_.contains("RelationV2"))
