@@ -3284,8 +3284,8 @@ class Analyzer(
    *
    * This rule will throw [[AnalysisException]] for following cases:
    * 1. [[Generator]] is nested in expressions, e.g. `SELECT explode(list) + 1 FROM tbl`
-   * 2. more than one [[Generator]] is found in projectList,
-   *    e.g. `SELECT explode(list), explode(list) FROM tbl`
+   * 2. more than one [[Generator]] is found in an aggregate result list,
+   *    e.g. `SELECT explode(list), explode(list), count(*) FROM tbl`
    * 3. [[Generator]] is found in other operators that are not [[Project]] or [[Generate]],
    *    e.g. `SELECT * FROM tbl SORT BY explode(list)`
    */
@@ -3343,6 +3343,62 @@ class Analyzer(
         case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil, false))
         case MultiAlias(g: Generator, names) if g.resolved => Some((g, names, false))
         case _ => None
+      }
+    }
+
+    private def isGeneratorOrUnresolvedGenerator(expr: Expression): Boolean = {
+      expr.containsPattern(GENERATOR) || (
+        expr.containsPattern(UNRESOLVED_FUNCTION) &&
+        expr.exists {
+          case u: UnresolvedFunction =>
+            u.nameParts.lastOption.exists(_.equalsIgnoreCase("json_tuple")) ||
+            functionResolution
+              .lookupBuiltinOrTempFunction(u.nameParts, Some(u))
+              .exists(_.getGroup == "generator_funcs")
+          case _ => false
+        }
+      )
+    }
+
+    /** Allows bypassing earlier generators only when they depend on a generator to their right. */
+    private def canExtractGeneratorInProjectListOrder(
+        precedingExpressions: Seq[NamedExpression],
+        remainingExpressions: Seq[NamedExpression]): Boolean = {
+      def generatorOutputNames(expression: NamedExpression): Seq[String] = expression match {
+        case AliasedGenerator(_, names, _) =>
+          names
+        case Alias(child, name) if isGeneratorOrUnresolvedGenerator(child) =>
+          name :: Nil
+        case MultiAlias(child, names) if isGeneratorOrUnresolvedGenerator(child) =>
+          names
+        case _ =>
+          Nil
+      }
+
+      val neededGeneratorOutputNames = ArrayBuffer.empty[String]
+      remainingExpressions.foreach { expression =>
+        generatorOutputNames(expression).foreach { name =>
+          neededGeneratorOutputNames += name
+        }
+      }
+
+      precedingExpressions.reverseIterator.forall { expression =>
+        if (!isGeneratorOrUnresolvedGenerator(expression)) {
+          true
+        } else {
+          val dependsOnGeneratorToRight = expression.exists {
+            case unresolvedAttribute: UnresolvedAttribute =>
+              neededGeneratorOutputNames.exists(
+                conf.resolver(_, unresolvedAttribute.nameParts.head))
+            case _ => false
+          }
+          if (dependsOnGeneratorToRight) {
+            generatorOutputNames(expression).foreach { name =>
+              neededGeneratorOutputNames += name
+            }
+          }
+          dependsOnGeneratorToRight
+        }
       }
     }
 
@@ -3415,13 +3471,16 @@ class Analyzer(
 
       // The star will be expanded differently if we insert `Generate` under `Project` too early.
       case p @ Project(projectList, child) if !projectList.exists(_.exists(_.isInstanceOf[Star])) =>
-        val (resolvedGenerator, newProjectList) = projectList
-          .map(trimNonTopLevelAliases)
-          .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) { (res, e) =>
-            e match {
-              // If there are more than one generator, we only rewrite the first one and wait for
-              // the next analyzer iteration to rewrite the next one.
-              case AliasedGenerator(generator, names, outer) if res._1.isEmpty &&
+        val trimmedProjectList = projectList.map(trimNonTopLevelAliases)
+        val (resolvedGenerator, newProjectList) = trimmedProjectList.zipWithIndex
+          .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) {
+            case (res, (AliasedGenerator(generator, names, outer), index))
+                if res._1.isEmpty &&
+                  (!conf.getConf(SQLConf.GENERATOR_PRESERVE_SELECT_LIST_ORDER) ||
+                    canExtractGeneratorInProjectListOrder(
+                      precedingExpressions = res._2,
+                      remainingExpressions = trimmedProjectList.drop(index)
+                    )) &&
                   generator.childrenResolved =>
                 val g = Generate(
                   generator,
@@ -3431,9 +3490,8 @@ class Analyzer(
                   generatorOutput = GeneratorResolution.makeGeneratorOutput(generator, names),
                   child)
                 (Some(g), res._2 ++ g.nullableOutput)
-              case other =>
-                (res._1, res._2 :+ other)
-            }
+            case (res, (other, _)) =>
+              (res._1, res._2 :+ other)
           }
 
         if (resolvedGenerator.isDefined) {
