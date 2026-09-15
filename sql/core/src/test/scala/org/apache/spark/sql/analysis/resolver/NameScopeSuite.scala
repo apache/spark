@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import java.util.HashMap
+import java.util.{HashMap, HashSet}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedStar
 import org.apache.spark.sql.catalyst.analysis.resolver.{
+  GroupingModifier,
   NameResolutionParameters,
   NameScope,
   NameScopeStack,
@@ -1062,6 +1063,44 @@ class NameScopeSuite extends SharedSparkSession {
 
     assert(output == Seq(col2Integer))
     assert(stack.current.output == Seq(col1Integer))
+  }
+
+  test("unaggregatedAccessOnlyIds excludes Expand-copy attributes under aggregate expressions") {
+    val bExpand = AttributeReference(name = "b", dataType = IntegerType)()
+    val bOriginal = AttributeReference(name = "b", dataType = IntegerType)()
+
+    val stack = newNameScopeStack()
+
+    stack.overwriteCurrent(
+      output = Some(Seq(bExpand)),
+      hiddenOutput = Some(Seq(bOriginal))
+    )
+
+    val groupingAttributeIds = new HashSet[ExprId]
+    groupingAttributeIds.add(bExpand.exprId)
+    stack.overwriteOutputAndExtendHiddenOutput(
+      output = Seq(bExpand),
+      groupingModifier = GroupingModifier.GroupingAnalytics(groupingAttributeIds)
+    )
+
+    val insideAggregate = stack.resolveMultipartName(
+      Seq("b"),
+      NameResolutionParameters(
+        canReferenceAggregatedAccessOnlyAttributes = true,
+        canResolveNameByHiddenOutput = true,
+        shouldPreferHiddenOutput = true
+      )
+    )
+    assert(insideAggregate.candidates.size == 1)
+    assert(
+      insideAggregate.candidates.head.asInstanceOf[AttributeReference].exprId == bOriginal.exprId
+    )
+
+    val outsideAggregate = stack.resolveMultipartName(Seq("b"))
+    assert(outsideAggregate.candidates.size == 1)
+    assert(
+      outsideAggregate.candidates.head.asInstanceOf[AttributeReference].exprId == bExpand.exprId
+    )
   }
 
   /**
