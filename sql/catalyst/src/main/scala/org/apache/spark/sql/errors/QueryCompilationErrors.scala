@@ -1341,7 +1341,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def commandNotSupportNestedColumnError(command: String, quoted: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1060",
+      errorClass = "UNSUPPORTED_FEATURE.NESTED_COLUMN",
       messageParameters = Map(
         "command" -> command,
         "column" -> quoted))
