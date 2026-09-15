@@ -27,7 +27,9 @@ import org.apache.spark.sql.execution.window.{Final, Partial, WindowGroupLimitEx
  * final node's required child distribution: the partial node only pre-filters, keeping the rows
  * whose rank within its own partition is within the limit, and a partition of the final node is a
  * union of partitions of the partial node, so it drops no row the final node would keep. A
- * [[GroupPartitionsExec]] between the two nodes, and a local sort, are looked through.
+ * [[GroupPartitionsExec]] between the two nodes, and a local sort, are looked through; the node is
+ * left in place where removing it would take no sort with it and leave the sort above the grouping
+ * with a bigger input.
  */
 object RemoveRedundantWindowGroupLimits extends Rule[SparkPlan] {
 
@@ -52,21 +54,30 @@ object RemoveRedundantWindowGroupLimits extends Rule[SparkPlan] {
    * is what makes the sort feeding the partial node dead; on its own that one is not redundant,
    * having been added to give the partial node its required ordering.
    *
+   * A partial node holding no local sort of its own stays where `hasUpperSort` is set: it is then
+   * the only cardinality reducer between its child and the sort above the grouping, and removing it
+   * hands that sort the whole input.
+   *
    * @param hasUpperSort whether a local sort between the final node and `plan` orders the rows the
    *                     final node ranks.
    */
   private def removePartialLimit(plan: SparkPlan, hasUpperSort: Boolean): SparkPlan = plan match {
     case WindowGroupLimitExec(_, _, _, _, Partial, child) =>
-      if (hasUpperSort) stripLocalSort(child) else child
+      if (hasUpperSort) {
+        child match {
+          case sort: SortExec if !sort.global => sort.child
+          // Nothing goes with the partial node here: it is the only cardinality reducer between
+          // its child and the sort above, which would then read the whole input -
+          // `PushDownLocalSort.isOrderPreserving` declines the same trade by default.
+          case _ => plan
+        }
+      } else {
+        child
+      }
     case group: GroupPartitionsExec =>
       group.withNewChildren(Seq(removePartialLimit(group.child, hasUpperSort)))
     case sort: SortExec if !sort.global =>
       sort.withNewChildren(Seq(removePartialLimit(sort.child, hasUpperSort = true)))
-    case other => other
-  }
-
-  private def stripLocalSort(plan: SparkPlan): SparkPlan = plan match {
-    case sort: SortExec if !sort.global => sort.child
     case other => other
   }
 

@@ -49,7 +49,7 @@ import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExcha
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraphNode
-import org.apache.spark.sql.execution.window.{Final, WindowGroupLimitExec, WindowGroupLimitMode}
+import org.apache.spark.sql.execution.window.{Final, Partial, WindowGroupLimitExec, WindowGroupLimitMode}
 import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
@@ -6355,10 +6355,10 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59492: remove the partial window group limit below a GroupPartitionsExec") {
     // (1, 'aa') is stored in two splits, so the reported KeyedPartitioning is not grouped and
     // EnsureRequirements coalesces the two splits with a GroupPartitionsExec to satisfy the final
-    // WindowGroupLimit's clustered distribution. The partial limit node, and the local sort feeding
-    // it, are redundant below that grouping: every partition the final node ranks is a union of
-    // partitions the partial node ranked, and the ordering the final node needs is re-established
-    // by a sort above the grouping.
+    // WindowGroupLimit's clustered distribution. The partial limit node is below that grouping, so
+    // it is not redundant in the work it saves and goes only where its own local sort goes with it:
+    // every partition the final node ranks is a union of partitions the partial node ranked, and
+    // the ordering the final node needs is re-established by a sort above the grouping.
     val partitions = Array(identity("id"), identity("name"))
     val orderedItems = "ordered_items"
     createTable(items, itemsColumns, partitions)
@@ -6381,10 +6381,12 @@ class KeyGroupedPartitioningSuite
     def finalChild(plan: SparkPlan): SparkPlan =
       collectFirst(plan) { case w: WindowGroupLimitExec => w.child }.get
 
-    // A stage boundary below the sort shows up as codegen wrappers around the grouping.
+    // A stage boundary below the sort shows up as codegen wrappers around the grouping, and the
+    // scan's projection sits between a limit node and the scan it reads.
     def unwrap(plan: SparkPlan): SparkPlan = plan match {
       case w: WholeStageCodegenExec => unwrap(w.child)
       case i: InputAdapter => unwrap(i.child)
+      case p: ProjectExec => unwrap(p.child)
       case other => other
     }
 
@@ -6443,13 +6445,19 @@ class KeyGroupedPartitioningSuite
         s"expected the sort above the grouping to be the one left:\n$byPricePlan")
 
       // A source that reports the ordering the window needs leaves the partial node without a sort
-      // of its own, and the sort the grouping forces above it is the only one either way.
+      // of its own. It is then the only cardinality reducer between the scan and the sort the
+      // grouping forces above it, so removing it would hand that sort the whole scan: it stays.
       val reported = topKQuery(orderedItems, "price")
       val reportedPlan = reported.queryExecution.executedPlan
       checkAnswer(reported, Seq(Row(1L, "aa", 10.0f), Row(2L, "cc", 30.0f)))
       assert(scanOrderingLength(reportedPlan) == 3,
         s"expected the scan to report the source's own three sort orders:\n$reportedPlan")
-      assertFinalAloneWithOneLocalSort(reportedPlan)
+      assert(limitModes(reportedPlan) == Seq(Final, Partial),
+        s"expected both limit nodes, got ${limitModes(reportedPlan)}:\n$reportedPlan")
+      assert(collectFirst(reportedPlan) {
+        case w: WindowGroupLimitExec if w.mode == Partial => unwrap(w.child)
+      }.exists(_.isInstanceOf[BatchScanExec]),
+        s"expected the partial node to read the scan, with no sort of its own:\n$reportedPlan")
       assert(unwrap(finalChild(reportedPlan)).isInstanceOf[SortExec],
         s"expected the sort above the grouping to be the one left:\n$reportedPlan")
     }
