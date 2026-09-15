@@ -53,8 +53,10 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object StampUnionDecisions extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = {
+    val codegenEnabled = plan.conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED)
+    val maxChildren = plan.conf.getConf(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN)
     plan.foreach {
-      case u: UnionExec => u.stampDecisions()
+      case u: UnionExec => u.stampDecisions(codegenEnabled, maxChildren)
       case _ =>
     }
     plan

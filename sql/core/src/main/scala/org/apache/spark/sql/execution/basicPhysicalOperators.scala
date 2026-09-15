@@ -1093,17 +1093,19 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   /**
    * Fixes this node's decisions for the rest of the plan's life. Called by `StampUnionDecisions`,
    * first right after `EnsureRequirements`, so what the exchanges around this union were planned
-   * against is what execution uses. Nothing else writes this tag on an existing node, and the
-   * nodes the rule writes are freshly planned and not yet published, so no reader can be looking at
-   * one; `metrics` and the codegen gate read it later, and a node that already carries it keeps it,
-   * which is how the copy in the codegen shell stays in step with the gate.
+   * against is what execution uses; the two confs come from one read per plan there. Nothing else
+   * writes this tag on an existing node, and the nodes the rule writes are freshly planned and not
+   * yet published, so no reader can be looking at one; `metrics` and the codegen gate read it
+   * later, and a node that already carries it keeps it, which is how the copy in the codegen shell
+   * stays in step with the gate.
    */
-  private[execution] def stampDecisions(): Unit = if (stampedDecisions.isEmpty) {
-    setTagValue(UnionExec.DECISIONS, UnionExec.Decisions(
-      plainUnion = isPlainUnion,
-      unionCodegenEnabled = conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED),
-      maxChildren = conf.getConf(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN)))
-  }
+  private[execution] def stampDecisions(codegenEnabled: Boolean, maxChildren: Int): Unit =
+    if (stampedDecisions.isEmpty) {
+      setTagValue(UnionExec.DECISIONS, UnionExec.Decisions(
+        plainUnion = isPlainUnion,
+        unionCodegenEnabled = codegenEnabled,
+        maxChildren = maxChildren))
+    }
 
   /**
    * A node stamped plain reports `UnknownPartitioning` even once its children agree on a concrete
@@ -1117,17 +1119,14 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * The reverse costs fusion. A rule that runs after the stamp and drops a child's partitioning
    * leaves the node stamped non-plain, so the codegen gate answers "partitioning-aware" and
    * `numOutputRows` goes unregistered, whereas re-deriving at the gate would have fused it.
-   * `DisableUnnecessaryBucketedScan` does that to a union over two bucketed scans, once a
-   * projection on each side makes them row-based; the `columnar` term would reject the bare scans
-   * anyway. Results are unaffected, since the other branch below re-derives and concatenates.
+   * `DisableUnnecessaryBucketedScan` does that to a union over two bucketed scans with a projection
+   * on each side. Results are unaffected, since the branch below re-derives and concatenates.
    *
-   * The other branch is derived per call, so `unionRDDs` could take the concatenating arm even
-   * though `EnsureRequirements` planned the parent against a concrete partitioning:
-   * `comparePartitioning` compares `HashPartitioningLike` by equality, so a change to one child's
-   * partitioning that its siblings do not mirror can empty the intersection. This node does not
-   * re-check it. AQE reconciles it, by validating a partitioning change against the parents'
-   * requirements and either reverting it or re-running `EnsureRequirements`; an injected rule can
-   * skip that.
+   * That branch is derived per call, so `unionRDDs` can take the concatenating arm even though
+   * `EnsureRequirements` planned the parent against a concrete partitioning: `comparePartitioning`
+   * compares `HashPartitioningLike` by equality, so a change to one child's partitioning that its
+   * siblings do not mirror can empty the intersection. AQE reconciles that, by validating a
+   * partitioning change against the parents' requirements; an injected rule can skip it.
    */
   override def outputPartitioning: Partitioning =
     if (isPlainUnion) super.outputPartitioning else rawPartitioning

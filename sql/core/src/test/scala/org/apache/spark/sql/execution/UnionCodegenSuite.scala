@@ -677,6 +677,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     // distribution from an RDD that does not have it.
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true",
         SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
       withTempView("v") {
         cacheAggregateView("v")
@@ -770,12 +771,14 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         assert(planned.collect().length == 200)
         // The row count alone does not discriminate, since the shell was installed at planning and
         // keeps emitting; registering `numOutputRows` unconditionally and reading the conf per call
-        // passes it. This assertion is what fails there, because nothing forces the copy's reason
-        // before it. It has to sit after the flip, as it does here: taken while the conf was still
-        // on, it would warm a memoizing implementation with the answer this test needs it not to
-        // have.
+        // passes it. The `supportCodegen` assertion below is what fails there.
         val copy = fusedUnions(planned)
         assert(copy.size == 1)
+        // The copy this test needs: `insertInputAdapter` wrapped both children, so the shell holds
+        // a copy rather than the instance the gate answered on. This copy's reason is first forced
+        // by the `SparkPlanInfo` that `collect()` above builds, with the conf already off, so what
+        // it answers can only come from the stamp.
+        assert(copy.head.children.forall(_.isInstanceOf[InputAdapter]))
         assert(copy.head.supportCodegen,
           "the copy in the shell must keep the decision it was planned with")
       }
@@ -806,6 +809,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         assert(planned.collect().length == 300)
         val copy = fusedUnions(planned)
         assert(copy.size == 1)
+        assert(copy.head.children.forall(_.isInstanceOf[InputAdapter]))
         assert(copy.head.supportCodegen,
           "the copy in the shell must keep the cap it was planned with")
         // Not `metrics.contains`, which `collect()` above already proves: an empty `metrics` would
@@ -871,25 +875,29 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
-  test("SPARK-59122: a prepared union keeps its layout when nothing read it during preparation") {
-    // With whole-stage codegen off, no gate consults the union while the plan is prepared, and a
-    // root union has no parent to ask for its partitioning either. First-read initialization would
-    // then decide at execution, under whatever the conf says by then; `StampUnionDecisions` decides
-    // during preparation instead.
+  test("SPARK-59122: a partitioning-aware union follows its children's coalesced partition count") {
+    // Only the decision is stamped, never the `Partitioning`. AQE coalescing changes the children's
+    // `numPartitions` after the stamp, and `unionRDDs` hands whatever it reports to
+    // `SQLPartitioningAwareUnionRDD`, which builds exactly that many partitions from each child: a
+    // count frozen at stamping time asks for partitions the coalesced children no longer have.
     withSQLConf(
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      val plan = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
-        spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k"))
-          .union(spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k")))
-          .queryExecution.executedPlan
-      }
-      withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
-        // Co-partitioned children pass their four partitions through; a plain concatenation would
-        // report eight.
-        assert(plan.execute().getNumPartitions == 4,
-          "a prepared union must execute by the layout it was prepared with")
-      }
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "20",
+        SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+      val left = spark.range(0, 100, 1, 4).selectExpr("id % 10 AS k").groupBy("k").count()
+      val right = spark.range(100, 200, 1, 4).selectExpr("id % 10 AS k").groupBy("k").count()
+      val df = left.union(right).groupBy("k").agg(sum("count").as("c"))
+      checkAnswer(df, (0L until 10L).map(k => Row(k, 20L)))
+
+      val unions = collect(df.queryExecution.executedPlan) { case u: UnionExec => u }
+      assert(unions.size == 1)
+      val children = unions.head.children.map(_.outputPartitioning.numPartitions)
+      assert(children.distinct.size == 1 && children.head < 20,
+        s"the children must have been coalesced as one group, got $children")
+      assert(unions.head.outputPartitioning.numPartitions == children.head,
+        "the union must report what its children report now, got " +
+          s"${unions.head.outputPartitioning}")
     }
   }
 
@@ -909,8 +917,12 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       val rules = QueryExecution.preparations(spark, subquery = false)
       val firstStamp = rules.indexWhere(_ eq StampUnionDecisions)
       val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
-      assert(ensureRequirements >= 0 && firstStamp > ensureRequirements,
-        s"expected a stamping pass after EnsureRequirements, got $ensureRequirements/$firstStamp")
+      val columnarRules =
+        rules.indexWhere(_.isInstanceOf[ApplyColumnarRulesAndInsertTransitions])
+      assert(ensureRequirements >= 0 && firstStamp > ensureRequirements &&
+          firstStamp < columnarRules,
+        "expected a stamping pass between EnsureRequirements and the columnar rules, got " +
+          s"$ensureRequirements/$firstStamp/$columnarRules")
 
       val stamped = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
         val df = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k"))
