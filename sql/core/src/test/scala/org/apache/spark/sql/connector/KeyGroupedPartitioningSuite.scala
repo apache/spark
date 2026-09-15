@@ -35,18 +35,21 @@ import org.apache.spark.sql.connector.expressions.Expressions._
 import org.apache.spark.sql.execution.{
   ExtendedMode,
   FormattedMode,
+  InputAdapter,
   LocalTableScanExec,
   ProjectExec,
   RDDScanExec,
   SimpleMode,
   SortExec,
   SparkPlan,
-  UnionExec}
+  UnionExec,
+  WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraphNode
+import org.apache.spark.sql.execution.window.{Final, Partial, WindowGroupLimitExec, WindowGroupLimitMode}
 import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
@@ -6346,6 +6349,117 @@ class KeyGroupedPartitioningSuite
         assert(collectAllGroupPartitions(df.queryExecution.executedPlan).nonEmpty,
           "GroupPartitionsExec expected to coalesce union partitions sharing the key [id]")
       }
+    }
+  }
+
+  test("SPARK-59492: remove the partial window group limit below a GroupPartitionsExec") {
+    // (1, 'aa') is stored in two splits, so the reported KeyedPartitioning is not grouped and
+    // EnsureRequirements coalesces the two splits with a GroupPartitionsExec to satisfy the final
+    // WindowGroupLimit's clustered distribution. The partial limit node is below that grouping, so
+    // it is not redundant in the work it saves and goes only where its own local sort goes with it:
+    // every partition the final node ranks is a union of partitions the partial node ranked, and
+    // the ordering the final node needs is re-established by a sort above the grouping.
+    val partitions = Array(identity("id"), identity("name"))
+    val orderedItems = "ordered_items"
+    createTable(items, itemsColumns, partitions)
+    // The same layout, with the source reporting the ordering the window below asks for.
+    createTable(orderedItems, itemsColumns, partitions,
+      ordering = Array(
+        sort(column("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+        sort(column("name"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+        sort(column("price"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)))
+    Seq(items, orderedItems).foreach { table =>
+      sql(s"INSERT INTO testcat.ns.$table VALUES " +
+        s"(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 20.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'cc', 30.0, cast('2020-01-01' as timestamp))")
+    }
+
+    def limitModes(plan: SparkPlan): Seq[WindowGroupLimitMode] =
+      collect(plan) { case w: WindowGroupLimitExec => w.mode }
+
+    def finalChild(plan: SparkPlan): SparkPlan =
+      collectFirst(plan) { case w: WindowGroupLimitExec => w.child }.get
+
+    // A stage boundary below the sort shows up as codegen wrappers around the grouping, and the
+    // scan's projection sits between a limit node and the scan it reads.
+    def unwrap(plan: SparkPlan): SparkPlan = plan match {
+      case w: WholeStageCodegenExec => unwrap(w.child)
+      case i: InputAdapter => unwrap(i.child)
+      case p: ProjectExec => unwrap(p.child)
+      case other => other
+    }
+
+    // One limit node is left, with one local sort in the whole plan and no global one.
+    def assertFinalAloneWithOneLocalSort(plan: SparkPlan): Unit = {
+      val limits = limitModes(plan)
+      val sorts = collect(plan) { case s: SortExec => s }
+      assert(limits == Seq(Final), s"expected the final limit alone, got $limits:\n$plan")
+      assert(sorts.length == 1, s"expected one sort in total, got ${sorts.length}:\n$plan")
+      assert(!sorts.head.global, s"expected the sort to be local:\n$plan")
+    }
+
+    // How many sort orders the scan reports: the two of the partition keys, or the source's own.
+    def scanOrderingLength(plan: SparkPlan): Int =
+      collect(plan) { case s: BatchScanExec => s }.head.outputOrdering.length
+
+    // `price` is projected by both the window and the outer select: every row of a group shares its
+    // (id, name), and answers are compared as multisets, so a row ranked in the wrong order is only
+    // visible through the column that ranks it.
+    def topKQuery(table: String, orderCol: String): DataFrame = sql(
+      s"""SELECT id, name, price FROM (
+         |  SELECT id, name, price, RANK() OVER (PARTITION BY id, name ORDER BY $orderCol) rk
+         |  FROM testcat.ns.$table
+         |) t WHERE rk = 1
+         |""".stripMargin)
+
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      // Ranking by a partition key leaves no sort between the two limit nodes: the coalesced
+      // partitions keep an ordering over the partition keys. With nothing above the grouping to
+      // order the rows the final node ranks, the sort that fed the partial node is the one carrying
+      // that ordering and stays where it is.
+      // Every row of a group ties on the key it is ranked by, so all of them rank first.
+      val byKey = topKQuery(items, "name")
+      checkAnswer(byKey,
+        Seq(Row(1L, "aa", 10.0f), Row(1L, "aa", 20.0f), Row(2L, "cc", 30.0f)))
+      val byKeyPlan = byKey.queryExecution.executedPlan
+      assertFinalAloneWithOneLocalSort(byKeyPlan)
+      finalChild(byKeyPlan) match {
+        case g: GroupPartitionsExec =>
+          assert(unwrap(g.child).isInstanceOf[SortExec],
+            s"expected the sort that fed the partial node below the grouping:\n$byKeyPlan")
+        case other =>
+          fail(s"expected the final limit to read the grouping, got $other:\n$byKeyPlan")
+      }
+
+      // Ranking by a non-key column loses the ordering when the splits are concatenated, so a sort
+      // sits between the two limit nodes. That one orders the rows the final node ranks, which
+      // makes the partial node's own sort dead: both the partial node and its sort go.
+      val byPrice = topKQuery(items, "price")
+      checkAnswer(byPrice, Seq(Row(1L, "aa", 10.0f), Row(2L, "cc", 30.0f)))
+      val byPricePlan = byPrice.queryExecution.executedPlan
+      assertFinalAloneWithOneLocalSort(byPricePlan)
+      assert(unwrap(finalChild(byPricePlan)).isInstanceOf[SortExec],
+        s"expected the sort above the grouping to be the one left:\n$byPricePlan")
+
+      // A source that reports the ordering the window needs leaves the partial node without a sort
+      // of its own. It is then the only cardinality reducer between the scan and the sort the
+      // grouping forces above it, so removing it would hand that sort the whole scan: it stays.
+      val reported = topKQuery(orderedItems, "price")
+      val reportedPlan = reported.queryExecution.executedPlan
+      checkAnswer(reported, Seq(Row(1L, "aa", 10.0f), Row(2L, "cc", 30.0f)))
+      assert(scanOrderingLength(reportedPlan) == 3,
+        s"expected the scan to report the source's own three sort orders:\n$reportedPlan")
+      assert(limitModes(reportedPlan) == Seq(Final, Partial),
+        s"expected both limit nodes, got ${limitModes(reportedPlan)}:\n$reportedPlan")
+      assert(collectFirst(reportedPlan) {
+        case w: WindowGroupLimitExec if w.mode == Partial => unwrap(w.child)
+      }.exists(_.isInstanceOf[BatchScanExec]),
+        s"expected the partial node to read the scan, with no sort of its own:\n$reportedPlan")
+      assert(unwrap(finalChild(reportedPlan)).isInstanceOf[SortExec],
+        s"expected the sort above the grouping to be the one left:\n$reportedPlan")
     }
   }
 

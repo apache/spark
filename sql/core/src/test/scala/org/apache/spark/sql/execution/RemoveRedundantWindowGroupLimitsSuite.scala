@@ -39,6 +39,12 @@ abstract class RemoveRedundantWindowGroupLimitsSuiteBase
     checkAnswer(df, result)
   }
 
+  private def unwrapCodegen(plan: SparkPlan): SparkPlan = plan match {
+    case w: WholeStageCodegenExec => unwrapCodegen(w.child)
+    case i: InputAdapter => unwrapCodegen(i.child)
+    case other => other
+  }
+
   test("remove redundant WindowGroupLimits") {
     withTempView("t") {
       spark.range(0, 100).withColumn("value", lit(1)).createOrReplaceTempView("t")
@@ -54,6 +60,17 @@ abstract class RemoveRedundantWindowGroupLimitsSuiteBase
           |WHERE rn < 3
           |""".stripMargin
       checkWindowGroupLimits(query1, 1)
+      // The child is already clustered on the window's PARTITION BY, so no exchange lands between
+      // the two limit nodes and nothing above them orders the rows the final node ranks: the local
+      // sort that fed the partial node is the one carrying that ordering, and it stays where the
+      // partial node was.
+      val plan = sql(query1).queryExecution.executedPlan
+      val limits = collectWithSubqueries(plan) { case w: WindowGroupLimitExec => w }
+      assert(limits.length == 1, s"expected the final limit alone, got ${limits.length}:\n$plan")
+      val sorts = collectWithSubqueries(plan) { case s: SortExec => s }.filter(!_.global)
+      assert(sorts.length == 1, s"expected one local sort, got ${sorts.length}:\n$plan")
+      assert(unwrapCodegen(limits.head.child).isInstanceOf[SortExec],
+        s"expected the sort to stay where the partial node was:\n$plan")
 
       val query2 =
         """
