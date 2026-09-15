@@ -7601,6 +7601,9 @@ def count_min_sketch(
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
+
+        .. versionchanged:: 4.4.0
+            Supports the TIME type for the ``col`` argument.
     eps : :class:`~pyspark.sql.Column` or float
         relative error, must be positive
 

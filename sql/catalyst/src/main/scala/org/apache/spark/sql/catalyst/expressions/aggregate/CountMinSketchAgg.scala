@@ -171,7 +171,12 @@ case class CountMinSketchAgg(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(IntegralType, StringType, BinaryType), DoubleType, DoubleType,
+    // AnyTimeType is kept last: ANSI coercion walks the collection in order, and a TIMESTAMP/DATE
+    // store-assigns to both STRING and TIME, so a TIME member ahead of StringType would coerce
+    // datetimes to TIME (nanos-of-day only) and silently under-count. A TIME value is accepted
+    // regardless of position via the order-independent acceptsType short-circuit, and sketches
+    // through the same addLong path as an integral (physically a long of nanos-of-day).
+    Seq(TypeCollection(IntegralType, StringType, BinaryType, AnyTimeType), DoubleType, DoubleType,
       TypeCollection(IntegerType, LongType))
   }
 

@@ -111,6 +111,29 @@ class CountMinSketchAggSuite extends SparkFunSuite {
 
   testDataType[Array[Byte]](BinaryType, Seq.fill(100) { rand.nextString(1).getBytes() })
 
+  // TIME is physically a long of nanos-of-day, so it sketches exactly like an integral column.
+  testDataType[Long](TimeType(), Seq.fill(100) { rand.nextInt(10).toLong * 1000000000L })
+
+  test("count_min_sketch accepts the TIME type and keeps AnyTimeType last") {
+    // The analyzer admits a TIME column as the value to sketch.
+    val agg = new CountMinSketchAgg(BoundReference(0, TimeType(6), nullable = true),
+      Literal(epsOfTotalCount), Literal(confidence), Literal(seed))
+    assert(agg.checkInputDataTypes().isSuccess)
+
+    // AnyTimeType MUST stay after the string member: ANSI coercion walks the collection in order,
+    // and a TIMESTAMP/DATE store-assigns to both STRING and TIME, so a TIME member ahead of the
+    // string type would coerce datetimes to TIME (nanos-of-day only) and silently under-count.
+    val members = agg.inputTypes.head match {
+      case TypeCollection(types) => types
+      case other => fail(s"expected the value input type to be a TypeCollection, got $other")
+    }
+    val stringIdx = members.indexWhere(_.acceptsType(StringType))
+    val timeIdx = members.indexWhere(_.acceptsType(TimeType(6)))
+    assert(stringIdx >= 0 && timeIdx >= 0)
+    assert(stringIdx < timeIdx,
+      "the string member must precede AnyTimeType so datetimes coerce to STRING, not TIME")
+  }
+
   test("serialize and de-serialize") {
     // Check empty serialize and de-serialize
     val agg = cms(epsOfTotalCount, confidence, seed)
