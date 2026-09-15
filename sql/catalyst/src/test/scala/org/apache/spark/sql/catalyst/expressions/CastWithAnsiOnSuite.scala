@@ -169,6 +169,27 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
   }
 
+  test("SPARK-58316: casting non-finite floating values to decimal") {
+    val targetType = DecimalType(38, 2)
+    Seq(
+      (Literal(Float.NaN), "NaN"),
+      (Literal(Float.PositiveInfinity), "Infinity"),
+      (Literal(Float.NegativeInfinity), "-Infinity"),
+      (Literal(Double.NaN), "NaN"),
+      (Literal(Double.PositiveInfinity), "Infinity"),
+      (Literal(Double.NegativeInfinity), "-Infinity")
+    ).foreach { case (literal, value) =>
+      checkErrorInExpression[SparkArithmeticException](
+        cast(literal, targetType),
+        "CAST_OVERFLOW",
+        Map(
+          "value" -> value,
+          "sourceType" -> s"\"${literal.dataType.sql}\"",
+          "targetType" -> s"\"${targetType.sql}\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+    }
+  }
+
   test("ANSI mode: disallow type conversions between Numeric types and Date type") {
     import DataTypeTestUtils.numericTypes
     checkInvalidCastFromNumericTypeToDateType()
