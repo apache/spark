@@ -391,7 +391,7 @@ class Word2VecModel private[ml] (
 @Since("1.6.0")
 object Word2VecModel extends MLReadable[Word2VecModel] {
 
-  private def findSynonyms(
+  private[spark] def findSynonyms(
       wordIndex: Map[String, Int],
       wordVectors: Array[Float],
       wordVecInvNorms: Array[Float],
