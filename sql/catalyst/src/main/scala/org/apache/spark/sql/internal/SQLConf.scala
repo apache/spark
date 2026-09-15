@@ -7007,6 +7007,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_ORACLE_NUMBER_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.oracle.numberMapping.enabled")
+      .doc("When true, Oracle bare NUMBER columns (no explicit precision/scale) are mapped " +
+        "to DecimalType(38, 10), preserving the pre-Spark-4.4 behavior. When false (default), " +
+        "they are mapped to DecimalType(38, 18) using DecimalType.DEFAULT_SCALE. The new " +
+        "default preserves more fractional digits (18 vs 10) but reduces the integer range " +
+        "from 28 to 20 digits; bare NUMBER values with more than 20 integer digits that " +
+        "previously read correctly will raise NUMERIC_VALUE_OUT_OF_RANGE. Set to true to " +
+        "restore the old mapping.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.db2.numericMapping.enabled")
       .internal()
@@ -9222,6 +9235,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyOracleTimestampNTZMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED)
+
+  def legacyOracleNumberMappingEnabled: Boolean =
+    getConf(LEGACY_ORACLE_NUMBER_MAPPING_ENABLED)
 
   def legacyDB2numericMappingEnabled: Boolean =
     getConf(LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED)
