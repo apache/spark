@@ -26,7 +26,7 @@ import scala.concurrent.Future
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState, VersionedCredentials}
+import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState, VersionedCredentials}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.UserCredentialManager
 import org.apache.spark.errors.SparkCoreErrors
@@ -155,6 +155,22 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("cleanup-decommission-execs")
     }
 
+  // Generate before launchers snapshot startup configuration; never reuse a user-supplied ID.
+  private[spark] val driverInstanceId = java.util.UUID.randomUUID().toString
+  conf.set(DRIVER_INSTANCE_ID.key, driverInstanceId)
+
+  private def checkDriverInstanceId(suppliedInstanceId: Option[String]): Option[SparkException] = {
+    suppliedInstanceId.filter(_.nonEmpty) match {
+      case Some(id) if id != driverInstanceId =>
+        Some(new SparkException(s"Executor driver instance ID $id does not match " +
+          s"driver instance ID $driverInstanceId. This likely means the executor " +
+          s"connected to the wrong driver after a port reuse / driver swap."))
+      case None =>
+        Some(new SparkException("Executor did not supply a driver instance ID."))
+      case _ => None
+    }
+  }
+
   class DriverEndpoint extends IsolatedThreadSafeRpcEndpoint with Logging {
 
     override val rpcEnv: RpcEnv = CoarseGrainedSchedulerBackend.this.rpcEnv
@@ -266,7 +282,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case RegisterExecutor(executorId, executorRef, hostname, cores, logUrls,
           attributes, resources, resourceProfileId) =>
-        if (executorDataMap.contains(executorId)) {
+        val idMismatch = checkDriverInstanceId(attributes.get(DRIVER_INSTANCE_ID.key))
+        if (idMismatch.isDefined) {
+          context.sendFailure(idMismatch.get)
+        } else if (executorDataMap.contains(executorId)) {
           context.sendFailure(new IllegalStateException(s"Duplicate executor ID: $executorId"))
         } else if (scheduler.excludedNodes().contains(hostname) ||
             isExecutorExcluded(executorId, hostname)) {
@@ -386,16 +405,27 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             adjustTargetNumExecutors = false,
             triggeredByExecutor = true))
 
+      // Never return credentials through the identity-less legacy request.
       case RetrieveSparkAppConfig(resourceProfileId) =>
-        val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(resourceProfileId)
-        val reply = SparkAppConfig(
-          sparkProperties,
-          SparkEnv.get.securityManager.getIOEncryptionKey(),
-          Option(delegationTokens.get()),
-          Option(SparkEnv.get.userCredentials.get()).map(vc => (vc.version, vc.bytes)),
-          rp,
-          currentLogLevel)
-        context.reply(reply)
+        context.sendFailure(new SparkException(
+          "Executor did not supply a driver instance ID. Send " +
+          "RetrieveSparkAppConfigWithIdentity with the executor's driver " +
+          "instance ID instead."))
+
+      case RetrieveSparkAppConfigWithIdentity(resourceProfileId, instanceId) =>
+        checkDriverInstanceId(Option(instanceId)) match {
+          case Some(e) => context.sendFailure(e)
+          case None =>
+            val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(resourceProfileId)
+            val reply = SparkAppConfig(
+              sparkProperties,
+              SparkEnv.get.securityManager.getIOEncryptionKey(),
+              Option(delegationTokens.get()),
+              Option(SparkEnv.get.userCredentials.get()).map(vc => (vc.version, vc.bytes)),
+              rp,
+              currentLogLevel)
+            context.reply(reply)
+        }
 
       case IsExecutorAlive(executorId) => context.reply(isExecutorActive(executorId))
 
