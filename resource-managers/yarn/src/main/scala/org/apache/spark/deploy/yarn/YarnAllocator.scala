@@ -334,7 +334,7 @@ private[yarn] class YarnAllocator(
       // This results in your default profile getting custom resources defined in
       // <code>spark.yarn.executor.resource.</code> plus spark defined resources of
       // GPU or FPGA. Spark converts GPU and FPGA resources into the YARN built in
-      // types <code>yarn.io/gpu</code>) and <code>yarn.io/fpga</code>, but does not
+      // types <code>yarn.io/gpu</code> and <code>yarn.io/fpga</code>, but does not
       // know the mapping of any other resources. Any other Spark custom resources
       // are not propagated to YARN for the default profile. So if you want Spark
       // to schedule based off a custom resource and have it requested from YARN, you
@@ -344,7 +344,7 @@ private[yarn] class YarnAllocator(
       // schedule using them. Now for custom ResourceProfiles, it doesn't currently have a way
       // to only specify YARN resources without Spark scheduling off of them. This means for
       // custom ResourceProfiles we propagate all the resources defined in the ResourceProfile
-      // to YARN. We still convert GPU and FPGA to the YARN build in types as well. This requires
+      // to YARN. We still convert GPU and FPGA to the YARN built in types as well. This requires
       // that the name of any custom resources you specify match what they are defined as in YARN.
       val customResources = if (rp.id == DEFAULT_RESOURCE_PROFILE_ID) {
         val gpuResource = sparkConf.get(YARN_GPU_DEVICE)
