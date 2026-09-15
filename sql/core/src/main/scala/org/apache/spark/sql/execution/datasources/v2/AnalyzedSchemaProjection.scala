@@ -242,9 +242,12 @@ private[sql] object AnalyzedSchemaProjection extends SQLConfHelper {
    * U+017F LONG S, say - is therefore a distinct column at the top level and ambiguous inside a
    * struct. Delegating keeps a refreshed plan readable exactly where a fresh query is readable.
    *
-   * An ambiguity is reported as the same user-facing error a fresh query reports; refresh
-   * validation pairs captured fields with current ones by folded name and so accepts a schema this
-   * rejects. A missing field, by contrast, is a validation gap and stays an internal error.
+   * An ambiguity is reported as the same user-facing error a fresh query reports. Refresh
+   * validation pairs a captured field with a current one the top-level way - candidates by folded
+   * name, narrowed with the resolver - so it can see one candidate where this sees two, and accepts
+   * a schema this rejects. A missing field, by contrast, cannot happen once validation has passed:
+   * the field it paired is always among the candidates the resolver alone collects here, so that
+   * branch stays an internal error.
    */
   private def matchStructField(
       structInput: Expression,
