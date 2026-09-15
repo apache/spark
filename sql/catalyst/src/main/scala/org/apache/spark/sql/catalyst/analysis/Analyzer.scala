@@ -3544,7 +3544,9 @@ class Analyzer(
      *          seq of non-window expressions)
      */
     private def extract(
-        expressions: Seq[NamedExpression]): (Seq[NamedExpression], Seq[NamedExpression]) = {
+        expressions: Seq[NamedExpression],
+        groupExpressions: Seq[Expression] = Nil)
+      : (Seq[NamedExpression], Seq[NamedExpression]) = {
       // First, we partition the input expressions to two part. For the first part,
       // every expression in it contain at least one WindowExpression.
       // Expressions in the second part do not have any WindowExpression.
@@ -3625,6 +3627,16 @@ class Analyzer(
           case agg: AggregateExpression if !seenWindowAggregates.contains(agg) =>
             extractedExprMap.getOrElseUpdate(agg.canonicalized,
               Alias(agg, s"_w${extractedExprMap.size}")()).toAttribute
+
+          // Extracts a non-window sub-expression that matches a grouping expression as a whole
+          // (e.g. UPPER(country) when the query groups by UPPER(country)). Without this, the
+          // transform would descend into it and extract its underlying attributes (e.g. country),
+          // which are not part of the GROUP BY clause and would make the child Aggregate invalid
+          // (SPARK-59175). Bare grouping attributes are left to the `Attribute` case below.
+          case e: Expression
+              if !e.isInstanceOf[Attribute] && !e.foldable && !hasWindowFunction(e) &&
+                groupExpressions.exists(_.semanticEquals(e)) =>
+            getOrExtract(e, e)
 
           // Extracts other attributes
           case attr: Attribute => extractExpr(attr)
@@ -3732,7 +3744,7 @@ class Analyzer(
             throw QueryCompilationErrors.lateralColumnAliasInAggWithWindowAndHavingUnsupportedError(
               lcaRef.nameParts)
         })
-        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
+        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs, groupingExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
         // Add a Filter operator for conditions in the Having clause.
@@ -3751,7 +3763,7 @@ class Analyzer(
         if hasWindowFunction(aggregateExprs) &&
           a.expressions.forall(_.resolved) &&
           !aggregateExprs.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
-        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
+        val (windowExpressions, aggregateExpressions) = extract(aggregateExprs, groupingExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
         // Add Window operators.
