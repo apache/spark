@@ -51,18 +51,13 @@ import java.util.Deque;
 
   /**
    * This method will be called when we see '/*' and try to match it as a bracketed comment.
-   * If the next character is '+', it should be parsed as hint later, and we cannot match
-   * it as a bracketed comment.
+   * If the next character is '+' and the opener starts the current token, it should be parsed
+   * as a hint later. A hint-shaped opener nested in a bracketed comment remains comment text.
    *
-   * Returns true if the next character is '+'.
+   * Returns true if the current token starts with '/*+'.
    */
   public boolean isHint() {
-    int nextChar = _input.LA(1);
-    if (nextChar == '+') {
-      return true;
-    } else {
-      return false;
-    }
+    return _input.LA(1) == '+' && _input.index() == _tokenStartCharIndex + 2;
   }
 
   /**
