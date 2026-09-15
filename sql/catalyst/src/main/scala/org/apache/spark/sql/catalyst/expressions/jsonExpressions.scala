@@ -1675,9 +1675,9 @@ object JsonArray {
 object JsonArrayExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     // A routed call carries no lexical FORMAT JSON, so every element is a plain value (quoted).
-    // Splicing a nested constructor is only reachable via `JSON_ARRAY(...)` syntax (which freezes
-    // the decision lexically).
-    // TODO(SPARK-59243): splice nested constructors reached through routed/qualified calls.
+    // Splicing a JSON-producing argument is only preserved via `JSON_ARRAY(...)` syntax (which
+    // freezes the decision lexically).
+    // TODO(SPARK-59243): splice JSON-producing arguments reached through routed/qualified calls.
     val flags = expressions.map(_ => false)
     JsonArray(expressions, flags, flags, JsonConstructorNullBehavior.Absent, StringType)
   }

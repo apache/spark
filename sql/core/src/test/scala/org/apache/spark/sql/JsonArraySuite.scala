@@ -19,11 +19,12 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, Star}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, JsonArray, JsonConstructorNullBehavior, JsonQuery, JsonQueryBehavior, JsonQueryQuotes, JsonQueryWrapper, Literal, ResolvedCollation}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, Range}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{CharType, GeographyType, GeometryType, IntegerType, MapType, StringType, VarcharType}
@@ -756,6 +757,29 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("routed JSON_ARRAY star guard recovers when the shadow probe hits a missing namespace") {
+    // A PATH catalog whose functionExists surfaces NoSuchNamespaceException must not fail analysis:
+    // persistentFunctionExists swallows it so resolution reaches system.builtin, which rejects the
+    // direct star. Both analyzer paths share the probe.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      "spark.sql.catalog.missing_ns_cat" -> classOf[MissingNamespaceFunctionCatalog].getName) {
+      try {
+        sql("SET PATH = missing_ns_cat.some_ns, system.builtin")
+        Seq(false, true).foreach { singlePass =>
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString) {
+            val e = intercept[AnalysisException] {
+              sql("SELECT json_array(*) FROM VALUES (1, 'x') AS t(a, b)").queryExecution.analyzed
+            }
+            assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX", s"singlePass=$singlePass")
+          }
+        }
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
   test("view-context shadow probe expands identifiers through the view's frozen catalog") {
     // The shadow probe must mirror `resolveFunctionCandidate`'s identifier expansion. A permanent
     // view freezes its creation catalog (spark_catalog). When the view is read while a different
@@ -969,4 +993,14 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+}
+
+/**
+ * A [[org.apache.spark.sql.connector.catalog.FunctionCatalog]] whose `loadFunction` reports a
+ * missing namespace, so the default `functionExists` propagates [[NoSuchNamespaceException]] --
+ * used to exercise the shadow probe's namespace-error recovery.
+ */
+class MissingNamespaceFunctionCatalog extends InMemoryCatalog {
+  override def loadFunction(ident: Identifier): UnboundFunction =
+    throw new NoSuchNamespaceException(ident.namespace)
 }

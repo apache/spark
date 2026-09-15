@@ -2121,7 +2121,7 @@ class Analyzer(
           // or a qualified `t.*` -- so reject it rather than expand below. A star nested in another
           // expression (json_array(array(*))) is expanded bottom-up before we get here, so only a
           // direct star reaches this guard.
-          if (functionResolution.resolvesToStarDisallowedJsonConstructor(f.nameParts)) {
+          if (functionResolution.resolvesToStarDisallowedSqlJsonFunction(f.nameParts)) {
             throw QueryCompilationErrors.invalidStarUsageError(
               s"expression `${f.prettyName}`", extractStar(f.arguments))
           }

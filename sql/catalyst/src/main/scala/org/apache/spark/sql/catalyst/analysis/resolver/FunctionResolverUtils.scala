@@ -64,12 +64,12 @@ trait FunctionResolverUtils {
     // Whether the call resolves to the builtin `count` (distinct-agnostic). This owner probe can
     // hit an external FunctionCatalog.functionExists lookup on a persistent-first SQL PATH, so
     // compute it once and reuse it for both the count(*) normalization and the count(tbl.*) guard.
-    // Lazy so the non-star and JSON-constructor paths never pay for it.
+    // Lazy so the non-star and SQL/JSON direct-star paths never pay for it.
     lazy val resolvesToCountBuiltin =
       functionResolution.functionNameResolvesToBuiltin(unresolvedFunction.nameParts, "count")
 
     if (functionContainsDirectStarInArguments &&
-        functionResolution.resolvesToStarDisallowedJsonConstructor(unresolvedFunction.nameParts)) {
+        functionResolution.resolvesToStarDisallowedSqlJsonFunction(unresolvedFunction.nameParts)) {
       // A direct star argument -- a bare `*` or a qualified `t.*` -- is rejected in a routed
       // SQL/JSON function; a star nested in another expression (json_array(array(*))) is expanded
       // there and count(*) is rewritten to count(1), so both stay valid arguments.

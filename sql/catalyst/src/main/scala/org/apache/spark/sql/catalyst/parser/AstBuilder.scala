@@ -4321,10 +4321,14 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitJsonArray(ctx: JsonArrayContext): Expression = withOrigin(ctx) {
     val arrayValues = ctx.values.asScala.map(v => expression(v.value)).toSeq
-    val hasExplicitFormat = ctx.values.asScala.exists(_.FORMAT() != null)
-    val hasImplicitJson = arrayValues.exists(JsonArray.isImplicitlyJson)
-    if (!hasExplicitFormat && ctx.nullBehavior == null && ctx.returning == null &&
-        !isTopLevelJsonArrayElement(ctx) && !hasImplicitJson) {
+    // Route a flat, clause-free call through routine resolution so it can be shadowed. Cheap
+    // clause/nesting checks come first to skip the recursive per-value FORMAT scans when a clause
+    // already forces direct construction.
+    val routeThroughResolution =
+      ctx.returning == null && ctx.nullBehavior == null && !isTopLevelJsonArrayElement(ctx) &&
+        !ctx.values.asScala.exists(_.FORMAT() != null) &&
+        !arrayValues.exists(JsonArray.isImplicitlyJson)
+    if (routeThroughResolution) {
       UnresolvedFunction("json_array", arrayValues, isDistinct = false)
     } else {
       // Decide each element's FORMAT JSON flags now, from the lexical argument, so a later

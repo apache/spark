@@ -459,15 +459,15 @@ class FunctionResolution(
   // All routed SQL/JSON functions (JSON_ARRAY, JSON_VALUE, JSON_QUERY, JSON_EXISTS) forbid a direct
   // star argument (a bare `*` or a qualified `t.*`). Derived from the single registry list so a
   // newly routed function is covered without editing this file too.
-  private val starDisallowedJsonConstructors = FunctionRegistry.routedJsonConstructorNames
+  private val starDisallowedSqlJsonFunctions = FunctionRegistry.routedSqlJsonFunctionNames
 
   /**
    * True if `nameParts` resolves to Spark's stock built-in routed SQL/JSON function that forbids a
    * direct star. The `isStockBuiltinFunction` check excludes an `injectFunction` replacement of
    * the name, whose expanded star is passed through rather than rejected.
    */
-  def resolvesToStarDisallowedJsonConstructor(nameParts: Seq[String]): Boolean =
-    starDisallowedJsonConstructors.exists { name =>
+  def resolvesToStarDisallowedSqlJsonFunction(nameParts: Seq[String]): Boolean =
+    starDisallowedSqlJsonFunctions.exists { name =>
       functionNameResolvesToBuiltin(nameParts, name) &&
         v1SessionCatalog.isStockBuiltinFunction(name)
     }
