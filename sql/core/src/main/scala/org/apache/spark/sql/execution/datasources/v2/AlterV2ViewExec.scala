@@ -19,12 +19,14 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaEvolution, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, View, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, View, ViewCatalog, ViewChange}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.command.CommandUtils
 
 /**
@@ -89,53 +91,54 @@ case class AlterV2ViewExec(
 }
 
 /**
- * Physical plan node for ALTER VIEW ... SET TBLPROPERTIES on a v2 [[ViewCatalog]]. Merges the
- * user-supplied properties on top of the analysis-time view properties and dispatches to
- * [[ViewCatalog#replaceView]] -- views carry no data, so a single atomic-swap call is sufficient.
+ * Physical plan node for ALTER VIEW ... SET TBLPROPERTIES on a v2 [[ViewCatalog]]. Dispatches the
+ * user-supplied properties as one batch to [[ViewCatalog#alterView]].
  */
 case class AlterV2ViewSetPropertiesExec(
     catalog: ViewCatalog,
     identifier: Identifier,
-    existingView: View,
     properties: Map[String, String]) extends LeafV2CommandExec {
 
   override def output: Seq[org.apache.spark.sql.catalyst.expressions.Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val merged = existingView.properties.asScala.toMap ++ properties
-    val info = CatalogV2Util.viewInfoBuilderFrom(existingView)
-      .withProperties(merged.asJava)
-      .build()
     // Match v1 `AlterTableSetPropertiesCommand`'s `invalidateCachedTable` so cached query
     // plans referencing the view drop their stale entries.
     CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
-    catalog.replaceView(identifier, info)
+    val changes = properties.map { case (key, value) => ViewChange.setProperty(key, value) }
+    try {
+      catalog.alterView(identifier, changes.toSeq: _*)
+    } catch {
+      case e: IllegalArgumentException if !e.isInstanceOf[SparkThrowable] =>
+        throw QueryExecutionErrors.unsupportedViewChangeError(e)
+    }
     Seq.empty
   }
 }
 
 /**
- * Physical plan node for ALTER VIEW ... UNSET TBLPROPERTIES on a v2 [[ViewCatalog]]. Drops the
- * listed property keys from the analysis-time view properties and dispatches to
- * [[ViewCatalog#replaceView]]. Missing keys are silently dropped, matching v1
+ * Physical plan node for ALTER VIEW ... UNSET TBLPROPERTIES on a v2 [[ViewCatalog]]. Dispatches
+ * the property keys as one batch to [[ViewCatalog#alterView]]. Missing keys are silently dropped,
+ * matching v1
  * `AlterTableUnsetPropertiesCommand` for views (`ifExists` is unused on the view path -- the
  * v1 view command never errors on missing keys).
  */
 case class AlterV2ViewUnsetPropertiesExec(
     catalog: ViewCatalog,
     identifier: Identifier,
-    existingView: View,
     propertyKeys: Seq[String]) extends LeafV2CommandExec {
 
   override def output: Seq[org.apache.spark.sql.catalyst.expressions.Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val remaining = existingView.properties.asScala.toMap -- propertyKeys
-    val info = CatalogV2Util.viewInfoBuilderFrom(existingView)
-      .withProperties(remaining.asJava)
-      .build()
     CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
-    catalog.replaceView(identifier, info)
+    val changes = propertyKeys.map(ViewChange.removeProperty)
+    try {
+      catalog.alterView(identifier, changes: _*)
+    } catch {
+      case e: IllegalArgumentException if !e.isInstanceOf[SparkThrowable] =>
+        throw QueryExecutionErrors.unsupportedViewChangeError(e)
+    }
     Seq.empty
   }
 }
