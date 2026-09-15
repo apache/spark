@@ -5574,6 +5574,21 @@ object functions {
   def floor(columnName: String): Column = floor(Column(columnName))
 
   /**
+   * Computes the greatest common divisor of the two given values. The result is non-negative, and
+   * is 0 when both values are 0.
+   *
+   * @param l
+   *   the first value. A column that evaluates to an integral.
+   * @param r
+   *   the second value. A column that evaluates to an integral.
+   * @group math_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a long.
+   */
+  def gcd(l: Column, r: Column): Column = Column.fn("gcd", l, r)
+
+  /**
    * Returns the greatest value of the list of values, skipping null values. This function takes
    * at least 2 parameters. It will return null iff all parameters are null.
    *
@@ -5742,6 +5757,21 @@ object functions {
    *   Returns a column that evaluates to a double.
    */
   def hypot(l: Double, rightName: String): Column = hypot(l, Column(rightName))
+
+  /**
+   * Computes the least common multiple of the two given values. The result is non-negative, and
+   * is 0 when either value is 0.
+   *
+   * @param l
+   *   the first value. A column that evaluates to an integral.
+   * @param r
+   *   the second value. A column that evaluates to an integral.
+   * @group math_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a long.
+   */
+  def lcm(l: Column, r: Column): Column = Column.fn("lcm", l, r)
 
   /**
    * Returns the least value of the list of values, skipping null values. This function takes at
