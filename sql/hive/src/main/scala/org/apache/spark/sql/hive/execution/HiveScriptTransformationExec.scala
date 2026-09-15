@@ -75,7 +75,9 @@ private[hive] case class HiveScriptTransformationExec(
       val mutableRow = new SpecificInternalRow(output.map(_.dataType))
 
       @transient
-      lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)
+      lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.zip(output).map {
+        case (field, attr) => unwrapperFor(field, attr.dataType)
+      }
 
       override def hasNext: Boolean = {
         if (completed) {

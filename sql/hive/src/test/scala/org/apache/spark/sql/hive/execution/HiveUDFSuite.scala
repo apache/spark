@@ -46,7 +46,7 @@ import org.apache.spark.sql.hive.HiveGenericUDF
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{TimestampType, TimeType}
+import org.apache.spark.sql.types.{CharType, StringType, TimestampType, TimeType, VarcharType}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
@@ -890,6 +890,110 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
            |         now())""".stripMargin).collect().length == 1)
     }
     hiveContext.reset()
+  }
+
+  test("SPARK-59277: Hive UDF and UDTF support first-class CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withUserDefinedFunction(
+          "hive_simple_concat" -> true,
+          "hive_upper" -> true,
+          "hive_explode" -> true) {
+        sql(s"CREATE TEMPORARY FUNCTION hive_simple_concat AS " +
+          s"'${classOf[UDFStringString].getName}'")
+        sql(s"CREATE TEMPORARY FUNCTION hive_upper AS '${classOf[GenericUDFUpper].getName}'")
+        sql(s"CREATE TEMPORARY FUNCTION hive_explode AS '${classOf[GenericUDTFExplode].getName}'")
+
+        val simple = sql(
+          """SELECT hive_simple_concat(
+            |  CAST('A' AS CHAR(3)),
+            |  CAST('b' AS VARCHAR(2))) AS value""".stripMargin)
+        assert(simple.schema.head.dataType === StringType)
+        checkAnswer(simple, Row("A b"))
+
+        val scalar = sql(
+          "SELECT hive_upper(CAST('Ab' AS CHAR(5) COLLATE UTF8_LCASE)) AS value")
+        assert(scalar.schema.head.dataType === CharType(5))
+        checkAnswer(scalar, Row("AB   "))
+
+        val table = sql(
+          """SELECT value
+            |FROM (
+            |  SELECT array(CAST('abc' AS VARCHAR(7) COLLATE UNICODE_CI)) AS values
+            |) input
+            |LATERAL VIEW hive_explode(values) exploded AS value
+            |""".stripMargin)
+        assert(table.schema.head.dataType === VarcharType(7))
+        checkAnswer(table, Row("abc"))
+      }
+    }
+  }
+
+  test("SPARK-59277: Hive UDF supports preserved CHAR without standard semantics") {
+    withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      withUserDefinedFunction("hive_upper" -> true) {
+        sql(s"CREATE TEMPORARY FUNCTION hive_upper AS '${classOf[GenericUDFUpper].getName}'")
+
+        val result = sql("SELECT hive_upper(CAST('Ab' AS CHAR(5))) AS value")
+        assert(result.schema.head.dataType === CharType(5))
+        checkAnswer(result, Row("AB   "))
+      }
+    }
+  }
+
+  test("SPARK-59277: persisted views use their captured Hive conversion types") {
+    withUserDefinedFunction(
+        "hive_upper" -> false,
+        "hive_max" -> false,
+        "hive_explode" -> false) {
+      withView("first_class_hive_view", "first_class_hive_udtf_view", "legacy_hive_view") {
+        sql(s"CREATE FUNCTION hive_upper AS '${classOf[GenericUDFUpper].getName}'")
+        sql(s"CREATE FUNCTION hive_max AS '${classOf[GenericUDAFMax].getName}'")
+        sql(s"CREATE FUNCTION hive_explode AS '${classOf[GenericUDTFExplode].getName}'")
+        val query =
+          """SELECT
+            |  hive_upper(CAST('Ab' AS CHAR(5))) AS scalar_value,
+            |  hive_max(CAST('cd' AS CHAR(4))) AS aggregate_value""".stripMargin
+        val udtfQuery =
+          """SELECT value
+            |FROM (
+            |  SELECT array(CAST('xy' AS CHAR(5))) AS values
+            |) input
+            |LATERAL VIEW hive_explode(values) exploded AS value
+            |""".stripMargin
+
+        withSQLConf(
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+          sql(s"CREATE VIEW first_class_hive_view AS $query")
+          sql(s"CREATE VIEW first_class_hive_udtf_view AS $udtfQuery")
+        }
+        withSQLConf(
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+          val result = sql("SELECT * FROM first_class_hive_view")
+          assert(result.schema.map(_.dataType) === Seq(StringType, StringType))
+          checkAnswer(result, Row("AB   ", "cd  "))
+
+          val udtfResult = sql("SELECT * FROM first_class_hive_udtf_view")
+          assert(udtfResult.schema.head.dataType === StringType)
+          checkAnswer(udtfResult, Row("xy   "))
+        }
+
+        withSQLConf(
+            SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+          sql(s"CREATE VIEW legacy_hive_view AS $query")
+        }
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+          val result = sql("SELECT * FROM legacy_hive_view")
+          assert(result.schema.map(_.dataType) === Seq(StringType, StringType))
+          checkAnswer(result, Row("AB", "cd"))
+        }
+      }
+    }
   }
 
   test("SPARK-58792: copied HiveGenericUDF nodes must not share a mutable GenericUDF") {
