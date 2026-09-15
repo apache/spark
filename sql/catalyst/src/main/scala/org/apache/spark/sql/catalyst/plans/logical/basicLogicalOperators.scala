@@ -2698,17 +2698,17 @@ object AsOfJoin {
   /**
    * Casts a scalar operand pair to the common type the comparison operator would use, so the
    * comparison, ordering distance, and per-side sort keys all agree. This is required for a
-   * string vs DATE/TIMESTAMP/number pair: the sort-merge scan sorts the right buffer by its raw
-   * sort key, and only a shared type keeps that order consistent with the coerced comparison.
-   * STRUCT and ARRAY operands are left untouched; their sort key is the whole value, so a
-   * per-field cast could not reach it.
+   * string vs DATE/TIMESTAMP/number pair: the sort-merge scan sorts the right buffer by its sort
+   * key, and only a shared type keeps that order consistent with the coerced comparison. STRUCT
+   * and ARRAY operands are left untouched: they keep the stricter widening rule and build their
+   * own comparison and ordering, so this scalar string coercion does not apply.
    */
   private def coerceMatchLeafOperands(
       leftOperand: Expression,
       rightOperand: Expression): (Expression, Expression) = {
     val leftType = leftOperand.dataType
     val rightType = rightOperand.dataType
-    if (MatchConditionTypes.isWholeValueSortOperand(leftType, rightType)) {
+    if (MatchConditionTypes.isCompositeOperand(leftType, rightType)) {
       (leftOperand, rightOperand)
     } else {
       MatchConditionTypes.matchComparisonCommonType(leftType, rightType) match {
@@ -2737,13 +2737,13 @@ object AsOfJoin {
      * e.g. STRING vs INTERVAL is rejected, the same as `>=` (accepting it via `findWiderTypeForTwo`
      * would pass validation but leave the operands uncoerced, the drift this shared code prevents).
      * Other scalar pairs are compatible when they widen. STRUCT/ARRAY operands keep the stricter
-     * widening rule via [[areFieldTypesCompatible]], because their sort key is the whole value and
-     * cannot carry a per-field string cast.
+     * widening rule via [[areFieldTypesCompatible]]; the scalar string coercion does not apply to
+     * their composite comparison and ordering.
      */
     def areOperandsCompatible(leftType: DataType, rightType: DataType): Boolean = {
       if (!isValidOperandType(leftType) || !isValidOperandType(rightType)) {
         false
-      } else if (isWholeValueSortOperand(leftType, rightType)) {
+      } else if (isCompositeOperand(leftType, rightType)) {
         areFieldTypesCompatible(leftType, rightType)
       } else if (isExactlyOneStringPair(leftType, rightType)) {
         matchComparisonCommonType(leftType, rightType).isDefined
@@ -2775,11 +2775,12 @@ object AsOfJoin {
     }
 
     /**
-     * STRUCT and ARRAY operands sort by the whole value, so the scalar per-field cast cannot reach
-     * their sort key. Both [[areOperandsCompatible]] and the leaf coercion branch on this and must
+     * True when either operand is a STRUCT or ARRAY. These composite operands keep the stricter
+     * widening rule and build their own comparison and ordering, so the scalar string coercion
+     * does not apply. Both [[areOperandsCompatible]] and the leaf coercion branch on this and must
      * stay in lockstep: one keeps such a pair on the strict widening rule, the other leaves it raw.
      */
-    private[catalyst] def isWholeValueSortOperand(
+    private[catalyst] def isCompositeOperand(
         leftType: DataType,
         rightType: DataType): Boolean =
       Seq(leftType, rightType).exists(t => t.isInstanceOf[StructType] || t.isInstanceOf[ArrayType])
