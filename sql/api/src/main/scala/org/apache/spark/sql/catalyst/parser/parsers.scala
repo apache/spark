@@ -340,15 +340,17 @@ case object PostProcessor extends SqlBaseParserBaseListener {
   private def replaceTokenByIdentifier(ctx: ParserRuleContext, stripMargins: Int)(
       f: CommonToken => CommonToken = identity): Unit = {
     // ANTLR's generated rule methods call `exitRule` from a `finally` block, so this listener also
-    // runs while an error such as a StackOverflowError unwinds the parser. If the error struck
-    // inside this very method - after the context was detached from its parent and before the
-    // replacement token was attached - the parser's current context is left pointing at `ctx`,
-    // and every enclosing rule's `finally` calls `exitRule` on it again. Rewrite only when the
-    // parent still holds `ctx` as its last child, which is the state every normal exit is in;
-    // otherwise leave the tree alone and let the original error propagate.
+    // runs while an error such as a StackOverflowError unwinds the parser, and then it can meet
+    // two states no normal exit produces. If the error struck between `enterRule` attaching `ctx`
+    // to its parent and `consume` attaching its token, `ctx` is attached and childless. If it
+    // struck inside this very method, after `removeLastChild` detached `ctx` and before `addChild`
+    // attached the replacement token, the parser's current context still points at `ctx`, so the
+    // next enclosing rule's `finally` exits `ctx` a second time (and each later one exits an
+    // ancestor early, which is harmless while the error propagates). Rewrite only when `ctx` holds
+    // its token and the parent still holds `ctx` as its last child, which is the state every
+    // normal exit is in; otherwise leave the tree alone and let the original error propagate.
     val parent = ctx.getParent
-    val stillAttached = parent != null && parent.getChildCount > 0 &&
-      parent.getChild(parent.getChildCount - 1) == ctx
+    val stillAttached = parent != null && parent.getChild(parent.getChildCount - 1) == ctx
     if (ctx.getChildCount > 0 && stillAttached) {
       parent.removeLastChild()
       val token = ctx.getChild(0).getPayload.asInstanceOf[Token]

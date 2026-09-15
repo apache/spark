@@ -630,31 +630,47 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
     val ctx = new SqlBaseParser.QuotedIdentifierContext(parent, 0)
     val token = new CommonToken(SqlBaseParser.BACKQUOTED_IDENTIFIER, "`a`")
     ctx.addChild(new TerminalNodeImpl(token))
+    // Attach and remove, so the parent's child list is empty rather than never created: that is
+    // what a second exitRule finds, and the only state in which the old code threw.
     parent.addChild(ctx)
     parent.removeLastChild()
     PostProcessor.exitQuotedIdentifier(ctx)
     assert(parent.getChildCount === 0)
-    assert(ctx.getChildCount === 1)
+    assert(ctx.getChild(0).getPayload == token)
   }
 
-  test("SPARK-59545: a parse that overflows the stack surfaces the overflow itself") {
-    // A type nested deeply enough to exhaust a small stack while ANTLR is still parsing, written
-    // with backquoted identifiers so that PostProcessor's identifier rewrite is on the unwinding
-    // path. Where the overflow lands moves with the JIT's frame layouts, so this states the
-    // property a caller can rely on; the test above pins the exact state that broke it.
+  test("SPARK-59545: PostProcessor leaves a context that matched no token alone") {
+    // The other state an unwinding error can present: the context is attached to its parent but
+    // the error struck before its token was consumed. The listener used to detach it and then fail
+    // with a NullPointerException reading the token that is not there.
+    val parent = new ParserRuleContext()
+    val ctx = new SqlBaseParser.NonReservedContext(parent, 0)
+    parent.addChild(ctx)
+    PostProcessor.exitNonReserved(ctx)
+    assert(parent.getChildCount === 1)
+    assert(parent.getChild(0) == ctx)
+    assert(ctx.getChildCount === 0)
+  }
+
+  test("SPARK-59545: the identifier rewrite does not replace the overflow that interrupted it") {
+    // A type nested deeply enough to exhaust a small stack, written with backquoted identifiers so
+    // that PostProcessor's identifier rewrite is on the unwinding path. Where the overflow lands
+    // moves with the JIT's frame layouts and cannot be forced from here, so this states the
+    // property a caller relies on rather than reproducing the failure: however the parse
+    // overflows, cold or warm, what comes out is the StackOverflowError itself. The two tests
+    // above pin the exact states that broke.
     val deep = "struct<`>`:" * 1000 + "int" + ">" * 1000
-    @volatile var thrown: Throwable = null
-    val runnable: Runnable = () => {
-      try CatalystSqlParser.parseDataType(deep) catch { case e: Throwable => thrown = e }
+    (1 to 2).foreach { attempt =>
+      @volatile var thrown: Throwable = null
+      val runnable: Runnable = () => {
+        try CatalystSqlParser.parseDataType(deep) catch { case e: Throwable => thrown = e }
+      }
+      val t = new Thread(null, runnable, s"spark-59545-deep-type-$attempt", 256 * 1024)
+      t.start()
+      t.join()
+      if (!thrown.isInstanceOf[StackOverflowError]) {
+        fail(s"attempt $attempt: expected the StackOverflowError itself, got $thrown", thrown)
+      }
     }
-    val t = new Thread(null, runnable, "spark-59545-deep-type", 256 * 1024)
-    t.start()
-    t.join()
-    val acceptable = thrown match {
-      case _: StackOverflowError => true
-      case e: ParseException => e.getCondition == "FAILED_TO_PARSE_TOO_COMPLEX"
-      case _ => false
-    }
-    assert(acceptable, s"expected the overflow itself, got $thrown")
   }
 }
