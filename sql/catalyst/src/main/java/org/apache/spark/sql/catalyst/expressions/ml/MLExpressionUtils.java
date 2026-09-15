@@ -52,6 +52,35 @@ public class MLExpressionUtils {
     }
   }
 
+  public static double dotProduct(
+      InternalRow vector,
+      int cachedVectorSize,
+      int[] cachedVectorIndices,
+      double[] cachedVectorValues,
+      boolean vectorIsLeft) {
+    byte vectorType = vector.getByte(0);
+    ArrayData vectorValues = vector.getArray(3);
+    int vectorSize = vectorSize(vector, vectorType, vectorValues);
+    if (vectorSize != cachedVectorSize) {
+      int leftSize = vectorIsLeft ? vectorSize : cachedVectorSize;
+      int rightSize = vectorIsLeft ? cachedVectorSize : vectorSize;
+      throw new IllegalArgumentException(
+        "requirement failed: VectorDotProduct was given vectors with non-matching sizes:" +
+          " left.size = " + leftSize + ", right.size = " + rightSize);
+    }
+
+    if (vectorType == DENSE_VECTOR_TYPE && cachedVectorIndices == null) {
+      return dotDenseDense(vectorValues, cachedVectorValues);
+    } else if (vectorType == SPARSE_VECTOR_TYPE && cachedVectorIndices == null) {
+      return dotSparseDense(vector.getArray(2), vectorValues, cachedVectorValues);
+    } else if (vectorType == DENSE_VECTOR_TYPE) {
+      return dotSparseDense(cachedVectorIndices, cachedVectorValues, vectorValues);
+    } else {
+      return dotSparseSparse(
+        vector.getArray(2), vectorValues, cachedVectorIndices, cachedVectorValues);
+    }
+  }
+
   private static int vectorSize(InternalRow vector, byte vectorType, ArrayData values) {
     if (vectorType == SPARSE_VECTOR_TYPE) {
       return vector.getInt(1);
@@ -70,6 +99,14 @@ public class MLExpressionUtils {
     return sum;
   }
 
+  private static double dotDenseDense(ArrayData left, double[] right) {
+    double sum = 0.0;
+    for (int index = 0; index < right.length; index++) {
+      sum += left.getDouble(index) * right[index];
+    }
+    return sum;
+  }
+
   private static double dotSparseDense(
       ArrayData sparseIndices,
       ArrayData sparseValues,
@@ -78,6 +115,28 @@ public class MLExpressionUtils {
     for (int index = 0; index < sparseIndices.numElements(); index++) {
       sum += sparseValues.getDouble(index) *
         denseValues.getDouble(sparseIndices.getInt(index));
+    }
+    return sum;
+  }
+
+  private static double dotSparseDense(
+      ArrayData sparseIndices,
+      ArrayData sparseValues,
+      double[] denseValues) {
+    double sum = 0.0;
+    for (int index = 0; index < sparseIndices.numElements(); index++) {
+      sum += sparseValues.getDouble(index) * denseValues[sparseIndices.getInt(index)];
+    }
+    return sum;
+  }
+
+  private static double dotSparseDense(
+      int[] sparseIndices,
+      double[] sparseValues,
+      ArrayData denseValues) {
+    double sum = 0.0;
+    for (int index = 0; index < sparseIndices.length; index++) {
+      sum += sparseValues[index] * denseValues.getDouble(sparseIndices[index]);
     }
     return sum;
   }
@@ -99,6 +158,29 @@ public class MLExpressionUtils {
       }
       if (rightIndex < rightNumActives && rightIndices.getInt(rightIndex) == index) {
         sum += leftValues.getDouble(leftIndex) * rightValues.getDouble(rightIndex);
+        rightIndex++;
+      }
+      leftIndex++;
+    }
+    return sum;
+  }
+
+  private static double dotSparseSparse(
+      ArrayData leftIndices,
+      ArrayData leftValues,
+      int[] rightIndices,
+      double[] rightValues) {
+    double sum = 0.0;
+    int leftIndex = 0;
+    int rightIndex = 0;
+    int leftNumActives = leftIndices.numElements();
+    while (leftIndex < leftNumActives && rightIndex < rightIndices.length) {
+      int index = leftIndices.getInt(leftIndex);
+      while (rightIndex < rightIndices.length && rightIndices[rightIndex] < index) {
+        rightIndex++;
+      }
+      if (rightIndex < rightIndices.length && rightIndices[rightIndex] == index) {
+        sum += leftValues.getDouble(leftIndex) * rightValues[rightIndex];
         rightIndex++;
       }
       leftIndex++;

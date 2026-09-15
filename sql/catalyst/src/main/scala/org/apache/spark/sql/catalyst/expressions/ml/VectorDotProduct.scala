@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions.ml
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, ExpectsInputTypes, Expression}
+import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, EmptyRow, ExpectsInputTypes, Expression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
 /**
@@ -47,10 +48,57 @@ case class VectorDotProduct(left: Expression, right: Expression)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    foldableVector(right)
+      .map(cached => doGenCodeWithCachedVector(ctx, ev, left, cached, vectorIsLeft = true))
+      .orElse(foldableVector(left)
+        .map(cached => doGenCodeWithCachedVector(ctx, ev, right, cached, vectorIsLeft = false)))
+      .getOrElse {
+        val utils = classOf[MLExpressionUtils].getName
+        nullSafeCodeGen(ctx, ev, (leftInput, rightInput) => {
+          s"${ev.value} = $utils.dotProduct($leftInput, $rightInput);"
+        })
+      }
+  }
+
+  private def foldableVector(expression: Expression): Option[InternalRow] = {
+    if (expression.foldable) {
+      Option(expression.eval(EmptyRow).asInstanceOf[InternalRow])
+    } else {
+      None
+    }
+  }
+
+  private def doGenCodeWithCachedVector(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      vector: Expression,
+      cachedVector: InternalRow,
+      vectorIsLeft: Boolean): ExprCode = {
+    val values = cachedVector.getArray(3)
+    val cachedVectorValues = ctx.addReferenceObj(
+      "cachedVectorValues", values.toDoubleArray(), "double[]")
+    val (cachedVectorSize, cachedVectorIndices) = cachedVector.getByte(0) match {
+      case VectorDotProduct.SparseVectorType =>
+        (cachedVector.getInt(1), ctx.addReferenceObj(
+          "cachedVectorIndices", cachedVector.getArray(2).toIntArray(), "int[]"))
+      case VectorDotProduct.DenseVectorType =>
+        (values.numElements(), "null")
+      case vectorType =>
+        throw new IllegalArgumentException(s"Unknown vector type $vectorType.")
+    }
+    val vectorGen = vector.genCode(ctx)
     val utils = classOf[MLExpressionUtils].getName
-    nullSafeCodeGen(ctx, ev, (leftInput, rightInput) => {
-      s"${ev.value} = $utils.dotProduct($leftInput, $rightInput);"
-    })
+
+    ev.copy(code = code"""
+      ${vectorGen.code}
+      boolean ${ev.isNull} = ${vectorGen.isNull};
+      double ${ev.value} = 0.0D;
+      if (!${ev.isNull}) {
+        ${ev.value} = $utils.dotProduct(
+          ${vectorGen.value}, $cachedVectorSize, $cachedVectorIndices, $cachedVectorValues,
+          $vectorIsLeft);
+      }
+    """)
   }
 
   override protected def withNewChildrenInternal(
@@ -59,6 +107,9 @@ case class VectorDotProduct(left: Expression, right: Expression)
 }
 
 object VectorDotProduct {
+  private val SparseVectorType: Byte = 0
+  private val DenseVectorType: Byte = 1
+
   private[ml] val vectorSqlType = StructType(Array(
     StructField("type", ByteType, nullable = false),
     StructField("size", IntegerType, nullable = true),
