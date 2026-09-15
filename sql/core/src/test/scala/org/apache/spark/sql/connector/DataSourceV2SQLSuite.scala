@@ -4814,6 +4814,21 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Column list resolves evolved nested fields by position") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (s struct<x: int, y: int>) USING foo")
+      spark.sql(
+        s"""INSERT WITH SCHEMA EVOLUTION INTO $t (s)
+           |SELECT named_struct('y', 1, 'x', 2, 'z', 3)
+           |""".stripMargin)
+
+      checkAnswer(
+        spark.sql(s"SELECT s.x, s.y, s.z FROM $t"),
+        Row(1, 2, 3))
+    }
+  }
+
   test("Overwrite: REPLACE WHERE without BY NAME - positional matching") {
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")

@@ -64,14 +64,10 @@ abstract class ResolveInsertionBase extends Rule[LogicalPlan] {
   }
 
   private def renameFieldsInStruct(input: StructType, expected: StructType): StructType = {
-    if (input.length == expected.length) {
-      val newFields = input.zip(expected).map { case (f1, f2) =>
-        f1.copy(name = f2.name, dataType = renameFieldsInType(f1.dataType, f2.dataType))
-      }
-      StructType(newFields)
-    } else {
-      input
+    val newFields = input.zip(expected).map { case (f1, f2) =>
+      f1.copy(name = f2.name, dataType = renameFieldsInType(f1.dataType, f2.dataType))
     }
+    StructType(newFields ++ input.drop(expected.length))
   }
 
   // Recursively rename fields so that positional INSERT analysis applies at every nesting level,
