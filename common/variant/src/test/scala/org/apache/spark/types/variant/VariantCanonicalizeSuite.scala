@@ -731,9 +731,9 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   private def gen(rand: Random, depth: Int): Node =
     if (depth <= 0) genLeaf(rand)
     else rand.nextInt(6) match {
-      case 0     => genLeaf(rand)
+      case 0 => genLeaf(rand)
       case 1 | 2 => Arr(Seq.fill(1 + rand.nextInt(3))(gen(rand, depth - 1)))
-      case _     =>
+      case _ =>
         Obj(rand.shuffle(fuzzKeys.toList).take(1 + rand.nextInt(3)).map(_ -> gen(rand, depth - 1)))
     }
 
@@ -749,9 +749,9 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
 
   // two calls => two legal encodings of one value (keys shuffled + equivalent number spellings)
   private def render(n: Node, rand: Random): String = n match {
-    case Obj(fs)    => rand.shuffle(fs.toList).map(f => "\"" + f._1 + "\":" + render(f._2, rand))
+    case Obj(fs) => rand.shuffle(fs.toList).map(f => "\"" + f._1 + "\":" + render(f._2, rand))
                          .mkString("{", ",", "}")
-    case Arr(es)    => es.map(render(_, rand)).mkString("[", ",", "]")
+    case Arr(es) => es.map(render(_, rand)).mkString("[", ",", "]")
     case Scalar(sp) => sp(rand.nextInt(sp.size))
   }
 
@@ -764,7 +764,9 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       val clue = s"seed=${0xC0FFEEL + i}"
       assert(bytesEqual(canon(v1), canon(v2)), s"equivalence: $clue")
       assert(isCanon(canon(v1)), s"completeness: $clue")
-      if (isCanon(v1)) assert(bytesEqual(v1, VariantBuilder.doCanonicalize(v1)), s"soundness: $clue")
+      if (isCanon(v1)) {
+        assert(bytesEqual(v1, VariantBuilder.doCanonicalize(v1)), s"soundness: $clue")
+      }
     }
   }
 }
