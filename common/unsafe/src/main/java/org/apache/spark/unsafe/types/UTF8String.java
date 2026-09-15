@@ -62,6 +62,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private int numBytes;
   private volatile int numChars = -1;
 
+  // Cache the hash code, like java.lang.String. `hash` holds the computed value; `hashIsZero`
+  // records the case where the hash legitimately computed to 0, so it is not recomputed on every
+  // call. Non-volatile: the benign race only ever recomputes the same value.
+  private int hash;
+  private boolean hashIsZero;
+
   /**
    * The validity of the UTF8Strings can be cached to avoid repeated validation checks, because
    * that operation requires full string scan. Valid strings have no illegal UTF-8 byte sequences.
@@ -2276,7 +2282,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   @Override
   public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeBytes(base, offset, numBytes, 42);
+    int h = hash;
+    if (h == 0 && !hashIsZero) {
+      h = Murmur3_x86_32.hashUnsafeBytes(base, offset, numBytes, 42);
+      if (h == 0) {
+        hashIsZero = true;
+      } else {
+        hash = h;
+      }
+    }
+    return h;
   }
 
   /**
@@ -2345,6 +2360,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     numBytes = in.readInt();
     base = new byte[numBytes];
     in.readFully((byte[]) base);
+    hash = 0;
+    hashIsZero = false;
   }
 
   @Override
@@ -2360,6 +2377,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     this.numBytes = in.readInt();
     this.base = new byte[numBytes];
     in.read((byte[]) base);
+    this.hash = 0;
+    this.hashIsZero = false;
   }
 
   /**
