@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import org.antlr.v4.runtime.{CommonToken, ParserRuleContext}
+import org.antlr.v4.runtime.tree.TerminalNodeImpl
+
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
@@ -615,5 +618,43 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
       },
       condition = "DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE",
       parameters = Map("parameter" -> "scale", "value" -> tooLarge, "type" -> "DECIMAL"))
+  }
+
+  test("SPARK-59545: PostProcessor leaves a context its parent no longer holds alone") {
+    // The state ANTLR's finally-driven exitRule presents after an error interrupted the identifier
+    // rewrite halfway: the context still holds its token, but the parent, which held the context
+    // as its last child, has had it removed and nothing put back. A second run of the listener
+    // used to remove the parent's last child regardless and fail with an IndexOutOfBoundsException
+    // that replaced the original error.
+    val parent = new ParserRuleContext()
+    val ctx = new SqlBaseParser.QuotedIdentifierContext(parent, 0)
+    val token = new CommonToken(SqlBaseParser.BACKQUOTED_IDENTIFIER, "`a`")
+    ctx.addChild(new TerminalNodeImpl(token))
+    parent.addChild(ctx)
+    parent.removeLastChild()
+    PostProcessor.exitQuotedIdentifier(ctx)
+    assert(parent.getChildCount === 0)
+    assert(ctx.getChildCount === 1)
+  }
+
+  test("SPARK-59545: a parse that overflows the stack surfaces the overflow itself") {
+    // A type nested deeply enough to exhaust a small stack while ANTLR is still parsing, written
+    // with backquoted identifiers so that PostProcessor's identifier rewrite is on the unwinding
+    // path. Where the overflow lands moves with the JIT's frame layouts, so this states the
+    // property a caller can rely on; the test above pins the exact state that broke it.
+    val deep = "struct<`>`:" * 1000 + "int" + ">" * 1000
+    @volatile var thrown: Throwable = null
+    val runnable: Runnable = () => {
+      try CatalystSqlParser.parseDataType(deep) catch { case e: Throwable => thrown = e }
+    }
+    val t = new Thread(null, runnable, "spark-59545-deep-type", 256 * 1024)
+    t.start()
+    t.join()
+    val acceptable = thrown match {
+      case _: StackOverflowError => true
+      case e: ParseException => e.getCondition == "FAILED_TO_PARSE_TOO_COMPLEX"
+      case _ => false
+    }
+    assert(acceptable, s"expected the overflow itself, got $thrown")
   }
 }
