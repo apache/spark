@@ -235,6 +235,13 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     assert(result.partialStatement.isEmpty)
   }
 
+  test("SPARK-59536: unclosed outer comment containing a hint-shaped comment") {
+    val sql = "/* SELECT /*+ HINT() 4; */ SELECT 1;"
+    assert(split(sql) == SqlStatementSplitResult(Nil, sql, hasUnclosedComment = true))
+    assert(split(s"SELECT 1; $sql") == SqlStatementSplitResult(
+      Seq(statement("SELECT 1")), sql, hasUnclosedComment = true))
+  }
+
   test("statement ending with bracketed comment retained") {
     val result = split("SELECT 1; SELECT 2 /* trailer */")
     assert(result.completeStatements == Seq(statement("SELECT 1")))

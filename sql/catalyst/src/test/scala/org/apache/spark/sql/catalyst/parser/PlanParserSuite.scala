@@ -212,7 +212,8 @@ class PlanParserSuite extends AnalysisTest {
 
     Seq(
       "SELECT /* outer /*+ inner */ outer tail 1 AS col1",
-      "SELECT /* outer /*+ inner outer tail */ 1 AS col1"
+      "SELECT /* outer /*+ inner outer tail */ 1 AS col1",
+      "/* SELECT /*+ HINT() 4; */ SELECT 1;"
     ).foreach { query =>
       checkError(
         exception = parseException(query),
