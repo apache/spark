@@ -156,19 +156,46 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     }
   }
 
-  test("canPlanAsBroadcastHashJoin should respect size for single-column null-aware anti join") {
+  test("canPlanAsBroadcastHashJoin uses the null-aware anti join broadcast threshold") {
     val leftKey = left.output.head
     val rightKey = right.output.head
     val condition = Or(EqualTo(leftKey, rightKey), IsNull(EqualTo(leftKey, rightKey)))
     val nullAwareAntiJoin = Join(left, right, LeftAnti, Some(condition), JoinHint.NONE)
     val largeRight = right.copy(rowCount = 20000000, size = Some(20000000))
+    val negativeSizeRight = right.copy(size = Some(-1))
+    val overLongMaxRight = right.copy(
+      rowCount = BigInt(Long.MaxValue) + 1,
+      size = Some(BigInt(Long.MaxValue) + 1))
 
     withSQLConf(
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       assert(canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
+      assert(canPlanAsBroadcastHashJoin(nullAwareAntiJoin.copy(right = largeRight), SQLConf.get))
+      assert(canPlanAsBroadcastHashJoin(
+        nullAwareAntiJoin.copy(right = overLongMaxRight), SQLConf.get))
+    }
+
+    withSQLConf(SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "-2") {
+      assert(canPlanAsBroadcastHashJoin(
+        nullAwareAntiJoin.copy(right = overLongMaxRight), SQLConf.get))
+    }
+
+    withSQLConf(SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      assert(!canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
+    }
+
+    withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "false",
+      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "-1") {
+      assert(!canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
+    }
+
+    withSQLConf(SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "10MB") {
+      assert(canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
       assert(!canPlanAsBroadcastHashJoin(nullAwareAntiJoin.copy(right = largeRight), SQLConf.get))
+      assert(!canPlanAsBroadcastHashJoin(
+        nullAwareAntiJoin.copy(right = negativeSizeRight), SQLConf.get))
     }
   }
-
 }

@@ -427,7 +427,12 @@ trait JoinSelectionHelper extends Logging {
       getBroadcastBuildSide(join, hintOnly = true, conf).isDefined ||
         (noShufflePlannedBefore &&
           getBroadcastBuildSide(join, hintOnly = false, conf).isDefined)
-    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) => canBroadcastBySize(j.right, conf)
+    // `JoinSelection` always builds from the right for this shape. A negative threshold preserves
+    // the original unbounded NAAJ behavior, while zero disables the broadcast hash optimization.
+    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) =>
+      val threshold = conf.nullAwareAntiJoinBroadcastThreshold
+      val rightSize = j.right.stats.sizeInBytes
+      threshold < 0 || (threshold > 0 && rightSize >= 0 && rightSize <= threshold)
     case _ => false
   }
 
