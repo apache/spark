@@ -206,9 +206,8 @@ case class ShuffleExchangeExec(
 
   override def nodeName: String = "Exchange"
 
-  // `pipelined` is only meaningful for a Real-Time Mode plan, and the default arg string is
-  // positional, so printing it unconditionally would add a bare `false` to every shuffle in every
-  // plan. Show it only when set, and name it when shown.
+  // The default arg string is positional, so printing `pipelined` unconditionally would add a bare
+  // `false` to every shuffle in every plan. Show it only when set, and name it when shown.
   override def stringArgs: Iterator[Any] = {
     // `pipelined` is the last field, so drop it positionally rather than by value; argString drops
     // the child on its own. Exchange's `[plan_id=...]` suffix is re-appended here.
@@ -307,15 +306,18 @@ object ShuffleExchangeExec {
    * @param partitioner the partitioner for the shuffle
    * @return true if rows should be copied before being shuffled, false otherwise
    */
-  private def needToCopyObjectsBeforeShuffle(partitioner: Partitioner): Boolean = {
+  private def needToCopyObjectsBeforeShuffle(
+      partitioner: Partitioner,
+      pipelined: Boolean): Boolean = {
+    if (pipelined) {
+      return SparkEnv.get.pipelinedShuffleManager.requiresDetachedRecords
+    }
     // Note: even though we only use the partitioner's `numPartitions` field, we require it to be
     // passed instead of directly passing the number of partitions in order to guard against
     // corner-cases where a partitioner constructed with `numPartitions` partitions may output
     // fewer partitions (like RangePartitioner, for example).
     val conf = SparkEnv.get.conf
-    // This decision concerns the regular (materialized) shuffle path only. A pipelined shuffle is
-    // served by a separate pipelined manager (see SparkEnv.shuffleManagerFor) and does not go
-    // through here, so inspect the blocking manager's type directly.
+    // The remaining cases concern the regular shuffle manager.
     val shuffleManager = SparkEnv.get.blockingShuffleManager
     val sortBasedShuffleOn = shuffleManager.isInstanceOf[SortShuffleManager]
     val bypassMergeThreshold = conf.get(config.SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD)
@@ -562,7 +564,7 @@ object ShuffleExchangeExec {
       // would reject a chain of round-robin repartitions rather than protect anything.
       val isOrderSensitive = (isRoundRobin || isNullAwareHashPartitioning) &&
         !SQLConf.get.sortBeforeRepartition && !pipelined
-      if (needToCopyObjectsBeforeShuffle(part)) {
+      if (needToCopyObjectsBeforeShuffle(part, pipelined)) {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
           iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
@@ -616,10 +618,7 @@ object ShuffleExchangeExec {
     dependency
   }
 
-  /**
-   * Create a customized [[ShuffleWriteProcessor]] for SQL which wrap the default metrics reporter
-   * with [[SQLShuffleWriteMetricsReporter]] as new reporter for [[ShuffleWriteProcessor]].
-   */
+  /** Create the SQL shuffle metrics reporter shared by both shuffle transports. */
   def createShuffleWriteProcessor(metrics: Map[String, SQLMetric]): ShuffleWriteProcessor = {
     new ShuffleWriteProcessor {
       override protected def createMetricsReporter(

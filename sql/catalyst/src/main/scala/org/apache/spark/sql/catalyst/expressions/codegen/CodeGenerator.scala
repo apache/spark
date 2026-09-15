@@ -236,13 +236,10 @@ class CodegenContext extends Logging {
      * `filling` catches a definition that references its own id, which would otherwise re-enter and
      * recurse, since `fillCode` is set only after `definition.genCode` returns.
      *
-     * The body goes into a method where it can and is worth it -- a definition that is or holds
-     * another `With`, or a body past the split threshold -- so it is emitted once per scope rather
-     * than once per reference, which for nested `With`s would double per level. A method is only
-     * possible where the definition reads the input row rather than local variables, the condition
-     * `reduceCodeSize` splits under. That is not the same as whole-stage codegen being off: a
-     * whole-stage `Project` or `Filter` passes local variables, while
-     * `SortMergeJoinExec.createJoinKey` and the aggregate output paths generate against a row.
+     * The body goes into a method where it is worth it -- a definition that is or holds another
+     * `With`, or a body past the split threshold -- so it is emitted once per scope rather than
+     * once per reference, which for nested `With`s would double per level. `methodArgs` says what
+     * the method takes, and which definitions cannot have one.
      */
     def fill: Block = {
       if (fillCode.isEmpty) {
@@ -278,38 +275,117 @@ class CodegenContext extends Logging {
          |${value.value} = ${defGen.value};
          |$computed = true;
        """.stripMargin
-      // TODO(SPARK-59295): cover the local-variable case too, by passing the `currentVars` values a
-      //   definition reads into the method as parameters, the way
-      //   `subexpressionEliminationForWholeStageCodegen` does. It needs a decision first:
-      //   `getLocalInputVariableValues` hoists an input variable that is not evaluated yet to
-      //   before the call, which for a reference behind a branch means evaluating it on rows that
-      //   never reach the reference.
-      val canPutInMethod = INPUT_ROW != null && currentVars == null
-      // A definition that is or holds another `With` is the shape whose code doubles per level,
-      // and what this is aimed at. It is not the only one -- a definition referencing a sibling
-      // definition of the same `With` doubles the same way, and codegen accepts that, since the
-      // sibling's slots are in scope while this definition is generated (`With.refsToBind` says
-      // why nothing builds that tree, and that evaluating one raises). What bounds those is not
-      // the length arm below: `body` is assembled after `definition.genCode` already ran
-      // `reduceCodeSize`, so the arm fires only in the band just under the threshold. It is
-      // `reduceCodeSize` itself, which hoists whichever node's code first passes the threshold as
-      // generation walks up, capping what one level contributes, so the code stays linear in the
-      // depth either way. The length arm just keeps the same body from being split once per
-      // reference, which leaves the methods small and the code as large.
+      // A definition that is or holds another `With` is the shape whose code doubles per level, and
+      // what this is aimed at. A definition reading a sibling definition of the same `With` doubles
+      // the same way, but not through this arm: a `CommonExpressionRef` carries `COMMON_EXPR_REF`,
+      // not `WITH_EXPRESSION`, so a short one reaches a method only through the length arm. Nothing
+      // builds that tree today (`With.refsToBind` says why). The length arm keeps one body from
+      // being split once per reference; it fires in the band just under the threshold where
+      // `reduceCodeSize` applies, since `body` is assembled after `definition.genCode` already ran
+      // it.
       val worthAMethod = definition.containsPattern(WITH_EXPRESSION) ||
         body.length > SQLConf.get.methodSplitThreshold
-      if (canPutInMethod && worthAMethod) {
-        val funcName = freshName("computeCommonExpr")
-        val funcFullName = addNewFunction(funcName,
-          s"""
-             |private void $funcName(InternalRow $INPUT_ROW) {
-             |  $body
-             |}
+      (if (worthAMethod) methodArgs else None) match {
+        case Some(args) =>
+          val funcName = freshName("computeCommonExpr")
+          val params = args.map(a => s"${typeName(a.javaType)} ${a.variableName}").mkString(", ")
+          val funcFullName = addNewFunction(funcName,
+            s"""
+               |private void $funcName($params) {
+               |  $body
+               |}
            """.stripMargin)
-        code"$funcFullName($INPUT_ROW);"
-      } else {
-        body
+          code"$funcFullName(${args.map(_.variableName).mkString(", ")});"
+        case None =>
+          body
       }
+    }
+
+    /**
+     * The locals to pass the method, or None where a method is not possible. What it collects are
+     * the values the body would otherwise read from the scope the call replaces it in: the input
+     * row, and an input variable the operator evaluated before generating this expression. Those
+     * variables are declared by code the operator emits ahead of this expression, so they enclose
+     * every reference to this definition; the input row is taken on the operator's word that
+     * `INPUT_ROW` names something in scope where it has this expression generated, which is what
+     * `Expression.reduceCodeSize` takes it on as well.
+     *
+     * A definition that reads an input variable the operator has *not* evaluated yet gets no
+     * method: that variable's code cannot travel into one, since it was generated by the operator
+     * producing the row, against that operator's scope, so it names a local of that scope -- the
+     * column batch's row index, or the input adapter's row. Nor can it be hoisted to before the
+     * call, the way `getLocalInputVariableValues` does for subexpression elimination, since that
+     * evaluates it on rows that reach no reference.
+     *
+     * Nor does a definition that is or holds a node subexpression elimination has computed, for
+     * which see the walk below. The two remaining refusals are local: `canPass` on a value no
+     * parameter can name, and the descriptor length at the end.
+     */
+    private def methodArgs: Option[Seq[VariableValue]] = {
+      val args = mutable.LinkedHashMap.empty[String, VariableValue]
+      // False for a value no parameter can carry: `ExpandExec` hands out a `VariableValue` naming a
+      // slot of a compacted mutable state array, and a `SimpleExprValue` is an expression rather
+      // than a name -- `posexplode_outer` gives its position the nullness `index == -1`, and a
+      // `Byte` or `Short` literal's value is `(byte)1`. A field or a literal needs no parameter and
+      // is read as it stands.
+      def canPass(v: ExprValue): Boolean = v match {
+        case local: VariableValue =>
+          val name = local.variableName
+          val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
+            name.forall(Character.isJavaIdentifierPart)
+          if (isName) {
+            args.getOrElseUpdate(name, local)
+          }
+          isName
+        case _: GlobalValue | _: LiteralValue => true
+        case _ => false
+      }
+      var possible = INPUT_ROW == null ||
+        canPass(JavaCode.variable(INPUT_ROW, classOf[InternalRow]))
+      val visited = mutable.HashSet.empty[Long]
+      // The definitions of a `With` in the tree walked here, which reach `currentCommonExprs` only
+      // once that `With` is generated. Ids come from one counter, so one map serves every scope.
+      val nestedDefs = mutable.HashMap.empty[Long, Expression]
+      val toVisit = mutable.Stack[Expression](definition)
+      while (possible && toVisit.nonEmpty) {
+        val next = toVisit.pop()
+        // A node subexpression elimination has computed keeps the definition inline. Which values
+        // the body reads there cannot be told from the tree: `Expression.genCode` reads the state,
+        // for a `With` as much as anything else since `With` overrides only `doGenCode`, while
+        // `Alias`, `Collate` and an identity `Cast` override `genCode` and generate their child
+        // again -- two different parameter lists. Refusing also keeps what this collects within
+        // what `getLocalInputVariableValues` collects for the operator's whole expression, which
+        // stops at a state as well and computes the parameters of the methods `ExpandExec` and the
+        // aggregates move this call into.
+        if (subExprEliminationExprs.contains(ExpressionEquals(next))) {
+          possible = false
+        } else {
+          next match {
+            case ref: BoundReference if currentVars != null && currentVars(ref.ordinal) != null =>
+              val input = currentVars(ref.ordinal)
+              possible = input.code == EmptyBlock && canPass(input.value) && canPass(input.isNull)
+            case w: With =>
+              // Only `child` is generated: a definition is generated where a reference reaches it,
+              // so one no reference reaches is not in the body, and what it reads decides nothing.
+              w.defs.foreach(d => nestedDefs.put(d.id.id, d.child))
+              toVisit.push(w.child)
+            case ref: CommonExpressionRef =>
+              // The definition this reference fills, which it does inside this method, so what
+              // that definition reads has to come in as well. One belonging to a `With` in the
+              // tree walked here is in `nestedDefs`; a sibling of this definition, or one of an
+              // enclosing scope, is registered in `currentCommonExprs`.
+              if (visited.add(ref.id.id)) {
+                nestedDefs.get(ref.id.id)
+                  .orElse(currentCommonExprs.get(ref.id.id).map(_.definition))
+                  .foreach(toVisit.push)
+              }
+            case e => toVisit.pushAll(e.children)
+          }
+        }
+      }
+      val params = args.values.toSeq
+      Option.when(
+        possible && isValidParamLength(calculateParamLengthFromExprValues(params)))(params)
     }
   }
 

@@ -1269,6 +1269,23 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LOCAL_PIPELINED_SHUFFLE_ENABLED = buildConf("spark.sql.shuffle.localPipelined.enabled")
+    .internal()
+    .doc("When true in local mode, eligible shuffle exchanges use the in-process channel " +
+      "manager configured by spark.shuffle.manager.incremental. Producer and consumer stages " +
+      "run concurrently. Plans whose estimated group width exceeds the local task capacity, " +
+      "or whose width cannot be determined, retain regular shuffles. In particular, ordinary " +
+      "non-bucketed file scans report unknown widths and stay regular. Runtime admission still " +
+      "checks available slots and can reject a group when other work occupies them. " +
+      "Pipelined exchanges do not receive AQE coalescing. Dataset.rdd, toLocalIterator, cache " +
+      "construction, cached inputs and mixed AQE plans use regular shuffles. Concurrent " +
+      "actions sharing a pipelined exchange remain unsupported. Other multi-job consumers " +
+      "can recompute pipelined producers for each job. Experimental.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
   val ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING =
     buildConf("spark.sql.adaptive.streaming.stateless.enabled")
       .internal()
@@ -2081,6 +2098,19 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
+
+  val PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ =
+    buildConf("spark.sql.parquet.timeType.allowIsAdjustedToUtcRead")
+      .doc("When true, Spark infers Parquet TIME columns with isAdjustedToUTC=true as TimeType " +
+        "during schema inference, for compatibility with writers such as Apache Arrow. " +
+        "When false (default), schema inference rejects such columns with an error. This only " +
+        "affects schema inference: a read with an explicit user-specified TimeType schema " +
+        "succeeds regardless of this flag, since Spark's zone-less TimeType decodes the same " +
+        "time-of-day either way.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
@@ -5402,6 +5432,33 @@ object SQLConf {
         s"set, the fallback is `${BUFFER_SIZE.key}`.")
       .version("4.0.0")
       .fallbackConf(BUFFER_SIZE)
+
+  val PYTHON_UDF_ARROW_WORKER_OUTPUT_BATCH_MAX_BYTES =
+    buildConf("spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes")
+      .internal()
+      .doc("Best-effort byte-size target for a single Arrow RecordBatch produced by an " +
+        "Arrow-based Python UDF worker, applied on the worker before the batch is sent to " +
+        "the JVM. applyInPandas hands each group to the UDF as one batch, so a large group " +
+        "produces one large output batch; when set, the worker splits a batch estimated " +
+        "larger than this into ceil(nbytes / value) row-balanced, zero-copy pieces so the " +
+        "JVM receives several smaller batches instead of one large one. The estimate " +
+        "assumes roughly uniform row size and is not measured per slice, so a skewed, " +
+        "variable-width batch may still exceed the target. It does not prevent " +
+        "conversion-time offset overflow: PandasToArrowConversion builds the full batch " +
+        "before it is split, so a column whose data exceeds Arrow's 32-bit offset range " +
+        "overflows during conversion, ahead of this split. It complements " +
+        "spark.sql.execution.arrow.maxBytesPerOutputBatch, which slices JVM-side after the " +
+        "batch is read back; this one pre-splits on the worker so the JVM need not receive " +
+        "and allocate one giant batch first. Currently only applyInPandas " +
+        "(SQL_GROUPED_MAP_PANDAS_UDF) honors this; other Arrow-based Python UDFs ship the " +
+        "value but ignore it. -1 (the default) means no limit.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(x => x == -1 || (x > 0 && x <= Int.MaxValue),
+        "The value of spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes should " +
+          "be -1 (no limit) or greater than zero and less than or equal to INT_MAX.")
+      .createWithDefault(-1)
 
   val PANDAS_UDF_BUFFER_SIZE =
     buildConf("spark.sql.execution.pandas.udf.buffer.size")
@@ -8943,6 +9000,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
+  def localPipelinedShuffleEnabled: Boolean = getConf(LOCAL_PIPELINED_SHUFFLE_ENABLED)
+
   def adaptiveExecutionEnabledInStatelessStreaming: Boolean =
     getConf(ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING)
 
@@ -9253,6 +9312,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parquetOutputTimestampType: ParquetOutputTimestampType.Value =
     getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE)
+
+  def parquetTimeTypeAllowIsAdjustedToUtcRead: Boolean =
+    getConf(PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ)
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
