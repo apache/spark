@@ -120,6 +120,24 @@ class StreamingTestsForeachBatchMixin:
             )
             self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
+    def test_streaming_foreach_batch_operation_tags(self):
+        tag = "foreach-batch"
+        q = None
+
+        def func(batch_df, _):
+            assert tag in batch_df.sparkSession.getTags()
+            batch_df.count()
+
+        self.spark.addTag(tag)
+        try:
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(func).start()
+            q.processAllAvailable()
+        finally:
+            if q:
+                q.stop()
+            self.spark.removeTag(tag)
+
     def test_streaming_foreach_batch_path_access(self):
         table_name = "testTable_foreach_batch_path"
         with self.table(table_name):
