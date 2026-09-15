@@ -115,6 +115,11 @@ class UnivocityParser(
     isParsing = true)
   private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
 
+  // Existence default values are a pure function of `requiredSchema`; compute them once instead of
+  // per row in the parse-error fallback below.
+  private lazy val existenceDefaults: Array[Any] =
+    ResolveDefaultColumns.existenceDefaultValues(requiredSchema)
+
   private val csvFilters = if (SQLConf.get.csvFilterPushDown) {
     new OrderedFilters(filters, requiredSchema)
   } else {
@@ -433,7 +438,7 @@ class UnivocityParser(
         case NonFatal(e) =>
           badRecordException = badRecordException.orElse(Some(e))
           // Use the corresponding DEFAULT value associated with the column, if any.
-          row.update(i, ResolveDefaultColumns.existenceDefaultValues(requiredSchema)(i))
+          row.update(i, existenceDefaults(i))
       }
       i += 1
     }

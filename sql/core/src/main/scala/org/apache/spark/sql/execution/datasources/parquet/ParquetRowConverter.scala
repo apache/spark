@@ -192,11 +192,19 @@ private[parquet] class ParquetRowConverter(
 
   private[this] lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(catalystType)
 
+  // The existence default values are a pure function of `catalystType`, so compute them once here
+  // rather than re-deriving them from the schema on every record.
+  private[this] lazy val existenceDefaults: Array[Any] =
+    ResolveDefaultColumns.existenceDefaultValues(catalystType)
+  private[this] lazy val hasExistenceDefaults: Boolean = existenceDefaults.exists(_ != null)
+
   /**
    * The [[InternalRow]] converted from an entire Parquet record.
    */
   def currentRecord: InternalRow = {
-    applyExistenceDefaultValuesToRow(catalystType, currentRow, bitmask)
+    if (hasExistenceDefaults) {
+      applyExistenceDefaultValuesToRow(existenceDefaults, currentRow, bitmask)
+    }
     currentRow
   }
 
@@ -234,9 +242,8 @@ private[parquet] class ParquetRowConverter(
       }
     // If any fields in the Catalyst result schema have associated existence default values,
     // maintain a boolean array to track which fields have been explicitly assigned for each row.
-    if (ResolveDefaultColumns.hasExistenceDefaultValues(catalystType)) {
-      val existingValues = ResolveDefaultColumns.existenceDefaultValues(catalystType)
-      for (i <- 0 until existingValues.length) {
+    if (hasExistenceDefaults) {
+      for (i <- 0 until existenceDefaults.length) {
        bitmask(i) =
           // Assume the schema for a Parquet file-based table contains N fields. Then if we later
           // run a command "ALTER TABLE t ADD COLUMN c DEFAULT <value>" on the Parquet table, this
@@ -245,7 +252,7 @@ private[parquet] class ParquetRowConverter(
           if (i < parquetType.getFieldCount) {
             false
           } else {
-            existingValues(i) != null
+            existenceDefaults(i) != null
           }
       }
     }
