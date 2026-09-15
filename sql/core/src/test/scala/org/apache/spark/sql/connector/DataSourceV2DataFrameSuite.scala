@@ -1811,6 +1811,47 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("refresh keeps an exact-name binding under a Turkish locale fold collision") {
+    val capitalIDot = new String(Character.toChars(0x130))
+    val iCombiningDot = "i" + new String(Character.toChars(0x307))
+    val t = "testcat.ns1.ns2.tbl"
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withLocale("tr") {
+        withTable(t) {
+          sql(s"CREATE TABLE $t (id INT, `$iCombiningDot` INT) USING foo")
+
+          // Analyze but do not execute so that collection has to refresh this captured plan.
+          val stale = spark.table(t).selectExpr("id", s"`$iCombiningDot`")
+          assert(stale.queryExecution.analyzed.resolved)
+
+          // Under a Turkish default locale, duplicate validation admits U+0130 beside
+          // i+U+0307, although Spark's root-locale fold puts both names in one lookup bucket.
+          // Put the addition first so that choosing the bucket's first field would be observable.
+          val cat = catalog("testcat")
+          cat.alterTable(
+            testIdent,
+            TableChange.addColumn(
+              Array(capitalIDot),
+              IntegerType,
+              true,
+              null,
+              TableChange.ColumnPosition.first(),
+              null))
+          assert(
+            cat.loadTable(testIdent).columns().map(_.name).toSeq ==
+              Seq(capitalIDot, "id", iCombiningDot))
+          externalAppend(cat, testIdent, InternalRow(99, 1, 20))
+
+          // A fresh query establishes that the exact name reads 20. The captured plan must make
+          // the same choice rather than read 99 from the preceding addition.
+          checkAnswer(sql(s"SELECT id, `$iCombiningDot` FROM $t"), Seq(Row(1, 20)))
+          checkAnswer(stale, Seq(Row(1, 20)))
+        }
+      }
+    }
+  }
+
   test("refresh reconciles a wider partially-pruned scan with stored temp view output") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
