@@ -27,8 +27,9 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -475,15 +476,99 @@ class RewriteWithExpressionSuite extends PlanTest {
       ref < 10 && ref > 0
     }
     val plan = testRelation.join(testRelation2, condition = Some(condition))
+    // No child plan can hold the definition, so it stays a memoizing `With` in the condition
+    // rather than being inlined into both references.
+    val rewritten = Optimizer.execute(plan)
+    comparePlans(rewritten, plan.analyze)
+    // The shape `comparePlans` cannot state on its own: one definition, emitted once, read twice.
+    // A rewrite that kept the definitions and inlined them into the child as well would still
+    // compare equal to nothing having changed on the ids alone.
+    val rewrittenCondition = rewritten.asInstanceOf[Join].condition.get
+    assert(rewrittenCondition.collect { case d: CommonExpressionDef => d }.size == 1)
+    assert(rewrittenCondition.collect { case r: CommonExpressionRef => r }.size == 2)
+    assert(rewrittenCondition.collect { case add: Add => add }.size == 1)
+  }
+
+  test("SPARK-59494: a definition that gains nothing is still inlined in a join condition") {
+    val a = testRelation.output.head
+    val x = testRelation2.output.head
+    // Read once, so memoizing it buys nothing: `canSubstitute` is asked before the definition's
+    // columns are looked for in a child plan, and inlines it as it did before.
+    val readOnce = With(a + x) { case Seq(ref) => ref < 10 }
     comparePlans(
-      Optimizer.execute(plan),
-      testRelation
-        .join(
-          testRelation2,
-          // Can't pre-evaluate, have to inline
-          condition = Some((a + x) < 10 && (a + x) > 0)
-        )
-    )
+      Optimizer.execute(testRelation.join(testRelation2, condition = Some(readOnce))),
+      testRelation.join(testRelation2, condition = Some((a + x) < 10)).analyze)
+  }
+
+  test("SPARK-59494: one With with a kept definition and a hoisted one") {
+    val Seq(a, b) = testRelation.output
+    val x = testRelation2.output.head
+    // Two definitions, each read twice: `a + x` fits in no child and stays, while `a + b` is
+    // hoisted into a project over the left child. So the `With` comes back with one definition
+    // and the other one's references resolve to the new column.
+    val condition = With(a + x, a + b) { case Seq(both, left) =>
+      both < 10 && both > 0 && left < 10 && left > 0
+    }
+    val rewritten = Optimizer.execute(
+      testRelation.join(testRelation2, condition = Some(condition)))
+    val withs = rewritten.collect {
+      case p => p.expressions.flatMap(_.collect { case w: With => w })
+    }.flatten
+    assert(withs.size == 1, rewritten.toString)
+    assert(withs.head.defs.size == 1, withs.head.toString)
+    assert(withs.head.defs.head.child.semanticEquals(a + x), withs.head.toString)
+    // The hoisted one became a column of a project over the left child, read by attribute.
+    assert(rewritten.exists {
+      case Project(projectList, _) => projectList.exists {
+        case Alias(child, name) => name.startsWith("_common_expr") && child.semanticEquals(a + b)
+        case _ => false
+      }
+      case _ => false
+    }, rewritten.toString)
+  }
+
+  test("SPARK-59494: a nested With keeps its hoisting opportunity") {
+    val Seq(a, b) = testRelation.output
+    val x = testRelation2.output.head
+    // The inner definition reads the left side only, so a project over that child can hold it --
+    // but this rule defers a nested `With` to its next pass, and keeping the outer one would meet
+    // it again and defer it again. So the outer is inlined instead, as it was before this rule kept
+    // anything, and the next pass hoists the inner definition.
+    val inner = With(a + b) { case Seq(ref) =>
+      If(EqualTo(ref, Literal(0)), Literal(null, IntegerType), ref)
+    }
+    val condition = With(a + x) { case Seq(ref) => ref >= inner && ref <= Literal(1000) }
+    val rewritten = Optimizer.execute(
+      testRelation.join(testRelation2, condition = Some(condition)))
+    assert(!rewritten.exists(_.expressions.exists(_.exists {
+      case _: With => true
+      case _ => false
+    })), rewritten.toString)
+    assert(rewritten.exists {
+      case Project(projectList, _) => projectList.exists {
+        case Alias(child, name) => name.startsWith("_common_expr") && child.semanticEquals(a + b)
+        case _ => false
+      }
+      case _ => false
+    }, s"the inner definition was not hoisted:\n$rewritten")
+  }
+
+  test("SPARK-59494: an equi-join key beside a surviving With stays a top-level conjunct") {
+    val Seq(a, b) = testRelation.output
+    val Seq(x, y) = testRelation2.output
+    // The `With` wraps only its own subtree, so the equality is still a conjunct of the condition
+    // and the join keeps its keys -- otherwise a hash join becomes a nested loop.
+    val condition = (b === y) && With(a + x) { case Seq(ref) => ref < 10 && ref > 0 }
+    val rewritten = Optimizer.execute(
+      testRelation.join(testRelation2, condition = Some(condition)))
+    // Asks the pattern the planner asks, rather than a hand-rolled stand-in for it.
+    rewritten match {
+      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, otherCondition, _, _, _, _) =>
+        assert(leftKeys.length == 1 && leftKeys.head.semanticEquals(b), rewritten.toString)
+        assert(rightKeys.length == 1 && rightKeys.head.semanticEquals(y), rewritten.toString)
+        assert(otherCondition.exists(_.exists(_.isInstanceOf[With])), rewritten.toString)
+      case _ => fail(s"no equi-join keys left in:\n$rewritten")
+    }
   }
 
   test("SPARK-58902: a With left in a conditional branch of an aggregate still converges") {

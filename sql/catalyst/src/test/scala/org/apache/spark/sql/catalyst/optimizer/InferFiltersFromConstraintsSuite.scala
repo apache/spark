@@ -451,4 +451,27 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     assert(joinFound, "Expected a Join node in the optimized plan")
   }
 
+  test("SPARK-59494: infer IsNotNull through a With left in a join condition") {
+    val left = LocalRelation($"a".int, $"b".int)
+    val right = LocalRelation($"x".int, $"y".int)
+    // `RewriteWithExpression` leaves this `With` in the condition, since neither child plan holds
+    // both columns of `a + x`. A `With` is not null intolerant and its references are leaves, so
+    // reading the node as it stands finds no attribute and both sides lose the filter that the
+    // inlined form used to infer.
+    val a = left.output.head
+    val x = right.output.head
+    val condition = With(a + x) { case Seq(ref) => ref > 1 && ref < 10 }
+    val optimized = Optimize.execute(
+      left.join(right, Inner, Some(condition)).analyze)
+    val inferred = optimized.collect { case Filter(cond, _) => cond }
+      .flatMap(splitConjunctivePredicates)
+    assert(inferred.exists {
+      case IsNotNull(a: Attribute) => a.name == "a"
+      case _ => false
+    }, s"expected isnotnull(a); found: $inferred")
+    assert(inferred.exists {
+      case IsNotNull(a: Attribute) => a.name == "x"
+      case _ => false
+    }, s"expected isnotnull(x); found: $inferred")
+  }
 }

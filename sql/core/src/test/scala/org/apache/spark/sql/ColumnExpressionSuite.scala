@@ -28,11 +28,13 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.UpdateFieldsBenchmark._
-import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression, With}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, CommonExpressionRef, Expression, InSet, Literal, Multiply, NamedExpression, With}
+import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.ProjectExec
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -641,6 +643,121 @@ class ColumnExpressionSuite extends SharedSparkSession {
         checkAnswer(
           spark.sql(query),
           Seq(Row(0L, 0L), Row(1L, 2L), Row(2L, 6L), Row(3L, 12L)))
+      }
+    }
+  }
+
+  // The left and right of the SPARK-59494 cases: k = v = 0..3 and k2 = w = 0..4, one partition
+  // each, so the 20 row pairs and the pairs a condition keeps are both known by hand.
+  private def joinSides: (DataFrame, DataFrame) = (
+    spark.range(0, 4, 1, 1).selectExpr("cast(id as int) AS k", "cast(id as int) AS v"),
+    spark.range(0, 5, 1, 1).selectExpr("cast(id as int) AS k2", "cast(id as int) AS w"))
+
+  /** The condition of the one join in `df`'s optimized plan. */
+  private def joinCondition(df: DataFrame): Expression = {
+    df.queryExecution.optimizedPlan.collectFirst {
+      case j: Join => j.condition.getOrElse(fail(s"the join has no condition:\n${j.treeString}"))
+    }.getOrElse(fail(s"no join in:\n${df.queryExecution.optimizedPlan.treeString}"))
+  }
+
+  test("SPARK-59494: a surviving With in a join condition is read twice and emitted once") {
+    // A definition reading columns from both sides fits in no child `Project`, so it stays in the
+    // condition and memoizes per entry rather than being inlined into both references.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      val (left, right) = joinSides
+      val condition = joinCondition(left.join(right, expr("(v * w + 1) BETWEEN 2 AND 6")))
+      val withs = condition.collect { case w: With => w }
+      assert(withs.size == 1, condition.toString)
+      assert(withs.head.defs.size == 1, condition.toString)
+      // Emitted once and read twice, which is the property; a rewrite that kept the `With` and
+      // inlined the definition as well would leave two `Multiply` nodes.
+      assert(condition.collect { case m: Multiply => m }.size == 1, condition.toString)
+      assert(condition.collect { case r: CommonExpressionRef => r }.size == 2, condition.toString)
+    }
+  }
+
+  test("SPARK-59494: a surviving With in a join condition agrees across join implementations") {
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      val (left, right) = joinSides
+      // `v * w + 1` in [2, 6] keeps the pairs whose product is 1 to 5.
+      val expected = Seq(Row(1, 1, 1, 1), Row(1, 1, 2, 2), Row(1, 1, 3, 3), Row(1, 1, 4, 4),
+        Row(2, 2, 1, 1), Row(2, 2, 2, 2), Row(3, 3, 1, 1))
+      val keyedExpected = Seq(Row(1, 1, 1, 1), Row(2, 2, 2, 2))
+      val outerExpected = Seq(Row(0, 0, null, null), Row(1, 1, 1, 1), Row(2, 2, 2, 2),
+        Row(3, 3, null, null))
+      onEachEvalPath {
+        // No equality, so a nested loop join evaluates the condition per row pair.
+        val nested = left.join(right, expr("(v * w + 1) BETWEEN 2 AND 6"))
+        assert(nested.queryExecution.sparkPlan.collect {
+          case j: BroadcastNestedLoopJoinExec => j
+        }.size == 1, nested.queryExecution.sparkPlan.toString)
+        checkAnswer(nested, expected)
+
+        // An equality beside it is still a conjunct, so the join keeps its keys: a `With` hiding
+        // them would leave the nested loop join above in a query that should hash.
+        val keyed = left.join(right, expr("k = k2 AND (v * w + 1) BETWEEN 2 AND 6"))
+        val hashJoins = keyed.queryExecution.sparkPlan.collect {
+          case j: BroadcastHashJoinExec => j
+        }
+        assert(hashJoins.size == 1, keyed.queryExecution.sparkPlan.toString)
+        assert(hashJoins.head.leftKeys.size == 1, hashJoins.head.toString)
+        checkAnswer(keyed, keyedExpected)
+
+        // The condition reaches the rest of the join operators through the same code paths, and a
+        // left outer join also evaluates it for pairs that end up null-extended.
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          val sorted = left.join(right, expr("k = k2 AND (v * w + 1) BETWEEN 2 AND 6"))
+          assert(sorted.queryExecution.sparkPlan.collect {
+            case j: SortMergeJoinExec => j
+          }.size == 1, sorted.queryExecution.sparkPlan.toString)
+          checkAnswer(sorted, keyedExpected)
+        }
+        checkAnswer(
+          left.join(right, expr("k = k2 AND (v * w + 1) BETWEEN 2 AND 6"), "left_outer"),
+          outerExpected)
+      }
+    }
+  }
+
+  test("SPARK-59494: a With whose references a later rule dropped stops hiding a join key") {
+    // `nullif(l = r, NULL)` starts out reading its definition twice, so the rewrite keeps it; then
+    // `NullPropagation` and `SimplifyConditionals` leave one read of it, in a batch that runs after
+    // the rewrite's. With nothing asking the question again, the equality would stay wrapped where
+    // the planner cannot see a join key, and a hash join would become a nested loop join.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      val left = spark.range(0, 8, 1, 1).selectExpr("id AS l")
+      val right = spark.range(0, 8, 1, 1).selectExpr("id AS r")
+      val joined = left.join(right, expr("nullif(l = r, cast(null as boolean))"))
+      assert(!joinCondition(joined).exists(_.isInstanceOf[With]), joinCondition(joined).toString)
+      val plan = joined.queryExecution.sparkPlan
+      assert(plan.collect { case j: BroadcastHashJoinExec => j }.size == 1, plan.toString)
+      onEachEvalPath {
+        checkAnswer(joined, (0 until 8).map(i => Row(i.toLong, i.toLong)))
+      }
+    }
+  }
+
+  test("SPARK-59494: the definition is evaluated once per row pair") {
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      val counter = spark.sparkContext.longAccumulator
+      // Deterministic, which is what lets it sit in a join condition at all, and not cheap, so it
+      // is the definition that survives. Counting its calls is the only direct way to observe the
+      // change: inlining evaluated it again at the second comparison of every pair that passed the
+      // first, and memoizing evaluates it once per pair.
+      spark.udf.register("counted_product", (x: Int, y: Int) => {
+        counter.add(1)
+        x * y
+      })
+      Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN).foreach {
+        mode =>
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> mode.toString) {
+            val (left, right) = joinSides
+            counter.reset()
+            // Built inside the conf block: `executedPlan` is a lazy val, so a DataFrame built
+            // outside would carry the first configuration's plan into the second.
+            left.join(right, expr("counted_product(v, w) BETWEEN 1 AND 5")).collect()
+            assert(counter.value == 20, s"$mode: 4 x 5 row pairs, one evaluation each")
+          }
       }
     }
   }

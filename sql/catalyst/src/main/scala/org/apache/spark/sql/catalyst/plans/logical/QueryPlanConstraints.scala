@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreePattern.COMMON_EXPR_REF
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.isBinaryStable
 
 
@@ -55,7 +56,7 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
   protected lazy val validConstraints: ExpressionSet = ExpressionSet()
 }
 
-trait ConstraintHelper {
+trait ConstraintHelper extends PredicateHelper {
 
   /**
    * Infers an additional set of constraints from a given set of equality constraints.
@@ -176,11 +177,30 @@ trait ConstraintHelper {
       // When the root is IsNotNull, we can push IsNotNull through the child null intolerant
       // expressions
       case IsNotNull(expr) => scanNullIntolerantAttribute(expr).map(IsNotNull(_))
+      // A `With` is opaque to the conjunct splitting that produced this constraint, so a
+      // constraint that is one may still be a conjunction underneath. It holds for every row, so
+      // each conjunct of it does, and each is asked the same question this was: a conjunct that is
+      // itself an `IsNotNull` or another `With` is then read as one.
+      case w: With =>
+        splitConjunctivePredicates(inlineDefinitions(w)).flatMap(inferIsNotNullConstraints)
       // Constraints always return true for all the inputs. That means, null will never be returned.
       // Thus, we can infer `IsNotNull(constraint)`, and also push IsNotNull through the child
       // null intolerant expressions.
       case _ => scanNullIntolerantAttribute(constraint).map(IsNotNull(_))
     }
+
+  /**
+   * The expression a `With` stands for, with each definition substituted into its references. The
+   * result is read, not planted: keeping the definition emitted once is what
+   * `RewriteWithExpression` left the `With` in the plan for, and nothing here goes back into it.
+   */
+  private def inlineDefinitions(w: With): Expression = {
+    val definitions = w.defs.map(d => d.id -> d.child).toMap
+    w.child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+      // A reference to an enclosing `With` is left alone: it is a leaf, so the scan stops there.
+      case ref: CommonExpressionRef => definitions.getOrElse(ref.id, ref)
+    }
+  }
 
   @tailrec
   private def isExtractOnly(e: Expression): Boolean = e match {
@@ -198,6 +218,10 @@ trait ConstraintHelper {
   private def scanNullIntolerantAttribute(expr: Expression): Seq[Expression] = expr match {
     case e: ExtractValue if isExtractOnly(e) => Seq(e)
     case a: Attribute => Seq(a)
+    // A `With` is not null intolerant -- its child decides -- and its references are leaves, so
+    // scanning it as it stands finds nothing. Read it as the expression it stands for, which is the
+    // tree this saw before `RewriteWithExpression` could leave a `With` in a condition.
+    case w: With => scanNullIntolerantAttribute(inlineDefinitions(w))
     case e if e.nullIntolerant => expr.children.flatMap(scanNullIntolerantAttribute)
     case _ => Seq.empty[Attribute]
   }
