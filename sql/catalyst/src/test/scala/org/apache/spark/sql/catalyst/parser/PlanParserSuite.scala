@@ -211,6 +211,7 @@ class PlanParserSuite extends AnalysisTest {
       UnresolvedHint("HINT", Seq.empty, plan))
 
     Seq(
+      "SELECT 1 /* outer /*+ inner",
       "SELECT /* outer /*+ inner */ outer tail 1 AS col1",
       "SELECT /* outer /*+ inner outer tail */ 1 AS col1",
       "/* SELECT /*+ HINT() 4; */ SELECT 1;"
