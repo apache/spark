@@ -50,6 +50,15 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
       !MatchConditionTypes.matchComparisonCommonType(IntegerType, StringType).contains(StringType))
   }
 
+  test("scalar string vs interval is rejected, matching the comparison operator") {
+    // No comparison common type exists for string vs interval. Accepting it (as findWiderTypeForTwo
+    // does) would pass validation but leave the operands uncoerced; reject it, like `>=` does.
+    val interval = DayTimeIntervalType()
+    assert(!MatchConditionTypes.areOperandsCompatible(StringType, interval))
+    assert(!MatchConditionTypes.areOperandsCompatible(YearMonthIntervalType(), StringType))
+    assert(MatchConditionTypes.matchComparisonCommonType(StringType, interval).isEmpty)
+  }
+
   test("struct fields keep the strict rule: string vs temporal field is rejected") {
     // The coercion is scoped to scalar top-level operands; a whole-struct sort key cannot apply
     // a per-field cast, so a string vs temporal STRUCT field stays incompatible.

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.DateType
+import org.apache.spark.sql.types.{DateType, IntegerType, LongType}
 
 /**
  * SQL ASOF JOIN surface tests (parser, analysis, and feature gating).
@@ -184,6 +184,30 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
                        |  ON t.symbol = q.symbol""".stripMargin,
           start = 35,
           stop = 120)))
+  }
+
+  // A numeric MATCH_CONDITION must sort by value, not lexicographically, in both modes: ANSI widens
+  // INT vs STRING to LONG, the default mode to INT. The string case is the only one that tells the
+  // two sorts apart (ISO date/timestamp strings sort the same either way), so assert the sort type.
+  Seq(true -> LongType, false -> IntegerType).foreach { case (ansi, sortType) =>
+    test(s"MATCH_CONDITION coerces INT vs STRING to a numeric sort key (ansi=$ansi)") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        val sqlText =
+          """
+            |SELECT t.k, r.s
+            |FROM VALUES (20) AS t(k) ASOF JOIN
+            |     VALUES ('9'), ('10'), ('20') AS r(s)
+            |  MATCH_CONDITION (t.k >= r.s)
+            |""".stripMargin
+        val asOfJoin = sql(sqlText).queryExecution.analyzed.collectFirst {
+          case j: AsOfJoin => j
+        }.get
+        assert(asOfJoin.leftSortExprs.forall(_.dataType == sortType))
+        assert(asOfJoin.rightSortExprs.forall(_.dataType == sortType))
+        // A lexicographic STRING sort key would order '9' last and wrongly match it for k = 20.
+        checkAnswer(sql(sqlText), Row(20, "20"))
+      }
+    }
   }
 
   test("MATCH_CONDITION rejects incompatible operand types") {
