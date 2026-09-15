@@ -193,7 +193,14 @@ case class BroadcastExchangeExec(
             val beforeBuild = System.nanoTime()
             longMetric("collectTime") += NANOSECONDS.toMillis(beforeBuild - beforeCollect)
 
-            // Construct the relation.
+            mode match {
+                case h: HashedRelationBroadcastMode =>
+                registerSubqueries(h.key)
+                case _ =>
+            }
+
+            waitForSubqueries()
+
             val relation = mode.transform(input, Some(numRows))
 
             val dataSize = relation match {
