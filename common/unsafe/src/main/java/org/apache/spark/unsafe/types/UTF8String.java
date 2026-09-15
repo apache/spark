@@ -293,11 +293,23 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Private helper method to calculate the number of code points in the UTF-8 string. Counting
    * the code points is a linear time operation, as we need to scan the entire UTF-8 string.
    * Hence, this method should generally only be called once for non-empty UTF-8 strings.
+   *
+   * Because the scan reads every lead byte, it also caches ASCII-ness for free (see
+   * {@link #isFullAscii()}): any lead byte >= 0x80 (a multi-byte or invalid byte) is non-ASCII.
+   * The flag is only set when still UNKNOWN, preserving a value already computed elsewhere.
    */
   private int getNumChars() {
     int len = 0;
-    for (int i = 0; i < numBytes; i += numBytesForFirstByte(getByte(i))) {
+    boolean ascii = true;
+    int i = 0;
+    while (i < numBytes) {
+      byte b = getByte(i);
+      ascii &= b >= 0;
+      i += numBytesForFirstByte(b);
       len += 1;
+    }
+    if (isFullAscii == IsFullAscii.UNKNOWN) {
+      isFullAscii = ascii ? IsFullAscii.FULL_ASCII : IsFullAscii.NOT_ASCII;
     }
     return len;
   }

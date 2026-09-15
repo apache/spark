@@ -71,6 +71,36 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void numCharsCachesAsciiness() {
+    // numChars() determines ASCII-ness as a byproduct of its scan and caches it. Verify it
+    // agrees with getIsFullAscii() (reached via a fresh isFullAscii()), including for invalid
+    // UTF-8 where the code-point count equals the byte count but a byte is >= 0x80 (not ASCII).
+    byte[][] inputs = new byte[][] {
+      {0x68, 0x65, 0x6c, 0x6c, 0x6f},                     // "hello" - full ASCII
+      {},                                                 // empty
+      {0x61, (byte) 0x80},                                // 'a' + stray continuation (invalid)
+      {(byte) 0x80},                                      // lone continuation byte (invalid)
+      {(byte) 0xC3, (byte) 0xA9},                         // valid 2-byte char U+00E9
+      {0x61, (byte) 0xE5, (byte) 0xA4, (byte) 0xA7, 0x62} // 'a' + 3-byte char + 'b'
+    };
+    for (byte[] bytes : inputs) {
+      // Reference: a fresh string computes ASCII-ness via getIsFullAscii().
+      boolean expected = fromBytes(bytes).isFullAscii();
+      // Under test: numChars() runs first and must cache the identical answer.
+      UTF8String s = fromBytes(bytes);
+      s.numChars();
+      assertEquals(expected, s.isFullAscii(),
+        "numChars() cached wrong ASCII flag for " + Arrays.toString(bytes));
+    }
+
+    // The specific invalid case a naive `numChars == numBytes` test would misflag as ASCII:
+    // the count equals the byte count, but the 0x80 byte is not ASCII.
+    UTF8String invalid = fromBytes(new byte[] {0x61, (byte) 0x80});
+    assertEquals(invalid.numBytes(), invalid.numChars());
+    assertFalse(invalid.isFullAscii());
+  }
+
+  @Test
   public void emptyStringTest() {
     assertEquals(EMPTY_UTF8, fromString(""));
     assertEquals(EMPTY_UTF8, fromBytes(new byte[0]));
