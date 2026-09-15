@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CaseWhen, If, IsNull, KnownFloatingPointNormalized}
+import org.apache.spark.sql.catalyst.expressions.{ArrayDistinct, ArrayExcept, ArrayIntersect, ArraysOverlap, ArrayUnion, CaseWhen, If, IsNull, KnownFloatingPointNormalized}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.DoubleType
 
 class NormalizeFloatingPointNumbersSuite extends PlanTest {
 
@@ -148,5 +149,19 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
       .as("nestedExpr").toAttribute
     val normalizedExpr = NormalizeFloatingNumbers.normalize(nestedExpr)
     assert(nestedExpr.dataType == normalizedExpr.dataType)
+  }
+
+  test("SPARK-54918: array set operations are not normalized by a plan rewrite") {
+    val relation = LocalRelation($"a".array(DoubleType), $"b".array(DoubleType))
+    val Seq(array1, array2) = relation.output
+    val query = relation.select(
+      ArrayDistinct(array1).as("distinct"),
+      ArrayUnion(array1, array2).as("union"),
+      ArrayIntersect(array1, array2).as("intersect"),
+      ArrayExcept(array1, array2).as("except"),
+      ArraysOverlap(array1, array2).as("overlap"))
+
+    comparePlans(SimpleTestOptimizer.FinishAnalysis(query), query)
+    comparePlans(Optimize.execute(query), query)
   }
 }
