@@ -1363,6 +1363,38 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # require the column name appears somewhere in the message.
         self.assertIn("a", message)
 
+    def test_udf_transpile_category_inference_is_linear(self):
+        import ast
+
+        from pyspark.sql.transpile import CatalystTranspiler
+
+        class CountingCatalystTranspiler(CatalystTranspiler):
+            def __init__(self):
+                super().__init__()
+                self.category_calls = 0
+
+            def _category_uncached(self, params, node):
+                self.category_calls += 1
+                return super()._category_uncached(params, node)
+
+        expression = " + ".join(["a"] * 161)
+        source = f"def f(a):\n    return {expression}\n"
+        function_ast = ast.parse(source).body[0]
+        self.assertIsInstance(function_ast, ast.FunctionDef)
+
+        transpiler = CountingCatalystTranspiler()
+        converted = transpiler._transpile_from_ast(
+            source,
+            function_ast,
+            function_ast,
+            ["a"],
+            LongType(),
+            {0: "numeric"},
+        )
+
+        self.assertIsNotNone(converted)
+        self.assertLessEqual(transpiler.category_calls, len(list(ast.walk(function_ast))))
+
     # ------------------------------------------------------------------
     # Edge cases (SPARK-55206 follow-up). Helpers build a UDF with
     # transpilation on; `_vals` runs it and returns outputs (asserting it
