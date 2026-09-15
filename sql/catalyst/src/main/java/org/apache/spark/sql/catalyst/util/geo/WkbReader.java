@@ -130,9 +130,17 @@ public class WkbReader {
    * Reads a geometry from WKB bytes.
    */
   public GeometryModel read(byte[] wkb) {
+    return read(wkb, 0, wkb == null ? 0 : wkb.length);
+  }
+
+  /**
+   * Reads a geometry from a sub-range {@code [offset, offset + length)} of the given byte array.
+   * This lets callers reuse a larger backing buffer without materializing an exact-size copy.
+   */
+  public GeometryModel read(byte[] wkb, int offset, int length) {
     try {
       currentWkb = wkb;
-      return readGeometry(Geometry.DEFAULT_SRID);
+      return readGeometry(offset, length, Geometry.DEFAULT_SRID);
     } finally {
       // Clear references to allow garbage collection
       buffer = null;
@@ -146,7 +154,7 @@ public class WkbReader {
   public GeometryModel read(byte[] wkb, int srid) {
     try {
       currentWkb = wkb;
-      return readGeometry(srid);
+      return readGeometry(0, wkb == null ? 0 : wkb.length, srid);
     } finally {
       // Clear references to allow garbage collection
       buffer = null;
@@ -225,22 +233,35 @@ public class WkbReader {
   /**
    * Reads a geometry from WKB bytes with a specified SRID.
    *
+   * @param offset start index of the WKB data within {@code currentWkb}
+   * @param length number of WKB bytes to read
    * @param defaultSrid srid to use if not specified in WKB
    * @return Geometry object
    */
-  private GeometryModel readGeometry(int defaultSrid) {
+  private GeometryModel readGeometry(int offset, int length, int defaultSrid) {
     // Check that we have data
-    if (currentWkb == null || currentWkb.length < 1) {
+    if (currentWkb == null || length < 1) {
       throw new WkbParseException("WKB data is empty or null", 0, currentWkb);
     }
 
     // Check that we have enough bytes for header (endianness byte + 4-byte type)
-    if (currentWkb.length < WkbUtil.BYTE_SIZE + WkbUtil.TYPE_SIZE) {
+    if (length < WkbUtil.BYTE_SIZE + WkbUtil.TYPE_SIZE) {
       throw new WkbParseException("Unexpected end of WKB buffer", 0, currentWkb);
     }
 
-    // Create buffer wrapping the entire byte array
-    buffer = ByteBuffer.wrap(currentWkb);
+    // Validate that [offset, offset + length) lies within currentWkb before wrapping.
+    // Without this, a bad offset/length would escape as a raw IndexOutOfBoundsException
+    // from ByteBuffer.wrap, which fromWkb's WkbParseException catch would not translate
+    // into WKB_PARSE_ERROR like every other malformed-WKB case. The subtraction avoids
+    // overflow: offset is already known to be >= 0.
+    if (offset < 0 || length > currentWkb.length - offset) {
+      throw new WkbParseException("WKB range [" + offset + ", " + ((long) offset + length)
+        + ") is out of bounds for buffer of length " + currentWkb.length, offset, currentWkb);
+    }
+
+    // Create a buffer over just the [offset, offset + length) sub-range. Positions
+    // reported in errors stay absolute so they index correctly into currentWkb.
+    buffer = ByteBuffer.wrap(currentWkb, offset, length);
 
     // Read endianness and set byte order
     ByteOrder byteOrder = readEndianness();
