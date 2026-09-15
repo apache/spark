@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -91,6 +92,12 @@ public class ExternalShuffleBlockResolver {
 
   private final boolean rddFetchEnabled;
 
+  private final boolean verifyBlockPathsAtRead;
+
+  // Canonical forms of registered executor local dirs, cached because they are checked on
+  // every block open. Keyed by the raw registered path string.
+  private final ConcurrentMap<String, Path> canonicalLocalDirs = new ConcurrentHashMap<>();
+
   @VisibleForTesting
   final File registeredExecutorFile;
   @VisibleForTesting
@@ -112,6 +119,8 @@ public class ExternalShuffleBlockResolver {
     this.conf = conf;
     this.rddFetchEnabled =
       Boolean.parseBoolean(conf.get(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "false"));
+    this.verifyBlockPathsAtRead =
+      Boolean.parseBoolean(conf.get(Constants.SHUFFLE_SERVICE_VERIFY_BLOCK_PATHS_AT_READ, "true"));
     this.registeredExecutorFile = registeredExecutorFile;
     String indexCacheSize = conf.get("spark.shuffle.service.index.cache.size", "100m");
     CacheLoader<String, ShuffleIndexInformation> indexCacheLoader =
@@ -164,6 +173,19 @@ public class ExternalShuffleBlockResolver {
       logger.error("Error saving registered executors", e);
     }
     executors.put(fullId, executorInfo);
+    if (verifyBlockPathsAtRead && executorInfo.localDirs != null) {
+      // Pin the canonical form of the registered dirs while they are known to be validated,
+      // so a later change to a registered dir itself is still detected at read time. Dirs of
+      // executors reloaded from the state store are resolved lazily on first block fetch.
+      for (String localDir : executorInfo.localDirs) {
+        try {
+          canonicalLocalDirs.put(localDir, new File(localDir).getCanonicalFile().toPath());
+        } catch (IOException e) {
+          logger.warn("Failed to resolve local dir {}; will retry on first block fetch", e,
+            MDC.of(LogKeys.PATH, localDir));
+        }
+      }
+    }
   }
 
   /**
@@ -315,17 +337,49 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
+   * Returns a File for {@code filename} under the executor's registered local dirs, verifying
+   * at open time that the fully resolved path is still contained in one of those directories.
+   * The local dirs themselves are validated when the executor registers, but their contents
+   * can change afterwards, so the resolved path is re-checked here against the canonical form
+   * of the registered dirs.
+   */
+  private File getVerifiedFile(ExecutorShuffleInfo executor, String filename) {
+    String path =
+      ExecutorDiskUtils.getFilePath(executor.localDirs, executor.subDirsPerLocalDir, filename);
+    File file = new File(path);
+    if (!verifyBlockPathsAtRead) {
+      return file;
+    }
+    try {
+      Path canonicalFile = file.getCanonicalFile().toPath();
+      for (String localDir : executor.localDirs) {
+        Path canonicalDir = canonicalLocalDirs.computeIfAbsent(localDir, dir -> {
+          try {
+            return new File(dir).getCanonicalFile().toPath();
+          } catch (IOException e) {
+            throw new UncheckedIOException(e);
+          }
+        });
+        if (canonicalFile.startsWith(canonicalDir)) {
+          return file;
+        }
+      }
+    } catch (IOException | UncheckedIOException e) {
+      throw new RuntimeException("Failed to resolve block file: " + path, e);
+    }
+    throw new RuntimeException("Block file " + path
+      + " resolves outside the executor's registered local directories");
+  }
+
+  /**
    * Sort-based shuffle data uses an index called "shuffle_ShuffleId_MapId_0.index" into a data file
    * called "shuffle_ShuffleId_MapId_0.data". This logic is from IndexShuffleBlockResolver,
    * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
     ExecutorShuffleInfo executor, int shuffleId, long mapId, int startReduceId, int endReduceId) {
-    String indexFilePath =
-      ExecutorDiskUtils.getFilePath(
-        executor.localDirs,
-        executor.subDirsPerLocalDir,
-        "shuffle_" + shuffleId + "_" + mapId + "_0.index");
+    String indexFilePath = getVerifiedFile(
+      executor, "shuffle_" + shuffleId + "_" + mapId + "_0.index").getPath();
 
     try {
       ShuffleIndexInformation shuffleIndexInformation = shuffleIndexCache.get(indexFilePath);
@@ -333,11 +387,7 @@ public class ExternalShuffleBlockResolver {
         startReduceId, endReduceId);
       return new FileSegmentManagedBuffer(
         conf,
-        new File(
-          ExecutorDiskUtils.getFilePath(
-            executor.localDirs,
-            executor.subDirsPerLocalDir,
-            "shuffle_" + shuffleId + "_" + mapId + "_0.data")),
+        getVerifiedFile(executor, "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
         shuffleIndexRecord.offset(),
         shuffleIndexRecord.length());
     } catch (ExecutionException e) {
@@ -347,9 +397,7 @@ public class ExternalShuffleBlockResolver {
 
   public ManagedBuffer getDiskPersistedRddBlockData(
       ExecutorShuffleInfo executor, int rddId, int splitIndex) {
-    File file = new File(
-      ExecutorDiskUtils.getFilePath(
-        executor.localDirs, executor.subDirsPerLocalDir, "rdd_" + rddId + "_" + splitIndex));
+    File file = getVerifiedFile(executor, "rdd_" + rddId + "_" + splitIndex);
     long fileLength = file.length();
     ManagedBuffer res = null;
     if (file.exists()) {
@@ -422,8 +470,7 @@ public class ExternalShuffleBlockResolver {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     // This should be in sync with IndexShuffleBlockResolver.getChecksumFile
     String fileName = "shuffle_" + shuffleId + "_" + mapId + "_0.checksum." + algorithm;
-    File checksumFile = new File(
-      ExecutorDiskUtils.getFilePath(executor.localDirs, executor.subDirsPerLocalDir, fileName));
+    File checksumFile = getVerifiedFile(executor, fileName);
     ManagedBuffer data = getBlockData(appId, execId, shuffleId, mapId, reduceId);
     return ShuffleChecksumHelper.diagnoseCorruption(
       algorithm, checksumFile, reduceId, data, checksumByReader);

@@ -90,4 +90,30 @@ class TransformExpressionSuite extends SparkFunSuite {
     assert(bucket(new ComparableFunction, a, 4) != bucket(new ComparableFunction, a, 8),
       "different bucket count")
   }
+
+  test("SPARK-59121: hasSameReducedKeys recognises the pairing that reduced both sides") {
+    // A join that reduces both sides leaves their keys in a space neither transform names, and the
+    // pairing that produced it is the only thing that tells two such spaces apart.
+    val fn = new NamedFunction("test.bucket")
+    val b12 = bucket(fn, a, 12)
+    val b8 = bucket(fn, a, 8)
+    val b18 = bucket(fn, a, 18)
+    val left = b12.reducedTogetherWith(b8)
+    val right = b8.reducedTogetherWith(b12)
+
+    assert(TransformExpression.hasReducedKeys(left) && TransformExpression.hasReducedKeys(right))
+    assert(left.hasSameReducedKeys(left), "an expression shares its own key space")
+    assert(left.hasSameReducedKeys(right), "the two sides of one reduce share theirs")
+    assert(right.hasSameReducedKeys(left), "and the relation is symmetric")
+
+    assert(!left.hasSameReducedKeys(b12.reducedTogetherWith(b18)),
+      "another pairing is another key space")
+    assert(!left.hasSameReducedKeys(b12), "an unreduced side never shares one")
+    assert(!b12.hasSameReducedKeys(left))
+    assert(!b12.hasSameReducedKeys(b8), "nor do two unreduced ones")
+
+    // The marker rides on the expression, so it survives the attribute rewrites a projection and
+    // `GroupPartitionsExec` apply to a reported partitioning.
+    assert(left.hasSameReducedKeys(left.withReference(b)))
+  }
 }

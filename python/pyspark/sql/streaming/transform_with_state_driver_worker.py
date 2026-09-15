@@ -69,15 +69,22 @@ def main(infile: IO, outfile: IO) -> None:
         # This driver runner will only be used on the first batch of a query,
         # and the following code block should be only run once for each query run
         state_server_port = read_int(infile)
+        auth_secret = None
         if state_server_port == -1:
             state_server_port = utf8_deserializer.loads(infile)
+        else:
+            # For TCP state servers the connection secret follows the port; Unix domain
+            # socket paths (-1 marker above) rely on filesystem permissions instead.
+            auth_secret = utf8_deserializer.loads(infile)
         key_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
         print(
             f"{log_name} received parameters for UDF. State server port/path: {state_server_port}, "
             f"key schema: {key_schema}.\n"
         )
 
-        stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
+        stateful_processor_api_client = StatefulProcessorApiClient(
+            state_server_port, key_schema, auth_secret=auth_secret
+        )
         process(
             stateful_processor_api_client,
             TransformWithStateInPandasFuncMode.PRE_INIT,

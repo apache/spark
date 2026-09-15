@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{ArrayDistinct, ArrayExcept, ArrayIntersect, ArraysOverlap, ArrayTransform, ArrayUnion, CaseWhen, Expression, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, NamedLambdaVariable}
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.DoubleType
@@ -88,6 +88,23 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     val joinCond = Some(KnownFloatingPointNormalized(NormalizeNaNAndZero(a))
       === KnownFloatingPointNormalized(NormalizeNaNAndZero(b)))
     val correctAnswer = testRelation1.join(testRelation2, condition = joinCond)
+
+    comparePlans(doubleOptimized, correctAnswer)
+  }
+
+  test("normalize floating points in null-aware anti join keys") {
+    val equality = a === b
+    val query = testRelation1.join(
+      testRelation2, joinType = LeftAnti, condition = Some(equality || IsNull(equality)))
+
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+    val normalizedEquality = KnownFloatingPointNormalized(NormalizeNaNAndZero(a)) ===
+      KnownFloatingPointNormalized(NormalizeNaNAndZero(b))
+    val correctAnswer = testRelation1.join(
+      testRelation2,
+      joinType = LeftAnti,
+      condition = Some(normalizedEquality || IsNull(normalizedEquality)))
 
     comparePlans(doubleOptimized, correctAnswer)
   }
@@ -249,4 +266,3 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     comparePlans(doubleOptimized, correctAnswer)
   }
 }
-

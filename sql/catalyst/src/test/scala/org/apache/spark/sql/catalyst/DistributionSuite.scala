@@ -20,11 +20,13 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.SparkFunSuite
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationAwareMurmur3Hash, Expression, Literal, Pmod}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, CollationAwareMurmur3Hash, Expression, Literal, Pmod, SortOrder}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
-class DistributionSuite extends SparkFunSuite {
+class DistributionSuite extends SparkFunSuite with SQLHelper {
 
   protected def checkSatisfied(
       inputPartitioning: Partitioning,
@@ -401,11 +403,11 @@ class DistributionSuite extends SparkFunSuite {
     assert(!nonGroupedKP.isGrouped)
     // satisfies() must return false: the partitions are not yet grouped.
     checkSatisfied(nonGroupedKP, ClusteredDistribution(Seq(x)), false)
-    // groupedSatisfies() returns true: it CAN satisfy once GroupPartitionsExec groups them.
-    assert(nonGroupedKP.groupedSatisfies(ClusteredDistribution(Seq(x))))
+    // mayGroupToSatisfy() returns true, because grouping them makes it satisfy.
+    assert(nonGroupedKP.mayGroupToSatisfy(ClusteredDistribution(Seq(x))))
 
     // Grouped: all distinct keys, so isGrouped=true and satisfies() delegates to
-    // groupedSatisfies().
+    // keysSatisfy().
     val groupedKP = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
     assert(groupedKP.isGrouped)
     checkSatisfied(groupedKP, ClusteredDistribution(Seq(x)), true)
@@ -444,7 +446,91 @@ class DistributionSuite extends SparkFunSuite {
 
     val combined = PartitioningCollection.fromPartitionings(Seq(nested, kpY))
     val interned = combined.partitionings.last.asInstanceOf[KeyedPartitioning]
-    assert(interned.partitionKeys eq kpX.partitionKeys)
+    assert(interned.layout eq kpX.layout, "the whole layout is interned, keys and all")
+  }
+
+  test("SPARK-59050: a marked one-partition layout keeps the global ordering claim") {
+    // The one-partition exemption inside `keysSatisfy`'s ordered branch: a single partition
+    // holds every row, so an out-of-set key cannot break the cross-partition sequence, while
+    // two partitions can (the e2e `ORDER BY` repro measures that). Positive control: an
+    // always-false gate would shuffle these plans for nothing.
+    val a = AttributeReference("a", IntegerType)()
+    val ordered = OrderedDistribution(Seq(SortOrder(a, Ascending)))
+    val markedOne = KeyedPartitioning(Seq(a), Seq(InternalRow(1)))
+      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    val markedTwo = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2)))
+      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+      checkSatisfied(markedOne, ordered, true)
+      checkSatisfied(markedTwo, ordered, false)
+    }
+  }
+
+  test("SPARK-59050: fromPartitionings normalizes the unknown-keys marker by OR") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val marked = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2)))
+      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    val plain = KeyedPartitioning(Seq(y), Seq(InternalRow(1), InternalRow(2)))
+    val combined = PartitioningCollection.fromPartitionings(Seq(marked, plain))
+    // The conservative direction: an unmarked member must never excuse marked data, because
+    // the OR'd-on marker only costs a shuffle while the AND'd-off one could cost correctness.
+    val members = combined.partitionings.map(_.asInstanceOf[KeyedPartitioning])
+    assert(members.forall(_.mayContainUnknownPartitionKeys), members.toString)
+    assert(members.last.layout eq members.head.layout)
+  }
+
+  test("SPARK-59050: PartitioningCollection requires members to agree on the marker") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    val base = KeyedPartitioning(Seq(x), keys)
+    val marked = base.withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    // The marker lives on the layout, so two members that disagree on it hold two layouts, and the
+    // one `eq` on the layout refuses them. There is no clause of its own to reach.
+    val disagree =
+      KeyedPartitioning(Seq(y), marked.layout.copy(mayContainUnknownPartitionKeys = false))
+    val err = intercept[IllegalArgumentException] {
+      PartitioningCollection(Seq(marked, disagree))
+    }
+    assert(err.getMessage.contains("share the same KeyLayout reference"))
+  }
+
+  test("SPARK-59050: fromPartitionings normalizes the unknown-keys marker through nesting") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    val marked =
+      KeyedPartitioning(Seq(x), keys).withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    val plainNested = PartitioningCollection.fromPartitionings(
+      Seq(KeyedPartitioning(Seq(y), keys)))
+    val combined = PartitioningCollection.fromPartitionings(Seq(marked, plainNested))
+    // The nested collection must be rebuilt with the OR'd-on marker, not excused: only the
+    // recursive arm of `fromPartitionings` carries the flag into it.
+    val leaves = PartitioningCollection.flatten(combined)
+      .collect { case k: KeyedPartitioning => k }
+    assert(leaves.length === 2, combined.toString)
+    assert(leaves.forall(_.mayContainUnknownPartitionKeys), leaves.toString)
+    assert(leaves.forall(_.layout eq leaves.head.layout),
+      "the interned layout must survive the rebuild")
+  }
+
+  test("SPARK-59050: PartitioningCollection requires a nested collection to agree on the " +
+    "marker") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val keys = Seq(InternalRow(1), InternalRow(2))
+    val base = KeyedPartitioning(Seq(x), keys)
+    val markedNested = PartitioningCollection.fromPartitionings(Seq(
+      base.withLayout(_.copy(mayContainUnknownPartitionKeys = true))))
+    val plain = base.copy(expressions = Seq(y))
+    // The nested collection is internally uniform, so its own construction passes. The outer
+    // constructor must still catch its representative against the unmarked sibling, and the marker
+    // living on the layout is what makes that one `eq` enough.
+    val err = intercept[IllegalArgumentException] {
+      PartitioningCollection(Seq(markedNested, plain))
+    }
+    assert(err.getMessage.contains("share the same KeyLayout reference"))
   }
 
   test("SPARK-56877: PartitioningCollection enforces the invariant through nesting") {
@@ -458,12 +544,41 @@ class DistributionSuite extends SparkFunSuite {
     val refMismatch = intercept[IllegalArgumentException] {
       PartitioningCollection(Seq(nested, kpY))
     }
-    assert(refMismatch.getMessage.contains("share the same partitionKeys reference"))
+    assert(refMismatch.getMessage.contains("share the same KeyLayout reference"))
 
     val kpXY = KeyedPartitioning(Seq(x, y), Seq(InternalRow(1, 1), InternalRow(2, 2)))
     val arityMismatch = intercept[IllegalArgumentException] {
       PartitioningCollection(Seq(nested, kpXY))
     }
     assert(arityMismatch.getMessage.contains("matching expression arity"))
+  }
+
+  test("SPARK-59285: fromPartitionings refuses a member that disagrees on isGrouped") {
+    // Interning now replaces a member's layout whole, where it used to keep each member's own
+    // `isGrouped`. Whether the keys are unique is a property of the keys, so a member that
+    // disagrees about it over equal keys is wrong, and interning would hide that.
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val keys = Seq(InternalRow(1), InternalRow(2))
+
+    val kpX = KeyedPartitioning(Seq(x), keys)
+    val ungrouped = KeyedPartitioning(Seq(y), keys).withLayout(_.copy(isGrouped = false))
+    val mismatch = intercept[IllegalArgumentException] {
+      PartitioningCollection.fromPartitionings(Seq(kpX, ungrouped))
+    }
+    assert(mismatch.getMessage.contains("must agree on isGrouped"))
+  }
+
+  test("SPARK-59057: toGrouped and KeyedShuffleSpec.createPartitioning keep isCollapsed sticky") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+
+    val collapsedKP = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
+      .withLayout(_.copy(isCollapsed = true))
+    assert(collapsedKP.toGrouped.isCollapsed, "toGrouped must keep isCollapsed sticky")
+
+    val spec = KeyedShuffleSpec(collapsedKP, ClusteredDistribution(Seq(x)))
+    val created = spec.createPartitioning(Seq(y)).asInstanceOf[KeyedPartitioning]
+    assert(created.isCollapsed, "createPartitioning must keep isCollapsed sticky")
   }
 }

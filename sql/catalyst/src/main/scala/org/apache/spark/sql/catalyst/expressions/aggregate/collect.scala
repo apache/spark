@@ -79,9 +79,9 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
   protected val bufferElementType: DataType
 
-  private lazy val projection = UnsafeProjection.create(
+  protected lazy val projection = UnsafeProjection.create(
     Array[DataType](ArrayType(elementType = bufferElementType, containsNull = bufferContainsNull)))
-  private lazy val row = new UnsafeRow(1)
+  protected lazy val row = new UnsafeRow(1)
 
   override def serialize(obj: T): Array[Byte] = {
     val array = new GenericArrayData(obj.toArray)
@@ -200,7 +200,6 @@ case class CollectList(
   """,
   group = "agg_funcs",
   since = "2.0.0")
-// TODO: Make CollectSet collation aware
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
@@ -235,13 +234,35 @@ case class CollectSet(
     buffer
   }
 
+  // Non-binary collated inputs (a collated string, or one nested in a struct/array) cannot dedup
+  // on the raw value's binary form: e.g. 'foo' and 'FOO' are equal under UTF8_LCASE but binary
+  // distinct. For those we store a wrapper in the HashSet keyed on a collation-aware key while
+  // keeping the original first-seen value for output. Binary-stable inputs stay on the fast path.
+  @transient private lazy val needsCollationKey: Boolean =
+    !UnsafeRowUtils.isBinaryStable(child.dataType)
+
+  // Projects a value to its collation- and float-normalized dedup key bytes. injectCollationKey
+  // handles collated strings nested at any depth; NormalizeFloatingNumbers folds them in too.
+  @transient private lazy val collationKeyBytes: Any => Array[Byte] = {
+    val ref = BoundReference(0, child.dataType, nullable = true)
+    val proj = UnsafeProjection.create(
+      Seq(CollationKey.injectCollationKey(NormalizeFloatingNumbers.normalize(ref))))
+    (value: Any) => proj(InternalRow(value)).getBytes
+  }
+
   @transient private lazy val complexNormalizer: Any => Any = {
     val ref = BoundReference(0, child.dataType, nullable = true)
     val proj = UnsafeProjection.create(NormalizeFloatingNumbers.normalize(ref))
     (value: Any) => InternalRow.copyValue(proj(InternalRow(value)).get(0, child.dataType))
   }
 
-  override def convertToBufferElement(value: Any): Any = child.dataType match {
+  override def convertToBufferElement(value: Any): Any = if (needsCollationKey) {
+    // Store the float-normalized value (not the raw one) so the emitted representative is
+    // canonical, matching the complex path below (e.g. -0.0 surfaces as 0.0). normalize is a
+    // no-op for pure collated strings, so this only affects nested floats. The dedup key already
+    // folds in the same normalization.
+    new CollationKeyedElement(collationKeyBytes(value), complexNormalizer(value))
+  } else child.dataType match {
     /*
      * collect_set() of BinaryType should not return duplicate elements,
      * Java byte arrays use referential equality and identity hash codes
@@ -279,21 +300,49 @@ case class CollectSet(
           case null => null
           case v => java.lang.Float.intBitsToFloat(v.asInstanceOf[Int])
         }.toArray[Any]
+      case _ if needsCollationKey =>
+        buffer.iterator.map {
+          case null => null
+          case v => v.asInstanceOf[CollationKeyedElement].value
+        }.toArray[Any]
       case _ => buffer.toArray
     }
     new GenericArrayData(array)
   }
 
+  // For the collation-key case the buffer holds wrappers, so serialize the original values (typed
+  // as bufferElementType) and re-wrap on deserialize. Recomputing the key on deserialize keeps
+  // post-merge dedup collation-aware. Binary-stable inputs use the base implementations unchanged.
+  override def serialize(obj: mutable.HashSet[Any]): Array[Byte] = if (!needsCollationKey) {
+    super.serialize(obj)
+  } else {
+    val values = obj.iterator.map {
+      case null => null
+      case v => v.asInstanceOf[CollationKeyedElement].value
+    }
+    val array = new GenericArrayData(values.toArray)
+    projection.apply(InternalRow.apply(array)).getBytes()
+  }
+
+  override def deserialize(bytes: Array[Byte]): mutable.HashSet[Any] = if (!needsCollationKey) {
+    super.deserialize(bytes)
+  } else {
+    val buffer = createAggregationBuffer()
+    row.pointTo(bytes, bytes.length)
+    row.getArray(0).foreach(bufferElementType, (_, x: Any) =>
+      buffer += (if (x == null) null else convertToBufferElement(x)))
+    buffer
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (!child.dataType.existsRecursively(_.isInstanceOf[MapType]) &&
-        UnsafeRowUtils.isBinaryStable(child.dataType)) {
+    if (!child.dataType.existsRecursively(_.isInstanceOf[MapType])) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
         errorSubClass = "UNSUPPORTED_INPUT_TYPE",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "dataType" -> (s"${toSQLType(MapType)} " + "or \"COLLATED STRING\"")
+          "dataType" -> toSQLType(MapType)
         )
       )
     }
@@ -322,6 +371,20 @@ case class CollectSet(
 
   override protected def withNewChildInternal(newChild: Expression): CollectSet =
     copy(child = newChild)
+}
+
+/**
+ * A collect_set buffer element for non-binary collated inputs. Equality and hashing use the
+ * collation-aware key bytes, so collation-equal values (e.g. 'foo' and 'FOO' under UTF8_LCASE)
+ * dedup to a single entry, while [[value]] retains the original first-seen value for output.
+ */
+private[aggregate] class CollationKeyedElement(val key: Array[Byte], val value: Any) {
+  override def hashCode(): Int = java.util.Arrays.hashCode(key)
+
+  override def equals(other: Any): Boolean = other match {
+    case that: CollationKeyedElement => java.util.Arrays.equals(key, that.key)
+    case _ => false
+  }
 }
 
 /**

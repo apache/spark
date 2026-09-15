@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, RowOrdering, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -53,6 +53,7 @@ trait DataSourceV2ScanExecBase
    * `SupportsReportOrdering` */
   def ordering: Option[Seq[SortOrder]]
 
+  /** Must be stable for the instance, since `outputPartitioning` memoizes over it. */
   protected def inputPartitions: Seq[InputPartition]
 
   override def simpleString(maxFields: Int): String = {
@@ -88,19 +89,49 @@ trait DataSourceV2ScanExecBase
        |""".stripMargin
   }
 
-  override def outputPartitioning: physical.Partitioning = {
+  /**
+   * The partitioning as the source reported it: one key per input partition, holding every
+   * reported key position, with the partitions in the order those full keys sort into. It is built
+   * from the raw, full-width `HasPartitionKey.partitionKey()` rows, so a consumer of those rows
+   * (`filteredPartitions`) must take the keys, the key types and the order from here, not from the
+   * possibly-projected `outputPartitioning`.
+   *
+   * A `lazy val` because this is the expensive half: it sorts every partition key, wraps each one
+   * and runs a `distinct` over them, and both `outputPartitioning` and `filteredPartitions` ask
+   * for it.
+   */
+  @transient protected lazy val reportedKeyedPartitioning: Option[KeyedPartitioning] = {
     keyGroupedPartitioning match {
       case Some(exprs) if conf.v2BucketingEnabled && KeyedPartitioning.supportsExpressions(exprs) &&
           inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
-        val dataTypes = exprs.map(_.dataType)
-        val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
-        val partitionKeys =
-          inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey()).sorted(rowOrdering)
-        KeyedPartitioning(exprs, partitionKeys)
-      case _ =>
-        super.outputPartitioning
+        // A data source reports its splits in its own order, and a keyed side and a side
+        // re-shuffled onto it have to agree on the order or
+        // `PartitioningCollection.fromPartitionings` refuses them. See `KeyedPartitioning.apply`
+        // for why this is the ordering to sort with.
+        val keys = inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
+          .sorted(KeyedPartitioning.groupedKeyRowOrdering(exprs.map(_.dataType)))
+        Some(KeyedPartitioning(exprs, keys))
+      case _ => None
     }
   }
+
+  // A `lazy val` because the planner asks a node for its partitioning many times, and each ask
+  // would otherwise re-project the reported keys.
+  @transient override lazy val outputPartitioning: physical.Partitioning =
+    reportedKeyedPartitioning match {
+      case Some(partitioning) =>
+        // A partition key may reference a column that was pruned out of the scan output (see
+        // V2ScanPartitioningAndOrdering). Project such unresolvable key positions away so the
+        // reported partitioning only references output columns.
+        val exprs = partitioning.expressions
+        val resolvablePositions = exprs.indices.filter(i => exprs(i).references.subsetOf(outputSet))
+        if (resolvablePositions.isEmpty) {
+          super.outputPartitioning
+        } else {
+          partitioning.project(resolvablePositions)
+        }
+      case _ => super.outputPartitioning
+    }
 
   /**
    * Returns the output ordering for this scan. When the source reports ordering via
