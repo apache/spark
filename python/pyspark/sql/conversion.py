@@ -820,7 +820,11 @@ class LocalDataToArrowConversion:
 
         elif isinstance(dataType, DecimalType):
             exp = decimal.Decimal(f"1E-{dataType.scale}")
-            ctx = decimal.Context(prec=dataType.precision, rounding=decimal.ROUND_HALF_EVEN)
+            # The JVM rounds HALF_UP whenever it rescales a decimal (Decimal.set,
+            # Decimal.changePrecision, CAST), so the pickled Python paths, which let the JVM
+            # rescale, do too. Python's decimal module defaults to HALF_EVEN, which turns
+            # 1.005 into 1.00.
+            ctx = decimal.Context(prec=dataType.precision, rounding=decimal.ROUND_HALF_UP)
 
             def convert_decimal(value: Any) -> Any:
                 if value is None:
