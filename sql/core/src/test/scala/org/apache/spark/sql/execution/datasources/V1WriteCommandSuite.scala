@@ -161,6 +161,24 @@ class V1WriteCommandSuite extends SharedSparkSession with V1WriteCommandSuiteBas
     }
   }
 
+  test("v1 write with CHAR/VARCHAR partition columns applies empty2null") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // The partition values must vary, otherwise the sort on a foldable key is pruned and
+      // there is no output ordering left to match.
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
+        withPlannedWrite { enabled =>
+          withTable("t") {
+            sql(s"CREATE TABLE t(i INT) USING PARQUET PARTITIONED BY (p $typ)")
+            executeAndCheckOrdering(
+              hasLogicalSort = enabled, orderingMatched = enabled, hasEmpty2Null = enabled) {
+              sql("INSERT INTO t SELECT i, k FROM t0")
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("v1 write with partition, bucketed and sort columns") {
     withPlannedWrite { enabled =>
       withTable("t") {

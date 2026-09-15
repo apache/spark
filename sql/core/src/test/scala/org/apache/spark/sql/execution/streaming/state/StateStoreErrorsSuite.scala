@@ -14,28 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.udf.worker.core
 
-import java.io.File
+package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.SparkFunSuite
 
-/**
- * :: Experimental ::
- * A [[WorkerConnection]] over a Unix domain socket. Owns the socket
- * path and removes the socket file on [[close]]. Subclasses provide the
- * protocol-specific channel (e.g. gRPC over UDS) and may override
- * [[close]] to add transport-level shutdown -- they should call
- * `super.close()` to ensure the socket file is removed.
- *
- * [[close]] is idempotent: deleting an already-removed file is a no-op.
- */
-@Experimental
-abstract class UnixSocketWorkerConnection(val socketPath: String)
-  extends WorkerConnection {
+class StateStoreErrorsSuite extends SparkFunSuite {
 
-  override def close(): Unit = {
-    val f = new File(socketPath)
-    if (f.exists()) f.delete()
+  test("SPARK-58945: state store mismatch reports schema details") {
+    checkError(
+      exception = StateStoreErrors.stateStoreColumnFamilyMismatch(
+        "state", "old_schema", "new_schema"),
+      condition = "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE",
+      parameters = Map(
+        "colFamilyName" -> "state",
+        "oldSchema" -> "old_schema",
+        "newSchema" -> "new_schema"))
   }
 }

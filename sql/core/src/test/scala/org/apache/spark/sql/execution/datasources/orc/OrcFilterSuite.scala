@@ -871,7 +871,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       assert(caseSensitiveFilters.isEmpty)
       assert(caseInsensitiveFilters.isDefined)
 
-      assert(caseInsensitiveFilters.get.getLeaves().size() > 0)
+      assert(!caseInsensitiveFilters.get.getLeaves().isEmpty)
       assert(caseInsensitiveFilters.get.getLeaves().size() == expected.getLeaves().size())
       (0 until expected.getLeaves().size()).foreach { index =>
         assert(caseInsensitiveFilters.get.getLeaves().get(index) == expected.getLeaves().get(index))

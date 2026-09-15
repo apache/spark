@@ -22,7 +22,6 @@ import java.util.{HashMap => JHashMap}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
 import org.apache.spark.ml.linalg.{SQLDataTypes, Vectors}
@@ -194,8 +193,11 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     val vocSize = $(vocabSize)
     val input = dataset.select($(inputCol))
     val inputSizeCol = input.select(count(lit(0))).scalar()
-    val minDfCol = if ($(minDF) >= 1.0) lit($(minDF)) else inputSizeCol * lit($(minDF))
-    val maxDfCol = if ($(maxDF) >= 1.0) lit($(maxDF)) else inputSizeCol * lit($(maxDF))
+    val rawMinDfCol = if ($(minDF) >= 1.0) lit($(minDF)) else inputSizeCol * lit($(minDF))
+    val rawMaxDfCol = if ($(maxDF) >= 1.0) lit($(maxDF)) else inputSizeCol * lit($(maxDF))
+    val invalidDfRangeError = raise_error(lit("maxDF must be >= minDF."))
+    val minDfCol = when(rawMaxDfCol >= rawMinDfCol, rawMinDfCol).otherwise(invalidDfRangeError)
+    val maxDfCol = when(rawMaxDfCol >= rawMinDfCol, rawMaxDfCol).otherwise(invalidDfRangeError)
     val filteringRequired = isSet(minDF) || isSet(maxDF)
     val wordCounts = if (filteringRequired) {
       input
@@ -294,31 +296,25 @@ class CountVectorizerModel(
   @Since("2.0.0")
   def setBinary(value: Boolean): this.type = set(binary, value)
 
-  /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
-  private var broadcastDict: Option[Broadcast[JHashMap[String, Integer]]] = None
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
-    if (broadcastDict.isEmpty) {
-      val dict = new JHashMap[String, Integer](math.ceil(vocabulary.length / 0.75).toInt)
-      var index = 0
-      while (index < vocabulary.length) {
-        dict.put(vocabulary(index), index)
-        index += 1
-      }
-      broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
+    val dict = new JHashMap[String, Integer](math.ceil(vocabulary.length / 0.75).toInt)
+    var index = 0
+    while (index < vocabulary.length) {
+      dict.put(vocabulary(index), index)
+      index += 1
     }
-    val dictBr = broadcastDict.get
+    val bcDict = dataset.sparkSession.sparkContext.broadcast(dict)
     val localMinTF = $(minTF)
     val localBinary = $(binary)
     val vectorizer = udf { document: Seq[String] =>
-      val dict = dictBr.value
-      val dictSize = dict.size()
+      val localDict = bcDict.value
+      val dictSize = localDict.size()
       val termCounts = new OpenHashMap[Int, Int]
       var tokenCount = 0L
       document.foreach { term =>
-        val index = dict.get(term)
+        val index = localDict.get(term)
         if (index != null) {
           termCounts.changeValue(index.intValue(), 1, _ + 1)
         }
@@ -326,9 +322,10 @@ class CountVectorizerModel(
       }
       val effectiveMinTF = if (localMinTF >= 1.0) localMinTF else tokenCount * localMinTF
       val effectiveCounts = if (localBinary) {
-        termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, 1.0)).toSeq
+        termCounts.iterator.filter(_._2 >= effectiveMinTF).map(p => (p._1, 1.0)).toSeq
       } else {
-        termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, p._2.toDouble)).toSeq
+        termCounts.iterator
+          .filter(_._2 >= effectiveMinTF).map(p => (p._1, p._2.toDouble)).toSeq
       }
 
       Vectors.sparse(dictSize, effectiveCounts)

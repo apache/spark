@@ -45,6 +45,23 @@ class ConstantFoldingSuite extends PlanTest {
 
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
 
+  test("constantFolding folds a foldable expression tree to a literal") {
+    assert(ConstantFolding.constantFolding(Literal(1) + Literal(2)) == Literal(3))
+  }
+
+  test("constantFolding folds nested foldable subtrees") {
+    assert(ConstantFolding.constantFolding((Literal(1) + Literal(2)) * Literal(3)) == Literal(9))
+  }
+
+  test("constantFolding folds only the foldable parts of a partially-foldable tree") {
+    val a = testRelation.output.head
+    assert(ConstantFolding.constantFolding(a + (Literal(1) + Literal(2))) == a + Literal(3))
+  }
+
+  test("constantFolding returns a literal unchanged") {
+    assert(ConstantFolding.constantFolding(Literal(5)) == Literal(5))
+  }
+
   test("eliminate subqueries") {
     val originalQuery =
       testRelation

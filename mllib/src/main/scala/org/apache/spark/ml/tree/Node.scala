@@ -113,46 +113,39 @@ private[ml] object Node {
    * Create a new Node from the old Node format, recursively creating child nodes as needed.
    */
   def fromOld(oldNode: OldNode, categoricalFeatures: Map[Int, Int]): Node = {
+    fromOld(oldNode, categoricalFeatures, 0)._1
+  }
+
+  private def fromOld(
+      oldNode: OldNode,
+      categoricalFeatures: Map[Int, Int],
+      nextLeafIndex: Int): (Node, Int) = {
     if (oldNode.isLeaf) {
       // TODO: Once the implementation has been moved to this API, then include sufficient
       //       statistics here.
-      new LeafNode(prediction = oldNode.predict.predict,
-        impurity = oldNode.impurity, impurityStats = null)
+      (new LeafNode(prediction = oldNode.predict.predict,
+        impurity = oldNode.impurity, impurityStats = null, leafIndex = nextLeafIndex),
+        nextLeafIndex + 1)
     } else {
       val gain = if (oldNode.stats.nonEmpty) {
         oldNode.stats.get.gain
       } else {
         0.0
       }
-      new InternalNode(prediction = oldNode.predict.predict, impurity = oldNode.impurity,
-        gain = gain, leftChild = fromOld(oldNode.leftNode.get, categoricalFeatures),
-        rightChild = fromOld(oldNode.rightNode.get, categoricalFeatures),
-        split = Split.fromOld(oldNode.split.get, categoricalFeatures), impurityStats = null)
+      val (leftChild, nextIndex) =
+        fromOld(oldNode.leftNode.get, categoricalFeatures, nextLeafIndex)
+      val (rightChild, endIndex) =
+        fromOld(oldNode.rightNode.get, categoricalFeatures, nextIndex)
+      (new InternalNode(prediction = oldNode.predict.predict, impurity = oldNode.impurity,
+        gain = gain, leftChild = leftChild, rightChild = rightChild,
+        split = Split.fromOld(oldNode.split.get, categoricalFeatures), impurityStats = null),
+        endIndex)
     }
   }
 
   // A dummy node used for ml connect only
   val dummyNode: Node = {
     new LeafNode(0.0, 0.0, ImpurityCalculator.getCalculator("gini", Array.empty, 0))
-  }
-
-  /** Return a copy of the tree with left-to-right DFS indices assigned to leaves. */
-  private[ml] def withLeafIndices(rootNode: Node): Node = {
-    withLeafIndices(rootNode, 0)._1
-  }
-
-  private def withLeafIndices(node: Node, nextLeafIndex: Int): (Node, Int) = {
-    node match {
-      case n: LeafNode =>
-        (new LeafNode(n.prediction, n.impurity, n.impurityStats, nextLeafIndex),
-          nextLeafIndex + 1)
-      case n: InternalNode =>
-        val (leftChild, nextIndex) = withLeafIndices(n.leftChild, nextLeafIndex)
-        val (rightChild, endIndex) = withLeafIndices(n.rightChild, nextIndex)
-        val newNode = new InternalNode(n.prediction, n.impurity, n.gain, leftChild, rightChild,
-          n.split, n.impurityStats)
-        (newNode, endIndex)
-    }
   }
 }
 
@@ -340,24 +333,31 @@ private[tree] class LearningNode(
    * Convert this [[LearningNode]] to a regular [[Node]], and recurse on any children.
    */
   def toNode(prune: Boolean = true): Node = {
+    toNode(prune, 0)._1
+  }
 
+  private def toNode(prune: Boolean, nextLeafIndex: Int): (Node, Int) = {
     if (!leftChild.isEmpty || !rightChild.isEmpty) {
       assert(leftChild.nonEmpty && rightChild.nonEmpty && split.nonEmpty && stats != null,
         "Unknown error during Decision Tree learning.  Could not convert LearningNode to Node.")
-      (leftChild.get.toNode(prune), rightChild.get.toNode(prune)) match {
+      val (leftNode, nextIndex) = leftChild.get.toNode(prune, nextLeafIndex)
+      val (rightNode, endIndex) = rightChild.get.toNode(prune, nextIndex)
+      (leftNode, rightNode) match {
         case (l: LeafNode, r: LeafNode) if prune && l.prediction == r.prediction =>
-          new LeafNode(l.prediction, stats.impurity, stats.impurityCalculator)
+          (new LeafNode(l.prediction, stats.impurity, stats.impurityCalculator, nextLeafIndex),
+            nextLeafIndex + 1)
         case (l, r) =>
-          new InternalNode(stats.impurityCalculator.predict, stats.impurity, stats.gain,
-            l, r, split.get, stats.impurityCalculator)
+          (new InternalNode(stats.impurityCalculator.predict, stats.impurity, stats.gain,
+            l, r, split.get, stats.impurityCalculator), endIndex)
       }
     } else {
       if (stats.valid) {
-        new LeafNode(stats.impurityCalculator.predict, stats.impurity,
-          stats.impurityCalculator)
+        (new LeafNode(stats.impurityCalculator.predict, stats.impurity,
+          stats.impurityCalculator, nextLeafIndex), nextLeafIndex + 1)
       } else {
         // Here we want to keep same behavior with the old mllib.DecisionTreeModel
-        new LeafNode(stats.impurityCalculator.predict, -1.0, stats.impurityCalculator)
+        (new LeafNode(stats.impurityCalculator.predict, -1.0, stats.impurityCalculator,
+          nextLeafIndex), nextLeafIndex + 1)
       }
     }
   }

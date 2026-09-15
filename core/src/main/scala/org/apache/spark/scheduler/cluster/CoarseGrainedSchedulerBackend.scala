@@ -697,9 +697,23 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   override def stop(): Unit = {
     reviveThread.shutdownNow()
     cleanupService.foreach(_.shutdownNow())
-    stopExecutors()
-    stopTokenManager()
-    stopUserCredentialManager()
+    // Ensure the token and user-credential managers are always stopped, even if stopExecutors()
+    // throws (e.g. the StopExecutors ask times out during shutdown, which
+    // KubernetesClusterSchedulerBackend.stop already anticipates). Otherwise the
+    // UserCredentialManager renewal thread would be left running while SparkContext.stop()
+    // closes the shared CredentialProviderLoader, causing the renewal task to fail repeatedly
+    // against an already-closed loader. The two stops are independent so that a failure in one
+    // does not skip the other.
+    try {
+      stopExecutors()
+    } finally {
+      Utils.tryLogNonFatalError {
+        stopTokenManager()
+      }
+      Utils.tryLogNonFatalError {
+        stopUserCredentialManager()
+      }
+    }
     try {
       if (driverEndpoint != null) {
         driverEndpoint.askSync[Boolean](StopDriver)
@@ -808,6 +822,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private[spark] def setExecutorsHeld(held: Boolean): Unit = {
     executorsHeld = held
   }
+
+  /**
+   * Report the hold status of the application to the cluster manager, so that it can show the
+   * status on its own UI. Called once the application is fully started and again on every
+   * transition. Ignored by default: only Standalone renders it today.
+   */
+  private[spark] def reportExecutorHoldStatus(supported: Boolean, held: Boolean): Unit = {}
 
   /** Whether an executor total was ever explicitly requested. Visible for testing only. */
   private[spark] def hasExplicitExecutorRequests: Boolean = synchronized {
@@ -1242,12 +1263,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Called from start(), independently of Kerberos/HadoopDelegationTokenManager.
    */
   private def setupUserCredentialManager(): Unit = {
+    // Reuse the loader from SparkContext's selection phase (Some when OIDC is enabled and not
+    // in local mode; None otherwise). Passing the Option straight through keeps SparkContext as
+    // the single owner of the loader: create() enforces that an enabled configuration has a
+    // loader, rather than silently allocating one here that no one would close.
     userCredentialManager = UserCredentialManager.create(conf, { (version, credentials) =>
       // Send to DriverEndpoint to ensure thread-safe access to executorDataMap.
       // This mirrors HadoopDelegationTokenManager's pattern of sending
       // UpdateDelegationTokens via schedulerRef.
       driverEndpoint.send(UpdateUserCredentials(version, credentials))
-    })
+    }, scheduler.sc.userCredentialProviderLoader)
     userCredentialManager.foreach { manager =>
       val (version, initialCredentials) = manager.start()
       // Store initial credentials synchronously so they are available for SparkAppConfig

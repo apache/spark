@@ -42,7 +42,7 @@ class AutoCdcScd2FullRefreshSuite
   import testImplicits._
 
   /** The SCD2 target's `_cdc_metadata` struct value for a given recordStartAt. */
-  private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt)
+  private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt, null)
 
   /** Create an SCD2 target with user columns `(id, name, version)` plus the framework columns. */
   private def createScd2Target(table: String): Unit = {
