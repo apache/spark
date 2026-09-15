@@ -52,6 +52,21 @@ class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with B
     assertSAName("executor-name", spec)
   }
 
+  test("SPARK-59518: an empty executor service account falls back to the driver's") {
+    baseConf.set(KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME, "driver-name")
+    baseConf.set(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME, "")
+    val spec = evaluateStep()
+    assertSAName("driver-name", spec)
+  }
+
+  test("SPARK-59518: an empty executor service account without a driver's leaves the pod " +
+    "untouched") {
+    baseConf.set(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME, "")
+    val spec = evaluateStep()
+    assert(spec.getServiceAccountName === null)
+    assert(spec.getServiceAccount === null)
+  }
+
   private def assertSAName(expectedServiceAccountName: String,
       spec: PodSpec): Unit = {
     assert(spec.getServiceAccountName.equals(expectedServiceAccountName))
