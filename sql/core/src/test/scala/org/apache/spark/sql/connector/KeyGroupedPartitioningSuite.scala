@@ -8249,9 +8249,9 @@ class KeyGroupedPartitioningSuite
         checkAnswer(df, expected)
         // The regrouped marked side can no longer claim the hash-routing contract. Four one-side
         // shuffles, all keyed with unknown partition keys: rt onto the union, rs onto the marked
-        // side once the second join declines, rt2 onto ra2, and the final join's re-shuffle of the
-        // side that was regrouped. Before SPARK-59050 the final join storage-partitioned (only the
-        // first, third and fourth shuffles) and silently lost the id=5 row.
+        // side once the second join declines, rt2 onto ra2, and the final join's one-side shuffle.
+        // Before SPARK-59050 the final join storage-partitioned (only the first and third
+        // shuffles) and silently lost the id=5 row.
         //
         // The second join's shuffle is this fix's. The give-up happens inside the node, so it used
         // to arrive after that join had already committed to the pairing and skipped both

@@ -794,27 +794,25 @@ case class EnsureRequirements(
     }
 
     // The pairing is only worth committing to if both children still declare the same aligned key
-    // sequence once the grouping has been pushed into them. They can fail that. A
-    // `GroupPartitionsExec` gives up its keyed claim when it turns out to regroup a layout that
-    // pins undeclared rows to `hash(key) % numPartitions` (see
-    // `KeyLayout.mayContainUnknownPartitionKeys`), and only the node knows the permutation it
-    // performs, so that answer arrives after the pairing was chosen. Asking before returning is
-    // what keeps the join from skipping both shuffles for a child that no longer satisfies its
-    // distribution, which is a plan `ValidateRequirements` rejects and every AQE rule that needs a
-    // valid plan then refuses to touch.
+    // sequence once the grouping has been pushed into them. A `GroupPartitionsExec` gives up its
+    // keyed claim when it turns out to regroup a layout that pins undeclared rows to
+    // `hash(key) % numPartitions` (see `KeyLayout.mayContainUnknownPartitionKeys`), and only the
+    // node knows the permutation it performs, so that answer arrives after the pairing was chosen.
+    // Asking before returning is what keeps the join from skipping both shuffles for a child that
+    // no longer satisfies its distribution, which is a plan `ValidateRequirements` rejects and
+    // every AQE rule that needs a valid plan then refuses to touch.
     //
     // The check is pairwise, not a per-side `satisfies`. Partially clustered distribution leaves
     // both children value-aligned yet not grouped on purpose, so a per-side gate would refuse that
     // whole family. What both sides owe each other is the key sequence `alignToExpectedKeys`
     // guarantees, each key repeated as many times as the merge expects, whichever side replicates.
-    // Through `KeyLayout.describesSameKeys`, which carries the reason the key types are compared as
-    // well as the rows.
+    // `KeyLayout.describesSameKeys` asks exactly that, and it compares the key types as well as
+    // the rows.
     //
     // Only the push branch rebuilds the children, so only it has to be asked. Where it did not run,
     // the children are the ones the pairing read: `KeyedShuffleSpec.isCompatibleWith` already ends
     // in `describesSameKeys`, and all keyed members of a `PartitioningCollection` share one
     // `KeyLayout`, so whichever member the spec matched on declares what the representative does.
-    // Asking again there would walk both sides' partition keys for an answer that cannot be no.
     def declaredLayout(plan: SparkPlan): Option[KeyLayout] =
       PartitioningCollection.representativeOf(plan.outputPartitioning).map(_.layout)
     def sidesDeclareSameKeys: Boolean =

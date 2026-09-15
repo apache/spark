@@ -917,8 +917,13 @@ case class KeyedPartitioning(
       // either would also need a `GroupPartitionsExec` on this side, and that node gives the keyed
       // claim up rather than perform a non-identity regrouping of a marked layout.
       //
-      // The unprojected spec that comes back is still usable, and is what a consumer is offered:
-      // the other child is laid out on the keys in the order this one reports them.
+      // What the unprojected spec is good for depends on the layout. Where every partition
+      // expression covers a clustering key, so the projection would only have re-sorted, the spec
+      // is usable and is what a consumer is offered: the other child is laid out on the keys in the
+      // order this one reports them. Where the layout narrows, one `keyPositions` entry is empty,
+      // and `canCreatePartitioning` and `areKeysCompatible` both turn the spec away. Nothing is
+      // lost there, because `keysSatisfy` does not call such a child grouped on the operation keys
+      // either.
       if (mayContainUnknownPartitionKeys) {
         return result
       }
@@ -1770,12 +1775,14 @@ case class IdentityReducer(transform: TransformExpression) extends Reducer[Any, 
  *                         projection changed it. `None` therefore means `partitioning` is the one
  *                         the child reports, and a consumer needs no `GroupPartitionsExec` to
  *                         produce it. Only `v2BucketingAllowKeysSubsetOfPartitionKeys` projects at
- *                         all, and it reaches `None` two ways: an identity projection over already
- *                         grouped and sorted keys rebuilds the same partitioning, and a marked
- *                         claim is refused outright, since neither narrowing nor sorting its keys
- *                         leaves the routing it promises for its undeclared rows. Both say the
- *                         child is grouped on the operation keys as it stands, and both leave a
- *                         spec a consumer can be laid out on. See
+ *                         all, and it reaches `None` two ways. An identity projection over already
+ *                         grouped and sorted keys rebuilds the same partitioning. A marked claim is
+ *                         refused outright, since neither narrowing nor sorting its keys leaves the
+ *                         routing it promises for its undeclared rows. The first always leaves a
+ *                         spec a consumer can be laid out on, and so does the second where every
+ *                         partition expression covers a clustering key. A marked claim that narrows
+ *                         does not: one `keyPositions` entry is empty there, which
+ *                         `canCreatePartitioning` and `areKeysCompatible` both turn away. See
  *                         `KeyedPartitioning.createShuffleSpec`.
  */
 case class KeyedShuffleSpec(
