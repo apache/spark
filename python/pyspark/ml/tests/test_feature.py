@@ -1742,12 +1742,15 @@ class FeatureTestsMixin:
         mh.setInputCol("features")
         mh.setOutputCol("hashes")
         mh.setSeed(12345)
+        mh.setHandleInvalid("keep")
 
         self.assertEqual(mh.getInputCol(), "features")
         self.assertEqual(mh.getOutputCol(), "hashes")
         self.assertEqual(mh.getSeed(), 12345)
+        self.assertEqual(mh.getHandleInvalid(), "keep")
 
         model = mh.fit(df)
+        self.assertEqual(model.getHandleInvalid(), "keep")
 
         output = model.transform(df)
         self.assertEqual(output.columns, ["id", "features", "hashes"])
