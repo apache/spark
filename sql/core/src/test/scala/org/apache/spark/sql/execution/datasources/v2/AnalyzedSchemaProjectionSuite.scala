@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
 
-import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CreateNamedStruct, Expression, ExpressionEvalHelper, Literal, MetadataAttribute}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSeq, CreateNamedStruct, Expression, ExpressionEvalHelper, ExtractValue, GetStructField, Literal, MetadataAttribute}
 import org.apache.spark.sql.catalyst.optimizer.FoldablePropagation
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, MetadataColumnHelper}
@@ -32,7 +32,7 @@ import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils, SchemaV
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.unsafe.types.VariantVal
 
-class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
+class AnalyzedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("rebind a root-level addition without inspecting unchanged column types") {
     val capturedTable = new TestTable(Array(
@@ -44,8 +44,8 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
       Column.create("payload", VariantType)))
     val captured = DataSourceV2Relation.create(capturedTable, None, None)
 
-    val project = CapturedSchemaProjection
-      .rebindToCapturedSchema(captured.copy(table = currentTable))
+    val project = AnalyzedSchemaProjection
+      .rebindToAnalyzedSchema(captured.copy(table = currentTable))
       .asInstanceOf[Project]
 
     assert(project.child.output.map(_.name) == Seq("added", "id", "payload"))
@@ -65,7 +65,7 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
     val captured = DataSourceV2Relation.create(table, None, None)
 
     // No projection is added, so an unchanged table keeps the plan it was analyzed with.
-    assert(CapturedSchemaProjection.rebindToCapturedSchema(captured) eq captured)
+    assert(AnalyzedSchemaProjection.rebindToAnalyzedSchema(captured) eq captured)
   }
 
   test("rebind an already rebound relation without stacking a second projection") {
@@ -75,15 +75,15 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
       Column.create("id", IntegerType)))
     val captured = DataSourceV2Relation.create(capturedTable, None, None)
 
-    val project = CapturedSchemaProjection
-      .rebindToCapturedSchema(captured.copy(table = currentTable))
+    val project = AnalyzedSchemaProjection
+      .rebindToAnalyzedSchema(captured.copy(table = currentTable))
       .asInstanceOf[Project]
 
     // `V2TableRefreshUtil` refreshes through `transformDown`, so the rule visits the relation it
     // just rebound. Rebinding must be idempotent there: the second pass has to leave the relation
     // and its attributes alone, or the projection above it would reference stale expression IDs.
     val rebound = project.child.asInstanceOf[DataSourceV2Relation]
-    assert(CapturedSchemaProjection.rebindToCapturedSchema(rebound) eq rebound)
+    assert(AnalyzedSchemaProjection.rebindToAnalyzedSchema(rebound) eq rebound)
   }
 
   test("project a nested field addition around an unchanged variant leaf") {
@@ -463,7 +463,7 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val e = intercept[SparkException] {
-          CapturedSchemaProjection.rebindToCapturedSchema(relation)
+          AnalyzedSchemaProjection.rebindToAnalyzedSchema(relation)
         }
         assert(e.getCondition == "INTERNAL_ERROR")
         assert(e.getMessage.contains("captured column i is missing from current table"))
@@ -486,7 +486,7 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
       identifier = None,
       options = CaseInsensitiveStringMap.empty())
 
-    val rebound = CapturedSchemaProjection.rebindToCapturedSchema(relation).asInstanceOf[Project]
+    val rebound = AnalyzedSchemaProjection.rebindToAnalyzedSchema(relation).asInstanceOf[Project]
     assert(rebound.child.output.map(_.name) == Seq(longS, "s"))
     assert(rebound.output.map(_.name) == Seq("s"))
     assert(rebound.output.map(_.exprId) == relation.output.map(_.exprId))
@@ -495,50 +495,37 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
     assert(read.map(_.exprId) == Seq(rebound.child.output.last.exprId))
   }
 
-  test("bind a captured field to the one that folds alike, not a resolver-equal sibling") {
-    val longS = new String(Character.toChars(0x17f))
-    val currentType = StructType(
-      Seq(StructField(longS, IntegerType), StructField("s", IntegerType)))
+  test("a resolver-equal sibling makes a captured struct field ambiguous") {
+    // Struct-field resolution compares with the resolver alone, so `S` and U+017F are both equal to
+    // `s` and a fresh `SELECT st.s` fails. Rebinding reports the same ambiguity rather than picking
+    // one, in either order. The same pair at the top level is NOT ambiguous, because top-level
+    // resolution folds first - see "bind a captured column to the one that folds alike ..." above.
     val capturedType = StructType(Seq(StructField("s", IntegerType)))
-
-    val projected = project(Literal(create_row(7, 1), currentType), currentType, capturedType)
-    assert(projected.dataType == capturedType)
-    checkEvaluation(projected, create_row(1))
+    Seq(
+      Seq(StructField(longS, IntegerType), StructField("s", IntegerType)),
+      Seq(StructField("S", IntegerType), StructField(longS, IntegerType))).foreach { fields =>
+      val currentType = StructType(fields)
+      val e = intercept[Throwable] {
+        project(Literal(create_row(1, 2), currentType), currentType, capturedType)
+      }
+      assert(condition(e) == "AMBIGUOUS_REFERENCE_TO_FIELDS", s"for ${fields.map(_.name)}")
+    }
   }
 
-  test("bind a captured field to a case-renamed field beside a resolver-equal addition") {
-    // Capture `s`, rename it to `S`, then add U+017F LONG S. Folding with `toLowerCase` keeps `S`
-    // and U+017F apart, so validation matches captured `s` to `S` and takes U+017F as a new field,
-    // and a fresh query resolves `s` to `S` the same way. Rebinding has to agree: comparing with
-    // the resolver instead would find both current names equal to `s` and fail on a legal change.
-    val longS = new String(Character.toChars(0x17f))
-    val currentType = StructType(
-      Seq(StructField("S", IntegerType), StructField(longS, IntegerType)))
-    val capturedType = StructType(Seq(StructField("s", IntegerType)))
-
-    val projected = project(Literal(create_row(1, 2), currentType), currentType, capturedType)
-    assert(projected.dataType == capturedType)
-    checkEvaluation(projected, create_row(1))
-  }
-
-  test("keep the first ordinal when a struct has duplicate field names") {
-    // Upstream validation rejects duplicate names, but `projectToType` resolves ordinals and must
-    // stay deterministic if it is ever reached without that validation: the first match wins.
+  test("duplicate struct field names report the ambiguity resolution reports") {
+    // The duplicate-name check rejects both of these schemas, so this path is unreachable through
+    // refresh. It still must not invent an answer: struct-field resolution calls both ambiguous, so
+    // reaching it without that check has to surface the same error, not silently take an ordinal.
     val capturedType = StructType(Seq(StructField("dup", IntegerType)))
-
-    val exactDuplicates =
-      StructType(Seq(StructField("dup", IntegerType), StructField("dup", IntegerType)))
-    val projected =
-      project(Literal(create_row(1, 2), exactDuplicates), exactDuplicates, capturedType)
-    assert(projected.dataType == capturedType)
-    checkEvaluation(projected, create_row(1))
-
-    // Names that collide only after case folding resolve the same way.
-    val caseDuplicates =
-      StructType(Seq(StructField("dup", IntegerType), StructField("DUP", IntegerType)))
-    checkEvaluation(
-      project(Literal(create_row(1, 2), caseDuplicates), caseDuplicates, capturedType),
-      create_row(1))
+    Seq(
+      Seq(StructField("dup", IntegerType), StructField("dup", IntegerType)),
+      Seq(StructField("dup", IntegerType), StructField("DUP", IntegerType))).foreach { fields =>
+      val currentType = StructType(fields)
+      val e = intercept[Throwable] {
+        project(Literal(create_row(1, 2), currentType), currentType, capturedType)
+      }
+      assert(condition(e) == "AMBIGUOUS_REFERENCE_TO_FIELDS", s"for ${fields.map(_.name)}")
+    }
   }
 
   test("reject a captured field that is missing from the current type") {
@@ -584,7 +571,7 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
       options = CaseInsensitiveStringMap.empty())
 
     val e = intercept[SparkException] {
-      CapturedSchemaProjection.rebindToCapturedSchema(relation)
+      AnalyzedSchemaProjection.rebindToAnalyzedSchema(relation)
     }
     assert(e.getCondition == "INTERNAL_ERROR")
     assert(e.getMessage.contains("Unexpected incompatible table schema after refresh validation"))
@@ -605,7 +592,7 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
       options = CaseInsensitiveStringMap.empty())
 
     val e = intercept[SparkException] {
-      CapturedSchemaProjection.rebindToCapturedSchema(relation)
+      AnalyzedSchemaProjection.rebindToAnalyzedSchema(relation)
     }
     assert(e.getCondition == "INTERNAL_ERROR")
     assert(e.getMessage.contains("Unexpected incompatible table schema after refresh validation"))
@@ -624,7 +611,7 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
       identifier = None,
       options = CaseInsensitiveStringMap.empty())
 
-    val rebound = CapturedSchemaProjection.rebindToCapturedSchema(relation)
+    val rebound = AnalyzedSchemaProjection.rebindToAnalyzedSchema(relation)
     val project = rebound.asInstanceOf[Project]
     assert(project.output.map(_.name) == Seq("id", "index"))
     // Rebinding exists to keep the captured expression IDs valid for the parent plan.
@@ -692,18 +679,307 @@ class CapturedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
       identifier = None,
       options = CaseInsensitiveStringMap.empty())
 
-    val project = CapturedSchemaProjection.rebindToCapturedSchema(relation).asInstanceOf[Project]
+    val project = AnalyzedSchemaProjection.rebindToAnalyzedSchema(relation).asInstanceOf[Project]
     assert(project.child.output.map(_.dataType) == Seq(currentStruct))
     assert(project.output.map(_.dataType) == Seq(capturedStruct))
     assert(project.output.head.metadata == comment, "the captured comment must survive the rebuild")
   }
+
+  // U+017F LONG S folds to itself but `equalsIgnoreCase` equates it with `s`.
+  private val longS = new String(Character.toChars(0x17f))
+  // U+0130 CAPITAL I WITH DOT folds to `i` plus a combining dot, which `equalsIgnoreCase` does
+  // not equate with either. A Turkish default locale keeps the two apart for the duplicate check.
+  private val capitalIDot = new String(Character.toChars(0x130))
+  private val iCombiningDot = "i" + new String(Character.toChars(0x307))
+  // U+00CC/U+00EC differ only by case to both rules, so they are ambiguous rather than distinct.
+  private val capitalIGrave = new String(Character.toChars(0xcc))
+  private val smallIGrave = new String(Character.toChars(0xec))
+
+  /**
+   * One row of the name-matching contract.
+   *
+   * `topExpected` and `nestedExpected` are the recorded behaviour of Spark's own resolution:
+   * `AttributeSeq.resolve` for a top-level column and `ExtractValue.extractValue` for a struct
+   * field. They are written as literals rather than derived from those APIs at run time, so that a
+   * change on either side - ours or Catalyst's - turns this test red instead of silently following.
+   * `Left` is an expected error condition, `Right` an expected ordinal in `current`.
+   *
+   * The two levels differ because Spark's two rules differ: top-level resolution folds names with
+   * `toLowerCase(ROOT)` to collect candidates and only then filters them with the resolver, while
+   * struct-field resolution compares with the resolver alone. A pair the fold separates but the
+   * resolver equates is therefore a distinct column at the top level and ambiguous inside a struct.
+   */
+  private case class NameCase(
+      label: String,
+      captured: String,
+      current: Seq[String],
+      topExpected: Either[String, Int],
+      nestedExpected: Either[String, Int])
+
+  private val nameCases = Seq(
+    NameCase("ascii case rename", "c", Seq("C"), Right(0), Right(0)),
+    NameCase("longS after the captured name", "s", Seq("S", longS),
+      Right(0), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")),
+    NameCase("longS before the captured name", "s", Seq(longS, "S"),
+      Right(1), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")),
+    NameCase("fold-colliding addition first", iCombiningDot, Seq(capitalIDot, iCombiningDot),
+      Right(1), Right(1)),
+    NameCase("fold-colliding addition last", iCombiningDot, Seq(iCombiningDot, capitalIDot),
+      Right(0), Right(0)),
+    NameCase("resolver-equal pair first", smallIGrave, Seq(capitalIGrave, smallIGrave),
+      Left("AMBIGUOUS_REFERENCE"), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")),
+    NameCase("resolver-equal pair last", smallIGrave, Seq(smallIGrave, capitalIGrave),
+      Left("AMBIGUOUS_REFERENCE"), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")),
+    NameCase("case-folding duplicates", "dup", Seq("dup", "DUP"),
+      Left("AMBIGUOUS_REFERENCE"), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")))
+
+  private def condition(t: Throwable): String = t match {
+    case s: SparkThrowable => s.getCondition
+    case other => other.getClass.getSimpleName
+  }
+
+  /** Rebinds a captured column against `current` and reports the ordinal it reads. */
+  private def rebindTopLevel(captured: String, current: Seq[String]): Either[String, Int] = {
+    val relation = DataSourceV2Relation(
+      table = new TestTable(current.map(n => Column.create(n, IntegerType)).toArray),
+      output = Seq(AttributeReference(captured, IntegerType)()),
+      catalog = None,
+      identifier = None,
+      options = CaseInsensitiveStringMap.empty())
+    try {
+      val rebound = AnalyzedSchemaProjection.rebindToAnalyzedSchema(relation).asInstanceOf[Project]
+      val read = rebound.projectList.head.references.head
+      Right(rebound.child.output.indexWhere(_.exprId == read.exprId))
+    } catch {
+      case e: Throwable => Left(condition(e))
+    }
+  }
+
+  /** Projects a captured struct field out of `current` and reports the ordinal it extracts. */
+  private def projectNested(captured: String, current: Seq[String]): Either[String, Int] = {
+    val currentType = StructType(current.map(n => StructField(n, IntegerType)))
+    val capturedType = StructType(Seq(StructField(captured, IntegerType)))
+    try {
+      val projected = project(AttributeReference("st", currentType)(), currentType, capturedType)
+      projected.collect { case g: GetStructField => g.ordinal } match {
+        case Seq(ordinal) => Right(ordinal)
+        case ordinals => Left(s"expected one extraction, got $ordinals")
+      }
+    } catch {
+      case e: Throwable => Left(condition(e))
+    }
+  }
+
+  private def topAuthority(captured: String, current: Seq[String]): Either[String, Int] = {
+    val attrs = current.map(n => AttributeReference(n, IntegerType)())
+    try {
+      AttributeSeq(attrs).resolve(Seq(captured), caseInsensitiveResolution) match {
+        case Some(resolved) =>
+          Right(attrs.indexWhere(_.exprId == resolved.references.head.exprId))
+        case None => Left("NO MATCH")
+      }
+    } catch {
+      case e: Throwable => Left(condition(e))
+    }
+  }
+
+  private def nestedAuthority(captured: String, current: Seq[String]): Either[String, Int] = {
+    val currentType = StructType(current.map(n => StructField(n, IntegerType)))
+    ExtractValue
+      .extractValue(
+        AttributeReference("st", currentType)(), Literal(captured), caseInsensitiveResolution)
+      .fold(
+        extracted => Right(extracted.asInstanceOf[GetStructField].ordinal),
+        throwable => Left(condition(throwable)))
+  }
+
+  test("name matching matches Spark's own resolution (recorded outcomes)") {
+    nameCases.foreach { c =>
+      assert(
+        rebindTopLevel(c.captured, c.current) == c.topExpected,
+        s"top-level '${c.label}': captured ${escapeName(c.captured)} " +
+          s"against ${c.current.map(escapeName)}")
+      assert(
+        projectNested(c.captured, c.current) == c.nestedExpected,
+        s"nested '${c.label}': captured ${escapeName(c.captured)} " +
+          s"against ${c.current.map(escapeName)}")
+    }
+  }
+
+  test("name matching delegates to Spark's own resolution rather than reimplementing it") {
+    // Guards against a future rule of our own drifting from resolution: it compares against the
+    // live APIs, so it also covers name pairs the recorded table above does not list.
+    nameCases.foreach { c =>
+      assert(
+        rebindTopLevel(c.captured, c.current) == topAuthority(c.captured, c.current),
+        s"top-level '${c.label}' must answer what AttributeSeq.resolve answers")
+      assert(
+        projectNested(c.captured, c.current) == nestedAuthority(c.captured, c.current),
+        s"nested '${c.label}' must answer what ExtractValue.extractValue answers")
+    }
+  }
+
+  test("exact duplicate names resolve the way Spark resolves them") {
+    // Kept apart from `nameCases` because two columns with the identical name make `canReuse`
+    // give both the captured attribute, so the rebound output holds one attribute twice rather
+    // than two ambiguous ones. The duplicate-name check rejects this schema under every locale.
+    assert(topAuthority("dup", Seq("dup", "dup")) == Left("AMBIGUOUS_REFERENCE"))
+    assert(nestedAuthority("dup", Seq("dup", "dup")) == Left("AMBIGUOUS_REFERENCE_TO_FIELDS"))
+    assert(projectNested("dup", Seq("dup", "dup")) == Left("AMBIGUOUS_REFERENCE_TO_FIELDS"))
+  }
+
+  test("which locales admit a schema whose names collide under the fold") {
+    // Pins the upstream facts this rebinding must not assume away: the duplicate-name check folds
+    // with the JVM default locale (`SchemaUtils.checkColumnNameDuplication`) while every other fold
+    // here uses `Locale.ROOT`, so a Turkish or Lithuanian default locale admits a pair that an
+    // English one rejects. Rebinding must therefore not rely on the fold being single-valued.
+    def admits(names: Seq[String], locale: String): Boolean = {
+      val previous = util.Locale.getDefault
+      try {
+        util.Locale.setDefault(util.Locale.forLanguageTag(locale))
+        SchemaUtils.checkColumnNameDuplication(names, caseSensitiveAnalysis = false)
+        true
+      } catch {
+        case _: Throwable => false
+      } finally {
+        util.Locale.setDefault(previous)
+      }
+    }
+
+    assert(admits(Seq("S", longS), "en"), "the fold keeps S and U+017F apart under any locale")
+    assert(!admits(Seq(capitalIDot, iCombiningDot), "en"))
+    assert(admits(Seq(capitalIDot, iCombiningDot), "tr"))
+    assert(!admits(Seq(capitalIGrave, smallIGrave), "en"))
+    assert(admits(Seq(capitalIGrave, smallIGrave), "lt"))
+    assert(!admits(Seq("dup", "dup"), "en") && !admits(Seq("dup", "dup"), "tr"))
+  }
+
+  test("refresh validation does not blame field IDs for a fold collision") {
+    // With the addition after the captured column, `SchemaUtils.index` folds both current names to
+    // one key and keeps the later field, so the captured field is compared against the addition and
+    // its ID mismatch is reported - a legal change rejected for the wrong reason.
+    //
+    // Runs under a Turkish default locale because that is what makes the schema admissible at all:
+    // the duplicate-name check folds with the default locale and would otherwise reject the pair.
+    val captured = StructType(Seq(StructField(iCombiningDot, IntegerType).withId("1")))
+    val previousLocale = util.Locale.getDefault
+    try {
+      util.Locale.setDefault(util.Locale.forLanguageTag("tr"))
+      Seq(
+        "addition first" -> Seq(capitalIDot -> "2", iCombiningDot -> "1"),
+        "addition last" -> Seq(iCombiningDot -> "1", capitalIDot -> "2")).foreach {
+        case (label, fields) =>
+          val current = StructType(fields.map { case (n, id) =>
+            StructField(n, IntegerType).withId(id)
+          })
+          val errors = SchemaUtils.validateSchemaCompatibility(
+            captured,
+            current,
+            caseInsensitiveResolution,
+            SchemaValidationMode.ALLOW_NEW_FIELDS,
+            checkFieldIds = true)
+          assert(
+            !errors.exists(_.contains("field ID has changed")),
+            s"$label must not report a field ID change: $errors")
+      }
+    } finally {
+      util.Locale.setDefault(previousLocale)
+    }
+  }
+
+  test("array elements and map entries match names the same way as a bare struct") {
+    // `projectToType` recurses into containers through the same name matching, so a pair that is
+    // ambiguous in a bare struct must stay ambiguous inside an array, a map key and a map value.
+    val currentField = StructType(
+      Seq(StructField("S", IntegerType), StructField(longS, IntegerType)))
+    val capturedField = StructType(Seq(StructField("s", IntegerType)))
+
+    Seq[(String, DataType, DataType)](
+      ("array element",
+        ArrayType(currentField, containsNull = false),
+        ArrayType(capturedField, containsNull = false)),
+      ("map value",
+        MapType(IntegerType, currentField, valueContainsNull = false),
+        MapType(IntegerType, capturedField, valueContainsNull = false)),
+      ("map key",
+        MapType(currentField, IntegerType, valueContainsNull = false),
+        MapType(capturedField, IntegerType, valueContainsNull = false))).foreach {
+      case (label, from, to) =>
+        val e = intercept[Throwable](project(AttributeReference("c", from)(), from, to))
+        assert(
+          condition(e) == "AMBIGUOUS_REFERENCE_TO_FIELDS",
+          s"$label must report the ambiguity struct-field resolution reports, got ${condition(e)}")
+    }
+  }
+
+  test("refresh validation and rebinding agree on which current field a captured name refers to") {
+    // Refresh validation runs first and rebinding assumes it passed. Two things must therefore
+    // never happen: validation accepting a schema that rebinding then cannot map (which would
+    // surface as INTERNAL_ERROR), and rebinding mapping a name that validation would have
+    // rejected. The pairs below make the two halves of the identity rule disagree in each
+    // direction, so a rule that applied only one half fails here.
+    //
+    // The one divergence that is allowed is a struct field the resolver finds ambiguous: struct
+    // fields are resolved with the resolver alone, so rebinding reports the ambiguity a fresh
+    // query reports even though validation, which folds first, paired the field successfully.
+    val rows = Seq(
+      ("fold-equal and resolver-equal", "c", Seq("C")),
+      ("fold-equal but resolver-unequal", iCombiningDot, Seq(capitalIDot)),
+      ("fold-unequal but resolver-equal", "s", Seq(longS)),
+      ("fold-equal beside an ambiguous sibling", "s", Seq("S", longS)))
+
+    rows.foreach { case (label, captured, current) =>
+      val capturedType = StructType(Seq(StructField(captured, IntegerType)))
+      val currentType = StructType(current.map(n => StructField(n, IntegerType)))
+      val validationPasses = SchemaUtils.validateSchemaCompatibility(
+        capturedType,
+        currentType,
+        caseInsensitiveResolution,
+        SchemaValidationMode.ALLOW_NEW_FIELDS,
+        checkFieldIds = false).isEmpty
+
+      Seq(
+        ("top-level", rebindTopLevel(captured, current), topAuthority(captured, current)),
+        ("nested", projectNested(captured, current), nestedAuthority(captured, current))
+      ).foreach { case (level, ours, authority) =>
+        if (validationPasses) {
+          assert(
+            ours != Left("INTERNAL_ERROR"),
+            s"$level '$label': validation accepted this schema, so rebinding must map the name " +
+              s"or report what a fresh query reports, not an internal error")
+          assert(ours == authority, s"$level '$label': must answer what resolution answers")
+        }
+      }
+
+      // The other direction is guarded by order rather than by the rules agreeing: validation folds
+      // names, so it calls a captured field removed when only a name the fold separates but the
+      // resolver equates is left, while struct-field resolution would still read that field. What
+      // keeps the two from disagreeing in practice is that `V2TableRefreshUtil.refresh` throws
+      // `columnsChangedAfterAnalysis` before it rebinds, so this pair never reaches the projection.
+      if (!validationPasses) {
+        assert(
+          SchemaUtils.validateSchemaCompatibility(
+            capturedType,
+            currentType,
+            caseInsensitiveResolution,
+            SchemaValidationMode.ALLOW_NEW_FIELDS,
+            checkFieldIds = false).nonEmpty,
+          s"'$label' must be rejected by validation, which is what stops it reaching rebinding")
+      }
+    }
+  }
+
+  private def escapeName(name: String): String =
+    if (name.forall(c => c > 0x20 && c < 0x7f)) s"'$name'"
+    else name.map(c => f"U+$c%04X").mkString("+")
 
   private def project(
       input: Expression,
       from: DataType,
       to: DataType,
       caseSensitive: Boolean = false): Expression = {
-    CapturedSchemaProjection.projectToType(input, from, to, caseSensitive)
+    val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
+    AnalyzedSchemaProjection.projectToType(input, from, to, resolver)
   }
 
   private def checkRejected(

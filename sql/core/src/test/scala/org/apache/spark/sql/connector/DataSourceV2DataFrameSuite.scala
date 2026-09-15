@@ -23,7 +23,7 @@ import java.util.Collections
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SessionQueryTest, SparkSession}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1732,6 +1732,55 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("a captured nested field a fresh query cannot resolve fails the refreshed query too") {
+    // Spark resolves a top-level column by folding names with `toLowerCase(ROOT)` to collect
+    // candidates and only then filtering them with the resolver, but resolves a struct field with
+    // the resolver alone. Adding U+017F LONG S beside `s` therefore leaves a top-level `s`
+    // resolvable while making a nested `st.s` ambiguous. A refreshed plan has to report that
+    // ambiguity rather than keep reading one of the two, so that a stale plan and a fresh query
+    // agree on whether the name is readable.
+    //
+    // Spark's own DDL refuses the addition at either level (it looks for an existing field with the
+    // resolver and reports FIELD_ALREADY_EXISTS), so it is applied through the catalog the way
+    // another engine would. That is also why this only reaches tables mutated outside Spark.
+    val longS = new String(Character.toChars(0x17f))
+    val t = "testcat.ns1.ns2.tbl"
+
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, st STRUCT<s: INT>) USING foo")
+
+      // Analyze but do not execute: a Dataset memoizes its optimized plan, so collecting here would
+      // refresh once and never see the change below.
+      val stale = spark.table(t).selectExpr("st.s AS v")
+      assert(stale.queryExecution.analyzed.resolved)
+
+      catalog("testcat")
+        .alterTable(testIdent, TableChange.addColumn(Array("st", longS), IntegerType, true))
+
+      val fresh = intercept[Throwable](sql(s"SELECT st.s FROM $t").collect())
+      assert(fresh.asInstanceOf[SparkThrowable].getCondition == "AMBIGUOUS_REFERENCE_TO_FIELDS")
+
+      val refreshed = intercept[Throwable](stale.collect())
+      assert(
+        refreshed.asInstanceOf[SparkThrowable].getCondition == "AMBIGUOUS_REFERENCE_TO_FIELDS",
+        "the refreshed plan must report the ambiguity a fresh query reports")
+    }
+
+    // The same addition at the top level stays readable, for both a fresh and a refreshed plan.
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, s INT) USING foo")
+      val stale = spark.table(t).filter("id > 0")
+      assert(stale.queryExecution.analyzed.resolved)
+
+      val cat = catalog("testcat")
+      cat.alterTable(testIdent, TableChange.addColumn(Array(longS), IntegerType, true))
+      externalAppend(cat, testIdent, InternalRow(1, 10, 99))
+
+      checkAnswer(sql(s"SELECT s FROM $t"), Seq(Row(10)))
+      checkAnswer(stale, Seq(Row(1, 10)))
+    }
+  }
+
   test("rebind a captured column renamed beside an addition the resolver cannot tell apart") {
     // U+017F LONG S folds to itself under `toLowerCase`, so it is a distinct column name to the
     // fold that name resolution and refresh validation key on, while `equalsIgnoreCase` equates it
@@ -1872,7 +1921,7 @@ class DataSourceV2DataFrameSuite
     withTable(t) {
       // A struct is needed between the map and the array: CatalogV2Util.replace only walks into a
       // collection whose element/value type is a struct, so ALTER TABLE cannot reach the inner
-      // field of MAP<STRING, ARRAY<STRUCT<...>>>. CapturedSchemaProjectionSuite covers that shape
+      // field of MAP<STRING, ARRAY<STRUCT<...>>>. AnalyzedSchemaProjectionSuite covers that shape
       // directly at the expression level.
       sql(
         s"""CREATE TABLE $t (
