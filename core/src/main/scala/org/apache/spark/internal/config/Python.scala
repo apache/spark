@@ -118,6 +118,23 @@ private[spark] object Python {
     .booleanConf
     .createWithDefault(false)
 
+  val PYTHON_WORKER_LOGGING_FLUSH_TIMEOUT =
+    ConfigBuilder("spark.python.worker.logging.flushTimeout")
+      .internal()
+      .doc("The maximum time Spark waits, at the end of a task that has Python worker logging " +
+        "enabled, for that task's worker log lines to be captured and saved as blocks before " +
+        "the task completes. This establishes a happens-before relationship so that logs " +
+        "emitted by a query are observable via the `python_worker_logs()` table-valued " +
+        "function in a subsequent query. Worker logs are captured asynchronously from the " +
+        "worker's stdout, which is a separate channel from the task result, so without this " +
+        "wait a following `python_worker_logs()` call can race the capture and return " +
+        "incomplete results. If the timeout is reached the task still completes and a warning " +
+        "is logged. `0` disables the wait.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ >= 0, "The flush timeout should be 0 or positive.")
+      .createWithDefault(10000)
+
   val PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS =
     ConfigBuilder("spark.python.worker.tracebackDumpIntervalSeconds")
       .doc("The interval (in seconds) for Python workers to dump their tracebacks. " +
