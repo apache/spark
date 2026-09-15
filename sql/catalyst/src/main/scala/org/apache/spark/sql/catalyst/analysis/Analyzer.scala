@@ -2352,6 +2352,11 @@ class Analyzer(
                 case FunctionType.TableOnly =>
                   throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
 
+                case FunctionType.Forbidden(error) =>
+                  // SPARK-57759: a catalog denied the lookup and no other candidate holds the
+                  // function; report the denial rather than "routine does not exist".
+                  throw error
+
                 case FunctionType.NotFound =>
                   val searchPath =
                     functionResolution.sqlResolutionPathEntriesForAnalysis.map(_.quoted)
