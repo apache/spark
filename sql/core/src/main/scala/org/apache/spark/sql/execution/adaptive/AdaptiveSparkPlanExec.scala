@@ -134,7 +134,15 @@ case class AdaptiveSparkPlanExec(
     Seq(
       CoalesceBucketsInJoin,
       RemoveRedundantProjects,
+      // Must run before `ensureRequirements`, which asks a `UnionExec` what it reports: it
+      // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
+      // decision under the same value the exchanges were planned against.
+      SnapshotUnionOutputPartitioningConf,
       ensureRequirements,
+      // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, so
+      // every rule below and the execution itself read the answer the exchanges above it were
+      // planned against.
+      StampUnionDecisions,
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       AdjustShuffleExchangePosition,
@@ -163,7 +171,10 @@ case class AdaptiveSparkPlanExec(
       // channel, opt-in). Runs last so skew handling and sort cleanup have settled
       // before placement is decided.
       AQEEnablePipelinedShuffle
-    ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
+    ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules :+
+      // A barrier for a `UnionExec` an injected prep rule just created. Decisions already stamped
+      // above are kept.
+      StampUnionDecisions
   }
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
@@ -188,6 +199,10 @@ case class AdaptiveSparkPlanExec(
   private def postStageCreationRules(outputsColumnar: Boolean) = Seq(
     ApplyColumnarRulesAndInsertTransitions(
       context.session.sessionState.columnarRules, outputsColumnar),
+    // A barrier for a `UnionExec` an injected stage-optimizer or columnar rule just created, which
+    // has no decision yet and would otherwise take one wherever it is first asked. A decision
+    // already stamped on a node is kept, so this pass cannot move one.
+    StampUnionDecisions,
     collapseCodegenStagesRule
   )
 

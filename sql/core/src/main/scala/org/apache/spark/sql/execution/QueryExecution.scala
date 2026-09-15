@@ -826,7 +826,14 @@ object QueryExecution {
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
+      // Must run before `EnsureRequirements`, which asks a `UnionExec` what it reports: it
+      // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
+      // decision under the same value the exchanges were planned against.
+      SnapshotUnionOutputPartitioningConf,
       EnsureRequirements(),
+      // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
+      // the answer to fix is the one the exchanges around it were planned against.
+      StampUnionDecisions,
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       // `PushDownLocalSort` pushes a wider local sort down onto a narrower one below it, so a
@@ -852,6 +859,10 @@ object QueryExecution {
       RemoveRedundantSorts,
       ApplyColumnarRulesAndInsertTransitions(
         sparkSession.sessionState.columnarRules, outputsColumnar = false),
+      // A barrier for a `UnionExec` an injected columnar rule just created, which has no decision
+      // yet and would otherwise take one wherever it is first asked. A decision already stamped on
+      // a node is kept.
+      StampUnionDecisions,
       CollapseCodegenStages()) ++
       (if (subquery) {
         Nil
