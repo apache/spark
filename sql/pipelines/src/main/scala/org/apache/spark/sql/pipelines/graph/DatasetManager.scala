@@ -425,6 +425,30 @@ object DatasetManager extends Logging {
               expectedSequencingType = autoCdcSpec.expectedSequencingType,
               resolver = effectiveResolver
             )
+
+            // `outputSchema` spells the reserved metadata column the way this run's definition
+            // resolves it (the declared spelling, or the canonical one when the declaration omits
+            // it), and the analysis-time read path plans downstream consumers against that same
+            // spelling. The incremental merge below, however, keeps the existing target's spelling.
+            // A case-only difference between the two would leave a downstream case-sensitive
+            // `SELECT *` unable to match the target's column, so reject it here with an actionable
+            // error rather than let it surface as an opaque failure at execution. Reconciling at
+            // analysis time instead is not possible: the read path cannot tell whether this run
+            // keeps the existing spelling (incremental) or rewrites it to canonical (full refresh).
+            AutoCdcReservedNames.reservedFieldCasingDrifts(
+              existingSchema = CatalogV2Util.v2ColumnsToStructType(existingTable.columns()),
+              desiredSchema = outputSchema,
+              resolver = effectiveResolver
+            ).foreach { case (existingColumnName, resolvedColumnName) =>
+              throw new AnalysisException(
+                errorClass = "AUTOCDC_INVALID_STATE.RESERVED_METADATA_COLUMN_CASING_DRIFT",
+                messageParameters = Map(
+                  "tableName" -> table.identifier.unquotedString,
+                  "existingColumnName" -> existingColumnName,
+                  "resolvedColumnName" -> resolvedColumnName
+                )
+              )
+            }
           }
         }
         evolveTable(

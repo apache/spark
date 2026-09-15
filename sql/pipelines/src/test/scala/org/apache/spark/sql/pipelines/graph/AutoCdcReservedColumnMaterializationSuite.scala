@@ -317,4 +317,50 @@ class AutoCdcReservedColumnMaterializationSuite
       s"downstream copy ${copyFields.mkString(",")} should match " +
         s"target ${targetFields.mkString(",")}")
   }
+
+  test("an already-materialized target with an upper-cased reserved column rejects a data-only " +
+    "declaration that omits it") {
+    // Upgrade path, the omitted-declaration case: a target already exists with the reserved
+    // metadata column upper-cased (allowed under case-insensitive AUTO CDC). The user adopts the
+    // new data-only declaration and drops the column, so this run resolves it to the canonical
+    // lower-case name while the incremental merge keeps the existing upper-case one. A
+    // case-sensitive downstream `SELECT *` could not match the two names, so the run is rejected
+    // up front with an actionable error rather than left to fail opaquely during execution.
+    // Reconciling at analysis time is not possible: the read path cannot see the existing catalog
+    // casing, nor whether this run keeps it (incremental) or rewrites it to canonical (refresh).
+    val upperMeta = AutoCdcReservedNames.cdcMetadataColName.toUpperCase(Locale.ROOT)
+    val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, " +
+      s"$upperMeta STRUCT<$del:BIGINT,$ups:BIGINT> NOT NULL)")
+
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 5L))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"), sequencing = functions.col("version")))
+    }
+
+    val ex = intercept[RuntimeException] { runPipeline(ctx) }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "AUTOCDC_INVALID_STATE.RESERVED_METADATA_COLUMN_CASING_DRIFT",
+      sqlState = Some("42000"),
+      parameters = Map(
+        "tableName" ->
+          fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
+        "existingColumnName" -> upperMeta,
+        "resolvedColumnName" -> AutoCdcReservedNames.cdcMetadataColName
+      )
+    )
+  }
 }

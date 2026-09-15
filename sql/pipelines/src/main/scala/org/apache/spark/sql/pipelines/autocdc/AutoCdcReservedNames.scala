@@ -116,4 +116,26 @@ private[pipelines] object AutoCdcReservedNames {
     val appended = engineReserved.filterNot(ef => usedEngineNames.contains(ef.name))
     StructType(rebuilt ++ appended)
   }
+
+  /**
+   * Reserved AUTO CDC fields whose persisted spelling in `existingSchema` differs, case only, from
+   * the spelling this run gives them in `desiredSchema`, as `(existingName, desiredName)` pairs.
+   *
+   * On an incremental run the target's schema merge keeps the existing field spelling, while the
+   * analysis-time read path plans a downstream consumer against `desiredName`. A case-only
+   * difference between the two leaves the planned and persisted schemas disagreeing on the reserved
+   * column, so a case-sensitive downstream `SELECT *` cannot match them. The caller rejects such a
+   * run rather than let that mismatch surface as an opaque failure during execution.
+   */
+  private[pipelines] def reservedFieldCasingDrifts(
+      existingSchema: StructType,
+      desiredSchema: StructType,
+      resolver: Resolver): Seq[(String, String)] = {
+    reservedFields(existingSchema, resolver).flatMap { existingField =>
+      desiredSchema.fields
+        .find(desiredField => resolver(desiredField.name, existingField.name))
+        .filter(_.name != existingField.name)
+        .map(desiredField => (existingField.name, desiredField.name))
+    }
+  }
 }
