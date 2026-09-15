@@ -3595,6 +3595,9 @@ class FunctionsTestsMixin:
 
         check(df.select(F.is_variant_null(v)), [False, False])
         check(df.select(F.is_valid_variant(v)), [True, True])
+        check(df.select(F.variant_array_length(v)), [None, None])
+        check(df.select(F.variant_array_length(v, "$.a")), [None, None])
+        check(df.select(F.variant_array_length(v, df.path)), [None, None])
         check(df.select(F.to_json(F.variant_delete(v, "$.a"))), ["{}", '{"b":2}'])
         check(df.select(F.to_json(F.variant_delete(v, df.path))), ["{}", "{}"])
         check(
@@ -3643,6 +3646,9 @@ class FunctionsTestsMixin:
             ['{"a":1,"z":9}', '{"b":2,"z":9}'],
         )
         arr = F.parse_json(df.arr)
+        check(df.select(F.variant_array_length(arr)), [2, 2])
+        check(df.select(F.variant_array_length(arr, "$[0]")), [None, 1])
+        check(df.select(F.variant_array_length(arr, df.arrpath)), [2, 1])
         check(
             df.select(F.to_json(F.variant_array_append(arr, "$", F.lit(9)))),
             ["[1,2,9]", "[[3],4,9]"],
