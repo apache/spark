@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -30,14 +31,11 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StringType, 
 
 /**
  * A catalog that creates [[InMemoryRowLevelOperationTable]]s carrying a fixed
- * [[SchemaAlignmentConfig]] supplied by the concrete subclass. It returns the live table instance
- * on load (rather than a copy) so the config is preserved for the analyzer.
+ * [[SchemaAlignmentConfig]] supplied by the concrete subclass.
  */
 abstract class SchemaAlignmentTestCatalog extends InMemoryRowLevelOperationTableCatalog {
 
   protected def tableConfig: SchemaAlignmentConfig
-
-  override def loadTable(ident: Identifier): Table = liveTable(ident)
 
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
     if (tables.containsKey(ident)) {
@@ -58,7 +56,7 @@ abstract class SchemaAlignmentTestCatalog extends InMemoryRowLevelOperationTable
 class RelaxedSchemaAlignmentCatalog extends SchemaAlignmentTestCatalog {
   override protected def tableConfig: SchemaAlignmentConfig = new SchemaAlignmentConfig {
     override def allowLegacyStoreAssignmentPolicy(): Boolean = true
-    override def deferCastValidationToRuntime(): Boolean = true
+    override def deferAnsiCastValidationToRuntime(): Boolean = true
   }
 }
 
@@ -124,7 +122,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("deferCastValidationToRuntime: INSERT of an ANSI-incompatible cast") {
+  test("deferAnsiCastValidationToRuntime: INSERT of an ANSI-incompatible cast") {
     withTable(s"$relaxed.t", s"$strict.t") {
       sql(s"CREATE TABLE $relaxed.t (id INT) USING foo")
       sql(s"CREATE TABLE $strict.t (id INT) USING foo")
@@ -145,7 +143,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("deferCastValidationToRuntime: UPDATE with an ANSI-incompatible cast") {
+  test("deferAnsiCastValidationToRuntime: UPDATE with an ANSI-incompatible cast") {
     withTable(s"$relaxed.t", s"$strict.t") {
       sql(s"CREATE TABLE $relaxed.t (id INT, data INT) USING foo")
       sql(s"CREATE TABLE $strict.t (id INT, data INT) USING foo")
@@ -187,7 +185,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("deferCastValidationToRuntime: MERGE with an ANSI-incompatible cast") {
+  test("deferAnsiCastValidationToRuntime: MERGE with an ANSI-incompatible cast") {
     withTable(s"$relaxed.t", s"$strict.t") {
       sql(s"CREATE TABLE $relaxed.t (id INT, data INT) USING foo")
       sql(s"CREATE TABLE $strict.t (id INT, data INT) USING foo")
@@ -213,7 +211,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("deferCastValidationToRuntime: structurally impossible casts are still rejected") {
+  test("deferAnsiCastValidationToRuntime: structurally impossible casts are still rejected") {
     withTable(s"$relaxed.t") {
       sql(s"CREATE TABLE $relaxed.t (d DATE) USING foo")
       withAnsiPolicy {
@@ -222,6 +220,53 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
         intercept[AnalysisException] {
           sql(s"INSERT INTO $relaxed.t VALUES (true)")
         }
+      }
+    }
+  }
+
+  test("schema alignment config survives ALTER TABLE ADD COLUMNS") {
+    withTable(s"$relaxed.t", s"$strict.t") {
+      sql(s"CREATE TABLE $relaxed.t (id INT) USING foo")
+      sql(s"CREATE TABLE $strict.t (id INT) USING foo")
+      sql(s"ALTER TABLE $relaxed.t ADD COLUMNS (data INT)")
+      sql(s"ALTER TABLE $strict.t ADD COLUMNS (data INT)")
+      withAnsiPolicy {
+        sql(s"INSERT INTO $relaxed.t VALUES (1, '5')")
+        checkAnswer(sql(s"SELECT * FROM $relaxed.t"), Row(1, 5))
+        checkError(
+          exception = intercept[AnalysisException](sql(s"INSERT INTO $strict.t VALUES (1, '5')")),
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> s"`$strict`.`t`",
+            "colName" -> "`data`",
+            "srcType" -> "\"STRING\"",
+            "targetType" -> "\"INT\""))
+      }
+    }
+  }
+
+  test("schema alignment config survives schema evolution") {
+    withTable(s"$relaxed.t", s"$strict.t") {
+      sql(s"CREATE TABLE $relaxed.t (id INT) USING foo")
+      sql(s"CREATE TABLE $strict.t (id INT) USING foo")
+      // A schema-evolving write reconstructs the table (adds the `data` column) via the catalog's
+      // alterTable; the config must survive that reconstruction.
+      val evolving = spark.createDataFrame(
+        java.util.Arrays.asList(Row(1, 5)),
+        new StructType().add("id", IntegerType).add("data", IntegerType))
+      evolving.write.mode("append").withSchemaEvolution().insertInto(s"$relaxed.t")
+      evolving.write.mode("append").withSchemaEvolution().insertInto(s"$strict.t")
+      withAnsiPolicy {
+        sql(s"INSERT INTO $relaxed.t VALUES (2, '5')")
+        checkAnswer(sql(s"SELECT * FROM $relaxed.t"), Seq(Row(1, 5), Row(2, 5)))
+        checkError(
+          exception = intercept[AnalysisException](sql(s"INSERT INTO $strict.t VALUES (2, '5')")),
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> s"`$strict`.`t`",
+            "colName" -> "`data`",
+            "srcType" -> "\"STRING\"",
+            "targetType" -> "\"INT\""))
       }
     }
   }
@@ -240,55 +285,75 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     result
   }
 
-  private def assertRelaxedMatchesStrict(targetSchema: StructType, source: DataFrame): Unit =
+  /**
+   * Append `source` by name into a fresh table with `targetSchema` on both the relaxed and the
+   * strict catalog, and assert both reject it at analysis with the same error condition. The point
+   * is that [[SchemaAlignmentConfig.deferAnsiCastValidationToRuntime]] relaxes only the atomic ANSI
+   * store-assignment cast; it must not relax structural checks, so both catalogs behave the same.
+   */
+  private def assertBothReject(
+      targetSchema: StructType, source: DataFrame, condition: String): Unit =
     withAnsiPolicy {
-      val fromRelaxed = appendByName(relaxed, targetSchema, source)
-      val fromStrict = appendByName(strict, targetSchema, source)
-      (fromRelaxed, fromStrict) match {
-        case (Success(relaxedRows), Success(strictRows)) =>
-          assert(relaxedRows.map(_.toString).sorted == strictRows.map(_.toString).sorted,
-            s"relaxed=$relaxedRows strict=$strictRows")
-        case (Failure(relaxedError: AnalysisException), Failure(strictError: AnalysisException)) =>
-          assert(relaxedError.getCondition == strictError.getCondition,
-            s"relaxed=${relaxedError.getCondition} strict=${strictError.getCondition}")
-        case (Failure(_), Failure(_)) =>
-        case _ =>
-          fail(s"relaxed and strict diverged: relaxed=$fromRelaxed strict=$fromStrict")
+      Seq(relaxed, strict).foreach { catalog =>
+        appendByName(catalog, targetSchema, source) match {
+          case Failure(error: SparkThrowable) =>
+            assert(error.getCondition == condition,
+              s"$catalog: expected $condition, got ${error.getCondition}")
+          case other =>
+            fail(s"$catalog: expected rejection with $condition, got $other")
+        }
       }
     }
 
-  test("deferCastValidationToRuntime: renamed nested struct field is still rejected") {
+  /**
+   * Append `source` by name into a fresh table with `targetSchema` on both the relaxed and the
+   * strict catalog, and assert both accept it and store exactly `source`'s rows (round trip).
+   */
+  private def assertBothStore(targetSchema: StructType, source: DataFrame): Unit =
+    withAnsiPolicy {
+      val expected = source.collect().toSeq.map(_.toString).sorted
+      Seq(relaxed, strict).foreach { catalog =>
+        appendByName(catalog, targetSchema, source) match {
+          case Success(rows) =>
+            assert(rows.map(_.toString).sorted == expected, s"$catalog: got $rows")
+          case other =>
+            fail(s"$catalog: expected success storing $expected, got $other")
+        }
+      }
+    }
+
+  test("deferAnsiCastValidationToRuntime: renamed nested struct field is still rejected") {
     val target = new StructType()
       .add("s", new StructType().add("a", IntegerType).add("b", IntegerType))
     val source = spark.createDataFrame(
       java.util.Arrays.asList(Row(Row(1, 2))),
       new StructType().add("s", new StructType().add("a", IntegerType).add("c", IntegerType)))
-    assertRelaxedMatchesStrict(target, source)
+    assertBothReject(target, source, "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
   }
 
-  test("deferCastValidationToRuntime: nullable array element into non-null element type") {
+  test("deferAnsiCastValidationToRuntime: nullable array element into non-null element type") {
     val target = new StructType().add("a", ArrayType(IntegerType, containsNull = false))
     val source = spark.createDataFrame(
       java.util.Arrays.asList(Row(Seq(1, 2))),
       new StructType().add("a", ArrayType(IntegerType, containsNull = true)))
-    assertRelaxedMatchesStrict(target, source)
+    assertBothStore(target, source)
   }
 
-  test("deferCastValidationToRuntime: nullable map value into non-null value type") {
+  test("deferAnsiCastValidationToRuntime: nullable map value into non-null value type") {
     val target = new StructType()
       .add("m", MapType(StringType, IntegerType, valueContainsNull = false))
     val source = spark.createDataFrame(
       java.util.Arrays.asList(Row(Map("k" -> 1))),
       new StructType().add("m", MapType(StringType, IntegerType, valueContainsNull = true)))
-    assertRelaxedMatchesStrict(target, source)
+    assertBothStore(target, source)
   }
 
-  test("deferCastValidationToRuntime: nullable child into non-null struct field") {
+  test("deferAnsiCastValidationToRuntime: nullable child into non-null struct field") {
     val target = new StructType()
       .add("s", new StructType().add("a", IntegerType, nullable = false))
     val source = spark.createDataFrame(
       java.util.Arrays.asList(Row(Row(1))),
       new StructType().add("s", new StructType().add("a", IntegerType, nullable = true)))
-    assertRelaxedMatchesStrict(target, source)
+    assertBothStore(target, source)
   }
 }

@@ -111,13 +111,14 @@ object DataTypeUtils {
       resolver: Resolver,
       context: String,
       storeAssignmentPolicy: StoreAssignmentPolicy.Value,
-      addError: String => Unit): Boolean = {
+      addError: String => Unit,
+      deferAnsiCastValidationToRuntime: Boolean = false): Boolean = {
     (write, read) match {
       case (wArr: ArrayType, rArr: ArrayType) =>
         // run compatibility check first to produce all error messages
         val typesCompatible = canWrite(
           tableName, wArr.elementType, rArr.elementType, byName, resolver, context + ".element",
-          storeAssignmentPolicy, addError)
+          storeAssignmentPolicy, addError, deferAnsiCastValidationToRuntime)
 
         if (wArr.containsNull && !rArr.containsNull) {
           throw QueryCompilationErrors.incompatibleDataToTableNullableArrayElementsError(
@@ -134,10 +135,10 @@ object DataTypeUtils {
         // run compatibility check first to produce all error messages
         val keyCompatible = canWrite(
           tableName, wMap.keyType, rMap.keyType, byName, resolver, context + ".key",
-          storeAssignmentPolicy, addError)
+          storeAssignmentPolicy, addError, deferAnsiCastValidationToRuntime)
         val valueCompatible = canWrite(
           tableName, wMap.valueType, rMap.valueType, byName, resolver, context + ".value",
-          storeAssignmentPolicy, addError)
+          storeAssignmentPolicy, addError, deferAnsiCastValidationToRuntime)
 
         if (wMap.valueContainsNull && !rMap.valueContainsNull) {
           throw QueryCompilationErrors.incompatibleDataToTableNullableMapValuesError(
@@ -155,7 +156,7 @@ object DataTypeUtils {
             val fieldContext = s"$context.${rField.name}"
             val typesCompatible = canWrite(
               tableName, wField.dataType, rField.dataType, byName, resolver, fieldContext,
-              storeAssignmentPolicy, addError)
+              storeAssignmentPolicy, addError, deferAnsiCastValidationToRuntime)
 
             if (byName && !nameMatch) {
               throw QueryCompilationErrors.incompatibleDataToTableUnexpectedColumnNameError(
@@ -199,7 +200,7 @@ object DataTypeUtils {
       case (_: NullType, _) if storeAssignmentPolicy == ANSI => true
 
       case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == ANSI =>
-        if (!Cast.canANSIStoreAssign(w, r)) {
+        if (!Cast.canANSIStoreAssign(w, r) && !deferAnsiCastValidationToRuntime) {
           throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(
             tableName, context, w.catalogString, r.catalogString
           )
@@ -213,12 +214,12 @@ object DataTypeUtils {
       // If write-side data type is a user-defined type, check with its underlying data type.
       case (w, r) if w.isInstanceOf[UserDefinedType[_]] && !r.isInstanceOf[UserDefinedType[_]] =>
         canWrite(tableName, w.asInstanceOf[UserDefinedType[_]].sqlType, r, byName, resolver,
-          context, storeAssignmentPolicy, addError)
+          context, storeAssignmentPolicy, addError, deferAnsiCastValidationToRuntime)
 
       // If read-side data type is a user-defined type, check with its underlying data type.
       case (w, r) if r.isInstanceOf[UserDefinedType[_]] && !w.isInstanceOf[UserDefinedType[_]] =>
         canWrite(tableName, w, r.asInstanceOf[UserDefinedType[_]].sqlType, byName, resolver,
-          context, storeAssignmentPolicy, addError)
+          context, storeAssignmentPolicy, addError, deferAnsiCastValidationToRuntime)
 
       case (w, r) =>
         throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(

@@ -144,7 +144,8 @@ class InMemoryTable(
       advisoryPartitionSize,
       isDistributionStrictlyRequired,
       numRowsPerSplit,
-      id)
+      id,
+      schemaAlignmentConfig = schemaAlignmentConfig)
 
     dataMap.synchronized {
       dataMap.foreach { case (key, splits) =>

@@ -3969,7 +3969,7 @@ class Analyzer(
           TableOutputResolver.resolveOutputColumnsWithGeneratedInfo(
             v2Write.table.name, expected, v2Write.query, v2Write.isByName, conf,
             defaultValueFillMode,
-            deferCastValidationToRuntime = schemaAlignment.deferCastValidationToRuntime())
+            deferAnsiCastValidationToRuntime = schemaAlignment.deferAnsiCastValidationToRuntime())
         if (projection != v2Write.query) {
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>

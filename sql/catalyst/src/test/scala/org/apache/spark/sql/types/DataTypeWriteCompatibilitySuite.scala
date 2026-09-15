@@ -152,6 +152,34 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     )
   }
 
+  test("deferAnsiCastValidationToRuntime relaxes only the atomic cast, not struct field names") {
+    // deferAnsiCastValidationToRuntime relaxes the atomic STRING -> INT store-assignment cast on the
+    // mismatched field, but the field-name check must still reject the write. This guards against
+    // canWrite becoming too broad under the deferred-cast path (it must keep the structural checks).
+    val writeStruct = StructType(Seq(
+      StructField("first", FloatType, nullable = false),
+      StructField("second", StringType, nullable = false)))
+    val readStruct = StructType(Seq(
+      StructField("first", FloatType, nullable = false),
+      StructField("renamed", IntegerType, nullable = false)))
+
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException](
+        DataTypeUtils.canWrite("", writeStruct, readStruct, byName = true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy,
+          errMsg => errs += errMsg, deferAnsiCastValidationToRuntime = true)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`t`",
+        "order" -> "1",
+        "expected" -> "`renamed`",
+        "found" -> "`second`")
+    )
+  }
+
   private val stringPoint2 = StructType(Seq(
     StructField("x", StringType, nullable = false),
     StructField("y", StringType, nullable = false)))

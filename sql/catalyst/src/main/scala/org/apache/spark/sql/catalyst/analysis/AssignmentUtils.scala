@@ -142,7 +142,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         val coerceMode = if (coerceNestedTypes) RECURSE else NONE
         TableOutputResolver.resolveUpdate(
           "", value, actualAttr, conf, err => errors += err, colPath, coerceMode,
-          deferCastValidationToRuntime = schemaAlignment.deferCastValidationToRuntime())
+          deferAnsiCastValidationToRuntime = schemaAlignment.deferAnsiCastValidationToRuntime())
       }
       Assignment(attr, resolvedValue)
     }
@@ -200,14 +200,14 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
             val coerceMode = if (coerceNestedTypes) RECURSE else NONE
             TableOutputResolver.resolveUpdate("", value, col, conf, addError, colPath,
               coerceMode,
-              deferCastValidationToRuntime = schemaAlignment.deferCastValidationToRuntime())
+              deferAnsiCastValidationToRuntime = schemaAlignment.deferAnsiCastValidationToRuntime())
         }
       } else {
         val value = exactAssignments.head.value
         val coerceMode = if (coerceNestedTypes) RECURSE else NONE
         TableOutputResolver.resolveUpdate("", value, col, conf, addError,
           colPath, coerceMode,
-          deferCastValidationToRuntime = schemaAlignment.deferCastValidationToRuntime())
+          deferAnsiCastValidationToRuntime = schemaAlignment.deferAnsiCastValidationToRuntime())
       }
     } else {
       applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath, coerceNestedTypes,
@@ -292,7 +292,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
               TableOutputResolver.resolveUpdate(
                 "", sourceFieldValue, fieldAttr, conf, addError,
                 fieldPath, coerceMode,
-                deferCastValidationToRuntime = schemaAlignment.deferCastValidationToRuntime())
+                deferAnsiCastValidationToRuntime =
+                  schemaAlignment.deferAnsiCastValidationToRuntime())
           }
         }
         val namedStruct = toNamedStruct(structType, updatedFieldExprs)

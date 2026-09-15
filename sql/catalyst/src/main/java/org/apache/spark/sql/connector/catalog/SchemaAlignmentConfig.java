@@ -20,10 +20,11 @@ package org.apache.spark.sql.connector.catalog;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * Schema-alignment configuration for writes to a {@link Table}. This allows connectors to
- * configure casting behavior and handling of schema mismatches during writes.
+ * Schema-alignment configuration for batch/row-level writes to a {@link Table}. This allows
+ * connectors to configure casting behavior and handling of schema mismatches during DSv2 writes.
+ * It is not consulted for streaming writes, which do not go through this alignment path.
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
 @Evolving
 public interface SchemaAlignmentConfig {
@@ -46,7 +47,7 @@ public interface SchemaAlignmentConfig {
    * store-assignment compatibility check and inserts an ANSI cast, so malformed values or
    * overflows surface at execution time.
    */
-  default boolean deferCastValidationToRuntime() {
+  default boolean deferAnsiCastValidationToRuntime() {
     return false;
   }
 }

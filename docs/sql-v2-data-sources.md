@@ -205,6 +205,7 @@ A `Table` provides:
 | `partitioning()` | Physical partitioning expressed as `Transform` arrays |
 | `properties()` | A string map of table properties |
 | `capabilities()` | A set of `TableCapability` values declaring what the table supports |
+| `schemaAlignmentConfig()` | A `SchemaAlignmentConfig` controlling how a query is aligned to the table schema during batch / row-level writes |
 
 ### Read and Write Mix-ins
 

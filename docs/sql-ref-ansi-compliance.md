@@ -226,6 +226,9 @@ INSERT INTO test VALUES (2147483648L);
 org.apache.spark.SparkArithmeticException: [CAST_OVERFLOW_IN_TABLE_INSERT] Fail to insert a value of "BIGINT" type into the "INT" type column `i` due to an overflow. Use `try_cast` on the input value to tolerate overflow and return NULL instead.
 ```
 
+By default, invalid source/target combinations are rejected during analysis.
+Data sources may instead defer this validation to execution time, so an insertion is rejected only when a value is actually malformed or overflows, not during analysis.
+
 ### Type coercion
 #### Type Promotion and Precedence
 When `spark.sql.ansi.enabled` is set to `true`, Spark SQL uses several rules that govern how conflicts between data types are resolved.
