@@ -204,7 +204,14 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
             LeftAnti, Option(finalJoinCond), JoinHint(None, subHint))
         case (p, predicate) =>
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
-          Project(p.output, Filter(newCond.get, inputPlan))
+          if (inputPlan.fastEquals(p)) {
+            // No existence join was introduced, so there is no `exists` attribute to project
+            // away. Re-wrapping in a Project here would make this rule rewrite its own output
+            // indefinitely. See SPARK-58442.
+            Filter(newCond.get, p)
+          } else {
+            Project(p.output, Filter(newCond.get, inputPlan))
+          }
       }
 
     // This case takes care of predicate subqueries in join conditions that are not pushed down
@@ -403,8 +410,18 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     plan: LogicalPlan): (Option[Expression], LogicalPlan, Seq[Attribute]) = {
     var newPlan = plan
     val introducedAttrs = ArrayBuffer.empty[Attribute]
-    val newExprs = exprs.map { e =>
-      e.transformDownWithPruning(_.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
+
+    // Rewriting IN/NOT IN to an ExistenceJoin represents the result as a non-nullable `exists`
+    // flag, which maps the three-valued IN result NULL to FALSE. That is only sound where NULL
+    // and FALSE are indistinguishable, so only recurse through And/Or. An uncorrelated IN left
+    // in place is executed by InSubqueryExec, which is three-valued; a correlated one must be
+    // rewritten regardless because it requires decorrelation. See SPARK-58442.
+    def rewrite(expr: Expression, nullInsensitive: Boolean): Expression = {
+      if (!expr.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
+        return expr
+      }
+      expr match {
+        // EXISTS is two-valued, so a non-nullable flag is sound in any position.
         case Exists(sub, _, _, conditions, subHint) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           val existenceJoin = ExistenceJoin(exists)
@@ -414,7 +431,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
               existenceJoin, newCondition, subHint)
           introducedAttrs += exists
           exists
-        case Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
+        case Not(InSubquery(values, l @ ListQuery(sub, _, _, _, conditions, subHint)))
+            if canRewriteToExistenceJoin(values, l, conditions, nullInsensitive) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
@@ -439,7 +457,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
             ExistenceJoin(exists), Some(finalJoinCond), joinHint)
           introducedAttrs += exists
           Not(exists)
-        case InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)) =>
+        case InSubquery(values, l @ ListQuery(sub, _, _, _, conditions, subHint))
+            if canRewriteToExistenceJoin(values, l, conditions, nullInsensitive) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
@@ -450,9 +469,36 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
             ExistenceJoin(exists), newConditions, joinHint)
           introducedAttrs += exists
           exists
+        // Leave the three-valued IN/NOT IN in place where NULL is observable. It is uncorrelated,
+        // so InSubqueryExec evaluates it directly with three-valued semantics.
+        case n @ Not(_: InSubquery) => n
+        case in: InSubquery => in
+        // NULL and FALSE stay indistinguishable below And/Or, and an Alias only names the
+        // result rather than observing it.
+        case _: And | _: Or | _: Alias =>
+          expr.mapChildren(child => rewrite(child, nullInsensitive))
+        case other => other.mapChildren(child => rewrite(child, nullInsensitive = false))
       }
     }
+
+    // Callers pass filter/join condition roots, where NULL and FALSE both reject the row.
+    val newExprs = exprs.map(rewrite(_, nullInsensitive = true))
     (newExprs.reduceOption(And), newPlan, introducedAttrs.toSeq)
+  }
+
+  /**
+   * An IN/NOT IN subquery is three-valued but an [[ExistenceJoin]]'s `exists` flag is not, so the
+   * rewrite maps NULL to FALSE. Rewrite only where that is unobservable, or where leaving the
+   * subquery in place is not an option: a correlated subquery must be decorrelated into a join, and
+   * a multi-column probe is compared as a whole struct by `InSubqueryExec`, which treats NULL as
+   * equal to NULL rather than comparing row-wise. See SPARK-58442.
+   */
+  private def canRewriteToExistenceJoin(
+      values: Seq[Expression],
+      query: ListQuery,
+      conditions: Seq[Expression],
+      nullInsensitive: Boolean): Boolean = {
+    nullInsensitive || query.isCorrelated || conditions.nonEmpty || values.length > 1
   }
 }
 

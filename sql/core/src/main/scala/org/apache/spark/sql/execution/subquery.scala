@@ -125,7 +125,9 @@ case class InSubqueryExec(
 
   @transient private lazy val inSet = InSet(child, result.toSet)
 
-  override def nullable: Boolean = child.nullable
+  // A NULL in the subquery result makes a non-matching probe evaluate to NULL, so the left side's
+  // nullability alone understates it. See SPARK-58442.
+  override def nullable: Boolean = child.nullable || plan.output.exists(_.nullable)
   override def toString: String = s"$child IN ${plan.name}"
   override def withNewPlan(plan: BaseSubqueryExec): InSubqueryExec =
     copy(plan = plan, result = null)
