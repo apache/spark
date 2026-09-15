@@ -35,6 +35,16 @@ class LikeSimplificationSuite extends PlanTest {
         LikeSimplification) :: Nil
   }
 
+  // Runs LikeSimplification to a fixed point alongside the operator-optimization rules that can
+  // rebuild the residual Like (and drop its idempotence tag). Deliberately excludes the rules that
+  // collapse an empty LocalRelation (PropagateEmptyRelation / ConvertToLocalRelation), which the
+  // full optimizer would apply -- they would erase the Filter and the derived predicate we assert.
+  object OptimizeWithFixedPoint extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Operator Optimization", FixedPoint(100),
+        LikeSimplification, BooleanSimplification, PruneFilters) :: Nil
+  }
+
   val testRelation = LocalRelation($"a".string)
 
   test("simplify Like into StartsWith") {
@@ -310,6 +320,72 @@ class LikeSimplificationSuite extends PlanTest {
     val originalQuery = testRelation.where($"a".substring(1, 5) likeAny("abc%", "", "ab")).analyze
 
     comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("derive StartsWith prefix guard for leading-literal LIKE 'a%b%'") {
+    val originalQuery = testRelation.where($"a" like "a%b%")
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where(StartsWith($"a", "a") && ($"a" like "a%b%"))
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("derive StartsWith prefix guard with a multi-char prefix and multiple wildcards") {
+    val originalQuery = testRelation.where($"a" like "ab%cd%ef")
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where(StartsWith($"a", "ab") && ($"a" like "ab%cd%ef"))
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("derive StartsWith prefix guard when the pattern uses '_' wildcards") {
+    val originalQuery = testRelation.where($"a" like "a_b%")
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where(StartsWith($"a", "a") && ($"a" like "a_b%"))
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("no StartsWith prefix guard when the pattern has no leading literal") {
+    val originalQuery = testRelation.where($"a" like "%b%c%").analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("no StartsWith prefix guard when the pattern contains the escape char") {
+    val originalQuery = testRelation.where($"a" like "a\\%b%").analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("no StartsWith prefix guard for non-binary collation") {
+    val relation = LocalRelation(AttributeReference("a", StringType("UTF8_LCASE"))())
+    val lcase = StringType("UTF8_LCASE")
+    val originalQuery =
+      relation.where(Like(relation.output.head, Literal.create("a%b%", lcase), '\\')).analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("SPARK-59185: no StartsWith prefix guard when the child is not a cheap expression") {
+    // The derivation duplicates the child (`StartsWith(child, ..) && (child LIKE ..)`). Mirroring
+    // the SPARK-40228 gate on the multiLike rules, it must not fire for a non-cheap child:
+    // duplicating one re-evaluates it (and a nondeterministic child would yield two values).
+    val originalQuery = testRelation.where($"a".substring(1, 5) like "a%b%").analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("SPARK-59185: prefix guard derivation is idempotent under a fixed-point batch") {
+    // Not a Once batch: running to a fixed point alongside BooleanSimplification/PruneFilters
+    // exercises the LIKE_PREFIX_GUARDED tag. Were it lost, LikeSimplification would re-derive the
+    // StartsWith on every iteration -- double-wrapping it and eventually tripping the batch's
+    // max-iterations check -- instead of converging to a single guarded rewrite.
+    val originalQuery = testRelation.where($"a" like "a%b%").analyze
+    val optimized = OptimizeWithFixedPoint.execute(originalQuery)
+    val correctAnswer = testRelation
+      .where(StartsWith($"a", "a") && ($"a" like "a%b%"))
+      .analyze
+    comparePlans(optimized, correctAnswer)
   }
 
   // scalastyle:off nonascii
