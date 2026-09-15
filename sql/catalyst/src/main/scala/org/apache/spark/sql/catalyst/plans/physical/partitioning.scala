@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
+import java.util.concurrent.ConcurrentHashMap
+
 import scala.annotation.tailrec
 import scala.collection.immutable.BitSet
 import scala.collection.mutable
@@ -28,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.util.TransientBestEffortLazyVal
 
 /**
  * Specifies how tuples that share common expressions will be distributed when a query is executed
@@ -813,19 +816,44 @@ case class KeyedPartitioning(
     KeyedPartitioning.projectKeys(partitionKeys, keyDataTypes, positions)
 
   /**
+   * The counts `numPartitionsProjectedOn` has already worked out, by position set.
+   *
+   * Memoized here rather than at a caller because there is no one caller. `satisfies` asks this
+   * question now, and `EnsureRequirements`, `ValidateRequirements` and every `AQEShuffleReadRule`
+   * application all ask `satisfies` of the same partitioning, so a memo scoped to one rule pass
+   * would miss most of the repeats. The partitioning is immutable and the answer depends only on
+   * the keys and the position set, so the cache cannot go stale.
+   *
+   * Not a constructor field, so it stays out of the product and leaves equality, `hashCode` and
+   * canonicalization alone. The map is built on first use, and only for a partitioning something
+   * actually asks a narrowing question of. On the default configuration nothing does, since
+   * `mayProjectToClusterKeys` requires
+   * `spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys`.
+   *
+   * [[TransientBestEffortLazyVal]] rather than a `lazy val`, for the reason that class exists: a
+   * Scala 2 `lazy val` locks the instance to initialize it, and this is read from whichever thread
+   * is planning or validating. Two threads racing here each build an empty map and one is dropped,
+   * which is all the best-effort part costs.
+   */
+  private val projectedPartitionCounts =
+    new TransientBestEffortLazyVal[ConcurrentHashMap[BitSet, java.lang.Integer]](
+      () => new ConcurrentHashMap[BitSet, java.lang.Integer]())
+
+  /**
    * The number of partitions a `GroupPartitionsExec` projecting these keys to `positions` would
    * leave, which is the number of distinct projected keys. Every position has to be in range, as
    * it must be for `project` and `projectKeys`, and a [[BitSet]] keeps them distinct. The order it
    * puts them in does not matter here, since only the count is asked for.
    *
    * A projection that keeps every position is the identity on the key values, so it needs no
-   * projected rows at all. The rest allocate a row per partition and hash it with an uncached
-   * `hashCode`, which makes this the expensive question to ask of a partitioning. A caller asking
-   * it for several position sets should memoize on the set.
+   * projected rows at all, and that case is answered before the memo is touched. The rest allocate
+   * a row per partition and hash it with an uncached `hashCode`, which makes this the expensive
+   * question to ask of a partitioning, so the answer is kept (see `projectedPartitionCounts`).
    */
   def numPartitionsProjectedOn(positions: BitSet): Int = {
     if (positions.size < expressions.length) {
-      projectKeys(positions.toSeq)._2.distinct.size
+      projectedPartitionCounts.apply().computeIfAbsent(positions,
+        _ => projectKeys(positions.toSeq)._2.distinct.size)
     } else if (isGrouped) {
       numPartitions
     } else {
