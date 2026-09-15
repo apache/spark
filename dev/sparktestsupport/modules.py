@@ -617,6 +617,7 @@ pyspark_core = Module(
         # unittests for upstream projects
         "pyspark.tests.upstream.numpy.test_numpy_ufunc_type_coercion",
         "pyspark.tests.upstream.pandas.test_pandas_api_types",
+        "pyspark.tests.upstream.pandas.test_pandas_series_astype",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_default",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_non_default",
