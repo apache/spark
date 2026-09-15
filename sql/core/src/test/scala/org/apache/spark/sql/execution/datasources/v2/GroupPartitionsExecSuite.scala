@@ -351,7 +351,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
   }
 
   test("SPARK-59050: a grouping that rewrites the declared keys drops the claim") {
-    // `identityGrouping` also asks whether the grouping rewrote the keys: the claim the node
+    // `PartitionGrouping.isIdentity` also asks whether the grouping rewrote the keys. The claim
     // goes on to declare lives in the projected or reduced key space, while the child's
     // undeclared rows still sit at hash(originalKey) % numPartitions. A reducer slot, a
     // narrowing projection, or a reordering projection therefore gives up the claim even when
