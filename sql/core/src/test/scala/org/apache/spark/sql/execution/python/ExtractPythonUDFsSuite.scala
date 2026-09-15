@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.plans.logical.{ArrowEvalPython, BatchEvalPython, Limit, LocalLimit}
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -24,6 +25,7 @@ import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{CharType, DataType, StringType}
 
 class ExtractPythonUDFsSuite extends SharedSparkSession {
   import testImplicits._
@@ -31,6 +33,14 @@ class ExtractPythonUDFsSuite extends SharedSparkSession {
   val batchedPythonUDF = new MyDummyPythonUDF
   val batchedNondeterministicPythonUDF = new MyDummyNondeterministicPythonUDF
   val scalarPandasUDF = new MyDummyScalarPandasUDF
+
+  private def typedPythonUDF(dataType: DataType, evalType: Int) =
+    UserDefinedPythonFunction(
+      name = "typedPythonUDF",
+      func = new DummyUDF,
+      dataType = dataType,
+      pythonEvalType = evalType,
+      udfDeterministic = true)
 
   private def collectBatchExec(plan: SparkPlan): Seq[BatchEvalPythonExec] = plan.collect {
     case b: BatchEvalPythonExec => b
@@ -54,6 +64,39 @@ class ExtractPythonUDFsSuite extends SharedSparkSession {
       .withColumn("d", scalarPandasUDF(col("c")))
     val arrowEvalNodes = collectArrowExec(df2.queryExecution.executedPlan)
     assert(arrowEvalNodes.size == 1)
+  }
+
+  test("CHAR/VARCHAR intermediate results split chained Python UDFs") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val df = Seq(("Hello", 4)).toDF("a", "b")
+      val batchInner = typedPythonUDF(CharType(3), PythonEvalType.SQL_BATCHED_UDF)
+      val batchOuter = typedPythonUDF(StringType, PythonEvalType.SQL_BATCHED_UDF)
+      val arrowInner = typedPythonUDF(CharType(3), PythonEvalType.SQL_SCALAR_PANDAS_UDF)
+      val arrowOuter = typedPythonUDF(StringType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
+
+      assert(collectBatchExec(
+        df.select(batchOuter(batchInner(col("a")))).queryExecution.executedPlan).size == 2)
+      assert(collectArrowExec(
+        df.select(arrowOuter(arrowInner(col("a")))).queryExecution.executedPlan).size == 2)
+    }
+  }
+
+  test("Legacy CHAR/VARCHAR intermediate results retain Python UDF chaining") {
+    withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val df = Seq(("Hello", 4)).toDF("a", "b")
+      val batchInner = typedPythonUDF(CharType(3), PythonEvalType.SQL_BATCHED_UDF)
+      val batchOuter = typedPythonUDF(StringType, PythonEvalType.SQL_BATCHED_UDF)
+      val arrowInner = typedPythonUDF(CharType(3), PythonEvalType.SQL_SCALAR_PANDAS_UDF)
+      val arrowOuter = typedPythonUDF(StringType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
+
+      assert(collectBatchExec(
+        df.select(batchOuter(batchInner(col("a")))).queryExecution.executedPlan).size == 1)
+      assert(collectArrowExec(
+        df.select(arrowOuter(arrowInner(col("a")))).queryExecution.executedPlan).size == 1)
+    }
   }
 
   test("Mixed Batched Python UDFs and Pandas UDF should be separate physical node") {

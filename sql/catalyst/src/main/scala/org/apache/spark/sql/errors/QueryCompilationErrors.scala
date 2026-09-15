@@ -3031,6 +3031,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("config" -> toSQLConf(config)))
   }
 
+  def invalidPythonUDTFReturnType(dataType: DataType): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.PYTHON_UDTF_CHAR_VARCHAR_RETURN_TYPE",
+      messageParameters = Map("dataType" -> toSQLType(dataType)))
+  }
+
+  def invalidPythonStateSchema(
+      dataType: DataType,
+      schemaKind: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.PYTHON_STATE_CHAR_VARCHAR_SCHEMA",
+      messageParameters = Map("dataType" -> toSQLType(dataType), "schemaKind" -> schemaKind))
+  }
+
   def externalUDFWithMultipleChildrenUnsupportedError(udf: Expression): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.EXTERNAL_UDF_WITH_MULTIPLE_CHILDREN",

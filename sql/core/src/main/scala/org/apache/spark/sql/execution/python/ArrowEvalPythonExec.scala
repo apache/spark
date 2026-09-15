@@ -24,6 +24,7 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -191,7 +192,7 @@ class ArrowEvalPythonEvaluatorFactory(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+    extends EvalPythonEvaluatorFactory(childOutput, udfs, output, outputAlreadyChecked = false) {
 
   override def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
@@ -200,9 +201,12 @@ class ArrowEvalPythonEvaluatorFactory(
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
 
-    val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
-      case udt: UserDefinedType[_] => udt.sqlType
-    })
+    val outputTypes = output.drop(childOutput.length).map { attr =>
+      CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(
+        attr.dataType.transformRecursively {
+          case udt: UserDefinedType[_] => udt.sqlType
+        })
+    }
 
     val batchIter = Iterator(iter)
 

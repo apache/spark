@@ -18,14 +18,15 @@
 import unittest
 from decimal import Decimal
 
-from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
+from pyspark.errors import AnalysisException, PythonException
 from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row
-from pyspark.sql.functions import col, udf
+from pyspark.sql.functions import col, lit, pandas_udf, udf
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
+    CharType,
     DayTimeIntervalType,
     DecimalType,
     MapType,
@@ -270,17 +271,84 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             rounded = df.select(f("v").alias("d")).first().d
             self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
-    def test_err_return_type(self):
-        with self.assertRaises(PySparkNotImplementedError) as pe:
-            udf(lambda x: x, VarcharType(10), useArrow=True)
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={
-                "feature": "Invalid return type with Arrow-optimized Python UDF: VarcharType(10)"
-            },
+    def test_char_varchar_results(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("v", VarcharType(3)),
+                StructField("nested", ArrayType(CharType(2))),
+                StructField("m", MapType(CharType(2), VarcharType(3))),
+            ]
         )
+
+        with self.sql_conf(
+            {
+                "spark.sql.charVarchar.standardSemantics.enabled": "true",
+                "spark.sql.execution.arrow.pythonUDF.columnarInput.enabled": "true",
+            }
+        ):
+            result = self.spark.range(1).select(
+                udf(
+                    lambda _: ("ab", "xyz", ["z"], {"k": "xy"}),
+                    schema,
+                    useArrow=True,
+                )("id").alias("s")
+            )
+            self.assertEqual(
+                result.first().s,
+                Row(c="ab  ", v="xyz", nested=["z "], m={"k ": "xy"}),
+            )
+
+            pandas_result = self.spark.range(1).select(
+                pandas_udf(lambda values: values, CharType(4))(lit("ab")).alias("c")
+            )
+            self.assertEqual(pandas_result.first().c, "ab  ")
+
+            invalid = self.spark.range(1).select(
+                udf(lambda _: "abcd", VarcharType(3), useArrow=True)("id")
+            )
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                invalid.collect()
+
+    def test_char_varchar_results_legacy_as_string(self):
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            result = self.spark.range(1).select(
+                udf(lambda _: "a", CharType(3), useArrow=True)("id").alias("c"),
+                udf(lambda _: "abcd", VarcharType(3), useArrow=True)("id").alias("v"),
+            )
+            self.assertEqual(result.first(), Row(c="a", v="abcd"))
+
+    def test_char_varchar_intermediate_udf_results_arrow(self):
+        inner_char = udf(lambda _: "a", CharType(3), useArrow=True)
+        inner_varchar = udf(lambda _: "abcd", VarcharType(3), useArrow=True)
+        outer = udf(lambda value: value, StringType(), useArrow=True)
+
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            padded = self.spark.range(1).select(outer(inner_char("id")).alias("result"))
+            self.assertEqual(padded.first().result, "a  ")
+
+            invalid = self.spark.range(1).select(outer(inner_varchar("id")))
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                invalid.collect()
+
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            result = self.spark.range(1).select(
+                outer(inner_char("id")).alias("c"),
+                outer(inner_varchar("id")).alias("v"),
+            )
+            self.assertEqual(result.first(), Row(c="a", v="abcd"))
 
     def test_named_arguments_negative(self):
         @udf("int")

@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRe
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.{DataFrameReader => ClassicDataFrameReader}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ExpressionUtils.expression
@@ -128,7 +129,19 @@ private[sql] object PythonSQLUtils extends Logging {
       arr: Array[Byte],
       returnType: StructType,
       deserializer: ExpressionEncoder.Deserializer[Row]): Row = {
-    val fromJava = EvaluatePython.makeFromJava(returnType)
+    toJVMRow(
+      arr,
+      returnType,
+      deserializer,
+      CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get))
+  }
+
+  def toJVMRow(
+      arr: Array[Byte],
+      returnType: StructType,
+      deserializer: ExpressionEncoder.Deserializer[Row],
+      applyCharVarcharChecks: Boolean): Row = {
+    val fromJava = EvaluatePython.makeFromJava(returnType, applyCharVarcharChecks)
     val internalRow =
         fromJava(withInternalRowUnpickler(_.loads(arr))).asInstanceOf[InternalRow]
     deserializer(internalRow)

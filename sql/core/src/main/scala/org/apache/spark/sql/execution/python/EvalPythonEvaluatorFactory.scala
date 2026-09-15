@@ -26,6 +26,7 @@ import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -33,8 +34,21 @@ import org.apache.spark.util.Utils
 abstract class EvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
-    output: Seq[Attribute])
-  extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+    output: Seq[Attribute],
+    outputAlreadyChecked: Boolean)
+    extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+
+  private val checkedOutput = if (outputAlreadyChecked) {
+    output
+  } else {
+    childOutput ++ output.drop(childOutput.length).zip(udfs).map { case (attr, udf) =>
+      if (udf.applyCharVarcharChecks) {
+        CharVarcharUtils.stringLengthCheck(attr, attr.dataType)
+      } else {
+        attr
+      }
+    }
+  }
 
   protected def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
@@ -119,7 +133,7 @@ abstract class EvalPythonEvaluatorFactory(
         evaluate(pyFuncs, argMetas, projectedRowIter, schema, context)
 
       val joined = new JoinedRow
-      val resultProj = UnsafeProjection.create(output, output)
+      val resultProj = UnsafeProjection.create(checkedOutput, output)
 
       outputRowIterator.map { outputRow =>
         resultProj(joined(queue.remove(), outputRow))

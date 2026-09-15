@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 
 
 /**
@@ -188,6 +189,8 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
    *           - PythonUDF (baz)
    * - if the eval types of the UDF expressions in the chain differ, return false.
    * - if a UDF has more than one child, e.g. foo(bar(), baz()), return false
+   * - if a child UDF has a CHAR/VARCHAR result whose captured policy requires assignment checks,
+   *   return false so the checked JVM conversion boundary is preserved.
    * If we return false here, the expectation is that the recursive calls of
    * collectEvaluableUDFsFromExpressions will then visit the children and extract them first to
    * separate nodes.
@@ -200,6 +203,8 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
       case Seq(child: PythonUDF) =>
         correctEvalType(e, pythonUDFArrowFallbackOnUDT) ==
           correctEvalType(child, pythonUDFArrowFallbackOnUDT) &&
+          !(child.applyCharVarcharChecks &&
+            CharVarcharUtils.hasCharVarchar(child.dataType)) &&
           shouldExtractUDFExpressionTree(child, pythonUDFArrowFallbackOnUDT)
       // Python UDF can't be evaluated directly in JVM
       case children => !children.exists(hasScalarPythonUDF)

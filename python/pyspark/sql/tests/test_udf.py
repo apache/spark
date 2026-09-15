@@ -27,7 +27,12 @@ import time
 import unittest
 from contextlib import redirect_stdout
 
-from pyspark.errors import AnalysisException, PySparkTypeError, PythonException
+from pyspark.errors import (
+    AnalysisException,
+    PySparkNotImplementedError,
+    PySparkTypeError,
+    PythonException,
+)
 from pyspark.logger import PySparkLogger
 from pyspark.sql import Column, Row, SparkSession
 from pyspark.sql.functions import assert_true, col, lit, rand, udf
@@ -35,6 +40,7 @@ from pyspark.sql.types import (
     ArrayType,
     BinaryType,
     BooleanType,
+    CharType,
     DayTimeIntervalType,
     DoubleType,
     IntegerType,
@@ -44,6 +50,8 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     TimestampNTZType,
+    UserDefinedType,
+    VarcharType,
     VariantType,
     VariantVal,
 )
@@ -55,10 +63,185 @@ from pyspark.testing.sqlutils import (
     test_not_compiled_message,
 )
 from pyspark.testing.utils import assertDataFrameEqual, eventually, timeout
-from pyspark.util import is_remote_only
+from pyspark.util import PythonEvalType, is_remote_only
 
 
 class BaseUDFTestsMixin:
+    def test_char_varchar_results(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("v", VarcharType(3)),
+                StructField("nested", ArrayType(CharType(2))),
+                StructField("m", MapType(CharType(2), VarcharType(3))),
+            ]
+        )
+
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            result = self.spark.range(1).select(
+                udf(
+                    lambda _: ("ab", "xyz", ["z"], {"k": "xy"}),
+                    schema,
+                    useArrow=False,
+                )("id").alias("s")
+            )
+            self.assertEqual(
+                result.first().s,
+                Row(c="ab  ", v="xyz", nested=["z "], m={"k ": "xy"}),
+            )
+
+            invalid = self.spark.range(1).select(
+                udf(lambda _: "abcd", VarcharType(3), useArrow=False)("id")
+            )
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                invalid.collect()
+
+    def test_char_varchar_legacy_as_string(self):
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            result = self.spark.range(1).select(
+                udf(lambda _: "a", CharType(3), useArrow=False)("id").alias("c"),
+                udf(lambda _: "abcd", VarcharType(3), useArrow=False)("id").alias("v"),
+            )
+            self.assertEqual(result.first(), Row(c="a", v="abcd"))
+
+    def test_char_varchar_intermediate_udf_results(self):
+        inner_char = udf(lambda _: "a", CharType(3), useArrow=False)
+        inner_varchar = udf(lambda _: "abcd", VarcharType(3), useArrow=False)
+        outer = udf(lambda value: value, StringType(), useArrow=False)
+
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            padded = self.spark.range(1).select(outer(inner_char("id")).alias("result"))
+            self.assertEqual(padded.first().result, "a  ")
+
+            invalid = self.spark.range(1).select(outer(inner_varchar("id")))
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                invalid.collect()
+
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            result = self.spark.range(1).select(
+                outer(inner_char("id")).alias("c"),
+                outer(inner_varchar("id")).alias("v"),
+            )
+            self.assertEqual(result.first(), Row(c="a", v="abcd"))
+
+    def test_char_varchar_view_keeps_resolved_semantics(self):
+        with self.temp_view("char_varchar_udf_view"):
+            with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+                self.spark.range(1).select(
+                    udf(lambda _: "a", CharType(3), useArrow=False)("id").alias("c"),
+                    udf(lambda _: "abcd", VarcharType(3), useArrow=False)("id").alias("v"),
+                ).createOrReplaceTempView("char_varchar_udf_view")
+
+            with self.sql_conf(
+                {
+                    "spark.sql.legacy.charVarcharAsString": "true",
+                    "spark.sql.preserveCharVarcharTypeInfo": "false",
+                    "spark.sql.charVarchar.standardSemantics.enabled": "false",
+                }
+            ):
+                self.assertEqual(
+                    self.spark.sql("SELECT c FROM char_varchar_udf_view").collect()[0].c,
+                    "a  ",
+                )
+                with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                    self.spark.sql("SELECT v FROM char_varchar_udf_view").collect()
+
+    def test_char_varchar_mixed_captured_policies_in_one_batch(self):
+        char_udf = udf(lambda _: "a", CharType(3), useArrow=False)
+        varchar_udf = udf(lambda _: "abcd", VarcharType(3), useArrow=False)
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            checked_char = char_udf("id").alias("c")
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            unchecked_varchar = varchar_udf("id").alias("v")
+
+        self.assertEqual(
+            self.spark.range(1).select(checked_char, unchecked_varchar).collect()[0],
+            Row(c="a  ", v="abcd"),
+        )
+
+    def test_char_varchar_non_scalar_return_types_unsupported(self):
+        nested_return_type = StructType([StructField("nested", ArrayType(CharType(3)))])
+        struct_eval_types = [
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+            PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+            PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+            PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
+        ]
+        aggregate_eval_types = [
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+        ]
+        stateful_and_incremental_eval_types = [
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
+        ]
+
+        for eval_type in struct_eval_types:
+            with self.assertRaisesRegex(PySparkNotImplementedError, "Invalid return type"):
+                UserDefinedFunction._check_return_type(nested_return_type, eval_type)
+        for eval_type in aggregate_eval_types:
+            with self.assertRaisesRegex(PySparkNotImplementedError, "Invalid return type"):
+                UserDefinedFunction._check_return_type(VarcharType(3), eval_type)
+        for eval_type in stateful_and_incremental_eval_types:
+            with self.assertRaisesRegex(PySparkNotImplementedError, "Invalid return type"):
+                UserDefinedFunction._check_return_type(nested_return_type, eval_type)
+
+    def test_char_varchar_inside_udt_return_type_is_unsupported(self):
+        class CharVarcharUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return StructType([StructField("value", ArrayType(CharType(2)))])
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+            def serialize(self, obj):
+                return obj
+
+            def deserialize(self, datum):
+                return datum
+
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR inside Python UDF UDT return type",
+        ):
+            UserDefinedFunction._check_return_type(
+                CharVarcharUDT(),
+                PythonEvalType.SQL_ARROW_BATCHED_UDF,
+            )
+
     def test_udf_with_callable(self):
         data = self.spark.createDataFrame([(i, i**2) for i in range(10)], ["number", "squared"])
 
@@ -1451,49 +1634,24 @@ class BaseUDFTestsMixin:
             result_type = df_result.schema["result"].dataType
             self.assertEqual(result_type, StringType("fr"))
 
-    def test_udf_with_char_varchar_return_type(self):
-        char_type, char_value = ("char(10)", "a")
-        varchar_type, varchar_value = ("varchar(8)", "a")
-        array_with_char_type, array_with_char_type_value = ("array<char(5)>", ["a", "b"])
-        array_with_varchar_type, array_with_varchar_value = ("array<varchar(12)>", ["a", "b"])
-        map_type, map_value = (f"map<{char_type}, {varchar_type}>", {"a": "b"})
-        struct_type, struct_value = (
-            f"struct<f1: {char_type}, f2: {varchar_type}>",
-            {"f1": "a", "f2": "b"},
+    def test_udf_with_char_varchar_return_type_legacy(self):
+        schema = StructType(
+            [
+                StructField("chars", ArrayType(CharType(3))),
+                StructField("values", MapType(CharType(2), VarcharType(3))),
+            ]
         )
-
-        pairs = [
-            (char_type, char_value),
-            (varchar_type, varchar_value),
-            (array_with_char_type, array_with_char_type_value),
-            (array_with_varchar_type, array_with_varchar_value),
-            (map_type, map_value),
-            (struct_type, struct_value),
-            (
-                f"struct<f1: {array_with_char_type}, f2: {array_with_varchar_type}, "
-                f"f3: {map_type}>",
-                f"{{'f1': {array_with_char_type_value}, 'f2': {array_with_varchar_value}, "
-                f"'f3': {map_value}}}",
-            ),
-            (
-                f"map<{array_with_char_type}, {array_with_varchar_type}>",
-                f"{{{array_with_char_type_value}: {array_with_varchar_value}}}",
-            ),
-            (f"array<{struct_type}>", [struct_value, struct_value]),
-        ]
-
-        for return_type, return_value in pairs:
-            with self.assertRaisesRegex(
-                Exception,
-                "(Please use a different output data type for your UDF or DataFrame|"
-                "Invalid return type with Arrow-optimized Python UDF)",
-            ):
-
-                @udf(return_type)
-                def my_udf():
-                    return return_value
-
-                self.spark.range(1).select(my_udf().alias("result")).show()
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            result = self.spark.range(1).select(
+                udf(lambda _: (["a"], {"k": "abcd"}), schema, useArrow=False)("id")
+            )
+            self.assertEqual(result.first()[0], Row(chars=["a"], values={"k": "abcd"}))
 
     def test_udf_binary_type(self):
         def get_binary_type(x):

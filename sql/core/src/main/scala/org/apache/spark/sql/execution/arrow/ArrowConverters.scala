@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -356,7 +357,7 @@ private[sql] object ArrowConverters extends Logging {
   private[sql] abstract class InternalRowIterator(
       arrowBatchIter: Iterator[Array[Byte]],
       context: TaskContext)
-      extends Iterator[InternalRow] {
+      extends CloseableIterator[InternalRow] {
     // Keep all the resources we have opened in order, should be closed in reverse order finally.
     val resources = new ArrayBuffer[AutoCloseable]()
     protected val allocator: BufferAllocator = ArrowUtils.rootAllocator.newChildAllocator(
@@ -367,11 +368,12 @@ private[sql] object ArrowConverters extends Logging {
 
     private var rowIterAndSchema =
       if (arrowBatchIter.hasNext) nextBatch() else (Iterator.empty, null)
+    private var closed = false
     // We will ensure schemas parsed from every batch are the same.
     val schema: StructType = rowIterAndSchema._2
 
     if (context != null) context.addTaskCompletionListener[Unit] { _ =>
-      closeAll(resources.toSeq.reverse: _*)
+      close()
     }
 
     override def hasNext: Boolean = rowIterAndSchema._1.hasNext || {
@@ -384,12 +386,19 @@ private[sql] object ArrowConverters extends Logging {
         }
         rowIterAndSchema._1.hasNext
       } else {
-        closeAll(resources.toSeq.reverse: _*)
+        close()
         false
       }
     }
 
     override def next(): InternalRow = rowIterAndSchema._1.next()
+
+    override def close(): Unit = {
+      if (!closed) {
+        closed = true
+        closeAll(resources.toSeq.reverse: _*)
+      }
+    }
 
     def nextBatch(): (Iterator[InternalRow], StructType)
   }
@@ -450,7 +459,7 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean,
-      context: TaskContext): Iterator[InternalRow] = {
+      context: TaskContext): CloseableIterator[InternalRow] = {
     new InternalRowIteratorWithoutSchema(
       arrowBatchIter, schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes, context
     )
@@ -547,7 +556,20 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean): DataFrame = {
-    val attrs = toAttributes(schema)
+    val physicalSchema =
+      CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(schema).asInstanceOf[StructType]
+    val attrs = toAttributes(physicalSchema)
+    val applyCharVarcharChecks =
+      CharVarcharUtils.hasCharVarchar(schema) &&
+        CharVarcharUtils.shouldApplyWriteSideLengthCheck(session.sessionState.conf)
+    val checkedAttrs = if (applyCharVarcharChecks) {
+      attrs.zip(schema.fields).map { case (attr, field) =>
+        CharVarcharUtils.stringLengthCheck(attr, field.dataType)
+      }
+    } else {
+      attrs
+    }
+    val outputSchema = if (applyCharVarcharChecks) schema else physicalSchema
     val batchesInDriver = arrowBatches.toArray
     val shouldUseRDD = session.sessionState.conf
       .arrowLocalRelationThreshold < batchesInDriver.map(_.length.toLong).sum
@@ -557,29 +579,40 @@ private[sql] object ArrowConverters extends Logging {
       val rdd = session.sparkContext
         .parallelize(batchesInDriver.toImmutableArraySeq, batchesInDriver.length)
         .mapPartitions { batchesInExecutors =>
-          ArrowConverters.fromBatchIterator(
+          val rows = ArrowConverters.fromBatchIterator(
             batchesInExecutors,
-            schema,
+            physicalSchema,
             timeZoneId,
             errorOnDuplicatedFieldNames,
             largeVarTypes,
             TaskContext.get())
+          if (applyCharVarcharChecks) {
+            val projection = UnsafeProjection.create(checkedAttrs, attrs)
+            rows.map(row => projection(row).copy(): InternalRow)
+          } else {
+            rows
+          }
         }
-      session.internalCreateDataFrame(rdd.setName("arrow"), schema)
+      session.internalCreateDataFrame(rdd.setName("arrow"), outputSchema)
     } else {
       logDebug("Using LocalRelation in createDataFrame with Arrow optimization.")
       val data = ArrowConverters.fromBatchIterator(
         batchesInDriver.iterator,
-        schema,
+        physicalSchema,
         timeZoneId,
         errorOnDuplicatedFieldNames,
         largeVarTypes,
         TaskContext.get())
 
       // Project/copy it. Otherwise, the Arrow column vectors will be closed and released out.
-      val proj = UnsafeProjection.create(attrs, attrs)
-      Dataset.ofRows(session,
-        LocalRelation(attrs, data.map(r => proj(r).copy()).toArray.toImmutableArraySeq))
+      val proj = UnsafeProjection.create(checkedAttrs, attrs)
+      val rows =
+        try {
+          data.map(r => proj(r).copy()).toArray.toImmutableArraySeq
+        } finally {
+          data.close()
+        }
+      Dataset.ofRows(session, LocalRelation(toAttributes(outputSchema), rows))
     }
   }
 

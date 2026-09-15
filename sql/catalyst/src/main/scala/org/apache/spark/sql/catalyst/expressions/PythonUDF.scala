@@ -337,7 +337,9 @@ case class PythonUDF(
     // single lambda, and one more for each enclosing lambda when the UDF is lifted out of a nested
     // lambda (e.g. `transform(arr, i -> transform(i, x -> f(x)))` lifts `f` to depth 2). Ignored
     // for every non-element-wise eval type, where it stays at its default of 1.
-    elementwiseNestingDepth: Int = 1)
+    elementwiseNestingDepth: Int = 1,
+    applyCharVarcharChecks: Boolean = false,
+    hasCharVarcharResult: Boolean = false)
   extends Expression with PythonFuncExpression with Unevaluable {
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
@@ -495,7 +497,8 @@ case class PythonUDTF(
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId,
     pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None,
-    tableArguments: Option[Seq[Boolean]] = None)
+    tableArguments: Option[Seq[Boolean]] = None,
+    applyCharVarcharChecks: Boolean = false)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val canonicalized: Expression = {
@@ -525,7 +528,8 @@ case class UnresolvedPolymorphicPythonUDTF(
     udfDeterministic: Boolean,
     resolveElementMetadata: (PythonFunction, Seq[Expression]) => PythonUDTFAnalyzeResult,
     resultId: ExprId = NamedExpression.newExprId,
-    tableArguments: Option[Seq[Boolean]] = None)
+    tableArguments: Option[Seq[Boolean]] = None,
+    applyCharVarcharChecks: Boolean = false)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val resolved = false
