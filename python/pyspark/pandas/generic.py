@@ -1883,7 +1883,7 @@ class Frame(object, metaclass=ABCMeta):
             where N represents the number of elements.
 
             .. versionchanged:: 3.4.0
-               Supported including arbitary integers.
+               Supported including arbitrary integers.
         numeric_only: bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -1982,7 +1982,7 @@ class Frame(object, metaclass=ABCMeta):
             where N represents the number of elements.
 
             .. versionchanged:: 3.4.0
-               Supported including arbitary integers.
+               Supported including arbitrary integers.
         numeric_only: bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -2214,7 +2214,7 @@ class Frame(object, metaclass=ABCMeta):
             where N represents the number of elements.
 
             .. versionchanged:: 3.4.0
-               Supported including arbitary integers.
+               Supported including arbitrary integers.
         numeric_only: bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
