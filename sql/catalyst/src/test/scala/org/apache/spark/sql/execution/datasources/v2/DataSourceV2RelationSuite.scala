@@ -163,6 +163,103 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("DataSourceV2ScanRelation.computeStats matches column stats for names needing quoting") {
+    val colAttr = AttributeReference("col-1", IntegerType)()
+    val output = Seq(colAttr)
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("col-1", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.of(42L)
+        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
+          val stats = new java.util.HashMap[NamedReference, ColumnStatistics]()
+          stats.put(FieldReference.column("col-1"), new ColumnStatistics {
+            override def distinctCount(): OptionalLong = OptionalLong.of(40L)
+          })
+          stats
+        }
+      }
+    }
+
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val stats = scanRel(output, scan).computeStats()
+      assert(stats.rowCount.contains(BigInt(42)))
+      assert(stats.attributeStats.size === 1,
+        "column stat keyed by a name needing quoting must be attached to its attribute")
+      assert(stats.attributeStats(colAttr).distinctCount.contains(BigInt(40)))
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats matches column stats respecting case sensitivity") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.of(42L)
+        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
+          val stats = new java.util.HashMap[NamedReference, ColumnStatistics]()
+          stats.put(FieldReference.column("ID"), new ColumnStatistics {
+            override def distinctCount(): OptionalLong = OptionalLong.of(40L)
+          })
+          stats
+        }
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+      assert(stats.attributeStats.size === 1,
+        "case-insensitive resolution should match 'ID' to attribute 'id'")
+      assert(stats.attributeStats(idAttr).distinctCount.contains(BigInt(40)))
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "true") {
+      val stats = scanRel(output, scan).computeStats()
+      assert(stats.attributeStats.isEmpty,
+        "case-sensitive resolution should not match 'ID' to attribute 'id'")
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats resolves case-conflicting outputs uniquely") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val upperIdAttr = AttributeReference("ID", IntegerType)()
+    val output = Seq(idAttr, upperIdAttr)
+
+    def scanKeyed(name: String): Scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType =
+        StructType(Seq(StructField("id", IntegerType), StructField("ID", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.of(42L)
+        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
+          val stats = new java.util.HashMap[NamedReference, ColumnStatistics]()
+          stats.put(FieldReference.column(name), new ColumnStatistics {
+            override def distinctCount(): OptionalLong = OptionalLong.of(40L)
+          })
+          stats
+        }
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+      val idStats = scanRel(output, scanKeyed("id")).computeStats()
+      assert(idStats.attributeStats.size === 1)
+      assert(idStats.attributeStats(idAttr).distinctCount.contains(BigInt(40)))
+
+      val ambiguousStats = scanRel(output, scanKeyed("Id")).computeStats()
+      assert(ambiguousStats.attributeStats.isEmpty,
+        "an ambiguous case-insensitive match must not be attached to any attribute")
+    }
+  }
+
   test("DataSourceV2ScanRelation.computeStats derives size 1 for a zero-row scan with CBO") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
