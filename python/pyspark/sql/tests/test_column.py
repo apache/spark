@@ -31,9 +31,7 @@ from pyspark.testing.utils import have_pandas, pandas_requirement_message
 
 
 class ColumnTestsMixin:
-    def assert_column_resolution_error(
-        self, exception, *, classic_condition, connect_condition
-    ):
+    def assert_column_resolution_error(self, exception, *, classic_condition, connect_condition):
         """Assert the API-specific condition for a shared Classic/Connect test."""
         self.assertEqual(exception.getCondition(), classic_condition)
 

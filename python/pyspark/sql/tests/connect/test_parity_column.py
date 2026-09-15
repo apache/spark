@@ -24,9 +24,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
-    def assert_column_resolution_error(
-        self, exception, *, classic_condition, connect_condition
-    ):
+    def assert_column_resolution_error(self, exception, *, classic_condition, connect_condition):
         self.assertEqual(exception.getCondition(), connect_condition)
 
     @classmethod
