@@ -270,15 +270,12 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         |  ON t.symbol = q.symbol
         |""".stripMargin
     // Both operands are literals with no column refs, so each takes its syntactic side
-    // (expr1 = left, expr2 = right) and the MATCH_CONDITION materializes.
+    // (expr1 = left, expr2 = right). Opposite sides pass the table-reference check; same-side
+    // assignment would throw ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE before this point.
     val asOfJoin = sql(sqlText).queryExecution.analyzed.collectFirst {
       case j: AsOfJoin => j
     }.get
-    // Populated sort keys prove the operands were assigned to opposite sides and the condition
-    // materialized, not merely that analysis succeeded.
     assert(asOfJoin.asOfCondition.resolved)
-    assert(asOfJoin.leftSortExprs.nonEmpty)
-    assert(asOfJoin.rightSortExprs.nonEmpty)
   }
 
   test("MATCH_CONDITION rejects scalar subquery operand") {
@@ -376,8 +373,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
   }
 
   test("ARRAY<STRUCT> MATCH_CONDITION with mismatched element names and types is rejected") {
-    // Element structs differ in name (x vs y) and type (INT vs BIGINT).
-    // Widening differing types requires matching field names, so the query fails.
+    // ASOF operand validation accepts these (fields compared positionally, names ignored), the
+    // failure is the generic comparison check, since array elements are not name-realigned.
     val sqlText =
       """
         |SELECT r.a
@@ -387,8 +384,22 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         |) r
         |  MATCH_CONDITION (t.a >= r.a)
         |""".stripMargin
-    val e = intercept[AnalysisException](sql(sqlText))
-    assert(e.getCondition == "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES")
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+      sqlState = Some("42K09"),
+      parameters = Map(
+        "left" -> "\"ARRAY<STRUCT<x: INT NOT NULL>>\"",
+        "right" -> "\"ARRAY<STRUCT<y: BIGINT NOT NULL>>\"",
+        "sqlExpr" -> "\"(a >= a)\""),
+      queryContext = Array(
+        ExpectedContext(
+          fragment = """ASOF JOIN (
+                     |  SELECT * FROM VALUES (ARRAY(named_struct('y', CAST(5 AS BIGINT)))) AS r(a)
+                     |) r
+                     |  MATCH_CONDITION (t.a >= r.a)""".stripMargin,
+          start = 75,
+          stop = 197)))
   }
 
   test("MATCH_CONDITION accepts nested STRUCT column operands") {

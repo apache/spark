@@ -434,17 +434,17 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("ARRAY<INT> operands of different lengths MATCH_CONDITION") {
-    // Rows have different lengths (2, 1, 3). The backward match takes the largest right array
-    // that is <= [5, 5] by Spark array ordering; the first element decides, so [4] is nearest.
+    // All elements equal, so length alone orders the arrays: the nearest right array <= [5, 5, 5]
+    // is [5, 5], not the longer [5, 5, 5, 5].
     checkSortMergeAsOf(
       sql(
         """
           |SELECT r.a
-          |FROM VALUES (ARRAY(5, 5)) AS t(a)
-          |ASOF JOIN VALUES (ARRAY(4)), (ARRAY(2, 9, 9)) AS r(a)
+          |FROM VALUES (ARRAY(5, 5, 5)) AS t(a)
+          |ASOF JOIN VALUES (ARRAY(5)), (ARRAY(5, 5)), (ARRAY(5, 5, 5, 5)) AS r(a)
           |  MATCH_CONDITION (t.a >= r.a)
           |""".stripMargin),
-      Row(Seq(4)) :: Nil)
+      Row(Seq(5, 5)) :: Nil)
   }
 
   test("ARRAY<STRUCT> whole column MATCH_CONDITION") {
