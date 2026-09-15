@@ -579,7 +579,7 @@ private[sql] case class UpdateFields(
 
 /**
  * Evaluate one or more conditional branches. The value of the first branch for which the
- * predicate evalutes to true is returned. If none of the branches evaluate to true, the value of
+ * predicate evaluates to true is returned. If none of the branches evaluate to true, the value of
  * `otherwise` is returned.
  *
  * @param branches
