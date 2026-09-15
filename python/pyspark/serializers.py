@@ -437,6 +437,14 @@ class PickleSerializer(FramedSerializer):
 
 
 class CloudPickleSerializer(FramedSerializer):
+    # Class-level default for `allowed_names`. Instances of this serializer are pickled and
+    # shipped across the driver and workers, which may run different Spark versions. Pickle
+    # restores an instance via __new__ + __dict__ without calling __init__, so an instance
+    # pickled by a version that predates `allowed_names` would otherwise lack the attribute
+    # entirely. Declaring the default here keeps `self.allowed_names` resolvable in that
+    # cross-version case; only a version-matched, explicitly restricted instance sets it.
+    allowed_names = None
+
     def __init__(self, allowed_names=None):
         super().__init__()
         self.allowed_names = allowed_names

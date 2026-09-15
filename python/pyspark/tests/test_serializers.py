@@ -160,7 +160,7 @@ class SerializationTestCase(unittest.TestCase):
         hash(FlattenedValuesSerializer(CPickleSerializer()))
 
     def test_restricted_unpickler(self):
-        ser = CPickleSerializer(allowed_names=[("collections", "deque")])
+        ser = CloudPickleSerializer(allowed_names=[("collections", "deque")])
         q = collections.deque([1, 2, 3])
         q2 = ser.loads(ser.dumps(q))
         self.assertEqual(q, q2)
