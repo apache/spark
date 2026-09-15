@@ -774,8 +774,8 @@ class ConversionTests(unittest.TestCase):
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowToPandasConversionTests(unittest.TestCase):
-    def test_convert_numpy_ser_name_survives_preprocess_time(self):
-        # convert_numpy reads the Arrow field name before preprocess_time, because the
+    def test_convert_column_numpy_ser_name_survives_preprocess_time(self):
+        # _convert_column_numpy reads the Arrow field name before preprocess_time, because the
         # pa.compute kernels it runs for timestamps return a new array with no field name.
         import pyarrow as pa
 
@@ -785,17 +785,17 @@ class ArrowToPandasConversionTests(unittest.TestCase):
             )
             col = pa.RecordBatch.from_arrays([ts], ["tscol"]).column(0)
             spark_type = TimestampType() if pa_type.tz is not None else TimestampNTZType()
-            result = ArrowToPandasConversion.convert_numpy(col, spark_type, timezone="UTC")
+            result = ArrowToPandasConversion._convert_column_numpy(col, spark_type, timezone="UTC")
             self.assertEqual(result.name, "tscol", f"name lost for {pa_type}")
 
-    def test_udt_convert_numpy(self):
+    def test_udt_convert_column_numpy(self):
         import pyarrow as pa
 
         udt = ExamplePointUDT()
 
         # basic conversion with nulls
         arr = pa.array([[1.0, 2.0], None, [3.0, 4.0]], type=pa.list_(pa.float64()))
-        result = ArrowToPandasConversion.convert_numpy(arr, udt, ser_name="my_point")
+        result = ArrowToPandasConversion._convert_column_numpy(arr, udt, ser_name="my_point")
         self.assertIsInstance(result.iloc[0], ExamplePoint)
         self.assertEqual(result.iloc[0], ExamplePoint(1.0, 2.0))
         self.assertIsNone(result.iloc[1])
@@ -803,13 +803,13 @@ class ArrowToPandasConversionTests(unittest.TestCase):
         self.assertEqual(result.name, "my_point")
 
         # empty
-        result = ArrowToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion._convert_column_numpy(
             pa.array([], type=pa.list_(pa.float64())), udt
         )
         self.assertEqual(len(result), 0)
 
         # PythonOnlyUDT
-        result = ArrowToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion._convert_column_numpy(
             pa.array([[5.0, 6.0]], type=pa.list_(pa.float64())), PythonOnlyUDT()
         )
         self.assertIsInstance(result.iloc[0], PythonOnlyPoint)
@@ -821,11 +821,11 @@ class ArrowToPandasConversionTests(unittest.TestCase):
         chunk1 = pa.array([[1.0, 2.0]], type=pa.list_(pa.float64()))
         chunk2 = pa.array([[3.0, 4.0]], type=pa.list_(pa.float64()))
         chunked = pa.chunked_array([chunk1, chunk2])
-        result = ArrowToPandasConversion.convert_numpy(chunked, ExamplePointUDT())
+        result = ArrowToPandasConversion._convert_column_numpy(chunked, ExamplePointUDT())
         self.assertEqual(result.iloc[0], ExamplePoint(1.0, 2.0))
         self.assertEqual(result.iloc[1], ExamplePoint(3.0, 4.0))
 
-    def test_variant_convert_numpy(self):
+    def test_variant_convert_column_numpy(self):
         import pyarrow as pa
 
         variant_type = pa.struct(
@@ -844,7 +844,7 @@ class ArrowToPandasConversionTests(unittest.TestCase):
             ],
             type=variant_type,
         )
-        result = ArrowToPandasConversion.convert_numpy(arr, VariantType(), ser_name="v")
+        result = ArrowToPandasConversion._convert_column_numpy(arr, VariantType(), ser_name="v")
         self.assertIsInstance(result.iloc[0], VariantVal)
         self.assertEqual(result.iloc[0].value, b"\x01")
         self.assertEqual(result.iloc[0].metadata, b"\x02")
@@ -854,12 +854,12 @@ class ArrowToPandasConversionTests(unittest.TestCase):
         self.assertEqual(result.name, "v")
 
         # empty
-        result = ArrowToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion._convert_column_numpy(
             pa.array([], type=variant_type), VariantType()
         )
         self.assertEqual(len(result), 0)
 
-    def test_geography_convert_numpy(self):
+    def test_geography_convert_column_numpy(self):
         import pyarrow as pa
 
         geography_type = pa.struct(
@@ -886,19 +886,21 @@ class ArrowToPandasConversionTests(unittest.TestCase):
             ],
             type=geography_type,
         )
-        result = ArrowToPandasConversion.convert_numpy(arr, GeographyType(4326), ser_name="g")
+        result = ArrowToPandasConversion._convert_column_numpy(
+            arr, GeographyType(4326), ser_name="g"
+        )
         self.assertEqual(result.iloc[0], Geography(wkb1, 4326))
         self.assertIsNone(result.iloc[1])
         self.assertEqual(result.iloc[2], Geography(wkb2, 4326))
         self.assertEqual(result.name, "g")
 
         # empty
-        result = ArrowToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion._convert_column_numpy(
             pa.array([], type=geography_type), GeographyType(4326)
         )
         self.assertEqual(len(result), 0)
 
-    def test_geometry_convert_numpy(self):
+    def test_geometry_convert_column_numpy(self):
         import pyarrow as pa
 
         geometry_type = pa.struct(
@@ -925,14 +927,14 @@ class ArrowToPandasConversionTests(unittest.TestCase):
             ],
             type=geometry_type,
         )
-        result = ArrowToPandasConversion.convert_numpy(arr, GeometryType(0), ser_name="g")
+        result = ArrowToPandasConversion._convert_column_numpy(arr, GeometryType(0), ser_name="g")
         self.assertEqual(result.iloc[0], Geometry(wkb1, 0))
         self.assertIsNone(result.iloc[1])
         self.assertEqual(result.iloc[2], Geometry(wkb2, 0))
         self.assertEqual(result.name, "g")
 
         # empty
-        result = ArrowToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion._convert_column_numpy(
             pa.array([], type=geometry_type), GeometryType(0)
         )
         self.assertEqual(len(result), 0)
