@@ -175,34 +175,6 @@ case class Coalesce(children: Seq[Expression])
     copy(children = newChildren)
 }
 
-private[sql] case class TypedNullLiteral(child: Expression)
-    extends UnaryExpression with RuntimeReplaceable {
-  override def nullable: Boolean = true
-
-  override def dataType: DataType = child.dataType
-
-  override def toString: String = "null"
-
-  override def sql: String = "NULL"
-
-  override lazy val replacement: Expression = Literal.create(null, child.dataType)
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    TypedNullLiteral.create(newChild)
-}
-
-private[sql] object TypedNullLiteral {
-  /**
-   * Collapses resolved subtrees to avoid 3^n growth in nested `NullIf` plans, while retaining
-   * common expression references whose types and collations may change.
-   */
-  def create(child: Expression): TypedNullLiteral = TypedNullLiteral(child match {
-    case _: CommonExpressionRef => child
-    case _ if child.resolved => Literal.create(null, child.dataType)
-    case _ => child
-  })
-}
-
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.",
   arguments = """
@@ -226,10 +198,10 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
     this(left, right,
       if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
         With(left) { case Seq(ref) =>
-          If(EqualTo(ref, right), TypedNullLiteral.create(ref), ref)
+          If(EqualTo(ref, right), Literal(null), ref)
         }
       } else {
-        If(EqualTo(left, right), TypedNullLiteral.create(left), left)
+        If(EqualTo(left, right), Literal(null), left)
       }
     )
   }

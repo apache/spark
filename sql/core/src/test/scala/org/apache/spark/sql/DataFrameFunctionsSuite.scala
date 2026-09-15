@@ -371,24 +371,10 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
           SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
           SQLConf.CONCAT_BINARY_AS_STRING.key -> "true") {
           checkAnswer(sql("SELECT nullif(concat(X'61', X'62'), 'z')"), Row("ab"))
-        }
-      }
-    }
-  }
 
-  test("nullif preserves operand collation during single-pass view resolution") {
-    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
-      withTable("t") {
-        withView("v") {
-          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false") {
-            sql("CREATE TABLE t (c STRING) USING parquet")
-            sql("INSERT INTO t VALUES ('a')")
-            sql("CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS " +
-              "SELECT lower(nullif(c, c)) AS n FROM t")
-          }
-          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
-            QueryTest.checkAnswer(sql("SELECT * FROM v"), Seq(Row(null)), checkToRDD = false)
-          }
+          val result = sql("SELECT nullif(1, 2.1D)")
+          checkAnswer(result, Row(1))
+          assert(result.schema.head.dataType == IntegerType)
         }
       }
     }

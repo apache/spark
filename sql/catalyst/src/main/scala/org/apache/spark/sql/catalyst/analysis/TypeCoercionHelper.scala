@@ -54,7 +54,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   SpecifiedWindowFrame,
   SubtractTimestamps,
   TimestampAddInterval,
-  TypedNullLiteral,
   WindowSpecDefinition
 }
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Sum}
@@ -673,9 +672,6 @@ abstract class TypeCoercionHelper {
    */
   object IfTypeCoercion {
     def apply(expression: Expression): Expression = expression match {
-      case i @ If(pred, _: TypedNullLiteral, right)
-          if !haveSameType(i.inputTypesForMerging) =>
-        If(pred, TypedNullLiteral.create(right), right)
       // Find tightest common type for If, if the true value and false value have different types.
       case i @ If(pred, left, right) if !haveSameType(i.inputTypesForMerging) =>
         findWiderTypeForTwo(left.dataType, right.dataType)
