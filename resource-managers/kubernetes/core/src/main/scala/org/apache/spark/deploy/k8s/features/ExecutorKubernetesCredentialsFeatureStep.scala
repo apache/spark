@@ -24,8 +24,10 @@ private[spark] class ExecutorKubernetesCredentialsFeatureStep(kubernetesConf: Ku
   extends KubernetesFeatureConfigStep {
 
   private lazy val driverServiceAccount = kubernetesConf.get(KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME)
+  // An explicitly empty executor account is treated as unset: writing "" to the pod spec would
+  // skip the fallback to the driver's account below while naming no usable account.
   private lazy val executorServiceAccount =
-    kubernetesConf.get(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME)
+    kubernetesConf.get(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME).filter(_.nonEmpty)
 
   override def configurePod(pod: SparkPod): SparkPod = {
       pod.copy(
