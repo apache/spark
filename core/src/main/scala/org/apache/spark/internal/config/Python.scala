@@ -131,6 +131,7 @@ private[spark] object Python {
         "incomplete results. If the timeout is reached the task still completes and a warning " +
         "is logged. `0` disables the wait.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ >= 0, "The flush timeout should be 0 or positive.")
       .createWithDefault(10000)
