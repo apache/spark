@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import scala.util.chaining._
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
@@ -124,9 +126,9 @@ case class Scd2BatchProcessor(
    *
    * Step ordering is load-bearing: the row-extension steps reference user data columns that
    * target-column selection is allowed to drop. Selection therefore runs after those extensions,
-   * followed by target-schema alignment. Unlike SCD1, no per-key deduplication step is performed
-   * here - SCD2 preserves every event as part of the row's history, including byte-identical
-   * full-event duplicates.
+   * followed by target-schema alignment and version-map population. Unlike SCD1, no per-key
+   * deduplication step is performed here - SCD2 preserves every event as part of the row's history,
+   * including byte-identical full-event duplicates.
    *
    * Duplicate event elimination (e.g., collapsing two identical events at the same sequence),
    * whether across microbatches or within the same microbatch, is the responsibility of
@@ -151,6 +153,7 @@ case class Scd2BatchProcessor(
       .transform(extendMicrobatchRowsWithCdcMetadata)
       .transform(projectTargetColumnsOntoMicrobatch)
       .transform(alignMicrobatchToTargetSchema(_, targetTableDf))
+      .transform(extendMicrobatchRowsWithVersionMap)
   }
 
   /**
@@ -189,20 +192,60 @@ case class Scd2BatchProcessor(
   /**
    * Project the operational CDC metadata column carrying the literal event sequence. Downstream
    * merges rely on it to preserve original event lineage regardless of how rows start/end-at are
-   * coalesced.
+   * coalesced. The version map is initially null; [[extendMicrobatchRowsWithVersionMap]] populates
+   * it after column selection runs.
    */
   private def extendMicrobatchRowsWithCdcMetadata(microbatchDf: DataFrame): DataFrame = {
     microbatchDf.withColumn(
       colName = AutoCdcReservedNames.cdcMetadataColName,
       col = Scd2BatchProcessor.constructCdcMetadataCol(
         recordStartAt = changeArgs.sequencing,
-        // TODO (SPARK-59183): actually populate version map according to ignore-null selection and
-        // actual authorship in microbatch.
         versionMap = F.lit(null),
         sequencingType = resolvedSequencingType
       )
     )
   }
+
+  /**
+   * Populates the version map on each microbatch row, recording which leaves the event authored.
+   *
+   * Delete-encoded rows (those matching [[ChangeArgs.deleteCondition]]) receive a null version
+   * map: their data-column values are not part of the SCD2 contract, so authorship tracking
+   * is not applicable.
+   *
+   * Must run after [[projectTargetColumnsOntoMicrobatch]] and
+   * [[alignMicrobatchToTargetSchema]], because the eligible schema is computed from the selected,
+   * target-aligned schema.
+   *
+   * TODO(SPARK-59343): decide how to handle the ignore-null selection changing between
+   * partial-retry attempts of the same microbatch.
+   */
+  private def extendMicrobatchRowsWithVersionMap(alignedDf: DataFrame): DataFrame =
+    changeArgs.ignoreNullSelection match {
+      case None => alignedDf
+      case Some(ignoreNullSelection) =>
+        val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)
+        val resolver = alignedDf.sparkSession.sessionState.conf.resolver
+
+        // Only upsert rows get a populated version map. By convention, delete-encoded
+        // rows always maintain a null version map. We detect deletes via endAt rather
+        // than changeArgs.deleteCondition because column selection may have already
+        // dropped the column the delete condition references.
+        val isUpsertRow = F.col(Scd2BatchProcessor.endAtColName).isNull
+        val versionMap = F.when(isUpsertRow, Scd2VersionMap.buildVersionMap(
+          schema = alignedDf.schema
+            .pipe(Scd2BatchProcessor.filterOutKeyColumns(_, changeArgs.keys, resolver))
+            .pipe(Scd2BatchProcessor.filterOutReservedFrameworkColumns(_, resolver)),
+          ignoreNullSelection = ignoreNullSelection,
+          resolver = resolver
+        ))
+
+        alignedDf.withColumn(
+          colName = AutoCdcReservedNames.cdcMetadataColName,
+          col = cdcMetadataCol
+            .withField(Scd2BatchProcessor.versionMapFieldName, versionMap)
+        )
+    }
 
   /**
    * Apply the user's target column selection while preserving the SCD2 framework columns; the
@@ -1460,24 +1503,39 @@ object Scd2BatchProcessor {
   private[pipelines] def computeTrackedHistoryColumns(
       schema: StructType,
       changeArgs: ChangeArgs,
-      resolver: Resolver): Seq[String] = {
-    val keyColNames = changeArgs.keys.map(_.name)
-
-    val eligibleSchema = StructType(schema.fields.filterNot { field =>
-      reservedFrameworkColNames.exists(resolver(_, field.name)) ||
-        keyColNames.exists(resolver(_, field.name))
-    })
-
+      resolver: Resolver): Seq[String] =
     ColumnSelection
       .applyToSchema(
         schemaName = "trackHistorySelection",
-        schema = eligibleSchema,
+        schema = schema
+          .pipe(filterOutKeyColumns(_, changeArgs.keys, resolver))
+          .pipe(filterOutReservedFrameworkColumns(_, resolver)),
         columnSelection = changeArgs.trackHistorySelection,
         resolver = resolver
       )
       .fieldNames
       .toImmutableArraySeq
+
+  /**
+   * Returns `schema` without fields matching the configured key columns, preserving field order.
+   */
+  private def filterOutKeyColumns(
+      schema: StructType,
+      keyColumns: Seq[UnqualifiedColumnName],
+      resolver: Resolver): StructType = {
+    val keyColumnNames = keyColumns.map(_.name)
+    StructType(schema.fields.filterNot(field => keyColumnNames.exists(resolver(_, field.name))))
   }
+
+  /**
+   * Returns `schema` without fields matching SCD2's reserved framework columns, preserving field
+   * order.
+   */
+  private def filterOutReservedFrameworkColumns(
+      schema: StructType,
+      resolver: Resolver): StructType =
+    StructType(schema.fields.filterNot(field =>
+      reservedFrameworkColNames.exists(resolver(_, field.name))))
 
   /**
    * Name of temporary column projected onto microbatch to compute the min sequencing value per
