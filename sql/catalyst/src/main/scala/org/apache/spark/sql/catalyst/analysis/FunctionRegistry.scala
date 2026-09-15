@@ -1031,6 +1031,7 @@ object FunctionRegistry {
     expression[BitmapBucketNumber]("bitmap_bucket_number"),
     expression[BitmapBitPosition]("bitmap_bit_position"),
     expression[BitmapCount]("bitmap_count"),
+    expression[BitmapContains]("bitmap_contains"),
     expression[BitmapAnd]("bitmap_and"),
     expression[BitmapOr]("bitmap_or"),
     expression[BitmapAndNot]("bitmap_andnot"),
