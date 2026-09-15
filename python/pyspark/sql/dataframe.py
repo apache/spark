@@ -3363,8 +3363,14 @@ class DataFrame:
 
     orderBy = sort
 
+    @overload
+    def describe(self, *cols: str) -> "DataFrame": ...
+
+    @overload
+    def describe(self, __cols: Sequence[str]) -> "DataFrame": ...
+
     @dispatch_df_method
-    def describe(self, *cols: Union[str, List[str]]) -> "DataFrame":
+    def describe(self, *cols: Union[str, Sequence[str]]) -> "DataFrame":
         """Computes basic statistics for numeric and string columns.
 
         .. versionadded:: 1.3.1
@@ -3780,10 +3786,10 @@ class DataFrame:
     def selectExpr(self, *expr: str) -> "DataFrame": ...
 
     @overload
-    def selectExpr(self, *expr: List[str]) -> "DataFrame": ...
+    def selectExpr(self, __expr: Sequence[str]) -> "DataFrame": ...
 
     @dispatch_df_method
-    def selectExpr(self, *expr: Union[str, List[str]]) -> "DataFrame":
+    def selectExpr(self, *expr: Union[str, Sequence[str]]) -> "DataFrame":
         """Projects a set of SQL expressions and returns a new :class:`DataFrame`.
 
         This is a variant of :func:`select` that accepts SQL expressions.
