@@ -46,7 +46,8 @@ case class OrcScan(
     pushedAggregate: Option[Aggregation] = None,
     pushedFilters: Array[Filter],
     partitionFilters: Seq[Expression] = Seq.empty,
-    dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
+    dataFilters: Seq[Expression] = Seq.empty,
+    charVarcharStandardSemantics: Boolean = false) extends FileScan {
   override def isSplitable(path: Path): Boolean = {
     // If aggregate is pushed down, only the file footer will be read once,
     // so file should not be split across multiple tasks.
@@ -75,7 +76,7 @@ case class OrcScan(
     // We should use `readPartitionSchema` as the partition schema here.
     OrcPartitionReaderFactory(conf, broadcastedConf,
       dataSchema, readDataSchema, readPartitionSchema, pushedFilters, pushedAggregate,
-      new OrcOptions(options.asScala.toMap, conf), memoryMode)
+      new OrcOptions(options.asScala.toMap, conf), memoryMode, charVarcharStandardSemantics)
   }
 
   override def equals(obj: Any): Boolean = obj match {
@@ -86,7 +87,8 @@ case class OrcScan(
         pushedAggregate.isEmpty && o.pushedAggregate.isEmpty
       }
       super.equals(o) && dataSchema == o.dataSchema && options == o.options &&
-        equivalentFilters(pushedFilters, o.pushedFilters) && pushedDownAggEqual
+        equivalentFilters(pushedFilters, o.pushedFilters) && pushedDownAggEqual &&
+        charVarcharStandardSemantics == o.charVarcharStandardSemantics
     case _ => false
   }
 

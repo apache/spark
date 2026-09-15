@@ -27,14 +27,14 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector
 import org.apache.logging.log4j.Level
-import org.apache.orc.OrcConf.COMPRESS
+import org.apache.orc.OrcConf.{COMPRESS, FORCE_POSITIONAL_EVOLUTION}
 import org.apache.orc.OrcFile
 import org.apache.orc.OrcProto.ColumnEncoding.Kind.{DICTIONARY_V2, DIRECT, DIRECT_V2}
 import org.apache.orc.OrcProto.Stream.Kind
 import org.apache.orc.TypeDescription
 import org.apache.orc.impl.RecordReaderImpl
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{QueryTestBase, Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec._
@@ -635,6 +635,7 @@ abstract class OrcSuite
 }
 
 abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
+  import testImplicits._
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -668,6 +669,33 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
        """.stripMargin)
+  }
+
+  test("SPARK-58814: positional ORC evolution preserves standard CHAR semantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTempPath { dir =>
+        Seq("ab").toDF("c").write.orc(dir.getCanonicalPath)
+        val result = spark.read
+          .schema("c CHAR(4)")
+          .option(FORCE_POSITIONAL_EVOLUTION.getAttribute, "true")
+          .orc(dir.getCanonicalPath)
+        checkAnswer(result.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
+      }
+
+      withTempPath { dir =>
+        Seq("abcdef").toDF("c").write.orc(dir.getCanonicalPath)
+        val result = spark.read
+          .schema("c CHAR(4)")
+          .option(FORCE_POSITIONAL_EVOLUTION.getAttribute, "true")
+          .orc(dir.getCanonicalPath)
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            result.collect()
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "4"))
+      }
+    }
   }
 
   test("Check BloomFilter creation") {

@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharScanMode, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableSummary, TruncatableTable, V1Table, V1View, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -73,7 +73,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val nameParts = ident.toQualifiedNameParts(catalog)
       cacheManager.recacheTableOrView(session, nameParts, includeTimeTravel = false)
     case _ =>
-      cacheManager.recacheByPlan(session, r)
+      cacheManager.recacheByV2Relation(session, r)
   }
 
   private def recacheTable(r: ResolvedTable, includeTimeTravel: Boolean)(): Unit = {
@@ -82,16 +82,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   // Invalidates the cache associated with the given table. If the invalidated cache matches the
-  // given table, the cache's storage level is returned.
-  private def invalidateTableCache(r: ResolvedTable)(): Option[StorageLevel] = {
+  // given table, each cache's storage level and scan mode are returned.
+  private def invalidateTableCache(
+      r: ResolvedTable)(): Seq[(StorageLevel, Option[CharVarcharScanMode])] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
-    val cache = cacheManager.lookupCachedData(session, v2Relation)
+    val caches = cacheManager.lookupCachedDataByV2Relation(v2Relation)
     invalidateCache(r.catalog, r.identifier)
-    if (cache.isDefined) {
-      val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
-      Some(cacheLevel)
-    } else {
-      None
+    caches.map { entry =>
+      val scanMode = entry.plan.collectFirst {
+        case relation: DataSourceV2Relation => relation.charVarcharScanMode
+      }.flatten
+      (entry.cachedRepresentation.cacheBuilder.storageLevel, scanMode)
     }
   }
 
