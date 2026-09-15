@@ -93,8 +93,9 @@ final class IDF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
       case Row(v: Vector) => OldVectors.fromML(v)
     }
-    val idf = new feature.IDF($(minDocFreq)).fit(input)
-    copyValues(new IDFModel(uid, idf).setParent(this))
+    val oldModel = new feature.IDF($(minDocFreq)).fit(input)
+    copyValues(new IDFModel(
+      uid, oldModel.idf.asML, oldModel.docFreq, oldModel.numDocs).setParent(this))
   }
 
   @Since("1.4.0")
@@ -115,27 +116,31 @@ object IDF extends DefaultParamsReadable[IDF] {
 
 /**
  * Model fitted by [[IDF]].
+ *
+ * @param idf The inverse document frequency vector.
+ * @param docFreq The document frequency of each term.
+ * @param numDocs The number of documents used to compute the IDF vector.
  */
 @Since("1.4.0")
 class IDFModel private[ml] (
     @Since("1.4.0") override val uid: String,
-    idfModel: feature.IDFModel)
+    @Since("2.0.0") val idf: Vector,
+    @Since("3.0.0") val docFreq: Array[Long],
+    @Since("3.0.0") val numDocs: Long)
   extends Model[IDFModel] with IDFBase with MLWritable {
 
   import IDFModel._
 
   // For ml connect only
-  private[ml] def this() = this("", null)
+  private[ml] def this() = this("", null, null, 0L)
 
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize
-    if (idfModel != null) {
-      if (idfModel.idf != null) {
-        size += idfModel.idf.asML.getSizeInBytes
-      }
-      if (idfModel.docFreq != null) {
-        size += SizeEstimator.estimate(idfModel.docFreq)
-      }
+    if (idf != null) {
+      size += idf.getSizeInBytes
+    }
+    if (docFreq != null) {
+      size += SizeEstimator.estimate(docFreq)
     }
     size
   }
@@ -152,7 +157,7 @@ class IDFModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    val localIdf = idfModel.idf.toArray
+    val localIdf = idf.toArray
     val func = (vector: Vector) => IDFModel.predict(localIdf, vector)
 
     val transformer = udf(func)
@@ -172,21 +177,9 @@ class IDFModel private[ml] (
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): IDFModel = {
-    val copied = new IDFModel(uid, idfModel)
+    val copied = new IDFModel(uid, idf, docFreq, numDocs)
     copyValues(copied, extra).setParent(parent)
   }
-
-  /** Returns the IDF vector. */
-  @Since("2.0.0")
-  def idf: Vector = idfModel.idf.asML
-
-  /** Returns the document frequency */
-  @Since("3.0.0")
-  def docFreq: Array[Long] = idfModel.docFreq
-
-  /** Returns number of documents evaluated to compute idf */
-  @Since("3.0.0")
-  def numDocs: Long = idfModel.numDocs
 
   @Since("1.6.0")
   override def write: MLWriter = new IDFModelWriter(this)
@@ -275,17 +268,13 @@ object IDFModel extends MLReadable[IDFModel] {
 
       val model = if (majorVersion(metadata.sparkVersion) >= 3) {
         val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
-        new IDFModel(
-          metadata.uid,
-          new feature.IDFModel(OldVectors.fromML(data.idf), data.docFreq, data.numDocs)
-        )
+        new IDFModel(metadata.uid, data.idf, data.docFreq, data.numDocs)
       } else {
         val data = sparkSession.read.parquet(dataPath)
         val Row(idf: Vector) = MLUtils.convertVectorColumnsToML(data, "idf")
           .select("idf")
           .head()
-        new IDFModel(metadata.uid,
-          new feature.IDFModel(OldVectors.fromML(idf), new Array[Long](idf.size), 0L))
+        new IDFModel(metadata.uid, idf, new Array[Long](idf.size), 0L)
       }
       metadata.getAndSetParams(model)
       model
