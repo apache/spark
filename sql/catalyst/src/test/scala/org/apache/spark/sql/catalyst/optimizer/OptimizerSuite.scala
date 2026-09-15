@@ -21,7 +21,22 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, ArrayCompact, AttributeReference, CreateArray, CreateStruct, IntegerLiteral, Literal, MapFromEntries, Multiply, NamedExpression, NullIf, Remainder, RuntimeReplaceable}
+import org.apache.spark.sql.catalyst.expressions.{
+  Add,
+  Alias,
+  ArrayCompact,
+  AttributeReference,
+  Cast,
+  CreateArray,
+  CreateStruct,
+  IntegerLiteral,
+  Literal,
+  MapFromEntries,
+  Multiply,
+  NamedExpression,
+  NullIf,
+  Remainder,
+  RuntimeReplaceable}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, OneRowRelation, Project}
@@ -335,7 +350,7 @@ class OptimizerSuite extends PlanTest {
       StructType(StructField("map", MapType(IntegerType, IntegerType, false), false) :: Nil))
   }
 
-  test("SPARK-56840: NullIf typed null branch is replaced with a null literal") {
+  test("SPARK-56840: NullIf is replaced with an If containing a typed null") {
     val optimizer = new SimpleTestOptimizer() {
       override def defaultBatches: Seq[Batch] =
         Batch("test", fixedPoint,
@@ -348,7 +363,7 @@ class OptimizerSuite extends PlanTest {
       val optimized = optimizer.execute(plan)
 
       assert(optimized.expressions.exists(_.exists {
-        case Literal(null, BooleanType) => true
+        case cast: Cast => cast.child == Literal(null) && cast.dataType == BooleanType
         case _ => false
       }))
       assert(optimized.expressions.forall(!_.exists(_.isInstanceOf[RuntimeReplaceable])))

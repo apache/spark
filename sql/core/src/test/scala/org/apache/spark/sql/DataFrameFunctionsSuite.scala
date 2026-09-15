@@ -363,6 +363,23 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("nullif keeps the coerced type of its first argument") {
+    Seq(true, false).foreach { alwaysInlineCommonExpr =>
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(
+          SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString,
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+          SQLConf.CONCAT_BINARY_AS_STRING.key -> "true") {
+          checkAnswer(sql("SELECT nullif(concat(X'61', X'62'), 'z')"), Row("ab"))
+
+          val result = sql("SELECT nullif(1, 2.1D)")
+          checkAnswer(result, Row(1))
+          assert(result.schema.head.dataType == IntegerType)
+        }
+      }
+    }
+  }
+
   test("equal_null function") {
     val df = Seq[(Integer, Integer)]((null, 8)).toDF("a", "b")
     checkAnswer(df.selectExpr("equal_null(a, b)"), Seq(Row(false)))

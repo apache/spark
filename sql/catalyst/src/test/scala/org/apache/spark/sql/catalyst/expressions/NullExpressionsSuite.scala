@@ -145,12 +145,18 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(analyze(new Nvl(floatLit, doubleLit)).dataType == DoubleType)
   }
 
-  test("SPARK-56840: NullIf replacement preserves its data type before type coercion") {
+  test("SPARK-56840: NullIf null branch is typed during analysis") {
     Seq(true, false).foreach { alwaysInlineCommonExpr =>
       withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString) {
         val nullIf = new NullIf(Literal(1), Literal(1))
-        assert(nullIf.dataType == IntegerType)
-        assert(nullIf.replacement.dataType == IntegerType)
+        assert(nullIf.replacement.exists {
+          case Literal(null, NullType) => true
+          case _ => false
+        })
+
+        val plan = SimpleAnalyzer.execute(
+          Project(Alias(nullIf, "out")() :: Nil, LocalRelation()))
+        assert(plan.expressions.head.dataType == IntegerType)
       }
     }
   }
@@ -158,13 +164,42 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test(
     "SPARK-56840: NullIf accepts unresolved nested fields during inlined function construction") {
     withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "true") {
-      val nullIf = FunctionRegistry.builtin.lookupFunction(
+      val unresolvedNullIf = FunctionRegistry.builtin.lookupFunction(
         FunctionIdentifier("nullif"),
         Seq(
           UnresolvedAttribute(Seq("c", "provider")),
           Lower(Literal("ERROR_MULTIPLE_PROVIDERS"))))
+        .asInstanceOf[NullIf]
 
-      assert(nullIf.isInstanceOf[NullIf])
+      assert(unresolvedNullIf.exists {
+        case Literal(null, NullType) => true
+        case _ => false
+      })
+
+      val resolvedNullIf = unresolvedNullIf.transformUp {
+        case _: UnresolvedAttribute => Literal("lit")
+      }
+      val plan = SimpleAnalyzer.execute(
+        Project(Alias(resolvedNullIf, "out")() :: Nil, LocalRelation()))
+
+      assert(plan.expressions.head.dataType == StringType)
+    }
+  }
+
+  test("NullIf only duplicates its left operand when common expressions are inlined") {
+    Seq(true, false).foreach { alwaysInlineCommonExpr =>
+      withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString) {
+        val depth = 8
+        val nestedNullIf = (1 to depth).foldLeft[Expression](Literal(0)) {
+          case (left, right) =>
+            SimpleAnalyzer.execute(Project(
+              Alias(new NullIf(left, Literal(right)), "out")() :: Nil,
+              LocalRelation())).expressions.head.asInstanceOf[Alias].child
+        }
+
+        val expectedCount = if (alwaysInlineCommonExpr) (1 << depth) - 1 else depth
+        assert(nestedNullIf.collect { case _: NullIf => 1 }.size == expectedCount)
+      }
     }
   }
 
