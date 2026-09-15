@@ -602,6 +602,40 @@ class SortMergeAsOfJoinSuite extends QueryTest
     )
   }
 
+  test("null-safe equi-key (<=>) in ON matches null keys, unlike EqualTo") {
+    // <=> is a residual (empty equi-keys), so null keys match, unlike EqualTo.
+    val schema1 = StructType(
+      StructField("grp", IntegerType, nullable = true) ::
+        StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val schema2 = StructType(
+      StructField("grp", IntegerType, nullable = true) ::
+        StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val df1 = spark.createDataFrame(
+      List(Row(null, 5, "a"), Row(1, 5, "b"), Row(null, 10, "c")).asJava, schema1)
+    val df2 = spark.createDataFrame(
+      List(Row(null, 3, "x"), Row(1, 4, "y"), Row(null, 8, "z")).asJava, schema2)
+    val joined = df1.joinAsOf(
+      df2, df1.col("ts"), df2.col("ts"),
+      joinExprs = df1.col("grp") <=> df2.col("grp"),
+      joinType = "inner", tolerance = null,
+      allowExactMatches = true, direction = "backward")
+    checkAnswer(
+      joined,
+      Seq(
+        Row(null, 5, "a", null, 3, "x"),
+        Row(1, 5, "b", 1, 4, "y"),
+        Row(null, 10, "c", null, 8, "z")
+      )
+    )
+    val plan = joined.queryExecution.executedPlan
+    val asOfExecs = collectWithSubqueries(plan) { case j: SortMergeAsOfJoinExec => j }
+    assert(asOfExecs.length == 1, s"expected one SortMergeAsOfJoinExec in:\n$plan")
+    assert(asOfExecs.head.leftKeys.isEmpty && asOfExecs.head.rightKeys.isEmpty,
+      s"<=> must be a residual, so equi-keys must be empty, got ${asOfExecs.head}")
+  }
+
   test("residual condition via joinExprs") {
     // Test that pair-correlated residual predicates are routed into the
     // scanner's residualCondition (not a post-join FilterExec).
