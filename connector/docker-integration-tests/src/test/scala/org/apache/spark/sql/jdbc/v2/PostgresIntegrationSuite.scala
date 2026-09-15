@@ -38,6 +38,7 @@ import org.apache.spark.tags.DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "postgresql"
   override val db = new PostgresDatabaseOnDocker
+  override def roundsIntegralCast: Boolean = true
 
   object JdbcClientTypes {
     val INTEGER = "int4"
