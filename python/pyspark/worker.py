@@ -77,7 +77,7 @@ from pyspark.sql.conversion import (
     LocalDataToArrowConversion,
     PandasToArrowConversion,
 )
-from pyspark.sql.eval_handlers import EVAL_TYPE_HANDLERS
+from pyspark.sql.eval_handlers._base import EVAL_TYPE_HANDLERS
 from pyspark.sql.eval_handlers.verification import (
     verify_result_row_count,
     verify_scalar_result,

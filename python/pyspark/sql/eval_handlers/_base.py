@@ -24,7 +24,7 @@ circular import.
 
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Optional, cast
 
 from pyspark.serializers import Serializer
 from pyspark.sql.eval_handlers._typing import (
@@ -44,11 +44,37 @@ if TYPE_CHECKING:
 
     from pyspark.worker_util import EvalConf, RunnerConf
 
-# eval type -> handler class, populated by EvalTypeHandler.__init_subclass__.
+# eval type -> handler class, populated by _EvalTypeHandlerMeta at class definition.
 EVAL_TYPE_HANDLERS: "dict[int, type[EvalTypeHandler]]" = {}
 
 
-class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=ABCMeta):
+class _EvalTypeHandlerMeta(ABCMeta):
+    """Registers a concrete handler under its ``eval_type`` at definition time.
+
+    Runs after ``ABCMeta`` sets ``__abstractmethods__``, so a class that declares
+    an ``eval_type`` while leaving ``run``/``serializer`` abstract is rejected here
+    instead of failing when ``read_udfs`` instantiates it.
+    """
+
+    def __new__(mcs, name: str, bases: tuple, namespace: dict, **kwargs: Any) -> type:
+        cls = cast("type[EvalTypeHandler]", super().__new__(mcs, name, bases, namespace, **kwargs))
+        eval_type = namespace.get("eval_type")
+        if eval_type is not None:
+            assert not cls.__abstractmethods__, (
+                "Handler {} declares eval_type {} but is abstract: {}".format(
+                    name, eval_type, sorted(cls.__abstractmethods__)
+                )
+            )
+            assert eval_type not in EVAL_TYPE_HANDLERS, (
+                "Duplicate eval type handler for {}: {} and {}".format(
+                    eval_type, EVAL_TYPE_HANDLERS[eval_type].__name__, name
+                )
+            )
+            EVAL_TYPE_HANDLERS[eval_type] = cls
+        return cls
+
+
+class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandlerMeta):
     """Base class for the Arrow/Pandas UDF execution model.
 
     A handler declares the ``serializer`` for the input/output streams and
@@ -60,18 +86,6 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=ABCMeta):
 
     # PythonEvalType this handler serves; None on the abstract bases.
     eval_type: ClassVar[Optional[int]] = None
-
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
-        # Register concrete handlers, i.e. those that declare an eval type.
-        eval_type = cls.__dict__.get("eval_type")
-        if eval_type is not None:
-            assert eval_type not in EVAL_TYPE_HANDLERS, (
-                "Duplicate eval type handler for {}: {} and {}".format(
-                    eval_type, EVAL_TYPE_HANDLERS[eval_type].__name__, cls.__name__
-                )
-            )
-            EVAL_TYPE_HANDLERS[eval_type] = cls
 
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"
@@ -91,7 +105,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=ABCMeta):
         ``func(split_index, data)`` shape ``read_udfs`` returns."""
 
 
-class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch], metaclass=ABCMeta):
+class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch]):
     """Handler category whose input stream is ``Iterator[pa.RecordBatch]``."""
 
     @property
@@ -99,7 +113,7 @@ class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch], metac
         return ArrowStreamSerializer(write_start_stream=True)
 
 
-class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch], metaclass=ABCMeta):
+class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch]):
     """Handler category whose input stream is ``Iterator[GroupedBatch]``."""
 
     @property
@@ -107,7 +121,7 @@ class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch], metacla
         return ArrowStreamGroupSerializer(write_start_stream=True)
 
 
-class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch], metaclass=ABCMeta):
+class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch]):
     """Handler category whose input stream is ``Iterator[CoGroupedBatch]``."""
 
     @property

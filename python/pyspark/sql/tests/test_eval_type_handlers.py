@@ -17,9 +17,9 @@
 
 import unittest
 
-from pyspark.sql.eval_handlers import (
+from pyspark.sql.eval_handlers._arrow import ArrowScalarUDFHandler
+from pyspark.sql.eval_handlers._base import (
     EVAL_TYPE_HANDLERS,
-    ArrowScalarUDFHandler,
     BatchEvalTypeHandler,
     CoGroupedEvalTypeHandler,
     EvalTypeHandler,
@@ -117,6 +117,19 @@ class EvalTypeHandlerTests(unittest.TestCase):
             ArrowScalarUDFHandler,
         )
 
+    def test_abstract_handler_with_eval_type_rejected(self):
+        # A subclass that declares an eval_type but leaves run abstract must fail
+        # at class definition, not when read_udfs later instantiates it.
+        unused_eval_type = -1
+
+        def _define_abstract():
+            class _Abstract(BatchEvalTypeHandler["pa.RecordBatch"]):
+                eval_type = unused_eval_type
+                # run left abstract on purpose
+
+        self.assertRaises(AssertionError, _define_abstract)
+        self.assertNotIn(unused_eval_type, EVAL_TYPE_HANDLERS)
+
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowScalarUDFHandlerTests(unittest.TestCase):
@@ -153,6 +166,41 @@ class ArrowScalarUDFHandlerTests(unittest.TestCase):
         # The int32 the UDF produced is coerced to the declared LongType (int64).
         self.assertEqual(out[0].schema.field(0).type, pa.int64())
         self.assertEqual(out[0].column(0).to_pylist(), [11, 21])
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class CoGroupedBatchTests(unittest.TestCase):
+    def test_deserialized_co_group_is_a_pair_of_lists(self):
+        # CoGroupedBatch must match what ArrowStreamCoGroupSerializer yields: the
+        # serializer eagerly materializes each side as a list, not an iterator.
+        import io
+
+        import pyarrow as pa
+
+        from pyspark.serializers import write_int
+
+        def arrow_bytes(batches):
+            buf = io.BytesIO()
+            ArrowStreamSerializer().dump_stream(iter(batches), buf)
+            return buf.getvalue()
+
+        left = pa.RecordBatch.from_arrays([pa.array([1, 2])], ["_0"])
+        right = pa.RecordBatch.from_arrays([pa.array([9])], ["_0"])
+
+        stream = io.BytesIO()
+        write_int(2, stream)  # two DataFrames in the co-group
+        stream.write(arrow_bytes([left]))
+        stream.write(arrow_bytes([right]))
+        write_int(0, stream)  # end of stream
+        stream.seek(0)
+
+        groups = list(ArrowStreamCoGroupSerializer().load_stream(stream))
+        self.assertEqual(len(groups), 1)
+        left_side, right_side = groups[0]
+        self.assertIsInstance(left_side, list)
+        self.assertIsInstance(right_side, list)
+        self.assertEqual([b.num_rows for b in left_side], [2])
+        self.assertEqual([b.num_rows for b in right_side], [1])
 
 
 if __name__ == "__main__":

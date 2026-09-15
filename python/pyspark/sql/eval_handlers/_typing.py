@@ -27,10 +27,10 @@ from typing import TYPE_CHECKING, TypeVar
 if TYPE_CHECKING:
     import pyarrow as pa
 
-# Input stream element type for the grouped categories (the batch category's
-# element is a plain ``pa.RecordBatch``).
-GroupedBatch = Iterator["pa.RecordBatch"]  # one group of batches
-CoGroupedBatch = tuple[Iterator["pa.RecordBatch"], Iterator["pa.RecordBatch"]]  # a co-group pair
+# Grouped-category input element, matching what the serializer yields: a group
+# serializer yields a lazy iterator; a co-group serializer materializes each side.
+GroupedBatch = Iterator["pa.RecordBatch"]
+CoGroupedBatch = tuple[list["pa.RecordBatch"], list["pa.RecordBatch"]]
 
 # Handler input and output stream element types.
 InputBatch = TypeVar("InputBatch")
