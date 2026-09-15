@@ -2678,4 +2678,133 @@ class SubquerySuite extends SharedSparkSession
 
     assert(exposedAttribute.exprId == outerReferenceAttribute.exprId)
   }
+
+  test("SPARK-59351: nested subquery referencing the inner query becomes an existence join") {
+    // SPARK-45580 covers the case where the nested subquery references the outer query, in which
+    // case its existence join is built on top of the outer plan. Here the nested subquery
+    // references the query it is nested in, so the existence join has to be built on top of the
+    // subquery plan instead.
+    withTempView("t1", "t2", "t3", "t3n") {
+      Seq((1), (2), (3), (7)).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq((1), (8), (9)).toDF("c1").persist().createOrReplaceTempView("t2")
+      Seq((3), (9)).toDF("col1").persist().createOrReplaceTempView("t3")
+      Seq(Some(3), Some(9), None).toDF("col1").persist().createOrReplaceTempView("t3n")
+
+      // EXISTS rewritten as a left semi join. The correlated predicate is a disjunction, so it
+      // is pulled up as a whole and carries the nested IN-subquery, which references c1, out of
+      // the subquery plan.
+      val query1 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR c1 IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      val df1 = sql(query1)
+      // Every plan node must be able to produce the attributes it references.
+      val invalidNodes = df1.queryExecution.optimizedPlan.collect {
+        case p if p.missingInput.nonEmpty => p
+      }
+      assert(invalidNodes.isEmpty,
+        s"""Plan nodes reference non-reachable attributes:
+           |${invalidNodes.mkString("\n")}
+           |${df1.queryExecution.optimizedPlan}""".stripMargin)
+      checkAnswer(df1, Row(1) :: Row(2) :: Row(3) :: Row(7) :: Nil)
+
+      // Same, with a nested subquery that returns no matching row.
+      val query2 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR c1 IN (SELECT col1 FROM t3 WHERE col1 = 3)
+          |)""".stripMargin
+      checkAnswer(sql(query2), Row(1) :: Nil)
+
+      // NOT EXISTS rewritten as a left anti join.
+      val query3 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE NOT EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR c1 IN (SELECT col1 FROM t3 WHERE col1 = 3)
+          |)""".stripMargin
+      checkAnswer(sql(query3), Row(2) :: Row(3) :: Row(7) :: Nil)
+
+      // IN-subquery rewritten as a left semi join.
+      val query4 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE a IN (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR c1 IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      checkAnswer(sql(query4), Row(1) :: Nil)
+
+      // NOT IN-subquery rewritten as a null-aware left anti join, with a nested EXISTS.
+      val query5 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE a NOT IN (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR EXISTS (SELECT col1 FROM t3 WHERE col1 = c1)
+          |)""".stripMargin
+      checkAnswer(sql(query5), Row(2) :: Row(3) :: Row(7) :: Nil)
+
+      // A nested NOT IN-subquery keeps its null-aware semantics: c1 NOT IN (3, 9, NULL) is
+      // never true, so only the correlated predicate can be satisfied.
+      val query6 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR c1 NOT IN (SELECT col1 FROM t3n)
+          |)""".stripMargin
+      checkAnswer(sql(query6), Row(1) :: Nil)
+
+      // Without the NULL, c1 NOT IN (3, 9) holds for c1 = 1.
+      val query7 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE EXISTS (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR c1 NOT IN (SELECT col1 FROM t3)
+          |)""".stripMargin
+      checkAnswer(sql(query7), Row(1) :: Row(2) :: Row(3) :: Row(7) :: Nil)
+
+      // A nested subquery that is itself correlated to the query it is nested in.
+      val query8 =
+        """
+          |SELECT *
+          |FROM t1
+          |WHERE a IN (
+          |  SELECT c1
+          |  FROM t2
+          |  WHERE a = c1
+          |  OR c1 IN (SELECT col1 FROM t3 WHERE col1 = c1)
+          |)""".stripMargin
+      checkAnswer(sql(query8), Row(1) :: Nil)
+    }
+  }
 }
