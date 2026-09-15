@@ -2768,12 +2768,28 @@ object AsOfJoin {
     def usesArrayOrderExpression(leftType: DataType, rightType: DataType): Boolean =
       (leftType, rightType) match {
         case (ArrayType(leftElem, _), ArrayType(rightElem, _)) =>
-          // Array operands compare element-wise, so elements use the same rules as top-level
-          // operands: identical, coercible (INT vs BIGINT), or positional structs. This matches
-          // the comparison operator, which widens array element types the same way.
-          areOperandsCompatible(leftElem, rightElem)
+          // MATCH_CONDITION compares the two arrays with `>=`, which widens array elements only
+          // through findTightestCommonType (no string promotion, no decimal widening). Accept
+          // exactly what that comparison can compare: orderable elements that are already
+          // structurally equal (BinaryComparison ignores struct field names and nullability) or
+          // have a tightest common type. Otherwise the type check would pass but the `>=` would
+          // fail to resolve.
+          isValidOperandType(leftElem) && isValidOperandType(rightElem) &&
+            (DataType.equalsStructurally(leftElem, rightElem, ignoreNullability = true) ||
+              arrayElementCommonType(leftElem, rightElem).isDefined)
         case _ => false
       }
+
+    /**
+     * The element type the `>=` comparison coerces two array operands to, if any. Binary
+     * comparison widens array elements only through findTightestCommonType, ANSI-aware, so the
+     * type check and the order expression use this instead of the broader findWiderTypeForTwo
+     * (which would string-promote or decimal-widen elements the `>=` cannot).
+     */
+    def arrayElementCommonType(leftElem: DataType, rightElem: DataType): Option[DataType] = {
+      val coercion = if (SQLConf.get.ansiEnabled) AnsiTypeCoercion else TypeCoercion
+      coercion.findTightestCommonType(leftElem, rightElem)
+    }
 
     /** Positional struct operands with the same field count (names may differ). */
     def usesStructDecomposition(leftType: DataType, rightType: DataType): Boolean =
@@ -2986,16 +3002,18 @@ object AsOfJoin {
       operator: MatchComparisonOperator): Expression = {
     val leftElementType = leftOperand.dataType.asInstanceOf[ArrayType].elementType
     val rightElementType = rightOperand.dataType.asInstanceOf[ArrayType].elementType
-    // The ZipWith lambda variables and both array inputs must share one element type. Coercible
-    // element types (e.g. INT vs BIGINT) widen to their common type and both arrays are cast to
-    // it, mirroring the comparison operator. Positional structs whose fields match by position
-    // but not name have no wider type; they keep the left element type and compare element-wise
-    // by ordinal (their field types are read-compatible).
+    // The ZipWith lambda variables and both array inputs must share the element type the `>=`
+    // comparison coerces to. Coercible elements (e.g. INT vs BIGINT, or INT vs FLOAT which widens
+    // to DOUBLE under ANSI) widen to their tightest common type and both arrays are cast to it.
+    // Structurally equal elements (BinaryComparison ignores struct field names) need no cast and
+    // compare element-wise by ordinal.
+    val elementsStructurallyEqual =
+      DataType.equalsStructurally(leftElementType, rightElementType, ignoreNullability = true)
     val (leftArray, rightArray, elementType) =
-      if (DataTypeUtils.sameType(leftElementType, rightElementType)) {
+      if (elementsStructurallyEqual) {
         (leftOperand, rightOperand, leftElementType)
       } else {
-        TypeCoercion.findWiderTypeForTwo(leftElementType, rightElementType) match {
+        MatchConditionTypes.arrayElementCommonType(leftElementType, rightElementType) match {
           case Some(widerElementType) =>
             (castArrayElementType(leftOperand, widerElementType),
               castArrayElementType(rightOperand, widerElementType),

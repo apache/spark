@@ -404,6 +404,42 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
+  test("ARRAY<INT> vs ARRAY<FLOAT> coercible MATCH_CONDITION") {
+    // SPARK-59528: INT vs FLOAT widens to FLOAT (non-ANSI) or DOUBLE (ANSI). The comparison and
+    // the sort/order expression must widen the same way, so the closest match ([1, 2]) is the
+    // same under both modes. Guards against sorting by one element type and comparing by another.
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        checkSortMergeAsOf(
+          sql(
+            """
+              |SELECT r.a
+              |FROM VALUES (ARRAY(1, 3)) AS t(a)
+              |ASOF JOIN VALUES (ARRAY(CAST(1 AS FLOAT), CAST(2 AS FLOAT))),
+              |                 (ARRAY(CAST(1 AS FLOAT), CAST(4 AS FLOAT))) AS r(a)
+              |MATCH_CONDITION (t.a >= r.a)
+              |""".stripMargin),
+          Row(Seq(1.0f, 2.0f)) :: Nil)
+      }
+    }
+  }
+
+  test("nested ARRAY<ARRAY<INT>> vs ARRAY<ARRAY<BIGINT>> coercible MATCH_CONDITION") {
+    // SPARK-59528: the element type is itself an array, so the ZipWith lambda compares elements
+    // via EqualTo/GreaterThan (arrays are not subtractable). [[1, 3]] >= [[1, 2]] holds while
+    // [[1, 3]] >= [[1, 4]] does not, so the closest match is [[1, 2]].
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT r.a
+          |FROM VALUES (ARRAY(ARRAY(1, 3))) AS t(a)
+          |ASOF JOIN VALUES (ARRAY(ARRAY(CAST(1 AS BIGINT), CAST(2 AS BIGINT)))),
+          |                 (ARRAY(ARRAY(CAST(1 AS BIGINT), CAST(4 AS BIGINT)))) AS r(a)
+          |MATCH_CONDITION (t.a >= r.a)
+          |""".stripMargin),
+      Row(Seq(Seq(1L, 2L))) :: Nil)
+  }
+
   test("ARRAY<STRUCT> whole column MATCH_CONDITION") {
     checkSortMergeAsOf(
       sql(
