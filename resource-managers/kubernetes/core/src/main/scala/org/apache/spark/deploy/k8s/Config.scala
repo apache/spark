@@ -687,7 +687,6 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(true)
 
-
   val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
       .doc("Interval between polls against the Kubernetes API server to inspect the " +
@@ -705,6 +704,42 @@ private[spark] object Config extends Logging {
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
+
+  val KUBERNETES_EXECUTOR_ENABLE_INFORMER =
+    ConfigBuilder("spark.kubernetes.executor.enableInformer")
+      .doc("If true, use a shared Kubernetes informer (list + watch) to track executor pod " +
+        "state, driven by ExecutorPodsInformerSnapshotSource (event-driven) and " +
+        "ExecutorPodsListerSnapshotSource (periodic refresh of the informer cache). If " +
+        "false (default), use the legacy path backed by ExecutorPodsWatchSnapshotSource and " +
+        "ExecutorPodsPollingSnapshotSource. The two modes are mutually exclusive; " +
+        "`spark.kubernetes.executor.enableApiWatcher` and " +
+        "`spark.kubernetes.executor.enableApiPolling` only apply when this is false.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_EXECUTOR_LISTER_POLLING_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.listerPollingInterval")
+      .doc("Interval between polls against the Kubernetes informer cache to inspect the " +
+        "state of executors. Only applies when " +
+        "`spark.kubernetes.executor.enableInformer` is true.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval > 0,
+        "Informer lister polling interval must be a positive time value.")
+      .createWithDefaultString("30s")
+
+  val KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.informerResyncInterval")
+      .doc("Interval between informer cache resync. The resync replays every cached pod as " +
+        "an update event to registered handlers; it does not re-list against the apiserver. " +
+        "Only applies when `spark.kubernetes.executor.enableInformer` is true. " +
+        "Default is 0 (disabled).")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval >= 0,
+        "Informer resync interval must not be a negative time value.")
+      .createWithDefaultString("0s")
 
   val KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.eventProcessingInterval")
