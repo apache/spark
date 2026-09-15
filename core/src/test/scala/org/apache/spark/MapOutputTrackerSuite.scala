@@ -1291,6 +1291,11 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
         s
       })
       assert(workerTracker.getStaleMapIndexes(0).contains(1))
+
+      // SPARK-57491 followup: stage retry (unregisterAllMapAndMergeOutput) must reset the stale
+      // set so a retried stage does not carry over stale marks from the previous attempt.
+      masterTracker.unregisterAllMapAndMergeOutput(0)
+      assert(shuffleStatus.getStaleMapIndexes.isEmpty)
     } finally {
       masterTracker.stop()
       rpcEnv.shutdown()
