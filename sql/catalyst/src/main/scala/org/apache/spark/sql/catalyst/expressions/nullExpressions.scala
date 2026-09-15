@@ -175,7 +175,7 @@ case class Coalesce(children: Seq[Expression])
     copy(children = newChildren)
 }
 
-private case class TypedNullLiteral(child: Expression)
+private[sql] case class TypedNullLiteral(child: Expression)
     extends UnaryExpression with RuntimeReplaceable {
   override def nullable: Boolean = true
 
@@ -191,14 +191,13 @@ private case class TypedNullLiteral(child: Expression)
     TypedNullLiteral.create(newChild)
 }
 
-private object TypedNullLiteral {
-  def create(child: Expression): Expression = {
-    if (child.resolved) {
-      Literal.create(null, child.dataType)
-    } else {
-      TypedNullLiteral(child)
-    }
-  }
+private[sql] object TypedNullLiteral {
+  /**
+   * Replaces a resolved child with a typed null marker to avoid 3^n growth in nested `NullIf`
+   * plans.
+   */
+  def create(child: Expression): TypedNullLiteral = TypedNullLiteral(
+    if (child.resolved) Literal.create(null, child.dataType) else child)
 }
 
 @ExpressionDescription(

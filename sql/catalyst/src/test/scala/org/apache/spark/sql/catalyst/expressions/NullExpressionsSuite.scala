@@ -171,7 +171,9 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         case _: UnresolvedAttribute => Literal("lit")
       }
 
-      assert(!resolvedNullIf.exists(_.isInstanceOf[TypedNullLiteral]))
+      assert(resolvedNullIf.collect {
+        case TypedNullLiteral(child) => child
+      } == Seq(Literal.create(null, StringType)))
     }
   }
 
@@ -182,7 +184,9 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         case (left, right) => new NullIf(left, Literal(right))
       }
 
-      assert(!nestedNullIf.exists(_.isInstanceOf[TypedNullLiteral]))
+      assert(nestedNullIf.collect {
+        case TypedNullLiteral(child) => child
+      }.forall(_.isInstanceOf[Literal]))
       // Each resolved NullIf should double the nested subtree instead of tripling it.
       assert(nestedNullIf.collect { case _: NullIf => 1 }.size == (1 << depth) - 1)
     }
