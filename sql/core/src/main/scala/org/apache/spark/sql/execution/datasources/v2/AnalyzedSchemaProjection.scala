@@ -305,9 +305,11 @@ private[sql] object AnalyzedSchemaProjection extends SQLConfHelper {
       caseSensitive: Boolean) {
     private val dataAttrs = attributes.filterNot(_.isMetadataCol)
     private val metadataAttrs = attributes.filter(_.isMetadataCol)
-    // Built once: `AttributeSeq` keeps its name index in per-instance lazy state, so wrapping the
-    // attributes on each lookup would rebuild that index for every column.
+    // Both indexes are built once, because `get` runs per column: `AttributeSeq` keeps its name
+    // index in per-instance lazy state, and recovering the attribute by expression ID would
+    // otherwise scan the attributes again on every lookup.
     private val dataAttrSeq = AttributeSeq(dataAttrs)
+    private val dataAttrsById = dataAttrs.map(attr => attr.exprId -> attr).toMap
 
     def get(target: AttributeReference): Option[AttributeReference] = {
       if (target.isMetadataCol) {
@@ -317,8 +319,7 @@ private[sql] object AnalyzedSchemaProjection extends SQLConfHelper {
         dataAttrSeq.resolve(Seq(target.name), resolver).flatMap { resolved =>
           // `resolve` renames the attribute it returns to the requested name; recover the attribute
           // itself so the rebound output keeps its own name and expression ID.
-          val exprId = resolved.references.head.exprId
-          dataAttrs.find(_.exprId == exprId)
+          dataAttrsById.get(resolved.references.head.exprId)
         }
       }
     }
