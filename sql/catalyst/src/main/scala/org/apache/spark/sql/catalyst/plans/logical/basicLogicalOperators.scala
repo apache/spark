@@ -2696,12 +2696,9 @@ object AsOfJoin {
   }
 
   /**
-   * Casts a scalar operand pair to the common type the comparison operator would use, so the
-   * comparison, ordering distance, and per-side sort keys all agree. This is required for a
-   * string vs DATE/TIMESTAMP/number pair: the sort-merge scan sorts the right buffer by its sort
-   * key, and only a shared type keeps that order consistent with the coerced comparison. STRUCT
-   * and ARRAY operands are left untouched: they keep the stricter widening rule and build their
-   * own comparison and ordering, so this scalar string coercion does not apply.
+   * Casts a scalar operand pair to the comparison operator's common type so the comparison,
+   * ordering, and sort keys agree (needed for string vs DATE/TIMESTAMP/number, where the buffer
+   * would otherwise sort by a different type). STRUCT/ARRAY operands are left uncoerced.
    */
   private def coerceMatchLeafOperands(
       leftOperand: Expression,
@@ -2733,12 +2730,9 @@ object AsOfJoin {
 
     /**
      * Top-level operand compatibility. A string vs non-string scalar pair is compatible only when
-     * that comparison has a common type, so DATE/TIMESTAMP/number vs STRING coerce like `>=` while
-     * e.g. STRING vs INTERVAL is rejected, the same as `>=` (accepting it via `findWiderTypeForTwo`
-     * would pass validation but leave the operands uncoerced, the drift this shared code prevents).
-     * Other scalar pairs are compatible when they widen. STRUCT/ARRAY operands keep the stricter
-     * widening rule via [[areFieldTypesCompatible]]; the scalar string coercion does not apply to
-     * their composite comparison and ordering.
+     * the comparison operator has a common type for it, so it coerces like `>=` (accepting DATE vs
+     * STRING, rejecting STRING vs INTERVAL). Other scalars widen; STRUCT/ARRAY use the stricter
+     * [[areFieldTypesCompatible]] rule.
      */
     def areOperandsCompatible(leftType: DataType, rightType: DataType): Boolean = {
       if (!isValidOperandType(leftType) || !isValidOperandType(rightType)) {
@@ -2753,11 +2747,9 @@ object AsOfJoin {
     }
 
     /**
-     * The type both scalar operands are cast to before comparison, ordering, and sort, mirroring
-     * the comparison operator's string coercion in the active mode (ANSI or default). Only a
-     * string vs non-string pair needs it: a string sorts lexicographically while its target sorts
-     * by value, so the two must share a type. Numeric and datetime widenings are monotonic, so
-     * those pairs keep their raw operands and this returns [[None]].
+     * The type a string vs non-string scalar pair is cast to for comparison, ordering, and sort,
+     * mirroring the comparison operator's string coercion in the active mode (ANSI or default).
+     * Returns [[None]] for other pairs, whose monotonic widening keeps the raw operands.
      */
     private[catalyst] def matchComparisonCommonType(
         leftType: DataType,
@@ -2775,10 +2767,8 @@ object AsOfJoin {
     }
 
     /**
-     * True when either operand is a STRUCT or ARRAY. These composite operands keep the stricter
-     * widening rule and build their own comparison and ordering, so the scalar string coercion
-     * does not apply. Both [[areOperandsCompatible]] and the leaf coercion branch on this and must
-     * stay in lockstep: one keeps such a pair on the strict widening rule, the other leaves it raw.
+     * True when either operand is a STRUCT or ARRAY. These keep the stricter widening rule and are
+     * left uncoerced; [[areOperandsCompatible]] and the leaf coercion both branch on this.
      */
     private[catalyst] def isCompositeOperand(
         leftType: DataType,
@@ -2790,9 +2780,8 @@ object AsOfJoin {
       leftType.isInstanceOf[StringType] != rightType.isInstanceOf[StringType]
 
     /**
-     * Compatibility for STRUCT fields, ARRAY elements, and STRUCT/ARRAY operands. Fields widen
-     * only (string vs temporal stays rejected), since the whole-value sort key cannot apply a
-     * per-field cast.
+     * Strict rule for STRUCT fields, ARRAY elements, and composite operands: widen only, with
+     * string vs temporal rejected.
      */
     private def areFieldTypesCompatible(leftType: DataType, rightType: DataType): Boolean = {
       if (!isValidOperandType(leftType) || !isValidOperandType(rightType)) {

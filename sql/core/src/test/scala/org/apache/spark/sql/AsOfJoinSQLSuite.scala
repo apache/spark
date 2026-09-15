@@ -186,9 +186,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
           stop = 120)))
   }
 
-  // A numeric MATCH_CONDITION must sort by value, not lexicographically, in both modes: ANSI widens
-  // INT vs STRING to LONG, the default mode to INT. The string case is the only one that tells the
-  // two sorts apart (ISO date/timestamp strings sort the same either way), so assert the sort type.
+  // A numeric MATCH_CONDITION must sort by value, not lexicographically (the string case is the
+  // only one that shows it). ANSI widens INT vs STRING to LONG, the default mode to INT.
   Seq(true -> LongType, false -> IntegerType).foreach { case (ansi, sortType) =>
     test(s"MATCH_CONDITION coerces INT vs STRING to a numeric sort key (ansi=$ansi)") {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
@@ -239,8 +238,7 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
   Seq(true, false).foreach { ansi =>
     test(s"MATCH_CONDITION coerces DATE vs STRING like the comparison operator (ansi=$ansi)") {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
-        // `l.d >= r.s` type-checks: the string is coerced to DATE, the same as a bare `>=`
-        // comparison. Before SPARK-59527 this failed with INVALID_TYPE.
+        // Coerced to DATE like `>=`; before SPARK-59527 this failed with INVALID_TYPE.
         val sqlText =
           """
             |SELECT l.d, r.s
@@ -252,8 +250,7 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
           case j: AsOfJoin => j
         }.get
         assert(asOfJoin.asOfCondition.resolved)
-        // Both sort keys carry DATE so the sort-merge order matches the coerced comparison; a raw
-        // STRING sort key would order lexicographically and pick the wrong as-of match.
+        // Both sort keys are DATE, so the sort order matches the coerced comparison.
         assert(asOfJoin.leftSortExprs.nonEmpty && asOfJoin.rightSortExprs.nonEmpty)
         assert(asOfJoin.leftSortExprs.forall(_.dataType == DateType))
         assert(asOfJoin.rightSortExprs.forall(_.dataType == DateType))
