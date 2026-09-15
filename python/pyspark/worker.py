@@ -2851,6 +2851,20 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 )
                 del result
 
+        # Bound each output RecordBatch toward the byte cap (no limit when unset).
+        max_output_bytes = runner_conf.python_udf_arrow_worker_output_batch_max_bytes
+        if max_output_bytes > 0:
+            inner_grouped_func = grouped_func
+
+            def grouped_func(
+                split_index: int,
+                data: Iterator[Iterator[pa.RecordBatch]],
+            ) -> Iterator[pa.RecordBatch]:
+                return ArrowBatchTransformer.resize_batches(
+                    inner_grouped_func(split_index, data),
+                    max_output_bytes,
+                )
+
         return grouped_func, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:

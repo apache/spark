@@ -371,6 +371,11 @@ class RunnerConf(Conf):
         return int(self.get("spark.sql.execution.arrow.maxBytesPerBatch", 2**31 - 1))
 
     @property
+    def python_udf_arrow_worker_output_batch_max_bytes(self) -> int:
+        # -1 (the default) means no limit; only positive values enable output batch resizing.
+        return int(self.get("spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes", -1))
+
+    @property
     def arrow_concurrency_level(self) -> int:
         return int(self.get("spark.sql.execution.pythonUDF.arrow.concurrency.level", -1))
 
