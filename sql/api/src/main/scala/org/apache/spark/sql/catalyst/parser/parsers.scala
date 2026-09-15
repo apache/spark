@@ -347,19 +347,19 @@ case object PostProcessor extends SqlBaseParserBaseListener {
     // parent still holds `ctx` as its last child, which is the state every normal exit is in;
     // otherwise leave the tree alone and let the original error propagate.
     val parent = ctx.getParent
-    if (ctx.getChildCount == 0 || parent == null || parent.getChildCount == 0 ||
-      (parent.getChild(parent.getChildCount - 1) ne ctx)) {
-      return
+    val stillAttached = parent != null && parent.getChildCount > 0 &&
+      parent.getChild(parent.getChildCount - 1) == ctx
+    if (ctx.getChildCount > 0 && stillAttached) {
+      parent.removeLastChild()
+      val token = ctx.getChild(0).getPayload.asInstanceOf[Token]
+      val newToken = new CommonToken(
+        new org.antlr.v4.runtime.misc.Pair(token.getTokenSource, token.getInputStream),
+        SqlBaseParser.IDENTIFIER,
+        token.getChannel,
+        token.getStartIndex + stripMargins,
+        token.getStopIndex - stripMargins)
+      parent.addChild(new TerminalNodeImpl(f(newToken)))
     }
-    parent.removeLastChild()
-    val token = ctx.getChild(0).getPayload.asInstanceOf[Token]
-    val newToken = new CommonToken(
-      new org.antlr.v4.runtime.misc.Pair(token.getTokenSource, token.getInputStream),
-      SqlBaseParser.IDENTIFIER,
-      token.getChannel,
-      token.getStartIndex + stripMargins,
-      token.getStopIndex - stripMargins)
-    parent.addChild(new TerminalNodeImpl(f(newToken)))
   }
 }
 
