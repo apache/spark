@@ -3315,10 +3315,16 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   private def genCodeForNumberOfElements(ctx: CodegenContext) : (String, String) = {
     val numElements = ctx.freshName("numElements")
     val z = ctx.freshName("z")
+    // The upper bound is checked here rather than left to the array allocation so that this path
+    // reports the same error as `eval`. Without it the allocation fails with an internal error.
     val code = s"""
         |long $numElements = 0L;
         |for (int $z = 0; $z < ${children.length}; $z++) {
         |  $numElements += args[$z].numElements();
+        |}
+        |if ($numElements > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+        |  throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+        |    "$prettyName", $numElements);
         |}
       """.stripMargin
 
