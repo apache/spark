@@ -26,7 +26,8 @@ import scala.util.Random
 import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{
+  CodegenObjectFactoryMode, Expression, Literal, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
@@ -1180,6 +1181,33 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
+    // Verify the default array_sort comparator under whole-stage codegen. The source is
+    // materialized via a cached temp view (an InMemoryRelation) so the plan is not folded to
+    // interpreted eval by ConvertToLocalRelation, which would otherwise make CODEGEN_ONLY a no-op.
+    withTempView("array_sort_codegen") {
+      df.createOrReplaceTempView("array_sort_codegen")
+      spark.catalog.cacheTable("array_sort_codegen")
+      val query = "SELECT array_sort(a), array_sort(b) FROM array_sort_codegen"
+      val expected = Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+      withSQLConf(
+          SQLConf.CODEGEN_FACTORY_MODE.key ->
+            CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+        val codegenDF = sql(query)
+        assert(
+          codegenDF.queryExecution.executedPlan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          "expected the array_sort query to run inside whole-stage codegen")
+        checkAnswer(codegenDF, expected)
+      }
+      withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+          SQLConf.CODEGEN_FACTORY_MODE.key ->
+            CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+        checkAnswer(sql(query), expected)
+      }
+    }
     checkAnswer(
       df.selectExpr("array_sort(a)", "array_sort(b)"),
       Seq(
