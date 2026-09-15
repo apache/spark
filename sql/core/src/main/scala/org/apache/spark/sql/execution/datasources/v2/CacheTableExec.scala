@@ -91,7 +91,8 @@ case class CacheTableAsSelectExec(
     originalText: String,
     override val isLazy: Boolean,
     override val options: Map[String, String],
-    referredTempFunctions: Seq[String]) extends BaseCacheTableExec {
+    referredTempFunctions: Seq[String],
+    referredTempVariablesUnderIdentifier: Seq[Seq[String]]) extends BaseCacheTableExec {
   override lazy val relationName: String = tempViewName
 
   override def planToCache: LogicalPlan = UnresolvedRelation(Seq(tempViewName))
@@ -110,7 +111,8 @@ case class CacheTableAsSelectExec(
       replace = false,
       viewType = LocalTempView,
       isAnalyzed = true,
-      referredTempFunctions = referredTempFunctions
+      referredTempFunctions = referredTempFunctions,
+      referredTempVariablesUnderIdentifier = referredTempVariablesUnderIdentifier
     ).run(session)
     try {
       super.run()
