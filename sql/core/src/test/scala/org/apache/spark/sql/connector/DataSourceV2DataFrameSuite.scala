@@ -23,7 +23,7 @@ import java.util.Collections
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SessionQueryTest, SparkSession}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1757,12 +1757,12 @@ class DataSourceV2DataFrameSuite
       catalog("testcat")
         .alterTable(testIdent, TableChange.addColumn(Array("st", longS), IntegerType, true))
 
-      val fresh = intercept[Throwable](sql(s"SELECT st.s FROM $t").collect())
-      assert(fresh.asInstanceOf[SparkThrowable].getCondition == "AMBIGUOUS_REFERENCE_TO_FIELDS")
+      val fresh = intercept[AnalysisException](sql(s"SELECT st.s FROM $t").collect())
+      assert(fresh.getCondition == "AMBIGUOUS_REFERENCE_TO_FIELDS")
 
-      val refreshed = intercept[Throwable](stale.collect())
+      val refreshed = intercept[AnalysisException](stale.collect())
       assert(
-        refreshed.asInstanceOf[SparkThrowable].getCondition == "AMBIGUOUS_REFERENCE_TO_FIELDS",
+        refreshed.getCondition == "AMBIGUOUS_REFERENCE_TO_FIELDS",
         "the refreshed plan must report the ambiguity a fresh query reports")
     }
 

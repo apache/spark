@@ -569,7 +569,7 @@ private[spark] object SchemaUtils {
    * captured field with a field resolution would not have chosen. Equally, a lone candidate the
    * fold collects is not a match until the resolver agrees: the fold equates U+0130 CAPITAL I WITH
    * DOT with `i` plus a combining dot while `equalsIgnoreCase` does not, so accepting it here would
-   * report a schema as compatible that no query can read that name out of.
+   * call a schema compatible when no query can read that name out of it.
    */
   private def matchField(
       candidatesByFoldedName: Map[String, Seq[StructField]],

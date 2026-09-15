@@ -427,11 +427,12 @@ class AnalyzedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
       caseSensitive = true)
   }
 
-  test("match names with the fold name resolution uses, not with the resolver") {
-    // U+0130 CAPITAL I WITH DOT separates the two identity rules: `equalsIgnoreCase` equates it
-    // with `i`, while folding with `toLowerCase` maps it to `i` plus a combining dot. Resolution
-    // and refresh validation both key on the fold, so this pair names two different columns and
-    // rebinding must report the captured one missing rather than bind it to the other.
+  test("reject a captured column the fold separates from every current name") {
+    // U+0130 CAPITAL I WITH DOT separates the two halves of the identity rule: `equalsIgnoreCase`
+    // equates it with `i`, while folding with `toLowerCase` maps it to `i` plus a combining dot.
+    // Top-level resolution collects candidates by the fold before applying the resolver, so the
+    // fold alone already rules this pair out: it names two different columns, and rebinding must
+    // report the captured one missing rather than bind it to the other.
     val capitalIWithDot = new String(Character.toChars(0x130))
     val capturedNested = StructType(Seq(StructField("i", StringType, nullable = false)))
     val currentNested =
@@ -685,114 +686,6 @@ class AnalyzedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
     assert(project.output.head.metadata == comment, "the captured comment must survive the rebuild")
   }
 
-  // U+017F LONG S folds to itself but `equalsIgnoreCase` equates it with `s`.
-  private val longS = new String(Character.toChars(0x17f))
-  // U+0130 CAPITAL I WITH DOT folds to `i` plus a combining dot, which `equalsIgnoreCase` does
-  // not equate with either. A Turkish default locale keeps the two apart for the duplicate check.
-  private val capitalIDot = new String(Character.toChars(0x130))
-  private val iCombiningDot = "i" + new String(Character.toChars(0x307))
-  // U+00CC/U+00EC differ only by case to both rules, so they are ambiguous rather than distinct.
-  private val capitalIGrave = new String(Character.toChars(0xcc))
-  private val smallIGrave = new String(Character.toChars(0xec))
-
-  /**
-   * One row of the name-matching contract.
-   *
-   * `topExpected` and `nestedExpected` are the recorded behaviour of Spark's own resolution:
-   * `AttributeSeq.resolve` for a top-level column and `ExtractValue.extractValue` for a struct
-   * field. They are written as literals rather than derived from those APIs at run time, so that a
-   * change on either side - ours or Catalyst's - turns this test red instead of silently following.
-   * `Left` is an expected error condition, `Right` an expected ordinal in `current`.
-   *
-   * The two levels differ because Spark's two rules differ: top-level resolution folds names with
-   * `toLowerCase(ROOT)` to collect candidates and only then filters them with the resolver, while
-   * struct-field resolution compares with the resolver alone. A pair the fold separates but the
-   * resolver equates is therefore a distinct column at the top level and ambiguous inside a struct.
-   */
-  private case class NameCase(
-      label: String,
-      captured: String,
-      current: Seq[String],
-      topExpected: Either[String, Int],
-      nestedExpected: Either[String, Int])
-
-  private val nameCases = Seq(
-    NameCase("ascii case rename", "c", Seq("C"), Right(0), Right(0)),
-    NameCase("longS after the captured name", "s", Seq("S", longS),
-      Right(0), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")),
-    NameCase("longS before the captured name", "s", Seq(longS, "S"),
-      Right(1), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")),
-    NameCase("fold-colliding addition first", iCombiningDot, Seq(capitalIDot, iCombiningDot),
-      Right(1), Right(1)),
-    NameCase("fold-colliding addition last", iCombiningDot, Seq(iCombiningDot, capitalIDot),
-      Right(0), Right(0)),
-    NameCase("resolver-equal pair first", smallIGrave, Seq(capitalIGrave, smallIGrave),
-      Left("AMBIGUOUS_REFERENCE"), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")),
-    NameCase("resolver-equal pair last", smallIGrave, Seq(smallIGrave, capitalIGrave),
-      Left("AMBIGUOUS_REFERENCE"), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")),
-    NameCase("case-folding duplicates", "dup", Seq("dup", "DUP"),
-      Left("AMBIGUOUS_REFERENCE"), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")))
-
-  private def condition(t: Throwable): String = t match {
-    case s: SparkThrowable => s.getCondition
-    case other => other.getClass.getSimpleName
-  }
-
-  /** Rebinds a captured column against `current` and reports the ordinal it reads. */
-  private def rebindTopLevel(captured: String, current: Seq[String]): Either[String, Int] = {
-    val relation = DataSourceV2Relation(
-      table = new TestTable(current.map(n => Column.create(n, IntegerType)).toArray),
-      output = Seq(AttributeReference(captured, IntegerType)()),
-      catalog = None,
-      identifier = None,
-      options = CaseInsensitiveStringMap.empty())
-    try {
-      val rebound = AnalyzedSchemaProjection.rebindToAnalyzedSchema(relation).asInstanceOf[Project]
-      val read = rebound.projectList.head.references.head
-      Right(rebound.child.output.indexWhere(_.exprId == read.exprId))
-    } catch {
-      case e: Throwable => Left(condition(e))
-    }
-  }
-
-  /** Projects a captured struct field out of `current` and reports the ordinal it extracts. */
-  private def projectNested(captured: String, current: Seq[String]): Either[String, Int] = {
-    val currentType = StructType(current.map(n => StructField(n, IntegerType)))
-    val capturedType = StructType(Seq(StructField(captured, IntegerType)))
-    try {
-      val projected = project(AttributeReference("st", currentType)(), currentType, capturedType)
-      projected.collect { case g: GetStructField => g.ordinal } match {
-        case Seq(ordinal) => Right(ordinal)
-        case ordinals => Left(s"expected one extraction, got $ordinals")
-      }
-    } catch {
-      case e: Throwable => Left(condition(e))
-    }
-  }
-
-  private def topAuthority(captured: String, current: Seq[String]): Either[String, Int] = {
-    val attrs = current.map(n => AttributeReference(n, IntegerType)())
-    try {
-      AttributeSeq(attrs).resolve(Seq(captured), caseInsensitiveResolution) match {
-        case Some(resolved) =>
-          Right(attrs.indexWhere(_.exprId == resolved.references.head.exprId))
-        case None => Left("NO MATCH")
-      }
-    } catch {
-      case e: Throwable => Left(condition(e))
-    }
-  }
-
-  private def nestedAuthority(captured: String, current: Seq[String]): Either[String, Int] = {
-    val currentType = StructType(current.map(n => StructField(n, IntegerType)))
-    ExtractValue
-      .extractValue(
-        AttributeReference("st", currentType)(), Literal(captured), caseInsensitiveResolution)
-      .fold(
-        extracted => Right(extracted.asInstanceOf[GetStructField].ordinal),
-        throwable => Left(condition(throwable)))
-  }
-
   test("name matching matches Spark's own resolution (recorded outcomes)") {
     nameCases.foreach { c =>
       assert(
@@ -967,6 +860,114 @@ class AnalyzedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHel
           s"'$label' must be rejected by validation, which is what stops it reaching rebinding")
       }
     }
+  }
+
+  // U+017F LONG S folds to itself but `equalsIgnoreCase` equates it with `s`.
+  private val longS = new String(Character.toChars(0x17f))
+  // U+0130 CAPITAL I WITH DOT folds to `i` plus a combining dot, which `equalsIgnoreCase` does
+  // not equate with either. A Turkish default locale keeps the two apart for the duplicate check.
+  private val capitalIDot = new String(Character.toChars(0x130))
+  private val iCombiningDot = "i" + new String(Character.toChars(0x307))
+  // U+00CC/U+00EC differ only by case to both rules, so they are ambiguous rather than distinct.
+  private val capitalIGrave = new String(Character.toChars(0xcc))
+  private val smallIGrave = new String(Character.toChars(0xec))
+
+  /**
+   * One row of the name-matching contract.
+   *
+   * `topExpected` and `nestedExpected` are the recorded behaviour of Spark's own resolution:
+   * `AttributeSeq.resolve` for a top-level column and `ExtractValue.extractValue` for a struct
+   * field. They are written as literals rather than derived from those APIs at run time, so that a
+   * change on either side - ours or Catalyst's - turns this test red instead of silently following.
+   * `Left` is an expected error condition, `Right` an expected ordinal in `current`.
+   *
+   * The two levels differ because Spark's two rules differ: top-level resolution folds names with
+   * `toLowerCase(ROOT)` to collect candidates and only then filters them with the resolver, while
+   * struct-field resolution compares with the resolver alone. A pair the fold separates but the
+   * resolver equates is therefore a distinct column at the top level and ambiguous inside a struct.
+   */
+  private case class NameCase(
+      label: String,
+      captured: String,
+      current: Seq[String],
+      topExpected: Either[String, Int],
+      nestedExpected: Either[String, Int])
+
+  private val nameCases = Seq(
+    NameCase("ascii case rename", "c", Seq("C"), Right(0), Right(0)),
+    NameCase("longS after the captured name", "s", Seq("S", longS),
+      Right(0), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")),
+    NameCase("longS before the captured name", "s", Seq(longS, "S"),
+      Right(1), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")),
+    NameCase("fold-colliding addition first", iCombiningDot, Seq(capitalIDot, iCombiningDot),
+      Right(1), Right(1)),
+    NameCase("fold-colliding addition last", iCombiningDot, Seq(iCombiningDot, capitalIDot),
+      Right(0), Right(0)),
+    NameCase("resolver-equal pair first", smallIGrave, Seq(capitalIGrave, smallIGrave),
+      Left("AMBIGUOUS_REFERENCE"), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")),
+    NameCase("resolver-equal pair last", smallIGrave, Seq(smallIGrave, capitalIGrave),
+      Left("AMBIGUOUS_REFERENCE"), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")),
+    NameCase("case-folding duplicates", "dup", Seq("dup", "DUP"),
+      Left("AMBIGUOUS_REFERENCE"), Left("AMBIGUOUS_REFERENCE_TO_FIELDS")))
+
+  private def condition(t: Throwable): String = t match {
+    case s: SparkThrowable => s.getCondition
+    case other => other.getClass.getSimpleName
+  }
+
+  /** Rebinds a captured column against `current` and reports the ordinal it reads. */
+  private def rebindTopLevel(captured: String, current: Seq[String]): Either[String, Int] = {
+    val relation = DataSourceV2Relation(
+      table = new TestTable(current.map(n => Column.create(n, IntegerType)).toArray),
+      output = Seq(AttributeReference(captured, IntegerType)()),
+      catalog = None,
+      identifier = None,
+      options = CaseInsensitiveStringMap.empty())
+    try {
+      val rebound = AnalyzedSchemaProjection.rebindToAnalyzedSchema(relation).asInstanceOf[Project]
+      val read = rebound.projectList.head.references.head
+      Right(rebound.child.output.indexWhere(_.exprId == read.exprId))
+    } catch {
+      case e: Throwable => Left(condition(e))
+    }
+  }
+
+  /** Projects a captured struct field out of `current` and reports the ordinal it extracts. */
+  private def projectNested(captured: String, current: Seq[String]): Either[String, Int] = {
+    val currentType = StructType(current.map(n => StructField(n, IntegerType)))
+    val capturedType = StructType(Seq(StructField(captured, IntegerType)))
+    try {
+      val projected = project(AttributeReference("st", currentType)(), currentType, capturedType)
+      projected.collect { case g: GetStructField => g.ordinal } match {
+        case Seq(ordinal) => Right(ordinal)
+        case ordinals => Left(s"expected one extraction, got $ordinals")
+      }
+    } catch {
+      case e: Throwable => Left(condition(e))
+    }
+  }
+
+  private def topAuthority(captured: String, current: Seq[String]): Either[String, Int] = {
+    val attrs = current.map(n => AttributeReference(n, IntegerType)())
+    try {
+      AttributeSeq(attrs).resolve(Seq(captured), caseInsensitiveResolution) match {
+        case Some(resolved) =>
+          Right(attrs.indexWhere(_.exprId == resolved.references.head.exprId))
+        case None => Left("NO MATCH")
+      }
+    } catch {
+      case e: Throwable => Left(condition(e))
+    }
+  }
+
+  private def nestedAuthority(captured: String, current: Seq[String]): Either[String, Int] = {
+    val currentType = StructType(current.map(n => StructField(n, IntegerType)))
+    ExtractValue
+      .extractValue(
+        AttributeReference("st", currentType)(), Literal(captured), caseInsensitiveResolution)
+      .fold(
+        extracted => Right(extracted.asInstanceOf[GetStructField].ordinal),
+        throwable => Left(condition(throwable)))
   }
 
   private def escapeName(name: String): String =

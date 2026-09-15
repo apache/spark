@@ -27,8 +27,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, Metadata, Struc
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
- * Rebinds a relation whose table has moved on to the output the plan above it was analyzed with -
- * the schema `V2TableUtil.validateCapturedColumns` calls the captured one.
+ * Restores the output a plan was analyzed with on a relation whose table has since changed - the
+ * schema `V2TableUtil.validateCapturedColumns` calls the captured one.
  *
  * The relation exposes the table's current schema, so its output stays aligned with the physical
  * scan, and a projection on top recreates the columns, types and expression IDs the parent plan was
@@ -302,13 +302,16 @@ private[sql] object AnalyzedSchemaProjection extends SQLConfHelper {
       caseSensitive: Boolean) {
     private val dataAttrs = attributes.filterNot(_.isMetadataCol)
     private val metadataAttrs = attributes.filter(_.isMetadataCol)
+    // Built once: `AttributeSeq` keeps its name index in per-instance lazy state, so wrapping the
+    // attributes on each lookup would rebuild that index for every column.
+    private val dataAttrSeq = AttributeSeq(dataAttrs)
 
     def get(target: AttributeReference): Option[AttributeReference] = {
       if (target.isMetadataCol) {
         matchFoldedName(metadataAttrs, metadataLogicalName(target), caseSensitive)(
           metadataLogicalName).map(pos => metadataAttrs(pos))
       } else {
-        AttributeSeq(dataAttrs).resolve(Seq(target.name), resolver).flatMap { resolved =>
+        dataAttrSeq.resolve(Seq(target.name), resolver).flatMap { resolved =>
           // `resolve` renames the attribute it returns to the requested name; recover the attribute
           // itself so the rebound output keeps its own name and expression ID.
           val exprId = resolved.references.head.exprId
