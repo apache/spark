@@ -491,8 +491,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self._check_print_schema(query)
 
     def test_char_varchar_result_schema(self):
-        # SPARK-58794: Python Connect maps first-class CHAR/VARCHAR the same as classic.
-        query = "SELECT CAST('ab' AS CHAR(4)) AS c, CAST('cd' AS VARCHAR(6)) AS v"
+        # SPARK-59276: Python Connect maps first-class CHAR/VARCHAR the same as classic.
+        query = """
+            SELECT
+              CAST('ab' AS CHAR(4)) AS c,
+              CAST('cd' AS VARCHAR(6)) AS v,
+              CAST('ef' AS CHAR(4) COLLATE UTF8_LCASE) AS collated_c,
+              CAST('gh' AS VARCHAR(6) COLLATE UNICODE_CI) AS collated_v
+        """
         conf = {"spark.sql.charVarchar.standardSemantics.enabled": "true"}
         with self.both_conf(conf):
             classic_df = self.spark.sql(query)
@@ -500,8 +506,13 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assertEqual(classic_df.schema, connect_df.schema)
             self.assertEqual(classic_df.schema["c"].dataType, CharType(4))
             self.assertEqual(classic_df.schema["v"].dataType, VarcharType(6))
+            self.assertEqual(classic_df.schema["collated_c"].dataType, CharType(4, "UTF8_LCASE"))
+            self.assertEqual(classic_df.schema["collated_v"].dataType, VarcharType(6, "UNICODE_CI"))
             self.assertEqual(classic_df.collect(), connect_df.collect())
-            self.assertEqual(connect_df.collect(), [Row(c="ab  ", v="cd")])
+            self.assertEqual(
+                connect_df.collect(),
+                [Row(c="ab  ", v="cd", collated_c="ef  ", collated_v="gh")],
+            )
 
     def test_to(self):
         # SPARK-41464: test DataFrame.to()

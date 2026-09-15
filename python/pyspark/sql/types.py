@@ -330,19 +330,32 @@ class CharType(AtomicType):
     ----------
     length : int
         the length limitation.
+    collation : str, optional
+        name of the collation. Defaults to ``None``, which is distinct from explicitly specifying
+        ``UTF8_BINARY``.
     """
 
-    def __init__(self, length: int):
+    def __init__(self, length: int, collation: Optional[str] = None):
         self.length = length
+        self.collation = collation
 
     def simpleString(self) -> str:
-        return "char(%d)" % (self.length)
+        if self.collation is None:
+            return "char(%d)" % (self.length)
+
+        return "char(%d) collate %s" % (self.length, self.collation)
 
     def jsonValue(self) -> str:
-        return "char(%d)" % (self.length)
+        return self.simpleString()
 
     def __repr__(self) -> str:
-        return "CharType(%d)" % (self.length)
+        if self.collation is None:
+            return "CharType(%d)" % (self.length)
+
+        return "CharType(%d, '%s')" % (self.length, self.collation)
+
+    def isUTF8BinaryCollation(self) -> bool:
+        return self.collation is None or self.collation == "UTF8_BINARY"
 
 
 class VarcharType(AtomicType):
@@ -352,19 +365,32 @@ class VarcharType(AtomicType):
     ----------
     length : int
         the length limitation.
+    collation : str, optional
+        name of the collation. Defaults to ``None``, which is distinct from explicitly specifying
+        ``UTF8_BINARY``.
     """
 
-    def __init__(self, length: int):
+    def __init__(self, length: int, collation: Optional[str] = None):
         self.length = length
+        self.collation = collation
 
     def simpleString(self) -> str:
-        return "varchar(%d)" % (self.length)
+        if self.collation is None:
+            return "varchar(%d)" % (self.length)
+
+        return "varchar(%d) collate %s" % (self.length, self.collation)
 
     def jsonValue(self) -> str:
-        return "varchar(%d)" % (self.length)
+        return self.simpleString()
 
     def __repr__(self) -> str:
-        return "VarcharType(%d)" % (self.length)
+        if self.collation is None:
+            return "VarcharType(%d)" % (self.length)
+
+        return "VarcharType(%d, '%s')" % (self.length, self.collation)
+
+    def isUTF8BinaryCollation(self) -> bool:
+        return self.collation is None or self.collation == "UTF8_BINARY"
 
 
 class BinaryType(AtomicType, metaclass=DataTypeSingleton):
@@ -1439,12 +1465,12 @@ class StructField(DataType):
                     removeCollations(dt.valueType),
                     dt.valueContainsNull,
                 )
-            elif isinstance(dt, StringType):
-                return StringType()
             elif isinstance(dt, VarcharType):
                 return VarcharType(dt.length)
             elif isinstance(dt, CharType):
                 return CharType(dt.length)
+            elif isinstance(dt, StringType):
+                return StringType()
             else:
                 return dt
 
@@ -1499,7 +1525,7 @@ class StructField(DataType):
             elif isinstance(dt, MapType):
                 processDataType(dt.keyType, fieldPath + ".key")
                 processDataType(dt.valueType, fieldPath + ".value")
-            elif isinstance(dt, StringType) and self._isCollatedString(dt):
+            elif self._isCollatedString(dt):
                 collationMetadata[fieldPath] = self.schemaCollationValue(dt)
 
         def processDataType(dt: DataType, fieldPath: str) -> None:
@@ -1513,10 +1539,15 @@ class StructField(DataType):
         return collationMetadata
 
     def _isCollatedString(self, dt: DataType) -> bool:
-        return isinstance(dt, StringType) and not dt.isUTF8BinaryCollation()
+        if isinstance(dt, (CharType, VarcharType)):
+            return dt.collation is not None
+        if isinstance(dt, StringType):
+            return not dt.isUTF8BinaryCollation()
+        return False
 
     def schemaCollationValue(self, dt: DataType) -> str:
-        assert isinstance(dt, StringType)
+        assert isinstance(dt, (StringType, CharType, VarcharType))
+        assert dt.collation is not None
         collationName = dt.collation
         provider = StringType.collationProvider(collationName)
         return f"{provider}.{collationName}"
@@ -2429,8 +2460,8 @@ _all_mappable_types: Dict[str, Type[DataType]] = {
     "interval": CalendarIntervalType,
 }
 
-_LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
-_LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
+_LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)(?:\s+collate\s+(\w+))?")
+_LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)(?:\s+collate\s+(\w+))?")
 _STRING_WITH_COLLATION = re.compile(r"string\s+collate\s+(\w+)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
@@ -2619,9 +2650,17 @@ def _parse_datatype_json_value(  # type: ignore[return]
         elif m := _STRING_WITH_COLLATION.match(json_value):
             return StringType(m.group(1))
         elif m := _LENGTH_CHAR.match(json_value):
-            return CharType(int(m.group(1)))
+            collation = m.group(2)
+            if collationsMap is not None and fieldPath in collationsMap:
+                _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
+                collation = collationsMap[fieldPath]
+            return CharType(int(m.group(1)), collation)
         elif m := _LENGTH_VARCHAR.match(json_value):
-            return VarcharType(int(m.group(1)))
+            collation = m.group(2)
+            if collationsMap is not None and fieldPath in collationsMap:
+                _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
+                collation = collationsMap[fieldPath]
+            return VarcharType(int(m.group(1)), collation)
         elif _GEOMETRY.match(json_value):
             return GeometryType._from_crs(GeometryType.DEFAULT_CRS)
         elif _GEOMETRY_CRS.match(json_value):
@@ -2671,7 +2710,14 @@ def _parse_datatype_json_value(  # type: ignore[return]
 def _assert_valid_type_for_collation(
     fieldPath: str, fieldType: Any, collationMap: Dict[str, str]
 ) -> None:
-    if fieldPath in collationMap and fieldType != "string":
+    char_match = _LENGTH_CHAR.fullmatch(fieldType) if isinstance(fieldType, str) else None
+    varchar_match = _LENGTH_VARCHAR.fullmatch(fieldType) if isinstance(fieldType, str) else None
+    is_string_type = (
+        fieldType == "string"
+        or (char_match is not None and char_match.group(2) is None)
+        or (varchar_match is not None and varchar_match.group(2) is None)
+    )
+    if fieldPath in collationMap and not is_string_type:
         raise PySparkTypeError(
             errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
             messageParameters={"jsonType": fieldType},

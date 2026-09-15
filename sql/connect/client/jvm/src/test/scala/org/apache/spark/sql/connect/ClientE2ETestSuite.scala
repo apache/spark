@@ -659,6 +659,24 @@ class ClientE2ETestSuite
     testCapturedStdOut(df.printSchema(5), expectedSchema.treeString(5))
   }
 
+  test("SPARK-59276: CHAR/VARCHAR result schema preserves collations") {
+    withSQLConf("spark.sql.charVarchar.standardSemantics.enabled" -> "true") {
+      val schema = spark
+        .sql("""SELECT
+          |  CAST('ab' AS CHAR(4)) AS c,
+          |  CAST('cd' AS VARCHAR(6)) AS v,
+          |  CAST('ef' AS CHAR(4) COLLATE UTF8_LCASE) AS collated_c,
+          |  CAST('gh' AS VARCHAR(6) COLLATE UNICODE_CI) AS collated_v
+          |""".stripMargin)
+        .schema
+
+      assert(schema("c").dataType === CharType(4))
+      assert(schema("v").dataType === VarcharType(6))
+      assert(schema("collated_c").dataType === CharType(4, "UTF8_LCASE"))
+      assert(schema("collated_v").dataType === VarcharType(6, "UNICODE_CI"))
+    }
+  }
+
   test("Dataset explain") {
     val df = spark.range(10)
     val simpleExplainFragments = Seq("== Physical Plan ==")
@@ -1146,6 +1164,73 @@ class ClientE2ETestSuite
     val rows = java.util.Arrays.asList(Row("bob", 99), Row("Club", 5), Row("Bag", 5))
     val schema = new StructType().add("key", "string").add("value", "int")
     checkSameResult(rows.asScala, spark.createDataFrame(rows, schema))
+  }
+
+  test("SPARK-59276: SparkSession.createDataFrame preserves CHAR/VARCHAR collations") {
+    val rows = java.util.Arrays.asList(Row("ab", "cd", Row("xy", Seq("z"))))
+    val emptyRows = java.util.Collections.emptyList[Row]()
+    val schema = new StructType()
+      .add("c", CharType(4, "UTF8_LCASE"))
+      .add("v", VarcharType(6, "UNICODE_CI"))
+      .add(
+        "nested",
+        new StructType()
+          .add("c", CharType(3, "UTF8_LCASE"))
+          .add("v", ArrayType(VarcharType(2, "UNICODE_CI"))))
+
+    withSQLConf(
+      "spark.sql.charVarchar.standardSemantics.enabled" -> "true",
+      "spark.sql.legacy.charVarcharAsString" -> "false") {
+      val dataFrame = spark.createDataFrame(rows, schema)
+      assert(dataFrame.schema === schema)
+      checkAnswer(dataFrame, Row("ab  ", "cd", Row("xy ", Seq("z"))))
+
+      val emptyDataFrame = spark.createDataFrame(emptyRows, schema)
+      assert(emptyDataFrame.schema === schema)
+      checkAnswer(emptyDataFrame, Seq.empty)
+
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark
+            .createDataFrame(
+              java.util.Arrays.asList(Row("abcde", "cd", Row("xy", Seq("z")))),
+              schema)
+            .collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "4"))
+    }
+
+    withSQLConf(
+      "spark.sql.charVarchar.standardSemantics.enabled" -> "false",
+      "spark.sql.legacy.charVarcharAsString" -> "true") {
+      val expectedSchema = schema
+        .transformRecursively {
+          case c: CharType => c.toStringType
+          case v: VarcharType => v.toStringType
+        }
+        .asInstanceOf[StructType]
+      val dataFrame = spark.createDataFrame(rows, schema)
+      assert(dataFrame.schema === expectedSchema)
+      checkAnswer(dataFrame, Row("ab", "cd", Row("xy", Seq("z"))))
+
+      val emptyDataFrame = spark.createDataFrame(emptyRows, schema)
+      assert(emptyDataFrame.schema === expectedSchema)
+      checkAnswer(emptyDataFrame, Seq.empty)
+    }
+
+    withSQLConf(
+      "spark.sql.charVarchar.standardSemantics.enabled" -> "false",
+      "spark.sql.legacy.charVarcharAsString" -> "false") {
+      Seq(rows, emptyRows).foreach { input =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.createDataFrame(input, schema).schema
+          },
+          condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+          parameters = Map.empty)
+      }
+    }
   }
 
   test("SparkSession.createDataFrame - bean") {
