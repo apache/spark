@@ -39,7 +39,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.{CharsetProvider, DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
+import org.apache.spark.sql.catalyst.util.{BadRecordException, CharsetProvider, DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
@@ -1182,8 +1182,10 @@ abstract class JsonSuite
             checkAnswer(df, Row(2, null))
           case "FAILFAST" =>
             val error = intercept[SparkException](df.collect())
-            assert(error.getCause.asInstanceOf[SparkException].getCondition ===
-              "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+            val malformed = error.getCause.asInstanceOf[SparkException]
+            assert(malformed.getCondition === "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+            // Cause is the underlying parse failure, not a re-wrapped BadRecordException.
+            assert(!malformed.getCause.isInstanceOf[BadRecordException])
         }
       }
     }

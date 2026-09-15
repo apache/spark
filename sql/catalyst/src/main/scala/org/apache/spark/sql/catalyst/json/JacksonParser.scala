@@ -785,7 +785,7 @@ class JacksonParser(
         case e: PartialResultException if options.parseMode != FailFastMode =>
           throw badRecord(e, () => recordLiteral(record)).copy(recoverable = true)
         case e: PartialResultException =>
-          fail(badRecord(e, () => recordLiteral(record)))
+          fail(e)
         case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
             _: PartialResultArrayException | _: PartialArrayDataResultException |
             _: PartialMapDataResultException) => fail(e)
