@@ -422,10 +422,11 @@ class PandasToArrowConversion:
                 )
             else:
                 raise PySparkTypeError(
-                    errorClass="UDF_RETURN_TYPE",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
-                        "expected": "pandas.Series or pandas.DataFrame",
-                        "actual": type(col).__name__,
+                        "arg_name": "column",
+                        "expected_type": "pandas.Series or pandas.DataFrame",
+                        "arg_type": type(col).__name__,
                     },
                 )
 
