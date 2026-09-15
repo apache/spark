@@ -18,7 +18,7 @@
 package org.apache.spark.memory
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 
 import scala.concurrent.{blocking, Future}
 import scala.concurrent.duration._
@@ -52,7 +52,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   override protected def createMemoryManager(
       maxOnHeapExecutionMemory: Long,
       maxOffHeapExecutionMemory: Long): UnifiedMemoryManager = {
-    val conf = new SparkConf()
+    val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
       .set(MEMORY_FRACTION, 1.0)
       .set(TEST_MEMORY, maxOnHeapExecutionMemory)
       .set(MEMORY_OFFHEAP_SIZE, maxOffHeapExecutionMemory)
@@ -105,7 +105,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val unregister = mm.registerOptionalMemoryReclaimer(1L, mode, () => {
       assert(!Thread.holdsLock(mm))
       callbacks += 1
-      mm.releaseExecutionMemory(held, 1L, mode)
+      mm.releaseOptionalExecutionMemory(held, 1L, mode)
       held = 0L
     })
     held = mm.tryAcquireExecutionMemory(100L, 1L, mode)
@@ -122,7 +122,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     unregister.run()
   }
 
-  test("outer storage marker drains before inherited monitor and excludes new optional admission") {
+  test("outer storage boundary reclaims before taking the accounting monitor") {
     val (mm, _) = makeThings(1000L)
     val mode = MemoryMode.ON_HEAP
     var held = 0L
@@ -131,23 +131,22 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       assert(!Thread.holdsLock(mm))
       callbacks += 1
       assert(mm.tryAcquireExecutionMemory(1L, 3L, mode) === 0L)
-      mm.releaseExecutionMemory(held, 1L, mode)
+      mm.releaseOptionalExecutionMemory(held, 1L, mode)
       held = 0L
     })
     held = mm.tryAcquireExecutionMemory(100L, 1L, mode)
-    mm.withMemoryReclamation {
-      mm.synchronized {
-        assert(callbacks === 1)
-        assert(mm.acquireStorageMemory(dummyBlock, 950L, mode))
-        assert(callbacks === 1)
-      }
+    mm.withStorageMemoryReclamation(950L, mode) {
+      assert(Thread.holdsLock(mm))
+      assert(callbacks === 1)
+      assert(mm.acquireStorageMemory(dummyBlock, 950L, mode))
+      assert(callbacks === 1)
     }
     assert(mm.executionMemoryUsed === 0L)
     mm.releaseStorageMemory(950L, mode)
     unregister.run()
   }
 
-  test("ordinary reclamation drains other owners before propagating callback failure") {
+  test("ordinary admission continues after a callback fails and retains its charge") {
     val (mm, _) = makeThings(1000L)
     val mode = MemoryMode.ON_HEAP
     var held = 0L
@@ -156,22 +155,18 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     })
     val released = mm.registerOptionalMemoryReclaimer(2L, mode, () => {
       assert(!Thread.holdsLock(mm))
-      mm.releaseExecutionMemory(held, 2L, mode)
+      mm.releaseOptionalExecutionMemory(held, 2L, mode)
       held = 0L
     })
     assert(mm.tryAcquireExecutionMemory(100L, 1L, mode) === 100L)
     held = mm.tryAcquireExecutionMemory(100L, 2L, mode)
-    assert(held === 100L)
-    intercept[IllegalStateException] {
-      mm.acquireExecutionMemory(700L, 3L, mode)
-    }
+    assert(mm.acquireExecutionMemory(900L, 3L, mode) === 900L)
     assert(held === 0L)
-    assert(mm.getExecutionMemoryUsageForTask(3L) === 0L)
-    assert(mm.executionMemoryUsed === 100L)
-    mm.releaseExecutionMemory(100L, 1L, mode)
+    assert(mm.getExecutionMemoryUsageForTask(3L) === 900L)
+    assert(mm.executionMemoryUsed === 1000L)
+    mm.releaseOptionalExecutionMemory(100L, 1L, mode)
     failed.run()
     released.run()
-    assert(mm.acquireExecutionMemory(700L, 3L, mode) === 700L)
     mm.releaseAllExecutionMemoryForTask(3L)
   }
 
@@ -192,7 +187,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
         assert(blocking { bothReclaiming.await(5, TimeUnit.SECONDS) })
         ownerLock.synchronized {
           if (held != 0L) {
-            mm.releaseExecutionMemory(held, 1L, mode)
+            mm.releaseOptionalExecutionMemory(held, 1L, mode)
             released += held
             held = 0L
           }
@@ -215,9 +210,10 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       }
       try {
         demands.foreach(ThreadUtils.awaitResult(_, 10.seconds))
-        // A repeated invocation must also be harmless after both demand requests have finished.
-        mm.withMemoryReclamation { () }
-        assert(calls.get() === 3)
+        // Empty registrations must not be revisited on the next allocation.
+        assert(mm.acquireExecutionMemory(1000L, 4L, mode) === 1000L)
+        mm.releaseAllExecutionMemoryForTask(4L)
+        assert(calls.get() === 2)
         assert(held === 0L)
         assert(released === 400L)
         assert(mm.executionMemoryUsed === 0L)
@@ -228,26 +224,22 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     }
   }
 
-  test("storage cleanup tolerates drain failure but preserves body failures and memory charges") {
+  test("release markers preserve optional work and propagate body failures") {
     val (mm, _) = makeThings(1000L)
     val mode = MemoryMode.ON_HEAP
-    val drainFailure = new IllegalStateException("injected drain failure")
     val bodyFailure = new IllegalArgumentException("injected cleanup failure")
-    val unregister = mm.registerOptionalMemoryReclaimer(1L, mode, () => throw drainFailure)
+    val unregister = mm.registerOptionalMemoryReclaimer(1L, mode, () => {
+      fail("a release marker must not reclaim optional memory")
+    })
     assert(mm.tryAcquireExecutionMemory(100L, 1L, mode) === 100L)
     try {
-      // Ordinary operations still stop before their body if reclamation fails.
-      assert(intercept[IllegalStateException] {
-        mm.withMemoryReclamation { fail("body must not run") }
-      } eq drainFailure)
       assert(intercept[IllegalArgumentException] {
-        mm.withMemoryReclamation({
+        mm.withMemoryReclamation {
           assert(mm.tryAcquireExecutionMemory(1L, 2L, mode) === 0L)
           throw bodyFailure
-        }, releaseOnly = true)
+        }
       } eq bodyFailure)
       assert(mm.executionMemoryUsed === 100L)
-      // The gate is released even when the cleanup body throws.
       assert(mm.tryAcquireExecutionMemory(1L, 2L, mode) === 1L)
     } finally {
       mm.releaseAllExecutionMemoryForTask(1L)
@@ -262,20 +254,20 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     var onHeapHeld = 0L
     var offHeapHeld = 0L
     val onHeap = mm.registerOptionalMemoryReclaimer(1L, MemoryMode.ON_HEAP, () => {
-      mm.releaseExecutionMemory(onHeapHeld, 1L, MemoryMode.ON_HEAP)
+      mm.releaseOptionalExecutionMemory(onHeapHeld, 1L, MemoryMode.ON_HEAP)
       onHeapHeld = 0L
     })
     val offHeap = mm.registerOptionalMemoryReclaimer(1L, MemoryMode.OFF_HEAP, () => {
-      mm.releaseExecutionMemory(offHeapHeld, 1L, MemoryMode.OFF_HEAP)
+      mm.releaseOptionalExecutionMemory(offHeapHeld, 1L, MemoryMode.OFF_HEAP)
       offHeapHeld = 0L
     })
     onHeapHeld = mm.tryAcquireExecutionMemory(100L, 1L, MemoryMode.ON_HEAP)
     offHeapHeld = mm.tryAcquireExecutionMemory(100L, 1L, MemoryMode.OFF_HEAP)
-    assert(mm.acquireExecutionMemory(700L, 2L, MemoryMode.OFF_HEAP) === 700L)
+    assert(mm.acquireExecutionMemory(950L, 2L, MemoryMode.OFF_HEAP) === 950L)
     assert(offHeapHeld === 0L)
     assert(onHeapHeld === 100L)
-    mm.releaseExecutionMemory(onHeapHeld, 1L, MemoryMode.ON_HEAP)
-    mm.releaseExecutionMemory(700L, 2L, MemoryMode.OFF_HEAP)
+    mm.releaseOptionalExecutionMemory(onHeapHeld, 1L, MemoryMode.ON_HEAP)
+    mm.releaseExecutionMemory(950L, 2L, MemoryMode.OFF_HEAP)
     onHeap.run()
     offHeap.run()
     assert(mm.executionMemoryUsed === 0L)
@@ -409,7 +401,8 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val continueStorage = new CountDownLatch(1)
     val abortStorage = new AtomicBoolean(false)
     val mode = MemoryMode.ON_HEAP
-    val mm = new UnifiedMemoryManager(new SparkConf(), 1000L, 500L, 1) {
+    val mm = new UnifiedMemoryManager(
+        new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true), 1000L, 500L, 1) {
       /**
        * Pause before ordinary storage admission so optional admission can take its gate first.
        * On test failure, return without entering that gate to let both futures finish safely.
@@ -447,6 +440,146 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     }
     assert(mm.executionMemoryUsed === 0L)
     assert(mm.storageMemoryUsed === 0L)
+  }
+
+  test("share-bound demand preserves optional bytes that cannot improve its grant") {
+    for (mode <- Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP)) {
+      val mm = createMemoryManager(1000L, 1000L)
+      var calls = 0
+      val unregister = mm.registerOptionalMemoryReclaimer(2L, mode, () => { calls += 1 })
+      try {
+        assert(mm.acquireExecutionMemory(400L, 1L, mode) === 400L)
+        assert(mm.acquireExecutionMemory(100L, 2L, mode) === 100L)
+        // Grow the physical execution pool before admitting optional work.
+        assert(mm.acquireExecutionMemory(100L, 2L, mode) === 100L)
+        mm.releaseExecutionMemory(100L, 2L, mode)
+        assert(mm.tryAcquireExecutionMemory(100L, 2L, mode) === 100L)
+        assert(mm.acquireExecutionMemory(200L, 1L, mode) === 100L)
+        assert(mm.acquireExecutionMemory(200L, 1L, mode) === 0L)
+        assert(calls === 0)
+        assert(mm.getExecutionMemoryUsageForTask(2L) === 200L)
+      } finally {
+        mm.releaseAllExecutionMemoryForTask(1L)
+        mm.releaseAllExecutionMemoryForTask(2L)
+        unregister.run()
+      }
+    }
+  }
+
+  test("optional-only tasks and own optional bytes do not reduce ordinary fair shares") {
+    for (own <- Seq(false, true)) {
+      val (mm, _) = makeThings(1000L)
+      val mode = MemoryMode.ON_HEAP
+      val owner = if (own) 1L else 2L
+      val unregister = mm.registerOptionalMemoryReclaimer(owner, mode, () => {
+        fail("physical capacity is available; keep the prefetched bytes")
+      })
+      try {
+        assert(mm.acquireExecutionMemory(400L, 1L, mode) === 400L)
+        assert(mm.tryAcquireExecutionMemory(100L, owner, mode) === 100L)
+        if (own) assert(mm.acquireExecutionMemory(100L, 2L, mode) === 100L)
+        val request = if (own) 100L else 200L
+        assert(mm.acquireExecutionMemory(request, 1L, mode) === request)
+        assert(mm.executionMemoryUsed === 700L)
+      } finally {
+        mm.releaseAllExecutionMemoryForTask(1L)
+        mm.releaseAllExecutionMemoryForTask(2L)
+        unregister.run()
+      }
+    }
+  }
+
+  test("reclamation stops when admission succeeds and skips drained registrations") {
+    val (mm, _) = makeThings(1000L)
+    val mode = MemoryMode.ON_HEAP
+    var calls = 0
+    val first = mm.registerOptionalMemoryReclaimer(1L, mode, () => {
+      calls += 1
+      mm.releaseOptionalExecutionMemory(300L, 1L, mode)
+    })
+    val second = mm.registerOptionalMemoryReclaimer(2L, mode, () => {
+      fail("the first owner released enough capacity")
+    })
+    try {
+      assert(mm.tryAcquireExecutionMemory(300L, 1L, mode) === 300L)
+      assert(mm.tryAcquireExecutionMemory(200L, 2L, mode) === 200L)
+      assert(mm.acquireExecutionMemory(700L, 3L, mode) === 700L)
+      assert(mm.getExecutionMemoryUsageForTask(2L) === 200L)
+      assert(calls === 1)
+      mm.releaseAllExecutionMemoryForTask(2L)
+      mm.releaseAllExecutionMemoryForTask(3L)
+      assert(mm.acquireExecutionMemory(1000L, 3L, mode) === 1000L)
+      assert(calls === 1)
+    } finally {
+      Seq(1L, 2L, 3L).foreach(mm.releaseAllExecutionMemoryForTask)
+      first.run()
+      second.run()
+    }
+  }
+
+  test("lock-order violations fail before acquiring the gate and invariants propagate") {
+    val (mm, _) = makeThings(1000L)
+    val mode = MemoryMode.ON_HEAP
+    mm.synchronized {
+      intercept[IllegalArgumentException] {
+        mm.withMemoryReclamation { () }
+      }
+      intercept[IllegalArgumentException] {
+        mm.acquireStorageMemory(dummyBlock, 1L, mode)
+      }
+      intercept[IllegalArgumentException] {
+        mm.acquireExecutionMemory(1L, 1L, mode)
+      }
+    }
+    val invariant = new AssertionError("invalid owner accounting")
+    val unregister = mm.registerOptionalMemoryReclaimer(1L, mode, () => throw invariant)
+    try {
+      assert(mm.tryAcquireExecutionMemory(400L, 1L, mode) === 400L)
+      assert(intercept[AssertionError] {
+        mm.acquireExecutionMemory(700L, 2L, mode)
+      } eq invariant)
+      assert(mm.executionMemoryUsed === 400L)
+    } finally {
+      mm.releaseAllExecutionMemoryForTask(1L)
+      unregister.run()
+    }
+  }
+
+  test("an actual ordinary capacity waiter excludes optional admission in both modes") {
+    val mm = createMemoryManager(1000L, 1000L)
+    val mode = MemoryMode.ON_HEAP
+    val granted = new AtomicLong(-1L)
+    assert(mm.acquireExecutionMemory(900L, 1L, mode) === 900L)
+    val waiter = new Thread(() => {
+      granted.set(mm.acquireExecutionMemory(500L, 2L, mode))
+    }, "optional-memory-capacity-waiter")
+    waiter.start()
+    try {
+      val deadline = 5.seconds.fromNow
+      while (waiter.getState != Thread.State.WAITING && deadline.hasTimeLeft()) {
+        Thread.sleep(10L)
+      }
+      assert(waiter.getState === Thread.State.WAITING)
+      assert(waiter.getStackTrace.exists(_.getClassName.endsWith("ExecutionMemoryPool")))
+      for (optionalMode <- Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP)) {
+        val result = Future { mm.tryAcquireExecutionMemory(1L, 3L, optionalMode) }
+        assert(ThreadUtils.awaitResult(result, 5.seconds) === 0L)
+      }
+      mm.releaseExecutionMemory(400L, 1L, mode)
+      waiter.join(5000L)
+      assert(!waiter.isAlive)
+      assert(granted.get() === 500L)
+      assert(mm.tryAcquireExecutionMemory(100L, 3L, MemoryMode.OFF_HEAP) === 100L)
+    } finally {
+      mm.releaseAllExecutionMemoryForTask(1L)
+      waiter.join(5000L)
+      if (waiter.isAlive) {
+        waiter.interrupt()
+        waiter.join(5000L)
+      }
+      mm.releaseAllExecutionMemoryForTask(2L)
+      mm.releaseAllExecutionMemoryForTask(3L)
+    }
   }
 
   test("basic storage memory") {
@@ -597,7 +730,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val systemMemory = 1024L * 1024
     val reservedMemory = 300L * 1024
     val memoryFraction = 0.8
-    val conf = new SparkConf()
+    val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
       .set(MEMORY_FRACTION, memoryFraction)
       .set(TEST_MEMORY, systemMemory)
       .set(TEST_RESERVED_MEMORY, reservedMemory)
@@ -624,7 +757,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val systemMemory = 1024L * 1024
     val reservedMemory = 300L * 1024
     val memoryFraction = 0.8
-    val conf = new SparkConf()
+    val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
       .set(MEMORY_FRACTION, memoryFraction)
       .set(TEST_MEMORY, systemMemory)
       .set(TEST_RESERVED_MEMORY, reservedMemory)
@@ -649,7 +782,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val systemMemory = 400L * 1024
     val reservedMemory = 300L * 1024
     val memoryFraction = 0.8
-    val conf = new SparkConf()
+    val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
       .set(MEMORY_FRACTION, memoryFraction)
       .set(TEST_MEMORY, systemMemory)
       .set(TEST_RESERVED_MEMORY, reservedMemory)
@@ -668,7 +801,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   }
 
   test("execution can evict cached blocks when there are multiple active tasks (SPARK-12155)") {
-    val conf = new SparkConf()
+    val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
       .set(MEMORY_FRACTION, 1.0)
       .set(MEMORY_STORAGE_FRACTION, 0.0)
       .set(TEST_MEMORY, 1000L)
@@ -695,7 +828,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   }
 
   test("SPARK-15260: atomically resize memory pools") {
-    val conf = new SparkConf()
+    val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
       .set(MEMORY_FRACTION, 1.0)
       .set(MEMORY_STORAGE_FRACTION, 0.0)
       .set(TEST_MEMORY, 1000L)
@@ -719,7 +852,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   }
 
   test("not enough free memory in the storage pool --OFF_HEAP") {
-    val conf = new SparkConf()
+    val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
       .set(MEMORY_OFFHEAP_SIZE, 1000L)
       .set(TEST_MEMORY, 1000L)
       .set(MEMORY_OFFHEAP_ENABLED, true)
@@ -754,7 +887,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
   test("optional memory admission and reclamation account for unmanaged memory") {
     Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { mode =>
-      val conf = new SparkConf()
+      val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
         .set(MEMORY_FRACTION, 1.0)
         .set(TEST_MEMORY, 1000L)
         .set(MEMORY_OFFHEAP_SIZE, 1000L)
@@ -774,7 +907,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       var callbacks = 0
       val unregister = mm.registerOptionalMemoryReclaimer(1L, mode, () => {
         callbacks += 1
-        mm.releaseExecutionMemory(held, 1L, mode)
+        mm.releaseOptionalExecutionMemory(held, 1L, mode)
         held = 0L
       })
       try {
@@ -790,7 +923,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
         held += mm.tryAcquireExecutionMemory(100L, 1L, mode)
         assert(held === 200L)
 
-        // The prospective fair share is 100 bytes until the optional task releases its charge.
+        // The unmanaged usage leaves only 200 physical bytes for both kinds of memory.
         assert(mm.acquireExecutionMemory(150L, 2L, mode) === 150L)
         assert(callbacks === 1)
         mm.releaseAllExecutionMemoryForTask(2L)
@@ -814,7 +947,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
   test("storage preflight and immediate grant use the same unmanaged memory sample") {
     val mode = MemoryMode.ON_HEAP
-    val conf = new SparkConf()
+    val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
       .set(MEMORY_OFFHEAP_SIZE, 0L)
       .set(UNMANAGED_MEMORY_POLLING_INTERVAL, 100L)
     val poll = PrivateMethod[Unit](Symbol("pollUnmanagedMemoryUsers"))
@@ -862,7 +995,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   test("unmanaged memory tracking with memory mode separation") {
     val maxMemory = 1000L
     val taskAttemptId = 0L
-    val conf = new SparkConf()
+    val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
       .set(MEMORY_FRACTION, 1.0)
       .set(TEST_MEMORY, maxMemory)
       .set(MEMORY_OFFHEAP_ENABLED, false)
@@ -943,7 +1076,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   }
 
   test("unmanaged memory consumer registration and unregistration") {
-    val conf = new SparkConf()
+    val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
       .set(MEMORY_FRACTION, 1.0)
       .set(TEST_MEMORY, 1000L)
       .set(MEMORY_OFFHEAP_ENABLED, false)
@@ -991,7 +1124,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   }
 
   test("unmanaged memory consumer auto-removal when returning -1") {
-    val conf = new SparkConf()
+    val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
       .set(MEMORY_FRACTION, 1.0)
       .set(TEST_MEMORY, 1000L)
       .set(MEMORY_OFFHEAP_ENABLED, false)
@@ -1037,7 +1170,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   }
 
   test("unmanaged memory polling disabled when interval is zero") {
-    val conf = new SparkConf()
+    val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
       .set(MEMORY_FRACTION, 1.0)
       .set(TEST_MEMORY, 1000L)
       .set(MEMORY_OFFHEAP_ENABLED, false)
@@ -1074,7 +1207,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val maxOnHeapMemory = 1000L
     val maxOffHeapMemory = 1500L
     val taskAttemptId = 0L
-    val conf = new SparkConf()
+    val conf = new SparkConf().set(MEMORY_OPTIONAL_ENABLED, true)
       .set(MEMORY_FRACTION, 1.0)
       .set(TEST_MEMORY, maxOnHeapMemory)
       .set(MEMORY_OFFHEAP_ENABLED, true)

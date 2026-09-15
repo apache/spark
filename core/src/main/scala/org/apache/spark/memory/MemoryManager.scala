@@ -17,7 +17,7 @@
 
 package org.apache.spark.memory
 
-import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.util.concurrent.locks.{Lock, ReentrantReadWriteLock}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.memory.MemoryStore
@@ -48,125 +49,132 @@ private[spark] abstract class MemoryManager(
 
   require(onHeapExecutionMemory > 0, "onHeapExecutionMemory must be > 0")
 
-  // Acquire the marker before this manager's monitor. Shared ownership never excludes ordinary
-  // operations, including capacity waiters; optional admission only tries the exclusive side.
+  // -- Optional execution memory ---------------------------------------------------------------
+
+  // Immutable: an operation may skip coordination only if optional admission stays disabled.
+  private[spark] final val optionalMemoryEnabled: Boolean = conf.get(MEMORY_OPTIONAL_ENABLED)
+
+  // Ordinary operations share the gate; optional admission never queues for its exclusive side.
+  // Keep this gate through capacity waits. This deliberately suppresses speculative admission
+  // in both memory modes while any ordinary allocator is waiting.
   protected val optionalAdmissionGate = new ReentrantReadWriteLock()
 
-  // This lock protects only registrations. Callbacks never run while it or this manager's
-  // monitor is held, and registration does not wait behind ordinary capacity waiters.
+  // Registrations carry task attribution. Never invoke a callback under this lock or this
+  // manager's monitor. TaskMemoryManager supplies the consumer lifetime and exact release.
   private val optionalReclaimers = new mutable.LinkedHashMap[Runnable, (Long, MemoryMode)]()
-  @volatile private var onHeapOptionalReclaimers = 0
-  @volatile private var offHeapOptionalReclaimers = 0
 
   /**
-   * Register a task-owned, release-only callback before its first optional admission.
-   * Returns an idempotent unregister action; callers must drain the owner before unregistering.
-   * Callbacks may run concurrently, repeatedly, or after unregistering and must release each
-   * reservation exactly once. They may take a short owner-state lock, but must not acquire a
-   * TaskMemoryManager monitor, allocate execution memory, or wait for I/O or task cleanup.
+   * Register a release-only owner before its first optional admission.
    *
-   * Never hold a lock needed by a reclaimer while requesting ordinary memory or invoking another
-   * operation that may reclaim optional memory, including storage cleanup. Otherwise two tasks
-   * can hold their own owner locks while reclaiming each other. Optional admission and release
-   * may use that lock: neither invokes reclamation nor acquires a TaskMemoryManager monitor.
+   * Callbacks may run concurrently, repeatedly, or after unregistering. They must release each
+   * reservation exactly once, without acquiring a TaskMemoryManager monitor, allocating memory,
+   * destroying a whole reader/session, or waiting for I/O or task cleanup. A short owner lock is
+   * allowed, but the owner must never hold it across an ordinary allocation or storage operation.
+   * Optional try-admission and release may use that lock. AssertionError signals a broken
+   * accounting invariant and propagates; other NonFatal callback failures retain outstanding
+   * charges and do not prevent ordinary admission.
+   *
+   * Returns an idempotent unregister action, or null when optional memory is disabled. The caller
+   * must drain its resources before unregistering. TaskMemoryManager owns task-end cleanup.
    */
   private[memory] final def registerOptionalMemoryReclaimer(
       taskAttemptId: Long,
       memoryMode: MemoryMode,
       reclaimer: Runnable): Runnable = {
-    // A distinct forwarding object gives each registration identity even if callbacks are reused.
+    if (!optionalMemoryEnabled) return null
     val registered = new Runnable {
-      /** Release this owner's optional bytes without allocating or destroying a whole reader. */
       override def run(): Unit = reclaimer.run()
     }
     optionalReclaimers.synchronized {
       optionalReclaimers(registered) = (taskAttemptId, memoryMode)
-      memoryMode match {
-        case MemoryMode.ON_HEAP => onHeapOptionalReclaimers += 1
-        case MemoryMode.OFF_HEAP => offHeapOptionalReclaimers += 1
-      }
     }
     new Runnable {
-      /** Remove this registration only; an already-captured callback remains safe to invoke. */
       override def run(): Unit = optionalReclaimers.synchronized {
-        if (optionalReclaimers.remove(registered).isDefined) {
-          memoryMode match {
-            case MemoryMode.ON_HEAP => onHeapOptionalReclaimers -= 1
-            case MemoryMode.OFF_HEAP => offHeapOptionalReclaimers -= 1
-          }
-        }
+        optionalReclaimers.remove(registered)
       }
     }
   }
 
-  /** Check for eligible owners without invoking callbacks or inspecting native state. */
-  protected final def hasOptionalMemoryReclaimers(memoryMode: MemoryMode): Boolean = {
+  /** Outstanding bytes, rather than live registrations, determine whether a drain can help. */
+  protected final def hasOptionalExecutionMemory(memoryMode: MemoryMode): Boolean = synchronized {
+    executionPoolFor(memoryMode).optionalMemoryUsed != 0L
+  }
+
+  protected final def executionPoolFor(memoryMode: MemoryMode): ExecutionMemoryPool = {
     memoryMode match {
-      case MemoryMode.ON_HEAP => onHeapOptionalReclaimers != 0
-      case MemoryMode.OFF_HEAP => offHeapOptionalReclaimers != 0
+      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool
+      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool
     }
   }
 
   /**
-   * Drain a snapshot of matching owners under ordinary admission's shared gate, outside all
-   * this manager's and the registry's monitors. Owners may run under the requesting task's monitor
-   * and must follow the registration's lock-order contract. They must synchronously cancel pure
-   * I/O and release exact credits, without dropping readers/sessions or awaiting task cleanup.
-   * Continue draining other owners after a non-fatal failure, then propagate it without inventing
-   * freed credit. Registrations remain live so a failed drain may be retried safely.
+   * Reclaim a snapshot of same-mode owners, outside all memory-manager and registration monitors.
+   * Empty tasks are skipped even when their callbacks remain registered. A successful admission
+   * check may stop the drain after any callback, preserving the remaining owners' useful work.
    */
-  protected final def reclaimOptionalMemory(memoryMode: Option[MemoryMode]): Unit = {
+  protected final def reclaimOptionalMemory(
+      memoryMode: MemoryMode,
+      stopAfterCallback: () => Boolean = null): Unit = {
     require(!Thread.holdsLock(this), "optional callbacks cannot run under the memory manager")
     val callbacks = optionalReclaimers.synchronized {
       optionalReclaimers.iterator.collect {
-        case (callback, (_, mode)) if memoryMode.forall(_ == mode) => callback
+        case (callback, (taskId, mode)) if mode == memoryMode => (callback, taskId)
       }.toList
     }
-    var failure: Throwable = null
-    callbacks.foreach { callback =>
-      try {
-        callback.run()
-      } catch {
-        case NonFatal(error) =>
-          if (failure == null) failure = error else if (failure ne error) {
-            failure.addSuppressed(error)
-          }
+    val iterator = callbacks.iterator
+    while (iterator.hasNext) {
+      val (callback, taskId) = iterator.next()
+      val outstanding = synchronized {
+        executionPoolFor(memoryMode).getOptionalMemoryUsageForTask(taskId) > 0L
+      }
+      if (outstanding) {
+        try {
+          callback.run()
+        } catch {
+          case invariant: AssertionError => throw invariant
+          case NonFatal(error) =>
+            logWarning(log"Failed to reclaim optional memory for task " +
+              log"${MDC(TASK_ATTEMPT_ID, taskId)} in ${MDC(MEMORY_POOL_NAME, memoryMode)}", error)
+        }
+        // Keep allocation errors outside the callback catch: never retry a successful grant.
+        if (stopAfterCallback != null && stopAfterCallback()) return
       }
     }
-    if (failure != null) throw failure
   }
 
   /**
-   * Mark an operation that can hold this monitor while evicting blocks or waiting for capacity.
-   *
-   * MemoryStore uses this before its atomic unroll/storage transfers take the monitor, preserving
-   * marker-before-monitor ordering when they call back into ordinary allocation. An outermost
-   * MemoryStore operation drains optional owners before taking the monitor: a preflight outside
-   * that monitor could otherwise race ordinary allocations and require a callback inside it.
-   * Nested operations reuse the outer drain. Failures propagate and the marker is always released.
-   * Release-only storage cleanup logs non-fatal drain failures and continues: aborting removal
-   * could leave a cached entry behind after BlockManager deletes its metadata. Failed owners keep
-   * their memory charges and registrations; failures from the cleanup body still propagate.
+   * Exclude optional admission around an operation that can take the memory-manager monitor.
+   * This marker never discards buffers. Allocating callers establish a capacity-aware boundary
+   * before taking the monitor; release and unroll-to-storage transfers need only this marker.
+   * Validate ordering before taking the gate, since checking afterward cannot prevent deadlock.
    */
-  private[spark] final def withMemoryReclamation[T](
-      body: => T,
-      releaseOnly: Boolean = false): T = {
-    val gate = optionalAdmissionGate.readLock()
-    gate.lock()
+  private[spark] final def withMemoryReclamation[T](body: => T): T = {
+    if (!optionalMemoryEnabled) return body
+    val gate = acquireOptionalAdmissionReadLock()
     try {
-      if ((onHeapOptionalReclaimers != 0 || offHeapOptionalReclaimers != 0) &&
-          optionalAdmissionGate.getReadHoldCount == 1) {
-        try {
-          reclaimOptionalMemory(None)
-        } catch {
-          case NonFatal(error) if releaseOnly =>
-            logWarning("Failed to reclaim optional memory before storage cleanup", error)
-        }
-      }
       body
     } finally {
       gate.unlock()
     }
+  }
+
+  /** Shared ordering check for allocation boundaries and release-only markers. */
+  protected final def acquireOptionalAdmissionReadLock(): Lock = {
+    require(!Thread.holdsLock(this) || optionalAdmissionGate.getReadHoldCount > 0,
+      "the optional-admission marker must precede the memory-manager monitor")
+    val gate = optionalAdmissionGate.readLock()
+    gate.lock()
+    gate
+  }
+
+  /**
+   * Keep storage admission and its caller's accounting atomic. Managers granting optional memory
+   * override this method to check capacity and reclaim outside the monitor when necessary.
+   */
+  private[spark] def withStorageMemoryReclamation[T](
+      numBytes: Long,
+      memoryMode: MemoryMode)(body: => T): T = {
+    withMemoryReclamation { synchronized { body } }
   }
 
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
@@ -264,7 +272,8 @@ private[spark] abstract class MemoryManager(
    *
    * Managers must opt in to this policy; the default rejects the request without changing their
    * accounting. Implementations may still contend on bookkeeping locks. A successful reservation
-   * must be task-attributed and released through the existing execution-memory release methods.
+   * must be task-attributed and released through releaseOptionalExecutionMemory. Ordinary releases
+   * never consume optional credit.
    *
    * @return `numBytes` on success, or zero with no reservation on denial
    */
@@ -288,6 +297,21 @@ private[spark] abstract class MemoryManager(
       case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.releaseMemory(numBytes, taskAttemptId)
       case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.releaseMemory(numBytes, taskAttemptId)
     }
+  }
+
+  /** Release credit belonging to optional work, independently of ordinary consumer memory. */
+  private[memory] def releaseOptionalExecutionMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Unit = synchronized {
+    executionPoolFor(memoryMode).releaseOptionalMemory(numBytes, taskAttemptId)
+  }
+
+  /** Failed optional owners stay charged while task cleanup releases ordinary memory. */
+  private[memory]
+  def releaseAllOrdinaryExecutionMemoryForTask(taskAttemptId: Long): Long = synchronized {
+    onHeapExecutionMemoryPool.releaseAllOrdinaryMemoryForTask(taskAttemptId) +
+      offHeapExecutionMemoryPool.releaseAllOrdinaryMemoryForTask(taskAttemptId)
   }
 
   /**

@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import java.io.IOException
 import java.nio.ByteBuffer
 
 import scala.language.implicitConversions
@@ -31,6 +32,7 @@ import org.apache.spark.memory.{MemoryMode, MemoryTestingUtils, UnifiedMemoryMan
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator}
 import org.apache.spark.util._
+import org.apache.spark.util.collection.SizeTrackingVector
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 case class OffHeapValue(override val estimatedSize: Long) extends KnownSizeEstimation
@@ -152,7 +154,8 @@ class MemoryStoreSuite
 
   test("impossible storage and unroll requests do not reclaim optional memory") {
     for (mode <- Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP)) {
-      val mm = new UnifiedMemoryManager(conf, 12000L, 6000L, 1)
+      val mm = new UnifiedMemoryManager(
+        conf.clone().set("spark.memory.optional.enabled", "true"), 12000L, 6000L, 1)
       val (store, _) = makeMemoryStore(mm)
       MemoryTestingUtils.withOptionalMemoryReclaimer(mm, 1L, 100L, mode, () => {
         throw new IllegalStateException("impossible admission must not invoke reclaimers")
@@ -164,6 +167,125 @@ class MemoryStoreSuite
         assert(mm.storageMemoryUsed === 0L && store.currentUnrollMemory === 0L)
       }
     }
+  }
+
+  test("unroll reclaims only same-mode optional memory when capacity is exhausted") {
+    for (mode <- Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP)) {
+      val otherMode = if (mode == MemoryMode.ON_HEAP) {
+        MemoryMode.OFF_HEAP
+      } else {
+        MemoryMode.ON_HEAP
+      }
+      val mm = new UnifiedMemoryManager(
+        conf.clone().set("spark.memory.optional.enabled", "true"), 12000L, 6000L, 1)
+      val (store, _) = makeMemoryStore(mm)
+      var sameModeHeld = 6000L
+      var sameModeCallbacks = 0
+      var otherModeCallbacks = 0
+      val sameModeReclaimer: Runnable = () => {
+        assert(!Thread.holdsLock(mm))
+        sameModeCallbacks += 1
+        MemoryTestingUtils.releaseOptionalMemory(mm, 1L, sameModeHeld, mode)
+        sameModeHeld = 0L
+      }
+      val otherModeReclaimer: Runnable = () => {
+        otherModeCallbacks += 1
+        throw new IllegalStateException("storage cannot use other-mode optional memory")
+      }
+      MemoryTestingUtils.withOptionalMemoryReclaimer(
+          mm, 1L, sameModeHeld, mode, sameModeReclaimer) {
+        MemoryTestingUtils.withOptionalMemoryReclaimer(
+            mm, 2L, 100L, otherMode, otherModeReclaimer) {
+          assert(store.reserveUnrollMemoryForThisTask("ample", 512L, mode))
+          assert(sameModeCallbacks === 0 && otherModeCallbacks === 0)
+          assert(mm.executionMemoryUsed === 6100L)
+
+          assert(store.reserveUnrollMemoryForThisTask("pressure", 6500L, mode))
+          assert(sameModeCallbacks === 1 && otherModeCallbacks === 0)
+          assert(mm.executionMemoryUsed === 100L)
+          assert(store.currentUnrollMemory === 7012L)
+
+          store.releaseUnrollMemoryForThisTask(mode)
+          assert(store.currentUnrollMemory === 0L)
+          assert(mm.storageMemoryUsed === 0L)
+          assert(mm.executionMemoryUsed === 100L)
+          assert(sameModeCallbacks === 1 && otherModeCallbacks === 0)
+        }
+      }
+    }
+  }
+
+  test("failed optional reclaimer leaves an exhausted unroll request denied") {
+    val mm = new UnifiedMemoryManager(
+      conf.clone().set("spark.memory.optional.enabled", "true"), 12000L, 6000L, 1)
+    val (store, _) = makeMemoryStore(mm)
+    var callbacks = 0
+    MemoryTestingUtils.withOptionalMemoryReclaimer(
+        mm, 1L, 6000L, MemoryMode.ON_HEAP, () => {
+          callbacks += 1
+          throw new IllegalStateException("injected optional cleanup failure")
+        }) {
+      assert(!store.reserveUnrollMemoryForThisTask("pressure", 7000L, MemoryMode.ON_HEAP))
+      assert(callbacks === 1)
+      assert(mm.executionMemoryUsed === 6000L)
+      assert(mm.storageMemoryUsed === 0L && store.currentUnrollMemory === 0L)
+    }
+  }
+
+  test("failed eviction leaves uncommitted deserialized values with their caller") {
+    val mm = new UnifiedMemoryManager(
+      conf.clone().set("spark.memory.optional.enabled", "true"), 1600L, 800L, 1)
+    val blockInfoManager = new BlockInfoManager
+    val failure = new IOException("injected disk eviction failure")
+    val handler = new BlockEvictionHandler {
+      override private[storage] def dropFromMemory[T: ClassTag](
+          blockId: BlockId,
+          data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = throw failure
+    }
+    val store = new MemoryStore(conf, blockInfoManager, serializerManager, mm, handler)
+    mm.setMemoryStore(store)
+
+    val cached = TestBlockId("cached")
+    val cachedTag = implicitly[ClassTag[Array[Byte]]]
+    assert(blockInfoManager.lockNewBlockForWriting(
+      cached, new BlockInfo(StorageLevel.MEMORY_ONLY_SER, cachedTag, tellMaster = false)))
+    assert(store.putBytes(cached, 900L, MemoryMode.ON_HEAP,
+      () => new ChunkedByteBuffer(ByteBuffer.allocate(900))))
+    blockInfoManager.unlock(cached, None)
+
+    val allocator = DummyAllocator()
+    val value = NativeObject(allocator, 500)
+    val probe = new SizeTrackingVector[Any]()
+    probe += value
+    val growthRequest = (probe.estimateSize() * conf.get(UNROLL_MEMORY_GROWTH_FACTOR) -
+      conf.get(STORAGE_UNROLL_MEMORY_THRESHOLD)).toLong
+    // Initial unroll reserves 512 bytes; only 188 more are free, and evicting the
+    // 900-byte cached block can satisfy a growth request of at most 1088 bytes.
+    assert(growthRequest > 188L && growthRequest <= 1088L,
+      s"expected a growth request requiring cached-block eviction, got $growthRequest")
+    val target = TestBlockId("failed-put")
+    assert(blockInfoManager.lockNewBlockForWriting(
+      target, new BlockInfo(StorageLevel.MEMORY_ONLY, ClassTag.Any, tellMaster = false)))
+    var consumed = 0
+    val values = Iterator[Any](value).map { v => consumed += 1; v }
+    try {
+      assert(intercept[IOException] {
+        store.putIteratorAsValues(target, values, MemoryMode.ON_HEAP, ClassTag.Any)
+      } eq failure)
+      assert(consumed === 1)
+      assert(allocator.getAllocatedMemory === 500)
+      assert(store.contains(cached))
+      assert(!store.contains(target))
+      assert(store.currentUnrollMemory === 0L)
+      assert(mm.storageMemoryUsed === 900L)
+    } finally {
+      value.close()
+      blockInfoManager.removeBlock(target)
+      assert(blockInfoManager.lockForWriting(cached).isDefined)
+      store.remove(cached)
+      blockInfoManager.removeBlock(cached)
+    }
+    assert(allocator.getAllocatedMemory === 0)
   }
 
   test("safely unroll blocks") {

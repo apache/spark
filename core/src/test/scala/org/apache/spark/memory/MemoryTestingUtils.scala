@@ -40,7 +40,7 @@ object MemoryTestingUtils {
       taskAttemptId: Long,
       numBytes: Long,
       memoryMode: MemoryMode): Unit = {
-    memoryManager.releaseExecutionMemory(numBytes, taskAttemptId, memoryMode)
+    memoryManager.releaseOptionalExecutionMemory(numBytes, taskAttemptId, memoryMode)
   }
 
   /** Exercise storage callers with a real optional reservation, releasing it after the test. */

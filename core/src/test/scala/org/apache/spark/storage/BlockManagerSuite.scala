@@ -443,8 +443,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(updatedId.executorId === BlockManagerId.INVALID_EXECUTOR_ID)
   }
 
-  for (phase <- Seq("growth", "top-up", "transfer"); failReclamation <- Seq(false, true)) {
-    test(s"cache unroll preserves resource ownership ($phase, failure=$failReclamation)") {
+  for (phase <- Seq("growth", "top-up", "transfer")) {
+    test(s"cache unroll keeps optional buffers when storage has capacity ($phase)") {
+      conf.set("spark.memory.optional.enabled", "true")
       conf.set(MEMORY_STORAGE_FRACTION, 0.5)
       conf.set(STORAGE_UNROLL_MEMORY_THRESHOLD, if (phase == "growth") 512L else 4096L)
       val store = makeBlockManager(20000)
@@ -461,21 +462,17 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       }
       var consumed = 0
       var held = 0L
-      var materialized = false
+      var callbacks = 0
       val values = new Iterator[Any] {
         private val input = phase match {
           case "growth" => Iterator(value(2000L), value(2000L))
           case "top-up" => Iterator(value(100L), value(6000L))
           case "transfer" => Iterator(value(100L), value(100L))
         }
-        override def hasNext: Boolean = {
-          val available = input.hasNext
-          if (!available) materialized = true
-          available
-        }
+        override def hasNext: Boolean = input.hasNext
         override def next(): Any = {
           consumed += 1
-          // Register empty, then admit optional work while unrolling, between reservations.
+          // Admit optional work between unroll reservations.
           if (held == 0L) {
             held = MemoryTestingUtils.tryAcquireOptionalMemory(
               store.memoryManager, 1L, 100L, MemoryMode.ON_HEAP)
@@ -484,39 +481,31 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
           input.next()
         }
       }
-      val failure = new IllegalStateException(s"injected $phase reclamation failure")
       val reclaimer: Runnable = () => {
-        if (held > 0L && failReclamation && (phase == "growth" || materialized)) throw failure
-        MemoryTestingUtils.releaseOptionalMemory(
-          store.memoryManager, 1L, held, MemoryMode.ON_HEAP)
-        held = 0L
+        callbacks += 1
+        throw new IllegalStateException("ample storage capacity must not reclaim optional work")
       }
       MemoryTestingUtils.withOptionalMemoryReclaimer(
           store.memoryManager, 1L, 0L, MemoryMode.ON_HEAP, reclaimer) {
-        if (failReclamation) {
-          assert(intercept[IllegalStateException] {
-            store.putIterator(block, values, StorageLevel.MEMORY_ONLY, tellMaster = false)
-          } eq failure)
-          assert(store.blockInfoManager.get(block).isEmpty)
-          assert(!store.memoryStore.contains(block))
-          assert(consumed === (if (phase == "growth") 1 else 2))
-          assert(closes === consumed)
-        } else {
-          assert(store.putIterator(block, values, StorageLevel.MEMORY_ONLY, tellMaster = false))
-          assert(closes === 0)
-          store.removeBlock(block, tellMaster = false)
-        }
+        assert(store.putIterator(block, values, StorageLevel.MEMORY_ONLY, tellMaster = false))
+        assert(consumed === 2)
+        assert(closes === 0)
+        assert(held === 100L)
+        assert(callbacks === 0)
+        store.removeBlock(block, tellMaster = false)
         assert(closes === consumed)
+        assert(callbacks === 0)
         assert(store.memoryStore.currentUnrollMemory === 16L)
         store.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP, 16L)
         assert(store.memoryManager.storageMemoryUsed === 0L)
-        assert(store.memoryManager.executionMemoryUsed === (if (failReclamation) 100L else 0L))
+        assert(store.memoryManager.executionMemoryUsed === 100L)
       }
     }
   }
 
   Seq(false, true).foreach { clearStore =>
-    test(s"storage cleanup survives optional reclaimer failure (clear=$clearStore)") {
+    test(s"storage cleanup leaves optional work alone (clear=$clearStore)") {
+      conf.set("spark.memory.optional.enabled", "true")
       val store = makeBlockManager(12000)
       val block = TestBlockId("optional-cleanup")
       val data = new ChunkedByteBuffer(ByteBuffer.allocate(512))
@@ -524,21 +513,18 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       assert(store.memoryManager.storageMemoryUsed === 512L)
       var callbacks = 0
       val reclaimer: Runnable = () => {
-        assert(!Thread.holdsLock(store.memoryManager))
         callbacks += 1
-        throw new IllegalStateException("injected optional cleanup failure")
+        throw new IllegalStateException("release must not reclaim optional work")
       }
       MemoryTestingUtils.withOptionalMemoryReclaimer(
           store.memoryManager, 1L, 1L, MemoryMode.ON_HEAP, reclaimer) {
         if (clearStore) {
           store.memoryStore.clear()
         } else {
-          // Use BlockManager's real removal path: its failure cleanup deletes BlockInfo even
-          // when MemoryStore.remove throws, which used to strand the entry and its memory.
           store.removeBlock(block, tellMaster = false)
           assert(store.blockInfoManager.get(block).isEmpty)
         }
-        assert(callbacks === 1)
+        assert(callbacks === 0)
         assert(!store.memoryStore.contains(block))
         assert(store.memoryManager.storageMemoryUsed === 0L)
         assert(store.memoryManager.executionMemoryUsed === 1L)

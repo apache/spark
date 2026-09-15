@@ -483,6 +483,16 @@ package object config {
     .checkValue(_ >= 0, "The off-heap memory size must not be negative")
     .createWithDefault(0)
 
+  private[spark] val MEMORY_OPTIONAL_ENABLED = ConfigBuilder("spark.memory.optional.enabled")
+    .internal()
+    .doc("Enable optional execution-memory admission and reclamation. Set before the memory " +
+      "manager is created; changing it later has no effect. Disabled managers reject optional " +
+      "requests and skip admission coordination. Consumers opt in to revocation of unused " +
+      "speculative work for ordinary allocations, including allocations from other tasks.")
+    .version("5.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   private[spark] val MEMORY_STORAGE_FRACTION = ConfigBuilder("spark.memory.storageFraction")
     .doc("Amount of storage memory immune to eviction, expressed as a fraction of the " +
       "size of the region set aside by spark.memory.fraction. The higher this is, the " +

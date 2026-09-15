@@ -51,20 +51,59 @@ private[memory] class ExecutionMemoryPool(
   }
 
   /**
-   * Map from taskAttemptId -> memory consumption in bytes
+   * Ordinary execution memory by task. Optional-only owners do not enter ordinary fair sharing.
    */
   @GuardedBy("lock")
   private val memoryForTask = new mutable.HashMap[Long, Long]()
 
+  @GuardedBy("lock")
+  private var optionalMemoryForTask: mutable.LongMap[Long] = null
+
+  @GuardedBy("lock")
+  private var optionalBytes = 0L
+
+  def optionalMemoryUsed: Long = lock.synchronized { optionalBytes }
+
+  def ordinaryMemoryUsed: Long = lock.synchronized { memoryForTask.values.sum }
+
+  def getOptionalMemoryUsageForTask(taskAttemptId: Long): Long = lock.synchronized {
+    if (optionalMemoryForTask == null) 0L else optionalMemoryForTask.getOrElse(taskAttemptId, 0L)
+  }
+
   override def memoryUsed: Long = lock.synchronized {
-    memoryForTask.values.sum
+    memoryForTask.values.sum + optionalBytes
   }
 
   /**
    * Returns the memory consumption, in bytes, for the given task.
    */
   def getMemoryUsageForTask(taskAttemptId: Long): Long = lock.synchronized {
-    memoryForTask.getOrElse(taskAttemptId, 0L)
+    memoryForTask.getOrElse(taskAttemptId, 0L) + getOptionalMemoryUsageForTask(taskAttemptId)
+  }
+
+  /** Remaining ordinary share, without changing task participation. */
+  private[memory] def absoluteMemoryHeadroom(taskAttemptId: Long, maxMemory: Long): Long = {
+    assert(Thread.holdsLock(lock))
+    val current = memoryForTask.getOrElse(taskAttemptId, -1L)
+    if (current >= 0L) {
+      math.max(0L, maxMemory / memoryForTask.size - current)
+    } else {
+      val share = maxMemory / (memoryForTask.size.toLong + 1L)
+      // Ordinary admission must still register a new task when its prospective share is zero.
+      if (share == 0L) -1L else share
+    }
+  }
+
+  /** Check the minimum-share wait using the prospective pool size after borrowing free storage. */
+  private[memory] def canGrantWithoutWaiting(
+      taskAttemptId: Long,
+      requested: Long,
+      granted: Long,
+      poolSizeAfterGrowth: Long): Boolean = {
+    assert(Thread.holdsLock(lock))
+    val tasks = memoryForTask.size + (if (memoryForTask.contains(taskAttemptId)) 0 else 1)
+    val current = memoryForTask.getOrElse(taskAttemptId, 0L)
+    granted == requested || current + granted >= poolSizeAfterGrowth / (2L * tasks)
   }
 
   /**
@@ -86,31 +125,37 @@ private[memory] class ExecutionMemoryPool(
   /**
    * Reserve all `numBytes` for optional work, or return zero without changing this pool.
    *
-   * Only currently free execution memory is eligible. The prospective task count includes a new
-   * caller when checking its `maxPoolSize / N` share, but a denied caller is not registered. A
-   * successful new caller wakes ordinary allocators so they can recompute their fair shares.
+   * Only currently free execution memory is eligible. Optional admission retains a conservative
+   * ceiling counting ordinary and optional-only tasks and both kinds of bytes for its owner.
+   * Optional bytes consume physical capacity, but never reduce ordinary fair shares.
    * This method never waits for capacity, grows the pool, or evicts memory. Acquiring the existing
-   * bookkeeping monitor can still block. Successful reservations use the normal release methods.
+   * bookkeeping monitor can still block. Successful reservations require optional release.
    */
   private[memory] def tryAcquireMemory(
       numBytes: Long,
       taskAttemptId: Long,
-      maxPoolSize: Long): Long = lock.synchronized {
+      maxPoolSize: Long,
+      availableMemory: Long = Long.MaxValue): Long = lock.synchronized {
     require(numBytes >= 0, s"invalid number of bytes requested: $numBytes")
     if (numBytes == 0) {
       return 0L
     }
-    val isNewTask = !memoryForTask.contains(taskAttemptId)
-    val numActiveTasks = memoryForTask.size + (if (isNewTask) 1 else 0)
-    val currentMemory = memoryForTask.getOrElse(taskAttemptId, 0L)
+    val currentOptional = getOptionalMemoryUsageForTask(taskAttemptId)
+    val optionalOnlyTasks = if (optionalMemoryForTask == null) 0 else {
+      optionalMemoryForTask.keysIterator.count(task => !memoryForTask.contains(task))
+    }
+    val isNewTask = !memoryForTask.contains(taskAttemptId) && currentOptional == 0L
+    val numActiveTasks = memoryForTask.size + optionalOnlyTasks + (if (isNewTask) 1 else 0)
+    val currentMemory = memoryForTask.getOrElse(taskAttemptId, 0L) + currentOptional
     val remainingShare = math.max(0L, maxPoolSize / numActiveTasks - currentMemory)
-    if (numBytes > memoryFree || numBytes > remainingShare) {
+    if (numBytes > math.min(memoryFree, availableMemory) || numBytes > remainingShare) {
       0L
     } else {
-      memoryForTask(taskAttemptId) = currentMemory + numBytes
-      if (isNewTask) {
-        lock.notifyAll()
+      if (optionalMemoryForTask == null) {
+        optionalMemoryForTask = new mutable.LongMap[Long]()
       }
+      optionalMemoryForTask(taskAttemptId) = currentOptional + numBytes
+      optionalBytes += numBytes
       numBytes
     }
   }
@@ -134,6 +179,8 @@ private[memory] class ExecutionMemoryPool(
    *                           size is variable in certain cases. For instance, in unified
    *                           memory management, the execution pool can be expanded by evicting
    *                           cached blocks, thereby shrinking the storage pool.
+   * @param computeMemoryFree an optional physical-capacity limit after unmanaged usage, or null
+   *                          to use the pool free space directly
    *
    * @return the number of bytes granted to the task.
    */
@@ -141,7 +188,8 @@ private[memory] class ExecutionMemoryPool(
       numBytes: Long,
       taskAttemptId: Long,
       maybeGrowPool: Long => Unit = (additionalSpaceNeeded: Long) => (),
-      computeMaxPoolSize: () => Long = () => poolSize): Long = lock.synchronized {
+      computeMaxPoolSize: () => Long = () => poolSize,
+      computeMemoryFree: () => Long = null): Long = lock.synchronized {
     assert(numBytes > 0, s"invalid number of bytes requested: $numBytes")
 
     // TODO: clean up this clunky method signature
@@ -179,7 +227,8 @@ private[memory] class ExecutionMemoryPool(
       // How much we can grant this task; keep its share within 0 <= X <= 1 / numActiveTasks
       val maxToGrant = math.min(numBytes, math.max(0, maxMemoryPerTask - curMem))
       // Only give it as much memory as is free, which might be none if it reached 1 / numTasks
-      val toGrant = math.min(maxToGrant, memoryFree)
+      val available = if (computeMemoryFree == null) memoryFree else computeMemoryFree()
+      val toGrant = math.min(maxToGrant, available)
 
       // We want to let each task get at least 1 / (2 * numActiveTasks) before blocking;
       // if we can't give it this much now, wait for other tasks to free up memory
@@ -224,9 +273,29 @@ private[memory] class ExecutionMemoryPool(
    * @return the number of bytes freed.
    */
   def releaseAllMemoryForTask(taskAttemptId: Long): Long = lock.synchronized {
-    val numBytesToFree = getMemoryUsageForTask(taskAttemptId)
-    releaseMemory(numBytesToFree, taskAttemptId)
-    numBytesToFree
+    val ordinary = releaseAllOrdinaryMemoryForTask(taskAttemptId)
+    val optional = getOptionalMemoryUsageForTask(taskAttemptId)
+    releaseOptionalMemory(optional, taskAttemptId)
+    ordinary + optional
+  }
+
+  def releaseAllOrdinaryMemoryForTask(taskAttemptId: Long): Long = lock.synchronized {
+    val numBytes = memoryForTask.getOrElse(taskAttemptId, 0L)
+    releaseMemory(numBytes, taskAttemptId)
+    numBytes
+  }
+
+  /** Ordinary release must never consume optional credit, or vice versa. */
+  def releaseOptionalMemory(numBytes: Long, taskAttemptId: Long): Unit = lock.synchronized {
+    val current = getOptionalMemoryUsageForTask(taskAttemptId)
+    assert(numBytes >= 0L && numBytes <= current,
+      s"invalid optional release: $numBytes bytes from task $taskAttemptId holding $current")
+    if (numBytes > 0L) {
+      if (numBytes == current) optionalMemoryForTask.remove(taskAttemptId)
+      else optionalMemoryForTask(taskAttemptId) = current - numBytes
+      optionalBytes -= numBytes
+      lock.notifyAll()
+    }
   }
 
 }
