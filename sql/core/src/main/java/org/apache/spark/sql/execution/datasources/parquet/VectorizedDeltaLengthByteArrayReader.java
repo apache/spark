@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import static org.apache.spark.sql.execution.datasources.parquet.VectorizedReaderBase.checkLength;
 import static org.apache.spark.sql.types.DataTypes.IntegerType;
 
 import java.io.EOFException;
@@ -58,11 +59,11 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     ByteBufferOutputWriter outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
     int length;
     for (int i = 0; i < total; i++) {
-      length = lengthsVector.getInt(currentRow + i);
+      length = checkLength(lengthsVector.getInt(currentRow + i));
       try {
         buffer = in.slice(length);
       } catch (EOFException e) {
-        throw new ParquetDecodingException("Failed to read " + length + " bytes");
+        throw new ParquetDecodingException("Failed to read " + length + " bytes", e);
       }
       outputWriter.write(c, rowId + i, buffer, length);
     }
@@ -88,13 +89,13 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     ByteBufferOutputWriter outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
     int length;
     for (int i = 0; i < total; i++) {
-      length = lengthsVector.getInt(currentRow + i);
+      length = checkLength(lengthsVector.getInt(currentRow + i));
       byte[] physicalValue;
       try {
         // Converts WKB into a physical representation of geometry/geography.
         physicalValue = converter.convert(in.readNBytes(length), srid);
       } catch (IOException e) {
-        throw new ParquetDecodingException("Failed to read " + length + " bytes");
+        throw new ParquetDecodingException("Failed to read " + length + " bytes", e);
       }
 
       outputWriter.write(c, rowId + i, ByteBuffer.wrap(physicalValue), physicalValue.length);
@@ -103,21 +104,24 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
   }
 
   public ByteBuffer getBytes(int rowId) {
-    int length = lengthsVector.getInt(rowId);
+    int length = checkLength(lengthsVector.getInt(rowId));
     try {
       return in.slice(length);
     } catch (EOFException e) {
-      throw new ParquetDecodingException("Failed to read " + length + " bytes");
+      throw new ParquetDecodingException("Failed to read " + length + " bytes", e);
     }
   }
 
   @Override
   public void skipBinary(int total) {
+    long totalSkip = 0;
     for (int i = 0; i < total; i++) {
-      int remaining = lengthsVector.getInt(currentRow + i);
-      while (remaining > 0) {
-        remaining -= in.skip(remaining);
-      }
+      totalSkip += checkLength(lengthsVector.getInt(currentRow + i));
+    }
+    try {
+      in.skipFully(totalSkip);
+    } catch (IOException e) {
+      throw new ParquetDecodingException("Failed to skip " + totalSkip + " bytes", e);
     }
     currentRow += total;
   }
