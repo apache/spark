@@ -336,6 +336,24 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
     assert(asOfJoin.rightSortExprs.nonEmpty)
   }
 
+  test("MATCH_CONDITION accepts ARRAY operands with coercible element types") {
+    // SPARK-59528: ARRAY<INT> vs ARRAY<BIGINT> is a legal comparison, so MATCH_CONDITION must
+    // accept it too. A resolved orderExpression proves the element types were unified before the
+    // ZipWith distance was built.
+    val sqlText =
+      """
+        |SELECT t.a
+        |FROM VALUES (ARRAY(1, 3)) AS t(a)
+        |ASOF JOIN VALUES (ARRAY(CAST(1 AS BIGINT), CAST(2 AS BIGINT))) AS r(a)
+        |  MATCH_CONDITION (t.a >= r.a)
+        |""".stripMargin
+    val analyzed = sql(sqlText).queryExecution.analyzed
+    assert(analyzed.resolved)
+    val asOfJoin = analyzed.collectFirst { case j: AsOfJoin => j }.get
+    assert(asOfJoin.asOfCondition.resolved)
+    assert(asOfJoin.orderExpression.resolved)
+  }
+
   test("MATCH_CONDITION accepts nested STRUCT column operands") {
     val sqlText =
       """

@@ -133,6 +133,13 @@ FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
      VALUES (ARRAY(1, 2)), (ARRAY(1, 4)) AS r(a)
   MATCH_CONDITION (t.a >= r.a);
 
+-- FVT-ASOF-4-017a: coercion ARRAY<INT> vs ARRAY<BIGINT>
+SELECT t.a, r.a AS matched_a
+FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
+     VALUES (ARRAY(CAST(1 AS BIGINT), CAST(2 AS BIGINT))),
+            (ARRAY(CAST(1 AS BIGINT), CAST(4 AS BIGINT))) AS r(a)
+  MATCH_CONDITION (t.a >= r.a);
+
 -- FVT-ASOF-4-018: ARRAY<STRUCT> whole column MATCH_CONDITION
 SELECT r.a
 FROM VALUES (ARRAY(named_struct('seq', 1, 'val', 3))) AS t(a)

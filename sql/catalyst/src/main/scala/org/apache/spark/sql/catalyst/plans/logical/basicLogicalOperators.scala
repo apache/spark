@@ -2768,16 +2768,27 @@ object AsOfJoin {
     def usesArrayOrderExpression(leftType: DataType, rightType: DataType): Boolean =
       (leftType, rightType) match {
         case (ArrayType(leftElem, _), ArrayType(rightElem, _)) =>
-          areArrayElementsCompatible(leftElem, rightElem)
+          // MATCH_CONDITION compares the two arrays with `>=`, which widens array elements only
+          // through findTightestCommonType (no string promotion, no decimal widening). Accept
+          // exactly what that comparison can compare: orderable elements that are already
+          // structurally equal (BinaryComparison ignores struct field names and nullability) or
+          // have a tightest common type. Otherwise the type check would pass but the `>=` would
+          // fail to resolve.
+          isValidOperandType(leftElem) && isValidOperandType(rightElem) &&
+            (DataType.equalsStructurally(leftElem, rightElem, ignoreNullability = true) ||
+              arrayElementCommonType(leftElem, rightElem).isDefined)
         case _ => false
       }
 
-    private def areArrayElementsCompatible(leftElem: DataType, rightElem: DataType): Boolean = {
-      if (DataTypeUtils.sameType(leftElem, rightElem)) {
-        RowOrdering.isOrderable(leftElem)
-      } else {
-        arePositionalStructsCompatible(leftElem, rightElem)
-      }
+    /**
+     * The element type the `>=` comparison coerces two array operands to, if any. Binary
+     * comparison widens array elements only through findTightestCommonType, ANSI-aware, so the
+     * type check and the order expression use this instead of the broader findWiderTypeForTwo
+     * (which would string-promote or decimal-widen elements the `>=` cannot).
+     */
+    def arrayElementCommonType(leftElem: DataType, rightElem: DataType): Option[DataType] = {
+      val coercion = if (SQLConf.get.ansiEnabled) AnsiTypeCoercion else TypeCoercion
+      coercion.findTightestCommonType(leftElem, rightElem)
     }
 
     /** Positional struct operands with the same field count (names may differ). */
@@ -2911,13 +2922,13 @@ object AsOfJoin {
       rightOperand: Expression,
       operator: MatchComparisonOperator): Expression = {
     (leftOperand.dataType, rightOperand.dataType) match {
-      case (ArrayType(elementType, _), _)
+      case (_: ArrayType, _)
           if MatchConditionTypes.usesArrayOrderExpression(
             leftOperand.dataType, rightOperand.dataType) =>
         // MATCH_CONDITION array comparison uses Spark lexicographic ordering (including length).
         // The ordering distance below is element-wise via ZipWith, padding the shorter side with
         // null when lengths differ (e.g. [0, null]), not a lexicographic length tie-break.
-        buildArrayOrderExpression(leftOperand, rightOperand, elementType, operator)
+        buildArrayOrderExpression(leftOperand, rightOperand, operator)
       case (leftType, rightType)
           if MatchConditionTypes.usesStructDecomposition(leftType, rightType) =>
         buildFlattenedStructOrderExpression(
@@ -2988,8 +2999,29 @@ object AsOfJoin {
   private def buildArrayOrderExpression(
       leftOperand: Expression,
       rightOperand: Expression,
-      elementType: DataType,
       operator: MatchComparisonOperator): Expression = {
+    val leftElementType = leftOperand.dataType.asInstanceOf[ArrayType].elementType
+    val rightElementType = rightOperand.dataType.asInstanceOf[ArrayType].elementType
+    // The ZipWith lambda variables and both array inputs must share the element type the `>=`
+    // comparison coerces to. Coercible elements (e.g. INT vs BIGINT, or INT vs FLOAT which widens
+    // to DOUBLE under ANSI) widen to their tightest common type and both arrays are cast to it.
+    // Structurally equal elements (BinaryComparison ignores struct field names) need no cast and
+    // compare element-wise by ordinal.
+    val elementsStructurallyEqual =
+      DataType.equalsStructurally(leftElementType, rightElementType, ignoreNullability = true)
+    val (leftArray, rightArray, elementType) =
+      if (elementsStructurallyEqual) {
+        (leftOperand, rightOperand, leftElementType)
+      } else {
+        MatchConditionTypes.arrayElementCommonType(leftElementType, rightElementType) match {
+          case Some(widerElementType) =>
+            (castArrayElementType(leftOperand, widerElementType),
+              castArrayElementType(rightOperand, widerElementType),
+              widerElementType)
+          case None =>
+            (leftOperand, rightOperand, leftElementType)
+        }
+      }
     elementType match {
       case struct: StructType =>
         val leftElement = NamedLambdaVariable("left_elem", struct, nullable = true)
@@ -3001,17 +3033,27 @@ object AsOfJoin {
           leafDiffs,
           ArrayType(struct, containsNull = true))
         ZipWith(
-          leftOperand,
-          rightOperand,
+          leftArray,
+          rightArray,
           LambdaFunction(elementOrder, Seq(leftElement, rightElement)))
       case _ =>
         val leftElement = NamedLambdaVariable("left_elem", elementType, nullable = true)
         val rightElement = NamedLambdaVariable("right_elem", elementType, nullable = true)
         val elementOrder = buildLeafOrderExpression(leftElement, rightElement, operator)
         ZipWith(
-          leftOperand,
-          rightOperand,
+          leftArray,
+          rightArray,
           LambdaFunction(elementOrder, Seq(leftElement, rightElement)))
+    }
+  }
+
+  /** Cast an array operand to the given element type, keeping its own `containsNull`. */
+  private def castArrayElementType(operand: Expression, elementType: DataType): Expression = {
+    val arrayType = operand.dataType.asInstanceOf[ArrayType]
+    if (DataTypeUtils.sameType(arrayType.elementType, elementType)) {
+      operand
+    } else {
+      Cast(operand, ArrayType(elementType, arrayType.containsNull))
     }
   }
 
