@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
@@ -3019,7 +3020,8 @@ object AsOfJoin {
               castArrayElementType(rightOperand, widerElementType),
               widerElementType)
           case None =>
-            (leftOperand, rightOperand, leftElementType)
+            // Unreachable: usesArrayOrderExpression already required a common element type here.
+            throw SparkException.internalError("MATCH_CONDITION array elements have no common type")
         }
       }
     elementType match {

@@ -405,9 +405,8 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("ARRAY<INT> vs ARRAY<FLOAT> coercible MATCH_CONDITION") {
-    // SPARK-59528: INT vs FLOAT widens to FLOAT (non-ANSI) or DOUBLE (ANSI). The comparison and
-    // the sort/order expression must widen the same way, so the closest match ([1, 2]) is the
-    // same under both modes. Guards against sorting by one element type and comparing by another.
+    // SPARK-59528: exercises INT vs FLOAT array-element coercion under both ANSI modes (widens to
+    // FLOAT non-ANSI, DOUBLE under ANSI). The closest match is [1, 2] in both.
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         checkSortMergeAsOf(
