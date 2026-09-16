@@ -650,6 +650,29 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("createShuffleSpec: a marked covering projection yields a usable unprojected spec") {
+    val a = $"a".int
+    // Grouped but not sorted, which is what a one-side shuffle onto a union's key order leaves
+    // behind. Every partition expression covers a clustering key here, so the projection that is
+    // refused would only have re-sorted the keys.
+    val marked = KeyedPartitioning(Seq(a),
+      Seq(InternalRow(3), InternalRow(4), InternalRow(1), InternalRow(2)))
+      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    assert(marked.isGrouped, "test setup: the keys are distinct, so the layout is grouped")
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val spec = marked.createShuffleSpec(ClusteredDistribution(Seq(a)))
+        .asInstanceOf[KeyedShuffleSpec]
+      // The refusal leaves the child's own layout, and unlike the narrowing case above that spec
+      // is usable: a consumer is laid out on the keys in the order this side reports them. Sorting
+      // them would send the consumer's undeclared rows where this side does not hold them.
+      assert(spec.joinKeyPositions.isEmpty)
+      assert(spec.canCreatePartitioning)
+      assert(spec.partitioning.partitionKeys == marked.partitionKeys)
+    }
+  }
+
   test("areKeysCompatible: unknown keys require the same function, not just a compatible one") {
     // A bucket-like reducible function: like the built-in `bucket`, a pair of the same function
     // with coarser/finer bucket counts is compatible (a reducer exists) but not the same

@@ -233,6 +233,12 @@
     ],
     "sqlState" : "42703"
   },
+  "AUTOCDC_CONFLICTING_IGNORE_NULL_UPDATES_OPTIONS" : {
+    "message" : [
+      "AutoCDC flow specifies more than one of `ignore_null_updates`, `ignore_null_updates_column_list`, and `ignore_null_updates_except_column_list`; at most one may be provided."
+    ],
+    "sqlState" : "42613"
+  },
   "AUTOCDC_EMPTY_KEYS" : {
     "message" : [
       "AutoCDC requires at least one key column to identify rows, but received an empty key set."
