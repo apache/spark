@@ -87,7 +87,8 @@ object JDBCRDD extends Logging {
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
           messageParameters = Map(
             "jdbcQuery" -> fullQuery,
-            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
+            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", ""),
+            "externalEngineSqlState" -> Option(e.getSQLState).getOrElse("unknown")
           ),
           cause = e)
     }
@@ -379,7 +380,8 @@ class JDBCRDD(
             errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
             messageParameters = Map(
               "jdbcQuery" -> sqlText,
-              "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
+              "externalEngineError" -> e.getMessage.replaceAll("\\.+$", ""),
+              "externalEngineSqlState" -> Option(e.getSQLState).getOrElse("unknown")
             ),
             cause = e)
       }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, SQLException}
 
 import org.scalatest.time.SpanSugar._
 
@@ -68,9 +68,12 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
       condition = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
       parameters = Map(
         "jdbcQuery" -> "SELECT \\* FROM \\(.*",
-        "externalEngineError" -> "[\\s\\S]*"
+        "externalEngineError" -> "[\\s\\S]*",
+        "externalEngineSqlState" -> "[\\s\\S]*"
       )
     )
+    assert(ex.getMessageParameters.get("externalEngineSqlState") ===
+      Option(ex.getCause.asInstanceOf[SQLException].getSQLState).getOrElse("unknown"))
   }
 
   test("SPARK-53386: Parameter `query` should work when ending with semicolons") {
