@@ -414,17 +414,21 @@ class StaxXmlParser(
         case _ => // do nothing
       }
     }
-    keyType match {
-      case _: CharType | _: VarcharType =>
-        val mapBuilder = new ArrayBasedMapBuilder(keyType, valueType)
-        kvPairs.foreach { case (key, value) => mapBuilder.put(key, value) }
-        val mapData = mapBuilder.build()
-        mapKeyException.foreach(throw _)
-        mapData
-      case _ =>
-        mapKeyException.foreach(throw _)
-        // Preserve the historical last-wins behavior for ordinary string keys.
-        ArrayBasedMapData(kvPairs.toMap)
+    val requiresCollationAwareBuilder = keyType match {
+      case _: CharType | _: VarcharType => true
+      case stringType: StringType => !stringType.isUTF8BinaryCollation
+      case _ => false
+    }
+    if (requiresCollationAwareBuilder) {
+      val mapBuilder = new ArrayBasedMapBuilder(keyType, valueType)
+      kvPairs.foreach { case (key, value) => mapBuilder.put(key, value) }
+      val mapData = mapBuilder.build()
+      mapKeyException.foreach(throw _)
+      mapData
+    } else {
+      mapKeyException.foreach(throw _)
+      // Preserve the historical last-wins behavior for ordinary UTF8_BINARY STRING keys.
+      ArrayBasedMapData(kvPairs.toMap)
     }
   }
 

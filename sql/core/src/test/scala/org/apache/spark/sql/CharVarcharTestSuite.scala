@@ -2377,6 +2377,10 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           |  '<ROW><m><a>1</a>9</m></ROW>',
           |  'm MAP<CHAR(2), INT>',
           |  map('valueTag', 'a ')).m""".stripMargin
+      val collatedXmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a><A>2</A></m></ROW>',
+          |  'm MAP<STRING COLLATE UTF8_LCASE, INT>').m""".stripMargin
       val badXmlKeyBeforeDuplicateQuery =
         """SELECT from_xml(
           |  '<ROW><m><abc>0</abc><a>1</a>2</m></ROW>',
@@ -2393,6 +2397,9 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assertDuplicateMapKey(badValueBeforeDuplicateQuery)
       assertDuplicateMapKey(malformedValueBeforeDuplicateQuery)
       assertDuplicateMapKey(xmlQuery)
+      withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+        assertDuplicateMapKey(collatedXmlQuery, expectedKey = "A")
+      }
       assertDuplicateMapKey(badXmlKeyBeforeDuplicateQuery)
       checkAnswer(sql(badKeyThenSiblingQuery), Row(2))
       checkAnswer(sql(badXmlKeyThenSiblingQuery), Row(2))
@@ -2406,6 +2413,9 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         checkAnswer(sql(badValueBeforeDuplicateQuery), Row(null))
         checkAnswer(sql(malformedValueBeforeDuplicateQuery), Row(null))
         checkAnswer(sql(xmlQuery), Row(Map("a " -> 9)))
+        withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+          checkAnswer(sql(collatedXmlQuery), Row(Map("a" -> 2)))
+        }
       }
     }
   }
