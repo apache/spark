@@ -1243,6 +1243,85 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
 
   // Helper: cache a single-column DataFrame (row path) and return its ArrowCachedBatch stats.
   // Stats layout per column: [lowerBound(0), upperBound(1), nullCount(2), rowCount(3), size(4)].
+  // Helper: the InMemoryRelation behind a cached DataFrame, after populating the cache. The
+  // DataFrame's queryExecution is memoized, so this must run before anything else forces it.
+  private def cachedRelation(df: org.apache.spark.sql.DataFrame): InMemoryRelation = {
+    df.cache()
+    df.count()
+    df.queryExecution.executedPlan.collectFirst {
+      case scan: InMemoryTableScanExec => scan.relation
+    }.get
+  }
+
+  // Helper: (Arrow vector class, row count, null count) per cached batch of a single-column
+  // relation, read back through the serializer's own columnar path.
+  private def cachedVectors(relation: InMemoryRelation): Array[(String, Int, Int)] = {
+    val attrs = relation.output
+    relation.cacheBuilder.serializer
+      .convertCachedBatchToColumnarBatch(
+        relation.cacheBuilder.cachedColumnBuffers, attrs, attrs, spark.sessionState.conf)
+      .mapPartitions { batches =>
+        batches.map { batch =>
+          val column = batch.column(0).asInstanceOf[ArrowColumnVector]
+          (column.getValueVector.getClass.getSimpleName, batch.numRows(), column.numNulls())
+        }
+      }
+      .collect()
+  }
+
+  private val nullPatterns: Seq[(String, Int => Boolean)] = Seq(
+    ("every 31st row null", i => i % 31 == 0),
+    ("no nulls", _ => false),
+    ("all nulls", _ => true))
+
+  test("SPARK-59571: TIME keeps its precision and its nulls through the cache, at every " +
+      "precision") {
+    // Every precision of TIME is written to the same TimeNanoVector; the precision travels in
+    // the Arrow field metadata and comes back through the cached relation's schema, so the
+    // cached type is checked as well as the values. The values are truncated to the declared
+    // precision so a precision loss could not hide behind a value the type would round anyway.
+    val rows = 1000
+    val nanosPerDay = 86400000000000L
+    for (precision <- Seq(0, 3, 6, 9); (pattern, isNull) <- nullPatterns) {
+      val unit = math.pow(10, 9 - precision).toLong
+      def timeAt(i: Int): LocalTime = {
+        val nanos = ((i.toLong * nanosPerDay) / rows + i.toLong * 1234567L) % nanosPerDay
+        LocalTime.ofNanoOfDay(nanos / unit * unit)
+      }
+      val values = (0 until rows).map(i => if (isNull(i)) null else timeAt(i))
+      val df = singlePartDf(values, TimeType(precision))
+      val relation = cachedRelation(df)
+      checkAnswer(df, values.map(Row(_)))
+      assert(relation.output.head.dataType === TimeType(precision),
+        s"TIME($precision), $pattern: the cached relation must keep the precision")
+      val vectors = cachedVectors(relation)
+      assert(vectors.map(_._1).toSet === Set("TimeNanoVector"), s"TIME($precision), $pattern")
+      assert(vectors.map(_._2).sum === rows, s"TIME($precision), $pattern")
+      assert(vectors.map(_._3).sum === (0 until rows).count(isNull),
+        s"TIME($precision), $pattern: null count")
+      df.unpersist()
+    }
+  }
+
+  test("SPARK-59571: day-time intervals of both signs keep their microseconds through the " +
+      "cache") {
+    val rows = 1000
+    for ((pattern, isNull) <- nullPatterns) {
+      // Whole microseconds, negative for the first half of the rows and positive for the rest.
+      def intervalAt(i: Int): Duration = Duration.ofNanos((i.toLong - rows / 2) * 7001000000L)
+      val values = (0 until rows).map(i => if (isNull(i)) null else intervalAt(i))
+      val df = singlePartDf(values, DayTimeIntervalType())
+      val relation = cachedRelation(df)
+      checkAnswer(df, values.map(Row(_)))
+      assert(relation.output.head.dataType === DayTimeIntervalType(), pattern)
+      val vectors = cachedVectors(relation)
+      assert(vectors.map(_._1).toSet === Set("DurationVector"), pattern)
+      assert(vectors.map(_._2).sum === rows, pattern)
+      assert(vectors.map(_._3).sum === (0 until rows).count(isNull), s"$pattern: null count")
+      df.unpersist()
+    }
+  }
+
   private def cachedStats(df: org.apache.spark.sql.DataFrame)
       : org.apache.spark.sql.catalyst.InternalRow = {
     df.count()  // trigger cache population
