@@ -30,17 +30,19 @@ private[spark] class ExecutorKubernetesCredentialsFeatureStep(kubernetesConf: Ku
     kubernetesConf.get(KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME)
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    podServiceAccount(pod) match {
-      // The pod template's account takes precedence, so the pod goes back as it came.
+    val account = podServiceAccount(pod) match {
+      // The pod template's account takes precedence over both configurations.
       case Some(templateAccount) =>
         reportAccountNotApplied(templateAccount)
-        pod
+        Some(templateAccount)
       // if not setup by the pod template, fallback to the executor's sa,
       // if executor's sa is not setup, the last option is driver's sa.
-      case None =>
-        val account = executorServiceAccount.orElse(driverServiceAccount)
-        pod.copy(pod = buildPodWithServiceAccount(account, pod).getOrElse(pod.pod))
+      case None => executorServiceAccount.orElse(driverServiceAccount)
     }
+    // Whichever account won goes into both fields, the deprecated one included, so that the feature
+    // steps running after this one see what the API server would store: SetDefaults_PodSpec copies
+    // the account into both fields whichever one the template named.
+    pod.copy(pod = buildPodWithServiceAccount(account, pod).getOrElse(pod.pod))
   }
 
   /**

@@ -59,18 +59,19 @@ class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with B
 
   test("SPARK-58910: keep the service account named by the executor pod template") {
     // Either spelling means the template already picked an account, so the configured one must not
-    // replace it. The field the template left alone stays null: the step hands the pod back as it
-    // came rather than mirroring the account into both fields. Varying the configuration alongside
-    // the spelling keeps the driver fallback covered here too.
+    // replace it. Varying the configuration alongside the spelling keeps the driver fallback
+    // covered here too. The account the step keeps goes into both fields, which is what the API
+    // server would store, and when the two disagree the one in `serviceAccountName` counts.
     Seq(
-      (EXECUTOR_SA_CONF, podWithAccount(serviceAccountName = Some("template-name")),
-        "template-name", null),
-      (DRIVER_SA_CONF, podWithAccount(serviceAccount = Some("template-name")),
-        null, "template-name")
-    ).foreach { case (conf, templatePod, expectedName, expectedAlias) =>
+      (EXECUTOR_SA_CONF, podWithAccount(serviceAccountName = Some("template-name"))),
+      (DRIVER_SA_CONF, podWithAccount(serviceAccount = Some("template-name"))),
+      (EXECUTOR_SA_CONF, podWithAccount(
+        serviceAccount = Some("configured-name"), serviceAccountName = Some("template-name")))
+    ).foreach { case (conf, templatePod) =>
       val spec = evaluateStep(templatePod, new SparkConf(false).set(conf, "configured-name"))
-      assert(spec.getServiceAccountName === expectedName, s"via $conf")
-      assert(spec.getServiceAccount === expectedAlias, s"via $conf")
+      withClue(s"via $conf: ") {
+        assertSAName("template-name", spec)
+      }
     }
   }
 
@@ -94,13 +95,18 @@ class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with B
       Seq(EXECUTOR_SA_CONF -> "configured-name") ->
         podWithAccount(serviceAccount = Some("template-name")),
       Seq(EXECUTOR_SA_CONF -> "configured-name", DRIVER_SA_CONF -> "driver-name") ->
-        podWithAccount(serviceAccountName = Some("template-name"))
+        podWithAccount(serviceAccountName = Some("template-name")),
+      // The deprecated field naming the configured account changes nothing: the step compares
+      // against `serviceAccountName`, so this displaces the configuration like the rows above.
+      Seq(EXECUTOR_SA_CONF -> "configured-name") ->
+        podWithAccount(
+          serviceAccount = Some("configured-name"), serviceAccountName = Some("template-name"))
     ).foreach { case (confs, templatePod) =>
       val appender = runWith(confs, templatePod)
       val warnings = messagesAt(appender, Level.WARN)
       assert(warnings.size === 1, s"expected one warning for $confs, got: $warnings")
-      // And nothing besides: splitting the report into two independent statements would add an
-      // INFO about the driver fallback for anyone who set both configurations.
+      // And nothing besides: splitting the report into two independent statements would add a DEBUG
+      // line about the driver fallback for anyone who set both configurations.
       assert(appender.loggingEvents.size === 1,
         s"expected the warning to be the only output for $confs: ${allOutput(appender)}")
       // The message names the configuration that did not apply, the account it would have applied,
@@ -140,6 +146,10 @@ class ExecutorKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with B
       Seq(EXECUTOR_SA_CONF -> "same-name") ->
         podWithAccount(serviceAccountName = Some("same-name")),
       Seq(EXECUTOR_SA_CONF -> "same-name") -> podWithAccount(serviceAccount = Some("same-name")),
+      // Or names it in `serviceAccountName` while the deprecated field names something else:
+      // comparing against the wrong field would report a displacement here.
+      Seq(EXECUTOR_SA_CONF -> "same-name") ->
+        podWithAccount(serviceAccount = Some("other-name"), serviceAccountName = Some("same-name")),
       // The template names no account, so the configured one applies.
       Seq(EXECUTOR_SA_CONF -> "executor-name") -> SparkPod.initialPod(),
       // An empty template field counts as unset, so the configured account applies here too.
