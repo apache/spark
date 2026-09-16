@@ -19,6 +19,10 @@
 Upgrading PySpark
 ==================
 
+Upgrading from PySpark 4.3 to 4.4
+---------------------------------
+* In Spark 4.4, timezone-naive pandas timestamp columns backed by ``pd.ArrowDtype`` are interpreted in the session timezone when converted to ``TimestampType``, consistent with numpy ``datetime64`` columns. Previously they were interpreted as UTC. To keep the previous behavior, make the column timezone-aware in UTC.
+
 Upgrading from PySpark 4.2 to 4.3
 ---------------------------------
 * In Spark 4.3, Python 3.10 support was dropped in PySpark.
