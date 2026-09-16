@@ -83,9 +83,9 @@ public abstract class PartitionPredicate extends Predicate {
    * supported.
    * <p>
    * This method may throw when it cannot evaluate the predicate for the given key, for example on
-   * an ANSI cast failure. Spark may have dropped the filter it pushed, which leaves this predicate
-   * as the only evaluator, so an implementation must let such a failure propagate rather than
-   * treat the partition as matching, and must finish evaluating before it mutates any data.
+   * an ANSI cast failure. Accepting a predicate lets Spark drop the filter it pushed, which leaves
+   * this predicate as the only evaluator, so a caller must let such a failure propagate rather
+   * than treat the partition as matching, and must finish evaluating before it mutates any data.
    *
    * @param partitionKey the full partition key for one partition, ordered according to
    *                     {@link Table#partitioning()}.

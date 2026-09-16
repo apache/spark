@@ -412,10 +412,10 @@ class DataSourceV2EnhancedPartitionFilterSuite
 
       spark.udf.register("to_int", (s: String) => s.toInt)
 
-      // `to_int('hr')` throws. The filter is untranslatable, so it is pushed as a
-      // PartitionPredicate and accepted, which removes it from the post-scan filters. The
-      // source is then its only evaluator, so reporting a failed evaluation as a match
-      // returns the 'hr' row, which does not satisfy the filter.
+      // `to_int('hr')` throws, so the filter is never true for that partition. The filter is
+      // untranslatable, so it is pushed as a PartitionPredicate and accepted, which removes it
+      // from the post-scan filters. The source is then its only evaluator, so reporting a failed
+      // evaluation as a match returns the 'hr' row. The error surfaces while the scan is built.
       val e = intercept[SparkException] {
         sql(s"SELECT * FROM $partFilterTableName WHERE to_int(part_col) = 1").collect()
       }

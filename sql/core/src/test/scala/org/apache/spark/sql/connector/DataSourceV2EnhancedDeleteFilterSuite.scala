@@ -242,8 +242,8 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
   }
 
   // A metadata-only DELETE has no post-scan filter, so the PartitionPredicate is the only
-  // evaluator. Reporting a failed evaluation as a match deletes a partition that does not
-  // satisfy the condition.
+  // evaluator. `to_int('hr')` throws, so the condition is never true for that partition, and
+  // reporting the failed evaluation as a match would delete it.
   test("SPARK-59572: metadata-only DELETE must not drop a partition whose predicate failed") {
     withTable(deleteTableName) {
       sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +

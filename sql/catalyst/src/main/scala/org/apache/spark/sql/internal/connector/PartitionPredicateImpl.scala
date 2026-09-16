@@ -32,11 +32,13 @@ import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
  * @param partitionFields one entry per transform of `Table.partitioning()`, in that order, so a
  *                        bound ordinal matches the partition key a connector passes to [[eval]].
  * @param failOpen what [[eval]] does when it cannot evaluate the expression for a partition.
- *                 When true it reports the partition as matching, which only prunes less; that
- *                 is safe for a runtime filter, since Spark evaluates it again in the post-scan
- *                 `FilterExec`. When false the failure is propagated, because Spark removed the
- *                 filter it pushed and this predicate is the only evaluator: reporting a match
- *                 would return or write rows the filter does not accept.
+ *                 When true it reports the partition as matching, which only prunes less; that is
+ *                 safe for a runtime filter, whose rows are filtered anyway, by the post-scan
+ *                 `FilterExec` for a scalar subquery filter and by the join it was derived from
+ *                 for a dynamic partition pruning filter. When false the failure is propagated,
+ *                 because Spark drops a filter the connector accepts, leaving this predicate as
+ *                 the only evaluator: reporting a match would return or write rows the filter
+ *                 does not accept.
  */
 class PartitionPredicateImpl private (
     private val catalystExpr: CatalystExpression,

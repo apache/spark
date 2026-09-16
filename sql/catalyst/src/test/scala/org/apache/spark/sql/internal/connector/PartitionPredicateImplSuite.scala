@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkThrowable}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkNumberFormatException}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerInstance}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, EvalMode, GreaterThan, Literal}
@@ -61,12 +61,14 @@ class PartitionPredicateImplSuite extends SparkFunSuite with QueryErrorsBase {
     val expr = EqualTo(Cast(ref, IntegerType, None, EvalMode.ANSI), Literal(1))
     val failing = InternalRow(UTF8String.fromString("hr"))
     val matching = InternalRow(UTF8String.fromString("1"))
+    val notMatching = InternalRow(UTF8String.fromString("2"))
 
     // Default: the predicate is Spark's only evaluator, so the failure must surface.
     val strict = PartitionPredicateImpl(expr, fields).get
     checkError(
-      exception = intercept[SparkThrowable](strict.eval(failing)),
+      exception = intercept[SparkNumberFormatException](strict.eval(failing)),
       condition = "CAST_INVALID_INPUT",
+      sqlState = Some("22018"),
       parameters = Map(
         "expression" -> toSQLValue("hr"),
         "sourceType" -> toSQLType(StringType),
@@ -74,17 +76,25 @@ class PartitionPredicateImplSuite extends SparkFunSuite with QueryErrorsBase {
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       queryContext = Array(ExpectedContext("", -1, -1)))
     assert(strict.eval(matching) === true)
+    assert(strict.eval(notMatching) === false)
 
     // Runtime filters are re-evaluated after the scan, so failing open only prunes less.
     val lenient = PartitionPredicateImpl(expr, fields, failOpen = true).get
     assert(lenient.eval(failing) === true)
     assert(lenient.eval(matching) === true)
+    // Failing open must not degrade into always matching: a key it can evaluate still decides.
+    assert(lenient.eval(notMatching) === false)
+
+    // The flag is part of the predicate's identity.
+    assert(strict !== lenient)
+    assert(strict.hashCode() !== lenient.hashCode())
 
     // The same split applies to a partition key that does not match the schema.
     val wrongWidth = InternalRow(UTF8String.fromString("1"), UTF8String.fromString("extra"))
     checkError(
       exception = intercept[SparkException](strict.eval(wrongWidth)),
       condition = "INTERNAL_ERROR",
+      sqlState = Some("XX000"),
       parameters = Map("message" -> ("Cannot evaluate partition predicate " +
         "(CAST(p AS INT) = 1): partition value field count (2) does not match schema (1).")))
     assert(lenient.eval(wrongWidth) === true)
