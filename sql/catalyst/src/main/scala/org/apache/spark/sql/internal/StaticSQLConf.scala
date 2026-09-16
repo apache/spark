@@ -390,6 +390,22 @@ object StaticSQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val AVRO_SCHEMA_URL_ALLOWED_SCHEMES =
+    buildStaticConf("spark.sql.avro.schemaUrlAllowedSchemes")
+      .internal()
+      .doc("A comma-separated allowlist of URI schemes permitted for the 'avroSchemaUrl' Avro " +
+        "option. Empty by default, which permits any scheme and preserves the previous behavior; " +
+        "when non-empty, an avroSchemaUrl whose scheme is not listed is rejected before it is " +
+        "opened. As a static configuration it can only be set when starting the driver, and not " +
+        "from a session. It restricts the scheme an avroSchemaUrl may name; it does not restrict " +
+        "which file system serves that scheme. That is decided by fs.<scheme>.impl, which a " +
+        "session can still set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   // Bounds on the environment a session may install in its Python workers through the reserved
   // `spark.pythonWorkerEnv.` prefix. Static, so a session cannot raise its own limits. Their keys
   // are deliberately not under that prefix: every SparkConf entry is copied into a new session's
@@ -431,4 +447,21 @@ object StaticSQLConf {
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= 0, "The maximum total size must not be negative.")
       .createWithDefault(128 * 1024) // 128 KiB
+
+  val KAFKA_DISALLOWED_OPTIONS =
+    buildStaticConf("spark.sql.kafka.disallowedOptions")
+      .internal()
+      .doc("A comma-separated list of Kafka client option names (without the 'kafka.' prefix) " +
+        "that are not allowed to be set through Kafka source/sink options. Empty by default, " +
+        "which allows all options and preserves the previous behavior; when non-empty, setting a " +
+        "listed option raises an error. This is a static configuration fixed when the " +
+        "SparkSession is created and cannot be changed at runtime, so it acts as an operator " +
+        "boundary that a session cannot turn off.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .checkValue(_.forall(!_.toLowerCase(Locale.ROOT).startsWith("kafka.")),
+        "Kafka option names must be listed without the 'kafka.' prefix.")
+      .createWithDefault(Nil)
 }

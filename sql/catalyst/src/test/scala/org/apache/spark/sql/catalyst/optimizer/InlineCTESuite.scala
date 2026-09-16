@@ -109,6 +109,43 @@ class InlineCTESuite extends PlanTest {
       "found a subquery with outer-scope reference"))
   }
 
+  test("MATERIALIZED keeps a single-reference deterministic CTE") {
+    val cteDef = CTERelationDef(
+      TestRelation(Seq($"a".int)).select($"a"), materialized = Some(true))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.select($"a"), Seq(cteDef)).analyze
+    assert(Optimize.execute(plan).exists(_.isInstanceOf[WithCTE]),
+      "MATERIALIZED CTE should not be inlined")
+    // `alwaysInline` mode still inlines it, e.g. to restore the plan shape for analysis checks.
+    assert(!InlineCTE(alwaysInline = true).apply(plan).exists(_.isInstanceOf[WithCTE]),
+      "MATERIALIZED CTE should be inlined in alwaysInline mode")
+  }
+
+  test("MATERIALIZED CTE with an outer reference across its boundary fails") {
+    // Analysis rejects this for SQL; the optimizer guard covers plans built programmatically,
+    // like it does for `forceSkipInline`.
+    val relation = TestRelation(Seq($"a".int))
+    val cteDef = CTERelationDef(
+      relation.where(OuterReference($"a".int) === 1), materialized = Some(true))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.select($"a"), Seq(cteDef))
+    val e = intercept[SparkException] {
+      Optimize.execute(plan)
+    }
+    assert(e.getCondition == "INTERNAL_ERROR")
+    assert(e.getMessage.contains(
+      "A force-materialized CTE cannot carry an outer reference across its boundary"))
+  }
+
+  test("NOT MATERIALIZED inlines a multi-reference non-deterministic CTE") {
+    val cteDef = CTERelationDef(
+      OneRowRelation().select(rand(0).as("a")), materialized = Some(false))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.union(cteRef), Seq(cteDef)).analyze
+    assert(!Optimize.execute(plan).exists(_.isInstanceOf[WithCTE]),
+      "NOT MATERIALIZED CTE should be inlined")
+  }
+
   test("SPARK-58779: optimizer InlineCTE (isAnalysis = false) fails on a ref with no definition") {
     // During analysis a CTERelationRef whose definition is not in the plan is tolerated -- it is
     // owned by a surrounding scope (e.g. when `ResolveSQLTableFunctions` runs `checkAnalysis` on a
