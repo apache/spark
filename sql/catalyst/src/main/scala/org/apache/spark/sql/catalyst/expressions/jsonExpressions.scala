@@ -2119,6 +2119,8 @@ case class SchemaOfJson(
   @transient
   private lazy val evaluator: SchemaOfJsonEvaluator = SchemaOfJsonEvaluator(options)
 
+  // Keep this type-based so the replacement expression does not change if SQLConf changes after
+  // analysis. A first-class CharType child already establishes that CHAR semantics apply.
   private lazy val jsonInput = child.dataType match {
     case _: CharType => StringTrimRight(child)
     case _ => child
