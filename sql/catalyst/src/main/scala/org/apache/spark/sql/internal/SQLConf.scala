@@ -7452,8 +7452,11 @@ object SQLConf {
         "single-column null-aware anti join for which Spark uses the broadcast hash join " +
         "optimization. This configuration takes effect only when " +
         "spark.sql.optimizeNullAwareAntiJoin is enabled. A negative value allows the " +
-        "optimization regardless of the estimated size, while zero disables it. If the " +
-        "estimated size exceeds a positive value, Spark falls back to regular join planning. " +
+        "optimization regardless of the estimated size. For a nonnegative value, the effective " +
+        "threshold is the larger of this value and spark.sql.autoBroadcastJoinThreshold. Thus, " +
+        "zero disables the optimization only when automatic broadcasting is also disabled. If " +
+        "the estimated size exceeds the effective threshold, Spark falls back to regular join " +
+        "planning. " +
         "The fallback may still broadcast the right side with a nested-loop representation " +
         "that uses more memory and runs in O(M * N) time. Join hints do not override this " +
         "configuration when the broadcast hash optimization is selected. This configuration " +
