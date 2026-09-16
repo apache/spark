@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, EqualTo, InS
 import org.apache.spark.sql.catalyst.optimizer.ReorderJoin
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, LogicalPlan}
+import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -40,12 +41,12 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
  * out an unrelated fixture mismatch as why its partner was rejected. (The `LIMIT` case is such a
  * pair: a Limit's expressions are all allowlisted, so the operator whitelist alone can reject it.)
  *
- * Self-joined fixtures are real tables, not temp views over VALUES. Spark deduplicates a self-join
- * over a [[org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation]] via `newInstance()`,
- * which refreshes one side's ExprIds without inserting a rename-only Project, so both sides stay
- * structurally identical. A temp view over VALUES cannot, and Spark renames one side with a Project
- * instead, which would make `isSameBaseRelation` false for every self-join below. `range()` needs
- * no such treatment -- Range is a MultiInstanceRelation already.
+ * Self-joined fixtures are real tables. This is not required for `isSameBaseRelation` to hold --
+ * a VALUES temp view resolves to `LocalRelation`, also a
+ * [[org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation]], and `FinishAnalysis` removes
+ * the View wrapper before this rule's batch runs. Real tables are used because they mirror the
+ * Parquet-backed shape this rule targets in Q95-style queries. `range()` similarly needs no
+ * special treatment -- `Range` is a `MultiInstanceRelation` already.
  */
 class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSparkSession {
 
@@ -354,11 +355,11 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
   test("Clock-dependent nested STRING -> TIMESTAMP casts (array/map/struct) are fail-closed") {
     withTable("TNest") {
-      // castHasClockDependentStringToTimestamp recurses into ARRAY/MAP/STRUCT casts, so a
-      // clock-dependent STRING -> TIMESTAMP_LTZ hidden at any nesting level must fail closed. The
-      // cast rides in a WHERE filter as `CAST(nested AS <ts>) IS NOT NULL` (tree IsNotNull -> Cast
-      // -> Attribute, all allowlisted) rather than the neq column, which the neq-column type gate
-      // would reject wholesale and mask the recursion. So only the clock-dependent-cast guard can
+      // Cast.needsTimeZone recurses into ARRAY/MAP/STRUCT casts, so a clock-dependent STRING ->
+      // TIMESTAMP_LTZ hidden at any nesting level must fail closed. The cast rides in a WHERE
+      // filter as `CAST(nested AS <ts>) IS NOT NULL` (tree IsNotNull -> Cast -> Attribute, all
+      // allowlisted) rather than the neq column, which the neq-column type gate would reject
+      // wholesale and mask the recursion. So only the clock-dependent-cast guard can
       // decline it. For each shape the TIMESTAMP_NTZ control must fire before the LTZ variant is
       // required not to, so deleting a recursion arm turns the matching negative red.
       createTable(
@@ -387,15 +388,50 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
     }
   }
 
-  test("VARIANT casts to LTZ-containing targets are fail-closed") {
-    // Same WHERE-filter shape and NTZ-control-fires-first setup as the nested STRING-cast test
-    // above (guard coverage at plan level, not a runtime nested-Variant conversion). Variant
-    // specifics: a Variant cast parses a runtime string, so a target with a TIMESTAMP_LTZ leaf at
-    // any nesting level is clock-dependent and must fail closed, while TIMESTAMP_NTZ stays allowed.
-    // `Cast.needsTimeZone(VariantType, _)` is unconditionally true, so the guard uses
-    // variantTargetHasClockDependentStringToTimestamp, which recurses the TARGET type only.
-    // pushVariantIntoScan is disabled so the Cast reaches the rule rather than being folded into a
-    // scan-level struct-field extraction.
+  test("Clock-dependent nested TIME -> TIMESTAMP casts are fail-closed") {
+    withTable("TTime") {
+      // TIME -> TIMESTAMP[_NTZ] depends on CURRENT_DATE. ComputeCurrentTime rewrites direct
+      // scalar casts before this rule, but nested casts survive because its TIME check does not
+      // recurse into complex types. Keep the cast in a filter so the neq type gate cannot mask
+      // the Cast.needsTimeZone guard being tested here.
+      createTable(
+        "TTime",
+        "k INT, v INT, arr ARRAY<TIME>",
+        """  (1, 10, ARRAY(TIME'01:00:00')), (1, 20, ARRAY(TIME'02:00:00')),
+          |  (2, 30, ARRAY(TIME'03:00:00'))""".stripMargin)
+
+      def wrapped(filterExpr: String): String =
+        s"""SELECT k FROM TTime outer_t WHERE k IN (
+           |  SELECT s1.k FROM
+           |    (SELECT k, v FROM TTime WHERE $filterExpr) s1
+           |    JOIN (SELECT k, v FROM TTime WHERE $filterExpr) s2
+           |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
+
+      // Same wrapper shape with a repeatable cast fires and computes the real membership.
+      val safeSql = wrapped("CAST(v AS BIGINT) IS NOT NULL")
+      assertRuleFired(safeSql)
+      val onRows = withSQLConf(rewriteConf -> "true") { spark.sql(safeSql).collect().toSeq }
+      val offRows = withSQLConf(rewriteConf -> "false") { spark.sql(safeSql).collect().toSeq }
+      QueryTest.sameRows(onRows, offRows).foreach { error =>
+        fail(s"safe control diverges:\n$error")
+      }
+      QueryTest.sameRows(Seq(Row(1), Row(1)), onRows).foreach { error =>
+        fail(s"safe control expected two copies of Row(1):\n$error")
+      }
+
+      assertRuleNotFired(wrapped("CAST(arr AS ARRAY<TIMESTAMP>) IS NOT NULL"))
+      assertRuleNotFired(wrapped("CAST(arr AS ARRAY<TIMESTAMP_NTZ>) IS NOT NULL"))
+    }
+  }
+
+  test("VARIANT casts are fail-closed regardless of target") {
+    // Cast.needsTimeZone(VariantType, _) is unconditionally true regardless of the declared
+    // target -- Variant's runtime type is unknown statically, so Cast treats any Variant-sourced
+    // cast as needing the session time zone. Delegating to it (see isRepeatableExpression) is more
+    // conservative than a target-only check: TIMESTAMP_NTZ targets are rejected too, not just
+    // LTZ-containing ones. A missed optimization, not a bug -- consistent with this rule's
+    // fail-closed default. pushVariantIntoScan is disabled so the Cast reaches the rule rather than
+    // being folded into a scan-level struct-field extraction.
     withSQLConf("spark.sql.variant.pushVariantIntoScan" -> "false") {
       withTable("TVar") {
         createTable(
@@ -412,13 +448,12 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
              |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
 
         Seq(
-          "CAST(vt AS TIMESTAMP)" -> "CAST(vt AS TIMESTAMP_NTZ)",
-          "CAST(vt AS ARRAY<TIMESTAMP>)" -> "CAST(vt AS ARRAY<TIMESTAMP_NTZ>)",
-          "CAST(vt AS MAP<STRING, TIMESTAMP>)" -> "CAST(vt AS MAP<STRING, TIMESTAMP_NTZ>)",
-          "CAST(vt AS STRUCT<x: TIMESTAMP>)" -> "CAST(vt AS STRUCT<x: TIMESTAMP_NTZ>)"
-        ).foreach { case (ltz, ntz) =>
-          assertRuleFired(wrapped(s"$ntz IS NOT NULL"))
-          assertRuleNotFired(wrapped(s"$ltz IS NOT NULL"))
+          "CAST(vt AS TIMESTAMP)", "CAST(vt AS TIMESTAMP_NTZ)",
+          "CAST(vt AS ARRAY<TIMESTAMP>)", "CAST(vt AS ARRAY<TIMESTAMP_NTZ>)",
+          "CAST(vt AS MAP<STRING, TIMESTAMP>)", "CAST(vt AS MAP<STRING, TIMESTAMP_NTZ>)",
+          "CAST(vt AS STRUCT<x: TIMESTAMP>)", "CAST(vt AS STRUCT<x: TIMESTAMP_NTZ>)"
+        ).foreach { cast =>
+          assertRuleNotFired(wrapped(s"$cast IS NOT NULL"))
         }
       }
     }
@@ -875,6 +910,58 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
   // ==================== Repeatability whitelist: unknown operators fail-closed ==============
 
+  test("Same-root Parquet leaves across an append are not the same FileIndex: rule bails out") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      spark.sql("SELECT * FROM VALUES (1, 1), (1, 3) AS t(k, v)")
+        .write.mode("overwrite").parquet(path)
+      spark.read.parquet(path).createOrReplaceTempView("SnapBefore")
+      // A second, independent read of the same root path after an append: `InMemoryFileIndex
+      // .equals` compares only `rootPaths`, so `sameResult` treats this pair as the same relation
+      // even though they enumerate different files -- the precondition this guard exists for.
+      spark.sql("SELECT 1 AS k, 2 AS v").write.mode("append").parquet(path)
+      spark.read.parquet(path).createOrReplaceTempView("SnapAfter")
+
+      def location(p: LogicalPlan): FileIndex = p.collectLeaves().collectFirst {
+        case LogicalRelationWithTable(h: HadoopFsRelation, _) => h.location
+      }.get
+
+      val snapshotSql =
+        """SELECT k FROM SnapBefore outer_t WHERE k IN (
+          |  SELECT s1.k FROM SnapBefore s1 JOIN SnapAfter s2
+          |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
+      val analyzed = spark.sql(snapshotSql).queryExecution.analyzed
+      val join = analyzed.subqueriesAll.head.collectFirst { case j: Join => j }.get
+      assert(join.left.sameResult(join.right),
+        s"expected sameResult to (wrongly) accept different snapshots of one root path:\n" +
+          s"${join.left}\n${join.right}")
+      assert(!(location(join.left) eq location(join.right)),
+        "expected the two independently captured reads to have different FileIndex instances")
+      assertRuleNotFired(snapshotSql)
+
+      // Positive control: referencing SnapBefore twice resolves it once and shares the FileIndex
+      // (LogicalRelation.newInstance keeps the relation reference, swapping only ExprIds), so an
+      // ordinary self-join over one already-resolved relation still fires and computes correctly.
+      val ordinarySql =
+        """SELECT k FROM SnapBefore outer_t WHERE k IN (
+          |  SELECT s1.k FROM SnapBefore s1 JOIN SnapBefore s2
+          |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
+      val ordinaryJoin = spark.sql(ordinarySql).queryExecution.analyzed.subqueriesAll.head
+        .collectFirst { case j: Join => j }.get
+      assert(location(ordinaryJoin.left) eq location(ordinaryJoin.right),
+        "expected an ordinary self-join to share one FileIndex instance")
+      assertRuleFired(ordinarySql)
+      val onRows = withSQLConf(rewriteConf -> "true") { spark.sql(ordinarySql).collect().toSeq }
+      val offRows = withSQLConf(rewriteConf -> "false") { spark.sql(ordinarySql).collect().toSeq }
+      QueryTest.sameRows(onRows, offRows).foreach { error =>
+        fail(s"ordinary self-join control diverges:\n$error")
+      }
+      QueryTest.sameRows(Seq(Row(1), Row(1)), onRows).foreach { error =>
+        fail(s"ordinary self-join control expected two copies of Row(1):\n$error")
+      }
+    }
+  }
+
   test("LIMIT inside the self-join subtrees breaks row-bag repeatability: rule bails out") {
     withTable("T") {
       // The guard under test is the operator whitelist in `isRowBagRepeatable`: a `LIMIT` without a
@@ -1259,24 +1346,32 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
           assertRuleFired(sql)
           val on = runOutcome(sql, rewrite = true)
           val off = runOutcome(sql, rewrite = false)
-          (on, off) match {
-            case (Right(onRows), Right(offRows)) =>
-              assert(onRows == offRows,
-                s"ANSI=$ansi both succeeded but diverged: ON=$onRows OFF=$offRows")
-              // Positive signal under ANSI off: the cast is defined (yields NULL) for every
-              // surviving row, so ON must return the real membership {1}, not just match OFF.
-              if (ansi == "false") {
-                assert(onRows == Set(Row(1)), s"ANSI=false expected {1}, got $onRows")
-              }
-            case (Left(onErr), Left(offErr)) =>
-              assert(onErr == offErr,
-                s"ANSI=$ansi both threw but different error: ON=$onErr OFF=$offErr")
-              if (ansi == "true") {
+          // Force the expected outcome shape by ansi instead of matching on whichever shape both
+          // sides happen to agree on: under ansi=false a (Left, Left) match on the same error class
+          // would otherwise pass without ever checking the real membership {1}.
+          if (ansi == "false") {
+            (on, off) match {
+              case (Right(onRows), Right(offRows)) =>
+                QueryTest.sameRows(onRows, offRows).foreach { error =>
+                  fail(s"ANSI=false both succeeded but diverged:\n$error")
+                }
+                // Real membership: both TAnsi rows with k=1, not just "matches OFF".
+                QueryTest.sameRows(Seq(Row(1), Row(1)), onRows).foreach { error =>
+                  fail(s"ANSI=false expected two copies of Row(1):\n$error")
+                }
+              case _ =>
+                fail(s"ANSI=false expected both sides to succeed: ON=$on OFF=$off")
+            }
+          } else {
+            (on, off) match {
+              case (Left(onErr), Left(offErr)) =>
+                assert(onErr == offErr,
+                  s"ANSI=true both threw but different error: ON=$onErr OFF=$offErr")
                 assert(onErr == "CAST_INVALID_INPUT",
                   s"ANSI=true expected CAST_INVALID_INPUT, got $onErr")
-              }
-            case _ =>
-              fail(s"ANSI=$ansi one-sided error behavior: ON=$on OFF=$off")
+              case _ =>
+                fail(s"ANSI=true expected both sides to throw: ON=$on OFF=$off")
+            }
           }
         }
       }
@@ -1308,39 +1403,43 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
           assertRuleFired(remSql)
           val on = runOutcome(remSql, rewrite = true)
           val off = runOutcome(remSql, rewrite = false)
-          (on, off) match {
-            case (Right(onRows), Right(offRows)) =>
-              assert(onRows == offRows,
-                s"Remainder ANSI=$ansi both succeeded but diverged: ON=$onRows OFF=$offRows")
-              // Positive signal (ANSI off): the remainders are defined, so the rewrite must return
-              // the real membership. k=1: 10%3=1, 20%7=6 -> {1,6} matches; k=2: 30%0=NULL, 40%4=0
-              // -> {0} no match. Result is exactly {1}.
-              if (ansi == "false") {
-                assert(onRows == Set(Row(1)), s"Remainder ANSI=false expected {1}, got $onRows")
-              }
-            case (Left(onErr), Left(offErr)) =>
-              assert(onErr == offErr,
-                s"Remainder ANSI=$ansi both threw but different error: ON=$onErr OFF=$offErr")
-              if (ansi == "true") {
+          // Force the expected outcome shape by ansi; see the Cast test above for why matching on
+          // whichever shape both sides agree on would leave the real membership unchecked.
+          if (ansi == "false") {
+            (on, off) match {
+              case (Right(onRows), Right(offRows)) =>
+                QueryTest.sameRows(onRows, offRows).foreach { error =>
+                  fail(s"Remainder ANSI=false both succeeded but diverged:\n$error")
+                }
+                // k=1: 10%3=1, 20%7=6 -> {1,6} matches; k=2: 30%0=NULL, 40%4=0 -> {0} no match.
+                QueryTest.sameRows(Seq(Row(1), Row(1)), onRows).foreach { error =>
+                  fail(s"Remainder ANSI=false expected two copies of Row(1):\n$error")
+                }
+              case _ =>
+                fail(s"Remainder ANSI=false expected both sides to succeed: ON=$on OFF=$off")
+            }
+          } else {
+            (on, off) match {
+              case (Left(onErr), Left(offErr)) =>
+                assert(onErr == offErr,
+                  s"Remainder ANSI=true both threw but different error: ON=$onErr OFF=$offErr")
                 assert(onErr == "REMAINDER_BY_ZERO",
                   s"Remainder ANSI=true expected REMAINDER_BY_ZERO, got $onErr")
-              }
-            case _ =>
-              fail(s"Remainder ANSI=$ansi one-sided error behavior: ON=$on OFF=$off")
+              case _ =>
+                fail(s"Remainder ANSI=true expected both sides to throw: ON=$on OFF=$off")
+            }
           }
         }
       }
     }
   }
 
-  test("ANSI: NULL equi-key row with a throwing neq expression preserves error parity") {
+  test("ANSI: NULL equi-key row does not expose the neq cast to a different filter placement") {
     withTable("TAnsiNull") {
-      // The rewrite excludes NULL equi keys with an injected `IsNotNull(k)` Filter, whereas the
-      // baseline self-join excludes them only through `s1.k = s2.k` -- a different mechanism the
-      // optimizer may place differently relative to the throwing `CAST(s AS INT)`. This pins that
-      // the injected filter does not change WHETHER the cast throws (same error class, or both
-      // succeed with equal rows). The NULL-key row carries the bad value 'bad' -- exactly the
-      // row the filter could drop before the cast runs.
+      // Our injected `IsNotNull(k)` and the baseline's own `InferFiltersFromConstraints` (inferred
+      // from `s1.k = s2.k`) are different mechanisms that could place the guard differently
+      // relative to the throwing `CAST(s AS INT)`. Both end up pushing it below the Project before
+      // the cast runs (Cast.nullIntolerant), on either side of ANSI -- pin that so it stays true.
       createTable(
         "TAnsiNull",
         "k INT, s STRING",
@@ -1360,22 +1459,15 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
           val off = runOutcome(sql, rewrite = false)
           (on, off) match {
             case (Right(onRows), Right(offRows)) =>
-              assert(onRows == offRows,
-                s"ANSI=$ansi both succeeded but diverged: ON=$onRows OFF=$offRows")
-              // Positive signal under ANSI off: the cast is defined (yields NULL) for every
-              // surviving row, so ON must return the real membership {1}, not just match OFF.
-              if (ansi == "false") {
-                assert(onRows == Set(Row(1)), s"ANSI=false expected {1}, got $onRows")
+              QueryTest.sameRows(onRows, offRows).foreach { error =>
+                fail(s"ANSI=$ansi both succeeded but diverged:\n$error")
               }
-            case (Left(onErr), Left(offErr)) =>
-              assert(onErr == offErr,
-                s"ANSI=$ansi both threw but different error: ON=$onErr OFF=$offErr")
-              if (ansi == "true") {
-                assert(onErr == "CAST_INVALID_INPUT",
-                  s"ANSI=true expected CAST_INVALID_INPUT, got $onErr")
+              // Real membership: both TAnsiNull rows with k=1; NULL-key never contributes.
+              QueryTest.sameRows(Seq(Row(1), Row(1)), onRows).foreach { error =>
+                fail(s"ANSI=$ansi expected two copies of Row(1):\n$error")
               }
             case _ =>
-              fail(s"ANSI=$ansi one-sided error behavior: ON=$on OFF=$off")
+              fail(s"ANSI=$ansi expected both sides to succeed: ON=$on OFF=$off")
           }
         }
       }
@@ -1385,12 +1477,13 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
   /**
    * Run `sql` with the rewrite on/off and capture observable behavior: `Right(rows)` on success or
    * `Left(errorClass)` if execution throws. Used to assert the rewrite does not change whether, or
-   * with what error, a query fails (e.g. under ANSI).
+   * with what error, a query fails (e.g. under ANSI). `Seq`, not `Set`: a `.toSet` here would hide
+   * a duplicated or dropped row the same way `runBoth`'s doc comment warns against.
    */
-  private def runOutcome(sql: String, rewrite: Boolean): Either[String, Set[Row]] = {
+  private def runOutcome(sql: String, rewrite: Boolean): Either[String, Seq[Row]] = {
     withSQLConf(rewriteConf -> rewrite.toString) {
       try {
-        Right(spark.sql(sql).collect().toSet)
+        Right(spark.sql(sql).collect().toSeq)
       } catch {
         case e: SparkThrowable => Left(Option(e.getCondition).getOrElse(e.getClass.getName))
         case e: Throwable => Left(e.getClass.getName)

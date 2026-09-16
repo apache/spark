@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.IN_SUBQUERY
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -488,6 +488,8 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
    * the target shape needs only a Parquet scan optionally wrapped in Project / Filter /
    * SubqueryAlias plus the self-join. The exact-`ParquetFileFormat` leaf check is deliberate:
    * other formats (ORC/JSON/CSV) reach the same scan but stay rejected until separately validated.
+   * Keep the leaf set here in sync with `sameLeafSnapshotIdentity`, which separately re-checks
+   * Parquet leaves for `FileIndex` identity since `sameResult` alone cannot be trusted for them.
    */
   private def isRowBagRepeatable(plan: LogicalPlan): Boolean = !plan.exists {
     // Whitelisted operator => false ("does not break repeatability"); negating `exists` then means
@@ -520,9 +522,13 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
   private def isRepeatableExpression(expr: Expression): Boolean = expr match {
     case _: Attribute | _: Literal =>
       true
-    // A clock-dependent STRING/VARIANT -> TIMESTAMP_LTZ cast is not repeatable at any
-    // nesting level; see castHasClockDependentStringToTimestamp. Fail closed.
-    case c: Cast if castHasClockDependentStringToTimestamp(c.child.dataType, c.dataType) =>
+    // A cast needing the session time zone (String/TIME/Variant -> timestamp, at any nesting
+    // level) is not provably repeatable across the two folded scans. Delegate to Cast.needsTimeZone
+    // -- the single authority for this -- rather than re-deriving it: it already recurses into
+    // array/map/struct, so this gate needs no separate upkeep as Spark's cast rules grow. Slightly
+    // more conservative than strictly necessary (it also rejects a few casts that depend only on
+    // the session time zone, not the clock), which is a missed optimization, not a bug.
+    case c: Cast if c.needsTimeZone =>
       false
     case _: Alias | _: Cast | _: Add | _: Subtract | _: Multiply | _: Divide | _: Remainder |
         _: And | _: Or | _: Not | _: EqualTo | _: EqualNullSafe | _: LessThan |
@@ -532,47 +538,35 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
       false
   }
 
-  /**
-   * True when casting `from` to `to` does a clock-dependent STRING -> TIMESTAMP_LTZ conversion at
-   * any nesting level (directly or inside array/map/struct casts). A time-only string's missing
-   * date comes from the runtime clock, so two folded scans can disagree; TIMESTAMP_NTZ is clock-
-   * free. The scalar decision is delegated to `Cast.needsTimeZone`. A VariantType source is handled
-   * separately: `Cast.needsTimeZone(VariantType, _)` is unconditionally true, but a Variant cast
-   * may parse a runtime String.
-   */
-  private def castHasClockDependentStringToTimestamp(from: DataType, to: DataType): Boolean =
-    (from, to) match {
-      case (s: StringType, t) => Cast.needsTimeZone(s, t)
-      case (_: VariantType, t) => variantTargetHasClockDependentStringToTimestamp(t)
-      case (ArrayType(fromEl, _), ArrayType(toEl, _)) =>
-        castHasClockDependentStringToTimestamp(fromEl, toEl)
-      case (MapType(fromKey, fromVal, _), MapType(toKey, toVal, _)) =>
-        castHasClockDependentStringToTimestamp(fromKey, toKey) ||
-          castHasClockDependentStringToTimestamp(fromVal, toVal)
-      case (StructType(fromFields), StructType(toFields))
-          if fromFields.length == toFields.length =>
-        fromFields.zip(toFields).exists { case (f, t) =>
-          castHasClockDependentStringToTimestamp(f.dataType, t.dataType)
-        }
-      case _ => false
-    }
-
-  // True when the Variant cast target holds, at any nesting level, a leaf a runtime String parse
-  // would turn into a clock-dependent TIMESTAMP_LTZ (via Cast.needsTimeZone(StringType, leaf)).
-  private def variantTargetHasClockDependentStringToTimestamp(to: DataType): Boolean = to match {
-    case ArrayType(toEl, _) => variantTargetHasClockDependentStringToTimestamp(toEl)
-    case MapType(toKey, toVal, _) =>
-      variantTargetHasClockDependentStringToTimestamp(toKey) ||
-        variantTargetHasClockDependentStringToTimestamp(toVal)
-    case StructType(toFields) =>
-      toFields.exists(f => variantTargetHasClockDependentStringToTimestamp(f.dataType))
-    case t => Cast.needsTimeZone(StringType, t)
-  }
-
   /** True iff `left`/`right` are the same plan modulo canonicalization AND each is repeatable. */
   private def isSameBaseRelation(left: LogicalPlan, right: LogicalPlan): Boolean = {
     left.sameResult(right) &&
-    isRepeatablePlan(left) && isRepeatablePlan(right)
+    isRepeatablePlan(left) && isRepeatablePlan(right) &&
+    sameLeafSnapshotIdentity(left, right)
+  }
+
+  // `sameResult` trusts `InMemoryFileIndex.equals`, which compares only root paths -- two
+  // independently resolved scans of one path (e.g. across an append) compare equal though they
+  // enumerate different files. Require the *same* `FileIndex` instance instead: a genuine
+  // self-join shares it via `LogicalRelation.newInstance`. `Join` is allowlisted in
+  // `isRowBagRepeatable`, so a side may hold more than one Parquet leaf -- collect all of them,
+  // not just the first.
+  //
+  // Mirrors the leaf set in `isRowBagRepeatable` (keep the two in sync); an unrecognized leaf
+  // fails closed rather than falling back to `sameResult`, which is exactly what this helper
+  // distrusts.
+  private def sameLeafSnapshotIdentity(left: LogicalPlan, right: LogicalPlan): Boolean = {
+    val leftLeaves = left.collectLeaves()
+    val rightLeaves = right.collectLeaves()
+    leftLeaves.length == rightLeaves.length &&
+      leftLeaves.zip(rightLeaves).forall {
+        case (LogicalRelationWithTable(l: HadoopFsRelation, _),
+              LogicalRelationWithTable(r: HadoopFsRelation, _)) =>
+          l.location eq r.location
+        case (l: LocalRelation, r: LocalRelation) => l.sameResult(r)
+        case (l: Range, r: Range) => l.sameResult(r)
+        case _ => false
+      }
   }
 
   // splitConjunctivePredicates is provided by the mixed-in PredicateHelper trait.
