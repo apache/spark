@@ -1173,9 +1173,10 @@ When enabled, credential propagation runs on independent threads alongside the K
 token machinery, and the two coexist without interfering with each other. A cluster that accesses
 HDFS via Kerberos and cloud storage via OIDC at the same time is a supported configuration.
 
-Credential propagation runs in cluster deployments where the driver and executors run in separate
-processes (for example, Kubernetes, Standalone, and YARN), and also in `local` mode. To exercise the
-full driver-to-executor propagation path, run against a cluster manager.
+Credential propagation targets Spark on Kubernetes accessing cloud object storage, which is the
+deployment this feature is designed and documented for. See
+[Running Spark on Kubernetes](running-on-kubernetes.html#oidc-credential-propagation) for complete
+configuration examples.
 
 1. On the driver, a token ingestor reads the OIDC identity token from the configured file and
    produces a driver-only user context. Kubernetes projected ServiceAccount tokens (which are
