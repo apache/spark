@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import com.fasterxml.jackson.core._
 import org.apache.hadoop.fs.PositionedReadable
 
-import org.apache.spark.{SparkRuntimeException, SparkUpgradeException}
+import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
@@ -40,7 +40,7 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
-import org.apache.spark.util.{SparkErrorUtils, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Constructs a parser for a given schema that translates a json string to an [[InternalRow]].
@@ -53,16 +53,6 @@ class JacksonParser(
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
-
-  private object DuplicateMapKeyException {
-    def unapply(exception: Throwable): Option[SparkRuntimeException] = {
-      SparkErrorUtils.getRootCause(exception) match {
-        case cause: SparkRuntimeException if cause.getCondition == "DUPLICATED_MAP_KEY" =>
-          Some(cause)
-        case _ => None
-      }
-    }
-  }
 
   // A `ValueConverter` is responsible for converting a value from `JsonParser`
   // to a value in a field for `InternalRow`.
@@ -600,7 +590,7 @@ class JacksonParser(
             bitmask(index) = false
           } catch {
             case e: SparkUpgradeException => throw e
-            case DuplicateMapKeyException(e) => throw e
+            case DuplicateMapKeyUtils(e) => throw e
             case err: PartialValueException if enablePartialResults =>
               badRecordException = badRecordException.orElse(Some(err.cause))
               row.update(index, err.partialResult)
@@ -634,7 +624,8 @@ class JacksonParser(
       valueType: DataType): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
-    val normalizedKeys = ArrayBuffer.empty[UTF8String]
+    val normalizedKeys = ArrayBuffer.empty[(UTF8String, UTF8String)]
+    val parsedRawKeys = ArrayBuffer.empty[UTF8String]
     val hasConstrainedKeys = keyType.isInstanceOf[CharType] || keyType.isInstanceOf[VarcharType]
     var partialResultException: Option[Throwable] = None
     var badMapException: Option[Throwable] = None
@@ -647,7 +638,7 @@ class JacksonParser(
         case err: PartialValueException if enablePartialResults =>
           partialResultException = partialResultException.orElse(Some(err.cause))
           Some(err.partialResult)
-        case DuplicateMapKeyException(e) => throw e
+        case DuplicateMapKeyUtils(e) => throw e
         case NonFatal(e) if enablePartialResults =>
           badMapException = badMapException.orElse(Some(e))
           parser.skipChildren()
@@ -656,14 +647,15 @@ class JacksonParser(
       try {
         val key = CharVarcharUtils.applyTextParseSemantics(rawKey, keyType)
         if (hasConstrainedKeys) {
-          normalizedKeys += key
+          normalizedKeys += rawKey -> key
         }
         value.foreach { parsedValue =>
+          parsedRawKeys += rawKey
           keys += key
           values += parsedValue
         }
       } catch {
-        case DuplicateMapKeyException(e) => throw e
+        case DuplicateMapKeyUtils(e) => throw e
         case NonFatal(e) if enablePartialResults =>
           badMapException = badMapException.orElse(Some(e))
       }
@@ -671,13 +663,24 @@ class JacksonParser(
 
     val mapData = keyType match {
       case _: CharType | _: VarcharType =>
+        def lastOccurrences(rawKeys: Array[UTF8String]): Seq[Int] = {
+          val seen = mutable.HashSet.empty[UTF8String]
+          rawKeys.indices.reverseIterator.filter(index => seen.add(rawKeys(index))).toSeq.reverse
+        }
+
+        // JSON object parsing historically keeps the last value for an exactly repeated field
+        // name. Apply mapKeyDedupPolicy only when distinct serialized names normalize to one key.
+        val normalizedIndices = lastOccurrences(normalizedKeys.map(_._1).toArray)
+        val parsedIndices = lastOccurrences(parsedRawKeys.toArray)
         // Apply the duplicate policy to every normalized key, including entries whose malformed
         // values are omitted from the partial map.
         new ArrayBasedMapBuilder(keyType, NullType).from(
-          new GenericArrayData(normalizedKeys.toArray),
-          new GenericArrayData(Array.fill[Any](normalizedKeys.length)(null)))
+          new GenericArrayData(normalizedIndices.map(normalizedKeys(_)._2).toArray),
+          new GenericArrayData(Array.fill[Any](normalizedIndices.length)(null)))
         new ArrayBasedMapBuilder(keyType, valueType)
-          .from(new GenericArrayData(keys.toArray), new GenericArrayData(values.toArray))
+          .from(
+            new GenericArrayData(parsedIndices.map(keys).toArray),
+            new GenericArrayData(parsedIndices.map(values).toArray))
       case _ =>
         // Preserve the historical behavior for ordinary string keys.
         ArrayBasedMapData(keys.toArray, values.toArray)
@@ -764,7 +767,7 @@ class JacksonParser(
       }
     } catch {
       case e: SparkUpgradeException => throw e
-      case DuplicateMapKeyException(e) => throw e
+      case DuplicateMapKeyUtils(e) => throw e
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by

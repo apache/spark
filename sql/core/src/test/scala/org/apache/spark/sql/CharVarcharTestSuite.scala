@@ -2329,6 +2329,15 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(
         sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS VARCHAR(40)))"),
         Row("STRUCT<a: BIGINT>"))
+      checkAnswer(
+        sql("""SELECT schema_of_json(CAST('{"a":1}' AS CHAR(7)))"""),
+        Row("STRUCT<a: BIGINT>"))
+      checkAnswer(
+        sql("SELECT schema_of_csv(CAST('1,abc' AS CHAR(5)))"),
+        Row("STRUCT<_c0: INT, _c1: STRING>"))
+      checkAnswer(
+        sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(19)))"),
+        Row("STRUCT<a: BIGINT>"))
     }
   }
 
@@ -2345,6 +2354,10 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           |  map('mode', 'FAILFAST'))""".stripMargin
       val varcharJsonQuery =
         """SELECT from_json('{"ab":1,"ab ":2}', 'MAP<VARCHAR(2), INT>')"""
+      val exactCharJsonQuery =
+        """SELECT from_json('{"a":1,"a":2}', 'MAP<CHAR(2), INT>')"""
+      val exactVarcharJsonQuery =
+        """SELECT from_json('{"ab":1,"ab":2}', 'MAP<VARCHAR(2), INT>')"""
       val varcharOverflowQuery =
         """SELECT from_json('{"abc":1}', 'MAP<VARCHAR(2), INT>')"""
       val varcharOverflowFailfastQuery =
@@ -2377,6 +2390,19 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           |  '<ROW><m><a>1</a>9</m></ROW>',
           |  'm MAP<CHAR(2), INT>',
           |  map('valueTag', 'a ')).m""".stripMargin
+      val varcharXmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><ab>1</ab>2</m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>',
+          |  map('valueTag', 'ab ')).m""".stripMargin
+      val exactCharXmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a><a>2</a></m></ROW>',
+          |  'm MAP<CHAR(2), INT>').m""".stripMargin
+      val exactVarcharXmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><ab>1</ab><ab>2</ab></m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>').m""".stripMargin
       val collatedXmlQuery =
         """SELECT from_xml(
           |  '<ROW><m><a>1</a><A>2</A></m></ROW>',
@@ -2397,6 +2423,11 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assertDuplicateMapKey(badValueBeforeDuplicateQuery)
       assertDuplicateMapKey(malformedValueBeforeDuplicateQuery)
       assertDuplicateMapKey(xmlQuery)
+      assertDuplicateMapKey(varcharXmlQuery, expectedKey = "ab")
+      checkAnswer(sql(exactCharJsonQuery), Row(Map("a " -> 2)))
+      checkAnswer(sql(exactVarcharJsonQuery), Row(Map("ab" -> 2)))
+      checkAnswer(sql(exactCharXmlQuery), Row(Map("a " -> 2)))
+      checkAnswer(sql(exactVarcharXmlQuery), Row(Map("ab" -> 2)))
       withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
         assertDuplicateMapKey(collatedXmlQuery, expectedKey = "A")
       }
@@ -2409,10 +2440,15 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(jsonFailfastQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(varcharJsonQuery), Row(Map("ab" -> 2)))
+        checkAnswer(sql(exactCharJsonQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(exactVarcharJsonQuery), Row(Map("ab" -> 2)))
         checkAnswer(sql(nestedJsonQuery), Row(Map("outer" -> Map("a " -> 2))))
         checkAnswer(sql(badValueBeforeDuplicateQuery), Row(null))
         checkAnswer(sql(malformedValueBeforeDuplicateQuery), Row(null))
         checkAnswer(sql(xmlQuery), Row(Map("a " -> 9)))
+        checkAnswer(sql(varcharXmlQuery), Row(Map("ab" -> 2)))
+        checkAnswer(sql(exactCharXmlQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(exactVarcharXmlQuery), Row(Map("ab" -> 2)))
         withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
           checkAnswer(sql(collatedXmlQuery), Row(Map("a" -> 2)))
         }
