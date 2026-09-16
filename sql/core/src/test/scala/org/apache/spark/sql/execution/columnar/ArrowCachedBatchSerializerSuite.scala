@@ -1306,12 +1306,21 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     // type would round anyway.
     val rows = 1000
     val nanosPerDay = 86400000000000L
-    for (precision <- Seq(0, 3, 6, 9); (pattern, isNull) <- nullPatterns) {
+    val precisions = TimeType.MIN_PRECISION to TimeType.MAX_PRECISION
+    for (precision <- precisions; (pattern, isNull) <- nullPatterns) {
       val unit = math.pow(10, 9 - precision).toLong
       def timeAt(i: Int): LocalTime = {
         val nanos = ((i.toLong * nanosPerDay) / rows + i.toLong * 1234567L) % nanosPerDay
         LocalTime.ofNanoOfDay(nanos / unit * unit)
       }
+      // The fixture has to reach the digits the precision admits, or the case would pass for a
+      // kernel that dropped them: at every precision above zero some value's last admitted digit
+      // is non-zero, and no value carries a digit the precision does not admit. Checked on the
+      // values the generator makes, before the null pattern hides some of them.
+      val generated = (0 until rows).map(i => timeAt(i).toNanoOfDay)
+      assert(generated.forall(_ % unit == 0), s"TIME($precision): fixture below the unit")
+      assert(precision == 0 || generated.exists(n => (n / unit) % 10 != 0),
+        s"TIME($precision): fixture never uses the last digit the precision admits")
       val values = (0 until rows).map(i => if (isNull(i)) null else timeAt(i))
       val df = singlePartDf(values, TimeType(precision))
       val relation = cachedRelation(df)
@@ -1332,7 +1341,13 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     val rows = 1000
     for ((pattern, isNull) <- nullPatterns) {
       // Whole microseconds, negative for the first half of the rows and positive for the rest.
-      def intervalAt(i: Int): Duration = Duration.ofNanos((i.toLong - rows / 2) * 7001000000L)
+      // The step is 7_001_001 microseconds, not a whole number of milliseconds, so a lane that
+      // came back rounded to the millisecond would fail rather than compare equal.
+      def intervalAt(i: Int): Duration = Duration.ofNanos((i.toLong - rows / 2) * 7001001000L)
+      val generated = (0 until rows).map(i => intervalAt(i).toNanos)
+      assert(generated.forall(_ % 1000 == 0), "fixture below the microsecond")
+      assert(generated.count(_ % 1000000 != 0) > rows / 2,
+        "fixture does not exercise sub-millisecond microseconds")
       val values = (0 until rows).map(i => if (isNull(i)) null else intervalAt(i))
       val df = singlePartDf(values, DayTimeIntervalType())
       val relation = cachedRelation(df)
