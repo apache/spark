@@ -37,11 +37,11 @@ import com.google.common.io.ByteStreams
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.security.AccessControlException
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException, SparkUpgradeException}
+import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, DuplicateMapKeyUtils, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -262,13 +262,10 @@ class StaxXmlParser(
         throw BadRecordException(xmlLiteral, () => Array.empty,
           wrappedCharException)
       case PartialResultException(row, cause) =>
-        SparkErrorUtils.getRootCause(cause) match {
-          case e: SparkRuntimeException if e.getCondition == "DUPLICATED_MAP_KEY" => throw e
-          case _ =>
-            throw BadRecordException(
-              record = xmlLiteral,
-              partialResults = () => Array(row),
-              cause)
+        DuplicateMapKeyUtils.cause(cause) match {
+          case Some(e) => throw e
+          case None =>
+            throw BadRecordException(record = xmlLiteral, partialResults = () => Array(row), cause)
         }
       case PartialResultArrayException(rows, cause) =>
         throw BadRecordException(record = xmlLiteral, partialResults = () => rows, cause)
@@ -384,14 +381,14 @@ class StaxXmlParser(
       keyType: DataType,
       valueType: DataType,
       attributes: Array[Attribute]): MapData = {
-    val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
+    val kvPairs = ArrayBuffer.empty[(UTF8String, UTF8String, Any)]
     var mapKeyException: Option[Throwable] = None
     def mapKey(raw: String): UTF8String = {
       CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(raw), keyType)
     }
     def appendPair(rawKey: String, value: Any): Unit = {
       try {
-        kvPairs += (mapKey(rawKey) -> value)
+        kvPairs += ((UTF8String.fromString(rawKey), mapKey(rawKey), value))
       } catch {
         case NonFatal(e) => mapKeyException = mapKeyException.orElse(Some(e))
       }
@@ -423,15 +420,20 @@ class StaxXmlParser(
       case _ => false
     }
     if (requiresCollationAwareBuilder) {
+      val seenRawKeys = collection.mutable.HashSet.empty[UTF8String]
+      val deduplicatedPairs = kvPairs.reverseIterator
+        .filter { case (rawKey, _, _) => seenRawKeys.add(rawKey) }
+        .toSeq
+        .reverse
       val mapBuilder = new ArrayBasedMapBuilder(keyType, valueType)
-      kvPairs.foreach { case (key, value) => mapBuilder.put(key, value) }
+      deduplicatedPairs.foreach { case (_, key, value) => mapBuilder.put(key, value) }
       val mapData = mapBuilder.build()
       mapKeyException.foreach(throw _)
       mapData
     } else {
       mapKeyException.foreach(throw _)
       // Preserve the historical last-wins behavior for ordinary UTF8_BINARY STRING keys.
-      ArrayBasedMapData(kvPairs.toMap)
+      ArrayBasedMapData(kvPairs.map { case (_, key, value) => key -> value }.toMap)
     }
   }
 
@@ -570,7 +572,7 @@ class StaxXmlParser(
           }
         } catch {
           case e: SparkUpgradeException => throw e
-          case e: SparkRuntimeException if e.getCondition == "DUPLICATED_MAP_KEY" => throw e
+          case DuplicateMapKeyUtils(e) => throw e
           case NonFatal(e) =>
             // TODO: we don't support partial results now
             badRecordException = badRecordException.orElse(Some(e))

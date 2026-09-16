@@ -6799,10 +6799,12 @@ object SQLConf {
   }
 
   val MAP_KEY_DEDUP_POLICY = buildConf("spark.sql.mapKeyDedupPolicy")
-    .doc("The policy to deduplicate map keys in builtin function: CreateMap, MapFromArrays, " +
-      "MapFromEntries, StringToMap, MapConcat and TransformKeys. When EXCEPTION, the query " +
-      "fails if duplicated map keys are detected. When LAST_WIN, the map key that is inserted " +
-      "at last takes precedence.")
+    .doc("The policy to deduplicate map keys in built-in functions: CreateMap, MapFromArrays, " +
+      "MapFromEntries, StringToMap, MapConcat and TransformKeys, and in from_json and from_xml " +
+      "when constrained or non-binary-collated string keys normalize to the same value. " +
+      "EXCEPTION fails the query when duplicate keys are detected. LAST_WIN makes the last " +
+      "inserted key take precedence. Exact repeated field names and ordinary UTF8_BINARY STRING " +
+      "keys retain the parsers' historical last-wins behavior.")
     .version("3.0.0")
     .enumConf(MapKeyDedupPolicy)
     .createWithDefault(MapKeyDedupPolicy.EXCEPTION)
