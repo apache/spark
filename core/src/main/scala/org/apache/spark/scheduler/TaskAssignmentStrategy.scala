@@ -26,7 +26,7 @@ import scala.util.Random
  * after a task has (or has not) been launched on it. Different strategies produce different task
  * placement, e.g. concentrating tasks onto few executors versus spreading them evenly.
  *
- * Lifecycle: a single instance is created per [[TaskSchedulerImpl.resourceOffers]] round and shared
+ * Lifecycle: a single instance is created per `TaskSchedulerImpl.resourceOffers` round and shared
  * across all task sets and locality levels of that round. [[prepare]] is called once at the start
  * of the round with the offers and the live `availableCpus` array; [[reset]] is called at the start
  * of every `resourceOfferSingleTaskSet` invocation (i.e. per task set x locality level x scheduling
@@ -44,8 +44,8 @@ import scala.util.Random
  * }}}
  * `availableCpus` is drained in place by the scheduler as tasks launch (and reverted on the barrier
  * partial-launch path), so strategies that order by free cores read the live values on each
- * [[reset]] rather than a stale snapshot. The strategy is selected via
- * [[internal.config.TASK_ASSIGNMENT_STRATEGY]].
+ * [[reset]] rather than a stale snapshot. The strategy is selected via the
+ * `spark.scheduler.taskAssignmentStrategy` config (`TASK_ASSIGNMENT_STRATEGY`).
  */
 private[spark] trait TaskAssignmentStrategy {
 
