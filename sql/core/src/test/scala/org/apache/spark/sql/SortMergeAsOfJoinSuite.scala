@@ -60,6 +60,19 @@ class SortMergeAsOfJoinSuite extends QueryTest
     (df1, df2)
   }
 
+  // Like checkAnswer, but also asserts the right-side buffer spilled (spillSize > 0).
+  private def checkAnswerAndSpill(df: classic.DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    checkAnswer(df, expectedAnswer)
+    val op = collectFirst(df.queryExecution.executedPlan) {
+      case s: SortMergeAsOfJoinExec => s
+    }
+    assert(op.isDefined,
+      s"Expected SortMergeAsOfJoinExec in plan:\n${df.queryExecution.executedPlan}")
+    assert(op.get.metrics("spillSize").value > 0,
+      s"Expected the right-side buffer to spill (spillSize > 0), " +
+        s"got ${op.get.metrics("spillSize").value}")
+  }
+
   test("uses SortMergeAsOfJoinExec physical operator") {
     val (df1, df2) = prepareForAsOfJoin()
     val result = df1.joinAsOf(
@@ -647,7 +660,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
-      checkAnswer(
+      checkAnswerAndSpill(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
@@ -658,7 +671,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           Row(10, "z", "c", 7, "z", 7)
         )
       )
-      // With equi-key (bufferRightGroup path)
+      // Equi-key (bufferRightGroup): at most one right row per group, so it does not spill.
       checkAnswer(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq("b"),
@@ -677,7 +690,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
-      checkAnswer(
+      checkAnswerAndSpill(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
@@ -700,7 +713,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         List(Row("A", 5), Row("A", 10)).asJava, schema1)
       val right = spark.createDataFrame(
         List(Row("A", 6, "a"), Row("A", 8, "b"), Row("A", 12, "c")).asJava, schema2)
-      checkAnswer(
+      checkAnswerAndSpill(
         left.joinAsOf(
           right, left.col("ts"), right.col("ts"), usingColumns = Seq("grp"),
           joinType = "inner", tolerance = null,
@@ -719,7 +732,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
-      checkAnswer(
+      checkAnswerAndSpill(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
@@ -742,7 +755,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         List(Row("A", 5), Row("A", 10)).asJava, schema1)
       val right = spark.createDataFrame(
         List(Row("A", 3, "a"), Row("A", 7, "b"), Row("A", 12, "c")).asJava, schema2)
-      checkAnswer(
+      checkAnswerAndSpill(
         left.joinAsOf(
           right, left.col("ts"), right.col("ts"), usingColumns = Seq("grp"),
           joinType = "inner", tolerance = null,
@@ -760,7 +773,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
-      checkAnswer(
+      checkAnswerAndSpill(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
           joinType = "leftouter", tolerance = null,
