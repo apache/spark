@@ -205,12 +205,17 @@ case class SchemaOfCsv(
   @transient
   private lazy val evaluator: SchemaOfCsvEvaluator = SchemaOfCsvEvaluator(options)
 
+  private lazy val csvInput = child.dataType match {
+    case _: CharType => StringTrimRight(child)
+    case _ => child
+  }
+
   override def replacement: Expression = Invoke(
     Literal.create(evaluator, ObjectType(classOf[SchemaOfCsvEvaluator])),
     "evaluate",
     dataType,
-    Seq(child),
-    Seq(child.dataType),
+    Seq(csvInput),
+    Seq(csvInput.dataType),
     returnNullable = false)
 }
 

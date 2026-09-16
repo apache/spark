@@ -221,12 +221,17 @@ case class SchemaOfXml(
 
   @transient private lazy val xmlInferSchemaObjectType = ObjectType(classOf[XmlInferSchema])
 
+  private lazy val xmlInput = child.dataType match {
+    case _: CharType => StringTrimRight(child)
+    case _ => child
+  }
+
   override def replacement: Expression = StaticInvoke(
     XmlExpressionEvalUtils.getClass,
     dataType,
     "schemaOfXml",
-    Seq(Literal(xmlInferSchema, xmlInferSchemaObjectType), child),
-    Seq(xmlInferSchemaObjectType, child.dataType),
+    Seq(Literal(xmlInferSchema, xmlInferSchemaObjectType), xmlInput),
+    Seq(xmlInferSchemaObjectType, xmlInput.dataType),
     returnNullable = false)
 }
 

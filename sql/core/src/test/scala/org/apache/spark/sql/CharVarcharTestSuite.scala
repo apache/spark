@@ -2308,6 +2308,37 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(
         sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(4), INT>')"),
         Row(Row(Map("ab  " -> 1))))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><other>str</other></ROW>',
+            |  'xs_any CHAR(5)',
+            |  map('wildcardColName', 'xs_any'))""".stripMargin),
+        Row(Row("str  ")))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><first>a</first><second>bc</second></ROW>',
+            |  'xs_any ARRAY<CHAR(5)>',
+            |  map('wildcardColName', 'xs_any'))""".stripMargin),
+        Row(Row(Seq("a    ", "bc   "))))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><other>abcdef</other></ROW>',
+            |  'xs_any CHAR(5)',
+            |  map('wildcardColName', 'xs_any'))""".stripMargin),
+        Row(Row(null)))
+      assertParseExceedLimit(
+        """SELECT from_xml(
+          |  '<ROW><other>abcdef</other></ROW>',
+          |  'xs_any CHAR(5)',
+          |  map('wildcardColName', 'xs_any', 'mode', 'FAILFAST'))""".stripMargin)
+      assertParseExceedLimit(
+        """SELECT from_xml(
+          |  '<ROW><other>abcdef</other></ROW>',
+          |  'xs_any ARRAY<CHAR(5)>',
+          |  map('wildcardColName', 'xs_any', 'mode', 'FAILFAST'))""".stripMargin)
       withTempPath { path =>
         Seq("<ROW><m><a>1</a></m></ROW>").toDS().write.text(path.getCanonicalPath)
         val xmlDataFrame = spark.read
@@ -2330,13 +2361,22 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS VARCHAR(40)))"),
         Row("STRUCT<a: BIGINT>"))
       checkAnswer(
-        sql("""SELECT schema_of_json(CAST('{"a":1}' AS CHAR(9)))"""),
+        sql("""SELECT length(CAST('{"a":1}' AS CHAR(20)))"""),
+        Row(20))
+      checkAnswer(
+        sql("""SELECT schema_of_json(CAST('{"a":1}' AS CHAR(20)))"""),
         Row("STRUCT<a: BIGINT>"))
       checkAnswer(
-        sql("SELECT schema_of_csv(CAST('1,abc' AS CHAR(7)))"),
-        Row("STRUCT<_c0: INT, _c1: STRING>"))
+        sql("SELECT length(CAST('1' AS CHAR(3)))"),
+        Row(3))
       checkAnswer(
-        sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(21)))"),
+        sql("SELECT schema_of_csv(CAST('1' AS CHAR(3)))"),
+        Row("STRUCT<_c0: INT>"))
+      checkAnswer(
+        sql("SELECT length(CAST('<ROW><a>1</a></ROW>' AS CHAR(30)))"),
+        Row(30))
+      checkAnswer(
+        sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(30)))"),
         Row("STRUCT<a: BIGINT>"))
     }
   }
@@ -2424,6 +2464,15 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           |  '<ROW><m><abc>0</abc><a>1</a>2</m></ROW>',
           |  'm MAP<CHAR(2), INT>',
           |  map('valueTag', 'a ')).m""".stripMargin
+      val badJsonKeyBeforeDuplicateQuery =
+        """SELECT from_json(
+          |  '{"abc":0,"a":1,"a ":2}',
+          |  'MAP<CHAR(2), INT>')""".stripMargin
+      val malformedXmlValueBeforeDuplicateQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><a>bad</a>2</m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('valueTag', 'a ')).m""".stripMargin
       val ignoreCorruptXmlQuery =
         """SELECT from_xml(
           |  '<ROW><m><a>1</a>2</m></ROW>',
@@ -2454,6 +2503,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           Row(Seq(Row("a", 3), Row("b", 2))))
       }
       assertDuplicateMapKey(badXmlKeyBeforeDuplicateQuery)
+      assertDuplicateMapKey(badJsonKeyBeforeDuplicateQuery)
+      assertDuplicateMapKey(malformedXmlValueBeforeDuplicateQuery)
       assertDuplicateMapKey(ignoreCorruptXmlQuery)
       checkAnswer(sql(badKeyThenSiblingQuery), Row(2))
       checkAnswer(sql(badXmlKeyThenSiblingQuery), Row(2))
@@ -2468,14 +2519,21 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         checkAnswer(sql(nestedJsonQuery), Row(Map("outer" -> Map("a " -> 2))))
         checkAnswer(sql(badValueBeforeDuplicateQuery), Row(null))
         checkAnswer(sql(malformedValueBeforeDuplicateQuery), Row(null))
+        checkAnswer(sql(interleavedCharJsonQuery), Row(Seq(Row("a ", 3), Row("b ", 2))))
         checkAnswer(sql(xmlQuery), Row(Map("a " -> 9)))
         checkAnswer(sql(varcharXmlQuery), Row(Map("ab" -> 2)))
         checkAnswer(sql(exactCharXmlQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(exactVarcharXmlQuery), Row(Map("ab" -> 2)))
+        checkAnswer(sql(interleavedCharXmlQuery), Row(Seq(Row("a ", 3), Row("b ", 2))))
         withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
           checkAnswer(sql(collatedXmlQuery), Row(Map("a" -> 2)))
+          checkAnswer(
+            sql(interleavedCollatedXmlQuery),
+            Row(Seq(Row("a", 3), Row("b", 2))))
         }
         checkAnswer(sql(badXmlKeyBeforeDuplicateQuery), Row(null))
+        checkAnswer(sql(badJsonKeyBeforeDuplicateQuery), Row(null))
+        checkAnswer(sql(malformedXmlValueBeforeDuplicateQuery), Row(null))
       }
     }
   }

@@ -1929,12 +1929,17 @@ case class SchemaOfJson(
   @transient
   private lazy val evaluator: SchemaOfJsonEvaluator = SchemaOfJsonEvaluator(options)
 
+  private lazy val jsonInput = child.dataType match {
+    case _: CharType => StringTrimRight(child)
+    case _ => child
+  }
+
   override def replacement: Expression = Invoke(
     Literal.create(evaluator, ObjectType(classOf[SchemaOfJsonEvaluator])),
     "evaluate",
     dataType,
-    Seq(child),
-    Seq(child.dataType),
+    Seq(jsonInput),
+    Seq(jsonInput.dataType),
     returnNullable = false)
 
   override def prettyName: String = "schema_of_json"

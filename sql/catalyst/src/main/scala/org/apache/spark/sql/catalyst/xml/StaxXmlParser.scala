@@ -379,20 +379,27 @@ class StaxXmlParser(
       keyType: DataType,
       valueType: DataType,
       attributes: Array[Attribute]): MapData = {
-    val kvPairs = ArrayBuffer.empty[(UTF8String, UTF8String, Any)]
-    var mapKeyException: Option[Throwable] = None
+    val kvPairs = ArrayBuffer.empty[(UTF8String, UTF8String, Option[Any])]
+    var badMapException: Option[Throwable] = None
     def mapKey(raw: String): UTF8String = {
       CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(raw), keyType)
     }
-    def appendPair(rawKey: String, value: Any): Unit = {
+    def appendPair(rawKey: String, value: Option[Any]): Unit = {
       try {
         kvPairs += ((UTF8String.fromString(rawKey), mapKey(rawKey), value))
       } catch {
-        case NonFatal(e) => mapKeyException = mapKeyException.orElse(Some(e))
+        case NonFatal(e) => badMapException = badMapException.orElse(Some(e))
       }
     }
     attributes.foreach { attr =>
-      val value = convertTo(attr.getValue, valueType)
+      val value = try {
+        Some(convertTo(attr.getValue, valueType))
+      } catch {
+        case e: SparkUpgradeException => throw e
+        case NonFatal(e) =>
+          badMapException = badMapException.orElse(Some(e))
+          None
+      }
       appendPair(options.attributePrefix + attr.getName.getLocalPart, value)
     }
     var shouldStop = false
@@ -400,12 +407,32 @@ class StaxXmlParser(
       parser.nextEvent match {
         case e: StartElement =>
           val rawKey = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          val value = convertField(parser, valueType, rawKey)
+          val value = try {
+            Some(convertField(parser, valueType, rawKey))
+          } catch {
+            case e: SparkUpgradeException => throw e
+            case DuplicateMapKeyUtils(e) => throw e
+            case NonFatal(e) =>
+              badMapException = badMapException.orElse(Some(e))
+              // Primitive conversion fails before consuming its text and end element. String and
+              // nested conversions can fail after consuming the complete element.
+              if (parser.peek().isInstanceOf[Characters]) {
+                StaxXmlParserUtils.skipChildren(parser, rawKey, options)
+              }
+              None
+          }
           appendPair(rawKey, value)
         case c: Characters if !c.isWhiteSpace =>
           // Create a value tag field for it
           // TODO: We don't support an array value tags in map yet.
-          val value = convertTo(c.getData, valueType)
+          val value = try {
+            Some(convertTo(c.getData, valueType))
+          } catch {
+            case e: SparkUpgradeException => throw e
+            case NonFatal(e) =>
+              badMapException = badMapException.orElse(Some(e))
+              None
+          }
           appendPair(options.valueTag, value)
         case _: EndElement | _: EndDocument =>
           shouldStop = true
@@ -421,15 +448,16 @@ class StaxXmlParser(
       val mapData = DuplicateMapKeyUtils.buildMapWithLastRawKeyWins(
         kvPairs.map(_._1).toSeq,
         kvPairs.map(_._2).toSeq,
-        kvPairs.map(entry => Some(entry._3)).toSeq,
+        kvPairs.map(_._3).toSeq,
         keyType,
         valueType)
-      mapKeyException.foreach(throw _)
+      badMapException.foreach(throw _)
       mapData
     } else {
-      mapKeyException.foreach(throw _)
+      badMapException.foreach(throw _)
       // Preserve the historical last-wins behavior for ordinary UTF8_BINARY STRING keys.
-      ArrayBasedMapData(kvPairs.map { case (_, key, value) => key -> value }.toMap)
+      ArrayBasedMapData(
+        kvPairs.flatMap { case (_, key, value) => value.map(key -> _) }.toMap)
     }
   }
 
