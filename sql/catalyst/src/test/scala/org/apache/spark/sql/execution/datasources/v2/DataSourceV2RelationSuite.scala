@@ -132,24 +132,57 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
       output)
   }
 
+  private def optLong(value: Option[Long]): OptionalLong =
+    value.map(OptionalLong.of).getOrElse(OptionalLong.empty())
+
+  /** Builds a [[ColumnStatistics]] overriding only the fields these tests exercise. */
+  private def columnStat(
+      distinct: Option[Long] = None,
+      avg: Option[Long] = None): ColumnStatistics = new ColumnStatistics {
+    override def distinctCount(): OptionalLong = optLong(distinct)
+    override def avgLen(): OptionalLong = optLong(avg)
+  }
+
+  /** Builds a column-stats map keyed by [[NamedReference]] from `name -> stats` pairs. */
+  private def columnStatsMap(
+      entries: (String, ColumnStatistics)*): java.util.Map[NamedReference, ColumnStatistics] = {
+    val map = new java.util.HashMap[NamedReference, ColumnStatistics]()
+    entries.foreach { case (name, stat) => map.put(FieldReference.column(name), stat) }
+    map
+  }
+
+  /** Builds a [[V2Statistics]]; `colStats` may be `null` to exercise null-tolerance. */
+  private def newStatistics(
+      size: OptionalLong = OptionalLong.empty(),
+      rows: OptionalLong = OptionalLong.empty(),
+      colStats: java.util.Map[NamedReference, ColumnStatistics] =
+        new java.util.HashMap[NamedReference, ColumnStatistics]()): V2Statistics =
+    new V2Statistics {
+      override def sizeInBytes(): OptionalLong = size
+      override def numRows(): OptionalLong = rows
+      override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = colStats
+    }
+
+  /**
+   * Builds a [[Scan]] reporting `stats` (evaluated on every `estimateStatistics()` call, so it may
+   * be `null` or count invocations). `sizeEstimate` backs `estimateSizeInBytes()`.
+   */
+  private def newStatsScan(
+      stats: => V2Statistics,
+      schema: StructType = StructType(Seq(StructField("id", IntegerType))),
+      sizeEstimate: OptionalLong = OptionalLong.empty()): Scan =
+    new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = schema
+      override def estimateStatistics(): V2Statistics = stats
+      override def estimateSizeInBytes(): OptionalLong = sizeEstimate
+    }
+
   test("DataSourceV2ScanRelation.computeStats uses non-empty scan stats with CBO") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
-        override def numRows(): OptionalLong = OptionalLong.of(42L)
-        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
-          val stats = new java.util.HashMap[NamedReference, ColumnStatistics]()
-          stats.put(FieldReference.column("id"), new ColumnStatistics {
-            override def distinctCount(): OptionalLong = OptionalLong.of(40L)
-            override def avgLen(): OptionalLong = OptionalLong.of(4L)
-          })
-          stats
-        }
-      }
-    }
+    val scan = newStatsScan(newStatistics(
+      rows = OptionalLong.of(42L),
+      colStats = columnStatsMap("id" -> columnStat(distinct = Some(40L), avg = Some(4L)))))
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val stats = scanRel(output, scan).computeStats()
@@ -166,20 +199,11 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats matches column stats for names needing quoting") {
     val colAttr = AttributeReference("col-1", IntegerType)()
     val output = Seq(colAttr)
-    val scan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("col-1", IntegerType)))
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
-        override def numRows(): OptionalLong = OptionalLong.of(42L)
-        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
-          val stats = new java.util.HashMap[NamedReference, ColumnStatistics]()
-          stats.put(FieldReference.column("col-1"), new ColumnStatistics {
-            override def distinctCount(): OptionalLong = OptionalLong.of(40L)
-          })
-          stats
-        }
-      }
-    }
+    val scan = newStatsScan(
+      newStatistics(
+        rows = OptionalLong.of(42L),
+        colStats = columnStatsMap("col-1" -> columnStat(distinct = Some(40L)))),
+      schema = StructType(Seq(StructField("col-1", IntegerType))))
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val stats = scanRel(output, scan).computeStats()
@@ -193,20 +217,9 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats matches column stats respecting case sensitivity") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
-        override def numRows(): OptionalLong = OptionalLong.of(42L)
-        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
-          val stats = new java.util.HashMap[NamedReference, ColumnStatistics]()
-          stats.put(FieldReference.column("ID"), new ColumnStatistics {
-            override def distinctCount(): OptionalLong = OptionalLong.of(40L)
-          })
-          stats
-        }
-      }
-    }
+    val scan = newStatsScan(newStatistics(
+      rows = OptionalLong.of(42L),
+      colStats = columnStatsMap("ID" -> columnStat(distinct = Some(40L)))))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
@@ -231,21 +244,11 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     val upperIdAttr = AttributeReference("ID", IntegerType)()
     val output = Seq(idAttr, upperIdAttr)
 
-    def scanKeyed(name: String): Scan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType =
-        StructType(Seq(StructField("id", IntegerType), StructField("ID", IntegerType)))
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
-        override def numRows(): OptionalLong = OptionalLong.of(42L)
-        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
-          val stats = new java.util.HashMap[NamedReference, ColumnStatistics]()
-          stats.put(FieldReference.column(name), new ColumnStatistics {
-            override def distinctCount(): OptionalLong = OptionalLong.of(40L)
-          })
-          stats
-        }
-      }
-    }
+    def scanKeyed(name: String): Scan = newStatsScan(
+      newStatistics(
+        rows = OptionalLong.of(42L),
+        colStats = columnStatsMap(name -> columnStat(distinct = Some(40L)))),
+      schema = StructType(Seq(StructField("id", IntegerType), StructField("ID", IntegerType))))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
@@ -263,13 +266,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats derives size 1 for a zero-row scan with CBO") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
-        override def numRows(): OptionalLong = OptionalLong.of(0L)
-      }
-    }
+    val scan = newStatsScan(newStatistics(rows = OptionalLong.of(0L)))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
@@ -284,14 +281,9 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats uses full stats with plan stats enabled") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateSizeInBytes(): OptionalLong = OptionalLong.of(50L)
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.of(1000L)
-        override def numRows(): OptionalLong = OptionalLong.of(7L)
-      }
-    }
+    val scan = newStatsScan(
+      newStatistics(size = OptionalLong.of(1000L), rows = OptionalLong.of(7L)),
+      sizeEstimate = OptionalLong.of(50L))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "false",
@@ -306,20 +298,8 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats treats column-only scan stats as non-empty") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
-        override def numRows(): OptionalLong = OptionalLong.empty()
-        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
-          val stats = new java.util.HashMap[NamedReference, ColumnStatistics]()
-          stats.put(FieldReference.column("id"), new ColumnStatistics {
-            override def distinctCount(): OptionalLong = OptionalLong.of(7L)
-          })
-          stats
-        }
-      }
-    }
+    val scan = newStatsScan(newStatistics(
+      colStats = columnStatsMap("id" -> columnStat(distinct = Some(7L)))))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
@@ -336,14 +316,9 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats uses size-only estimates without CBO") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateSizeInBytes(): OptionalLong = OptionalLong.of(50L)
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.of(1000L)
-        override def numRows(): OptionalLong = OptionalLong.of(5L)
-      }
-    }
+    val scan = newStatsScan(
+      newStatistics(size = OptionalLong.of(1000L), rows = OptionalLong.of(5L)),
+      sizeEstimate = OptionalLong.of(50L))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "false",
@@ -359,13 +334,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats uses default estimateSizeInBytes without CBO") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.of(64L)
-        override def numRows(): OptionalLong = OptionalLong.of(5L)
-      }
-    }
+    val scan = newStatsScan(newStatistics(size = OptionalLong.of(64L), rows = OptionalLong.of(5L)))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "false",
@@ -381,13 +350,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats infers size-only estimates from row count") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
-        override def numRows(): OptionalLong = OptionalLong.of(5L)
-      }
-    }
+    val scan = newStatsScan(newStatistics(rows = OptionalLong.of(5L)))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "false",
@@ -407,16 +370,10 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     // consult the full statistics exactly once, not once for the (empty) size and again for the row
     // count.
     var estimateStatisticsCalls = 0
-    val scan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateStatistics(): V2Statistics = {
-        estimateStatisticsCalls += 1
-        new V2Statistics {
-          override def sizeInBytes(): OptionalLong = OptionalLong.empty()
-          override def numRows(): OptionalLong = OptionalLong.of(5L)
-        }
-      }
-    }
+    val scan = newStatsScan({
+      estimateStatisticsCalls += 1
+      newStatistics(rows = OptionalLong.of(5L))
+    })
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "false",
@@ -431,13 +388,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
 
   test("DataSourceV2ScanRelation.computeStats uses default size without CBO for empty stats") {
     val output = Seq(AttributeReference("id", IntegerType)())
-    val scan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
-        override def numRows(): OptionalLong = OptionalLong.empty()
-      }
-    }
+    val scan = newStatsScan(newStatistics())
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "false",
@@ -478,13 +429,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
 
   test("DataSourceV2ScanRelation.computeStats uses default size for empty scan stats") {
     val output = Seq(AttributeReference("id", IntegerType)())
-    val scan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
-        override def numRows(): OptionalLong = OptionalLong.empty()
-      }
-    }
+    val scan = newStatsScan(newStatistics())
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
@@ -498,18 +443,8 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
 
   test("DataSourceV2ScanRelation.computeStats uses default size for null scan stats") {
     val output = Seq(AttributeReference("id", IntegerType)())
-    val nullStatsScan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateStatistics(): V2Statistics = null
-    }
-    val nullColumnStatsScan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
-        override def numRows(): OptionalLong = OptionalLong.empty()
-        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = null
-      }
-    }
+    val nullStatsScan = newStatsScan(stats = null)
+    val nullColumnStatsScan = newStatsScan(newStatistics(colStats = null))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
@@ -540,24 +475,10 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     val output = Seq(idAttr)
     // numRows present, columnStats null: isNotEmpty is true (via numRows), so the conversion runs
     // and must not NPE on the null column-stats map.
-    val rowCountScan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
-        override def numRows(): OptionalLong = OptionalLong.of(42L)
-        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = null
-      }
-    }
+    val rowCountScan = newStatsScan(newStatistics(rows = OptionalLong.of(42L), colStats = null))
     // sizeInBytes present, columnStats null: same null-tolerance requirement, reached via
     // sizeInBytes instead of numRows.
-    val sizeScan = new Scan with SupportsReportStatistics {
-      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
-      override def estimateStatistics(): V2Statistics = new V2Statistics {
-        override def sizeInBytes(): OptionalLong = OptionalLong.of(1000L)
-        override def numRows(): OptionalLong = OptionalLong.empty()
-        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = null
-      }
-    }
+    val sizeScan = newStatsScan(newStatistics(size = OptionalLong.of(1000L), colStats = null))
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val rowCountStats = scanRel(output, rowCountScan).computeStats()
