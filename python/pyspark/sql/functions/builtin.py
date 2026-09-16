@@ -14339,7 +14339,8 @@ def time_bucket(
         A day-time or year-month interval defining the bucket size. Must be positive
         and foldable.
     ts : :class:`~pyspark.sql.Column` or column name
-        A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+        A TIMESTAMP, TIMESTAMP_NTZ, or nanosecond-precision
+        (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p in [7, 9]) value to bucket.
     origin : :class:`~pyspark.sql.Column`, optional
         Alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as
         ``ts`` and must be foldable.
@@ -29983,10 +29984,13 @@ def hll_sketch_agg(
 
     .. versionadded:: 3.5.0
 
+    .. versionchanged:: 4.4.0
+        Supports the TIME type for the ``col`` argument.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        A column that evaluates to an integer, long, string, or binary.
+        A column that evaluates to an integer, long, time, string, or binary.
     lgConfigK : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of K, where K is the number of buckets or slots for the HllSketch.
         A column that evaluates to an integer.

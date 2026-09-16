@@ -20,6 +20,7 @@ Tests that run Pipelines against a Spark Connect server.
 """
 
 import unittest
+from unittest import mock
 
 from pyspark import pipelines as dp
 from pyspark.testing.connectutils import (
@@ -29,6 +30,10 @@ from pyspark.testing.connectutils import (
 )
 
 if should_test_connect:
+    from google.protobuf import any_pb2
+
+    import pyspark.sql.connect.proto as pb2
+    from pyspark.errors import PySparkValueError
     from pyspark.errors.exceptions.connect import AnalysisException
     from pyspark.pipelines.graph_element_registry import graph_element_registration_context
     from pyspark.pipelines.spark_connect_graph_element_registry import (
@@ -39,6 +44,36 @@ if should_test_connect:
         handle_pipeline_events,
         start_run,
     )
+    from pyspark.sql.connect.client.core import PlanObservedMetrics
+    from pyspark.sql.metrics import PlanMetrics
+
+
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class SparkConnectPipelineEventHandlerTests(unittest.TestCase):
+    def test_ignores_execution_metadata(self):
+        pipeline_event = pb2.PipelineEventResult()
+        pipeline_event.event.message = "event"
+        results = iter(
+            [
+                {"pipeline_command_result": object()},
+                {"pipeline_event_result": pipeline_event},
+                PlanMetrics("metric", 1, 0, []),
+                PlanObservedMetrics("observation", [], []),
+            ]
+        )
+
+        with mock.patch(
+            "pyspark.pipelines.spark_connect_pipeline.log_with_provided_timestamp"
+        ) as log:
+            handle_pipeline_events(results)
+
+        log.assert_called_once_with("event", mock.ANY)
+
+    def test_rejects_unexpected_response(self):
+        with self.assertRaises(PySparkValueError) as error:
+            handle_pipeline_events(iter([any_pb2.Any()]))
+
+        self.assertIn("received an unexpected result", str(error.exception))
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

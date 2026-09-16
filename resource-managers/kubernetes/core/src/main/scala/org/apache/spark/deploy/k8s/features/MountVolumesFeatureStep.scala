@@ -72,7 +72,10 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
       val volumeBuilder = spec.volumeConf match {
         case KubernetesHostPathVolumeConf(hostPath, volumeType) =>
           new VolumeBuilder()
-            .withHostPath(new HostPathVolumeSource(hostPath, volumeType))
+            .withNewHostPath()
+              .withPath(hostPath)
+              .withType(volumeType)
+            .endHostPath()
 
         case KubernetesPVCVolumeConf(claimNameTemplate, storageClass, size, labels, annotations) =>
           val claimName = conf match {
@@ -113,20 +116,24 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
           }
 
           new VolumeBuilder()
-            .withPersistentVolumeClaim(
-              new PersistentVolumeClaimVolumeSource(claimName, spec.mountReadOnly))
+            .withNewPersistentVolumeClaim()
+              .withClaimName(claimName)
+              .withReadOnly(spec.mountReadOnly)
+            .endPersistentVolumeClaim()
 
         case KubernetesEmptyDirVolumeConf(medium, sizeLimit) =>
           new VolumeBuilder()
-            .withEmptyDir(
-              new EmptyDirVolumeSourceBuilder()
-                .withMedium(medium.getOrElse(""))
-                .withSizeLimit(sizeLimit.map(new Quantity(_)).orNull)
-                .build())
+            .withNewEmptyDir()
+              .withMedium(medium.getOrElse(""))
+              .withSizeLimit(sizeLimit.map(new Quantity(_)).orNull)
+            .endEmptyDir()
 
         case KubernetesNFSVolumeConf(path, server) =>
           new VolumeBuilder()
-            .withNfs(new NFSVolumeSource(path, null, server))
+            .withNewNfs()
+              .withPath(path)
+              .withServer(server)
+            .endNfs()
       }
 
       val volume = volumeBuilder.withName(spec.volumeName).build()
