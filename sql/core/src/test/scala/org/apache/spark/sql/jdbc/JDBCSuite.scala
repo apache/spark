@@ -1904,7 +1904,7 @@ class JDBCSuite extends SharedSparkSession {
   test("SPARK-58876: Oracle TIMESTAMP(7-9) resolves to nanosecond NTZ under the nanos preview") {
     // scale/preferTimestampNanos reach the dialect only as metadata getSchema stamps, so resolve a
     // mocked Oracle TIMESTAMP column via getSchema for each (scale, option, preview) combination.
-    def resolve(scale: Int, preferNanos: Boolean, nanosEnabled: Boolean): DataType = {
+    def resolve(scale: Int, preferNanos: Boolean, nanosEnabled: Boolean): StructField = {
       val rsmd = mock(classOf[java.sql.ResultSetMetaData])
       when(rsmd.getColumnCount).thenReturn(1)
       when(rsmd.getColumnLabel(anyInt())).thenReturn("T")
@@ -1918,18 +1918,27 @@ class JDBCSuite extends SharedSparkSession {
       when(rs.getMetaData).thenReturn(rsmd)
       withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> nanosEnabled.toString) {
         JdbcUtils.getSchema(mock(classOf[Connection]), rs, OracleDialect(),
-          preferTimestampNanos = preferNanos).fields.head.dataType
+          preferTimestampNanos = preferNanos).fields.head
       }
     }
+    def marked(f: StructField): Boolean =
+      f.metadata.contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK)
     // Sub-microsecond scales (7-9) widen to the nanosecond NTZ type only when both the read option
     // and the preview are on; every coarser scale and either flag off stays microsecond NTZ.
     (TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION).foreach { s =>
-      assert(resolve(s, preferNanos = true, nanosEnabled = true) === TimestampNTZNanosType(s),
-        s"scale=$s")
+      val f = resolve(s, preferNanos = true, nanosEnabled = true)
+      assert(f.dataType === TimestampNTZNanosType(s), s"scale=$s")
+      // The nanos NTZ getter is wall-clock by construction, so the marker must not be stamped.
+      assert(!marked(f), s"scale=$s")
     }
-    assert(resolve(6, preferNanos = true, nanosEnabled = true) === TimestampNTZType)
-    assert(resolve(9, preferNanos = false, nanosEnabled = true) === TimestampNTZType)
-    assert(resolve(9, preferNanos = true, nanosEnabled = false) === TimestampNTZType)
+    // Microsecond NTZ results carry the wall-clock read marker.
+    Seq(
+      resolve(6, preferNanos = true, nanosEnabled = true),
+      resolve(9, preferNanos = false, nanosEnabled = true),
+      resolve(9, preferNanos = true, nanosEnabled = false)).foreach { f =>
+      assert(f.dataType === TimestampNTZType)
+      assert(marked(f))
+    }
   }
 
   test("SPARK-42469: OracleDialect Limit query test") {

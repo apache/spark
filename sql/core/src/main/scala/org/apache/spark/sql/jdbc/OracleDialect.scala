@@ -184,16 +184,19 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case INTERVAL_DS => Some(DayTimeIntervalType())
       case Types.TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
           typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") =>
-        // Oracle DATE and TIMESTAMP are zoneless; map to NTZ and mark it wall-clock so a later flag
-        // flip can't desync the read. TZ/LTZ variants are handled above.
-        if (md != null) md.putBoolean(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
         val metadata = if (md != null) md.build() else Metadata.empty
         // Absent scale metadata: Oracle TIMESTAMP defaults to TIMESTAMP(6).
         val scale = if (metadata.contains("scale")) metadata.getLong("scale").toInt else 6
         val preferNanos = metadata.contains("preferTimestampNanos") &&
           metadata.getBoolean("preferTimestampNanos")
-        Some(JdbcUtils.resolveTimestampType(
-          isTimestampNTZ = true, scale = scale, preferTimestampNanos = preferNanos))
+        val resolved = JdbcUtils.resolveTimestampType(
+          isTimestampNTZ = true, scale = scale, preferTimestampNanos = preferNanos)
+        // Oracle DATE/TIMESTAMP are zoneless; mark the microsecond NTZ wall-clock so a later flag
+        // flip can't desync the read. The nanos NTZ getter is wall-clock by construction.
+        if (md != null && resolved == TimestampNTZType) {
+          md.putBoolean(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
+        }
+        Some(resolved)
       case _ => None
     }
   }
