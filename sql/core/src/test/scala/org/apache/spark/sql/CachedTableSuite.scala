@@ -48,6 +48,7 @@ import org.apache.spark.sql.execution.{CachedData, ColumnarToRowExec, ExecSubque
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.command.CommandUtils
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
@@ -2465,6 +2466,67 @@ class CachedTableSuite extends SharedSparkSession
       assert(
         cachedData(preserveConf).cachedRepresentation.cacheBuilder.storageLevel === MEMORY_ONLY)
       assert(cachedData(standardConf).cachedRepresentation.cacheBuilder.storageLevel === DISK_ONLY)
+    }
+  }
+
+  test("refreshTable recaches all bound CHAR/VARCHAR V1 scan modes") {
+    val preserveConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
+    val standardConf = Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
+
+    withTable("cached_cv") {
+      sql("CREATE TABLE cached_cv (id int, data string) USING parquet")
+      sql("INSERT INTO cached_cv VALUES (1, 'a')")
+
+      def cachedData(modeConf: Seq[(String, String)]): CachedData = {
+        withSQLConf(modeConf: _*) {
+          cacheManager.lookupCachedData(sql("SELECT * FROM cached_cv")).getOrElse {
+            fail(s"Expected cached_cv to be cached for $modeConf")
+          }
+        }
+      }
+
+      def scanMode(modeConf: Seq[(String, String)]): Option[CharVarcharScanMode] = {
+        cachedData(modeConf).plan.collectFirst {
+          case relation: LogicalRelation => relation.charVarcharScanMode
+        }.flatten
+      }
+
+      withSQLConf(preserveConf: _*) {
+        sql("CACHE TABLE cached_cv OPTIONS('storageLevel' 'MEMORY_ONLY')")
+        checkAnswer(sql("SELECT * FROM cached_cv"), Row(1, "a"))
+      }
+      withSQLConf(standardConf: _*) {
+        sql("CACHE TABLE cached_cv OPTIONS('storageLevel' 'DISK_ONLY')")
+        checkAnswer(sql("SELECT * FROM cached_cv"), Row(1, "a"))
+      }
+
+      withSQLConf(preserveConf: _*) {
+        checkCacheLoading(sql("SELECT * FROM cached_cv"), isLoaded = true)
+      }
+      withSQLConf(standardConf: _*) {
+        checkCacheLoading(sql("SELECT * FROM cached_cv"), isLoaded = true)
+      }
+
+      withSQLConf(preserveConf: _*) {
+        spark.catalog.refreshTable("cached_cv")
+      }
+
+      withSQLConf(preserveConf: _*) {
+        checkCacheLoading(sql("SELECT * FROM cached_cv"), isLoaded = false)
+        checkAnswer(sql("SELECT * FROM cached_cv"), Row(1, "a"))
+      }
+      withSQLConf(standardConf: _*) {
+        checkCacheLoading(sql("SELECT * FROM cached_cv"), isLoaded = false)
+        checkAnswer(sql("SELECT * FROM cached_cv"), Row(1, "a"))
+      }
+      assert(scanMode(preserveConf).contains(CharVarcharScanMode.PreserveNative))
+      assert(scanMode(standardConf).contains(CharVarcharScanMode.SparkStandard))
+      assert(
+        cachedData(preserveConf).cachedRepresentation.cacheBuilder.storageLevel === MEMORY_ONLY)
+      assert(
+        cachedData(standardConf).cachedRepresentation.cacheBuilder.storageLevel === DISK_ONLY)
     }
   }
 

@@ -27,11 +27,14 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema, InMemoryTableSessionCatalog}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableInfo, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
+import org.apache.spark.sql.execution.CachedData
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MemoryStreamScanBuilder, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
@@ -39,6 +42,7 @@ import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.sources.FakeScanBuilder
 import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.storage.StorageLevel.{DISK_ONLY, MEMORY_ONLY}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
@@ -495,6 +499,70 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
         } finally {
           sq.stop()
         }
+      }
+    }
+  }
+
+  test("micro-batch V2 write recaches all bound CHAR/VARCHAR scan modes") {
+    val t = "testcat.ns.cached_cv"
+    val preserveConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
+    val standardConf = Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
+    val cacheManager = spark.sharedState.cacheManager
+
+    spark.sql("CREATE NAMESPACE testcat.ns")
+    withTable(t) {
+      withTempDir { dir =>
+        sql(s"CREATE TABLE $t (col1 string, col2 integer) USING foo")
+        sql(s"INSERT INTO $t VALUES ('a', 1)")
+
+        def cachedData(modeConf: Seq[(String, String)]): CachedData = {
+          withSQLConf(modeConf: _*) {
+            cacheManager.lookupCachedData(sql(s"SELECT * FROM $t")).getOrElse {
+              fail(s"Expected $t to be cached for $modeConf")
+            }
+          }
+        }
+
+        def scanMode(modeConf: Seq[(String, String)]): Option[CharVarcharScanMode] = {
+          cachedData(modeConf).plan.collectFirst {
+            case relation: DataSourceV2Relation => relation.charVarcharScanMode
+          }.flatten
+        }
+
+        withSQLConf(preserveConf: _*) {
+          sql(s"CACHE TABLE $t OPTIONS('storageLevel' 'MEMORY_ONLY')")
+          checkAnswer(sql(s"SELECT * FROM $t"), Row("a", 1))
+        }
+        withSQLConf(standardConf: _*) {
+          sql(s"CACHE TABLE $t OPTIONS('storageLevel' 'DISK_ONLY')")
+          checkAnswer(sql(s"SELECT * FROM $t"), Row("a", 1))
+        }
+
+        val stream = MemoryStream[Int]
+        val sq = stream.toDF().select(lit("b"), $"value").writeStream
+          .option("checkpointLocation", dir.getCanonicalPath)
+          .toTable(t)
+        try {
+          stream.addData(2)
+          sq.processAllAvailable()
+        } finally {
+          sq.stop()
+        }
+
+        withSQLConf(preserveConf: _*) {
+          checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row("a", 1), Row("b", 2)))
+        }
+        withSQLConf(standardConf: _*) {
+          checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row("a", 1), Row("b", 2)))
+        }
+        assert(scanMode(preserveConf).contains(CharVarcharScanMode.PreserveNative))
+        assert(scanMode(standardConf).contains(CharVarcharScanMode.SparkStandard))
+        assert(
+          cachedData(preserveConf).cachedRepresentation.cacheBuilder.storageLevel === MEMORY_ONLY)
+        assert(
+          cachedData(standardConf).cachedRepresentation.cacheBuilder.storageLevel === DISK_ONLY)
       }
     }
   }
