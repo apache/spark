@@ -1881,9 +1881,8 @@ def _elementwise_result_to_arrow(result, return_type, arrow_element_type, is_pan
 
 
 def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
-    # Eval types that have been migrated to a handler are dispatched here without
-    # walking the if/elif chain below. The handler owns the whole lifecycle,
-    # including serializer selection.
+    # If an eval type has a registered handler, dispatch through it: the handler
+    # provides both the function and the serializer.
     handler_cls = get_eval_type_handler(eval_type)
     if handler_cls is not None:
         udfs = [

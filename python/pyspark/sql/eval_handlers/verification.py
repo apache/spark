@@ -15,11 +15,9 @@
 # limitations under the License.
 #
 
-"""Verification helpers shared by the eval type handlers and the worker.
+"""Verification helpers for a UDF's result before it is written back to the JVM.
 
-These validate a UDF's result before it is written back to the JVM. Handlers
-call them from ``run``; the worker still calls them from the eval-type branches
-that have not been migrated yet.
+Used by the eval type handlers and by the worker's ``read_udfs``.
 """
 
 from typing import Any

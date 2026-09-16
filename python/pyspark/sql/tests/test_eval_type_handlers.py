@@ -119,8 +119,8 @@ class EvalTypeHandlerTests(unittest.TestCase):
         )
 
     def test_abstract_handler_with_eval_type_rejected(self):
-        # A subclass that declares an eval_type but leaves run abstract must fail
-        # at class definition, not when read_udfs later instantiates it.
+        # A subclass that declares an eval_type but leaves run abstract must be
+        # rejected at class definition.
         unused_eval_type = -1
 
         def _define_abstract():

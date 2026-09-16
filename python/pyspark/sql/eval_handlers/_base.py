@@ -17,9 +17,8 @@
 
 """Base classes and registry for the eval type handlers.
 
-Kept in a leaf module (importing only ``_typing`` and serializers) so both the
-package ``__init__`` and the concrete-handler submodules can import it without a
-circular import.
+This leaf module imports only ``_typing`` and the serializers, so the package
+``__init__`` and the concrete-handler submodules can both import it.
 """
 
 from abc import ABCMeta, abstractmethod
@@ -54,11 +53,11 @@ def get_eval_type_handler(eval_type: int) -> "Optional[type[EvalTypeHandler]]":
 
 
 class _EvalTypeHandlerMeta(ABCMeta):
-    """Registers a concrete handler under its ``eval_type`` at definition time.
+    """Registers a concrete handler under its ``eval_type`` at class definition.
 
     Runs after ``ABCMeta`` sets ``__abstractmethods__``, so a class that declares
-    an ``eval_type`` while leaving ``run``/``serializer`` abstract is rejected here
-    instead of failing when ``read_udfs`` instantiates it.
+    an ``eval_type`` while leaving ``run``/``serializer`` abstract is rejected at
+    definition.
     """
 
     def __new__(mcs, name: str, bases: tuple, namespace: dict, **kwargs: Any) -> type:
