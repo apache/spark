@@ -520,9 +520,36 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 StructField("c", CharType(4)),
                 StructField("explicit_c", CharType(4, "UTF8_BINARY")),
                 StructField("v", VarcharType(3, "UTF8_LCASE")),
+                StructField(
+                    "nested",
+                    StructType(
+                        [
+                            StructField("c", CharType(3, "UTF8_BINARY")),
+                            StructField(
+                                "values",
+                                ArrayType(VarcharType(4, "UNICODE_CI"), containsNull=False),
+                            ),
+                            StructField(
+                                "lookup",
+                                MapType(
+                                    CharType(3, "UTF8_LCASE"),
+                                    VarcharType(4, "UTF8_BINARY"),
+                                    valueContainsNull=False,
+                                ),
+                            ),
+                        ]
+                    ),
+                ),
             ]
         )
-        rows = [("ab", "cd", "ef")]
+        rows = [
+            (
+                "ab",
+                "cd",
+                "ef",
+                Row(c="x", values=["gh", "ij"], lookup={"k": "lm"}),
+            )
+        ]
         standard_conf = {
             "spark.sql.charVarchar.standardSemantics.enabled": "true",
             "spark.sql.legacy.charVarcharAsString": "false",
@@ -530,7 +557,21 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.both_conf(standard_conf):
             df = self.connect.createDataFrame(rows, schema)
             self.assertEqual(df.schema, schema)
-            self.assertEqual(df.collect(), [Row(c="ab  ", explicit_c="cd  ", v="ef")])
+            self.assertEqual(
+                df.collect(),
+                [
+                    Row(
+                        c="ab  ",
+                        explicit_c="cd  ",
+                        v="ef",
+                        nested=Row(
+                            c="x  ",
+                            values=["gh", "ij"],
+                            lookup={"k  ": "lm"},
+                        ),
+                    )
+                ],
+            )
             empty = self.connect.createDataFrame([], schema)
             self.assertEqual(empty.schema, schema)
             self.assertEqual(empty.collect(), [])
@@ -545,11 +586,45 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                     StructField("c", StringType()),
                     StructField("explicit_c", StringType("UTF8_BINARY")),
                     StructField("v", StringType("UTF8_LCASE")),
+                    StructField(
+                        "nested",
+                        StructType(
+                            [
+                                StructField("c", StringType("UTF8_BINARY")),
+                                StructField(
+                                    "values",
+                                    ArrayType(StringType("UNICODE_CI"), containsNull=False),
+                                ),
+                                StructField(
+                                    "lookup",
+                                    MapType(
+                                        StringType("UTF8_LCASE"),
+                                        StringType("UTF8_BINARY"),
+                                        valueContainsNull=False,
+                                    ),
+                                ),
+                            ]
+                        ),
+                    ),
                 ]
             )
             df = self.connect.createDataFrame(rows, schema)
             self.assertEqual(df.schema, expected)
-            self.assertEqual(df.collect(), [Row(c="ab", explicit_c="cd", v="ef")])
+            self.assertEqual(
+                df.collect(),
+                [
+                    Row(
+                        c="ab",
+                        explicit_c="cd",
+                        v="ef",
+                        nested=Row(
+                            c="x",
+                            values=["gh", "ij"],
+                            lookup={"k": "lm"},
+                        ),
+                    )
+                ],
+            )
             empty = self.connect.createDataFrame([], schema)
             self.assertEqual(empty.schema, expected)
             self.assertEqual(empty.collect(), [])
@@ -566,6 +641,44 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                     exception=ctx.exception,
                     errorClass="UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
                 )
+
+    def test_create_dataframe_with_explicit_binary_string_schema(self):
+        explicit_binary = StringType("UTF8_BINARY")
+        schema = StructType(
+            [
+                StructField("s", explicit_binary),
+                StructField(
+                    "nested",
+                    StructType(
+                        [
+                            StructField("s", explicit_binary),
+                            StructField("a", ArrayType(explicit_binary)),
+                            StructField(
+                                "m",
+                                MapType(explicit_binary, explicit_binary),
+                            ),
+                        ]
+                    ),
+                ),
+            ]
+        )
+        rows = [
+            (
+                "direct",
+                Row(s="nested", a=["array"], m={"key": "value"}),
+            )
+        ]
+
+        populated = self.connect.createDataFrame(rows, schema)
+        self.assertEqual(populated.schema, schema)
+        self.assertEqual(
+            populated.collect(),
+            [Row(s="direct", nested=Row(s="nested", a=["array"], m={"key": "value"}))],
+        )
+
+        empty = self.connect.createDataFrame([], schema)
+        self.assertEqual(empty.schema, schema)
+        self.assertEqual(empty.collect(), [])
 
     def test_to(self):
         # SPARK-41464: test DataFrame.to()
