@@ -24,7 +24,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.sql.types import (
     ArrayType,
     CharType,
@@ -522,11 +522,50 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 StructField("v", VarcharType(3, "UTF8_LCASE")),
             ]
         )
-        conf = {"spark.sql.charVarchar.standardSemantics.enabled": "true"}
-        with self.both_conf(conf):
-            df = self.connect.createDataFrame([("ab", "cd", "ef")], schema)
+        rows = [("ab", "cd", "ef")]
+        standard_conf = {
+            "spark.sql.charVarchar.standardSemantics.enabled": "true",
+            "spark.sql.legacy.charVarcharAsString": "false",
+        }
+        with self.both_conf(standard_conf):
+            df = self.connect.createDataFrame(rows, schema)
             self.assertEqual(df.schema, schema)
             self.assertEqual(df.collect(), [Row(c="ab  ", explicit_c="cd  ", v="ef")])
+            empty = self.connect.createDataFrame([], schema)
+            self.assertEqual(empty.schema, schema)
+            self.assertEqual(empty.collect(), [])
+
+        legacy_conf = {
+            "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            "spark.sql.legacy.charVarcharAsString": "true",
+        }
+        with self.both_conf(legacy_conf):
+            expected = StructType(
+                [
+                    StructField("c", StringType()),
+                    StructField("explicit_c", StringType("UTF8_BINARY")),
+                    StructField("v", StringType("UTF8_LCASE")),
+                ]
+            )
+            df = self.connect.createDataFrame(rows, schema)
+            self.assertEqual(df.schema, expected)
+            self.assertEqual(df.collect(), [Row(c="ab", explicit_c="cd", v="ef")])
+            empty = self.connect.createDataFrame([], schema)
+            self.assertEqual(empty.schema, expected)
+            self.assertEqual(empty.collect(), [])
+
+        default_conf = {
+            "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            "spark.sql.legacy.charVarcharAsString": "false",
+        }
+        with self.both_conf(default_conf):
+            for data in (rows, []):
+                with self.assertRaises(AnalysisException) as ctx:
+                    self.connect.createDataFrame(data, schema).schema
+                self.check_error(
+                    exception=ctx.exception,
+                    errorClass="UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+                )
 
     def test_to(self):
         # SPARK-41464: test DataFrame.to()
