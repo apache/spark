@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.node.ObjectNode
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
@@ -710,7 +711,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
          |      "type": "char(4)",
          |      "nullable": true,
          |      "metadata": {
-         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |        "${DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY}": {
          |          "binary": "spark.UTF8_BINARY"
          |        }
          |      }
@@ -724,7 +725,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
          |      },
          |      "nullable": true,
          |      "metadata": {
-         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |        "${DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY}": {
          |          "nested.element": "icu.UNICODE_CI"
          |        }
          |      }
@@ -733,6 +734,81 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
          |}
          |""".stripMargin
     assert(mapper.readTree(compatibilitySchema.json) == mapper.readTree(expectedJson))
+  }
+
+  test("SPARK-59276: old readers ignore CHAR/VARCHAR collation metadata") {
+    val schema = StructType(StructField("c", CharType(4, "UTF8_LCASE")) :: Nil)
+    val node = mapper.readTree(schema.json)
+    val metadata = node.get("fields").get(0).get("metadata").asInstanceOf[ObjectNode]
+    assert(metadata.has(DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY))
+    assert(!metadata.has(DataType.COLLATIONS_METADATA_KEY))
+    metadata.remove(DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY)
+    assert(DataType.fromJson(node.toString) === StructType(StructField("c", CharType(4)) :: Nil))
+  }
+
+  test("SPARK-59276: STRING and CHAR collations use separate JSON keys") {
+    val schema = StructType(
+      StructField(
+        "mixed",
+        MapType(StringType("UTF8_LCASE"), CharType(4, "UNICODE_CI"))) :: Nil)
+    val json = schema.json
+    assert(json.contains(DataType.COLLATIONS_METADATA_KEY))
+    assert(json.contains(DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY))
+    assert(DataType.fromJson(json) === schema)
+  }
+
+  test("SPARK-59276: reject CHAR/VARCHAR collations stored in __COLLATIONS") {
+    val json =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "c",
+         |      "type": "char(4)",
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "c": "spark.UTF8_LCASE"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson(json)
+      },
+      condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      parameters = Map("jsonType" -> "char(4)"))
+  }
+
+  test("SPARK-59276: reject inline CHAR collation plus metadata") {
+    val json =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "c",
+         |      "type": "char(4) collate UTF8_LCASE",
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY}": {
+         |          "c": "spark.UTF8_LCASE"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson(json)
+      },
+      condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      parameters = Map("jsonType" -> "char(4) collate UTF8_LCASE"))
   }
 
   test("simple struct with collations to json") {

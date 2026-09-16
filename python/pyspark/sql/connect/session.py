@@ -90,18 +90,54 @@ from pyspark.sql.session import SparkSession as PySparkSession
 from pyspark.sql.session import classproperty
 from pyspark.sql.types import (
     AtomicType,
+    ArrayType,
+    CharType,
     DataType,
     DayTimeIntervalType,
     MapType,
     Row,
     StringType,
+    StructField,
     StructType,
     TimestampType,
+    UserDefinedType,
+    VarcharType,
     _has_nulltype,
     _infer_schema,
     _merge_type,
 )
 from pyspark.sql.utils import to_str
+
+
+def _to_arrow_compatible_type(data_type: DataType) -> DataType:
+    if isinstance(data_type, (CharType, VarcharType)):
+        return StringType()
+    if isinstance(data_type, ArrayType):
+        return ArrayType(
+            _to_arrow_compatible_type(data_type.elementType), data_type.containsNull
+        )
+    if isinstance(data_type, MapType):
+        return MapType(
+            _to_arrow_compatible_type(data_type.keyType),
+            _to_arrow_compatible_type(data_type.valueType),
+            data_type.valueContainsNull,
+        )
+    if isinstance(data_type, StructType):
+        return StructType(
+            [
+                StructField(
+                    field.name,
+                    _to_arrow_compatible_type(field.dataType),
+                    field.nullable,
+                    field.metadata,
+                )
+                for field in data_type.fields
+            ]
+        )
+    if isinstance(data_type, UserDefinedType):
+        return _to_arrow_compatible_type(data_type.sqlType())
+    return data_type
+
 
 if TYPE_CHECKING:
     import pyspark.sql.connect.proto as pb2
@@ -599,9 +635,12 @@ class SparkSession:
             spark_types: List[Optional[DataType]]
             if isinstance(schema, StructType):
                 deduped_schema = cast(StructType, _deduplicate_field_names(schema))
-                spark_types = [field.dataType for field in deduped_schema.fields]
+                arrow_compatible_schema = cast(
+                    StructType, _to_arrow_compatible_type(deduped_schema)
+                )
+                spark_types = [field.dataType for field in arrow_compatible_schema.fields]
                 arrow_schema = to_arrow_schema(
-                    deduped_schema,
+                    arrow_compatible_schema,
                     timezone="UTC",
                     prefers_large_types=prefers_large_types,
                 )
@@ -662,7 +701,7 @@ class SparkSession:
                 _check_arrow_table_timestamps_localize(data, schema, True, timezone)
                 .cast(
                     to_arrow_schema(
-                        schema,
+                        cast(StructType, _to_arrow_compatible_type(schema)),
                         error_on_duplicated_field_names_in_struct=True,
                         timezone="UTC",
                         prefers_large_types=prefers_large_types,
@@ -744,7 +783,12 @@ class SparkSession:
             # Spark Connect will try its best to build the Arrow table with the
             # inferred schema in the client side, and then rename the columns and
             # cast the datatypes in the server side.
-            _table = LocalDataToArrowConversion.convert(_data, _schema, prefers_large_types)
+            arrow_compatible_schema = cast(
+                StructType, _to_arrow_compatible_type(_schema)
+            )
+            _table = LocalDataToArrowConversion.convert(
+                _data, arrow_compatible_schema, prefers_large_types
+            )
 
         # TODO: Beside the validation on number of columns, we should also check
         # whether the Arrow Schema is compatible with the user provided Schema.

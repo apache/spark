@@ -722,7 +722,7 @@ class TypesTestsMixin:
                         "type": "char(4)",
                         "nullable": True,
                         "metadata": {
-                            "__COLLATIONS": {"binary": "spark.UTF8_BINARY"},
+                            "__CHAR_VARCHAR_COLLATIONS": {"binary": "spark.UTF8_BINARY"},
                         },
                     },
                     {
@@ -734,7 +734,7 @@ class TypesTestsMixin:
                         },
                         "nullable": True,
                         "metadata": {
-                            "__COLLATIONS": {"nested.element": "icu.UNICODE_CI"},
+                            "__CHAR_VARCHAR_COLLATIONS": {"nested.element": "icu.UNICODE_CI"},
                         },
                     },
                 ],
@@ -848,7 +848,11 @@ class TypesTestsMixin:
             assert schema == _parse_datatype_json_string(schema.json())
 
     def test_schema_rejects_inline_and_metadata_collations(self):
-        from pyspark.sql.types import _COLLATIONS_METADATA_KEY, _parse_datatype_json_string
+        from pyspark.sql.types import (
+            _CHAR_VARCHAR_COLLATIONS_METADATA_KEY,
+            _COLLATIONS_METADATA_KEY,
+            _parse_datatype_json_string,
+        )
 
         for data_type, metadata_collation in [
             ("char(4) collate UTF8_LCASE", "spark.UTF8_LCASE"),
@@ -862,7 +866,9 @@ class TypesTestsMixin:
                         "type": data_type,
                         "nullable": True,
                         "metadata": {
-                            _COLLATIONS_METADATA_KEY: {"c": metadata_collation},
+                            _CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {
+                                "c": metadata_collation
+                            },
                         },
                     }
                 ],
@@ -871,6 +877,41 @@ class TypesTestsMixin:
                 PySparkTypeError,
                 lambda: _parse_datatype_json_string(json.dumps(schema_json)),
             )
+
+        collations_on_char_json = {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "c",
+                    "type": "char(4)",
+                    "nullable": True,
+                    "metadata": {
+                        _COLLATIONS_METADATA_KEY: {"c": "spark.UTF8_LCASE"},
+                    },
+                }
+            ],
+        }
+        self.assertRaises(
+            PySparkTypeError,
+            lambda: _parse_datatype_json_string(json.dumps(collations_on_char_json)),
+        )
+
+    def test_char_varchar_collation_metadata_ignored_by_old_readers(self):
+        from pyspark.sql.types import (
+            _CHAR_VARCHAR_COLLATIONS_METADATA_KEY,
+            _parse_datatype_json_string,
+        )
+
+        schema = StructType([StructField("c", CharType(4, "UTF8_LCASE"))])
+        json_value = schema.jsonValue()
+        metadata = json_value["fields"][0]["metadata"]
+        self.assertIn(_CHAR_VARCHAR_COLLATIONS_METADATA_KEY, metadata)
+        self.assertNotIn("__COLLATIONS", metadata)
+        del metadata[_CHAR_VARCHAR_COLLATIONS_METADATA_KEY]
+        self.assertEqual(
+            _parse_datatype_json_string(json.dumps(json_value)),
+            StructType([StructField("c", CharType(4))]),
+        )
 
     def test_schema_with_collations_on_non_string_types(self):
         from pyspark.sql.types import _COLLATIONS_METADATA_KEY, _parse_datatype_json_string
