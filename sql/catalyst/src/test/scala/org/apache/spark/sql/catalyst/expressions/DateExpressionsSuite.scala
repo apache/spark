@@ -2715,6 +2715,25 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // The unit keyword is case-insensitive.
     checkEvaluation(TimestampAdd("Nanosecond", Literal(1L), ntz(0, 0)), tnv(0, 1))
 
+    // NANOSECOND result is floored to the input's precision, so a quantity finer than the type's
+    // step (10^(9-p) ns) never yields an off-grid fraction (which would compare / hash / sort
+    // unequal to its displayed, aligned form). p=7 -> 100ns step, p=8 -> 10ns step.
+    checkEvaluation(TimestampAdd("NANOSECOND", Literal(150L), ntz(0, 100, 7)), tnv(0, 200))
+    checkEvaluation(TimestampAdd("NANOSECOND", Literal(50L), ntz(0, 100, 7)), tnv(0, 100))
+    checkEvaluation(TimestampAdd("NANOSECOND", Literal(15L), ntz(0, 100, 8)), tnv(0, 110))
+    // Carry into the microsecond then floor the remainder: 100 + 905 = 1005 -> (+1 us, 5ns),
+    // floored to the 10ns step -> 0ns.
+    checkEvaluation(TimestampAdd("NANOSECOND", Literal(905L), ntz(0, 100, 8)), tnv(1, 0))
+    // LTZ at p=7 floors the same way.
+    checkEvaluation(
+      TimestampAdd("NANOSECOND", Literal(250L), ltz(0, 100, 7), Some("UTC")), tnv(0, 300))
+    // A near-Long.MaxValue nanosecond quantity that stays representable is not spuriously rejected:
+    // it carries ~9.2e15 microseconds forward from a small epoch. 9223372036854775000 ns =
+    // 9223372036854775 us + 0 ns; from epochMicros 0 that lands on that microsecond, fraction 0.
+    checkEvaluation(
+      TimestampAdd("NANOSECOND", Literal(9223372036854775000L), ntz(0, 0)),
+      tnv(9223372036854775L, 0))
+
     // Null propagation on either operand.
     checkEvaluation(
       TimestampAdd("NANOSECOND", Literal.create(null, LongType), ntz(0, 1)), null)
@@ -2732,9 +2751,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "invalidValue" -> "'NANOSECOND'"))
 
     // Overflow while carrying nanoseconds into epochMicros surfaces as a datetime overflow.
-    intercept[SparkArithmeticException] {
+    val overflow = intercept[SparkArithmeticException] {
       TimestampAdd("NANOSECOND", Literal(1000L), ntz(Long.MaxValue, 999)).eval(null)
     }
+    assert(overflow.getCondition == "DATETIME_OVERFLOW")
   }
 
   test("SPARK-42635: timestampadd near daylight saving transition") {

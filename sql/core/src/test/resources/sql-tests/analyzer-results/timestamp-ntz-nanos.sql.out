@@ -1617,3 +1617,17 @@ SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_NTZ '2020-01-01 00:00:00')
 -- !query analysis
 Project [timestampadd(NANOSECOND, cast(1 as bigint), 2020-01-01 00:00:00, Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 1, TIMESTAMP_NTZ '2020-01-01 00:00:00')#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 150, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7))
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(150 as bigint), cast(2020-01-01 00:00:00.0000001 as timestamp_ntz(7)), Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 150, CAST(2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 50, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7))
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(50 as bigint), cast(2020-01-01 00:00:00.0000001 as timestamp_ntz(7)), Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 50, CAST(2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7)))#x]
++- OneRowRelation

@@ -1680,3 +1680,19 @@ org.apache.spark.SparkIllegalArgumentException
     "parameter" : "`unit`"
   }
 }
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 150, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7))
+-- !query schema
+struct<timestampadd(NANOSECOND, 150, CAST(2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7))):timestamp_ntz(7)>
+-- !query output
+2020-01-01 00:00:00.0000002
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 50, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7))
+-- !query schema
+struct<timestampadd(NANOSECOND, 50, CAST(2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7))):timestamp_ntz(7)>
+-- !query output
+2020-01-01 00:00:00.0000001

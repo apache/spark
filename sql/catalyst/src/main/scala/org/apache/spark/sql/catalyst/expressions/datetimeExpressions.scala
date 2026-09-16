@@ -4982,7 +4982,8 @@ case class ConvertTimezone(
           - "MILLISECOND"
           - "MICROSECOND"
           - "NANOSECOND" - only for nanosecond-precision timestamp inputs (TIMESTAMP_NTZ(p) /
-            TIMESTAMP_LTZ(p), p in [7, 9])
+            TIMESTAMP_LTZ(p), p in [7, 9]); the result is floored to the input's precision, so a
+            quantity finer than the type's step (10^(9-p) ns) is truncated to it
       * quantity - this is the number of units of time that you want to add.
       * timestamp - this is a timestamp (w/ or w/o timezone) to which you want to add. A
         nanosecond-precision timestamp keeps its sub-microsecond fraction; units of MICROSECOND or
@@ -5030,7 +5031,16 @@ case class TimestampAdd(
 
   // A nanosecond-precision timestamp is carried as a TimestampNanosVal object rather than a
   // primitive microsecond Long, so the nanos-aware add path preserves the sub-microsecond fraction.
-  private def isNanos: Boolean = timestamp.dataType.isInstanceOf[AnyTimestampNanoType]
+  @transient private lazy val isNanos: Boolean =
+    timestamp.dataType.isInstanceOf[AnyTimestampNanoType]
+
+  // The declared fractional-second precision p in [7, 9] of a nanosecond timestamp input; -1 for a
+  // microsecond timestamp (where it is unused). Every produced element is floored to this p.
+  @transient private lazy val nanosPrecision: Int = timestamp.dataType match {
+    case t: TimestampNTZNanosType => t.precision
+    case t: TimestampLTZNanosType => t.precision
+    case _ => -1
+  }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -5040,7 +5050,8 @@ case class TimestampAdd(
   override def nullSafeEval(q: Any, ts: Any): Any = {
     if (isNanos) {
       DateTimeUtils.timestampAddNanos(
-        unit, q.asInstanceOf[Long], ts.asInstanceOf[TimestampNanosVal], zoneIdInEval)
+        unit, q.asInstanceOf[Long], ts.asInstanceOf[TimestampNanosVal],
+        nanosPrecision, zoneIdInEval)
     } else {
       DateTimeUtils.timestampAdd(unit, q.asInstanceOf[Long], ts.asInstanceOf[Long], zoneIdInEval)
     }
@@ -5051,7 +5062,7 @@ case class TimestampAdd(
     val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     if (isNanos) {
       defineCodeGen(ctx, ev, (q, ts) =>
-        s"""$dtu.timestampAddNanos("$unit", $q, $ts, $zid)""")
+        s"""$dtu.timestampAddNanos("$unit", $q, $ts, $nanosPrecision, $zid)""")
     } else {
       defineCodeGen(ctx, ev, (q, micros) =>
         s"""$dtu.timestampAdd("$unit", $q, $micros, $zid)""")
