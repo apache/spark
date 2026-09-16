@@ -112,6 +112,9 @@ class VarcharValue:
     def __init__(self, value):
         self.value = value
 
+    def __eq__(self, other):
+        return isinstance(other, VarcharValue) and self.value == other.value
+
 
 class VarcharStorageUDT(UserDefinedType):
     @classmethod
@@ -1572,6 +1575,12 @@ class ArrowTestsMixin:
     def test_char_varchar_udt_storage_explicit_schema(self):
         char_schema = StructType([StructField("value", CharStorageUDT())])
         varchar_schema = StructType([StructField("value", VarcharStorageUDT())])
+        array_char_schema = StructType(
+            [StructField("value", ArrayType(CharStorageUDT()))]
+        )
+        map_varchar_schema = StructType(
+            [StructField("value", MapType(StringType(), VarcharStorageUDT()))]
+        )
 
         with self.sql_conf(
             {
@@ -1590,10 +1599,33 @@ class ArrowTestsMixin:
                         self.assertEqual(df.schema, char_schema)
                         self.assertEqual(df.first(), Row(value=CharValue("a  ")))
 
+                        array_df = self.spark.createDataFrame(
+                            pd.DataFrame({"value": [[CharValue("a")]]}),
+                            array_char_schema,
+                        )
+                        self.assertEqual(array_df.schema, array_char_schema)
+                        self.assertEqual(array_df.first(), Row(value=[CharValue("a  ")]))
+
+                        map_df = self.spark.createDataFrame(
+                            pd.DataFrame({"value": [{"key": VarcharValue("abc")}]}),
+                            map_varchar_schema,
+                        )
+                        self.assertEqual(map_df.schema, map_varchar_schema)
+                        self.assertEqual(
+                            map_df.first(),
+                            Row(value={"key": VarcharValue("abc")}),
+                        )
+
                         with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
                             self.spark.createDataFrame(
                                 pd.DataFrame({"value": [VarcharValue("abcd")]}),
                                 varchar_schema,
+                            ).collect()
+
+                        with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                            self.spark.createDataFrame(
+                                pd.DataFrame({"value": [{"key": VarcharValue("abcd")}]}),
+                                map_varchar_schema,
                             ).collect()
 
     def test_createDataFrame_pandas_duplicate_field_names(self):

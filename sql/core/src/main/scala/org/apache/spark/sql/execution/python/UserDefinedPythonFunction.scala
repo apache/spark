@@ -267,8 +267,6 @@ case class UserDefinedPythonTableFunction(
       case _ => false
     }
 
-    val applyCharVarcharChecks =
-      CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get)
     val udtf = returnType match {
       case Some(rt) =>
         validateReturnType(rt)
@@ -280,8 +278,7 @@ case class UserDefinedPythonTableFunction(
           children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic,
-          tableArguments = Some(tableArgs),
-          applyCharVarcharChecks = applyCharVarcharChecks)
+          tableArguments = Some(tableArgs))
       case _ =>
         val runAnalyzeInPython = (func: PythonFunction, exprs: Seq[Expression]) => {
           val runner =
@@ -297,8 +294,7 @@ case class UserDefinedPythonTableFunction(
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic,
           resolveElementMetadata = runAnalyzeInPython,
-          tableArguments = Some(tableArgs),
-          applyCharVarcharChecks = applyCharVarcharChecks)
+          tableArguments = Some(tableArgs))
     }
     Generate(
       udtf,
