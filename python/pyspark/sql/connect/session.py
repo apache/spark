@@ -114,6 +114,10 @@ def _to_arrow_compatible_type(data_type: DataType) -> DataType:
         if data_type.collation is None:
             return StringType()
         return StringType(data_type.collation)
+    if isinstance(data_type, UserDefinedType):
+        # LocalDataToArrowConversion needs the wrapper to call serialize. Its Arrow schema
+        # conversion independently lowers the UDT through sqlType.
+        return data_type
     if isinstance(data_type, ArrayType):
         return ArrayType(
             _to_arrow_compatible_type(data_type.elementType), data_type.containsNull
@@ -136,8 +140,6 @@ def _to_arrow_compatible_type(data_type: DataType) -> DataType:
                 for field in data_type.fields
             ]
         )
-    if isinstance(data_type, UserDefinedType):
-        return _to_arrow_compatible_type(data_type.sqlType())
     return data_type
 
 

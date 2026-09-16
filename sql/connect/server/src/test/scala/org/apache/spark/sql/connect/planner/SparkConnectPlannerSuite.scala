@@ -545,6 +545,37 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     }
   }
 
+  test("SPARK-59276: reconstruct explicit UTF8_BINARY strings in local relations") {
+    val physicalSchema = StructType(
+      StructField("s", StringType) ::
+        StructField("nested", StructType(StructField("s", StringType) :: Nil)) :: Nil)
+    val requestedSchema =
+      "STRUCT<s: STRING COLLATE UTF8_BINARY, " +
+        "nested: STRUCT<s: STRING COLLATE UTF8_BINARY>>"
+    val projection = UnsafeProjection.create(physicalSchema)
+    val row = projection(
+      InternalRow(UTF8String.fromString("direct"), InternalRow(UTF8String.fromString("nested"))))
+      .copy()
+
+    val populatedBuilder = createLocalRelationProto(physicalSchema, Seq(row)).toBuilder
+    populatedBuilder.getLocalRelationBuilder.setSchema(requestedSchema)
+    val emptyRelation = proto.Relation
+      .newBuilder()
+      .setLocalRelation(proto.LocalRelation.newBuilder().setSchema(requestedSchema))
+      .build()
+
+    Seq(populatedBuilder.build(), emptyRelation).zipWithIndex.foreach {
+      case (relation, index) =>
+        val dataFrame = Dataset.ofRows(spark, transform(relation))
+        val directType = dataFrame.schema("s").dataType.asInstanceOf[StringType]
+        val nestedType = dataFrame.schema("nested").dataType
+          .asInstanceOf[StructType]("s").dataType.asInstanceOf[StringType]
+        assert(!(directType eq StringType))
+        assert(!(nestedType eq StringType))
+        assert(dataFrame.count() === (if (index == 0) 1L else 0L))
+    }
+  }
+
   test("Empty ArrowBatch") {
     val schema = StructType(Seq(StructField("int", IntegerType)))
     val data = ArrowConverters.createEmptyArrowBatch(schema, null, true, false)

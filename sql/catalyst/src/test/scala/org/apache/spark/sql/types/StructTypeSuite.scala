@@ -18,7 +18,8 @@
 package org.apache.spark.sql.types
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.node.ObjectNode
+import org.json4s.{JArray, JBool, JObject, JString, JValue}
+import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
@@ -45,6 +46,30 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   private val UNICODE_COLLATION = "UNICODE"
   private val UTF8_LCASE_COLLATION = "UTF8_LCASE"
   private val mapper = new ObjectMapper()
+
+  /**
+   * Fixture copied from the StructField JSON reader at the PR's base commit,
+   * 389de941f002a5c92e22dc3ed0f65af602a174db. The emitted compatibility document
+   * contains no __COLLATIONS entry, so the preceding reader's collation map is empty.
+   */
+  private def readWithPreCharVarcharCollationReader(json: String): StructType = {
+    def readField(json: JValue): StructField = {
+      val values = json.asInstanceOf[JObject].obj.toMap
+      val JString(name) = values("name")
+      val JBool(nullable) = values("nullable")
+      val dataType = values("type")
+      val JObject(metadataFields) = values("metadata")
+      StructField(
+        name,
+        DataType.parseDataType(dataType, name, Map.empty[String, String]),
+        nullable,
+        Metadata.fromJObject(JObject(metadataFields)))
+    }
+
+    val rootValues = parse(json).asInstanceOf[JObject].obj.toMap
+    val JArray(fields) = rootValues("fields")
+    StructType(fields.map(readField))
+  }
 
   test("lookup a single missing field should output existing fields") {
     checkError(
@@ -736,14 +761,21 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(mapper.readTree(compatibilitySchema.json) == mapper.readTree(expectedJson))
   }
 
-  test("SPARK-59276: old readers ignore CHAR/VARCHAR collation metadata") {
-    val schema = StructType(StructField("c", CharType(4, "UTF8_LCASE")) :: Nil)
-    val node = mapper.readTree(schema.json)
-    val metadata = node.get("fields").get(0).get("metadata").asInstanceOf[ObjectNode]
-    assert(metadata.has(DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY))
-    assert(!metadata.has(DataType.COLLATIONS_METADATA_KEY))
-    metadata.remove(DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY)
-    assert(DataType.fromJson(node.toString) === StructType(StructField("c", CharType(4)) :: Nil))
+  test("SPARK-59276: preceding readers retain unknown CHAR/VARCHAR collation metadata") {
+    val schema = StructType(
+      StructField("c", CharType(4, "UTF8_LCASE")) ::
+        StructField("nested", ArrayType(VarcharType(6, "UNICODE_CI"))) :: Nil)
+
+    val precedingSchema = readWithPreCharVarcharCollationReader(schema.json)
+    assert(precedingSchema("c").dataType === CharType(4))
+    assert(precedingSchema("nested").dataType === ArrayType(VarcharType(6)))
+
+    val metadataKey = DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY
+    assert(precedingSchema("c").metadata.getMetadata(metadataKey).getString("c") ===
+      "spark.UTF8_LCASE")
+    assert(
+      precedingSchema("nested").metadata.getMetadata(metadataKey).getString("nested.element") ===
+        "icu.UNICODE_CI")
   }
 
   test("SPARK-59276: STRING and CHAR collations use separate JSON keys") {
