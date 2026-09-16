@@ -417,13 +417,13 @@ class StaxXmlParser(
       case _ => false
     }
     if (requiresCollationAwareBuilder) {
-      val seenRawKeys = collection.mutable.HashSet.empty[UTF8String]
-      val deduplicatedPairs = kvPairs.reverseIterator
-        .filter { case (rawKey, _, _) => seenRawKeys.add(rawKey) }
-        .toSeq
-        .reverse
+      val lastIndices =
+        DuplicateMapKeyUtils.lastOccurrenceIndices(kvPairs.map(_._1).toArray)
       val mapBuilder = new ArrayBasedMapBuilder(keyType, valueType)
-      deduplicatedPairs.foreach { case (_, key, value) => mapBuilder.put(key, value) }
+      lastIndices.foreach { index =>
+        val (_, key, value) = kvPairs(index)
+        mapBuilder.put(key, value)
+      }
       val mapData = mapBuilder.build()
       mapKeyException.foreach(throw _)
       mapData

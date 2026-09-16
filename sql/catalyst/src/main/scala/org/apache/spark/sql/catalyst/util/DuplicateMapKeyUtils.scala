@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SparkErrorUtils
 
 private[sql] object DuplicateMapKeyUtils {
@@ -30,4 +33,9 @@ private[sql] object DuplicateMapKeyUtils {
   }
 
   def unapply(exception: Throwable): Option[SparkRuntimeException] = cause(exception)
+
+  def lastOccurrenceIndices(rawKeys: Array[UTF8String]): Seq[Int] = {
+    val seen = mutable.HashSet.empty[UTF8String]
+    rawKeys.indices.reverseIterator.filter(index => seen.add(rawKeys(index))).toSeq.reverse
+  }
 }
