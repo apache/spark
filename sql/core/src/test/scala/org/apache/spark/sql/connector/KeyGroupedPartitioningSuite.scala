@@ -7628,17 +7628,23 @@ class KeyGroupedPartitioningSuite
           |FROM (SELECT t.id AS id FROM testcat.ns.a a RIGHT OUTER JOIN t ON a.id = t.id) r
           |JOIN testcat.ns.u u ON r.id = u.id
           |""".stripMargin
-      withSQLConf(
-          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        val df = sql(query)
-        checkAnswer(df, Seq(Row(1, "u1")))
-        // Only the first join's one-side shuffle remains; the second join storage-partitions.
-        assertShuffleMayContainUnknownPartitionKeys(df.queryExecution.executedPlan,
-          Seq(true))
-        assert(collectGroupPartitions(df.queryExecution.executedPlan).nonEmpty,
-          s"subset-keyed partner should still storage-partition join, got: " +
-            df.queryExecution.executedPlan)
+      // SPARK-59272: both settings of partition filtering plan the same join. Were the merge free
+      // to narrow a marked layout, the inner join would keep only the [1] intersection, one group
+      // over r's two input partitions, and r would give up its keyed claim on the count clause.
+      Seq(false, true).foreach { partitionFilter =>
+        withSQLConf(
+            SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+            SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> partitionFilter.toString) {
+          val df = sql(query)
+          checkAnswer(df, Seq(Row(1, "u1")))
+          // Only the first join's one-side shuffle remains; the second join storage-partitions.
+          assertShuffleMayContainUnknownPartitionKeys(df.queryExecution.executedPlan,
+            Seq(true))
+          assert(collectGroupPartitions(df.queryExecution.executedPlan).nonEmpty,
+            s"subset-keyed partner should still storage-partition join, got: " +
+              df.queryExecution.executedPlan)
+        }
       }
     }
   }
@@ -8408,29 +8414,41 @@ class KeyGroupedPartitioningSuite
       withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
         checkAnswer(sql(query), expected)
       }
-      withSQLConf(
-          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-          "spark.sql.autoBroadcastJoinThreshold" -> "-1",
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        val df = sql(query)
-        checkAnswer(df, expected)
-        val plan = df.queryExecution.executedPlan
-        // A GroupPartitionsExec with no reducers whose output partition i holds exactly input
-        // partition i is an identity grouping; the fix keeps the unknown-keyed claim for it.
-        val identityGpe = collectAllGroupPartitions(plan).find { g =>
-          g.reducers.isEmpty && g.groupedPartitions.zipWithIndex.forall {
-            case ((_, inputIndices), outputIndex) =>
-              inputIndices.lengthCompare(1) == 0 && inputIndices.head == outputIndex
+      // SPARK-59272: partition filtering must not take this join away. On the `true` arm the merge
+      // would otherwise intersect down to [1, 2], two groups over the marked side's three input
+      // partitions, which breaks the count clause of `identityGrouping`, forfeits the claim and
+      // makes the pairing gate decline. Both arms plan the same join.
+      Seq(false, true).foreach { partitionFilter =>
+        withSQLConf(
+            SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+            "spark.sql.autoBroadcastJoinThreshold" -> "-1",
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+            SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> partitionFilter.toString) {
+          val df = sql(query)
+          checkAnswer(df, expected)
+          val plan = df.queryExecution.executedPlan
+          assert(ValidateRequirements.validate(plan),
+            s"the executed plan must satisfy every operator's required distribution:\n$plan")
+          // Locate the marked side's node: no reducers, and output partition i holds exactly input
+          // partition i. That is weaker than `identityGrouping`, which also asks for one output per
+          // input, so the assertions below are what pin the claim and the three keys.
+          val identityGpe = collectAllGroupPartitions(plan).find { g =>
+            g.reducers.isEmpty && g.groupedPartitions.zipWithIndex.forall {
+              case ((_, inputIndices), outputIndex) =>
+                inputIndices.lengthCompare(1) == 0 && inputIndices.head == outputIndex
+            }
           }
-        }
-        assert(identityGpe.isDefined,
-          s"expected a reducer-free identity GroupPartitionsExec, got:\n$plan")
-        identityGpe.get.outputPartitioning match {
-          case k: KeyedPartitioning =>
-            assert(k.mayContainUnknownPartitionKeys,
-              "the identity grouping must keep the unknown-keyed claim")
-          case other =>
-            fail(s"expected a KeyedPartitioning output, got $other")
+          assert(identityGpe.isDefined,
+            s"expected a reducer-free identity GroupPartitionsExec, got:\n$plan")
+          identityGpe.get.outputPartitioning match {
+            case k: KeyedPartitioning =>
+              assert(k.mayContainUnknownPartitionKeys,
+                "the identity grouping must keep the unknown-keyed claim")
+              assert(k.numPartitions === 3,
+                s"the marked side keeps all three of its declared keys:\n$plan")
+            case other =>
+              fail(s"expected a KeyedPartitioning output, got $other")
+          }
         }
       }
     }
