@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{DataInput, DataOutput, File, PrintWriter}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInput, DataOutput, File}
+import java.io.{ObjectInputStream, ObjectOutputStream, PrintWriter}
 import java.sql.{Date, Timestamp}
 import java.util.{ArrayList, Arrays, Properties}
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.common.`type`.HiveChar
 import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.udf.{UDAFPercentile, UDFType}
@@ -32,9 +34,10 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
 import org.apache.hadoop.io.{LongWritable, Writable}
 
-import org.apache.spark.{SparkException, SparkFiles, TestUtils}
+import org.apache.spark.{SparkException, SparkFiles, SparkRuntimeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, CodegenObjectFactoryMode, Literal}
@@ -46,8 +49,9 @@ import org.apache.spark.sql.hive.HiveGenericUDF
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CharType, StringType, TimestampType, TimeType, VarcharType}
+import org.apache.spark.sql.types.{CharType, DataType, StringType, TimestampType, TimeType, VarcharType}
 import org.apache.spark.tags.SlowHiveTest
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 case class Fields(f1: Int, f2: Int, f3: Int, f4: Int, f5: Int)
@@ -974,7 +978,6 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
             SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
             SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
             SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
-          // Interpreted task execution rebuilds the transient evaluator from the analyzed type.
           val result = sql("SELECT * FROM first_class_hive_view")
           assert(result.schema.map(_.dataType) === Seq(StringType, StringType))
           checkAnswer(result, Row("AB   ", "cd  "))
@@ -996,6 +999,86 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
           checkAnswer(result, Row("AB", "cd"))
         }
       }
+    }
+  }
+
+  test("SPARK-59277: HiveGenericUDF Java serialization preserves its Catalyst type") {
+    def serialize(expression: HiveGenericUDF): Array[Byte] = {
+      val bytes = new ByteArrayOutputStream()
+      val output = new ObjectOutputStream(bytes)
+      try {
+        output.writeObject(expression)
+      } finally {
+        output.close()
+      }
+      bytes.toByteArray
+    }
+
+    def deserialize(bytes: Array[Byte]): HiveGenericUDF = {
+      val input = new ObjectInputStream(new ByteArrayInputStream(bytes))
+      try {
+        input.readObject().asInstanceOf[HiveGenericUDF]
+      } finally {
+        input.close()
+      }
+    }
+
+    val inferredBytes = withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val expression = HiveGenericUDF(
+        "return_char",
+        HiveFunctionWrapper(classOf[ReturnCharGenericUDF].getName),
+        Seq(Literal("ab")))
+      assert(expression.resolvedDataType.isEmpty)
+      assert(expression.dataType === CharType(5))
+      val copied = expression.withNewChildren(Seq(Literal("cd"))).asInstanceOf[HiveGenericUDF]
+      assert(copied.resolvedDataType.contains(CharType(5)))
+      serialize(expression)
+    }
+
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+      val expression = deserialize(inferredBytes)
+      assert(expression.resolvedDataType.isEmpty)
+      assert(expression.dataType === CharType(5))
+      assert(expression.eval(InternalRow.empty) === UTF8String.fromString("ab   "))
+    }
+
+    val (charBytes, varcharBytes) = withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+      def resolvedExpression(value: String, dataType: DataType) = {
+        val expression = HiveGenericUDF(
+          "return_string",
+          HiveFunctionWrapper(classOf[ReturnStringGenericUDF].getName),
+          Seq(Literal(value)),
+          Some(dataType))
+        assert(expression.dataType === dataType)
+        serialize(expression)
+      }
+      (
+        resolvedExpression("ab", CharType(5)),
+        resolvedExpression("abcd", VarcharType(3)))
+    }
+
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val charExpression = deserialize(charBytes)
+      assert(charExpression.dataType === CharType(5))
+      assert(charExpression.eval(InternalRow.empty) === UTF8String.fromString("ab   "))
+
+      val varcharExpression = deserialize(varcharBytes)
+      assert(varcharExpression.dataType === VarcharType(3))
+      val exception = intercept[SparkException] {
+        varcharExpression.eval(InternalRow.empty)
+      }
+      checkError(
+        exception = exception.getCause.asInstanceOf[SparkRuntimeException],
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
     }
   }
 
@@ -1130,6 +1213,27 @@ class PairUDF extends GenericUDF {
   }
 
   override def getDisplayString(p1: Array[String]): String = ""
+}
+
+class ReturnCharGenericUDF extends GenericUDF {
+  override def initialize(arguments: Array[ObjectInspector]): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(
+      TypeInfoFactory.getCharTypeInfo(5))
+
+  override def evaluate(arguments: Array[DeferredObject]): AnyRef =
+    new HiveChar(arguments(0).get.toString, 5)
+
+  override def getDisplayString(children: Array[String]): String = "return_char"
+}
+
+class ReturnStringGenericUDF extends GenericUDF {
+  override def initialize(arguments: Array[ObjectInspector]): ObjectInspector =
+    PrimitiveObjectInspectorFactory.javaStringObjectInspector
+
+  override def evaluate(arguments: Array[DeferredObject]): AnyRef =
+    arguments(0).get.toString
+
+  override def getDisplayString(children: Array[String]): String = "return_string"
 }
 
 @UDFType(stateful = true)

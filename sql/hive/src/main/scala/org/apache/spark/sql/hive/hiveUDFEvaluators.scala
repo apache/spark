@@ -111,26 +111,24 @@ class HiveSimpleUDFEvaluator(
   }
 }
 
-class HiveGenericUDFEvaluator(
-    funcWrapper: HiveFunctionWrapper,
-    children: Seq[Expression],
-    resolvedReturnType: Option[DataType])
-  extends HiveUDFEvaluatorBase[GenericUDF](funcWrapper, children) {
+private[hive] object HiveGenericUDFEvaluator extends HiveInspectors {
 
-  // SPARK-58792: copied expression nodes (e.g. via withNewChildrenInternal) share one
-  // HiveFunctionWrapper, whose cached GenericUDF instance is mutable: initialize()
-  // rewrites its converters and output holders based on the arguments of whichever
-  // copy initialized it last. Give every evaluator its own clone so copied nodes
-  // cannot corrupt each other.
-  @transient
-  override lazy val function: GenericUDF =
-    HiveFunctionRegistryUtils.cloneGenericUDF(funcWrapper.createFunction[GenericUDF]())
+  def inferReturnType(
+      funcWrapper: HiveFunctionWrapper,
+      children: Seq[Expression]): DataType = {
+    val function =
+      HiveFunctionRegistryUtils.cloneGenericUDF(funcWrapper.createFunction[GenericUDF]())
+    val argumentInspectors = children.map(toInspector).toArray
+    val udfType = function.getClass.getAnnotation(classOf[HiveUDFType])
+    val isDeterministic =
+      udfType != null && udfType.deterministic() && !udfType.stateful()
+    inspectorToDataType(initialize(function, argumentInspectors, isDeterministic))
+  }
 
-  @transient
-  private lazy val argumentInspectors = children.map(toInspector).toArray
-
-  @transient
-  lazy val returnInspector = {
+  def initialize(
+      function: GenericUDF,
+      argumentInspectors: Array[ObjectInspector],
+      isDeterministic: Boolean): ObjectInspector = {
     // Inline o.a.h.hive.ql.udf.generic.GenericUDF#initializeAndFoldConstants, but
     // eliminate calls o.a.h.hive.ql.exec.FunctionRegistry to avoid initializing Hive
     // built-in UDFs.
@@ -140,7 +138,7 @@ class HiveGenericUDFEvaluator(
     if (function.getRequiredFiles == null && function.getRequiredJars == null &&
       argumentInspectors.forall(ObjectInspectorUtils.isConstantObjectInspector) &&
       !ObjectInspectorUtils.isConstantObjectInspector(oi) &&
-      isUDFDeterministic &&
+      isDeterministic &&
       ObjectInspectorUtils.supportsConstantObjectInspector(oi)) {
       val argumentValues: Array[DeferredObject] = argumentInspectors.map { argumentInspector =>
         new GenericUDF.DeferredJavaObject(
@@ -157,15 +155,34 @@ class HiveGenericUDFEvaluator(
       oi
     }
   }
+}
+
+private[hive] class HiveGenericUDFEvaluator(
+    funcWrapper: HiveFunctionWrapper,
+    children: Seq[Expression],
+    catalystReturnType: DataType)
+  extends HiveUDFEvaluatorBase[GenericUDF](funcWrapper, children) {
+
+  // SPARK-58792: copied expression nodes (e.g. via withNewChildrenInternal) share one
+  // HiveFunctionWrapper, whose cached GenericUDF instance is mutable: initialize()
+  // rewrites its converters and output holders based on the arguments of whichever
+  // copy initialized it last. Give every evaluator its own clone so copied nodes
+  // cannot corrupt each other.
+  @transient
+  override lazy val function: GenericUDF =
+    HiveFunctionRegistryUtils.cloneGenericUDF(funcWrapper.createFunction[GenericUDF]())
+
+  @transient
+  private lazy val argumentInspectors = children.map(toInspector).toArray
+
+  @transient
+  lazy val returnInspector =
+    HiveGenericUDFEvaluator.initialize(function, argumentInspectors, isUDFDeterministic)
 
   @transient
   private lazy val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {
     case (inspect, child) => new DeferredObjectAdapter(inspect, child.dataType)
   }
-
-  @transient
-  private lazy val catalystReturnType =
-    resolvedReturnType.getOrElse(inspectorToDataType(returnInspector))
 
   @transient
   private lazy val unwrapper: Any => Any = unwrapperFor(returnInspector, catalystReturnType)

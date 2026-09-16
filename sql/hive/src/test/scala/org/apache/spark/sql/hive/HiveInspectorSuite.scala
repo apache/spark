@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import java.sql.Timestamp
 import java.util
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
@@ -31,7 +32,7 @@ import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row, TestUserClassUDT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -405,6 +406,24 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
       assert(nestedResult.getArray(0).getUTF8String(0) === UTF8String.fromString("a   "))
       assert(
         nestedResult.getMap(1).valueArray().getUTF8String(0) === UTF8String.fromString("value"))
+    }
+  }
+
+  test("SPARK-59277: typed field unwrappers preserve nanosecond timestamps") {
+    val value = Timestamp.valueOf("2026-09-16 12:34:56.123456789")
+    Seq(
+      TimestampNTZNanosType(9) ->
+        DateTimeUtils.localDateTimeToTimestampNanos(value.toLocalDateTime, 9),
+      TimestampLTZNanosType(9) ->
+        DateTimeUtils.instantToTimestampNanos(value.toInstant, 9)).foreach {
+      case (dataType, expected) =>
+        val inspector = ObjectInspectorFactory.getStandardStructObjectInspector(
+          util.Arrays.asList("value"),
+          util.Arrays.asList(PrimitiveObjectInspectorFactory.javaTimestampObjectInspector))
+        val field = inspector.getAllStructFieldRefs.get(0)
+        val targetRow = new SpecificInternalRow(Seq(dataType))
+        unwrapperFor(field, dataType)(value, targetRow, 0)
+        assert(targetRow.get(0, dataType) === expected)
     }
   }
 

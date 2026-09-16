@@ -113,6 +113,16 @@ private[hive] case class HiveSimpleUDF(
   }
 }
 
+/**
+ * A Hive GenericUDF expression whose Catalyst return type is fixed during analysis.
+ *
+ * @param resolvedDataType the return type already resolved by an earlier copy of this expression.
+ *   This is load-bearing runtime state for first-class types. For example, if
+ *   `hive_udf(CAST('a' AS CHAR(3)))` resolves to `CHAR(3)`, executor-side Hive conversion must
+ *   keep that type even when the executor's SQLConf has first-class types disabled. When absent
+ *   on an initial expression, analysis materializes `dataType`; subsequent copies retain the
+ *   concrete type here.
+ */
 private[hive] case class HiveGenericUDF(
     name: String,
     funcWrapper: HiveFunctionWrapper,
@@ -133,13 +143,18 @@ private[hive] case class HiveGenericUDF(
   override def foldable: Boolean = evaluator.isUDFDeterministic &&
     evaluator.returnInspector.isInstanceOf[ConstantObjectInspector]
 
-  override lazy val dataType: DataType = resolvedDataType.getOrElse(evaluator.returnType)
+  // This non-transient lazy val is materialized when analysis asks for dataType and is serialized
+  // with the expression. Type inference uses separate driver-side Hive state so the transient
+  // runtime evaluator can only be constructed from one concrete Catalyst type.
+  private lazy val catalystDataType: DataType = resolvedDataType.getOrElse {
+    HiveGenericUDFEvaluator.inferReturnType(funcWrapper, children)
+  }
 
-  // resolvedDataType is the stable Catalyst return type captured during analysis. The evaluator
-  // contains only runtime Hive state and is rebuilt from that type after serialization.
+  override lazy val dataType: DataType = catalystDataType
+
   @transient
   private lazy val evaluator =
-    new HiveGenericUDFEvaluator(funcWrapper, children, resolvedDataType)
+    new HiveGenericUDFEvaluator(funcWrapper, children, catalystDataType)
 
   override def eval(input: InternalRow): Any = {
     children.zipWithIndex.foreach {
@@ -161,7 +176,7 @@ private[hive] case class HiveGenericUDF(
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(children = newChildren, resolvedDataType = Some(dataType))
+    copy(children = newChildren, resolvedDataType = Some(catalystDataType))
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)

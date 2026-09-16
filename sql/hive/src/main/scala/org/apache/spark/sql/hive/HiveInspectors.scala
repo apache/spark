@@ -266,39 +266,6 @@ private[hive] trait HiveInspectors {
     input => if (input == null) null else f(input)
   }
 
-  private def charVarcharWrapper(
-      targetLength: Option[Int],
-      inspectorLength: Int,
-      preferWritable: Boolean,
-      writeSideCheck: (UTF8String, Int) => UTF8String,
-      toJava: (String, Int) => Any,
-      toWritable: (String, Int) => Any): Any => Any = {
-    if (preferWritable) {
-      targetLength match {
-        case Some(length) =>
-          withNullSafe { value =>
-            val checked = writeSideCheck(value.asInstanceOf[UTF8String], length)
-            toWritable(checked.toString, inspectorLength)
-          }
-        case None =>
-          withNullSafe(value => getStringWritable(value))
-      }
-    } else {
-      targetLength match {
-        case Some(length) =>
-          withNullSafe { value =>
-            val checked = writeSideCheck(value.asInstanceOf[UTF8String], length)
-            toJava(checked.toString, inspectorLength)
-          }
-        case None =>
-          withNullSafe { value =>
-            val string = value.asInstanceOf[UTF8String].toString
-            toJava(string, string.length)
-          }
-      }
-    }
-  }
-
   /**
    * Wraps with Hive types based on object inspector.
    */
@@ -526,6 +493,39 @@ private[hive] trait HiveInspectors {
 
     case _ =>
       identity[Any]
+  }
+
+  private def charVarcharWrapper(
+      targetLength: Option[Int],
+      inspectorLength: Int,
+      preferWritable: Boolean,
+      writeSideCheck: (UTF8String, Int) => UTF8String,
+      toJava: (String, Int) => Any,
+      toWritable: (String, Int) => Any): Any => Any = {
+    if (preferWritable) {
+      targetLength match {
+        case Some(length) =>
+          withNullSafe { value =>
+            val checked = writeSideCheck(value.asInstanceOf[UTF8String], length)
+            toWritable(checked.toString, inspectorLength)
+          }
+        case None =>
+          withNullSafe(value => getStringWritable(value))
+      }
+    } else {
+      targetLength match {
+        case Some(length) =>
+          withNullSafe { value =>
+            val checked = writeSideCheck(value.asInstanceOf[UTF8String], length)
+            toJava(checked.toString, inspectorLength)
+          }
+        case None =>
+          withNullSafe { value =>
+            val string = value.asInstanceOf[UTF8String].toString
+            toJava(string, string.length)
+          }
+      }
+    }
   }
 
   /**
@@ -958,18 +958,14 @@ private[hive] trait HiveInspectors {
     }
 
   /**
-   * Builds an in-place unwrapper that honors CHAR/VARCHAR conversion when `dataType`
-   * contains those types. Other targets, including nanosecond timestamps, still use
-   * `unwrapperFor(field)`.
+   * Builds an in-place unwrapper using the target Catalyst `dataType`. This preserves all
+   * target-aware conversion, including CHAR/VARCHAR checks and nanosecond timestamp precision.
    */
   def unwrapperFor(
       field: HiveStructField,
-      dataType: DataType): (Any, InternalRow, Int) => Unit = dataType match {
-    case dt if CharVarcharUtils.hasCharVarchar(dt) =>
-      val unwrapper = unwrapperFor(field.getFieldObjectInspector, dataType)
-      (value: Any, row: InternalRow, ordinal: Int) => row(ordinal) = unwrapper(value)
-    case _ =>
-      unwrapperFor(field)
+      dataType: DataType): (Any, InternalRow, Int) => Unit = {
+    val unwrapper = unwrapperFor(field.getFieldObjectInspector, dataType)
+    (value: Any, row: InternalRow, ordinal: Int) => row(ordinal) = unwrapper(value)
   }
 
   def wrap(a: Any, oi: ObjectInspector, dataType: DataType): AnyRef = {
