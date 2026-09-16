@@ -561,7 +561,8 @@ abstract class SparkSession extends Serializable with Closeable {
   /**
    * Add a single artifact to the current session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs.
+   * Ivy URIs are resolved using `spark.jars.ivySettings` when it is configured.
    *
    * @since 4.0.0
    */
@@ -572,6 +573,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * Add a single artifact to the current session.
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs.
+   * Ivy URIs are resolved using `spark.jars.ivySettings` when it is configured.
    *
    * @since 4.0.0
    */
@@ -622,7 +624,8 @@ abstract class SparkSession extends Serializable with Closeable {
   /**
    * Add one or more artifacts to the session.
    *
-   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs.
+   * Ivy URIs are resolved using `spark.jars.ivySettings` when it is configured.
    *
    * @since 4.0.0
    */

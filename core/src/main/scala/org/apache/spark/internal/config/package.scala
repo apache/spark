@@ -3042,7 +3042,8 @@ package object config {
   private[spark] val JAR_IVY_SETTING_PATH =
     ConfigBuilder(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
       .doc("Path to an Ivy settings file to customize resolution of jars specified " +
-        "using spark.jars.packages instead of the built-in defaults, such as maven central. " +
+        "using spark.jars.packages or ivy:// URIs passed to SparkSession.addArtifact instead " +
+        "of the built-in defaults, such as maven central. " +
         "Additional repositories given by the command-line option --repositories " +
         "or spark.jars.repositories will also be included. " +
         "Useful for allowing Spark to resolve artifacts from behind a firewall " +

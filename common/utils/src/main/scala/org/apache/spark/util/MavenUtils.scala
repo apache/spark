@@ -22,6 +22,8 @@ import java.net.URI
 import java.text.ParseException
 import java.util.UUID
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
 import org.apache.ivy.core.module.descriptor.{Artifact, DefaultDependencyDescriptor, DefaultExcludeRule, DefaultModuleDescriptor, ExcludeRule}
@@ -29,10 +31,10 @@ import org.apache.ivy.core.module.id.{ArtifactId, ModuleId, ModuleRevisionId}
 import org.apache.ivy.core.report.{DownloadStatus, ResolveReport}
 import org.apache.ivy.core.resolve.ResolveOptions
 import org.apache.ivy.core.retrieve.RetrieveOptions
-import org.apache.ivy.core.settings.IvySettings
+import org.apache.ivy.core.settings.{IvySettings, NamedTimeoutConstraint}
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
-import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
+import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
@@ -338,6 +340,28 @@ private[spark] object MavenUtils extends Logging {
     processIvyPathArg(ivySettings, ivyPath)
     processRemoteRepoArg(ivySettings, remoteRepos)
     ivySettings
+  }
+
+  /** Apply bounded network timeouts to every resolver in an Ivy settings graph. */
+  private[spark] def setResolverTimeouts(
+      ivySettings: IvySettings,
+      connectTimeoutMs: Int,
+      readTimeoutMs: Int): Unit = {
+    require(connectTimeoutMs > 0, "The Ivy connection timeout must be positive")
+    require(readTimeoutMs > 0, "The Ivy read timeout must be positive")
+
+    val name = s"spark-runtime-${UUID.randomUUID()}"
+    val timeout = new NamedTimeoutConstraint(name)
+    timeout.setConnectionTimeout(connectTimeoutMs)
+    timeout.setReadTimeout(readTimeoutMs)
+    ivySettings.addConfigured(timeout)
+
+    ivySettings.getResolvers.asScala.foreach {
+      case resolver: AbstractResolver =>
+        resolver.setTimeoutConstraint(name)
+        resolver.validate()
+      case _ =>
+    }
   }
 
   /* Set ivy settings for location of cache, if option is supplied */
