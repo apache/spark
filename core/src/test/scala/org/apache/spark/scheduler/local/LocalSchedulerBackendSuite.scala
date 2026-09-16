@@ -111,4 +111,33 @@ class LocalSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext {
     assert(sc.hadoopConfiguration.get("fs.fake.credentials.provider") == null,
       "no provider wiring should be applied when OIDC is disabled")
   }
+
+  test("start() after stop() is a no-op and does not bring the backend up on a stopped app") {
+    withTempDir { dir =>
+      sc = new SparkContext(oidcConf(enabled = true, tokenFile = Some(writeTokenFile(dir))))
+      val backend = sc.schedulerBackend.asInstanceOf[LocalSchedulerBackend]
+
+      // The executor endpoint exists after SparkContext construction (start() ran).
+      val endpointAfterStart = backend.localEndpointForTesting
+      assert(endpointAfterStart != null, "the executor endpoint should exist after start()")
+
+      // Simulate a stop request (e.g. a launcher KILLED). stop() sets `stopped` and, being
+      // serialized with start(), tears the backend down.
+      backend.stop()
+
+      // Invoking start() after stop() must be a no-op. This exercises the `stopped`-flag path
+      // (a truly concurrent start()/stop() interleaving cannot be reproduced deterministically in
+      // a unit test; the monitor that serializes them is what makes this flag reliable). With
+      // `stopped` set, start() must not re-enter its setup: it must not call
+      // rpcEnv.setupEndpoint("LocalSchedulerBackendEndpoint", ...) a second time (which would
+      // throw "There is already an RpcEndpoint called ...") and must not bring the
+      // UserCredentialManager renewal thread back up on an already-stopped app. It must not throw.
+      backend.start()
+
+      // The endpoint reference is unchanged, proving start() skipped its setup block entirely
+      // rather than registering a new endpoint.
+      assert(backend.localEndpointForTesting eq endpointAfterStart,
+        "start() after stop() must not create a new executor endpoint")
+    }
+  }
 }
