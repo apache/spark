@@ -96,6 +96,9 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("PrintToStderr") {
     val inputExpr = Literal(1)
+    assert(!PrintToStderr(inputExpr).foldable)
+    assert(!PrintToStderr(inputExpr).deterministic)
+
     val systemErr = System.err
 
     val (outputEval, outputCodegen) = try {
@@ -115,6 +118,36 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     assert(outputCodegen.contains(s"Result of $inputExpr is 1"))
     assert(outputEval.contains(s"Result of $inputExpr is 1"))
+  }
+
+  test("DynamicPruningExpression is not foldable") {
+    assert(!DynamicPruningExpression(Literal.TrueLiteral).foldable)
+  }
+
+  test("AesEncrypt determinism reflects whether it generates an IV") {
+    val randomIvExpression = new AesEncrypt(Literal("Spark"), Literal("0000111122223333"))
+    assert(!randomIvExpression.deterministic)
+    assert(!randomIvExpression.replacement.deterministic)
+    assert(!randomIvExpression.replacement.foldable)
+
+    val explicitIvExpression = new AesEncrypt(
+      Literal("Spark"),
+      Literal("0000111122223333"),
+      Literal("GCM"),
+      Literal("DEFAULT"),
+      Literal(Array.fill[Byte](12)(0)))
+    assert(explicitIvExpression.deterministic)
+    assert(explicitIvExpression.replacement.deterministic)
+    assert(explicitIvExpression.replacement.foldable)
+
+    val ecbExpression = new AesEncrypt(
+      Literal("Spark"),
+      Literal("0000111122223333"),
+      Literal("ECB"),
+      Literal("PKCS"))
+    assert(ecbExpression.deterministic)
+    assert(ecbExpression.replacement.deterministic)
+    assert(ecbExpression.replacement.foldable)
   }
 
   test("Hmac") {
