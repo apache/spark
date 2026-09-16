@@ -678,6 +678,7 @@ object SQLConf {
         "not apply to the switch path (bytes/shorts/ints/dates below inSetSwitchThreshold) or to " +
         "float/double/string. Set to false to fall back to the generic Set path.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
