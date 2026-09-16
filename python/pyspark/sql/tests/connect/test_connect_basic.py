@@ -514,6 +514,20 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 [Row(c="ab  ", v="cd", collated_c="ef  ", collated_v="gh")],
             )
 
+    def test_create_dataframe_with_char_varchar_schema(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("explicit_c", CharType(4, "UTF8_BINARY")),
+                StructField("v", VarcharType(3, "UTF8_LCASE")),
+            ]
+        )
+        conf = {"spark.sql.charVarchar.standardSemantics.enabled": "true"}
+        with self.both_conf(conf):
+            df = self.connect.createDataFrame([("ab", "cd", "ef")], schema)
+            self.assertEqual(df.schema, schema)
+            self.assertEqual(df.collect(), [Row(c="ab  ", explicit_c="cd  ", v="ef")])
+
     def test_to(self):
         # SPARK-41464: test DataFrame.to()
 

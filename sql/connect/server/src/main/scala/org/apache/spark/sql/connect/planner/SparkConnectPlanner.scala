@@ -1650,6 +1650,13 @@ class SparkConnectPlanner(
         def restoreFieldNames(actual: DataType, requested: DataType): DataType =
           (actual, requested) match {
             case (_, requestedUdt: UserDefinedType[_]) => requestedUdt
+            case (actualString: StringType, requestedString: StringType)
+                if !actualString.isInstanceOf[CharType] &&
+                  !actualString.isInstanceOf[VarcharType] &&
+                  !requestedString.isInstanceOf[CharType] &&
+                  !requestedString.isInstanceOf[VarcharType] &&
+                  DataType.equalsIgnoreCompatibleCollation(actualString, requestedString) =>
+              requestedString
             case (StructType(actualFields), StructType(requestedFields)) =>
               StructType(
                 actualFields.zip(requestedFields).map { case (actualField, requestedField) =>
