@@ -352,6 +352,12 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
         UTF8String.fromString("abc  "))
       assert(wrap(null, charInspector, charType) === null)
       assert(unwrapperFor(charInspector, charType)(null) === null)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          wrap(UTF8String.fromString("abcdef"), charInspector, charType)
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5"))
 
       val varcharType = VarcharType(7)
       val varcharInspector = PrimitiveObjectInspectorFactory.getPrimitiveWritableObjectInspector(
@@ -363,6 +369,12 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
       assert(unwrapperFor(varcharInspector, varcharType)(wrappedVarchar) === varcharValue)
       assert(wrap(null, varcharInspector, varcharType) === null)
       assert(unwrapperFor(varcharInspector, varcharType)(null) === null)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          wrap(UTF8String.fromString("abcdefgh"), varcharInspector, varcharType)
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "7"))
     }
   }
 

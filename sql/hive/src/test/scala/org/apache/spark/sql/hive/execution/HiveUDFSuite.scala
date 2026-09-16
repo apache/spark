@@ -971,7 +971,10 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
         }
         withSQLConf(
             SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
-            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+            SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+          // Interpreted task execution rebuilds the transient evaluator from the analyzed type.
           val result = sql("SELECT * FROM first_class_hive_view")
           assert(result.schema.map(_.dataType) === Seq(StringType, StringType))
           checkAnswer(result, Row("AB   ", "cd  "))

@@ -135,8 +135,9 @@ private[hive] case class HiveGenericUDF(
 
   override lazy val dataType: DataType = resolvedDataType.getOrElse(evaluator.returnType)
 
-  // The evaluator carries the return type resolved during analysis. Its mutable Hive state is
-  // transient and is rebuilt on the executor, but the resolved Catalyst type must not be.
+  // resolvedDataType is the stable Catalyst return type captured during analysis. The evaluator
+  // contains only runtime Hive state and is rebuilt from that type after serialization.
+  @transient
   private lazy val evaluator =
     new HiveGenericUDFEvaluator(funcWrapper, children, resolvedDataType)
 

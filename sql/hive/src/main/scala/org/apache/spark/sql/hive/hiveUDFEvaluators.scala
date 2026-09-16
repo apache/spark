@@ -163,6 +163,7 @@ class HiveGenericUDFEvaluator(
     case (inspect, child) => new DeferredObjectAdapter(inspect, child.dataType)
   }
 
+  @transient
   private lazy val catalystReturnType =
     resolvedReturnType.getOrElse(inspectorToDataType(returnInspector))
 
