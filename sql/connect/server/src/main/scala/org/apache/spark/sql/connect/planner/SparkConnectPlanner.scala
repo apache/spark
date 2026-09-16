@@ -1647,7 +1647,7 @@ class SparkConnectPlanner(
           .asInstanceOf[Project]
 
         val proj = UnsafeProjection.create(project.projectList, project.child.output)
-        def restoreFieldNames(actual: DataType, requested: DataType): DataType =
+        def restoreRequestedLogicalType(actual: DataType, requested: DataType): DataType =
           (actual, requested) match {
             case (_, requestedUdt: UserDefinedType[_]) => requestedUdt
             case (actualString: StringType, requestedString: StringType)
@@ -1662,23 +1662,24 @@ class SparkConnectPlanner(
                 actualFields.zip(requestedFields).map { case (actualField, requestedField) =>
                   actualField.copy(
                     name = requestedField.name,
-                    dataType = restoreFieldNames(actualField.dataType, requestedField.dataType))
+                    dataType =
+                      restoreRequestedLogicalType(actualField.dataType, requestedField.dataType))
                 })
             case (ArrayType(actualElement, containsNull), ArrayType(requestedElement, _)) =>
-              ArrayType(restoreFieldNames(actualElement, requestedElement), containsNull)
+              ArrayType(restoreRequestedLogicalType(actualElement, requestedElement), containsNull)
             case (
                   MapType(actualKey, actualValue, valueContainsNull),
                   MapType(requestedKey, requestedValue, _)) =>
               MapType(
-                restoreFieldNames(actualKey, requestedKey),
-                restoreFieldNames(actualValue, requestedValue),
+                restoreRequestedLogicalType(actualKey, requestedKey),
+                restoreRequestedLogicalType(actualValue, requestedValue),
                 valueContainsNull)
             case _ => actual
           }
         val output = project.output.zip(schema.fields).map { case (attribute, field) =>
           AttributeReference(
             field.name,
-            restoreFieldNames(attribute.dataType, field.dataType),
+            restoreRequestedLogicalType(attribute.dataType, field.dataType),
             attribute.nullable,
             field.metadata)()
         }

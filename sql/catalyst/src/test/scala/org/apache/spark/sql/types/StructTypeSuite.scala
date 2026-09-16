@@ -48,11 +48,23 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   private val mapper = new ObjectMapper()
 
   /**
-   * Fixture copied from the StructField JSON reader at the PR's base commit,
-   * 389de941f002a5c92e22dc3ed0f65af602a174db. The emitted compatibility document
-   * contains no __COLLATIONS entry, so the preceding reader's collation map is empty.
+   * Reader fixture copied from the relevant JSON branches at the PR's base commit,
+   * 389de941f002a5c92e22dc3ed0f65af602a174db. Keep this independent of the current
+   * DataType parser so this test continues to exercise the preceding-reader contract.
    */
   private def readWithPreCharVarcharCollationReader(json: String): StructType = {
+    def readType(json: JValue): DataType = json match {
+      case JString(name) if name.startsWith("char(") =>
+        CharType(name.stripPrefix("char(").stripSuffix(")").toInt)
+      case JString(name) if name.startsWith("varchar(") =>
+        VarcharType(name.stripPrefix("varchar(").stripSuffix(")").toInt)
+      case JObject(fields) if fields.toMap.get("type").contains(JString("array")) =>
+        val values = fields.toMap
+        ArrayType(readType(values("elementType")), values("containsNull").asInstanceOf[JBool].value)
+      case other =>
+        fail(s"Unsupported type in pinned preceding-reader fixture: $other")
+    }
+
     def readField(json: JValue): StructField = {
       val values = json.asInstanceOf[JObject].obj.toMap
       val JString(name) = values("name")
@@ -61,7 +73,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       val JObject(metadataFields) = values("metadata")
       StructField(
         name,
-        DataType.parseDataType(dataType, name, Map.empty[String, String]),
+        readType(dataType),
         nullable,
         Metadata.fromJObject(JObject(metadataFields)))
     }
