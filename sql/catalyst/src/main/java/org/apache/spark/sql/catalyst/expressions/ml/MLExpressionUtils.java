@@ -53,31 +53,27 @@ public class MLExpressionUtils {
   }
 
   public static double dotProduct(
-      InternalRow vector,
-      int cachedVectorSize,
-      int[] cachedVectorIndices,
-      double[] cachedVectorValues,
-      boolean vectorIsLeft) {
-    byte vectorType = vector.getByte(0);
-    ArrayData vectorValues = vector.getArray(3);
-    int vectorSize = vectorSize(vector, vectorType, vectorValues);
-    if (vectorSize != cachedVectorSize) {
-      int leftSize = vectorIsLeft ? vectorSize : cachedVectorSize;
-      int rightSize = vectorIsLeft ? cachedVectorSize : vectorSize;
+      InternalRow left,
+      int rightSize,
+      int[] rightIndices,
+      double[] rightValues) {
+    byte leftType = left.getByte(0);
+    ArrayData leftValues = left.getArray(3);
+    int leftSize = vectorSize(left, leftType, leftValues);
+    if (leftSize != rightSize) {
       throw new IllegalArgumentException(
         "requirement failed: VectorDotProduct was given vectors with non-matching sizes:" +
           " left.size = " + leftSize + ", right.size = " + rightSize);
     }
 
-    if (vectorType == DENSE_VECTOR_TYPE && cachedVectorIndices == null) {
-      return dotDenseDense(vectorValues, cachedVectorValues);
-    } else if (vectorType == SPARSE_VECTOR_TYPE && cachedVectorIndices == null) {
-      return dotSparseDense(vector.getArray(2), vectorValues, cachedVectorValues);
-    } else if (vectorType == DENSE_VECTOR_TYPE) {
-      return dotSparseDense(cachedVectorIndices, cachedVectorValues, vectorValues);
+    if (leftType == DENSE_VECTOR_TYPE && rightIndices == null) {
+      return dotDenseDense(leftValues, rightValues);
+    } else if (leftType == SPARSE_VECTOR_TYPE && rightIndices == null) {
+      return dotSparseDense(left.getArray(2), leftValues, rightValues);
+    } else if (leftType == DENSE_VECTOR_TYPE) {
+      return dotSparseDense(rightIndices, rightValues, leftValues);
     } else {
-      return dotSparseSparse(
-        vector.getArray(2), vectorValues, cachedVectorIndices, cachedVectorValues);
+      return dotSparseSparse(left.getArray(2), leftValues, rightIndices, rightValues);
     }
   }
 

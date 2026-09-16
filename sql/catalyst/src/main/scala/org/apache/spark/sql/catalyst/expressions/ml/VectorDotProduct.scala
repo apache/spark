@@ -49,9 +49,9 @@ case class VectorDotProduct(left: Expression, right: Expression)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     foldableVector(right)
-      .map(cached => doGenCodeWithCachedVector(ctx, ev, left, cached, vectorIsLeft = true))
+      .map(cached => doGenCodeWithCachedVector(ctx, ev, left, cached))
       .orElse(foldableVector(left)
-        .map(cached => doGenCodeWithCachedVector(ctx, ev, right, cached, vectorIsLeft = false)))
+        .map(cached => doGenCodeWithCachedVector(ctx, ev, right, cached)))
       .getOrElse {
         val utils = classOf[MLExpressionUtils].getName
         nullSafeCodeGen(ctx, ev, (leftInput, rightInput) => {
@@ -72,8 +72,7 @@ case class VectorDotProduct(left: Expression, right: Expression)
       ctx: CodegenContext,
       ev: ExprCode,
       vector: Expression,
-      cachedVector: InternalRow,
-      vectorIsLeft: Boolean): ExprCode = {
+      cachedVector: InternalRow): ExprCode = {
     val values = cachedVector.getArray(3)
     val cachedVectorValues = ctx.addReferenceObj(
       "cachedVectorValues", values.toDoubleArray(), "double[]")
@@ -95,8 +94,7 @@ case class VectorDotProduct(left: Expression, right: Expression)
       double ${ev.value} = 0.0D;
       if (!${ev.isNull}) {
         ${ev.value} = $utils.dotProduct(
-          ${vectorGen.value}, $cachedVectorSize, $cachedVectorIndices, $cachedVectorValues,
-          $vectorIsLeft);
+          ${vectorGen.value}, $cachedVectorSize, $cachedVectorIndices, $cachedVectorValues);
       }
     """)
   }
