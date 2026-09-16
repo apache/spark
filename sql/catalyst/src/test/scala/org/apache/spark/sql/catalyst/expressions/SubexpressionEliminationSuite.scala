@@ -640,17 +640,21 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     def assertNoneEliminated(expr: Expression, hint: String): Unit = {
       val states = statesOf(expr)
-      // Without this, an implementation that recorded nothing at all would satisfy the next line.
+      // `supportedExpression` refuses a tree that holds a `LambdaVariable`, and the lambda shape
+      // above gets through only because `NamedLambdaVariable` carries no `LAMBDA_VARIABLE` pattern.
+      // So check that the walk happened before reading anything into what it did not record.
       assert(states.nonEmpty, s"nothing was recorded, $hint: $expr")
       assert(states.forall(_.useCount == 1),
         s"eliminated ${states.filter(_.useCount > 1).map(_.expr)}, $hint: $expr")
     }
 
     guarded.foreach { expr =>
-      // The guard holds when the expression is met directly, ...
+      // Met directly, the guards are the ones that were already there: `skipForShortcut` returns a
+      // node that is not an `And`/`Or` unchanged, so this line behaves as it did before. It is here
+      // so that a future change to the guards has to keep both cases in step.
       assertNoneEliminated(expr, "met directly")
-      // ... and it has to hold just the same behind one, behind a chain of, and behind a mix of
-      // short-circuit operands, all of which the peel walks through to reach that expression.
+      // Behind one, behind a chain of, and behind a mix of short-circuit operands is where the peel
+      // used to walk past the guards.
       assertNoneEliminated(And(expr, otherBody), "behind an And")
       assertNoneEliminated(Or(Or(expr, otherBody), otherBody), "behind an Or chain")
       assertNoneEliminated(And(Or(expr, otherBody), otherBody), "behind a mixed chain")
@@ -666,11 +670,16 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     // for whichever branch runs, as long as it occurs once more outside the group -- here in the
     // condition, which is always evaluated. The use count is what pins this down: asking
     // `branchGroups` about the `And` instead of about the operand the peel lands on leaves 1 and
-    // no elimination, and recursing into every branch as if it always ran gives 3.
+    // no elimination, and recursing into every branch as if it always ran gives 3. The `If` shape
+    // is here because `branchGroups` groups its two values, where `CaseWhen` groups conditions and
+    // values separately.
     val shared = CaseWhen(
       Seq((GreaterThan(add, Literal(0)), GreaterThan(add, Literal(1)))),
       GreaterThan(add, Literal(2)))
-    Seq[Expression](shared, And(shared, otherBody)).foreach { expr =>
+    val sharedIf =
+      If(GreaterThan(add, Literal(0)), GreaterThan(add, Literal(1)), GreaterThan(add, Literal(2)))
+    Seq[Expression](shared, And(shared, otherBody), sharedIf, And(sharedIf, otherBody))
+        .foreach { expr =>
       val states = eliminated(expr)
       assert(states.map(_.expr) == Seq(add), s"$expr")
       assert(states.head.useCount == 2, s"$expr")
