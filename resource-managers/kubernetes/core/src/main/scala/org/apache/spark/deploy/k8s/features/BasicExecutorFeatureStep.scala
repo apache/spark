@@ -36,7 +36,6 @@ import org.apache.spark.util.Utils
 
 private[spark] class BasicExecutorFeatureStep(
     kubernetesConf: KubernetesExecutorConf,
-    secMgr: SecurityManager,
     resourceProfile: ResourceProfile)
   extends KubernetesFeatureConfigStep with Logging {
 
@@ -137,7 +136,7 @@ private[spark] class BasicExecutorFeatureStep(
       buildExecutorResourcesQuantities(execResources.customResources.values.toSet)
 
     val executorEnv: Seq[EnvVar] = {
-      val sparkAuthSecret = Option(secMgr.getSecretKey()).map {
+      val sparkAuthSecret = kubernetesConf.authSecret.map {
         case authSecret: String if kubernetesConf.get(AUTH_SECRET_FILE_EXECUTOR).isEmpty =>
           Seq(SecurityManager.ENV_AUTH_SECRET -> authSecret)
         case _ => Nil

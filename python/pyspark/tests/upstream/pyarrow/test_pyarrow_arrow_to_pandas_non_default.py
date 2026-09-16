@@ -239,7 +239,7 @@ class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
     asks pandas to keep pointing at the Arrow buffers instead of materializing them
     into NumPy -- avoiding the copy is the point of that backend.  Its own golden file
     records the result, so the two can be read side by side.  PySpark takes this path
-    in ``ArrowArrayToPandasConversion.convert_numpy``
+    in ``ArrowToPandasConversion.convert_numpy``
     (``python/pyspark/sql/conversion.py``).
     """
 
@@ -479,7 +479,7 @@ class PyArrowArrayToPandasIntegerObjectNullsTests(_PyArrowToPandasTestBase):
     large value silently changes.  ``integer_object_nulls=True`` keeps ``object``
     dtype (Python ``int`` and ``None``) instead, preserving the values.
 
-    PySpark passes it in ``ArrowArrayToPandasConversion.convert_legacy``
+    PySpark passes it in ``ArrowToPandasConversion.convert_legacy``
     (``python/pyspark/sql/conversion.py``), bundled with ``date_as_object`` and
     ``coerce_temporal_nanoseconds``, then narrows the object Series to a nullable
     extension dtype (``Int8Dtype`` .. ``Int64Dtype``) -- the only bridge from Arrow to

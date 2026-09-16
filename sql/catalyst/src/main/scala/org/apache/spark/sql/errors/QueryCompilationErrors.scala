@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamedRelation, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -3697,6 +3697,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "dataType" -> column.dataType.catalogString))
   }
 
+  def invalidJdbcPartitionBoundError(
+      optionName: String,
+      value: String,
+      dataType: DataType): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_JDBC_PARTITION_BOUND",
+      messageParameters = Map(
+        "option" -> toDSOption(optionName),
+        "value" -> toSQLConfVal(value),
+        "dataType" -> toSQLType(dataType)))
+  }
+
   def tableOrViewAlreadyExistsError(name: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1288",
@@ -4525,6 +4537,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "name" -> toSQLId(name),
         "config" -> toSQLConf(LEGACY_CTE_PRECEDENCE_POLICY.key),
         "docroot" -> SPARK_DOC_ROOT))
+  }
+
+  def materializedCTEWithOuterReferenceError(reference: NamedExpression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+      messageParameters = Map("colName" -> toSQLId(reference.name)),
+      origin = reference.origin)
+  }
+
+  def materializedCTEAlwaysInlinedError(cteName: String, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_ALWAYS_INLINED",
+      messageParameters = Map("cteName" -> toSQLId(cteName)),
+      origin = origin)
+  }
+
+  def materializedCTEInCorrelatedSubqueryError(cteName: String, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_IN_CORRELATED_SUBQUERY",
+      messageParameters = Map("cteName" -> toSQLId(cteName)),
+      origin = origin)
   }
 
   def ambiguousLateralColumnAliasError(name: String, numOfMatches: Int): Throwable = {
