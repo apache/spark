@@ -142,6 +142,18 @@ object DataType {
   // __COLLATIONS (and reject it on non-STRING types) still see uncollated char(n)/varchar(n).
   val CHAR_VARCHAR_COLLATIONS_METADATA_KEY = "__CHAR_VARCHAR_COLLATIONS"
 
+  /**
+   * Lowers CHAR/VARCHAR recursively to the physical STRING types used to encode local data,
+   * preserving explicit collations. This does not apply CHAR/VARCHAR length semantics.
+   */
+  private[spark] def replaceCharVarcharWithCollationPreservingString(
+      dataType: DataType): DataType = {
+    dataType.transformRecursively {
+      case c: CharType => c.toStringType
+      case v: VarcharType => v.toStringType
+    }
+  }
+
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
       ddl,

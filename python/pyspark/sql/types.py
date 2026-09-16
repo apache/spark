@@ -324,7 +324,11 @@ class StringType(AtomicType):
 
 
 class CharType(AtomicType):
-    """Char data type
+    """Char data type.
+
+    A standalone collated ``CharType`` writes its collation inline in JSON and therefore requires
+    a current reader. Within a ``StructField``, schema JSON stores the collation in field metadata
+    and emits an uncollated ``char(n)`` type so readers preceding this support can still read it.
 
     Parameters
     ----------
@@ -359,7 +363,12 @@ class CharType(AtomicType):
 
 
 class VarcharType(AtomicType):
-    """Varchar data type
+    """Varchar data type.
+
+    A standalone collated ``VarcharType`` writes its collation inline in JSON and therefore
+    requires a current reader. Within a ``StructField``, schema JSON stores the collation in field
+    metadata and emits an uncollated ``varchar(n)`` type so readers preceding this support can
+    still read it.
 
     Parameters
     ----------
@@ -1451,7 +1460,8 @@ class StructField(DataType):
         return "StructField('%s', %s, %s)" % (self.name, self.dataType, str(self.nullable))
 
     def jsonValue(self) -> Dict[str, Any]:
-        string_metadata, char_varchar_metadata = self.getCollationMetadata()
+        string_metadata = self.getCollationMetadata()
+        char_varchar_metadata = self.getCharVarcharCollationMetadata()
         metadata = dict(self.metadata)
         if string_metadata:
             metadata[_COLLATIONS_METADATA_KEY] = string_metadata
@@ -1522,47 +1532,37 @@ class StructField(DataType):
         )
 
     def getCollationsMap(self, metadata: Dict[str, Any]) -> Dict[str, str]:
-        if not metadata or _COLLATIONS_METADATA_KEY not in metadata:
-            return {}
+        return _parse_collation_metadata_map(metadata, _COLLATIONS_METADATA_KEY)
 
-        collationMetadata: Dict[str, str] = metadata[_COLLATIONS_METADATA_KEY]
-        collationsMap: Dict[str, str] = {}
+    def getCollationMetadata(self) -> Dict[str, str]:
+        """Return field paths and collations for plain STRING types."""
+        return self._getCollationMetadata(self._isCollatedPlainString)
 
-        for key, value in collationMetadata.items():
-            nameParts = value.split(".")
-            assert len(nameParts) == 2
-            provider, name = nameParts[0], nameParts[1]
-            _assert_valid_collation_provider(provider)
-            collationsMap[key] = name
+    def getCharVarcharCollationMetadata(self) -> Dict[str, str]:
+        """Return field paths and collations for CHAR/VARCHAR types."""
+        return self._getCollationMetadata(self._isCollatedCharVarchar)
 
-        return collationsMap
-
-    def getCollationMetadata(self) -> Tuple[Dict[str, str], Dict[str, str]]:
+    def _getCollationMetadata(
+        self, include: Callable[[DataType], bool]
+    ) -> Dict[str, str]:
         def visitRecursively(dt: DataType, fieldPath: str) -> None:
             if isinstance(dt, ArrayType):
                 processDataType(dt.elementType, fieldPath + ".element")
             elif isinstance(dt, MapType):
                 processDataType(dt.keyType, fieldPath + ".key")
                 processDataType(dt.valueType, fieldPath + ".value")
-            else:
-                record(dt, fieldPath)
+            elif include(dt):
+                collationMetadata[fieldPath] = self.schemaCollationValue(dt)
 
         def processDataType(dt: DataType, fieldPath: str) -> None:
-            if self._isCollatedCharVarchar(dt) or self._isCollatedPlainString(dt):
-                record(dt, fieldPath)
+            if include(dt):
+                collationMetadata[fieldPath] = self.schemaCollationValue(dt)
             else:
                 visitRecursively(dt, fieldPath)
 
-        def record(dt: DataType, fieldPath: str) -> None:
-            if self._isCollatedCharVarchar(dt):
-                charVarcharMetadata[fieldPath] = self.schemaCollationValue(dt)
-            elif self._isCollatedPlainString(dt):
-                stringMetadata[fieldPath] = self.schemaCollationValue(dt)
-
-        stringMetadata: Dict[str, str] = {}
-        charVarcharMetadata: Dict[str, str] = {}
+        collationMetadata: Dict[str, str] = {}
         visitRecursively(self.dataType, self.name)
-        return stringMetadata, charVarcharMetadata
+        return collationMetadata
 
     def _isCollatedCharVarchar(self, dt: DataType) -> bool:
         return isinstance(dt, (CharType, VarcharType)) and dt.collation is not None
