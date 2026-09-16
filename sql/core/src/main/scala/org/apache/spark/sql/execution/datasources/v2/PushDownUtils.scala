@@ -435,18 +435,21 @@ object PushDownUtils extends Logging {
    * @param flattenedFilters Catalyst filter expressions with partition field references
    *                         already flattened.
    * @param partitionFields Partition field metadata.
+   * @param failOpen whether a created predicate reports a partition as matching when it cannot be
+   *                 evaluated, instead of propagating the failure. See [[PartitionPredicateImpl]].
    * @return a pair of (created partition predicates, remaining filters not converted).
    */
   private[v2] def createPartitionPredicates(
       flattenedFilters: Seq[Expression],
-      partitionFields: Seq[PartitionPredicateField])
+      partitionFields: Seq[PartitionPredicateField],
+      failOpen: Boolean = false)
   : (Seq[PartitionPredicateImpl], Seq[Expression]) = {
     val partitionAttributes = partitionFields.map(_.attrRef)
     val (partFilters, nonPartitionFilters) =
       DataSourceUtils.getPartitionFiltersAndDataFilters(partitionAttributes, flattenedFilters)
     val (pushable, nonPushable) = partFilters.partition(isPushablePartitionFilter(_))
     val (partitionPredicates, errorPartitionPredicates) = pushable.partitionMap { e =>
-      PartitionPredicateImpl(e, partitionFields).toLeft(e)
+      PartitionPredicateImpl(e, partitionFields, failOpen).toLeft(e)
     }
     (partitionPredicates, nonPartitionFilters ++ nonPushable ++ errorPartitionPredicates)
   }
@@ -481,7 +484,9 @@ object PushDownUtils extends Logging {
       partitionFields: Seq[PartitionPredicateField]): Seq[PartitionPredicateImpl] = {
     val catalystExprs = runtimeFilters.flatMap(unwrapRuntimeFilterExpression)
     val flattened = flattenNestedPartitionFilters(catalystExprs, partitionFields).keys
-    createPartitionPredicates(flattened.toSeq, partitionFields)._1
+    // A runtime filter is evaluated again by the post-scan `FilterExec`, so a partition the
+    // source cannot evaluate can be kept rather than failing the query.
+    createPartitionPredicates(flattened.toSeq, partitionFields, failOpen = true)._1
   }
 
   /** Unwraps a runtime filter to the Catalyst predicate for pushdown. */

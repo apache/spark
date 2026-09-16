@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.internal.connector
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BindReferences, Expression => CatalystExpression, ExprId, Predicate => CatalystPredicate}
@@ -26,10 +27,21 @@ import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 /**
  * An implementation for [[PartitionPredicate]] that wraps a Catalyst Expression representing a
  * partition filter.
+ *
+ * @param catalystExpr the partition filter this predicate evaluates.
+ * @param partitionFields one entry per transform of `Table.partitioning()`, in that order, so a
+ *                        bound ordinal matches the partition key a connector passes to [[eval]].
+ * @param failOpen what [[eval]] does when it cannot evaluate the expression for a partition.
+ *                 When true it reports the partition as matching, which only prunes less; that
+ *                 is safe for a runtime filter, since Spark evaluates it again in the post-scan
+ *                 `FilterExec`. When false the failure is propagated, because Spark removed the
+ *                 filter it pushed and this predicate is the only evaluator: reporting a match
+ *                 would return or write rows the filter does not accept.
  */
 class PartitionPredicateImpl private (
     private val catalystExpr: CatalystExpression,
-    private val partitionFields: Seq[PartitionPredicateField])
+    private val partitionFields: Seq[PartitionPredicateField],
+    private val failOpen: Boolean)
   extends PartitionPredicate with Logging {
 
   @transient private lazy val exprIdToIndex: Map[ExprId, Int] =
@@ -47,6 +59,12 @@ class PartitionPredicateImpl private (
 
   override def eval(partitionValues: InternalRow): Boolean = {
     if (partitionValues.numFields != partitionFields.length) {
+      if (!failOpen) {
+        throw SparkException.internalError(
+          s"Cannot evaluate partition predicate ${catalystExpr.sql}: partition value field " +
+          s"count (${partitionValues.numFields}) does not match schema " +
+          s"(${partitionFields.length}).")
+      }
       logWarning(
         log"Cannot evaluate partition predicate ${MDC(LogKeys.EXPR, catalystExpr.sql)}: " +
         log"partition value field count (${MDC(LogKeys.COUNT, partitionValues.numFields)}) " +
@@ -58,7 +76,8 @@ class PartitionPredicateImpl private (
     try {
       boundPredicate(partitionValues)
     } catch {
-      case e: Exception =>
+      // Propagated when this predicate is the only evaluator: see `failOpen`.
+      case e: Exception if failOpen =>
         logWarning(
           log"Failed to evaluate partition predicate ${MDC(LogKeys.EXPR, catalystExpr.sql)}. " +
           log"Including partition in scan result to avoid incorrect filtering.",
@@ -79,12 +98,13 @@ class PartitionPredicateImpl private (
   override def equals(obj: Any): Boolean = obj match {
     case other: PartitionPredicateImpl =>
       catalystExpr.semanticEquals(other.catalystExpr) &&
-        partitionFields == other.partitionFields
+        partitionFields == other.partitionFields &&
+        failOpen == other.failOpen
     case _ => false
   }
 
   override def hashCode(): Int = {
-    31 * catalystExpr.semanticHash() + partitionFields.hashCode()
+    31 * (31 * catalystExpr.semanticHash() + partitionFields.hashCode()) + failOpen.hashCode()
   }
 
   override def toString(): String = s"PartitionPredicate(${catalystExpr.sql})"
@@ -93,7 +113,8 @@ class PartitionPredicateImpl private (
 object PartitionPredicateImpl extends Logging {
 
   def apply(catalystExpr: CatalystExpression,
-      partitionFields: Seq[PartitionPredicateField])
+      partitionFields: Seq[PartitionPredicateField],
+      failOpen: Boolean = false)
   : Option[PartitionPredicateImpl] = {
     if (partitionFields.isEmpty) {
       logWarning(
@@ -116,6 +137,6 @@ object PartitionPredicateImpl extends Logging {
       return None
     }
 
-    Some(new PartitionPredicateImpl(catalystExpr, partitionFields))
+    Some(new PartitionPredicateImpl(catalystExpr, partitionFields, failOpen))
   }
 }

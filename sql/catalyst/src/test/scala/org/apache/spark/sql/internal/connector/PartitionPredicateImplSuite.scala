@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkThrowable}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerInstance}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GreaterThan, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, EvalMode, GreaterThan, Literal}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.expressions.PartitionFieldReference
+import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField}
 import org.apache.spark.unsafe.types.UTF8String
 
-class PartitionPredicateImplSuite extends SparkFunSuite {
+class PartitionPredicateImplSuite extends SparkFunSuite with QueryErrorsBase {
 
   test("Kryo serialization: PartitionPredicateImpl works after round-trip") {
     val conf = new SparkConf()
@@ -50,6 +52,42 @@ class PartitionPredicateImplSuite extends SparkFunSuite {
     val conf = new SparkConf()
     val serializer = new JavaSerializer(conf).newInstance()
     checkNestedPartitionPathReferencesAfterSerialization(serializer)
+  }
+
+  test("SPARK-59572: eval propagates a failure unless the predicate may fail open") {
+    val ref = DataTypeUtils.toAttribute(StructField("p", StringType, nullable = true))
+    val fields = Seq(PartitionPredicateField(Seq("p"), ref))
+    // An ANSI cast of a non-numeric string throws when evaluated.
+    val expr = EqualTo(Cast(ref, IntegerType, None, EvalMode.ANSI), Literal(1))
+    val failing = InternalRow(UTF8String.fromString("hr"))
+    val matching = InternalRow(UTF8String.fromString("1"))
+
+    // Default: the predicate is Spark's only evaluator, so the failure must surface.
+    val strict = PartitionPredicateImpl(expr, fields).get
+    checkError(
+      exception = intercept[SparkThrowable](strict.eval(failing)),
+      condition = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "expression" -> toSQLValue("hr"),
+        "sourceType" -> toSQLType(StringType),
+        "targetType" -> toSQLType(IntegerType),
+        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      queryContext = Array(ExpectedContext("", -1, -1)))
+    assert(strict.eval(matching) === true)
+
+    // Runtime filters are re-evaluated after the scan, so failing open only prunes less.
+    val lenient = PartitionPredicateImpl(expr, fields, failOpen = true).get
+    assert(lenient.eval(failing) === true)
+    assert(lenient.eval(matching) === true)
+
+    // The same split applies to a partition key that does not match the schema.
+    val wrongWidth = InternalRow(UTF8String.fromString("1"), UTF8String.fromString("extra"))
+    checkError(
+      exception = intercept[SparkException](strict.eval(wrongWidth)),
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> ("Cannot evaluate partition predicate " +
+        "(CAST(p AS INT) = 1): partition value field count (2) does not match schema (1).")))
+    assert(lenient.eval(wrongWidth) === true)
   }
 
   private def checkPartitionPredicateImplAfterSerialization(

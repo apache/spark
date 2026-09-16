@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionPredicateDeleteCatalog
 import org.apache.spark.sql.connector.expressions.PartitionFieldReference
@@ -238,6 +238,30 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
       checkAnswer(
         sql(s"SELECT * FROM $deleteTableName"),
         Seq(Row(2, "hr", 200), Row(3, "software", 300)))
+    }
+  }
+
+  // A metadata-only DELETE has no post-scan filter, so the PartitionPredicate is the only
+  // evaluator. Reporting a failed evaluation as a match deletes a partition that does not
+  // satisfy the condition.
+  test("SPARK-59572: metadata-only DELETE must not drop a partition whose predicate failed") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep)")
+      sql(s"INSERT INTO $deleteTableName VALUES (1, 'hr', 100), (2, '1', 200)")
+
+      spark.udf.register("to_int", (s: String) => s.toInt)
+
+      val e = intercept[SparkException] {
+        sql(s"DELETE FROM $deleteTableName WHERE to_int(dep) = 1").collect()
+      }
+      assert(e.getCondition == "FAILED_EXECUTE_UDF")
+      assert(e.getCause.isInstanceOf[NumberFormatException])
+
+      // The partition whose predicate could not be evaluated must still be there.
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "hr", 100), Row(2, "1", 200)))
     }
   }
 

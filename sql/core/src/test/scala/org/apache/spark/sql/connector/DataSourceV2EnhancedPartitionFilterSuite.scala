@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{Expression, In, PredicateHelper, ScalaUDF}
 import org.apache.spark.sql.connector.catalog.BufferedRows
@@ -400,6 +401,26 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(Row("a", "x", "1", "d1"), Row("b", "x", "1", "d4")))
       assertPushedPartitionPredicates(df, 1)
       assertReferencedPartitionFieldOrdinals(df, Array(1, 2), Array("p0", "p1", "p2"))
+    }
+  }
+
+  test("SPARK-59572: a failed second-pass PartitionPredicate must not keep the partition") {
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
+        "PARTITIONED BY (part_col)")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('hr', 'x'), ('1', 'y')")
+
+      spark.udf.register("to_int", (s: String) => s.toInt)
+
+      // `to_int('hr')` throws. The filter is untranslatable, so it is pushed as a
+      // PartitionPredicate and accepted, which removes it from the post-scan filters. The
+      // source is then its only evaluator, so reporting a failed evaluation as a match
+      // returns the 'hr' row, which does not satisfy the filter.
+      val e = intercept[SparkException] {
+        sql(s"SELECT * FROM $partFilterTableName WHERE to_int(part_col) = 1").collect()
+      }
+      assert(e.getCondition == "FAILED_EXECUTE_UDF")
+      assert(e.getCause.isInstanceOf[NumberFormatException])
     }
   }
 
