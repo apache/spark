@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.columnar.{InMemoryTableScanExec, InMemoryT
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, EnsureRequirements, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, HashedRelationBroadcastMode, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
@@ -5321,6 +5321,45 @@ class AdaptiveQueryExecSuite
           checkAnswer(df, correctResults)
         }
       }
+    }
+  }
+
+  test("SPARK-59122: query stage preparation keeps the union barriers around EnsureRequirements") {
+    // `EnsureRequirements` asks a `UnionExec` what it reports, and `StampUnionDecisions` freezes
+    // that answer so every rule below it and the execution read what the exchanges were planned
+    // against. `SnapshotUnionOutputPartitioningConf` has to run first, or the value the stamp reads
+    // is whatever `conf` says by then rather than the one `EnsureRequirements` saw. The two sit
+    // next to `EnsureRequirements` with nothing in between, and nothing at the list itself says the
+    // three have to stay contiguous: an injected rule cannot land between them, since those are
+    // appended at the tail, but an edit to the list can. AQE builds its own list, and
+    // `UnionCodegenSuite` covers the one `QueryExecution` builds when AQE is off.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      // The repartition exchanges are what bring AQE in, with the aggregate's distribution
+      // requirement as a second reason: `InsertAdaptiveSparkPlan` tests for either and leaves a
+      // plain union of ranges alone.
+      val df = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k"))
+        .union(spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k")))
+        .groupBy("k").count()
+      val aqe = df.queryExecution.executedPlan.collectFirst {
+        case a: AdaptiveSparkPlanExec => a
+      }
+      assert(aqe.isDefined, s"expected an AdaptiveSparkPlanExec:\n${df.queryExecution}")
+      val rules = aqe.get.queryStagePreparationRules
+      val snapshot = rules.indexWhere(_ eq SnapshotUnionOutputPartitioningConf)
+      val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
+      // Both barriers, not the first one: the list ends with a second `StampUnionDecisions` for a
+      // union an injected prep rule created, and asking only for the first index would let that one
+      // stand in for the barrier behind `EnsureRequirements`.
+      val stamps = rules.zipWithIndex.collect {
+        case (rule, i) if rule eq StampUnionDecisions => i
+      }
+      assert(snapshot >= 0 && snapshot == ensureRequirements - 1,
+        s"expected the conf snapshot right before EnsureRequirements at $ensureRequirements, " +
+          s"got $snapshot")
+      assert(stamps.headOption.contains(ensureRequirements + 1),
+        s"expected the stamp right behind EnsureRequirements at $ensureRequirements, got $stamps")
+      assert(stamps.last == rules.length - 1,
+        s"expected the trailing stamp last of ${rules.length} rules, got $stamps")
     }
   }
 
