@@ -896,21 +896,30 @@ class TypesTestsMixin:
             lambda: _parse_datatype_json_string(json.dumps(collations_on_char_json)),
         )
 
-    def test_char_varchar_collation_metadata_ignored_by_old_readers(self):
-        from pyspark.sql.types import (
-            _CHAR_VARCHAR_COLLATIONS_METADATA_KEY,
-            _parse_datatype_json_string,
-        )
+    def test_preceding_reader_retains_unknown_char_varchar_collation_metadata(self):
+        from pyspark.sql.types import _CHAR_VARCHAR_COLLATIONS_METADATA_KEY
 
         schema = StructType([StructField("c", CharType(4, "UTF8_LCASE"))])
         json_value = schema.jsonValue()
-        metadata = json_value["fields"][0]["metadata"]
+        field = json_value["fields"][0]
+        metadata = field["metadata"]
         self.assertIn(_CHAR_VARCHAR_COLLATIONS_METADATA_KEY, metadata)
         self.assertNotIn("__COLLATIONS", metadata)
-        del metadata[_CHAR_VARCHAR_COLLATIONS_METADATA_KEY]
+
+        # This is the StructField.fromJson behavior at the PR's pinned base commit,
+        # 389de941f002a5c92e22dc3ed0f65af602a174db. It parses CHAR without consulting
+        # the new key and passes all unknown metadata through unchanged.
+        self.assertEqual(field["type"], "char(4)")
+        preceding_field = StructField(
+            field["name"], CharType(4), field["nullable"], field["metadata"]
+        )
         self.assertEqual(
-            _parse_datatype_json_string(json.dumps(json_value)),
-            StructType([StructField("c", CharType(4))]),
+            preceding_field.dataType,
+            CharType(4),
+        )
+        self.assertEqual(
+            preceding_field.metadata[_CHAR_VARCHAR_COLLATIONS_METADATA_KEY],
+            {"c": "spark.UTF8_LCASE"},
         )
 
     def test_schema_with_collations_on_non_string_types(self):
