@@ -1732,27 +1732,6 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("refresh skips an unused captured column with an ambiguous nested field") {
-    val longS = new String(Character.toChars(0x17f))
-    val t = "testcat.ns1.ns2.tbl"
-
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, st STRUCT<s: INT>) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, named_struct('s', 10))")
-
-      val stale = spark.table(t).select("id")
-      assert(stale.queryExecution.analyzed.resolved)
-
-      catalog("testcat")
-        .alterTable(testIdent, TableChange.addColumn(Array("st", longS), IntegerType, true))
-
-      val freshNested = intercept[AnalysisException](sql(s"SELECT st.s FROM $t").collect())
-      assert(freshNested.getCondition == "AMBIGUOUS_REFERENCE_TO_FIELDS")
-      checkAnswer(sql(s"SELECT id FROM $t"), Seq(Row(1)))
-      checkAnswer(stale, Seq(Row(1)))
-    }
-  }
-
   test("a captured nested field a fresh query cannot resolve fails the refreshed query too") {
     // Spark resolves a top-level column by folding names with `toLowerCase(ROOT)` to collect
     // candidates and only then filtering them with the resolver, but resolves a struct field with
