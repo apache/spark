@@ -2505,13 +2505,13 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS VARCHAR(40)))"),
         Row("STRUCT<a: BIGINT>"))
       checkAnswer(
-        sql("""SELECT schema_of_json(CAST('{"a":1}' AS CHAR(7)))"""),
+        sql("""SELECT schema_of_json(CAST('{"a":1}' AS CHAR(9)))"""),
         Row("STRUCT<a: BIGINT>"))
       checkAnswer(
-        sql("SELECT schema_of_csv(CAST('1,abc' AS CHAR(5)))"),
+        sql("SELECT schema_of_csv(CAST('1,abc' AS CHAR(7)))"),
         Row("STRUCT<_c0: INT, _c1: STRING>"))
       checkAnswer(
-        sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(19)))"),
+        sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(21)))"),
         Row("STRUCT<a: BIGINT>"))
     }
   }
@@ -2533,6 +2533,10 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         """SELECT from_json('{"a":1,"a":2}', 'MAP<CHAR(2), INT>')"""
       val exactVarcharJsonQuery =
         """SELECT from_json('{"ab":1,"ab":2}', 'MAP<VARCHAR(2), INT>')"""
+      val interleavedCharJsonQuery =
+        """SELECT map_entries(from_json(
+          |  '{"a":1,"b":2,"a":3}',
+          |  'MAP<CHAR(2), INT>'))""".stripMargin
       val varcharOverflowQuery =
         """SELECT from_json('{"abc":1}', 'MAP<VARCHAR(2), INT>')"""
       val varcharOverflowFailfastQuery =
@@ -2578,6 +2582,14 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         """SELECT from_xml(
           |  '<ROW><m><ab>1</ab><ab>2</ab></m></ROW>',
           |  'm MAP<VARCHAR(2), INT>').m""".stripMargin
+      val interleavedCharXmlQuery =
+        """SELECT map_entries(from_xml(
+          |  '<ROW><m><a>1</a><b>2</b><a>3</a></m></ROW>',
+          |  'm MAP<CHAR(2), INT>').m)""".stripMargin
+      val interleavedCollatedXmlQuery =
+        """SELECT map_entries(from_xml(
+          |  '<ROW><m><a>1</a><b>2</b><a>3</a></m></ROW>',
+          |  'm MAP<STRING COLLATE UTF8_LCASE, INT>').m)""".stripMargin
       val collatedXmlQuery =
         """SELECT from_xml(
           |  '<ROW><m><a>1</a><A>2</A></m></ROW>',
@@ -2587,6 +2599,11 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           |  '<ROW><m><abc>0</abc><a>1</a>2</m></ROW>',
           |  'm MAP<CHAR(2), INT>',
           |  map('valueTag', 'a ')).m""".stripMargin
+      val ignoreCorruptXmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a>2</m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('valueTag', 'a ', 'ignoreCorruptFiles', 'true')).m""".stripMargin
 
       assertDuplicateMapKey(jsonQuery)
       assertDuplicateMapKey(jsonFailfastQuery)
@@ -2601,12 +2618,18 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assertDuplicateMapKey(varcharXmlQuery, expectedKey = "ab")
       checkAnswer(sql(exactCharJsonQuery), Row(Map("a " -> 2)))
       checkAnswer(sql(exactVarcharJsonQuery), Row(Map("ab" -> 2)))
+      checkAnswer(sql(interleavedCharJsonQuery), Row(Seq(Row("a ", 3), Row("b ", 2))))
       checkAnswer(sql(exactCharXmlQuery), Row(Map("a " -> 2)))
       checkAnswer(sql(exactVarcharXmlQuery), Row(Map("ab" -> 2)))
+      checkAnswer(sql(interleavedCharXmlQuery), Row(Seq(Row("a ", 3), Row("b ", 2))))
       withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
         assertDuplicateMapKey(collatedXmlQuery, expectedKey = "A")
+        checkAnswer(
+          sql(interleavedCollatedXmlQuery),
+          Row(Seq(Row("a", 3), Row("b", 2))))
       }
       assertDuplicateMapKey(badXmlKeyBeforeDuplicateQuery)
+      assertDuplicateMapKey(ignoreCorruptXmlQuery)
       checkAnswer(sql(badKeyThenSiblingQuery), Row(2))
       checkAnswer(sql(badXmlKeyThenSiblingQuery), Row(2))
 
@@ -2627,6 +2650,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
           checkAnswer(sql(collatedXmlQuery), Row(Map("a" -> 2)))
         }
+        checkAnswer(sql(badXmlKeyBeforeDuplicateQuery), Row(null))
       }
     }
   }

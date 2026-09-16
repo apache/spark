@@ -624,8 +624,9 @@ class JacksonParser(
       valueType: DataType): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
-    val normalizedKeys = ArrayBuffer.empty[(UTF8String, UTF8String)]
-    val parsedRawKeys = ArrayBuffer.empty[UTF8String]
+    val rawKeys = ArrayBuffer.empty[UTF8String]
+    val normalizedKeys = ArrayBuffer.empty[UTF8String]
+    val normalizedValues = ArrayBuffer.empty[Option[Any]]
     val hasConstrainedKeys = keyType.isInstanceOf[CharType] || keyType.isInstanceOf[VarcharType]
     var partialResultException: Option[Throwable] = None
     var badMapException: Option[Throwable] = None
@@ -647,12 +648,14 @@ class JacksonParser(
       try {
         val key = CharVarcharUtils.applyTextParseSemantics(rawKey, keyType)
         if (hasConstrainedKeys) {
-          normalizedKeys += rawKey -> key
-        }
-        value.foreach { parsedValue =>
-          parsedRawKeys += rawKey
-          keys += key
-          values += parsedValue
+          rawKeys += rawKey
+          normalizedKeys += key
+          normalizedValues += value
+        } else {
+          value.foreach { parsedValue =>
+            keys += key
+            values += parsedValue
+          }
         }
       } catch {
         case DuplicateMapKeyUtils(e) => throw e
@@ -665,18 +668,9 @@ class JacksonParser(
       case _: CharType | _: VarcharType =>
         // JSON object parsing historically keeps the last value for an exactly repeated field
         // name. Apply mapKeyDedupPolicy only when distinct serialized names normalize to one key.
-        val normalizedIndices =
-          DuplicateMapKeyUtils.lastOccurrenceIndices(normalizedKeys.map(_._1).toArray)
-        val parsedIndices = DuplicateMapKeyUtils.lastOccurrenceIndices(parsedRawKeys.toArray)
-        // Apply the duplicate policy to every normalized key, including entries whose malformed
-        // values are omitted from the partial map.
-        new ArrayBasedMapBuilder(keyType, NullType).from(
-          new GenericArrayData(normalizedIndices.map(normalizedKeys(_)._2).toArray),
-          new GenericArrayData(Array.fill[Any](normalizedIndices.length)(null)))
-        new ArrayBasedMapBuilder(keyType, valueType)
-          .from(
-            new GenericArrayData(parsedIndices.map(keys).toArray),
-            new GenericArrayData(parsedIndices.map(values).toArray))
+        // Include entries with failed values so normalized key collisions still take precedence.
+        DuplicateMapKeyUtils.buildMapWithLastRawKeyWins(
+          rawKeys.toSeq, normalizedKeys.toSeq, normalizedValues.toSeq, keyType, valueType)
       case _ =>
         // Preserve the historical behavior for ordinary string keys.
         ArrayBasedMapData(keys.toArray, values.toArray)

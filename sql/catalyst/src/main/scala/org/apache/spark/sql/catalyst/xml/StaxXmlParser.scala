@@ -41,7 +41,7 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, DuplicateMapKeyUtils, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, DuplicateMapKeyUtils, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -271,6 +271,7 @@ class StaxXmlParser(
         throw BadRecordException(record = xmlLiteral, partialResults = () => rows, cause)
       case e: Throwable =>
         SparkErrorUtils.getRootCause(e) match {
+          case DuplicateMapKeyUtils(duplicate) => throw duplicate
           case _: FileNotFoundException if options.ignoreMissingFiles =>
             logWarning("Skipped missing file", e)
             parser.close()
@@ -420,14 +421,12 @@ class StaxXmlParser(
       case _ => false
     }
     if (requiresCollationAwareBuilder) {
-      val lastIndices =
-        DuplicateMapKeyUtils.lastOccurrenceIndices(kvPairs.map(_._1).toArray)
-      val mapBuilder = new ArrayBasedMapBuilder(keyType, valueType)
-      lastIndices.foreach { index =>
-        val (_, key, value) = kvPairs(index)
-        mapBuilder.put(key, value)
-      }
-      val mapData = mapBuilder.build()
+      val mapData = DuplicateMapKeyUtils.buildMapWithLastRawKeyWins(
+        kvPairs.map(_._1).toSeq,
+        kvPairs.map(_._2).toSeq,
+        kvPairs.map(entry => Some(entry._3)).toSeq,
+        keyType,
+        valueType)
       mapKeyException.foreach(throw _)
       mapData
     } else {

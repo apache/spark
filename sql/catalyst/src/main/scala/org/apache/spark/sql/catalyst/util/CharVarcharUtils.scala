@@ -161,6 +161,9 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * Applies assignment semantics when parsing text into a typed schema. CHAR values are padded,
    * and excess trailing spaces are trimmed when the remaining value fits. Non-space overflow
    * raises EXCEED_LIMIT_LENGTH. Null stays null, and unbounded STRING is unchanged.
+   *
+   * For example, `from_json('{"c":"ab"}', 'c CHAR(4)')` produces `"ab  "`, while parsing
+   * `{"v":"abcd"}` as `v VARCHAR(3)` in FAILFAST mode raises EXCEED_LIMIT_LENGTH.
    */
   def applyTextParseSemantics(value: UTF8String, dt: DataType): UTF8String = {
     if (value == null) {
