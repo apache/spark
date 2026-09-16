@@ -53,7 +53,7 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
     withTable("t") {
       sql(s"CREATE TABLE t (s STRING, i INT NOT NULL) USING $FORMAT")
 
-      val e = intercept[SparkRuntimeException] {
+      assertNotNullException(Seq("i")) {
         if (byName) {
           val inputDF = sql("SELECT 'txt' AS s, null AS i")
           inputDF.writeTo("t").append()
@@ -61,7 +61,6 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
           sql("INSERT INTO t VALUES ('txt', null)")
         }
       }
-      assert(e.getCondition == "NOT_NULL_ASSERT_VIOLATION")
     }
   }
 
@@ -85,7 +84,7 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
            |USING $FORMAT
          """.stripMargin)
 
-      val e1 = intercept[SparkRuntimeException] {
+      assertNotNullException(Seq("s", "ns")) {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -101,9 +100,8 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
              """.stripMargin)
         }
       }
-      assertNotNullException(e1, Seq("s", "ns"))
 
-      val e2 = intercept[SparkRuntimeException] {
+      assertNotNullException(Seq("s", "arr")) {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -119,9 +117,8 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
              """.stripMargin)
         }
       }
-      assertNotNullException(e2, Seq("s", "arr"))
 
-      val e3 = intercept[SparkRuntimeException] {
+      assertNotNullException(Seq("s", "m")) {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -137,7 +134,6 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
              """.stripMargin)
         }
       }
-      assertNotNullException(e3, Seq("s", "m"))
     }
   }
 
@@ -174,7 +170,7 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
       }
       checkAnswer(spark.table("t"), Row(1, Row(1, null)))
 
-      val e = intercept[SparkRuntimeException] {
+      assertNotNullException(Seq("s", "ns", "x")) {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -190,7 +186,6 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
              """.stripMargin)
         }
       }
-      assertNotNullException(e, Seq("s", "ns", "x"))
     }
   }
 
@@ -223,7 +218,7 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
       }
       checkAnswer(spark.table("t"), Row(1, null))
 
-      val e = intercept[SparkRuntimeException] {
+      assertNotNullException(Seq("arr", "element")) {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -239,7 +234,6 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
              """.stripMargin)
         }
       }
-      assertNotNullException(e, Seq("arr", "element"))
     }
   }
 
@@ -279,7 +273,7 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
       }
       checkAnswer(spark.table("t"), Row(1, List(null, Row(1, 1))))
 
-      val e = intercept[SparkRuntimeException] {
+      assertNotNullException(Seq("arr", "element", "x")) {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -295,7 +289,6 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
              """.stripMargin)
         }
       }
-      assertNotNullException(e, Seq("arr", "element", "x"))
     }
   }
 
@@ -326,7 +319,7 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
       }
       checkAnswer(spark.table("t"), Row(1, null))
 
-      val e = intercept[SparkRuntimeException] {
+      assertNotNullException(Seq("m", "value")) {
         if (byName) {
           val inputDF = sql("SELECT 1 AS i, map(1, null) AS m")
           inputDF.writeTo("t").append()
@@ -334,7 +327,6 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
           sql("INSERT INTO t VALUES (1 AS i, map(1, null) AS m)")
         }
       }
-      assertNotNullException(e, Seq("m", "value"))
     }
   }
 
@@ -366,7 +358,7 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
       }
       checkAnswer(spark.table("t"), Row(1, Map(Row(1, 1) -> null)))
 
-      val e1 = intercept[SparkRuntimeException] {
+      assertNotNullException(Seq("m", "key", "x")) {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -382,9 +374,8 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
              """.stripMargin)
         }
       }
-      assertNotNullException(e1, Seq("m", "key", "x"))
 
-      val e2 = intercept[SparkRuntimeException] {
+      assertNotNullException(Seq("m", "value", "x")) {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -400,15 +391,15 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
              """.stripMargin)
         }
       }
-      assertNotNullException(e2, Seq("m", "value", "x"))
     }
   }
 
-  private def assertNotNullException(e: SparkRuntimeException, colPath: Seq[String]): Unit = {
+  protected def assertNotNullException(colPath: Seq[String])(func: => Any): Unit = {
+    val e = intercept[SparkRuntimeException](func)
     e.getCause match {
       case _ if e.getCondition == "NOT_NULL_ASSERT_VIOLATION" =>
       case other =>
-        fail(s"Unexpected exception cause: $other")
+        fail(s"Unexpected exception cause for ${colPath.mkString(".")}: $other")
     }
   }
 }

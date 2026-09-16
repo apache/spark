@@ -45,6 +45,14 @@ import org.apache.spark.tags.ExtendedSQLTest
 class DataFrameFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
+  protected def assertNullMapKeyFailure(func: => Any): Unit = {
+    checkError(
+      exception = intercept[SparkRuntimeException](func),
+      condition = "NULL_MAP_KEY",
+      parameters = Map.empty
+    )
+  }
+
   test("DataFrame function and SQL function parity") {
     // This test compares the available list of DataFrame functions in
     // org.apache.spark.sql.functions with the SQL function registry. This attempts to verify that
@@ -186,13 +194,9 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     )
 
     val df5 = Seq((Seq("a", null), Seq(1, 2))).toDF("k", "v")
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        df5.select(map_from_arrays($"k", $"v")).collect()
-      },
-      condition = "NULL_MAP_KEY",
-      parameters = Map.empty
-    )
+    assertNullMapKeyFailure {
+      df5.select(map_from_arrays($"k", $"v")).collect()
+    }
 
     val df6 = Seq((Seq(1, 2), Seq("a"))).toDF("k", "v")
     val msg2 = intercept[Exception] {
@@ -5432,21 +5436,13 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         stop = 35)
     )
 
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        dfExample1.selectExpr("transform_keys(i, (k, v) -> v)").show()
-      },
-      condition = "NULL_MAP_KEY",
-      parameters = Map.empty
-    )
+    assertNullMapKeyFailure {
+      dfExample1.selectExpr("transform_keys(i, (k, v) -> v)").show()
+    }
 
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        dfExample1.select(transform_keys(col("i"), (k, v) => v)).show()
-      },
-      condition = "NULL_MAP_KEY",
-      parameters = Map.empty
-    )
+    assertNullMapKeyFailure {
+      dfExample1.select(transform_keys(col("i"), (k, v) => v)).show()
+    }
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -6070,13 +6066,9 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
 
   test("SPARK-24734: Fix containsNull of Concat for array type") {
     val df = Seq((Seq(1), Seq[Integer](null), Seq("a", "b"))).toDF("k1", "k2", "v")
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        df.select(map_from_arrays(concat($"k1", $"k2"), $"v")).show()
-      },
-      condition = "NULL_MAP_KEY",
-      parameters = Map.empty
-    )
+    assertNullMapKeyFailure {
+      df.select(map_from_arrays(concat($"k1", $"k2"), $"v")).show()
+    }
   }
 
   test("SPARK-26370: Fix resolution of higher-order function for the same identifier") {
