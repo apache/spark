@@ -413,15 +413,15 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
  * simplification leaves one read of it, and the equality stays wrapped where
  * `ExtractEquiJoinKeys` cannot see it -- so a hash join becomes a nested loop join.
  *
- * Runs with the simplification rules rather than after them, so whatever the `With` was hiding is
- * available to the rest of that batch and not only to the planner.
+ * Listed with the simplification rules, in the same fixed-point batch and after them, so whatever
+ * the `With` was hiding is available to the rest of that batch and not only to the planner.
  */
 object InlineWithDefinitionsThatGainNothing extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformWithPruning(_.containsPattern(WITH_EXPRESSION)) {
       // One walk of each operator's expressions, bottom-up so an inner `With` is asked before the
-      // outer one that may inline it. Matching every expression node and starting a walk from each
-      // would rescan the subtree under a kept `With` once per ancestor.
+      // outer one that may inline it. `transformAllExpressionsWithPruning` would say this in one
+      // call, but `QueryPlan` offers only the top-down variant.
       case p => p.transformExpressionsUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
         case w: With => RewriteWithExpression.inlineDefsThatGainNothing(w)
       }

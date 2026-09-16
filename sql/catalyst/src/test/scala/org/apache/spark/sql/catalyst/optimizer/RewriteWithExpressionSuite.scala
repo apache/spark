@@ -476,13 +476,12 @@ class RewriteWithExpressionSuite extends PlanTest {
       ref < 10 && ref > 0
     }
     val plan = testRelation.join(testRelation2, condition = Some(condition))
-    // No child plan can hold the definition, so it stays a memoizing `With` in the condition
-    // rather than being inlined into both references.
+    // No child plan can hold the definition, so it stays in the condition rather than being
+    // inlined into both references.
     val rewritten = Optimizer.execute(plan)
     comparePlans(rewritten, plan.analyze)
-    // The shape `comparePlans` cannot state on its own: one definition, emitted once, read twice.
-    // A rewrite that kept the definitions and inlined them into the child as well would still
-    // compare equal to nothing having changed on the ids alone.
+    // Spelled out beside `comparePlans`, which states it only by being an equality against the
+    // input: one definition, one `Add`, two references.
     val rewrittenCondition = rewritten.asInstanceOf[Join].condition.get
     assert(rewrittenCondition.collect { case d: CommonExpressionDef => d }.size == 1)
     assert(rewrittenCondition.collect { case r: CommonExpressionRef => r }.size == 2)
@@ -517,6 +516,10 @@ class RewriteWithExpressionSuite extends PlanTest {
     assert(withs.size == 1, rewritten.toString)
     assert(withs.head.defs.size == 1, withs.head.toString)
     assert(withs.head.defs.head.child.semanticEquals(a + x), withs.head.toString)
+    // Every reference left belongs to the definition that stayed. Without this the case would pass
+    // with the hoisted definition's references dangling, since the `With` above them is gone.
+    val refs = withs.head.collect { case r: CommonExpressionRef => r }
+    assert(refs.size == 2 && refs.forall(_.id == withs.head.defs.head.id), withs.head.toString)
     // The hoisted one became a column of a project over the left child, read by attribute.
     assert(rewritten.exists {
       case Project(projectList, _) => projectList.exists {

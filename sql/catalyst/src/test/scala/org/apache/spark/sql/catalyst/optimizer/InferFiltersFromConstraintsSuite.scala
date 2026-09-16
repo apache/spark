@@ -451,27 +451,59 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     assert(joinFound, "Expected a Join node in the optimized plan")
   }
 
+  /** Every conjunct of every `Filter` in `plan`. */
+  private def filterConjuncts(plan: LogicalPlan): Seq[Expression] =
+    plan.collect { case Filter(cond, _) => cond }.flatMap(splitConjunctivePredicates)
+
+  private def assertIsNotNullInferred(inferred: Seq[Expression], names: String*): Unit =
+    names.foreach { name =>
+      assert(inferred.exists {
+        case IsNotNull(a: Attribute) => a.name == name
+        case _ => false
+      }, s"expected isnotnull($name); found: $inferred")
+    }
+
   test("SPARK-59494: infer IsNotNull through a With left in a join condition") {
     val left = LocalRelation($"a".int, $"b".int)
     val right = LocalRelation($"x".int, $"y".int)
     // `RewriteWithExpression` leaves this `With` in the condition, since neither child plan holds
-    // both columns of `a + x`. A `With` is not null intolerant and its references are leaves, so
-    // reading the node as it stands finds no attribute and both sides lose the filter that the
-    // inlined form used to infer.
+    // both columns of `a + x`. A `With` is not null intolerant and its references are leaves, so a
+    // constraint that is one yields no attribute, and both sides lose the filter the inlined form
+    // used to infer.
     val a = left.output.head
     val x = right.output.head
     val condition = With(a + x) { case Seq(ref) => ref > 1 && ref < 10 }
-    val optimized = Optimize.execute(
-      left.join(right, Inner, Some(condition)).analyze)
-    val inferred = optimized.collect { case Filter(cond, _) => cond }
-      .flatMap(splitConjunctivePredicates)
-    assert(inferred.exists {
-      case IsNotNull(a: Attribute) => a.name == "a"
-      case _ => false
-    }, s"expected isnotnull(a); found: $inferred")
-    assert(inferred.exists {
-      case IsNotNull(a: Attribute) => a.name == "x"
-      case _ => false
-    }, s"expected isnotnull(x); found: $inferred")
+    val optimized = Optimize.execute(left.join(right, Inner, Some(condition)).analyze)
+    assertIsNotNullInferred(filterConjuncts(optimized), "a", "x")
+  }
+
+  test("SPARK-59494: a With below the root of a constraint is read through as well") {
+    val left = LocalRelation($"a".int, $"b".int)
+    val right = LocalRelation($"x".int, $"y".int)
+    // Same question one level down: the constraint is a `GreaterThan` whose left side is the
+    // `With`, so reading it takes rewriting the whole predicate, not just a `With` that happens to
+    // sit at the top of one.
+    val a = left.output.head
+    val x = right.output.head
+    val condition = With(a + x) { case Seq(ref) => ref } > 1
+    val optimized = Optimize.execute(left.join(right, Inner, Some(condition)).analyze)
+    assertIsNotNullInferred(filterConjuncts(optimized), "a", "x")
+  }
+
+  test("SPARK-59494: an inferred filter carries no With") {
+    val left = LocalRelation($"k".int, $"v".int)
+    val right = LocalRelation($"k2".int, $"w".int)
+    val Seq(k, _) = left.output
+    val Seq(k2, w) = right.output
+    // With the equality to substitute through, the `With` conjunct becomes one the right side can
+    // hold on its own, and `InferFiltersFromConstraints` plants it. It has to be planted as the
+    // expression it stands for: a `With` is opaque to `DataSourceStrategy`'s filter translation, so
+    // planting one would cost the pushdown this filter exists for.
+    val condition = (k === k2) && With(k * w) { case Seq(ref) => ref >= 2 && ref <= 6 }
+    val optimized = Optimize.execute(left.join(right, Inner, Some(condition)).analyze)
+    val planted = filterConjuncts(optimized)
+    assert(planted.exists(_.semanticEquals(k2 * w >= 2)), s"found: $planted")
+    assert(planted.exists(_.semanticEquals(k2 * w <= 6)), s"found: $planted")
+    assert(!planted.exists(_.exists(_.isInstanceOf[With])), s"found: $planted")
   }
 }

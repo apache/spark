@@ -220,6 +220,11 @@ trait PredicateHelper extends AliasHelper with Logging {
     // For PythonUDFs that can't be evaluated in join condition, `ExtractPythonUDFFromJoinCondition`
     // will pull them out later.
     case _: PythonUDF => true
+    // A `With` evaluates, but the `CommonExpressionDef`s it carries as children do not: a
+    // definition is reached through the references in the child. Ask what each one holds instead,
+    // or `ReorderJoin` moves the condition out of the join it belongs to and
+    // `PushPredicateThroughJoin` refuses to push it back in.
+    case w: With => (w.child +: w.defs.map(_.child)).forall(canEvaluateWithinJoin)
     case e: Unevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
   }

@@ -28,7 +28,7 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.UpdateFieldsBenchmark._
-import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, CommonExpressionRef, Expression, InSet, Literal, Multiply, NamedExpression, With}
+import org.apache.spark.sql.catalyst.expressions.{CommonExpressionRef, Expression, InSet, Literal, Multiply, NamedExpression, With}
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -436,15 +436,16 @@ class ColumnExpressionSuite extends SharedSparkSession {
   // evaluated by all three and the memoization is implemented separately for interpretation and for
   // codegen.
   private def onEachEvalPath(f: => Unit): Unit = {
-    withSQLConf(
-      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
-      SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN")(f)
-    withSQLConf(
-      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
-      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY")(f)
-    withSQLConf(
-      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
-      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY")(f)
+    val paths = Seq(("false", "NO_CODEGEN"), ("false", "CODEGEN_ONLY"), ("true", "CODEGEN_ONLY"))
+    paths.foreach { case (wholeStage, factoryMode) =>
+      // Which path failed is the first thing to know, and neither `withSQLConf` nor the assertions
+      // in these tests say.
+      withClue(s"wholeStage=$wholeStage, codegenFactoryMode=$factoryMode: ") {
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> factoryMode)(f)
+      }
+    }
   }
 
   test("SPARK-58902: BETWEEN on a nondeterministic input inside a conditional branch") {
@@ -649,6 +650,9 @@ class ColumnExpressionSuite extends SharedSparkSession {
 
   // The left and right of the SPARK-59494 cases: k = v = 0..3 and k2 = w = 0..4, one partition
   // each, so the 20 row pairs and the pairs a condition keeps are both known by hand.
+  //
+  // The cases below pin `spark.sql.alwaysInlineCommonExpr` to its default of false: with it on,
+  // `BETWEEN` and `nullif` build no `With` at all and the cases would exercise nothing.
   private def joinSides: (DataFrame, DataFrame) = (
     spark.range(0, 4, 1, 1).selectExpr("cast(id as int) AS k", "cast(id as int) AS v"),
     spark.range(0, 5, 1, 1).selectExpr("cast(id as int) AS k2", "cast(id as int) AS w"))
@@ -662,7 +666,8 @@ class ColumnExpressionSuite extends SharedSparkSession {
 
   test("SPARK-59494: a surviving With in a join condition is read twice and emitted once") {
     // A definition reading columns from both sides fits in no child `Project`, so it stays in the
-    // condition and memoizes per entry rather than being inlined into both references.
+    // condition instead of being inlined into both references. This case reads the shape; the one
+    // counting evaluations below is what observes the memoization.
     withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
       val (left, right) = joinSides
       val condition = joinCondition(left.join(right, expr("(v * w + 1) BETWEEN 2 AND 6")))
@@ -691,6 +696,10 @@ class ColumnExpressionSuite extends SharedSparkSession {
         assert(nested.queryExecution.sparkPlan.collect {
           case j: BroadcastNestedLoopJoinExec => j
         }.size == 1, nested.queryExecution.sparkPlan.toString)
+        // Without this the case would still pass on the inlined condition, i.e. it would agree
+        // across implementations about something other than its subject.
+        assert(joinCondition(nested).exists(_.isInstanceOf[With]),
+          joinCondition(nested).toString)
         checkAnswer(nested, expected)
 
         // An equality beside it is still a conjunct, so the join keeps its keys: a `With` hiding
@@ -725,13 +734,15 @@ class ColumnExpressionSuite extends SharedSparkSession {
     // the rewrite's. With nothing asking the question again, the equality would stay wrapped where
     // the planner cannot see a join key, and a hash join would become a nested loop join.
     withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
-      val left = spark.range(0, 8, 1, 1).selectExpr("id AS l")
-      val right = spark.range(0, 8, 1, 1).selectExpr("id AS r")
-      val joined = left.join(right, expr("nullif(l = r, cast(null as boolean))"))
-      assert(!joinCondition(joined).exists(_.isInstanceOf[With]), joinCondition(joined).toString)
-      val plan = joined.queryExecution.sparkPlan
-      assert(plan.collect { case j: BroadcastHashJoinExec => j }.size == 1, plan.toString)
       onEachEvalPath {
+        // Built inside the loop: `queryExecution` memoizes, so a DataFrame built outside would
+        // carry the first path's plan into the other two.
+        val left = spark.range(0, 8, 1, 1).selectExpr("id AS l")
+        val right = spark.range(0, 8, 1, 1).selectExpr("id AS r")
+        val joined = left.join(right, expr("nullif(l = r, cast(null as boolean))"))
+        assert(!joinCondition(joined).exists(_.isInstanceOf[With]), joinCondition(joined).toString)
+        val plan = joined.queryExecution.sparkPlan
+        assert(plan.collect { case j: BroadcastHashJoinExec => j }.size == 1, plan.toString)
         checkAnswer(joined, (0 until 8).map(i => Row(i.toLong, i.toLong)))
       }
     }
@@ -744,20 +755,21 @@ class ColumnExpressionSuite extends SharedSparkSession {
       // is the definition that survives. Counting its calls is the only direct way to observe the
       // change: inlining evaluated it again at the second comparison of every pair that passed the
       // first, and memoizing evaluates it once per pair.
-      spark.udf.register("counted_product", (x: Int, y: Int) => {
-        counter.add(1)
-        x * y
-      })
-      Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN).foreach {
-        mode =>
-          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> mode.toString) {
-            val (left, right) = joinSides
-            counter.reset()
-            // Built inside the conf block: `executedPlan` is a lazy val, so a DataFrame built
-            // outside would carry the first configuration's plan into the second.
-            left.join(right, expr("counted_product(v, w) BETWEEN 1 AND 5")).collect()
-            assert(counter.value == 20, s"$mode: 4 x 5 row pairs, one evaluation each")
-          }
+      withUserDefinedFunction("counted_product" -> true) {
+        spark.udf.register("counted_product", (x: Int, y: Int) => {
+          counter.add(1)
+          x * y
+        })
+        // `onEachEvalPath` rather than the codegen factory mode alone: a nested loop join over an
+        // inner join supports whole-stage codegen, so with it left on both modes would run the same
+        // generated code and the interpreted memoization would never be counted. The DataFrame is
+        // built inside for the same reason as above.
+        onEachEvalPath {
+          val (left, right) = joinSides
+          counter.reset()
+          left.join(right, expr("counted_product(v, w) BETWEEN 1 AND 5")).collect()
+          assert(counter.value == 20, "4 x 5 row pairs, one evaluation each")
+        }
       }
     }
   }

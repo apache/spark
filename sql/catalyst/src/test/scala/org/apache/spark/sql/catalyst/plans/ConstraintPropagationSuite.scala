@@ -379,6 +379,34 @@ class ConstraintPropagationSuite extends PlanTest {
         IsNotNull(resolveColumn(tr, "b")))))
   }
 
+  test("SPARK-59494: a With entering the constraints is read as what it stands for") {
+    val tr = LocalRelation($"a".int, $"b".int)
+    val Seq(a, b) = tr.output
+    // `RewriteWithExpression` leaves a `With` in a predicate whose definition reads columns no
+    // single child plan holds. Everything downstream reads constraints as plain, individually true
+    // predicates: `IsNotNull` inference walks them, and `InferFiltersFromConstraints` plants them
+    // as filters to be pushed down. So one enters as the expression it stands for, and the
+    // conjunction it hides is split.
+    verifyConstraints(
+      tr.where(With(a + b) { case Seq(ref) => ref > 1 && ref < 10 }).analyze.constraints,
+      ExpressionSet(Seq(
+        resolveColumn(tr, "a") + resolveColumn(tr, "b") > 1,
+        resolveColumn(tr, "a") + resolveColumn(tr, "b") < 10,
+        IsNotNull(resolveColumn(tr, "a")),
+        IsNotNull(resolveColumn(tr, "b")))))
+  }
+
+  test("SPARK-59494: a With read more than once in one constraint is left as it is") {
+    val tr = LocalRelation($"a".int, $"b".int)
+    val Seq(a, b) = tr.output
+    // Splitting the conjunction is what keeps a copy of the definition out of each conjunct. There
+    // is nothing to split here and the reference is read twice, the property `nullif` also has, so
+    // reading it would compute `a + b` a second time on the rows that reach the second comparison.
+    // It stays the single opaque constraint it was.
+    val condition = With(a + b) { case Seq(ref) => ref > 1 || ref < 10 }
+    verifyConstraints(tr.where(condition).analyze.constraints, ExpressionSet(Seq(condition)))
+  }
+
   test("infer IsNotNull constraints from non-nullable attributes") {
     val tr = LocalRelation($"a".int, AttributeReference("b", IntegerType, nullable = false)(),
       AttributeReference("c", StringType, nullable = false)())

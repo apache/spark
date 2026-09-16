@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, With}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, Join, JoinHint, LeafNode, Statistics}
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, TimestampType}
 
 class StreamingJoinHelperSuite extends AnalysisTest {
@@ -150,5 +151,46 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     // Test non-positive results
     assert(watermarkFrom("CAST(leftTime AS LONG) > CAST(rightTime AS LONG) - 10") === Some(0))
     assert(watermarkFrom("CAST(leftTime AS LONG) > CAST(rightTime AS LONG) - 100") === Some(-90000))
+  }
+
+  test("SPARK-59494: extract watermark from a time condition left as a With") {
+    val leftAttributes = Seq(
+      AttributeReference("leftTime", TimestampType)(),
+      AttributeReference("leftOther", IntegerType)())
+    val metadataWithWatermark = new MetadataBuilder()
+      .putLong(EventTimeWatermark.delayKey, 1000)
+      .build()
+    val rightAttributes = Seq(
+      AttributeReference("rightTime", TimestampType, metadata = metadataWithWatermark)(),
+      AttributeReference("rightOther", IntegerType)())
+
+    case class DummyLeafNode(attributes: Seq[Attribute]) extends LeafNode {
+      override def output: Seq[Attribute] = attributes
+      // override computeStats to avoid UnsupportedOperationException.
+      override def computeStats(): Statistics = Statistics(sizeInBytes = BigInt(0))
+    }
+
+    // `BETWEEN` builds a `With`, and `RewriteWithExpression` leaves it in place when the definition
+    // reads columns from both sides of the join -- which never happens above, where the condition
+    // sits in a `Filter` over one leaf. So a join is what this case needs: the derivation has to
+    // read through the `With`, since matching the shape of the `With` itself finds no comparison at
+    // all and derives no bound.
+    val plan = Join(
+      DummyLeafNode(leftAttributes),
+      DummyLeafNode(rightAttributes),
+      Inner,
+      Some(CatalystSqlParser.parseExpression(
+        "CAST(leftTime AS LONG) - CAST(rightTime AS LONG) BETWEEN 0 AND 3600")),
+      JoinHint.NONE)
+    val optimized = SimpleTestOptimizer.execute(SimpleAnalyzer.execute(plan))
+    val condition = optimized.collectFirst { case j: Join => j.condition }.flatten
+    assert(condition.exists(_.exists(_.isInstanceOf[With])), s"expected a With; found: $condition")
+
+    // `leftTime - rightTime >= 0` with the right side watermarked at 10 seconds bounds leftTime at
+    // 10000, and everything at or below the bound is what gets cleaned up, hence 9999. The upper
+    // half of the `BETWEEN` bounds leftTime from above, which says nothing about what to evict.
+    assert(StreamingJoinHelper.getStateValueWatermark(
+      AttributeSet(leftAttributes), AttributeSet(rightAttributes), condition, Some(10000))
+      === Some(9999))
   }
 }

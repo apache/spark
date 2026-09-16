@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, With}
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, InnerLike, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -125,5 +125,25 @@ class JoinOptimizationSuite extends PlanTest {
       val optimized = Optimize.execute(queryAnswerPair._1.analyze)
       comparePlans(optimized, queryAnswerPair._2.analyze)
     }
+  }
+
+  test("SPARK-59494: a With left in a join condition is reordered with the join, not out of it") {
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+    val z = LocalRelation($"e".int).subquery("z")
+    // The shape `RewriteWithExpression` leaves behind: no child plan holds every column the
+    // definition reads, and it is read twice, so inlining would evaluate it twice.
+    // `canEvaluateWithinJoin` has to look through it: reading the `CommonExpressionDef` as an
+    // `Unevaluable` child instead leaves the condition in a `Filter` over a join with no condition
+    // at all, which is a cartesian product.
+    val condition = With(x.output.head + z.output.head) { case Seq(ref) => ref > 1 && ref < 10 }
+    val plan = x.join(y, Inner, Some("x.b".attr === "y.d".attr))
+      .join(z, Inner, Some(condition)).analyze
+    val optimized = Optimize.execute(plan)
+    assert(optimized.collect { case j: Join if j.condition.isEmpty => j }.isEmpty,
+      s"the With conjunct was moved out of its join:\n$optimized")
+    assert(optimized.collect {
+      case j: Join => j.condition.toSeq.flatMap(_.collect { case w: With => w })
+    }.flatten.size == 1, s"expected the With in a join condition:\n$optimized")
   }
 }
