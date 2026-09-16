@@ -1190,6 +1190,82 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59080: the re-shuffled side lands on the member the keyed side was matched on") {
+    val id = AttributeReference("id", IntegerType)()
+    val t1 = AttributeReference("t1", IntegerType)()
+    val t2 = AttributeReference("t2", IntegerType)()
+    // Same arity and the same keys, different expressions: what an alias cross-product produces
+    // when one column is selected twice. Clustering on (id, t1), the first member covers `id` only
+    // and keeps two partitions, the second covers both positions and keeps three. The coarse
+    // member comes first so that reading the collection's head would pick the wrong one.
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1))
+    val keyed = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning = PartitioningCollection(Seq(
+        KeyGroupedPartitioning(Seq(id, t2), keys.size, keys),
+        KeyGroupedPartitioning(Seq(id, t1), keys.size, keys))))
+    val unpartitioned = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val smj = SortMergeJoinExec(Seq(id, t1), Seq(id, t1), Inner, None, keyed, unpartitioned)
+      val planned = EnsureRequirements.apply(smj).asInstanceOf[SortMergeJoinExec]
+
+      // The keyed side is grouped on both join keys, which is the finest member. On this branch
+      // the resolved member is recorded on the scan rather than on a grouping node.
+      assert(planned.left.collect { case b: BatchScanExec => b.spjParams.joinKeyPositions } ===
+        Seq(Some(Seq(0, 1))),
+        "the keyed side must be grouped on the member covering both join keys")
+      // And the shuffled side lands on that same member. Reading the collection instead would take
+      // whichever member came first and could put the two sides on different key sets.
+      val shuffles = planned.right.collect { case s: ShuffleExchangeExec => s }
+      assert(shuffles.map(_.outputPartitioning.numPartitions) === Seq(3),
+        "the re-shuffled side must land on the same member, not on whichever came first")
+    }
+  }
+
+  test("SPARK-59080: pushed-down positions index into the child's own partition expressions") {
+    val nL = AttributeReference("nL", IntegerType)()
+    val iL = AttributeReference("iL", IntegerType)()
+    val iR = AttributeReference("iR", IntegerType)()
+    val nR = AttributeReference("nR", IntegerType)()
+    // Both sides declare the same two key columns, in the opposite order, so the cogroup key sits
+    // at position 1 on the left and at position 0 on the right. Both project onto {1, 2}, so the
+    // sides are co-partitioned and neither is re-shuffled.
+    val leftKeys = Seq(InternalRow(1, 1), InternalRow(2, 1), InternalRow(3, 2))
+    val rightKeys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 3))
+    val left = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning = KeyGroupedPartitioning(Seq(nL, iL), leftKeys.size, leftKeys))
+    val right = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning = KeyGroupedPartitioning(Seq(iR, nR), rightKeys.size, rightKeys))
+
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    // A cogroup requires `ClusteredDistribution` on both children but is not a `ShuffledJoin`, so
+    // `checkKeyGroupCompatible` declines and both children go through the per-child branch that
+    // pushes the positions down. Unlike the Scala `CoGroupExec`, whose key comes from an
+    // `AppendColumns` no `KeyGroupedPartitioning` satisfies, the Pandas one groups on real columns,
+    // so both sides stay keyed.
+    val cogroup = FlatMapCoGroupsInPandasExec(
+      Seq(iL), Seq(iR), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val result = EnsureRequirements.apply(cogroup)
+
+      assert(result.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+        "the sides are co-partitioned on the cogroup key")
+      assert(result.collect { case b: BatchScanExec => b.spjParams.joinKeyPositions } ===
+        Seq(Some(Seq(1)), Some(Seq(0))),
+        "the positions pushed into a child must index into that child's own expressions")
+    }
+  }
+
   def bucket(numBuckets: Int, expr: Expression): TransformExpression = {
     TransformExpression(BucketFunction, Seq(expr), Some(numBuckets))
   }
