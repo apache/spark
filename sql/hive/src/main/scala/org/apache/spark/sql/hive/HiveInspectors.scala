@@ -954,7 +954,9 @@ private[hive] trait HiveInspectors {
     }
 
   /**
-   * Builds an in-place unwrapper that also honors target-type-specific conversions.
+   * Builds an in-place unwrapper that honors CHAR/VARCHAR conversion when `dataType`
+   * contains those types. Other targets, including nanosecond timestamps, still use
+   * `unwrapperFor(field)`.
    */
   def unwrapperFor(
       field: HiveStructField,

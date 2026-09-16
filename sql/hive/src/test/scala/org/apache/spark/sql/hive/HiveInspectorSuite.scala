@@ -382,6 +382,12 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
         }
         assert(unwrapperFor(inspector, dataType)(
           inspector.asInstanceOf[ConstantObjectInspector].getWritableConstantValue) === expected)
+
+        val nullInspector = toInspector(Literal.create(null, dataType))
+        assert(nullInspector.isInstanceOf[ConstantObjectInspector])
+        assert(inspectorToDataType(nullInspector) === dataType)
+        assert(unwrapperFor(nullInspector, dataType)(
+          nullInspector.asInstanceOf[ConstantObjectInspector].getWritableConstantValue) === null)
       }
     }
   }
