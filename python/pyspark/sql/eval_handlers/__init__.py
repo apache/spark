@@ -20,9 +20,9 @@
 Not a supported extension API: the registry is per executor process and filled at
 import time, so handlers must be defined in this package rather than by user code.
 Each migrated eval type is an ``EvalTypeHandler`` subclass (in ``_base``) that
-declares its ``eval_type`` and self-registers in ``EVAL_TYPE_HANDLERS``, which
-``read_udfs`` consults to dispatch. Importing this package imports the concrete
-handler submodules (``_arrow``) so they register.
+declares its ``eval_type`` and self-registers at class definition, which
+``read_udfs`` looks up via ``get_eval_type_handler``. Importing this package
+imports the concrete handler submodules (``_arrow``) so they register.
 """
 
 from pyspark.sql.eval_handlers import _arrow  # noqa: F401  # registers handlers on import

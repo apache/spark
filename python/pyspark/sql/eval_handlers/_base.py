@@ -24,7 +24,7 @@ circular import.
 
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Optional, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Optional
 
 from pyspark.serializers import Serializer
 from pyspark.sql.eval_handlers._typing import (
@@ -45,7 +45,12 @@ if TYPE_CHECKING:
     from pyspark.worker_util import EvalConf, RunnerConf
 
 # eval type -> handler class, populated by _EvalTypeHandlerMeta at class definition.
-EVAL_TYPE_HANDLERS: "dict[int, type[EvalTypeHandler]]" = {}
+_eval_type_handlers: "dict[int, type[EvalTypeHandler]]" = {}
+
+
+def get_eval_type_handler(eval_type: int) -> "Optional[type[EvalTypeHandler]]":
+    """Return the handler class registered for ``eval_type``, or ``None``."""
+    return _eval_type_handlers.get(eval_type)
 
 
 class _EvalTypeHandlerMeta(ABCMeta):
@@ -57,20 +62,21 @@ class _EvalTypeHandlerMeta(ABCMeta):
     """
 
     def __new__(mcs, name: str, bases: tuple, namespace: dict, **kwargs: Any) -> type:
-        cls = cast("type[EvalTypeHandler]", super().__new__(mcs, name, bases, namespace, **kwargs))
+        cls = super().__new__(mcs, name, bases, namespace, **kwargs)
         eval_type = namespace.get("eval_type")
         if eval_type is not None:
+            assert issubclass(cls, EvalTypeHandler)
             assert not cls.__abstractmethods__, (
                 "Handler {} declares eval_type {} but is abstract: {}".format(
                     name, eval_type, sorted(cls.__abstractmethods__)
                 )
             )
-            assert eval_type not in EVAL_TYPE_HANDLERS, (
+            assert eval_type not in _eval_type_handlers, (
                 "Duplicate eval type handler for {}: {} and {}".format(
-                    eval_type, EVAL_TYPE_HANDLERS[eval_type].__name__, name
+                    eval_type, _eval_type_handlers[eval_type].__name__, name
                 )
             )
-            EVAL_TYPE_HANDLERS[eval_type] = cls
+            _eval_type_handlers[eval_type] = cls
         return cls
 
 

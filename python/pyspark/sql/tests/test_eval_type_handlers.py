@@ -19,11 +19,12 @@ import unittest
 
 from pyspark.sql.eval_handlers._arrow import ArrowScalarUDFHandler
 from pyspark.sql.eval_handlers._base import (
-    EVAL_TYPE_HANDLERS,
     BatchEvalTypeHandler,
     CoGroupedEvalTypeHandler,
     EvalTypeHandler,
     GroupedEvalTypeHandler,
+    _eval_type_handlers,
+    get_eval_type_handler,
 )
 from pyspark.sql.pandas.serializers import (
     ArrowStreamCoGroupSerializer,
@@ -45,7 +46,7 @@ class _RunnerConf:
 class EvalTypeHandlerTests(unittest.TestCase):
     def test_scalar_arrow_udf_is_registered(self):
         self.assertIs(
-            EVAL_TYPE_HANDLERS.get(PythonEvalType.SQL_SCALAR_ARROW_UDF),
+            get_eval_type_handler(PythonEvalType.SQL_SCALAR_ARROW_UDF),
             ArrowScalarUDFHandler,
         )
 
@@ -63,7 +64,7 @@ class EvalTypeHandlerTests(unittest.TestCase):
 
     def test_category_bases_are_not_registered(self):
         # Only concrete subclasses that declare an eval type are registered.
-        registered = set(EVAL_TYPE_HANDLERS.values())
+        registered = set(_eval_type_handlers.values())
         for base in (
             EvalTypeHandler,
             BatchEvalTypeHandler,
@@ -113,7 +114,7 @@ class EvalTypeHandlerTests(unittest.TestCase):
         self.assertRaises(AssertionError, _define_duplicate)
         # The failed definition must not clobber the existing registration.
         self.assertIs(
-            EVAL_TYPE_HANDLERS[PythonEvalType.SQL_SCALAR_ARROW_UDF],
+            get_eval_type_handler(PythonEvalType.SQL_SCALAR_ARROW_UDF),
             ArrowScalarUDFHandler,
         )
 
@@ -128,7 +129,7 @@ class EvalTypeHandlerTests(unittest.TestCase):
                 # run left abstract on purpose
 
         self.assertRaises(AssertionError, _define_abstract)
-        self.assertNotIn(unused_eval_type, EVAL_TYPE_HANDLERS)
+        self.assertNotIn(unused_eval_type, _eval_type_handlers)
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)

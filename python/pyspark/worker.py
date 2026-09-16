@@ -77,7 +77,7 @@ from pyspark.sql.conversion import (
     LocalDataToArrowConversion,
     PandasToArrowConversion,
 )
-from pyspark.sql.eval_handlers._base import EVAL_TYPE_HANDLERS
+from pyspark.sql.eval_handlers._base import get_eval_type_handler
 from pyspark.sql.eval_handlers.verification import (
     verify_result_row_count,
     verify_scalar_result,
@@ -1884,7 +1884,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
     # Eval types that have been migrated to a handler are dispatched here without
     # walking the if/elif chain below. The handler owns the whole lifecycle,
     # including serializer selection.
-    handler_cls = EVAL_TYPE_HANDLERS.get(eval_type)
+    handler_cls = get_eval_type_handler(eval_type)
     if handler_cls is not None:
         udfs = [
             read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index=udf_index)
