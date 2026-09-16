@@ -78,6 +78,8 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
  *   relation operators in [[MetadataResolver]].
  * @param externalRelationResolution An optional [[RelationResolution]] with to override the default
  *   one. The default is constructed using [[Resolver.createRelationResolution]].
+ * @param hintResolutionRules Rules of the fixed-point Analyzer's "Hints" batch that are injected
+ *   through `SparkSessionExtensions.injectHintResolutionRule`. See [[HintResolutionRunner]].
  */
 class Resolver(
     catalogManager: CatalogManager,
@@ -86,7 +88,8 @@ class Resolver(
     metadataResolverExtensions: Seq[ResolverExtension] = Seq.empty,
     externalRelationResolution: Option[RelationResolution] = None,
     extendedRewriteRules: Seq[Rule[LogicalPlan]] = Seq.empty,
-    tracker: Option[QueryPlanningTracker] = None)
+    tracker: Option[QueryPlanningTracker] = None,
+    hintResolutionRules: Seq[Rule[LogicalPlan]] = Seq.empty)
     extends LogicalPlanResolver
     with ResolverMetricTracker
     with DelegatesResolutionToExtensions
@@ -101,6 +104,7 @@ class Resolver(
   )
   private val cteRegistry = new CteRegistry
   private val identifierAndCteSubstitutor = new IdentifierAndCteSubstitutor
+  private val hintResolutionRunner = new HintResolutionRunner(hintResolutionRules)
   private val operatorResolutionContextStack = new OperatorResolutionContextStack
   private val relationResolution = externalRelationResolution.getOrElse {
     Resolver.createRelationResolution(catalogManager, sharedRelationCache)
@@ -184,12 +188,17 @@ class Resolver(
    * This method is a top-level analysis entry point:
    * 1. Substitute IDENTIFIERs and CTEs in the `unresolvedPlan` using
    *    [[IdentifierAndCteSubstitutor]];
-   * 2. Resolve the metadata for the plan using [[MetadataResolver]]. When
+   * 2. Apply the injected hint resolution rules using [[HintResolutionRunner]]. Those rules run
+   *    before the metadata lookup, because the fixed-point analyzer completes its "Hints" batch
+   *    before resolving relations, and because they have to be able to rewrite an
+   *    [[UnresolvedRelation]] before its metadata (and, for path-based relations, its file
+   *    listing) is resolved;
+   * 3. Resolve the metadata for the plan using [[MetadataResolver]]. When
    *    [[ANALYZER_SINGLE_PASS_RESOLVER_RELATION_BRIDGING_ENABLED]] is enabled, we need to
    *    re-instantiate the [[RelationMetadataProvider]] as [[View]] resolution context might have
    *    changed in the meantime;
-   * 3. Resolve the plan using [[resolve]].
-   * 4. Rewrites the plan using rules configured in the [[planRewriter]]. The plan rewrite is
+   * 4. Resolve the plan using [[resolve]].
+   * 5. Rewrites the plan using rules configured in the [[planRewriter]]. The plan rewrite is
    *    necessary in order to either fully resolve the plan or stay compatible with the fixed-point
    *    analyzer.
    *    Rewriting is done in `lookupMetadataAndResolve` so rules are applied after the main
@@ -209,7 +218,12 @@ class Resolver(
 
       val planAfterSubstitution = identifierAndCteSubstitutor.substitutePlan(unresolvedPlan)
 
-      planLogger.logPlanResolutionEvent(planAfterSubstitution, "Metadata lookup")
+      planLogger.logPlanResolutionEvent(planAfterSubstitution, "Hint resolution")
+
+      val planAfterHintResolution =
+        hintResolutionRunner.resolveWithSubqueries(planAfterSubstitution)
+
+      planLogger.logPlanResolutionEvent(planAfterHintResolution, "Metadata lookup")
 
       relationMetadataProvider = analyzerBridgeState match {
         case Some(analyzerBridgeState) =>
@@ -223,15 +237,15 @@ class Resolver(
           relationMetadataProvider
       }
 
-      relationMetadataProvider.resolve(planAfterSubstitution)
+      relationMetadataProvider.resolve(planAfterHintResolution)
 
-      planLogger.logPlanResolutionEvent(planAfterSubstitution, "Main resolution")
+      planLogger.logPlanResolutionEvent(planAfterHintResolution, "Main resolution")
 
-      planAfterSubstitution.setTagValue(ResolverTag.TOP_LEVEL_OPERATOR, ())
+      planAfterHintResolution.setTagValue(ResolverTag.TOP_LEVEL_OPERATOR, ())
 
       val resolvedPlan =
         recordProfile("resolve") {
-          resolve(planAfterSubstitution)
+          resolve(planAfterHintResolution)
         }
 
       recordProfile("rewrite") {

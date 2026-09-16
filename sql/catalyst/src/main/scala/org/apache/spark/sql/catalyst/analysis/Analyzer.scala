@@ -483,6 +483,8 @@ class Analyzer(
         self.singlePassResolverExtensions
       override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] =
         self.singlePassMetadataResolverExtensions
+      override def singlePassHintResolutionRules: Seq[Rule[LogicalPlan]] =
+        self.singlePassHintResolutionRules
       override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =
         self.singlePassPostHocResolutionRules
       override val singlePassExtendedResolutionChecks: Seq[LogicalPlan => Unit] =
@@ -524,6 +526,16 @@ class Analyzer(
    * See [[ResolverExtension]] for more info.
    */
   val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Nil
+
+  /**
+   * Rules for the "Hints" batch of the single-pass Resolver. They are applied before the relation
+   * metadata is resolved, which is the position the fixed-point "Hints" batch has relative to
+   * `ResolveSQLOnFile`.
+   *
+   * Defaults to [[hintResolutionRules]], so that the two analyzers stay in sync by default.
+   * Override to run a different set of rules under the single-pass Resolver.
+   */
+  def singlePassHintResolutionRules: Seq[Rule[LogicalPlan]] = hintResolutionRules
 
   /**
    * Override to provide rules to do post-hoc resolution. This batch is to run right after the
