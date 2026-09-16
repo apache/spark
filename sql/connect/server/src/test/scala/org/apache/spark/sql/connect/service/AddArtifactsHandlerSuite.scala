@@ -17,7 +17,8 @@
 package org.apache.spark.sql.connect.service
 
 import java.io.{FileOutputStream, InputStream}
-import java.nio.file.{Files, Path}
+import java.net.URI
+import java.nio.file.{Files, Path, Paths}
 import java.util.UUID
 import java.util.jar.{JarEntry, JarOutputStream}
 import java.util.zip.CRC32
@@ -37,6 +38,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
+import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.connect.ResourceHelper
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -63,7 +65,8 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
   class TestAddArtifactsHandler(
       responseObserver: StreamObserver[AddArtifactsResponse],
-      throwIfArtifactExists: Boolean = false)
+      throwIfArtifactExists: Boolean = false,
+      resolvedMavenArtifacts: Map[URI, Seq[Artifact]] = Map.empty)
       extends SparkConnectAddArtifactsHandler(responseObserver) {
 
     // Stop the staged artifacts from being automatically deleted
@@ -86,6 +89,16 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
       finalArtifacts.append(artifact.name)
       artifactChecksums += (artifact.name -> artifact.getCrc)
+    }
+
+    override protected def resolveMavenDependency(
+        uri: URI,
+        connectTimeoutMs: Int,
+        readTimeoutMs: Int,
+        isCancelled: () => Boolean): Seq[Artifact] = {
+      resolvedMavenArtifacts.getOrElse(
+        uri,
+        super.resolveMavenDependency(uri, connectTimeoutMs, readTimeoutMs, isCancelled))
     }
 
     def getFinalArtifacts: Seq[String] = finalArtifacts.toSeq
@@ -310,6 +323,69 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
       val writtenBytes = ByteString.readFrom(Files.newInputStream(writtenFile))
       val expectedBytes = ByteString.readFrom(Files.newInputStream(artifactPath))
       assert(writtenBytes == expectedBytes)
+    } finally {
+      handler.forceCleanUp()
+    }
+  }
+
+  test("ordered entries resolve Maven dependencies before registration") {
+    val promise = Promise[AddArtifactsResponse]()
+    val ivyUri = URI.create("ivy://my.connect.lib:mylib:0.1")
+    val resolved = Artifact.newJarArtifact(
+      Paths.get("resolved.jar"),
+      new Artifact.LocalFile(inputFilePath.resolve("smallJar.jar")))
+    val handler = new TestAddArtifactsHandler(
+      new DummyStreamObserver(promise),
+      resolvedMavenArtifacts = Map(ivyUri -> Seq(resolved)))
+    try {
+      def uploaded(name: String, path: Path): proto.AddArtifactsRequest.ArtifactEntry = {
+        val bytes = ByteString.copyFrom(Files.readAllBytes(path))
+        val crc = new CRC32()
+        crc.update(bytes.toByteArray)
+        val artifact = proto.AddArtifactsRequest.SingleChunkArtifact
+          .newBuilder()
+          .setName(name)
+          .setData(
+            proto.AddArtifactsRequest.ArtifactChunk
+              .newBuilder()
+              .setData(bytes)
+              .setCrc(crc.getValue))
+        proto.AddArtifactsRequest.ArtifactEntry.newBuilder().setArtifact(artifact).build()
+      }
+
+      val request = AddArtifactsRequest
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setUserContext(proto.UserContext.newBuilder().setUserId("c1"))
+        .setBatch(
+          proto.AddArtifactsRequest.Batch
+            .newBuilder()
+            .addEntries(
+              uploaded(
+                "classes/smallClassFile.class",
+                inputFilePath.resolve("smallClassFile.class")))
+            .addEntries(
+              proto.AddArtifactsRequest.ArtifactEntry
+                .newBuilder()
+                .setMavenDependency(
+                  proto.AddArtifactsRequest.MavenDependency
+                    .newBuilder()
+                    .setUri(ivyUri.toString)))
+            .addEntries(uploaded("jars/smallJar.jar", inputFilePath.resolve("smallJar.jar")))
+            .build())
+        .build()
+
+      handler.onNext(request)
+      assert(handler.getFinalArtifacts.isEmpty)
+      handler.onCompleted()
+
+      val response = ThreadUtils.awaitResult(promise.future, 5.seconds)
+      assert(
+        handler.getFinalArtifacts == Seq(
+          "classes/smallClassFile.class",
+          "jars/resolved.jar",
+          "jars/smallJar.jar"))
+      assert(response.getArtifactsList.asScala.map(_.getName) == handler.getFinalArtifacts)
     } finally {
       handler.forceCleanUp()
     }

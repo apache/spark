@@ -896,14 +896,26 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         VERSION_FIELD_NUMBER: builtins.int
+        CAPABILITIES_FIELD_NUMBER: builtins.int
         version: builtins.str
+        @property
+        def capabilities(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """Capabilities supported by the server. Capability names are versioned so clients can
+            negotiate behavior without inferring it from the Spark version or a configuration value.
+            """
         def __init__(
             self,
             *,
             version: builtins.str = ...,
+            capabilities: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["version", b"version"]
+            self,
+            field_name: typing_extensions.Literal[
+                "capabilities", b"capabilities", "version", b"version"
+            ],
         ) -> None: ...
 
     class DDLParse(google.protobuf.message.Message):
@@ -2488,26 +2500,87 @@ class AddArtifactsRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["data", b"data", "name", b"name"]
         ) -> None: ...
 
+    class MavenDependency(google.protobuf.message.Message):
+        """A Maven dependency that must be resolved by the server. The URI uses Spark's existing
+        ivy://group:module:version syntax.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        URI_FIELD_NUMBER: builtins.int
+        uri: builtins.str
+        def __init__(
+            self,
+            *,
+            uri: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["uri", b"uri"]) -> None: ...
+
+    class ArtifactEntry(google.protobuf.message.Message):
+        """An ordered artifact batch entry used by clients that support server-side Maven resolution."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        ARTIFACT_FIELD_NUMBER: builtins.int
+        MAVEN_DEPENDENCY_FIELD_NUMBER: builtins.int
+        @property
+        def artifact(self) -> global___AddArtifactsRequest.SingleChunkArtifact: ...
+        @property
+        def maven_dependency(self) -> global___AddArtifactsRequest.MavenDependency: ...
+        def __init__(
+            self,
+            *,
+            artifact: global___AddArtifactsRequest.SingleChunkArtifact | None = ...,
+            maven_dependency: global___AddArtifactsRequest.MavenDependency | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "artifact", b"artifact", "maven_dependency", b"maven_dependency", "value", b"value"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "artifact", b"artifact", "maven_dependency", b"maven_dependency", "value", b"value"
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["value", b"value"]
+        ) -> typing_extensions.Literal["artifact", "maven_dependency"] | None: ...
+
     class Batch(google.protobuf.message.Message):
         """A number of `SingleChunkArtifact` batched into a single RPC."""
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         ARTIFACTS_FIELD_NUMBER: builtins.int
+        ENTRIES_FIELD_NUMBER: builtins.int
         @property
         def artifacts(
             self,
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
             global___AddArtifactsRequest.SingleChunkArtifact
-        ]: ...
+        ]:
+            """Legacy artifact list used by clients that do not negotiate server-side Maven resolution."""
+        @property
+        def entries(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___AddArtifactsRequest.ArtifactEntry
+        ]:
+            """Ordered mixture of uploaded artifacts and server-resolved Maven dependencies."""
         def __init__(
             self,
             *,
             artifacts: collections.abc.Iterable[global___AddArtifactsRequest.SingleChunkArtifact]
             | None = ...,
+            entries: collections.abc.Iterable[global___AddArtifactsRequest.ArtifactEntry]
+            | None = ...,
         ) -> None: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["artifacts", b"artifacts"]
+            self,
+            field_name: typing_extensions.Literal["artifacts", b"artifacts", "entries", b"entries"],
         ) -> None: ...
 
     class BeginChunkedArtifact(google.protobuf.message.Message):

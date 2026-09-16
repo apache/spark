@@ -283,6 +283,9 @@ message AnalyzePlanResponse {
 
   message SparkVersion {
     string version = 1;
+    // Capabilities supported by the server. Capability names are versioned so clients can
+    // negotiate behavior without inferring it from the Spark version or a configuration value.
+    repeated string capabilities = 2;
   }
 
   message DDLParse {
@@ -679,9 +682,26 @@ message AddArtifactsRequest {
     ArtifactChunk data = 2;
   }
 
+  // A Maven dependency that must be resolved by the server. The URI uses Spark's existing
+  // ivy://group:module:version syntax.
+  message MavenDependency {
+    string uri = 1;
+  }
+
+  // An ordered artifact batch entry used by clients that support server-side Maven resolution.
+  message ArtifactEntry {
+    oneof value {
+      SingleChunkArtifact artifact = 1;
+      MavenDependency maven_dependency = 2;
+    }
+  }
+
   // A number of `SingleChunkArtifact` batched into a single RPC.
   message Batch {
+    // Legacy artifact list used by clients that do not negotiate server-side Maven resolution.
     repeated SingleChunkArtifact artifacts = 1;
+    // Ordered mixture of uploaded artifacts and server-resolved Maven dependencies.
+    repeated ArtifactEntry entries = 2;
   }
 
   // Signals the beginning/start of a chunked artifact.
