@@ -213,49 +213,7 @@ private[spark] object BLAS extends Serializable {
       case _ =>
         throw new IllegalArgumentException(s"nrm2 doesn't support vector type ${x.getClass}.")
     }
-    if (containsNonzero(values)) {
-      val result = getBLAS(values.length).dnrm2(values.length, values, 1)
-      // VectorBLAS computes sqrt(sum(x * x)) directly, so recover from overflow or underflow.
-      if (result == 0.0 || result.isInfinite) stableNrm2(values) else result
-    } else {
-      0.0
-    }
-  }
-
-  private def containsNonzero(values: Array[Double]): Boolean = {
-    var i = 0
-    while (i < values.length) {
-      if (values(i) != 0.0) {
-        return true
-      }
-      i += 1
-    }
-    false
-  }
-
-  private def stableNrm2(values: Array[Double]): Double = {
-    var scale = 0.0
-    var sum = 1.0
-    var i = 0
-    while (i < values.length) {
-      val value = math.abs(values(i))
-      if (value.isNaN) {
-        return Double.NaN
-      } else if (value.isInfinite) {
-        scale = Double.PositiveInfinity
-      } else if (value != 0.0 && !scale.isInfinite) {
-        if (scale < value) {
-          val ratio = scale / value
-          sum = 1.0 + sum * ratio * ratio
-          scale = value
-        } else {
-          val ratio = value / scale
-          sum += ratio * ratio
-        }
-      }
-      i += 1
-    }
-    scale * math.sqrt(sum)
+    getBLAS(values.length).dnrm2(values.length, values, 1)
   }
 
   /**

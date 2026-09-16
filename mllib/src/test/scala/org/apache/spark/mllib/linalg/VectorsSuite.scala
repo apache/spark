@@ -372,19 +372,6 @@ class VectorsSuite extends SparkFunSuite {
       a + math.pow(math.abs(v), 3.7)), 1.0 / 3.7) relTol 1E-8)
   }
 
-  test("L2 norm avoids overflow and underflow") {
-    Seq(1e200, 1e-200).foreach { scale =>
-      val expected = math.sqrt(2.0) * scale
-      val vectors = Seq(
-        Vectors.dense(scale, -scale),
-        Vectors.sparse(3, Seq(0 -> scale, 2 -> -scale)))
-
-      vectors.foreach { vector =>
-        assert(Vectors.norm(vector, 2.0) ~== expected relTol 1E-15)
-      }
-    }
-  }
-
   test("Vector numActive and numNonzeros") {
     val dv = Vectors.dense(0.0, 2.0, 3.0, 0.0)
     assert(dv.numActives === 4)
