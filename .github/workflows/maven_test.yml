@@ -71,7 +71,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     steps:
       - name: Bootstrap composite actions
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Checkout and sync Spark repository
         id: checkout
         uses: ./.github/actions/checkout-and-sync
@@ -214,7 +214,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     steps:
       - name: Bootstrap composite actions
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Checkout and sync Spark repository
         uses: ./.github/actions/checkout-and-sync
         with:

@@ -33,7 +33,7 @@ jobs:
     if: github.repository == 'apache/spark'
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Cache SBT and Maven
