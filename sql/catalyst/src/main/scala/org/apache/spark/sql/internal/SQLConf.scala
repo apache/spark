@@ -677,6 +677,7 @@ object SQLConf {
         "'x = 1 OR x IN (2, 3)' becomes 'x IN (1, 2, 3)'. This lets OptimizeIn further dedup " +
         "and, for large lists, convert to InSet.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
