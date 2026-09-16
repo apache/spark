@@ -618,8 +618,7 @@ case class PythonUDTF(
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId,
     pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None,
-    tableArguments: Option[Seq[Boolean]] = None,
-    applyCharVarcharChecks: Boolean = false)
+    tableArguments: Option[Seq[Boolean]] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val canonicalized: Expression = {
@@ -649,8 +648,7 @@ case class UnresolvedPolymorphicPythonUDTF(
     udfDeterministic: Boolean,
     resolveElementMetadata: (PythonFunction, Seq[Expression]) => PythonUDTFAnalyzeResult,
     resultId: ExprId = NamedExpression.newExprId,
-    tableArguments: Option[Seq[Boolean]] = None,
-    applyCharVarcharChecks: Boolean = false)
+    tableArguments: Option[Seq[Boolean]] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val resolved = false
