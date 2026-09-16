@@ -678,6 +678,7 @@ object SQLConf {
         "inSetSwitchThreshold) or to float/double/string/decimal. Set to false to fall back to " +
         "the generic Set path.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
