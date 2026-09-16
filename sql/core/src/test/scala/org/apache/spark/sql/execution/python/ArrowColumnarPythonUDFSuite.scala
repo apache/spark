@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.IntegratedUDFTestUtils
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{ExamplePointUDT, SharedSparkSession}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
@@ -36,8 +35,8 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
 
   import IntegratedUDFTestUtils._
 
-  private class CharStorageUDT extends UserDefinedType[String] {
-    override def sqlType: DataType = CharType(3)
+  private class StringStorageUDT extends UserDefinedType[String] {
+    override def sqlType: DataType = StringType
     override def serialize(value: String): Any = value
     override def deserialize(value: Any): String = value.toString
     override def userClass: Class[String] = classOf[String]
@@ -59,23 +58,6 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     plan.collect {
       case p if tag.runtimeClass.isInstance(p) => p.asInstanceOf[T]
     }
-  }
-
-  test("CHAR/VARCHAR output normalization also unwraps UDT siblings") {
-    val logicalSchema =
-      StructType(Seq(
-        StructField("c", CharType(3)),
-        StructField("point", new ExamplePointUDT()),
-        StructField("nested", new CharStorageUDT())))
-    val expectedSchema = StructType(
-      Seq(
-        StructField("c", StringType),
-        StructField("point", ArrayType(DoubleType, containsNull = false)),
-        StructField("nested", StringType)))
-
-    assert(
-      ColumnarArrowEvalPythonEvaluatorFactory.toPhysicalType(logicalSchema) === expectedSchema)
-    assert(CharVarcharUtils.physicalTypeHasCharVarchar(logicalSchema))
   }
 
   test("Arrow-backed source: no ColumnarToRowExec before ArrowEvalPythonExec") {
@@ -162,6 +144,33 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     }
   }
 
+  test("Arrow-backed source: row queue preserves ordinary UDT sibling") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "row_queue_char_udf", returnType = CharType(4))
+      val udtUDF = TestTypedScalarPandasUDF(
+        name = "row_queue_udt_udf", returnType = new StringStorageUDT())
+      registerTestUDF(charUDF, spark)
+      registerTestUDF(udtUDF, spark)
+
+      val result = readArrowSource(numRows = 3).selectExpr(
+        "id", "name", "value", "data",
+        "row_queue_char_udf(id) as char_result",
+        "row_queue_udt_udf(id) as udt_result")
+      val arrowExec = collectNodes[ArrowEvalPythonExec](result.queryExecution.executedPlan).head
+
+      assert(!ColumnarArrowEvalPythonEvaluatorFactory.canUseArrowColumnar(
+        Some(Array(0, 0)), isArrow = true, arrowExec.udfs))
+      assert(result.schema("udt_result").dataType.isInstanceOf[StringStorageUDT])
+      assert(result.collect().map(row => (row.getString(4), row.getString(5))).toSeq ===
+        Seq(("0   ", "0"), ("1   ", "1"), ("2   ", "2")))
+    }
+  }
+
   test("Arrow-backed source: default policy exposes checked CHAR/VARCHAR output as STRING") {
     assume(shouldTestPandasUDFs)
     withSQLConf(
@@ -244,6 +253,36 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         assert(row.getString(4) === index.toString)
         assert(row.getString(5) === s"row_$index")
       }
+    }
+  }
+
+  test("Arrow-backed source: legacy CHAR/VARCHAR output keeps optimized route with UDT") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "optimized_char_udf", returnType = CharType(4))
+      val udtUDF = TestTypedScalarPandasUDF(
+        name = "optimized_udt_udf", returnType = new StringStorageUDT())
+      registerTestUDF(charUDF, spark)
+      registerTestUDF(udtUDF, spark)
+
+      val result = readArrowSource(numRows = 2).selectExpr(
+        "id", "name", "value", "data",
+        "optimized_char_udf(id) as char_result",
+        "optimized_udt_udf(id) as udt_result")
+      val arrowExec = collectNodes[ArrowEvalPythonExec](result.queryExecution.executedPlan).head
+
+      assert(ColumnarArrowEvalPythonEvaluatorFactory.canUseArrowColumnar(
+        Some(Array(0, 0)), isArrow = true, arrowExec.udfs))
+      assert(result.schema("char_result").dataType === StringType)
+      assert(result.schema("udt_result").dataType.isInstanceOf[StringStorageUDT])
+      assert(result.collect().map(row => (row.getString(4), row.getString(5))).toSeq ===
+        Seq(("0", "0"), ("1", "1")))
     }
   }
 

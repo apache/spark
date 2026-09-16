@@ -446,7 +446,6 @@ object IntegratedUDFTestUtils extends SQLHelper {
       resultId: ExprId,
       elementwiseNestingDepth: Int,
       applyCharVarcharChecks: Boolean,
-      hasCharVarcharResult: Boolean = false,
       charVarcharResultType: Option[DataType] = None)
       extends PythonUDF(
         name,
@@ -458,7 +457,6 @@ object IntegratedUDFTestUtils extends SQLHelper {
         resultId,
         elementwiseNestingDepth,
         applyCharVarcharChecks,
-        hasCharVarcharResult = hasCharVarcharResult,
         charVarcharResultType = charVarcharResultType) {
 
     def this(pudf: PythonUDF) = {
@@ -472,7 +470,6 @@ object IntegratedUDFTestUtils extends SQLHelper {
         pudf.resultId,
         pudf.elementwiseNestingDepth,
         pudf.applyCharVarcharChecks,
-        pudf.hasCharVarcharResult,
         pudf.charVarcharResultType)
     }
 

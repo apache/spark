@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.state.StateMessage
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, ContainsKey, DeleteTimer, Exists, ExpiryTimerRequest, Get, GetProcessingTime, GetValue, GetWatermark, HandleState, Keys, ListStateCall, ListStateGet, ListStatePut, ListTimers, MapStateCall, ParseStringSchema, RegisterTimer, RemoveKey, SetHandleState, StateCallCommand, StatefulProcessorCall, TimerRequest, TimerStateCallCommand, TimerValueRequest, UpdateValue, UtilsRequest, Values, ValueStateCall, ValueStateUpdate}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
-import org.apache.spark.sql.types.{ArrayType, CharType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
@@ -232,54 +232,59 @@ class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with Bef
   }
 
   test("CHAR/VARCHAR grouping key schemas are rejected before state processing") {
-    val schema = StructType(StructField("key", ArrayType(CharType(3))) :: Nil)
-    val error = intercept[SparkUnsupportedOperationException] {
-      new TransformWithStateInPySparkStateServer(
-        serverSocket,
-        statefulProcessorHandle,
-        schema,
-        2,
-        batchTimestampMs,
-        eventTimeWatermarkForEviction,
-        outputStream)
+    val charStorageUDT = new PythonUserDefinedType(CharType(3), "test.CharStorageUDT", "")
+    Seq(ArrayType(CharType(3)), charStorageUDT).foreach { dataType =>
+      val schema = StructType(StructField("key", dataType) :: Nil)
+      val error = intercept[SparkUnsupportedOperationException] {
+        new TransformWithStateInPySparkStateServer(
+          serverSocket,
+          statefulProcessorHandle,
+          schema,
+          2,
+          batchTimestampMs,
+          eventTimeWatermarkForEviction,
+          outputStream)
+      }
+      assert(error.getCondition === "UNSUPPORTED_FEATURE.PYTHON_STATE_CHAR_VARCHAR_SCHEMA")
+      assert(error.getMessageParameters.get("schemaKind") === "grouping key")
     }
-    assert(error.getCondition === "UNSUPPORTED_FEATURE.PYTHON_STATE_CHAR_VARCHAR_SCHEMA")
-    assert(error.getMessageParameters.get("schemaKind") === "grouping key")
   }
 
   test("CHAR/VARCHAR value, list, and map state schemas are rejected") {
-    val unsupportedSchema =
-      StructType(StructField("value", ArrayType(CharType(3))) :: Nil).json
     val supportedSchema = stateSchema.json
-    val calls = Seq(
-      StatefulProcessorCall.newBuilder().setGetValueState(
-        StateCallCommand.newBuilder()
-          .setStateName("value")
-          .setSchema(unsupportedSchema)
-          .build()).build(),
-      StatefulProcessorCall.newBuilder().setGetListState(
-        StateCallCommand.newBuilder()
-          .setStateName("list")
-          .setSchema(unsupportedSchema)
-          .build()).build(),
-      StatefulProcessorCall.newBuilder().setGetMapState(
-        StateCallCommand.newBuilder()
-          .setStateName("map-key")
-          .setSchema(unsupportedSchema)
-          .setMapStateValueSchema(supportedSchema)
-          .build()).build(),
-      StatefulProcessorCall.newBuilder().setGetMapState(
-        StateCallCommand.newBuilder()
-          .setStateName("map-value")
-          .setSchema(supportedSchema)
-          .setMapStateValueSchema(unsupportedSchema)
-          .build()).build())
+    val charStorageUDT = new PythonUserDefinedType(CharType(3), "test.CharStorageUDT", "")
+    Seq(ArrayType(CharType(3)), charStorageUDT).foreach { dataType =>
+      val unsupportedSchema = StructType(StructField("value", dataType) :: Nil).json
+      val calls = Seq(
+        StatefulProcessorCall.newBuilder().setGetValueState(
+          StateCallCommand.newBuilder()
+            .setStateName("value")
+            .setSchema(unsupportedSchema)
+            .build()).build(),
+        StatefulProcessorCall.newBuilder().setGetListState(
+          StateCallCommand.newBuilder()
+            .setStateName("list")
+            .setSchema(unsupportedSchema)
+            .build()).build(),
+        StatefulProcessorCall.newBuilder().setGetMapState(
+          StateCallCommand.newBuilder()
+            .setStateName("map-key")
+            .setSchema(unsupportedSchema)
+            .setMapStateValueSchema(supportedSchema)
+            .build()).build(),
+        StatefulProcessorCall.newBuilder().setGetMapState(
+          StateCallCommand.newBuilder()
+            .setStateName("map-value")
+            .setSchema(supportedSchema)
+            .setMapStateValueSchema(unsupportedSchema)
+            .build()).build())
 
-    calls.foreach { call =>
-      val error = intercept[SparkUnsupportedOperationException] {
-        stateServer.handleStatefulProcessorCall(call)
+      calls.foreach { call =>
+        val error = intercept[SparkUnsupportedOperationException] {
+          stateServer.handleStatefulProcessorCall(call)
+        }
+        assert(error.getCondition === "UNSUPPORTED_FEATURE.PYTHON_STATE_CHAR_VARCHAR_SCHEMA")
       }
-      assert(error.getCondition === "UNSUPPORTED_FEATURE.PYTHON_STATE_CHAR_VARCHAR_SCHEMA")
     }
   }
 

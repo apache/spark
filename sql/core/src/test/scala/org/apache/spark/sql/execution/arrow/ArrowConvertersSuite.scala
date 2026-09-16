@@ -36,11 +36,25 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, Decimal, IntegerType, NullType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, VarcharType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.Utils
 
+
+private class ArrowCharStorageUDT extends UserDefinedType[String] {
+  override def sqlType: DataType = CharType(3)
+  override def serialize(value: String): Any = value
+  override def deserialize(value: Any): String = value.toString
+  override def userClass: Class[String] = classOf[String]
+}
+
+private class ArrowVarcharStorageUDT extends UserDefinedType[String] {
+  override def sqlType: DataType = VarcharType(3)
+  override def serialize(value: String): Any = value
+  override def deserialize(value: Any): String = value.toString
+  override def userClass: Class[String] = classOf[String]
+}
 
 class ArrowConvertersSuite extends SharedSparkSession {
   import testImplicits._
@@ -1466,6 +1480,81 @@ class ArrowConvertersSuite extends SharedSparkSession {
       assert(error.getMessage.contains("EXCEED_LIMIT_LENGTH"))
     }
     assert(ArrowUtils.rootAllocator.getAllocatedMemory === allocatedBefore)
+  }
+
+  test("Arrow DataFrame conversion checks UDT-backed CHAR/VARCHAR storage") {
+    def batches(value: String): Array[Array[Byte]] = {
+      ArrowConverters.toBatchIterator(
+        Iterator.single(InternalRow(UTF8String.fromString(value))),
+        StructType(Seq(StructField("value", StringType))),
+        1,
+        "UTC",
+        errorOnDuplicatedFieldNames = true,
+        largeVarTypes = false,
+        TaskContext.empty()).toArray
+    }
+
+    val charSchema = StructType(Seq(StructField("value", new ArrowCharStorageUDT())))
+    val varcharSchema = StructType(Seq(StructField("value", new ArrowVarcharStorageUDT())))
+    Seq(Long.MaxValue, 0L).foreach { threshold =>
+      withSQLConf(
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+          SQLConf.ARROW_LOCAL_RELATION_THRESHOLD.key -> threshold.toString) {
+        val charDataFrame = ArrowConverters.toDataFrame(
+          batches("a").iterator,
+          charSchema,
+          spark,
+          "UTC",
+          errorOnDuplicatedFieldNames = true,
+          largeVarTypes = false)
+        assert(charDataFrame.schema === charSchema)
+        assert(charDataFrame.queryExecution.toRdd.collect().head.getUTF8String(0) ===
+          UTF8String.fromString("a  "))
+
+        val error = intercept[Exception] {
+          ArrowConverters.toDataFrame(
+            batches("abcd").iterator,
+            varcharSchema,
+            spark,
+            "UTC",
+            errorOnDuplicatedFieldNames = true,
+            largeVarTypes = false).queryExecution.toRdd.collect()
+        }
+        assert(error.getMessage.contains("EXCEED_LIMIT_LENGTH"))
+      }
+    }
+  }
+
+  test("Python RDD conversion captures CHAR/VARCHAR policy at DataFrame creation") {
+    val classicSession = spark.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
+    val charSchema = StructType(Seq(StructField("value", CharType(3))))
+    val varcharSchema = StructType(Seq(StructField("value", VarcharType(3))))
+
+    val standardDataFrame = withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      classicSession.applySchemaToPythonRDD(
+        spark.sparkContext.parallelize(Seq(Array[Any]("a"))), charSchema)
+    }
+    withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      assert(standardDataFrame.queryExecution.toRdd.collect().head.getUTF8String(0) ===
+        UTF8String.fromString("a  "))
+    }
+
+    val legacyDataFrame = withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      classicSession.applySchemaToPythonRDD(
+        spark.sparkContext.parallelize(Seq(Array[Any]("abcd"))), varcharSchema)
+    }
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(legacyDataFrame.schema.head.dataType === StringType)
+      assert(legacyDataFrame.queryExecution.toRdd.collect().head.getUTF8String(0) ===
+        UTF8String.fromString("abcd"))
+    }
   }
 
   test("SPARK-57159: roundtrip arrow batches with nanosecond timestamps") {

@@ -116,7 +116,7 @@ case class UserDefinedPythonFunction(
       val resolvedDataType = if (conf.charVarcharFirstClassTypes) {
         dataType
       } else {
-        CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(dataType)
+        CharVarcharUtils.replaceCharVarcharWithString(dataType)
       }
       PythonUDF(
         name,
@@ -126,7 +126,6 @@ case class UserDefinedPythonFunction(
         pythonEvalType,
         udfDeterministic,
         applyCharVarcharChecks = applyCharVarcharChecks,
-        hasCharVarcharResult = hasCharVarcharResult,
         charVarcharResultType = if (hasCharVarcharResult) Some(dataType) else None)
     }
     // The ``_udf_param_N`` substitution below is positional, so a UDF

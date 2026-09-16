@@ -1526,7 +1526,7 @@ class SparkConnectPlanner(
       schema
     } else {
       CharVarcharUtils
-        .replaceCharVarcharWithStringForPhysicalType(schema)
+        .replaceCharVarcharWithString(schema)
         .asInstanceOf[StructType]
     }
   }

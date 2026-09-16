@@ -894,7 +894,7 @@ class SparkSession private(
       schema
     } else {
       CharVarcharUtils
-        .replaceCharVarcharWithStringForPhysicalType(schema)
+        .replaceCharVarcharWithString(schema)
         .asInstanceOf[StructType]
     }
     val rowRdd = rdd.mapPartitions { iter =>

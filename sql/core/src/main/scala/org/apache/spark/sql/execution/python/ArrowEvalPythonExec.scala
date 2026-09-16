@@ -24,13 +24,12 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.types.{StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
@@ -202,10 +201,7 @@ class ArrowEvalPythonEvaluatorFactory(
       context: TaskContext): Iterator[InternalRow] = {
 
     val outputTypes = output.drop(childOutput.length).map { attr =>
-      CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(
-        attr.dataType.transformRecursively {
-          case udt: UserDefinedType[_] => udt.sqlType
-        })
+      ColumnarArrowEvalPythonEvaluatorFactory.toArrowPhysicalType(attr.dataType)
     }
 
     val batchIter = Iterator(iter)

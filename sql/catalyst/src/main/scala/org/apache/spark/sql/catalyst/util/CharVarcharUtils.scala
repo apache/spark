@@ -283,6 +283,14 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
           MapFromArrays(newKeys, newValues)
         }
 
+      case udt: UserDefinedType[_] =>
+        val storageExpr = expr.dataType match {
+          case _: UserDefinedType[_] => UnwrapUDT(expr)
+          case _ => expr
+        }
+        processStringForCharVarchar(
+          storageExpr, udt.sqlType, charFuncName, varcharFuncName)
+
       case _ => expr
     }
   }
