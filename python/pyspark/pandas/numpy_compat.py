@@ -40,10 +40,10 @@ from pyspark.sql.types import (
 )
 
 # Spark SQL expressions determine the result types of the Spark-backed mappings below. Those types
-# can differ from pandas when the same NumPy ufunc is applied to a pandas object. For example,
-# Spark math expressions convert FloatType input to DoubleType, so a float32 pandas-on-Spark Series
-# can return float64. This explains only output-type differences; casting an operand before
-# evaluation can still change values and must be reviewed separately.
+# can differ from pandas for the same NumPy ufunc. For example, some Spark math expressions, such as
+# sqrt, convert a FloatType input to DoubleType, so a float32 pandas-on-Spark Series can return
+# float64. This explains only output-type differences. Casting an operand before evaluation can
+# still change values and must be reviewed separately.
 unary_np_spark_mappings = {
     "abs": F.abs,
     "absolute": F.abs,
@@ -397,10 +397,10 @@ _BITWISE_INPUT_TYPES = _INTEGRAL_INPUT_TYPES + (NullType,)
 
 # Spark input types accepted by each NumPy ufunc in pandas-on-Spark, based on pandas behavior.
 # Each inner tuple describes one operand. Checking these types before building a Spark expression
-# prevents unsupported inputs from being silently cast; for example, np.fmod on a string column
-# would otherwise return 1.0. A ufunc is omitted when it runs inside a pandas UDF, its mapping is
-# unreachable, or its accepted types cannot be described independently for each operand, as with
-# np.fmax.
+# prevents unsupported inputs from being silently cast; for example, np.fmod on string values "7"
+# and "2" would otherwise return 1.0. A ufunc is omitted when it runs inside a pandas UDF, its
+# mapping is unreachable, or its accepted types cannot be described independently for each operand,
+# as with np.fmax.
 _np_spark_accepted_types: Dict[str, Tuple[Tuple[type, ...], ...]] = {
     "absolute": (_NUMERIC_OR_DECIMAL_INPUT_TYPES,),
     "arccos": (_NUMERIC_INPUT_TYPES,),
