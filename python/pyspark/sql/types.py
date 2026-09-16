@@ -3042,7 +3042,7 @@ def _has_nulltype(dt: DataType) -> bool:
 
 
 def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
-    """Return whether there are specified types"""
+    """Return whether `dt` logically contains any of `dts`. Does not descend UDTs."""
     if isinstance(dt, dts):
         return True
     elif isinstance(dt, StructType):
@@ -3051,8 +3051,24 @@ def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
         return _has_type(dt.elementType, dts)
     elif isinstance(dt, MapType):
         return _has_type(dt.keyType, dts) or _has_type(dt.valueType, dts)
+    else:
+        return False
+
+
+def _has_physical_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
+    """Return whether `dt` contains any of `dts`, including UDT storage types."""
+    if isinstance(dt, dts):
+        return True
     elif isinstance(dt, UserDefinedType):
-        return _has_type(dt.sqlType(), dts)
+        return _has_physical_type(dt.sqlType(), dts)
+    elif isinstance(dt, StructType):
+        return any(_has_physical_type(f.dataType, dts) for f in dt.fields)
+    elif isinstance(dt, ArrayType):
+        return _has_physical_type(dt.elementType, dts)
+    elif isinstance(dt, MapType):
+        return _has_physical_type(dt.keyType, dts) or _has_physical_type(
+            dt.valueType, dts
+        )
     else:
         return False
 

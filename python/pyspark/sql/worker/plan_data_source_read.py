@@ -43,7 +43,7 @@ from pyspark.sql.types import (
     CharType,
     StructType,
     VarcharType,
-    _has_type,
+    _has_physical_type,
     _parse_datatype_json_string,
 )
 from pyspark.sql.worker.utils import check_pushdown_not_disabled, worker_run
@@ -67,7 +67,7 @@ def records_to_arrow_batches(
     of pyarrow record batches.  For each Python tuple, check the types of each field
     and append it to the records batch.
     """
-    if _has_type(return_type, (CharType, VarcharType)):
+    if _has_physical_type(return_type, (CharType, VarcharType)):
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",
             messageParameters={

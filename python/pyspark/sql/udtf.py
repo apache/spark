@@ -38,7 +38,7 @@ from pyspark.sql.types import (
     DataType,
     StructType,
     VarcharType,
-    _has_type,
+    _has_physical_type,
     _parse_datatype_string,
 )
 from pyspark.sql.udf import _wrap_function
@@ -326,7 +326,7 @@ def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]
 
 
 def _check_udtf_return_type(return_type: DataType) -> None:
-    if _has_type(return_type, (CharType, VarcharType)):
+    if _has_physical_type(return_type, (CharType, VarcharType)):
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",
             messageParameters={

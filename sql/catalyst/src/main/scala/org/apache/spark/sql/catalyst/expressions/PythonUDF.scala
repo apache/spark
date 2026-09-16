@@ -338,11 +338,12 @@ case class PythonUDF(
     // lambda (e.g. `transform(arr, i -> transform(i, x -> f(x)))` lifts `f` to depth 2). Ignored
     // for every non-element-wise eval type, where it stays at its default of 1.
     elementwiseNestingDepth: Int = 1,
-    applyCharVarcharChecks: Boolean = false,
-    charVarcharResultType: Option[DataType] = None)
+    // Original CHAR/VARCHAR result type when write-side checks apply. Absent for unconstrained
+    // results so CHAR policy is not part of PythonUDF equality.
+    charVarcharCheckedResultType: Option[DataType] = None)
   extends Expression with PythonFuncExpression with Unevaluable {
 
-  def hasCharVarcharResult: Boolean = charVarcharResultType.isDefined
+  def hasCharVarcharResult: Boolean = charVarcharCheckedResultType.isDefined
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)

@@ -48,7 +48,7 @@ private[python] object ColumnarArrowEvalPythonEvaluatorFactory {
       udfs: Seq[PythonUDF]): Boolean = {
     inputColumnIndices.isDefined &&
       isArrow &&
-      !udfs.exists(udf => udf.applyCharVarcharChecks && udf.hasCharVarcharResult)
+      !udfs.exists(_.hasCharVarcharResult)
   }
 }
 
@@ -96,8 +96,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
   private val udfOutput = output.drop(childOutput.length)
   private val checkedOutput = childOutput ++ udfOutput.zip(udfs).map { case (attr, udf) =>
-    udf.charVarcharResultType
-      .filter(_ => udf.applyCharVarcharChecks)
+    udf.charVarcharCheckedResultType
       .map(CharVarcharUtils.stringLengthCheck(attr, _))
       .getOrElse(attr)
   }

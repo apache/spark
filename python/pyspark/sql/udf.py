@@ -37,6 +37,7 @@ from pyspark.sql.types import (
     StructType,
     UserDefinedType,
     VarcharType,
+    _has_physical_type,
     _has_type,
     _parse_datatype_string,
 )
@@ -325,7 +326,7 @@ class UserDefinedFunction:
 
         def has_char_varchar_in_udt(data_type: DataType) -> bool:
             if isinstance(data_type, UserDefinedType):
-                return _has_type(data_type.sqlType(), (CharType, VarcharType))
+                return _has_physical_type(data_type.sqlType(), (CharType, VarcharType))
             if isinstance(data_type, StructType):
                 return any(has_char_varchar_in_udt(f.dataType) for f in data_type.fields)
             if isinstance(data_type, ArrayType):
