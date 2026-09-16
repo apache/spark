@@ -21,7 +21,9 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CTERelationDef, Distinct}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SetOperation, UnionBase}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util
@@ -85,6 +87,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       versionedOnly: Boolean,
       schemaValidationMode: SchemaValidationMode): LogicalPlan = {
     val currentTables = mutable.HashMap.empty[CurrentTableKey, Table]
+    lazy val requiredOutput = requiredAttributes(plan)
     plan transformWithSubqueries {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
           if (r.isVersioned || !versionedOnly) && r.timeTravelSpec.isEmpty =>
@@ -105,11 +108,36 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
         validateMetadataColumns(currentTable, r, schemaValidationMode)
         val refreshed = r.copy(table = currentTable)
         if (schemaValidationMode == ALLOW_NEW_FIELDS) {
-          AnalyzedSchemaProjection.rebindToAnalyzedSchema(refreshed)
+          AnalyzedSchemaProjection.rebindToAnalyzedSchema(refreshed, requiredOutput)
         } else {
           refreshed
         }
     }
+  }
+
+  /**
+   * Returns the attributes that the plan can consume from its relations.
+   *
+   * Most operators name their inputs in [[LogicalPlan.references]]. Root outputs are required as
+   * well, including subquery outputs. Union, set, and distinct operators also consume attributes
+   * implicitly by position or as whole rows, while CTE definitions use expression IDs that differ
+   * from their references, so keep their child outputs conservatively.
+   */
+  private def requiredAttributes(plan: LogicalPlan): AttributeSet = {
+    val required = mutable.ArrayBuffer.empty[Attribute]
+    required ++= plan.output
+    required ++= plan.subqueriesAll.flatMap(_.output)
+    plan.foreachWithSubqueries { node =>
+      required ++= node.references
+      node match {
+        case _: UnionBase | _: SetOperation | _: Distinct =>
+          required ++= node.children.flatMap(_.output)
+        case cte: CTERelationDef =>
+          required ++= cte.child.output
+        case _ =>
+      }
+    }
+    AttributeSet(required)
   }
 
   private def lookupCachedRelation(

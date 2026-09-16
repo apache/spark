@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, AttributeReference, AttributeSeq, CreateNamedStruct, Expression, ExtractValue, GetStructField, If, IsNull, KnownNotNull, LambdaFunction, Literal, MetadataAttributeWithLogicalName, NamedLambdaVariable, TaggingExpression, TransformKeys, TransformValues, UnresolvedNamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, AttributeReference, AttributeSeq, AttributeSet, CreateNamedStruct, Expression, ExtractValue, GetStructField, If, IsNull, KnownNotNull, LambdaFunction, Literal, MetadataAttributeWithLogicalName, NamedLambdaVariable, TaggingExpression, TransformKeys, TransformValues, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, Metadata, StructType}
@@ -46,6 +46,12 @@ private[sql] object AnalyzedSchemaProjection extends SQLConfHelper {
   }
 
   def rebindToAnalyzedSchema(relation: DataSourceV2Relation): LogicalPlan = {
+    rebindToAnalyzedSchema(relation, relation.outputSet)
+  }
+
+  def rebindToAnalyzedSchema(
+      relation: DataSourceV2Relation,
+      requiredOutput: AttributeSet): LogicalPlan = {
     // The relation still carries the output captured at analysis time; only its table has been
     // swapped for the current one.
     val capturedOutput = relation.output
@@ -92,7 +98,7 @@ private[sql] object AnalyzedSchemaProjection extends SQLConfHelper {
     val reboundRelation = relation.copy(output = reboundOutput)
 
     val reboundIndex = new AttributeIndex(reboundOutput, resolver, caseSensitive)
-    val projectList = capturedOutput.map { capturedAttr =>
+    val projectList = capturedOutput.filter(requiredOutput.contains).map { capturedAttr =>
       val currentAttr = reboundIndex.get(capturedAttr).getOrElse {
         unexpectedSchemaChange(
           s"captured column ${capturedAttr.name} is missing from current table ${relation.name}")
