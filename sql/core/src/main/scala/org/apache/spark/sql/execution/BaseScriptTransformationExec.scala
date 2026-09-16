@@ -201,6 +201,14 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   private lazy val outputFieldWriters: Seq[String => Any] = output.map { attr =>
     val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
     attr.dataType match {
+      case _: CharType | _: VarcharType =>
+        // First-class CHAR/VARCHAR must not use Hive LazySimpleSerde's null-on-error path.
+        (data: String) =>
+          if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
+            null
+          } else {
+            converter(data)
+          }
       case _: StringType => wrapperConvertException(data => data, converter)
       case BooleanType => wrapperConvertException(data => data.toBoolean, converter)
       case ByteType => wrapperConvertException(data => data.toByte, converter)

@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -258,7 +258,11 @@ object HiveScriptIOSchema extends HiveInspectors {
       output: Seq[Attribute]): Option[(AbstractSerDe, StructObjectInspector)] = {
     ioschema.outputSerdeClass.map { serdeClass =>
       val (columns, columnTypes) = parseAttrs(output)
-      val serde = initSerDe(serdeClass, columns, columnTypes, ioschema.outputSerdeProps)
+      // Hive CHAR/VARCHAR SerDe truncates silently. Always deserialize as STRING
+      // (even under first-class CHAR/VARCHAR) so unwrapperFor can raise
+      // EXCEED_LIMIT_LENGTH instead of returning a truncated value.
+      val serdeTypes = columnTypes.map(toHiveSerdePhysicalType)
+      val serde = initSerDe(serdeClass, columns, serdeTypes, ioschema.outputSerdeProps)
       val structObjectInspector = serde.getObjectInspector().asInstanceOf[StructObjectInspector]
       (serde, structObjectInspector)
     }
@@ -268,6 +272,21 @@ object HiveScriptIOSchema extends HiveInspectors {
     val columns = attrs.zipWithIndex.map(e => s"${e._1.prettyName}_${e._2}")
     val columnTypes = attrs.map(_.dataType)
     (columns, columnTypes)
+  }
+
+  /**
+   * Hive SerDe CHAR/VARCHAR types truncate on deserialize. Map them to STRING so Spark
+   * applies first-class length checks. Unlike `replaceCharVarcharWithString`, this must
+   * run even when first-class CHAR/VARCHAR is enabled.
+   */
+  private def toHiveSerdePhysicalType(dt: DataType): DataType = dt match {
+    case ArrayType(et, n) => ArrayType(toHiveSerdePhysicalType(et), n)
+    case MapType(kt, vt, n) =>
+      MapType(toHiveSerdePhysicalType(kt), toHiveSerdePhysicalType(vt), n)
+    case StructType(fields) =>
+      StructType(fields.map(f => f.copy(dataType = toHiveSerdePhysicalType(f.dataType))))
+    case _: CharType | _: VarcharType => StringType
+    case other => other
   }
 
   def initSerDe(

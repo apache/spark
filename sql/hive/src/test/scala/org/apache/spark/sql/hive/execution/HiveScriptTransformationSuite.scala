@@ -394,6 +394,30 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     }
   }
 
+  test("SPARK-59277: TRANSFORM CHAR overflow with Hive SerDe raises EXCEED_LIMIT_LENGTH") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val exception = intercept[Exception] {
+        sql(
+          """
+            |SELECT TRANSFORM('abcdef')
+            |USING 'cat'
+            |AS (c CHAR(4))
+            |FROM VALUES (1) input(dummy)
+            |""".stripMargin).collect()
+      }
+      val runtimeException = exception match {
+        case s: org.apache.spark.SparkRuntimeException => s
+        case other =>
+          other.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException]
+      }
+      checkError(
+        exception = runtimeException,
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "4"))
+    }
+  }
+
   test("SPARK-32400: TRANSFORM doesn't support CalendarIntervalType/UserDefinedType (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {

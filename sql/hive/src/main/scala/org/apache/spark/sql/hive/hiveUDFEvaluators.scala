@@ -113,26 +113,28 @@ class HiveSimpleUDFEvaluator(
 
 private[hive] object HiveGenericUDFEvaluator extends HiveInspectors {
 
+  /**
+   * Driver-side Hive initialize for `SELECT hive_udf(...)`. Stores the Catalyst type on
+   * `HiveGenericUDF.dataType` (for example CHAR(5) from a CHAR inspector).
+   */
   def inferReturnType(
       funcWrapper: HiveFunctionWrapper,
       children: Seq[Expression]): DataType = {
     val function =
       HiveFunctionRegistryUtils.cloneGenericUDF(funcWrapper.createFunction[GenericUDF]())
-    val argumentInspectors = children.map(toInspector).toArray
-    val udfType = function.getClass.getAnnotation(classOf[HiveUDFType])
-    val isDeterministic =
-      udfType != null && udfType.deterministic() && !udfType.stateful()
-    inspectorToDataType(initialize(function, argumentInspectors, isDeterministic))
+    inspectorToDataType(initialize(function, children.map(toInspector).toArray))
   }
 
   def initialize(
       function: GenericUDF,
-      argumentInspectors: Array[ObjectInspector],
-      isDeterministic: Boolean): ObjectInspector = {
+      argumentInspectors: Array[ObjectInspector]): ObjectInspector = {
     // Inline o.a.h.hive.ql.udf.generic.GenericUDF#initializeAndFoldConstants, but
     // eliminate calls o.a.h.hive.ql.exec.FunctionRegistry to avoid initializing Hive
     // built-in UDFs.
     val oi = function.initialize(argumentInspectors)
+    val udfType = function.getClass.getAnnotation(classOf[HiveUDFType])
+    val isDeterministic =
+      udfType != null && udfType.deterministic() && !udfType.stateful()
     // If the UDF depends on any external resources, we can't fold because the
     // resources may not be available at compile time.
     if (function.getRequiredFiles == null && function.getRequiredJars == null &&
@@ -177,7 +179,7 @@ private[hive] class HiveGenericUDFEvaluator(
 
   @transient
   lazy val returnInspector =
-    HiveGenericUDFEvaluator.initialize(function, argumentInspectors, isUDFDeterministic)
+    HiveGenericUDFEvaluator.initialize(function, argumentInspectors)
 
   @transient
   private lazy val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {

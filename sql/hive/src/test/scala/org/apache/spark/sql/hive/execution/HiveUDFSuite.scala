@@ -1030,10 +1030,9 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
         "return_char",
         HiveFunctionWrapper(classOf[ReturnCharGenericUDF].getName),
         Seq(Literal("ab")))
-      assert(expression.resolvedDataType.isEmpty)
       assert(expression.dataType === CharType(5))
       val copied = expression.withNewChildren(Seq(Literal("cd"))).asInstanceOf[HiveGenericUDF]
-      assert(copied.resolvedDataType.contains(CharType(5)))
+      assert(copied.dataType === CharType(5))
       serialize(expression)
     }
 
@@ -1041,7 +1040,6 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
         SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
       val expression = deserialize(inferredBytes)
-      assert(expression.resolvedDataType.isEmpty)
       assert(expression.dataType === CharType(5))
       assert(expression.eval(InternalRow.empty) === UTF8String.fromString("ab   "))
     }
@@ -1054,7 +1052,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
           "return_string",
           HiveFunctionWrapper(classOf[ReturnStringGenericUDF].getName),
           Seq(Literal(value)),
-          Some(dataType))
+          dataType)
         assert(expression.dataType === dataType)
         serialize(expression)
       }

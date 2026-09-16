@@ -104,6 +104,33 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
+  test("SPARK-59277: TRANSFORM CHAR/VARCHAR overflow without SerDe raises EXCEED_LIMIT_LENGTH") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val input = Seq(("abcdef", "abcdefgh")).toDF("c", "v")
+      val exception = intercept[Exception] {
+        QueryTest.executePlan(
+          createScriptTransformationExec(
+            script = "cat",
+            output = Seq(
+              AttributeReference("c", CharType(4))(),
+              AttributeReference("v", VarcharType(5))()),
+            child = input.queryExecution.sparkPlan,
+            ioschema = defaultIOSchema),
+          spark.sqlContext)
+      }
+      val runtimeException = exception match {
+        case s: org.apache.spark.SparkRuntimeException => s
+        case other =>
+          other.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException]
+      }
+      checkError(
+        exception = runtimeException,
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "4"))
+    }
+  }
+
   test("script transformation should not swallow errors from upstream operators (no serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 
