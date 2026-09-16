@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, Murmur3HashFunction, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{BaseOrdering, Expression, Murmur3HashFunction, RowOrdering}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition}
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.NonFateSharingCache
@@ -33,11 +33,27 @@ import org.apache.spark.util.NonFateSharingCache
  *
  * @param dataTypes the data types for the row
  */
-class InternalRowComparableWrapper(val row: InternalRow, val dataTypes: Seq[DataType]) {
-  import InternalRowComparableWrapper._
+class InternalRowComparableWrapper(val row: InternalRow, val dataTypes: Seq[DataType])
+  extends Serializable {
 
-  private val structType = structTypeCache.get(dataTypes)
-  private val ordering = orderingCache.get(dataTypes)
+  // `structType` and `ordering` cannot cross the wire (the ordering may be generated code), so
+  // they are transient and re-derived from the shared caches on first use after deserialization.
+  @transient private var _structType: StructType = _
+  @transient private var _ordering: BaseOrdering = _
+
+  def structType: StructType = {
+    if (_structType == null) {
+      _structType = InternalRowComparableWrapper.structTypeCache.get(dataTypes)
+    }
+    _structType
+  }
+
+  def ordering: BaseOrdering = {
+    if (_ordering == null) {
+      _ordering = InternalRowComparableWrapper.orderingCache.get(dataTypes)
+    }
+    _ordering
+  }
 
   override def hashCode(): Int = Murmur3HashFunction.hash(
     row,
