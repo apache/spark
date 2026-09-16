@@ -736,6 +736,31 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     }
   }
 
+  Seq(
+    true -> Row(1, 2, 3),
+    false -> Row(2, 1, 3)
+  ).foreach { case (resolveNestedFieldsByPosition, expected) =>
+    test("Insert schema evolution: column list resolves nested fields by position - " +
+      s"enabled=$resolveNestedFieldsByPosition") {
+      withSQLConf(
+          SQLConf.INSERT_COLUMN_LIST_NESTED_FIELDS_RESOLVE_BY_POSITION.key ->
+            resolveNestedFieldsByPosition.toString) {
+        val t1 = s"${catalogAndNamespace}tbl"
+        withTable(t1) {
+          sql(s"CREATE TABLE $t1 (s struct<x: int, y: int>) USING $v2Format")
+          sql(
+            s"""INSERT WITH SCHEMA EVOLUTION INTO $t1 (s)
+               |SELECT named_struct('y', 1, 'x', 2, 'z', 3)
+               |""".stripMargin)
+
+          checkAnswer(
+            sql(s"SELECT s.x, s.y, s.z FROM $t1"),
+            expected)
+        }
+      }
+    }
+  }
+
   test("Insert schema evolution: extra column by name - different column order") {
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
