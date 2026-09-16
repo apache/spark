@@ -7009,6 +7009,7 @@ object SQLConf {
 
   val LEGACY_ORACLE_NUMBER_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.oracle.numberMapping.enabled")
+      .internal()
       .doc("When true, Oracle bare NUMBER columns (no explicit precision/scale) are mapped " +
         "to DecimalType(38, 10), preserving the pre-Spark-4.4 behavior. When false (default), " +
         "they are mapped to DecimalType(38, 18) using DecimalType.DEFAULT_SCALE. The new " +
@@ -7017,6 +7018,7 @@ object SQLConf {
         "previously read correctly will raise NUMERIC_VALUE_OUT_OF_RANGE. Set to true to " +
         "restore the old mapping.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 

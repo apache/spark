@@ -1723,7 +1723,8 @@ class JDBCSuite extends SharedSparkSession {
     assert(preserved.toString == "0.000012345678912345")
 
     // Large integer: 23 digits.
-    // Old Decimal(38,10) fits (28 integer digits); new Decimal(38,18) overflows (20 integer digits).
+    // Old Decimal(38,10) fits (28 integer digits);
+    // new Decimal(38,18) overflows (20 integer digits).
     val largeInt = new java.math.BigDecimal("12345678901234567890123")
     // Old mapping: fits
     val legacyDecimal = Decimal(largeInt, p, oldScale)
