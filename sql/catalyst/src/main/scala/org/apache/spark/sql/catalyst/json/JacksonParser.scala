@@ -622,12 +622,7 @@ class JacksonParser(
       fieldConverter: ValueConverter,
       keyType: DataType,
       valueType: DataType): MapData = {
-    val keys = ArrayBuffer.empty[UTF8String]
-    val values = ArrayBuffer.empty[Any]
-    val rawKeys = ArrayBuffer.empty[UTF8String]
-    val normalizedKeys = ArrayBuffer.empty[UTF8String]
-    val normalizedValues = ArrayBuffer.empty[Option[Any]]
-    val hasConstrainedKeys = keyType.isInstanceOf[CharType] || keyType.isInstanceOf[VarcharType]
+    val entries = ArrayBuffer.empty[(UTF8String, UTF8String, Option[Any])]
     var partialResultException: Option[Throwable] = None
     var badMapException: Option[Throwable] = None
 
@@ -647,16 +642,7 @@ class JacksonParser(
       }
       try {
         val key = CharVarcharUtils.applyTextParseSemantics(rawKey, keyType)
-        if (hasConstrainedKeys) {
-          rawKeys += rawKey
-          normalizedKeys += key
-          normalizedValues += value
-        } else {
-          value.foreach { parsedValue =>
-            keys += key
-            values += parsedValue
-          }
-        }
+        entries += ((rawKey, key, value))
       } catch {
         case NonFatal(e) if enablePartialResults =>
           badMapException = badMapException.orElse(Some(e))
@@ -669,10 +655,19 @@ class JacksonParser(
         // name. Apply mapKeyDedupPolicy only when distinct serialized names normalize to one key.
         // Include entries with failed values so normalized key collisions still take precedence.
         DuplicateMapKeyUtils.buildMapWithLastRawKeyWins(
-          rawKeys.toSeq, normalizedKeys.toSeq, normalizedValues.toSeq, keyType, valueType)
+          entries.map(_._1).toSeq,
+          entries.map(_._2).toSeq,
+          entries.map(_._3).toSeq,
+          keyType,
+          valueType)
       case _ =>
         // Preserve the historical behavior for ordinary string keys.
-        ArrayBasedMapData(keys.toArray, values.toArray)
+        val retainedEntries = entries.flatMap {
+          case (_, key, value) => value.map(key -> _)
+        }
+        ArrayBasedMapData(
+          retainedEntries.map(_._1).toArray,
+          retainedEntries.map(_._2).toArray)
     }
 
     // Ordinary value or key conversion failures invalidate the whole map. Delay throwing until

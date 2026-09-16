@@ -2329,6 +2329,13 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
             |  'xs_any CHAR(5)',
             |  map('wildcardColName', 'xs_any'))""".stripMargin),
         Row(Row(null)))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><other>abcdef</other></ROW>',
+            |  'xs_any ARRAY<CHAR(5)>',
+            |  map('wildcardColName', 'xs_any'))""".stripMargin),
+        Row(Row(null)))
       assertParseExceedLimit(
         """SELECT from_xml(
           |  '<ROW><other>abcdef</other></ROW>',
@@ -2372,6 +2379,13 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(
         sql("SELECT schema_of_csv(CAST('1' AS CHAR(3)))"),
         Row("STRUCT<_c0: INT>"))
+      // Without trailing-only CHAR padding removal, the space delimiter creates empty columns.
+      checkAnswer(
+        sql(
+          """SELECT schema_of_csv(
+            |  CAST('1' AS CHAR(3)),
+            |  map('delimiter', ' '))""".stripMargin),
+        Row("STRUCT<_c0: INT>"))
       checkAnswer(
         sql("SELECT length(CAST('<ROW><a>1</a></ROW>' AS CHAR(30)))"),
         Row(30))
@@ -2409,6 +2423,10 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           |  '{"abc":1}',
           |  'MAP<VARCHAR(2), INT>',
           |  map('mode', 'FAILFAST'))""".stripMargin
+      val overflowAfterCollisionQuery =
+        """SELECT from_json(
+          |  '{"a":1,"a ":2,"abc":0}',
+          |  'MAP<CHAR(2), INT>')""".stripMargin
       val nestedJsonQuery =
         """SELECT from_json(
           |  '{"outer":{"a":1,"a ":2}}',
@@ -2451,14 +2469,6 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         """SELECT map_entries(from_xml(
           |  '<ROW><m><a>1</a><b>2</b><a>3</a></m></ROW>',
           |  'm MAP<CHAR(2), INT>').m)""".stripMargin
-      val interleavedCollatedXmlQuery =
-        """SELECT map_entries(from_xml(
-          |  '<ROW><m><a>1</a><b>2</b><a>3</a></m></ROW>',
-          |  'm MAP<STRING COLLATE UTF8_LCASE, INT>').m)""".stripMargin
-      val collatedXmlQuery =
-        """SELECT from_xml(
-          |  '<ROW><m><a>1</a><A>2</A></m></ROW>',
-          |  'm MAP<STRING COLLATE UTF8_LCASE, INT>').m""".stripMargin
       val badXmlKeyBeforeDuplicateQuery =
         """SELECT from_xml(
           |  '<ROW><m><abc>0</abc><a>1</a>2</m></ROW>',
@@ -2484,6 +2494,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assertDuplicateMapKey(varcharJsonQuery, expectedKey = "ab")
       checkAnswer(sql(varcharOverflowQuery), Row(null))
       assertParseExceedLimit(varcharOverflowFailfastQuery, expectedLimit = "2")
+      assertDuplicateMapKey(overflowAfterCollisionQuery)
       assertDuplicateMapKey(nestedJsonQuery)
       assertDuplicateMapKey(badFieldBeforeDuplicateQuery)
       assertDuplicateMapKey(badValueBeforeDuplicateQuery)
@@ -2496,24 +2507,26 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(sql(exactCharXmlQuery), Row(Map("a " -> 2)))
       checkAnswer(sql(exactVarcharXmlQuery), Row(Map("ab" -> 2)))
       checkAnswer(sql(interleavedCharXmlQuery), Row(Seq(Row("a ", 3), Row("b ", 2))))
-      withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
-        assertDuplicateMapKey(collatedXmlQuery, expectedKey = "A")
-        checkAnswer(
-          sql(interleavedCollatedXmlQuery),
-          Row(Seq(Row("a", 3), Row("b", 2))))
-      }
       assertDuplicateMapKey(badXmlKeyBeforeDuplicateQuery)
       assertDuplicateMapKey(badJsonKeyBeforeDuplicateQuery)
       assertDuplicateMapKey(malformedXmlValueBeforeDuplicateQuery)
       assertDuplicateMapKey(ignoreCorruptXmlQuery)
       checkAnswer(sql(badKeyThenSiblingQuery), Row(2))
       checkAnswer(sql(badXmlKeyThenSiblingQuery), Row(2))
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+        assertDuplicateMapKey(jsonQuery)
+        checkAnswer(sql(varcharOverflowQuery), Row(null))
+        assertParseExceedLimit(varcharOverflowFailfastQuery, expectedLimit = "2")
+      }
 
       withSQLConf(
           SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
         checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(jsonFailfastQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(varcharJsonQuery), Row(Map("ab" -> 2)))
+        checkAnswer(sql(varcharOverflowQuery), Row(null))
+        assertParseExceedLimit(varcharOverflowFailfastQuery, expectedLimit = "2")
+        checkAnswer(sql(overflowAfterCollisionQuery), Row(null))
         checkAnswer(sql(exactCharJsonQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(exactVarcharJsonQuery), Row(Map("ab" -> 2)))
         checkAnswer(sql(nestedJsonQuery), Row(Map("outer" -> Map("a " -> 2))))
@@ -2525,30 +2538,95 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         checkAnswer(sql(exactCharXmlQuery), Row(Map("a " -> 2)))
         checkAnswer(sql(exactVarcharXmlQuery), Row(Map("ab" -> 2)))
         checkAnswer(sql(interleavedCharXmlQuery), Row(Seq(Row("a ", 3), Row("b ", 2))))
-        withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
-          checkAnswer(sql(collatedXmlQuery), Row(Map("a" -> 2)))
-          checkAnswer(
-            sql(interleavedCollatedXmlQuery),
-            Row(Seq(Row("a", 3), Row("b", 2))))
-        }
         checkAnswer(sql(badXmlKeyBeforeDuplicateQuery), Row(null))
         checkAnswer(sql(badJsonKeyBeforeDuplicateQuery), Row(null))
         checkAnswer(sql(malformedXmlValueBeforeDuplicateQuery), Row(null))
+        checkAnswer(sql(ignoreCorruptXmlQuery), Row(Map("a " -> 2)))
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+          checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-59274: pretty-printed XML map failures preserve parser position") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val overflowQueries = Seq("CHAR(5)", "VARCHAR(5)").map { valueType =>
+        s"""SELECT from_xml(
+           |  '<ROW>
+           |    <m>
+           |      <b>abcdef</b>
+           |      <a>x</a>y
+           |    </m>
+           |    <tail>9</tail>
+           |  </ROW>',
+           |  'm MAP<CHAR(2), $valueType>, tail INT',
+           |  map('valueTag', 'a '))""".stripMargin
+      }
+      val nestedFailureQuery =
+        """SELECT from_xml(
+          |  '<ROW>
+          |    <m>
+          |      <b><x>bad</x></b>
+          |      <a><x>1</x></a>ignored
+          |    </m>
+          |    <tail>9</tail>
+          |  </ROW>',
+          |  'm MAP<CHAR(2), MAP<CHAR(2), INT>>, tail INT',
+          |  map('valueTag', 'a '))""".stripMargin
+
+      (overflowQueries :+ nestedFailureQuery).foreach { query =>
+        // A duplicate, rather than an AssertionError from XML recovery, wins under EXCEPTION.
+        withClue(s"$query: ") {
+          assertDuplicateMapKey(query)
+        }
+      }
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        // The failed map remains null, but its complete element was consumed and tail is parsed.
+        (overflowQueries :+ nestedFailureQuery).foreach { query =>
+          checkAnswer(sql(query), Row(Row(null, 9)))
+        }
       }
     }
   }
 
   test("SPARK-59274: ordinary STRING map duplicate behavior is unchanged") {
-    Seq("false", "true").foreach { standardSemantics =>
-      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standardSemantics) {
-        checkAnswer(
-          sql("""SELECT from_json('{"a":1,"a":2}', 'MAP<STRING, INT>')"""),
-          Row(Map("a" -> 2)))
-        checkAnswer(
-          sql("""SELECT from_xml(
-            |  '<ROW><m><a>1</a><a>2</a></m></ROW>',
-            |  'm MAP<STRING, INT>').m""".stripMargin),
-          Row(Map("a" -> 2)))
+    withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+      Seq("false", "true").foreach { standardSemantics =>
+        Seq(SQLConf.MapKeyDedupPolicy.EXCEPTION, SQLConf.MapKeyDedupPolicy.LAST_WIN)
+          .foreach { dedupPolicy =>
+            withSQLConf(
+                SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standardSemantics,
+                SQLConf.MAP_KEY_DEDUP_POLICY.key -> dedupPolicy.toString) {
+              checkAnswer(
+                sql("""SELECT from_json('{"a":1,"a":2}', 'MAP<STRING, INT>')"""),
+                Row(Map("a" -> 2)))
+              checkAnswer(
+                sql("""SELECT from_xml(
+                  |  '<ROW><m><a>1</a><a>2</a></m></ROW>',
+                  |  'm MAP<STRING, INT>').m""".stripMargin),
+                Row(Map("a" -> 2)))
+
+              Seq(
+                ("from_json('{\"a\":1,\"A\":2}', " +
+                  "'MAP<STRING COLLATE UTF8_LCASE, INT>')", Seq("A:2", "a:1")),
+                ("""from_xml(
+                   |  '<ROW><m><a>1</a><A>2</A><a>3</a></m></ROW>',
+                   |  'm MAP<STRING COLLATE UTF8_LCASE, INT>').m""".stripMargin,
+                  Seq("A:2", "a:3")))
+                .foreach { case (mapExpression, expectedEntries) =>
+                  checkAnswer(
+                    sql(
+                      s"""SELECT size(m), array_sort(transform(
+                         |  map_entries(m),
+                         |  x -> collate(concat(x.key, ':', x.value), 'UTF8_BINARY')))
+                         |FROM (SELECT $mapExpression AS m)""".stripMargin),
+                    Row(2, expectedEntries))
+                }
+            }
+          }
       }
     }
   }

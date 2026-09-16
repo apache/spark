@@ -407,6 +407,7 @@ class StaxXmlParser(
       parser.nextEvent match {
         case e: StartElement =>
           val rawKey = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
+          val valueStartEvent = parser.peek()
           val value = try {
             Some(convertField(parser, valueType, rawKey))
           } catch {
@@ -414,10 +415,21 @@ class StaxXmlParser(
             case DuplicateMapKeyUtils(e) => throw e
             case NonFatal(e) =>
               badMapException = badMapException.orElse(Some(e))
-              // Primitive conversion fails before consuming its text and end element. String and
-              // nested conversions can fail after consuming the complete element.
-              if (parser.peek().isInstanceOf[Characters]) {
+              // Primitive conversion can fail while still positioned on its original text.
+              // String and nested conversions consume the element before failing, so any
+              // following whitespace or sibling must remain for the map loop.
+              if (valueStartEvent.isInstanceOf[Characters] &&
+                  (parser.peek() eq valueStartEvent)) {
                 StaxXmlParserUtils.skipChildren(parser, rawKey, options)
+              } else if (valueStartEvent.isInstanceOf[Characters] &&
+                  valueType.isInstanceOf[ArrayType]) {
+                // The array scalar path consumes its text before conversion, but not its end tag.
+                parser.peek() match {
+                  case end: EndElement
+                      if StaxXmlParserUtils.getName(end.getName, options) == rawKey =>
+                    parser.nextEvent()
+                  case _ =>
+                }
               }
               None
           }
@@ -439,25 +451,22 @@ class StaxXmlParser(
         case _ => // do nothing
       }
     }
-    val requiresCollationAwareBuilder = keyType match {
-      case _: CharType | _: VarcharType => true
-      case stringType: StringType => !stringType.isUTF8BinaryCollation
-      case _ => false
-    }
-    if (requiresCollationAwareBuilder) {
-      val mapData = DuplicateMapKeyUtils.buildMapWithLastRawKeyWins(
-        kvPairs.map(_._1).toSeq,
-        kvPairs.map(_._2).toSeq,
-        kvPairs.map(_._3).toSeq,
-        keyType,
-        valueType)
-      badMapException.foreach(throw _)
-      mapData
-    } else {
-      badMapException.foreach(throw _)
-      // Preserve the historical last-wins behavior for ordinary UTF8_BINARY STRING keys.
-      ArrayBasedMapData(
-        kvPairs.flatMap { case (_, key, value) => value.map(key -> _) }.toMap)
+    keyType match {
+      case _: CharType | _: VarcharType =>
+        val mapData = DuplicateMapKeyUtils.buildMapWithLastRawKeyWins(
+          kvPairs.map(_._1).toSeq,
+          kvPairs.map(_._2).toSeq,
+          kvPairs.map(_._3).toSeq,
+          keyType,
+          valueType)
+        badMapException.foreach(throw _)
+        mapData
+      case _ =>
+        badMapException.foreach(throw _)
+        // Preserve historical binary exact-name last-wins behavior for ordinary STRING keys,
+        // including strings with a non-binary collation.
+        ArrayBasedMapData(
+          kvPairs.flatMap { case (_, key, value) => value.map(key -> _) }.toMap)
     }
   }
 
