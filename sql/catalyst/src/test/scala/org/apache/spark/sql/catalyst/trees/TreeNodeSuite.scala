@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.trees
 
+import java.lang.management.ManagementFactory
 import java.math.BigInteger
 import java.util.UUID
 
@@ -99,6 +100,30 @@ case class FakeLeafPlan(child: LogicalPlan)
 case class FakeCurryingProduct(x: Expression)(val y: Int)
 
 class TreeNodeSuite extends SparkFunSuite with SQLHelper {
+  test("constructing unused Literals does not allocate eager cache state") {
+    val bean = ManagementFactory.getThreadMXBean.asInstanceOf[com.sun.management.ThreadMXBean]
+    assert(bean.isThreadAllocatedMemorySupported)
+    bean.setThreadAllocatedMemoryEnabled(true)
+    val count = 100000
+    val literals = new Array[Literal](count)
+
+    var i = 0
+    while (i < count) {
+      Literal(1)
+      i += 1
+    }
+
+    val before = bean.getCurrentThreadAllocatedBytes
+    i = 0
+    while (i < count) {
+      literals(i) = Literal(1)
+      i += 1
+    }
+    val bytesPerLiteral = (bean.getCurrentThreadAllocatedBytes - before) / count
+
+    assert(bytesPerLiteral < 220, s"unused Literal allocated $bytesPerLiteral bytes")
+  }
+
   test("top node changed") {
     val after = Literal(1) transform { case Literal(1, _) => Literal(2) }
     assert(after === Literal(2))
