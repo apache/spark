@@ -592,16 +592,15 @@ case class EnsureRequirements(
     // compatible with each other.
     val compatibleAsIs =
       bothUnprojected(leftSpec, rightSpec) && leftSpec.isCompatibleWith(rightSpec)
-    // Entering the push branch is the same as taking it. The keys agree for this pair by
+    // Entering the push branch is not the same as taking it. The keys agree for this pair by
     // construction, since `agreeingPairs` filtered on exactly that and an empty result returned
-    // above, so what the branch pushes always applies.
+    // above, so what the branch pushes always applies to the pair it was chosen for. The gate at
+    // the end can still discard the result, when a node it builds gives up its keyed claim.
     val pushCommonValues =
       (!compatibleAsIs || conf.v2BucketingPartiallyClusteredDistributionEnabled) &&
         (conf.v2BucketingPushPartValuesEnabled ||
           conf.v2BucketingAllowKeysSubsetOfPartitionKeys)
     if (pushCommonValues) {
-      logInfo("Pushing common partition values for storage-partitioned join")
-
       // Partition expressions are compatible. Regardless of whether partition values
       // match from both sides of children, we can calculate a superset of partition values and
       // push-down to respective data sources so they can adjust their output partitioning by
@@ -794,7 +793,45 @@ case class EnsureRequirements(
         rightReducers, distributePartitions = applyPartialClustering && !replicateRightSide)
     }
 
-    if (compatibleAsIs || pushCommonValues) Some(Seq(newLeft, newRight)) else None
+    // The pairing is only worth committing to if both children still declare the same aligned key
+    // sequence once the grouping has been pushed into them. A `GroupPartitionsExec` gives up its
+    // keyed claim when it turns out to regroup a layout that pins undeclared rows to
+    // `hash(key) % numPartitions` (see `KeyLayout.mayContainUnknownPartitionKeys`), and only the
+    // node knows the permutation it performs, so that answer arrives after the pairing was chosen.
+    // Asking before returning is what keeps the join from skipping both shuffles for a child that
+    // no longer satisfies its distribution, which is a plan `ValidateRequirements` rejects and
+    // every AQE rule that needs a valid plan then refuses to touch.
+    //
+    // The check is pairwise, not a per-side `satisfies`. Partially clustered distribution leaves
+    // both children value-aligned yet not grouped on purpose, so a per-side gate would refuse that
+    // whole family. What both sides owe each other is the key sequence `alignToExpectedKeys`
+    // guarantees, each key repeated as many times as the merge expects, whichever side replicates.
+    // `KeyLayout.describesSameKeys` asks exactly that, and it compares the key types as well as
+    // the rows.
+    //
+    // Only the push branch rebuilds the children, so only it has to be asked. Where it did not run,
+    // the children are the ones the pairing read: `KeyedShuffleSpec.isCompatibleWith` already ends
+    // in `describesSameKeys`, and all keyed members of a `PartitioningCollection` share one
+    // `KeyLayout`, so whichever member the spec matched on declares what the representative does.
+    def declaredLayout(plan: SparkPlan): Option[KeyLayout] =
+      PartitioningCollection.representativeOf(plan.outputPartitioning).map(_.layout)
+    def sidesDeclareSameKeys: Boolean =
+      (declaredLayout(newLeft), declaredLayout(newRight)) match {
+        case (Some(left), Some(right)) => left.describesSameKeys(right)
+        case _ => false
+      }
+    val committed = if (pushCommonValues) sidesDeclareSameKeys else compatibleAsIs
+    // Announced here rather than where the branch runs, since the gate can still discard what it
+    // built, and a log that names a pushdown should name one that happens.
+    if (pushCommonValues) {
+      if (committed) {
+        logInfo("Pushing common partition values for storage-partitioned join")
+      } else {
+        logInfo("Not storage-partitioning this join after all: the two sides no longer declare " +
+          "the same partition keys once regrouped onto the merged partition values")
+      }
+    }
+    Option.when(committed)(Seq(newLeft, newRight))
   }
 
   private def checkShufflePartitionIdPassThroughCompatible(

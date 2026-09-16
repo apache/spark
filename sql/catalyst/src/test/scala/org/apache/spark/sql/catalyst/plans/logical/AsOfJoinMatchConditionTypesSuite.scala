@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.MatchConditionTypes
 import org.apache.spark.sql.types._
 
@@ -32,6 +33,15 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
   test("string and temporal types are incompatible") {
     assert(!MatchConditionTypes.areOperandsCompatible(StringType, TimestampType))
     assert(!MatchConditionTypes.areOperandsCompatible(DateType, StringType))
+  }
+
+  test("orderable scalars with no common type are incompatible") {
+    // Both are individually valid, orderable operands ...
+    assert(MatchConditionTypes.isValidOperandType(TimestampType))
+    assert(MatchConditionTypes.isValidOperandType(BooleanType))
+    // ... but TIMESTAMP and BOOLEAN have no common wider type and are not a
+    // string/temporal pair, so they are not comparable.
+    assert(!MatchConditionTypes.areOperandsCompatible(TimestampType, BooleanType))
   }
 
   test("positional struct operands with different field names are compatible") {
@@ -116,5 +126,70 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
         Nil)
     assert(!MatchConditionTypes.usesStructDecomposition(leftStruct, rightStruct))
     assert(!MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
+  }
+
+  test("map operands are invalid (not orderable)") {
+    val mapType = MapType(StringType, IntegerType)
+    assert(!MatchConditionTypes.isValidOperandType(mapType))
+    assert(!MatchConditionTypes.areOperandsCompatible(mapType, mapType))
+  }
+
+  test("array operands with non-orderable elements are invalid") {
+    val arrayOfMap = ArrayType(MapType(StringType, IntegerType))
+    assert(!MatchConditionTypes.isValidOperandType(arrayOfMap))
+    assert(!MatchConditionTypes.areOperandsCompatible(arrayOfMap, arrayOfMap))
+    assert(!MatchConditionTypes.usesArrayOrderExpression(arrayOfMap, arrayOfMap))
+  }
+
+  test("struct operands with a non-orderable field are invalid") {
+    val structWithMap = StructType(
+      StructField("a", IntegerType) ::
+        StructField("m", MapType(StringType, IntegerType)) ::
+        Nil)
+    assert(!MatchConditionTypes.isValidOperandType(structWithMap))
+    assert(!MatchConditionTypes.areOperandsCompatible(structWithMap, structWithMap))
+  }
+
+  test("positional struct operands with incompatible field types are rejected") {
+    val leftStruct = StructType(
+      StructField("a", IntegerType) ::
+        StructField("b", TimestampType) ::
+        Nil)
+    val rightStruct = StructType(
+      StructField("x", IntegerType) ::
+        StructField("y", BooleanType) ::
+        Nil)
+    // Same field count, so the operands are structurally decomposable ...
+    assert(MatchConditionTypes.usesStructDecomposition(leftStruct, rightStruct))
+    // ... but the second field pair (TIMESTAMP vs BOOLEAN) is not comparable.
+    assert(!MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
+  }
+
+  test("array operands with empty struct elements are invalid") {
+    // An array whose element contains an empty struct is invalid even though the array itself
+    // is orderable (the ArrayType arm of containsEmptyStructType).
+    val arrayOfEmptyStruct = ArrayType(StructType(Nil))
+    // Pin orderability so the rejection is due to the empty struct, not non-orderability.
+    assert(RowOrdering.isOrderable(arrayOfEmptyStruct))
+    assert(!MatchConditionTypes.isValidOperandType(arrayOfEmptyStruct))
+    assert(!MatchConditionTypes.areOperandsCompatible(arrayOfEmptyStruct, arrayOfEmptyStruct))
+  }
+
+  test("array operands with incompatible struct element field types are rejected") {
+    val leftArray = ArrayType(
+      StructType(
+        StructField("a", IntegerType) ::
+          StructField("b", TimestampType) ::
+          Nil))
+    val rightArray = ArrayType(
+      StructType(
+        StructField("x", IntegerType) ::
+          StructField("y", BooleanType) ::
+          Nil))
+    // Each operand is individually a valid, orderable type ...
+    assert(MatchConditionTypes.isValidOperandType(leftArray))
+    assert(MatchConditionTypes.isValidOperandType(rightArray))
+    // ... but the element structs' second field pair (TIMESTAMP vs BOOLEAN) is not comparable.
+    assert(!MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
   }
 }

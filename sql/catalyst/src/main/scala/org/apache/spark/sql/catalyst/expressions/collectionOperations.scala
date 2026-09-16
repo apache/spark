@@ -43,7 +43,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SQLOpenHashSet
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.{ByteArray, CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{ByteArray, CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
  * Base trait for [[BinaryExpression]]s with two arrays of the same element type and implicit
@@ -3503,6 +3503,9 @@ case class Flatten(child: Expression) extends UnaryExpression
 
       Supported types are: byte, short, integer, long, date, timestamp.
 
+      The timestamp types include the nanosecond-precision timestamp types; their generated values
+      advance on the microsecond grid and keep the start value's sub-microsecond fraction.
+
       The start and stop expressions must resolve to the same type.
       If start and stop expressions resolve to the 'date' or 'timestamp' type
       then the step expression must resolve to the 'interval' or 'year-month interval' or
@@ -3580,11 +3583,8 @@ case class Sequence(
     val typesCorrect =
       DataTypeUtils.sameType(startType, stop.dataType) &&
         (startType match {
-          case TimestampType | TimestampNTZType =>
-            stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
-              YearMonthIntervalType.acceptsType(stepType) ||
-              DayTimeIntervalType.acceptsType(stepType)
-          case DateType =>
+          case TimestampType | TimestampNTZType | DateType |
+              _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
             stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
               YearMonthIntervalType.acceptsType(stepType) ||
               DayTimeIntervalType.acceptsType(stepType)
@@ -3600,7 +3600,8 @@ case class Sequence(
         errorSubClass = "SEQUENCE_WRONG_INPUT_TYPES",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "startType" -> toSQLType(TypeCollection(TimestampType, TimestampNTZType, DateType)),
+          "startType" -> toSQLType(
+            TypeCollection(TimestampType, TimestampNTZType, AnyTimestampNanoType, DateType)),
           "stepType" -> toSQLType(
             TypeCollection(CalendarIntervalType, YearMonthIntervalType, DayTimeIntervalType)),
           "otherStartType" -> toSQLType(IntegralType)
@@ -3630,13 +3631,21 @@ case class Sequence(
       val ct = physicalDataType.tag
       new IntegralSequenceImpl[T](iType)(ct, integral.asInstanceOf[Integral[T]])
 
-    case TimestampType | TimestampNTZType =>
+    case TimestampType | TimestampNTZType |
+        _: TimestampLTZNanosType | _: TimestampNTZNanosType =>
+      // A nanosecond sequence reuses the microsecond machinery on epochMicros, so map each nanos
+      // type to its microsecond counterpart (which drives zone-aware interval addition).
+      val outerType: DataType = start.dataType match {
+        case _: TimestampLTZNanosType => TimestampType
+        case _: TimestampNTZNanosType => TimestampNTZType
+        case other => other
+      }
       if (stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepOpt.get.dataType)) {
-        new TemporalSequenceImpl[Long](LongType, start.dataType, 1, identity, zoneId)
+        new TemporalSequenceImpl[Long](LongType, outerType, 1, identity, zoneId)
       } else if (YearMonthIntervalType.acceptsType(stepOpt.get.dataType)) {
-        new PeriodSequenceImpl[Long](LongType, start.dataType, 1, identity, zoneId)
+        new PeriodSequenceImpl[Long](LongType, outerType, 1, identity, zoneId)
       } else {
-        new DurationSequenceImpl[Long](LongType, start.dataType, 1, identity, zoneId)
+        new DurationSequenceImpl[Long](LongType, outerType, 1, identity, zoneId)
       }
 
     case DateType =>
@@ -3649,25 +3658,115 @@ case class Sequence(
       }
   }
 
+  private def isNanos: Boolean = start.dataType.isInstanceOf[AnyTimestampNanoType]
+
   override def eval(input: InternalRow): Any = {
     val startVal = start.eval(input)
     if (startVal == null) return null
     val stopVal = stop.eval(input)
     if (stopVal == null) return null
-    val stepVal = stepOpt.map(_.eval(input)).getOrElse(impl.defaultStep(startVal, stopVal))
-    if (stepVal == null) return null
 
-    ArrayData.toArrayData(impl.eval(startVal, stopVal, stepVal))
+    if (isNanos) {
+      // The sequence runs on epochMicros and every element carries the start value's fraction.
+      // The step sign and the microsecond bound honor the endpoints' fractions (an out-of-order
+      // same-microsecond pair still raises the boundary error), and a final full-precision check
+      // drops an endpoint the micros-only bound cannot exclude, so the result never overshoots
+      // stop. See nanosStepIsNegative / nanosBoundedStopMicros.
+      val startNanos = startVal.asInstanceOf[TimestampNanosVal]
+      val stopNanos = stopVal.asInstanceOf[TimestampNanosVal]
+      val startMicros = startNanos.epochMicros
+      val startFrac = startNanos.nanosWithinMicro.toInt
+      // Default step sign comes from the full-precision comparison: defaultStep picks the positive
+      // unit when its first arg <= second, so pass (compareTo, 0) => ascending iff start <= stop.
+      val stepVal = stepOpt.map(_.eval(input)).getOrElse {
+        impl.defaultStep(startNanos.compareTo(stopNanos).toLong, 0L)
+      }
+      if (stepVal == null) return null
+      val stepNegative = Sequence.nanosStepIsNegative(stepVal)
+      val stopMicros = Sequence.nanosBoundedStopMicros(
+        startFrac, stopNanos.epochMicros, stopNanos.nanosWithinMicro.toInt, stepNegative)
+      val microsArr = impl.eval(startMicros, stopMicros, stepVal).asInstanceOf[Array[Long]]
+      val out = new Array[TimestampNanosVal](microsArr.length)
+      var i = 0
+      while (i < microsArr.length) {
+        // startFrac is already a valid fraction, so skip the per-element range check.
+        out(i) = TimestampNanosVal.fromTrustedRowBytes(microsArr(i), startFrac.toShort)
+        i += 1
+      }
+      // Membership is decided on the microsecond grid, but every element carries startFrac, so the
+      // element landing on stop's microsecond can still fall outside [start, stop] when the
+      // fractions differ (calendar/day/month and default steps use the while-loop machinery, whose
+      // micro-nudged bound cannot drop it). Only that endpoint element can be out of range, so
+      // compare it against stop in full precision and drop it if it overshoots.
+      val n = out.length
+      val trimmed =
+        if (n > 0 && (if (stepNegative) out(n - 1).compareTo(stopNanos) < 0
+                      else out(n - 1).compareTo(stopNanos) > 0)) {
+          out.slice(0, n - 1)
+        } else {
+          out
+        }
+      ArrayData.toArrayData(trimmed)
+    } else {
+      val stepVal = stepOpt.map(_.eval(input)).getOrElse(impl.defaultStep(startVal, stopVal))
+      if (stepVal == null) return null
+      ArrayData.toArrayData(impl.eval(startVal, stopVal, stepVal))
+    }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val startGen = start.genCode(ctx)
     val stopGen = stop.genCode(ctx)
+    // Nanosecond endpoints box as TimestampNanosVal; the default-step sign uses the full-precision
+    // comparison (compareTo(start, stop) <= 0 => ascending), and the sequence math runs on
+    // epochMicros before each element is re-wrapped with the start value's fraction.
+    val (defaultStepStart, defaultStepStop) = if (isNanos) {
+      (startGen.copy(value =
+        JavaCode.expression(s"${startGen.value}.compareTo(${stopGen.value})", IntegerType)),
+        stopGen.copy(value = JavaCode.expression("0", IntegerType)))
+    } else {
+      (startGen, stopGen)
+    }
     val stepGen = stepOpt.map(_.genCode(ctx)).getOrElse(
-      impl.defaultStep.genCode(ctx, startGen, stopGen))
+      impl.defaultStep.genCode(ctx, defaultStepStart, defaultStepStop))
 
     val resultType = CodeGenerator.javaType(dataType)
-    val resultCode = {
+    val resultCode = if (isNanos) {
+      val microsArr = ctx.freshName("microsArr")
+      val nanosArr = ctx.freshName("nanosArr")
+      val startFrac = ctx.freshName("startFrac")
+      val startMicros = ctx.freshName("startMicros")
+      val stopMicros = ctx.freshName("stopMicros")
+      val stepNeg = ctx.freshName("stepNeg")
+      val idx = ctx.freshName("idx")
+      val tnv = classOf[TimestampNanosVal].getName
+      val genericArr = "org.apache.spark.sql.catalyst.util.GenericArrayData"
+      val seqObj = classOf[Sequence].getName + "$.MODULE$"
+      val microsGen = impl.genCode(ctx, startMicros, stopMicros, stepGen.value, microsArr, "long")
+      s"""
+         |long $startMicros = ${startGen.value}.epochMicros;
+         |short $startFrac = ${startGen.value}.nanosWithinMicro;
+         |boolean $stepNeg = $seqObj.nanosStepIsNegative(${stepGen.value});
+         |long $stopMicros = $seqObj.nanosBoundedStopMicros(
+         |  $startFrac, ${stopGen.value}.epochMicros, ${stopGen.value}.nanosWithinMicro, $stepNeg);
+         |long[] $microsArr = null;
+         |$microsGen
+         |$tnv[] $nanosArr = new $tnv[$microsArr.length];
+         |for (int $idx = 0; $idx < $microsArr.length; $idx++) {
+         |  // startFrac is already a valid fraction, so skip the per-element range check.
+         |  $nanosArr[$idx] = $tnv.fromTrustedRowBytes($microsArr[$idx], $startFrac);
+         |}
+         |// The endpoint landing on stop's microsecond carries startFrac and can overshoot stop
+         |// when the fractions differ; the micros-only bound cannot always drop it (see the eval
+         |// path). Only the last element can be out of range, so drop it with a full-precision cmp.
+         |if ($nanosArr.length > 0 &&
+         |    ($stepNeg ? $nanosArr[$nanosArr.length - 1].compareTo(${stopGen.value}) < 0
+         |              : $nanosArr[$nanosArr.length - 1].compareTo(${stopGen.value}) > 0)) {
+         |  $nanosArr = ($tnv[]) java.util.Arrays.copyOf($nanosArr, $nanosArr.length - 1);
+         |}
+         |${ev.value} = new $genericArr($nanosArr);
+       """.stripMargin
+    } else {
       val arr = ctx.freshName("arr")
       val arrElemType = CodeGenerator.javaType(dataType.elementType)
       s"""
@@ -3744,6 +3843,33 @@ object Sequence {
         safeLen.toInt
       case e: Exception => throw e
     }
+  }
+
+  /**
+   * The microsecond bound handed to the microsecond sequence machinery for a nanosecond sequence.
+   * Every generated element lands on the microsecond grid and carries `startFrac`, so an element
+   * that falls exactly on `stopMicros` should be kept only when `startFrac` does not carry it past
+   * `stop` in the step's direction; nudging the bound one microsecond off the boundary drops it on
+   * the count-based micros path and makes the machinery reject an out-of-order same-microsecond
+   * pair. The nudge cannot express that drop on the while-loop path (calendar/day/month and default
+   * steps), so the endpoint is finalized by a full-precision `compareTo` against `stop` in
+   * `eval` / `doGenCode`; this bound only has to be right for sizing and the boundary error.
+   */
+  def nanosBoundedStopMicros(
+      startFrac: Int, stopMicros: Long, stopFrac: Int, stepNegative: Boolean): Long = {
+    if (startFrac == stopFrac) stopMicros
+    else if (stepNegative) if (startFrac < stopFrac) stopMicros + 1 else stopMicros
+    else if (startFrac > stopFrac) stopMicros - 1 else stopMicros
+  }
+
+  /** Whether a sequence step points backwards, matching the microsecond machinery's sign rule. */
+  def nanosStepIsNegative(step: Any): Boolean = step match {
+    case ci: CalendarInterval =>
+      val totalMicros =
+        ci.months.toLong * (28 * MICROS_PER_DAY) + ci.days.toLong * MICROS_PER_DAY + ci.microseconds
+      totalMicros < 0
+    case months: Int => months < 0
+    case micros: Long => micros < 0
   }
 
   private type LessThanOrEqualFn = (Any, Any) => Boolean

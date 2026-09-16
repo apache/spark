@@ -29984,10 +29984,13 @@ def hll_sketch_agg(
 
     .. versionadded:: 3.5.0
 
+    .. versionchanged:: 4.4.0
+        Supports the TIME type for the ``col`` argument.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        A column that evaluates to an integer, long, string, or binary.
+        A column that evaluates to an integer, long, time, string, or binary.
     lgConfigK : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of K, where K is the number of buckets or slots for the HllSketch.
         A column that evaluates to an integer.

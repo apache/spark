@@ -50,19 +50,13 @@ import java.util.Deque;
   }
 
   /**
-   * This method will be called when we see '/*' and try to match it as a bracketed comment.
-   * If the next character is '+', it should be parsed as hint later, and we cannot match
-   * it as a bracketed comment.
+   * Called after a top-level '/*' opener to distinguish hints from bracketed comments.
+   * Nested comment openers are handled by NESTED_BRACKETED_COMMENT.
    *
    * Returns true if the next character is '+'.
    */
   public boolean isHint() {
-    int nextChar = _input.LA(1);
-    if (nextChar == '+') {
-      return true;
-    } else {
-      return false;
-    }
+    return _input.LA(1) == '+';
   }
 
   /**
@@ -726,7 +720,15 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | {markUnclosedComment();} EOF) -> channel(HIDDEN)
+    : '/*' {!isHint()}? COMMENT_BODY ('*/' | {markUnclosedComment();} EOF) -> channel(HIDDEN)
+    ;
+
+fragment COMMENT_BODY
+    : (NESTED_BRACKETED_COMMENT | .)*?
+    ;
+
+fragment NESTED_BRACKETED_COMMENT
+    : '/*' COMMENT_BODY ('*/' | EOF)
     ;
 
 WS

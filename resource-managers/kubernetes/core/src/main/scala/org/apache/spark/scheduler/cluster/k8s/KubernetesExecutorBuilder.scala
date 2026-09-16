@@ -18,7 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.{SecurityManager, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.resource.ResourceProfile
@@ -28,7 +28,12 @@ private[spark] class KubernetesExecutorBuilder {
 
   def buildFromFeatures(
       conf: KubernetesExecutorConf,
-      secMgr: SecurityManager,
+      client: KubernetesClient): KubernetesExecutorSpec = {
+    buildFromFeatures(conf, client, ResourceProfile.getOrCreateDefaultProfile(conf.sparkConf))
+  }
+
+  def buildFromFeatures(
+      conf: KubernetesExecutorConf,
       client: KubernetesClient,
       resourceProfile: ResourceProfile): KubernetesExecutorSpec = {
     val initialPod = conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
@@ -66,7 +71,7 @@ private[spark] class KubernetesExecutorBuilder {
       }
 
     val allFeatures = Seq(
-      new BasicExecutorFeatureStep(conf, secMgr, resourceProfile),
+      new BasicExecutorFeatureStep(conf, resourceProfile),
       new ExecutorKubernetesCredentialsFeatureStep(conf),
       new MountSecretsFeatureStep(conf),
       new EnvSecretsFeatureStep(conf),

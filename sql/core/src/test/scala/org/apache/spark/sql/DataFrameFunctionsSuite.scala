@@ -2163,6 +2163,9 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         Timestamp.valueOf("2018-01-02 00:00:00")))))
 
     // test invalid data types
+    val nanosSeqStartType =
+      "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or " +
+        "\"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\" or \"DATE\")"
     checkError(
       exception = intercept[AnalysisException] {
         Seq((true, false)).toDF().selectExpr("sequence(_1, _2)")
@@ -2171,7 +2174,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"sequence(_1, _2)\"",
         "functionName" -> "`sequence`",
-        "startType" -> "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\")",
+        "startType" -> nanosSeqStartType,
         "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
         "otherStartType" -> "\"INTEGRAL\""
       ),
@@ -2185,7 +2188,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"sequence(_1, _2, _3)\"",
         "functionName" -> "`sequence`",
-        "startType" -> "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\")",
+        "startType" -> nanosSeqStartType,
         "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
         "otherStartType" -> "\"INTEGRAL\""
       ),
@@ -2199,7 +2202,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"sequence(_1, _2, _3)\"",
         "functionName" -> "`sequence`",
-        "startType" -> "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\")",
+        "startType" -> nanosSeqStartType,
         "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
         "otherStartType" -> "\"INTEGRAL\""
       ),

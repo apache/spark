@@ -128,7 +128,7 @@ case class UnionLoopExec(
         }
       case _ =>
         val materializedDF = df.repartition()
-        val count = materializedDF.queryExecution.toRdd.count()
+        val count = materializedDF.queryExecution.withRegularShuffle.toRdd.count()
 
         // In the case we return a sufficiently small number of rows when executing any step of the
         // recursion we convert the result into a LocalRelation, so that, if the recursion doesn't
@@ -181,7 +181,7 @@ case class UnionLoopExec(
 
     var limitReached: Boolean = false
 
-    val numPartitions = prevDF.queryExecution.toRdd.partitions.length
+    val numPartitions = prevDF.queryExecution.withRegularShuffle.toRdd.partitions.length
 
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && !limitReached) {
@@ -223,8 +223,9 @@ case class UnionLoopExec(
               }
               p.copy(projectList = prevPlanToRefMapping)
             case _ =>
-              val logicalRDD = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF,
-                  prevDF.isStreaming).newInstance()
+              val logicalRDD = LogicalRDD.fromDataset(
+                prevDF.queryExecution.withRegularShuffle.toRdd, prevDF,
+                prevDF.isStreaming).newInstance()
               prevPlan = logicalRDD
               val optimizedPlan = prevDF.queryExecution.optimizedPlan
               val (stats, constraints) = rewriteStatsAndConstraints(r, optimizedPlan,
@@ -284,7 +285,7 @@ case class UnionLoopExec(
         }
       }
       val coalescedDF = df.coalesce(numPartitions)
-      coalescedDF.queryExecution.toRdd
+      coalescedDF.queryExecution.withRegularShuffle.toRdd
     }
   }
 

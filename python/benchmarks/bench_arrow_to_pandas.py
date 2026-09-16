@@ -16,7 +16,7 @@
 #
 
 """
-Microbenchmarks for ``ArrowBatchTransformer.to_pandas``, the hot path of pandas
+Microbenchmarks for ``ArrowToPandasConversion.to_pandas``, the hot path of pandas
 UDF inputs: every pandas UDF eval type calls it once per batch to build the
 Series it passes to the user's function.
 
@@ -24,7 +24,7 @@ Part of the per-batch cost is fixed per COLUMN and does not scale with row
 count, so ``n_cols`` is swept alongside ``n_rows``: wide batches and small
 batches are the shapes where that fixed cost dominates.
 
-``ArrowArrayToPandasConversion.convert`` routes each column by type. ``long`` and
+``ArrowToPandasConversion.convert`` routes each column by type. ``long`` and
 ``timestamp`` are in the ``_prefer_convert_numpy`` allowlist and take
 ``convert_numpy``; ``string`` is not, and takes ``convert_legacy``. The two
 allowlist types differ by an order of magnitude in conversion cost -- a timestamp
@@ -37,7 +37,7 @@ import pyarrow as pa
 
 
 class ArrowBatchToPandasBenchmark:
-    """Benchmark ``ArrowBatchTransformer.to_pandas`` over a whole RecordBatch."""
+    """Benchmark ``ArrowToPandasConversion.to_pandas`` over a whole RecordBatch."""
 
     params = [
         [128, 10000],
@@ -47,7 +47,7 @@ class ArrowBatchToPandasBenchmark:
     param_names = ["n_rows", "n_cols", "col_type"]
 
     def setup(self, n_rows, n_cols, col_type):
-        from pyspark.sql.conversion import ArrowBatchTransformer
+        from pyspark.sql.conversion import ArrowToPandasConversion
         from pyspark.sql.types import (
             LongType,
             StringType,
@@ -74,7 +74,7 @@ class ArrowBatchToPandasBenchmark:
         names = [f"c{i}" for i in range(n_cols)]
         self.batch = pa.RecordBatch.from_arrays([column] * n_cols, names)
         self.schema = StructType([StructField(name, spark_type) for name in names])
-        self.to_pandas = ArrowBatchTransformer.to_pandas
+        self.to_pandas = ArrowToPandasConversion.to_pandas
 
     def time_batch_to_pandas(self, n_rows, n_cols, col_type):
         self.to_pandas(self.batch, timezone="UTC", schema=self.schema)

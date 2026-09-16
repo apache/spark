@@ -19,10 +19,17 @@
 PySpark supports custom serializers for transferring data; this can improve
 performance.
 
-By default, PySpark uses :class:`CloudPickleSerializer` to serialize objects using Python's
-`cPickle` serializer, which can serialize nearly any Python object.
+By default, PySpark uses :class:`CPickleSerializer` to serialize objects. This is an alias
+that resolves to :class:`CloudPickleSerializer` (which uses the ``cloudpickle`` library and
+can serialize nearly any Python object); setting the ``PYSPARK_ENABLE_NAMEDTUPLE_PATCH=1``
+environment variable makes it resolve to :class:`PickleSerializer` (which uses the standard
+library ``pickle`` module) instead.
 Other serializers, like :class:`MarshalSerializer`, support fewer datatypes but can be
 faster.
+
+These serializers apply to the classic RDD path only, as shown below. Spark SQL and
+DataFrame data transfers default to Arrow-based serialization (see
+:mod:`pyspark.sql.pandas.serializers`) since SPARK-54555.
 
 
 Examples
@@ -411,7 +418,7 @@ class PickleSerializer(FramedSerializer):
     """
     Serializes objects using Python's pickle serializer:
 
-        http://docs.python.org/2/library/pickle.html
+        https://docs.python.org/3/library/pickle.html
 
     This serializer supports nearly any Python object, but may
     not be as fast as more specialized serializers.
@@ -455,7 +462,7 @@ class MarshalSerializer(FramedSerializer):
     """
     Serializes objects using Python's Marshal serializer:
 
-        http://docs.python.org/2/library/marshal.html
+        https://docs.python.org/3/library/marshal.html
 
     This serializer is faster than CloudPickleSerializer but supports fewer datatypes.
     """

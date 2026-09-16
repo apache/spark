@@ -89,6 +89,22 @@ Other information of first level.
 SELECT 'selected content' AS tenth;
 --QUERY-DELIMITER-END
 
+-- SPARK-59536: hint-shaped nested comments are part of the outer comment
+--QUERY-DELIMITER-START
+SELECT /* outer /*+ inner */ outer tail */ 1 AS nested_hint;
+--QUERY-DELIMITER-END
+
+-- SPARK-59536: semicolons inside hint-shaped nested comments are comment text
+--QUERY-DELIMITER-START
+/* SELECT /*+ HINT() */ 4; */
+SELECT 'after-comment' AS nested_hint_semicolon;
+--QUERY-DELIMITER-END
+
+-- SPARK-59536: closing the hint-shaped inner comment leaves the outer comment open
+--QUERY-DELIMITER-START
+/* SELECT /*+ HINT() 4; */ SELECT 1;
+--QUERY-DELIMITER-END
+
 -- the first case of unclosed bracketed comment
 --QUERY-DELIMITER-START
 /*abc*/

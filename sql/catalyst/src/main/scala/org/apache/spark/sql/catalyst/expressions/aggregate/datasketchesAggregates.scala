@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -51,7 +51,7 @@ import org.apache.spark.unsafe.types.UTF8String
   arguments = """
     Arguments:
       * expr - The expression to aggregate into the HLL sketch.
-        An expression that evaluates to an integer, long, string, or binary.
+        An expression that evaluates to an integer, long, time, string, or binary.
       * lgConfigK - The log-base-2 of K, where K is the number of buckets for the sketch.
         An expression that evaluates to an integer.
   """,
@@ -116,11 +116,18 @@ case class HllSketchAgg(
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
+      // AnyTimeType MUST stay last. ANSI implicit coercion walks these members in order and casts
+      // an input the collection does not directly accept to the first that canANSIStoreAssign
+      // permits. A TIMESTAMP/TIMESTAMP_NTZ store-assigns to both STRING and TIME, so a TIME member
+      // ahead of StringType would coerce it to TIME (nanos-of-day only) and silently under-count;
+      // DATE would hit a TIME target that has no cast rule. TIME inputs are unaffected by the
+      // position (accepted via the order-independent acceptsType short-circuit). See SPARK-59440.
       TypeCollection(
         IntegerType,
         LongType,
         StringTypeWithCollation(supportsTrimCollation = true),
-        BinaryType),
+        BinaryType,
+        AnyTimeType),
       IntegerType)
 
   override def dataType: DataType = BinaryType
@@ -156,9 +163,12 @@ case class HllSketchAgg(
         // Spark SQL doesn't have equivalent types for ByteBuffer or char[] so leave those out.
         // We leave out support for Array types, as unique counting these aren't a common use case.
         // We leave out support for floating point types (such as DoubleType) due to imprecision.
-        // TODO: implement support for decimal/datetime/interval types
+        // TODO: implement support for decimal/date/timestamp/interval types
         case IntegerType => sketch.update(v.asInstanceOf[Int])
         case LongType => sketch.update(v.asInstanceOf[Long])
+        // TIME is physically stored as a long (nanoseconds since midnight), so it hashes exactly
+        // like LongType: equal times share the same nanos and therefore the same sketch entry.
+        case _: TimeType => sketch.update(v.asInstanceOf[Long])
         case st: StringType =>
           val collation = CollationFactory.fetchCollation(st.collationId)
           val str = v.asInstanceOf[UTF8String]
