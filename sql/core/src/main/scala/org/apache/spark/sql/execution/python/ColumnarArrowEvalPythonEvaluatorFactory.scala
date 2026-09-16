@@ -90,11 +90,10 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
   private val udfOutput = output.drop(childOutput.length)
   private val checkedOutput = childOutput ++ udfOutput.zip(udfs).map { case (attr, udf) =>
-    if (udf.applyCharVarcharChecks) {
-      CharVarcharUtils.stringLengthCheck(attr, attr.dataType)
-    } else {
-      attr
-    }
+    udf.charVarcharResultType
+      .filter(_ => udf.applyCharVarcharChecks)
+      .map(CharVarcharUtils.stringLengthCheck(attr, _))
+      .getOrElse(attr)
   }
   private val hasCharVarcharOutput = udfs.exists(_.hasCharVarcharResult)
   private val physicalOutputSchema = ColumnarArrowEvalPythonEvaluatorFactory

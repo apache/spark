@@ -18,7 +18,6 @@ import os
 import unittest
 from unittest.mock import patch
 
-from pyspark.sql.connect.udtf import UserDefinedTableFunction
 from pyspark.sql.functions import lit, udtf
 from pyspark.sql.tests.test_udtf import (
     BaseUDTFTestsMixin,
@@ -53,6 +52,8 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
         self.check_struct_output_type_casting_row(PickleException)
 
     def test_return_type_validation_rpc_is_arrow_only_and_cached(self):
+        from pyspark.sql.connect.udtf import UserDefinedTableFunction
+
         class TestUDTF:
             def eval(self):
                 yield (1,)

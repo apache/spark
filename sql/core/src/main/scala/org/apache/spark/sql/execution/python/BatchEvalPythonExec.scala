@@ -101,9 +101,11 @@ class BatchEvalPythonEvaluatorFactory(
     val unpickle = new Unpickler
     val mutableRow = new GenericInternalRow(1)
     val resultType = if (udfs.length == 1) {
-      udfs.head.dataType
+      udfs.head.charVarcharResultType.getOrElse(udfs.head.dataType)
     } else {
-      StructType(udfs.map(u => StructField("", u.dataType, u.nullable)))
+      StructType(udfs.map { udf =>
+        StructField("", udf.charVarcharResultType.getOrElse(udf.dataType), udf.nullable)
+      })
     }
 
     val fromJava = if (udfs.length == 1) {

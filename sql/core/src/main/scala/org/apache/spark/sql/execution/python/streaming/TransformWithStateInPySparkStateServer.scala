@@ -53,7 +53,7 @@ import org.apache.spark.util.Utils
 
 private[streaming] object TransformWithStateInPySparkStateServer {
   def validateStateSchema(schema: StructType, schemaKind: String): Unit = {
-    if (CharVarcharUtils.hasCharVarchar(schema)) {
+    if (CharVarcharUtils.physicalTypeHasCharVarchar(schema)) {
       throw QueryCompilationErrors.invalidPythonStateSchema(schema, schemaKind)
     }
   }
