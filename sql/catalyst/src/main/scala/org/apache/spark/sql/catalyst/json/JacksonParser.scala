@@ -658,7 +658,6 @@ class JacksonParser(
           }
         }
       } catch {
-        case DuplicateMapKeyUtils(e) => throw e
         case NonFatal(e) if enablePartialResults =>
           badMapException = badMapException.orElse(Some(e))
       }

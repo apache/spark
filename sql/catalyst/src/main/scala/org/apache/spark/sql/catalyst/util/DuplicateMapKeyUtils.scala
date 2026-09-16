@@ -37,12 +37,6 @@ private[sql] object DuplicateMapKeyUtils {
 
   def unapply(exception: Throwable): Option[SparkRuntimeException] = cause(exception)
 
-  def lastOccurrenceIndices(rawKeys: Array[UTF8String]): Seq[Int] = {
-    val lastIndices = mutable.LinkedHashMap.empty[UTF8String, Int]
-    rawKeys.indices.foreach(index => lastIndices.update(rawKeys(index), index))
-    lastIndices.values.toSeq
-  }
-
   def buildMapWithLastRawKeyWins(
       rawKeys: Seq[UTF8String],
       normalizedKeys: Seq[UTF8String],
@@ -71,5 +65,11 @@ private[sql] object DuplicateMapKeyUtils {
       values(index).foreach(builder.put(normalizedKeys(index), _))
     }
     builder.build()
+  }
+
+  private def lastOccurrenceIndices(rawKeys: Array[UTF8String]): Seq[Int] = {
+    val lastIndices = mutable.LinkedHashMap.empty[UTF8String, Int]
+    rawKeys.indices.foreach(index => lastIndices.update(rawKeys(index), index))
+    lastIndices.values.toSeq
   }
 }
