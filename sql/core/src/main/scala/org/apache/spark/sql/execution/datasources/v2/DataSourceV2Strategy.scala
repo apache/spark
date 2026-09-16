@@ -247,11 +247,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       DataSourceV2Strategy.withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
     case WriteToDataSourceV2(relationOpt, writer, query, customMetrics) =>
-      val invalidateCacheFunc: () => Unit = () => relationOpt match {
-        case Some(r) => session.sharedState.cacheManager.uncacheQuery(session, r, cascade = true)
-        case None => ()
-      }
-      WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
+      // Micro-batch V2Writes forwards the unbound target (scan mode None). Recache using the
+      // same catalog-name / catalog-less mutation identity as batch V2 writes so every bound
+      // CHAR/VARCHAR cache variant is rebuilt after a successful commit.
+      val refreshCacheFunc: () => Unit = () => relationOpt.foreach(r => refreshCache(r)())
+      WriteToDataSourceV2Exec(writer, refreshCacheFunc, planLater(query), customMetrics) :: Nil
 
     case c @ CreateTable(ResolvedIdentifier(catalog, ident), columns, partitioning,
         tableSpec: TableSpec, ifNotExists) =>
