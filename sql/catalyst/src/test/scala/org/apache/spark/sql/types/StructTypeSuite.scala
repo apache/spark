@@ -48,9 +48,9 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   private val mapper = new ObjectMapper()
 
   /**
-   * Reader fixture copied from the relevant JSON branches at the PR's base commit,
-   * 389de941f002a5c92e22dc3ed0f65af602a174db. Keep this independent of the current
-   * DataType parser so this test continues to exercise the preceding-reader contract.
+   * Reduced independent reader copied from the relevant JSON branches at the PR's base commit,
+   * 389de941f002a5c92e22dc3ed0f65af602a174db. It deliberately does not call the current DataType
+   * parser, so unknown metadata continues to exercise the preceding-reader contract.
    */
   private def readWithPreCharVarcharCollationReader(json: String): StructType = {
     def readType(json: JValue): DataType = json match {
@@ -61,6 +61,12 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       case JObject(fields) if fields.toMap.get("type").contains(JString("array")) =>
         val values = fields.toMap
         ArrayType(readType(values("elementType")), values("containsNull").asInstanceOf[JBool].value)
+      case JObject(fields) if fields.toMap.get("type").contains(JString("map")) =>
+        val values = fields.toMap
+        MapType(
+          readType(values("keyType")),
+          readType(values("valueType")),
+          values("valueContainsNull").asInstanceOf[JBool].value)
       case other =>
         fail(s"Unsupported type in pinned preceding-reader fixture: $other")
     }
@@ -776,11 +782,15 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-59276: preceding readers retain unknown CHAR/VARCHAR collation metadata") {
     val schema = StructType(
       StructField("c", CharType(4, "UTF8_LCASE")) ::
-        StructField("nested", ArrayType(VarcharType(6, "UNICODE_CI"))) :: Nil)
+        StructField("nested", ArrayType(VarcharType(6, "UNICODE_CI"))) ::
+        StructField(
+          "mapped",
+          MapType(CharType(3, "UTF8_BINARY"), VarcharType(5, "UTF8_LCASE"))) :: Nil)
 
     val precedingSchema = readWithPreCharVarcharCollationReader(schema.json)
     assert(precedingSchema("c").dataType === CharType(4))
     assert(precedingSchema("nested").dataType === ArrayType(VarcharType(6)))
+    assert(precedingSchema("mapped").dataType === MapType(CharType(3), VarcharType(5)))
 
     val metadataKey = DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY
     assert(precedingSchema("c").metadata.getMetadata(metadataKey).getString("c") ===
@@ -788,6 +798,9 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(
       precedingSchema("nested").metadata.getMetadata(metadataKey).getString("nested.element") ===
         "icu.UNICODE_CI")
+    val mapMetadata = precedingSchema("mapped").metadata.getMetadata(metadataKey)
+    assert(mapMetadata.getString("mapped.key") === "spark.UTF8_BINARY")
+    assert(mapMetadata.getString("mapped.value") === "spark.UTF8_LCASE")
   }
 
   test("SPARK-59276: STRING and CHAR collations use separate JSON keys") {

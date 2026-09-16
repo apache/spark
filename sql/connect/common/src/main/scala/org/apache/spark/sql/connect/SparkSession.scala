@@ -56,7 +56,7 @@ import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.internal.{SessionState, SharedState, SqlApiConf, SubqueryExpression}
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.types.{CharType, StructType, VarcharType}
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.{CloseableIterator, ExecutionListenerManager}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -230,11 +230,8 @@ class SparkSession private[sql] (
     // RowEncoder applies CHAR/VARCHAR semantics from the client process's local SqlApiConf, which
     // can differ from the server-side configuration visible through SparkSession.conf. Send raw
     // string values and let the server apply its policy to the separately provided logical schema.
-    val physicalSchema = schema
-      .transformRecursively {
-        case c: CharType => c.toStringType
-        case v: VarcharType => v.toStringType
-      }
+    val physicalSchema = DataType
+      .replaceCharVarcharWithCollationPreservingString(schema)
       .asInstanceOf[StructType]
     createDataset(
       RowEncoder.encoderForResultSchema(physicalSchema),

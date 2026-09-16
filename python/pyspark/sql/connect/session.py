@@ -109,7 +109,10 @@ from pyspark.sql.types import (
 from pyspark.sql.utils import to_str
 
 
-def _to_arrow_compatible_type(data_type: DataType) -> DataType:
+def _replace_char_varchar_with_collation_preserving_string(
+    data_type: DataType,
+) -> DataType:
+    """Lower CHAR/VARCHAR recursively for Arrow storage, preserving explicit collations."""
     if isinstance(data_type, (CharType, VarcharType)):
         if data_type.collation is None:
             return StringType()
@@ -120,12 +123,13 @@ def _to_arrow_compatible_type(data_type: DataType) -> DataType:
         return data_type
     if isinstance(data_type, ArrayType):
         return ArrayType(
-            _to_arrow_compatible_type(data_type.elementType), data_type.containsNull
+            _replace_char_varchar_with_collation_preserving_string(data_type.elementType),
+            data_type.containsNull,
         )
     if isinstance(data_type, MapType):
         return MapType(
-            _to_arrow_compatible_type(data_type.keyType),
-            _to_arrow_compatible_type(data_type.valueType),
+            _replace_char_varchar_with_collation_preserving_string(data_type.keyType),
+            _replace_char_varchar_with_collation_preserving_string(data_type.valueType),
             data_type.valueContainsNull,
         )
     if isinstance(data_type, StructType):
@@ -133,7 +137,7 @@ def _to_arrow_compatible_type(data_type: DataType) -> DataType:
             [
                 StructField(
                     field.name,
-                    _to_arrow_compatible_type(field.dataType),
+                    _replace_char_varchar_with_collation_preserving_string(field.dataType),
                     field.nullable,
                     field.metadata,
                 )
@@ -640,7 +644,8 @@ class SparkSession:
             if isinstance(schema, StructType):
                 deduped_schema = cast(StructType, _deduplicate_field_names(schema))
                 arrow_compatible_schema = cast(
-                    StructType, _to_arrow_compatible_type(deduped_schema)
+                    StructType,
+                    _replace_char_varchar_with_collation_preserving_string(deduped_schema),
                 )
                 spark_types = [field.dataType for field in arrow_compatible_schema.fields]
                 arrow_schema = to_arrow_schema(
@@ -705,7 +710,10 @@ class SparkSession:
                 _check_arrow_table_timestamps_localize(data, schema, True, timezone)
                 .cast(
                     to_arrow_schema(
-                        cast(StructType, _to_arrow_compatible_type(schema)),
+                        cast(
+                            StructType,
+                            _replace_char_varchar_with_collation_preserving_string(schema),
+                        ),
                         error_on_duplicated_field_names_in_struct=True,
                         timezone="UTC",
                         prefers_large_types=prefers_large_types,
@@ -788,7 +796,8 @@ class SparkSession:
             # inferred schema in the client side, and then rename the columns and
             # cast the datatypes in the server side.
             arrow_compatible_schema = cast(
-                StructType, _to_arrow_compatible_type(_schema)
+                StructType,
+                _replace_char_varchar_with_collation_preserving_string(_schema),
             )
             _table = LocalDataToArrowConversion.convert(
                 _data, arrow_compatible_schema, prefers_large_types
