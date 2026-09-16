@@ -1146,6 +1146,7 @@ achieved by setting `spark.kubernetes.hadoop.configMapName` to a pre-existing Co
     local:///opt/spark/examples/jars/spark-examples_<VERSION>.jar \
     <HDFS_FILE_LOCATION>
 ```
+
 # OIDC Credential Propagation
 
 Spark supports propagating short-lived, per-workload or per-user credentials to executors in
@@ -1185,8 +1186,10 @@ full driver-to-executor propagation path, run against a cluster manager.
    credential.
 1. The service credentials are serialized and distributed to all registered executors via an RPC
    message. Newly-registered executors (for example, those created by dynamic allocation) receive
-   the current credentials as part of their registration response, so they have valid credentials
-   before running any task.
+   the current credentials as part of their registration response, and each launched task also
+   carries the current credentials in its `TaskDescription`, so executors have valid credentials
+   before running any task. All of these delivery paths travel over Spark's RPC channels and are
+   covered by the same RPC encryption.
 1. The manager schedules the next renewal ahead of the earliest expiry (the minimum of the identity
    token expiry and the service credential expiry, minus a configurable safety margin), and retries
    with exponential backoff on failure.
@@ -1284,9 +1287,11 @@ commit protocol, and schema inference all run on the driver).
   `FileSystem`, which still uses the default credential chain (typically the pod's service account)
   rather than the propagated OIDC identity. The job does not fail; instead the driver's access to
   that bucket runs under a different identity than the executors, which is easy to overlook. To
-  avoid this, use `local://` for `--jars` / `--files`, or disable the S3A filesystem cache for the
-  affected bucket (for example, `spark.hadoop.fs.s3a.impl.disable.cache=true`), so the driver
-  builds a fresh `FileSystem` that picks up the propagated provider.
+  avoid this, use `local://` for `--jars` / `--files`, or disable the S3A filesystem cache (for
+  example, `spark.hadoop.fs.s3a.impl.disable.cache=true`), so the driver builds a fresh
+  `FileSystem` that picks up the propagated provider. Note that this disables the cache for the
+  entire `s3a` scheme (not just one bucket), which has a performance cost because a new
+  `FileSystem` is created per access instead of being reused.
 
 ## Configuration
 
@@ -1395,15 +1400,19 @@ spark.security.oidc.identityToken.file      /var/run/secrets/oidc/token
 spark.security.oidc.aws.roleArn             arn:aws:iam::123456789012:role/spark-data-access
 ```
 
-When credential propagation is enabled and you have not explicitly set
-`fs.s3a.aws.credentials.provider`, Spark automatically configures the S3A connector on executors to
-read the propagated credentials by setting:
+When credential propagation is enabled and you have not set
+`spark.hadoop.fs.s3a.aws.credentials.provider` in your Spark configuration, Spark automatically
+configures the S3A connector on the driver and executors to read the propagated credentials by
+setting:
 
 ```
 spark.hadoop.fs.s3a.aws.credentials.provider org.apache.spark.security.aws.SparkOidcAwsCredentialsProvider
 ```
 
-If you set `fs.s3a.aws.credentials.provider` yourself, Spark does not override it.
+Only the `spark.hadoop.fs.s3a.aws.credentials.provider` key in the Spark configuration is
+considered. If you set it yourself, Spark does not override it. A value set elsewhere -- for
+example `fs.s3a.aws.credentials.provider` in `core-site.xml` -- is not detected, and the injected
+`spark.hadoop.*` value takes precedence over it.
 
 For complete, deployment-ready examples on Kubernetes (including how to mount a projected
 ServiceAccount token for workload-level identity, or an externally-injected per-user identity token),

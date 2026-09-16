@@ -310,13 +310,15 @@ carried over Spark's RPC channels, enable [RPC encryption](security.html#network
 whenever you enable credential propagation.
 
 The examples below enable AES-based RPC encryption with `spark.authenticate=true` and
-`spark.network.crypto.enabled=true`. On Kubernetes, Spark automatically generates and distributes
-the authentication secret, so this requires no additional key material. Alternatively, Spark
-supports SSL-based RPC encryption (`spark.ssl.rpc.enabled=true`), which requires configuring a
-key store and related settings. For the full set of options and how to configure them, see
-[Network Encryption](security.html#network-encryption).
+`spark.network.crypto.enabled=true`. In general Spark documents SSL-based RPC encryption
+(`spark.ssl.rpc.enabled=true`) as the preferred method and AES-based encryption as the legacy one
+(see [Network Encryption](security.html#network-encryption)). The examples use the AES-based method
+because on Kubernetes Spark automatically generates and distributes the authentication secret, so it
+needs no additional key material, whereas the SSL-based method requires configuring a key store and
+related settings; choose SSL if your environment already standardizes on it.
 
-With credential propagation enabled and no explicit `fs.s3a.aws.credentials.provider`, both the
+With credential propagation enabled and no `spark.hadoop.fs.s3a.aws.credentials.provider` set in
+your Spark configuration (a value in `core-site.xml` is not detected), both the
 driver and the executors access S3 using the propagated OIDC credentials. One caveat is specific to
 `cluster` mode: if you pass application dependencies from the same object store the job reads or
 writes (for example `--jars s3a://BUCKET/app.jar` where output also goes to `s3a://BUCKET/...`),
