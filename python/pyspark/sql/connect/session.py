@@ -111,7 +111,9 @@ from pyspark.sql.utils import to_str
 
 def _to_arrow_compatible_type(data_type: DataType) -> DataType:
     if isinstance(data_type, (CharType, VarcharType)):
-        return StringType()
+        if data_type.collation is None:
+            return StringType()
+        return StringType(data_type.collation)
     if isinstance(data_type, ArrayType):
         return ArrayType(
             _to_arrow_compatible_type(data_type.elementType), data_type.containsNull
@@ -820,7 +822,9 @@ class SparkSession:
             configs["spark.sql.session.localRelationChunkSizeBytes"]  # type: ignore[arg-type]
         )
         max_batch_of_chunks_size_bytes = int(
-            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type]
+            configs[  # type: ignore[arg-type]
+                "spark.sql.session.localRelationBatchOfChunksSizeBytes"
+            ]
         )
         plan: LogicalPlan = local_relation
         if cache_threshold <= _table.nbytes:
