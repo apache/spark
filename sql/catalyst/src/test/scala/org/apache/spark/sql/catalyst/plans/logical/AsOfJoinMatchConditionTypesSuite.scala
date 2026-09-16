@@ -75,21 +75,17 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
   }
 
   test("array operands with coercible element types are compatible") {
-    // Element types widen the same way the array `>=` comparison does (findTightestCommonType),
-    // so ARRAY<INT> and ARRAY<BIGINT> match even though the element types differ (SPARK-59528).
+    // SPARK-59528: elements widen via findTightestCommonType, like the array `>=` comparison.
     val intArray = ArrayType(IntegerType)
     val longArray = ArrayType(LongType)
     assert(MatchConditionTypes.areOperandsCompatible(intArray, longArray))
     assert(MatchConditionTypes.usesArrayOrderExpression(intArray, longArray))
-    // Coercion is symmetric and covers other numeric widenings (e.g. INT vs DOUBLE).
     assert(MatchConditionTypes.areOperandsCompatible(longArray, intArray))
     assert(MatchConditionTypes.areOperandsCompatible(intArray, ArrayType(DoubleType)))
   }
 
   test("array operands whose elements only string-promote are rejected") {
-    // INT vs STRING has no tightest common type; the array `>=` cannot coerce it (string
-    // promotion does not recurse through ArrayType), so MATCH_CONDITION rejects it too rather
-    // than accepting a pair the comparison would fail to resolve (SPARK-59528).
+    // SPARK-59528: INT vs STRING has no tightest common type, so the array `>=` cannot coerce it.
     val intArray = ArrayType(IntegerType)
     val stringArray = ArrayType(StringType)
     assert(!MatchConditionTypes.areOperandsCompatible(intArray, stringArray))
@@ -119,8 +115,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
   }
 
   test("array operands with non-coercible element types are rejected") {
-    // INT and BINARY have no wider type and are not positional structs, so the arrays are
-    // rejected even though both element types are individually orderable.
+    // INT and BINARY are both orderable but have no common type.
     val leftArray = ArrayType(IntegerType)
     val rightArray = ArrayType(BinaryType)
     assert(!MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))

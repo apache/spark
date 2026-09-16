@@ -386,8 +386,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("ARRAY<INT> vs ARRAY<BIGINT> coercible MATCH_CONDITION") {
-    // SPARK-59528: element types differ but coerce to BIGINT. [1, 3] >= [1, 2] holds while
-    // [1, 3] >= [1, 4] does not, so the closest match is [1, 2]. Reproduces under ANSI on and off.
+    // SPARK-59528: elements coerce to BIGINT; closest match is [1, 2]. ANSI on and off.
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         checkSortMergeAsOf(
@@ -405,8 +404,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("ARRAY<INT> vs ARRAY<FLOAT> coercible MATCH_CONDITION") {
-    // SPARK-59528: exercises INT vs FLOAT array-element coercion under both ANSI modes (widens to
-    // FLOAT non-ANSI, DOUBLE under ANSI). The closest match is [1, 2] in both.
+    // SPARK-59528: INT vs FLOAT coercion under both ANSI modes (FLOAT non-ANSI, DOUBLE ANSI).
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         checkSortMergeAsOf(
@@ -424,9 +422,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   }
 
   test("nested ARRAY<ARRAY<INT>> vs ARRAY<ARRAY<BIGINT>> coercible MATCH_CONDITION") {
-    // SPARK-59528: the element type is itself an array, so the ZipWith lambda compares elements
-    // via EqualTo/GreaterThan (arrays are not subtractable). [[1, 3]] >= [[1, 2]] holds while
-    // [[1, 3]] >= [[1, 4]] does not, so the closest match is [[1, 2]].
+    // SPARK-59528: array elements coerce element-wise; closest match is [[1, 2]].
     checkSortMergeAsOf(
       sql(
         """

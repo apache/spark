@@ -337,9 +337,7 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
   }
 
   test("MATCH_CONDITION accepts ARRAY operands with coercible element types") {
-    // SPARK-59528: ARRAY<INT> vs ARRAY<BIGINT> is a legal comparison, so MATCH_CONDITION must
-    // accept it too. A resolved orderExpression proves the element types were unified before the
-    // ZipWith distance was built.
+    // SPARK-59528: a resolved orderExpression proves the elements were unified for the ZipWith.
     val sqlText =
       """
         |SELECT t.a

@@ -73,8 +73,7 @@ SELECT * FROM VALUES (MAP('a', 1)) AS t(m) ASOF JOIN VALUES (MAP('a', 1)) AS r(m
 SELECT * FROM VALUES (ARRAY(MAP('a', 1))) AS t(a) ASOF JOIN VALUES (ARRAY(MAP('a', 1))) AS r(a)
   MATCH_CONDITION (t.a >= r.a);
 
--- FVT-ASOF-3-011a: ARRAY elements with no tightest common type rejected (INT vs STRING only
--- string-promotes, which the array `>=` comparison cannot coerce)
+-- FVT-ASOF-3-011a: ARRAY elements with no common type rejected (INT vs STRING only string-promotes)
 SELECT * FROM VALUES (ARRAY(1)) AS t(a) ASOF JOIN VALUES (ARRAY('x')) AS r(a)
   MATCH_CONDITION (t.a >= r.a);
 
