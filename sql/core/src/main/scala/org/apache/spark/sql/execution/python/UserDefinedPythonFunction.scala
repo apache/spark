@@ -109,15 +109,18 @@ case class UserDefinedPythonFunction(
       PythonAggregate(name, func, dataType, e, udfDeterministic, bufferStruct)
     } else {
       val conf = SQLConf.get
-      val applyCharVarcharChecks =
-        CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf)
-      val hasCharVarcharResult =
-        CharVarcharUtils.physicalTypeHasCharVarchar(dataType)
       val resolvedDataType = if (conf.charVarcharFirstClassTypes) {
         dataType
       } else {
         CharVarcharUtils.replaceCharVarcharWithString(dataType)
       }
+      val charVarcharCheckedResultType =
+        if (CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) &&
+            CharVarcharUtils.physicalTypeHasCharVarchar(dataType)) {
+          Some(dataType)
+        } else {
+          None
+        }
       PythonUDF(
         name,
         func,
@@ -125,8 +128,7 @@ case class UserDefinedPythonFunction(
         e,
         pythonEvalType,
         udfDeterministic,
-        applyCharVarcharChecks = applyCharVarcharChecks,
-        charVarcharResultType = if (hasCharVarcharResult) Some(dataType) else None)
+        charVarcharCheckedResultType = charVarcharCheckedResultType)
     }
     // The ``_udf_param_N`` substitution below is positional, so a UDF
     // call site that supplied named arguments (e.g. SQL ``name => val``

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{ArrowEvalPython, BatchEvalPython, Limit, LocalLimit}
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -97,6 +98,22 @@ class ExtractPythonUDFsSuite extends SharedSparkSession {
       assert(collectArrowExec(
         df.select(arrowOuter(arrowInner(col("a")))).queryExecution.executedPlan).size == 1)
     }
+  }
+
+  test("STRING Python UDFs are semantically equal regardless of CHAR policy") {
+    def stringUdf(): Expression = {
+      typedPythonUDF(StringType, PythonEvalType.SQL_BATCHED_UDF)(col("a")).expr
+    }
+    val withChecks = withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      stringUdf()
+    }
+    val withoutChecks = withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      stringUdf()
+    }
+    assert(withChecks.semanticEquals(withoutChecks))
   }
 
   test("Mixed Batched Python UDFs and Pandas UDF should be separate physical node") {

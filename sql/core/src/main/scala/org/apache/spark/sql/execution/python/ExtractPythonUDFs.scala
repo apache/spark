@@ -202,7 +202,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
       case Seq(child: PythonUDF) =>
         correctEvalType(e, pythonUDFArrowFallbackOnUDT) ==
           correctEvalType(child, pythonUDFArrowFallbackOnUDT) &&
-          !(child.applyCharVarcharChecks && child.hasCharVarcharResult) &&
+          !child.hasCharVarcharResult &&
           shouldExtractUDFExpressionTree(child, pythonUDFArrowFallbackOnUDT)
       // Python UDF can't be evaluated directly in JVM
       case children => !children.exists(hasScalarPythonUDF)

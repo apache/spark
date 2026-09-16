@@ -42,8 +42,7 @@ abstract class EvalPythonEvaluatorFactory(
     output
   } else {
     childOutput ++ output.drop(childOutput.length).zip(udfs).map { case (attr, udf) =>
-      udf.charVarcharResultType
-        .filter(_ => udf.applyCharVarcharChecks)
+      udf.charVarcharCheckedResultType
         .map(CharVarcharUtils.stringLengthCheck(attr, _))
         .getOrElse(attr)
     }

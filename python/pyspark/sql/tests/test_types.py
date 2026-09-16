@@ -77,6 +77,8 @@ from pyspark.sql.types import (
     _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings,
     _create_row,
+    _has_physical_type,
+    _has_type,
     _infer_type,
     _make_type_verifier,
     _merge_type,
@@ -3652,6 +3654,17 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         v3 = CharType(10)
         self.assertEqual(v1, v3)
         self.assertFalse(v1 is v3)
+
+    def test_has_type_does_not_descend_udt(self):
+        udt = ExamplePointUDT()
+        self.assertFalse(_has_type(udt, ArrayType))
+        self.assertTrue(_has_physical_type(udt, ArrayType))
+        char_struct = StructType([StructField("c", CharType(1))])
+        self.assertTrue(_has_type(char_struct, CharType))
+        self.assertTrue(_has_physical_type(char_struct, CharType))
+        nested_udt = StructType([StructField("p", ExamplePointUDT())])
+        self.assertFalse(_has_type(nested_udt, ArrayType))
+        self.assertTrue(_has_physical_type(nested_udt, ArrayType))
 
     def test_varchar_type(self):
         v1 = VarcharType(10)
