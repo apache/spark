@@ -210,7 +210,7 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
           stop = 122)))
   }
 
-  test("MATCH_CONDITION accepts CURRENT_TIMESTAMP as left operand") {
+  test("MATCH_CONDITION rejects a query-foldable constant operand (no join input reference)") {
     setupTradeQuoteViews()
     val sqlText =
       """
@@ -219,15 +219,16 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         |  MATCH_CONDITION (current_timestamp() >= q.quote_time)
         |  ON t.symbol = q.symbol
         |""".stripMargin
-    val asOfJoin = sql(sqlText).queryExecution.analyzed.collectFirst {
-      case j: AsOfJoin => j
-    }.get
-    assert(asOfJoin.asOfCondition.resolved)
-    assert(asOfJoin.leftSortExprs.nonEmpty)
-    assert(asOfJoin.rightSortExprs.nonEmpty)
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+      sqlState = Some("42K0E"),
+      parameters = Map(
+        "refs1" -> "\"current_timestamp()\"",
+        "refs2" -> "\"quote_time\""))
   }
 
-  test("MATCH_CONDITION accepts literal constant as right operand") {
+  test("MATCH_CONDITION rejects a literal constant operand (no join input reference)") {
     setupTradeQuoteViews()
     val sqlText =
       """
@@ -236,10 +237,13 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         |  MATCH_CONDITION (t.trade_time >= TIMESTAMP '2026-06-29 10:00:00')
         |  ON t.symbol = q.symbol
         |""".stripMargin
-    val asOfJoin = sql(sqlText).queryExecution.analyzed.collectFirst {
-      case j: AsOfJoin => j
-    }.get
-    assert(asOfJoin.asOfCondition.resolved)
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+      sqlState = Some("42K0E"),
+      parameters = Map(
+        "refs1" -> "\"trade_time\"",
+        "refs2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
   }
 
   test("MATCH_CONDITION rejects scalar subquery operand") {
