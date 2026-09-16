@@ -155,6 +155,8 @@ class EquivalentExpressions(
   //   3. HigherOrderFunction: lambda functions operate in the context of local lambdas and can't
   //        be called outside of that scope, only always-evaluated arguments can be evaluated
   //        ahead of time.
+  // The expression passed in is the one that is always evaluated, i.e. the caller has already
+  // applied `skipForShortcut`, so that these cases are asked about that expression.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
     // A `CommonExpressionRef` cannot be evaluated ahead of the `With` that binds it, for the same
@@ -163,19 +165,18 @@ class EquivalentExpressions(
     // a candidate. The `With` itself may still be deduplicated as a whole, which is safe: it
     // carries its own definitions and brings their slots into scope wherever it is generated.
     case _: With => Nil
+    // Peeled again, so that the candidate recorded for an always-evaluated input is the operand
+    // within it that will run, rather than the `And`/`Or` chain around that operand. The recursion
+    // asks the cases above about the peeled node either way, so this is about which node becomes a
+    // candidate, not about safety.
     case c: ConditionalExpression => c.alwaysEvaluatedInputs.map(skipForShortcut)
     case h: HigherOrderFunction => h.alwaysEvaluatedArguments
-    case other => skipForShortcut(other) match {
-      // The peel walks past `And`/`Or`, which are not `ConditionalExpression`s, so it can land on a
-      // `With` and hand back its children -- the descent the case above exists to prevent. Ask
-      // again after peeling.
-      case _: With => Nil
-      case peeled => peeled.children
-    }
+    case other => other.children
   }
 
   // For some special expressions we cannot just recurse into all of its children, but we can
-  // recursively add the common expressions shared between all of its children.
+  // recursively add the common expressions shared between all of its children. As with
+  // `childrenToRecurse`, the expression passed in is the one that is always evaluated.
   private def commonChildrenToRecurse(expr: Expression): Seq[Seq[Expression]] = expr match {
     case _: CodegenFallback => Nil
     case c: ConditionalExpression => c.branchGroups
@@ -211,8 +212,13 @@ class EquivalentExpressions(
 
     if (!skip && !updateExprInMap(expr, map, useCount)) {
       val uc = useCount.sign
-      childrenToRecurse(expr).foreach(updateExprTree(_, map, uc))
-      commonChildrenToRecurse(expr).filter(_.nonEmpty).foreach(updateCommonExprs(_, map, uc))
+      // Peel first: which children may be recursed into is a question about the operand that is
+      // always evaluated, and `And`/`Or` are not `ConditionalExpression`s, so asking it about the
+      // chain above that operand would walk past the guards in both methods below.
+      val alwaysEvaluated = skipForShortcut(expr)
+      childrenToRecurse(alwaysEvaluated).foreach(updateExprTree(_, map, uc))
+      commonChildrenToRecurse(alwaysEvaluated).filter(_.nonEmpty)
+        .foreach(updateCommonExprs(_, map, uc))
     }
   }
 
