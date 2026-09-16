@@ -458,9 +458,10 @@ case class PythonUDF(
     // for every non-element-wise eval type, where it stays at its default of 1.
     elementwiseNestingDepth: Int = 1,
     applyCharVarcharChecks: Boolean = false,
-    hasCharVarcharResult: Boolean = false,
     charVarcharResultType: Option[DataType] = None)
   extends Expression with PythonFuncExpression with Unevaluable {
+
+  def hasCharVarcharResult: Boolean = charVarcharResultType.isDefined
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)

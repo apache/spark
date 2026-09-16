@@ -569,7 +569,11 @@ private[sql] object ArrowConverters extends Logging {
     } else {
       attrs
     }
-    val outputSchema = if (applyCharVarcharChecks) schema else physicalSchema
+    val outputSchema = if (applyCharVarcharChecks) {
+      schema
+    } else {
+      CharVarcharUtils.replaceCharVarcharWithString(schema).asInstanceOf[StructType]
+    }
     val batchesInDriver = arrowBatches.toArray
     val shouldUseRDD = session.sessionState.conf
       .arrowLocalRelationThreshold < batchesInDriver.map(_.length.toLong).sum

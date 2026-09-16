@@ -33,16 +33,22 @@ import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.types.{DataType, StructField, StructType, UserDefinedType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.Utils
 
 private[python] object ColumnarArrowEvalPythonEvaluatorFactory {
-  def toPhysicalType(dataType: DataType): DataType = {
-    CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(dataType.transformRecursively {
-      case udt: UserDefinedType[_] => udt.sqlType
-    })
+  def toArrowPhysicalType(dataType: DataType): DataType =
+    CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(dataType)
+
+  def canUseArrowColumnar(
+      inputColumnIndices: Option[Array[Int]],
+      isArrow: Boolean,
+      udfs: Seq[PythonUDF]): Boolean = {
+    inputColumnIndices.isDefined &&
+      isArrow &&
+      !udfs.exists(udf => udf.applyCharVarcharChecks && udf.hasCharVarcharResult)
   }
 }
 
@@ -95,9 +101,8 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
       .map(CharVarcharUtils.stringLengthCheck(attr, _))
       .getOrElse(attr)
   }
-  private val hasCharVarcharOutput = udfs.exists(_.hasCharVarcharResult)
   private val physicalOutputSchema = ColumnarArrowEvalPythonEvaluatorFactory
-    .toPhysicalType(outputSchema)
+    .toArrowPhysicalType(outputSchema)
     .asInstanceOf[StructType]
 
   override def createEvaluator()
@@ -159,7 +164,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         }.toArray)
 
       val outputTypes = output.drop(childOutput.length).map { attr =>
-        ColumnarArrowEvalPythonEvaluatorFactory.toPhysicalType(attr.dataType)
+        ColumnarArrowEvalPythonEvaluatorFactory.toArrowPhysicalType(attr.dataType)
       }
 
       val inputColumnIndices = resolveColumnIndices(allInputs.toSeq)
@@ -171,7 +176,8 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
           batch.column(0).isInstanceOf[ArrowColumnVector]
       }
 
-      if (inputColumnIndices.isDefined && isArrow && !hasCharVarcharOutput) {
+      if (ColumnarArrowEvalPythonEvaluatorFactory.canUseArrowColumnar(
+          inputColumnIndices, isArrow, udfs)) {
         // Path 1: Arrow columnar -- full optimization.
         evalArrowColumnar(peekIter, context, pyFuncs, argMetas,
           udfInputSchema, outputTypes, inputColumnIndices.get)

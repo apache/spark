@@ -20,7 +20,15 @@ from typing import Iterator, Optional
 
 from pyspark.errors import PySparkAttributeError, PySparkNotImplementedError, PythonException
 from pyspark.sql.functions import arrow_udtf, lit, udtf
-from pyspark.sql.types import ArrayType, CharType, IntegerType, Row, StructField, StructType
+from pyspark.sql.types import (
+    ArrayType,
+    CharType,
+    IntegerType,
+    Row,
+    StructField,
+    StructType,
+    UserDefinedType,
+)
 from pyspark.sql.udtf import AnalyzeResult
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -35,6 +43,19 @@ if have_pyarrow:
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowUDTFTestsMixin:
     def test_char_varchar_return_types_unsupported(self):
+        class CharStorageUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return CharType(3)
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
         @arrow_udtf(returnType="c CHAR(3)")
         class DirectCharUDTF:
             def eval(self) -> Iterator["pa.Table"]:
@@ -47,7 +68,12 @@ class ArrowUDTFTestsMixin:
             def eval(self) -> Iterator["pa.Table"]:
                 yield pa.table({"nested": [["a"]]})
 
-        for function in (DirectCharUDTF, NestedCharUDTF):
+        @arrow_udtf(returnType=StructType([StructField("nested", CharStorageUDT())]))
+        class UDTBackedCharUDTF:
+            def eval(self) -> Iterator["pa.Table"]:
+                yield pa.table({"nested": ["a"]})
+
+        for function in (DirectCharUDTF, NestedCharUDTF, UDTBackedCharUDTF):
             with self.assertRaisesRegex(
                 PySparkNotImplementedError, "CHAR/VARCHAR return type in Python UDTFs"
             ):

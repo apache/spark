@@ -443,7 +443,6 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
         udf.udfDeterministic,
         elementwiseNestingDepth = newDepth,
         applyCharVarcharChecks = udf.applyCharVarcharChecks,
-        hasCharVarcharResult = udf.hasCharVarcharResult,
         charVarcharResultType = udf.charVarcharResultType)
       val signature: Expression = if (udf.udfDeterministic) lifted.canonicalized else lifted
       val ordinal = ordinalBySignature.getOrElseUpdate(signature, {
