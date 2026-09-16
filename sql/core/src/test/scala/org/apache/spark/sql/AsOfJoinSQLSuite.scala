@@ -246,6 +246,24 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         "refs2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
   }
 
+  test("MATCH_CONDITION rejects two constant operands (neither references a join input)") {
+    setupTradeQuoteViews()
+    val sqlText =
+      """
+        |SELECT count(*)
+        |FROM trades t ASOF JOIN quotes q
+        |  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:01' >= TIMESTAMP '2026-06-29 10:00:00')
+        |  ON t.symbol = q.symbol
+        |""".stripMargin
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+      sqlState = Some("42K0E"),
+      parameters = Map(
+        "refs1" -> "\"TIMESTAMP '2026-06-29 10:00:01'\"",
+        "refs2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
+  }
+
   test("MATCH_CONDITION rejects scalar subquery operand") {
     setupTradeQuoteViews()
     val sqlText =

@@ -176,7 +176,7 @@
   },
   "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE" : {
     "message" : [
-      "Each operand of the MATCH_CONDITION comparison must reference only columns of one join input. Got: <refs1> and <refs2>."
+      "Each operand of the MATCH_CONDITION comparison must reference exactly one join input, and the two operands must reference different inputs. Got: <refs1> and <refs2>."
     ],
     "sqlState" : "42K0E"
   },
