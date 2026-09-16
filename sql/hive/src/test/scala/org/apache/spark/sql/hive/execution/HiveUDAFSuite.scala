@@ -443,9 +443,11 @@ class MockUDAFEvaluator2 extends GenericUDAFEvaluator {
   }
 }
 
-// PARTIAL1/PARTIAL2 expose a STRING inspector; FINAL/COMPLETE expose CHAR(5). This keeps the
-// (partial, final) Catalyst type pair distinct so shuffle serde cannot silently use the result
-// type for the aggregation buffer.
+/**
+ * PARTIAL1/PARTIAL2 expose a STRING inspector; FINAL/COMPLETE expose CHAR(5). This keeps the
+ * (partial, final) Catalyst type pair distinct so shuffle serde cannot silently use the result
+ * type for the aggregation buffer.
+ */
 class MockPartialStringFinalCharUDAF extends AbstractGenericUDAFResolver {
   override def getEvaluator(info: Array[TypeInfo]): GenericUDAFEvaluator =
     new MockPartialStringFinalCharEvaluator

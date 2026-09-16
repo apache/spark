@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import java.util
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
-import org.apache.hadoop.hive.serde2.io.DoubleWritable
+import org.apache.hadoop.hive.serde2.io.{DoubleWritable, HiveCharWritable, HiveVarcharWritable}
 import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory, PrimitiveObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
@@ -339,6 +339,33 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     }
   }
 
+  test("SPARK-59277: writable CHAR/VARCHAR inspectors round-trip values and nulls") {
+    withFirstClassCharVarchar(enabled = true) {
+      val charType = CharType(5)
+      val charInspector = PrimitiveObjectInspectorFactory.getPrimitiveWritableObjectInspector(
+        new CharTypeInfo(charType.length))
+      val charValue = UTF8String.fromString("abc")
+      val wrappedChar = wrap(charValue, charInspector, charType)
+      assert(wrappedChar.isInstanceOf[HiveCharWritable])
+      assert(wrappedChar.asInstanceOf[HiveCharWritable].getHiveChar.getPaddedValue === "abc  ")
+      assert(unwrapperFor(charInspector, charType)(wrappedChar) ===
+        UTF8String.fromString("abc  "))
+      assert(wrap(null, charInspector, charType) === null)
+      assert(unwrapperFor(charInspector, charType)(null) === null)
+
+      val varcharType = VarcharType(7)
+      val varcharInspector = PrimitiveObjectInspectorFactory.getPrimitiveWritableObjectInspector(
+        new VarcharTypeInfo(varcharType.length))
+      val varcharValue = UTF8String.fromString("abc")
+      val wrappedVarchar = wrap(varcharValue, varcharInspector, varcharType)
+      assert(wrappedVarchar.isInstanceOf[HiveVarcharWritable])
+      assert(wrappedVarchar.asInstanceOf[HiveVarcharWritable].getHiveVarchar.getValue === "abc")
+      assert(unwrapperFor(varcharInspector, varcharType)(wrappedVarchar) === varcharValue)
+      assert(wrap(null, varcharInspector, varcharType) === null)
+      assert(unwrapperFor(varcharInspector, varcharType)(null) === null)
+    }
+  }
+
   test("SPARK-59277: Hive object inspectors support nested CHAR/VARCHAR") {
     withFirstClassCharVarchar(enabled = true) {
       val dataType = StructType(Seq(
@@ -412,6 +439,23 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
         parameters = Map("limit" -> "3"))
 
       val char = CharType(5)
+      val charInspector = toInspector(char)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          wrap(UTF8String.fromString("abcdef"), charInspector, char)
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5"))
+
+      val varcharUnwrapper =
+        unwrapperFor(PrimitiveObjectInspectorFactory.javaStringObjectInspector, varchar)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          varcharUnwrapper("abcd")
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+
       val charUnwrapper =
         unwrapperFor(PrimitiveObjectInspectorFactory.javaStringObjectInspector, char)
       assert(charUnwrapper("ab") === UTF8String.fromString("ab   "))
