@@ -39,8 +39,8 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-# The functions below are implemented with Spark SQL expressions. Spark chooses their result types,
-# which can differ from pandas when the same NumPy ufunc is applied to a pandas object. For example,
+# Spark SQL expressions determine the result types of the Spark-backed mappings below. Those types
+# can differ from pandas when the same NumPy ufunc is applied to a pandas object. For example,
 # Spark math expressions convert FloatType input to DoubleType, so a float32 pandas-on-Spark Series
 # can return float64. This explains only output-type differences; casting an operand before
 # evaluation can still change values and must be reviewed separately.
