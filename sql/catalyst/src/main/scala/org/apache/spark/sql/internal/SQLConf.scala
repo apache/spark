@@ -678,6 +678,7 @@ object SQLConf {
         "if/else-if chain. Applies only to string keys, where a hash probe beats repeated string " +
         "comparisons; integral/temporal keys keep the chain. Set to false to always use the chain.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
