@@ -264,6 +264,26 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         "refs2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
   }
 
+  test("MATCH_CONDITION rejects a constant operand under the single-pass analyzer") {
+    setupTradeQuoteViews()
+    val sqlText =
+      """
+        |SELECT count(*)
+        |FROM trades t ASOF JOIN quotes q
+        |  MATCH_CONDITION (t.trade_time >= TIMESTAMP '2026-06-29 10:00:00')
+        |  ON t.symbol = q.symbol
+        |""".stripMargin
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException](sql(sqlText)),
+        condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+        sqlState = Some("42K0E"),
+        parameters = Map(
+          "refs1" -> "\"trade_time\"",
+          "refs2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
+    }
+  }
+
   test("MATCH_CONDITION rejects scalar subquery operand") {
     setupTradeQuoteViews()
     val sqlText =
