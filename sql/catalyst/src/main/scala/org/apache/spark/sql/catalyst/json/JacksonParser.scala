@@ -663,15 +663,11 @@ class JacksonParser(
 
     val mapData = keyType match {
       case _: CharType | _: VarcharType =>
-        def lastOccurrences(rawKeys: Array[UTF8String]): Seq[Int] = {
-          val seen = mutable.HashSet.empty[UTF8String]
-          rawKeys.indices.reverseIterator.filter(index => seen.add(rawKeys(index))).toSeq.reverse
-        }
-
         // JSON object parsing historically keeps the last value for an exactly repeated field
         // name. Apply mapKeyDedupPolicy only when distinct serialized names normalize to one key.
-        val normalizedIndices = lastOccurrences(normalizedKeys.map(_._1).toArray)
-        val parsedIndices = lastOccurrences(parsedRawKeys.toArray)
+        val normalizedIndices =
+          DuplicateMapKeyUtils.lastOccurrenceIndices(normalizedKeys.map(_._1).toArray)
+        val parsedIndices = DuplicateMapKeyUtils.lastOccurrenceIndices(parsedRawKeys.toArray)
         // Apply the duplicate policy to every normalized key, including entries whose malformed
         // values are omitted from the partial map.
         new ArrayBasedMapBuilder(keyType, NullType).from(
