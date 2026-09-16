@@ -2379,10 +2379,11 @@ class AstBuilder extends DataTypeAstBuilder
     // exclude null values by default
     val filtered = if (ctx.nullOperator == null || ctx.nullOperator.EXCLUDE() != null) {
       val valueColumns = valueColumnNames.map(UnresolvedAttribute(_))
-      // Multiple value columns can have unrelated types, so test each for null independently.
       val condition = if (valueColumns.length == 1) {
+        // Keep the single-value plan stable; unary Coalesce does not require type coercion.
         IsNotNull(Coalesce(valueColumns))
       } else {
+        // Multi-value columns can have unrelated types, so test each for null independently.
         valueColumns.map(IsNotNull).reduceLeft(Or)
       }
       Filter(condition, unpivot)
