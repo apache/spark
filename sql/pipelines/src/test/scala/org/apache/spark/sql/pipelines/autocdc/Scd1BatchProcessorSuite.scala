@@ -63,6 +63,33 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
   private def columnNamesAndDataTypes(schema: StructType): Seq[(String, DataType)] =
     schema.fields.map(f => (f.name, f.dataType)).toSeq
 
+  private implicit class RowLevelReconciliationOps(processor: Scd1BatchProcessor) {
+    def deduplicateMicrobatch(batch: DataFrame): DataFrame =
+      Scd1RowLevelReconciliation.deduplicateMicrobatch(processor.changeArgs, batch)
+
+    def extendMicrobatchRowsWithCdcMetadata(batch: DataFrame): DataFrame =
+      Scd1RowLevelReconciliation.extendMicrobatchRowsWithCdcMetadata(
+        changeArgs = processor.changeArgs,
+        resolvedSequencingType = processor.resolvedSequencingType,
+        validatedMicrobatch = batch
+      )
+
+    def projectTargetColumnsOntoMicrobatch(batch: DataFrame): DataFrame =
+      Scd1RowLevelReconciliation.projectTargetColumnsOntoMicrobatch(
+        changeArgs = processor.changeArgs,
+        microbatchWithCdcMetadataDf = batch
+      )
+
+    def applyTombstonesToMicrobatch(
+        microbatch: DataFrame,
+        auxiliary: DataFrame): DataFrame =
+      Scd1RowLevelReconciliation.applyTombstonesToMicrobatch(
+        changeArgs = processor.changeArgs,
+        microbatchDf = microbatch,
+        auxiliaryTableDf = auxiliary
+      )
+  }
+
   // =============== deduplicateMicrobatch tests ===============
 
   test("deduplicateMicrobatch keeps only the row with the largest sequence value per key") {
