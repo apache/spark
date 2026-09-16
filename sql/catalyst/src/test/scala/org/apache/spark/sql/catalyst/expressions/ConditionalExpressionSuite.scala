@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -300,5 +301,112 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(!hasNullInNotTrueBranch.nullable)
     val noTrueBranch = CaseWhen(normalBranch :: Nil, Literal(1))
     assert(!noTrueBranch.nullable)
+  }
+
+  // A lookup-shaped branch: `key = <literal keyValue> THEN <string label>`.
+  private def eqBranch(key: Expression, keyValue: Any, label: Any): (Expression, Expression) =
+    (EqualTo(key, Literal.create(keyValue, key.dataType)), Literal(label))
+
+  test("CaseWhen lookup: hash probe matches the if/else-if chain (string keys)") {
+    val n = CaseWhen.LookupThreshold + 2
+    val key = BoundReference(0, StringType, nullable = true)
+    val branches = (0 until n).map(i => eqBranch(key, s"k$i", s"v$i"))
+    val withElse = CaseWhen(branches, Some(Literal("else")))
+    val noElse = CaseWhen(branches, None)
+
+    // hits at the start, middle and end (different bucket positions)
+    Seq(0, n / 2, n - 1).foreach { i =>
+      checkEvaluation(withElse, s"v$i", create_row(s"k$i"))
+      checkEvaluation(noElse, s"v$i", create_row(s"k$i"))
+    }
+    checkEvaluation(withElse, "else", create_row("absent"))  // miss -> else
+    checkEvaluation(noElse, null, create_row("absent"))      // miss, no else -> null
+    checkEvaluation(withElse, "else", create_row(null))      // null key -> else
+    checkEvaluation(noElse, null, create_row(null))          // null key, no else -> null
+
+    // a constant NULL branch value yields NULL on a hit (not a miss/else)
+    val withNullValue = CaseWhen(
+      branches.updated(0, (EqualTo(key, Literal("k0")), Literal.create(null, StringType))),
+      Some(Literal("else")))
+    checkEvaluation(withNullValue, null, create_row("k0"))
+    checkEvaluation(withNullValue, "v1", create_row("k1"))
+
+    // duplicate keys: first branch wins
+    val dup = CaseWhen(
+      ((EqualTo(key, Literal("k0")), Literal("first")): (Expression, Expression)) +:
+        ((EqualTo(key, Literal("k0")), Literal("second")): (Expression, Expression)) +:
+        branches.drop(1),
+      Some(Literal("else")))
+    checkEvaluation(dup, "first", create_row("k0"))
+
+    // literal on the left-hand side of the equality
+    val swapped = CaseWhen(
+      (0 until n).map { i =>
+        (EqualTo(Literal(s"k$i"), key), Literal(s"v$i")): (Expression, Expression)
+      },
+      Some(Literal("else")))
+    checkEvaluation(swapped, "v1", create_row("k1"))
+    checkEvaluation(swapped, "else", create_row("absent"))
+  }
+
+  test("CaseWhen lookup: generates a hash probe under codegen, chain when disabled") {
+    val key = BoundReference(0, StringType, nullable = true)
+    def mkCase: CaseWhen = CaseWhen(
+      (0 until CaseWhen.LookupThreshold + 2).map(i => eqBranch(key, s"k$i", s"v$i")),
+      Some(Literal("else")))
+    withSQLConf(SQLConf.CASE_WHEN_LOOKUP_ENABLED.key -> "true") {
+      val code = mkCase.genCode(new CodegenContext()).code.toString
+      assert(code.contains("caseWhenBuckets"), "expected the hash-probe reference array")
+      assert(!code.contains("caseWhenResultState"), "should not use the if/else-if chain")
+    }
+    withSQLConf(SQLConf.CASE_WHEN_LOOKUP_ENABLED.key -> "false") {
+      val code = mkCase.genCode(new CodegenContext()).code.toString
+      assert(!code.contains("caseWhenBuckets"))
+      assert(code.contains("caseWhenResultState"), "expected the if/else-if chain")
+    }
+  }
+
+  test("CaseWhen lookup: falls back to the if/else-if chain when not lookup-shaped") {
+    val n = CaseWhen.LookupThreshold + 2
+    def usesChain(cw: CaseWhen): Boolean = {
+      val code = cw.genCode(new CodegenContext()).code.toString
+      code.contains("caseWhenResultState") && !code.contains("caseWhenBuckets")
+    }
+    val strKey = BoundReference(0, StringType, nullable = true)
+    def elseVal = Some(Literal("else"))
+
+    // Ineligible key types (only binary-collation strings use the probe):
+    // integer/long -- cheap compares, the chain wins (measured); float -- NaN/-0.0 equality;
+    // non-binary-collation string -- collation-aware equality a hash bucket cannot honor.
+    val intKey = BoundReference(0, IntegerType, nullable = true)
+    assert(usesChain(CaseWhen((0 until n).map(i => eqBranch(intKey, i, s"v$i")), elseVal)))
+    val longKey = BoundReference(0, LongType, nullable = true)
+    assert(usesChain(CaseWhen((0 until n).map(i => eqBranch(longKey, i.toLong, s"v$i")), elseVal)))
+    val floatKey = BoundReference(0, FloatType, nullable = true)
+    assert(usesChain(
+      CaseWhen((0 until n).map(i => eqBranch(floatKey, i.toFloat, s"v$i")), elseVal)))
+    val lcaseKey = BoundReference(0, StringType("UTF8_LCASE"), nullable = true)
+    assert(usesChain(CaseWhen((0 until n).map(i => eqBranch(lcaseKey, s"k$i", s"v$i")), elseVal)))
+
+    // Ineligible shapes on an otherwise-eligible string key:
+    // non-foldable branch value (cannot precompute the value table)
+    val strCol = BoundReference(1, StringType, nullable = true)
+    assert(usesChain(CaseWhen(
+      (0 until n).map(i => (EqualTo(strKey, Literal(s"k$i")), strCol): (Expression, Expression)),
+      elseVal)))
+
+    // one non-equality branch among otherwise lookup-shaped branches
+    val mixed = (0 until n).map(i => eqBranch(strKey, s"k$i", s"v$i")) :+
+      ((GreaterThan(strKey, Literal("zzz")), Literal("big")): (Expression, Expression))
+    assert(usesChain(CaseWhen(mixed, elseVal)))
+
+    // non-deterministic key (Uuid is a non-deterministic StringType expression; a seed is needed
+    // for it to codegen, but it stays non-deterministic so the probe must bail to the chain)
+    val uuidKey = Uuid(Some(0L))
+    assert(usesChain(CaseWhen((0 until n).map(i => eqBranch(uuidKey, s"k$i", s"v$i")), elseVal)))
+
+    // fewer distinct keys than the fixed threshold
+    assert(usesChain(CaseWhen(
+      (0 until CaseWhen.LookupThreshold - 1).map(i => eqBranch(strKey, s"k$i", s"v$i")), elseVal)))
   }
 }
