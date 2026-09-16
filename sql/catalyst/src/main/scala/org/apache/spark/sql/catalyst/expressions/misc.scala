@@ -38,6 +38,10 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = child.dataType
 
+  override lazy val deterministic: Boolean = false
+
+  override def foldable: Boolean = false
+
   protected override def nullSafeEval(input: Any): Any = {
     // scalastyle:off println
     System.err.println(outputPrefix + input)
@@ -412,6 +416,26 @@ case class CurrentUser()
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
+private object AesEncryptDeterminism {
+  def apply(arguments: Seq[Expression]): Boolean = {
+    arguments.forall(_.deterministic) &&
+      (hasNonEmptyLiteral(arguments(4)) || isEcbLiteral(arguments(2)))
+  }
+
+  private def hasNonEmptyLiteral(expression: Expression): Boolean = expression match {
+    case Literal(value: Array[Byte], _) => value.nonEmpty
+    case Literal(value: UTF8String, _) => value.numBytes() > 0
+    case cast: Cast if cast.dataType == BinaryType => hasNonEmptyLiteral(cast.child)
+    case _ => false
+  }
+
+  private def isEcbLiteral(expression: Expression): Boolean = expression match {
+    case Literal(value: UTF8String, _) => value.toString.equalsIgnoreCase("ECB")
+    case cast: Cast if cast.dataType.isInstanceOf[StringType] => isEcbLiteral(cast.child)
+    case _ => false
+  }
+}
+
 /**
  * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
  * If either argument is NULL or the key length is not one of the permitted values,
@@ -471,12 +495,15 @@ case class AesEncrypt(
     aad: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
 
+  override lazy val deterministic: Boolean = AesEncryptDeterminism(children)
+
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
     BinaryType,
     "aesEncrypt",
     Seq(input, key, mode, padding, iv, aad),
-    inputTypes)
+    inputTypes,
+    isDeterministic = deterministic)
 
   def this(input: Expression, key: Expression, mode: Expression, padding: Expression, iv: Expression) =
     this(input, key, mode, padding, iv, Literal(""))

@@ -131,6 +131,9 @@ case class DynamicPruningExpression(child: Expression)
   extends UnaryExpression
   with DynamicPruning {
   override def eval(input: InternalRow): Any = child.eval(input)
+
+  override def foldable: Boolean = false
+
   final override val nodePatterns: Seq[TreePattern] = Seq(DYNAMIC_PRUNING_EXPRESSION)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
