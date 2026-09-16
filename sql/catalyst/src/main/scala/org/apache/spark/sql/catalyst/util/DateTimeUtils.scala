@@ -991,6 +991,45 @@ object DateTimeUtils extends SparkDateTimeUtils {
     }
   }
 
+  /**
+   * Adds the specified number of units to a nanosecond-precision timestamp, preserving its
+   * sub-microsecond fraction.
+   *
+   * For units of MICROSECOND or coarser the addition runs on the microsecond grid (reusing
+   * [[timestampAdd]] for all the calendar, DST and overflow handling) and the fraction is carried
+   * through unchanged. For the NANOSECOND unit the fraction absorbs `quantity` nanoseconds and any
+   * whole microseconds carry into `epochMicros`. NANOSECOND is only valid here: adding nanoseconds
+   * to a microsecond timestamp is unrepresentable, so that combination is rejected as an invalid
+   * unit through the microsecond [[timestampAdd]] path.
+   *
+   * @param unit A keyword that specifies the interval units to add to the input timestamp.
+   * @param quantity The amount of `unit`s to add. It can be positive or negative.
+   * @param ts The input nanosecond-precision timestamp.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return A nanosecond-precision timestamp value.
+   */
+  def timestampAddNanos(
+      unit: String, quantity: Long, ts: TimestampNanosVal, zoneId: ZoneId): TimestampNanosVal = {
+    if (unit.toUpperCase(Locale.ROOT) == "NANOSECOND") {
+      try {
+        val totalNanos = Math.addExact(ts.nanosWithinMicro.toLong, quantity)
+        val carryMicros = Math.floorDiv(totalNanos, NANOS_PER_MICROS)
+        val newFraction = Math.floorMod(totalNanos, NANOS_PER_MICROS).toShort
+        val newMicros = Math.addExact(ts.epochMicros, carryMicros)
+        TimestampNanosVal.fromParts(newMicros, newFraction)
+      } catch {
+        case _: ArithmeticException | _: DateTimeException =>
+          throw QueryExecutionErrors.timestampAddOverflowError(ts.epochMicros, quantity, unit)
+      }
+    } else {
+      // Units of MICROSECOND or coarser do not touch the sub-microsecond fraction; add on the
+      // microsecond grid and re-attach the original fraction. An unknown unit is rejected by
+      // timestampAdd, and NANOSECOND is handled above, so this branch never drops precision.
+      TimestampNanosVal.fromParts(
+        timestampAdd(unit, quantity, ts.epochMicros, zoneId), ts.nanosWithinMicro)
+    }
+  }
+
   private val timestampDiffMap = Map[String, (Temporal, Temporal) => Long](
     "MICROSECOND" -> ChronoUnit.MICROS.between,
     "MILLISECOND" -> ChronoUnit.MILLIS.between,

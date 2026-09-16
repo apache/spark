@@ -2687,6 +2687,56 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57833: timestampadd over nanosecond-precision timestamps") {
+    val sec = 1000000L // microseconds per second
+    def ntz(micros: Long, frac: Int, p: Int = 9): Literal =
+      Literal(TimestampNanosVal.fromParts(micros, frac.toShort), TimestampNTZNanosType(p))
+    def ltz(micros: Long, frac: Int, p: Int = 9): Literal =
+      Literal(TimestampNanosVal.fromParts(micros, frac.toShort), TimestampLTZNanosType(p))
+    def tnv(micros: Long, frac: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(micros, frac.toShort)
+
+    // Units of MICROSECOND or coarser keep the sub-microsecond fraction unchanged and the result
+    // stays nanosecond-typed (NTZ and LTZ, precisions 7/8/9).
+    checkEvaluation(TimestampAdd("SECOND", Literal(5L), ntz(0, 123)), tnv(5 * sec, 123))
+    checkEvaluation(TimestampAdd("MICROSECOND", Literal(2L), ntz(0, 123)), tnv(2, 123))
+    checkEvaluation(TimestampAdd("MINUTE", Literal(1L), ntz(3 * sec, 120, 8)), tnv(63 * sec, 120))
+    checkEvaluation(TimestampAdd("HOUR", Literal(0L), ntz(sec, 100, 7)), tnv(sec, 100))
+    // LTZ (zone-aware) with a whole-second unit: UTC keeps epoch alignment, fraction preserved.
+    checkEvaluation(TimestampAdd("SECOND", Literal(1L), ltz(0, 500), Some("UTC")), tnv(sec, 500))
+
+    // NANOSECOND unit: the fraction absorbs the quantity and whole microseconds carry into
+    // epochMicros.
+    checkEvaluation(TimestampAdd("NANOSECOND", Literal(300L), ntz(0, 123)), tnv(0, 423))
+    checkEvaluation(TimestampAdd("NANOSECOND", Literal(900L), ntz(0, 200)), tnv(1, 100))
+    checkEvaluation(TimestampAdd("NANOSECOND", Literal(2500L), ntz(0, 100)), tnv(2, 600))
+    // A negative quantity floors the carry: 100 - 300 ns = -200 ns => -1 microsecond, fraction 800.
+    checkEvaluation(TimestampAdd("NANOSECOND", Literal(-300L), ntz(5, 100)), tnv(4, 800))
+    // The unit keyword is case-insensitive.
+    checkEvaluation(TimestampAdd("Nanosecond", Literal(1L), ntz(0, 0)), tnv(0, 1))
+
+    // Null propagation on either operand.
+    checkEvaluation(
+      TimestampAdd("NANOSECOND", Literal.create(null, LongType), ntz(0, 1)), null)
+    checkEvaluation(
+      TimestampAdd("SECOND", Literal(1L), Literal.create(null, TimestampNTZNanosType(9))), null)
+
+    // NANOSECOND is meaningful only for a nanosecond-precision timestamp; on a microsecond
+    // timestamp nanoseconds are unrepresentable, so it is rejected as an invalid unit.
+    checkErrorInExpression[SparkIllegalArgumentException](
+      TimestampAdd("NANOSECOND", Literal(1L), Literal(0L, TimestampType)),
+      condition = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+      parameters = Map(
+        "functionName" -> "`TIMESTAMPADD`",
+        "parameter" -> "`unit`",
+        "invalidValue" -> "'NANOSECOND'"))
+
+    // Overflow while carrying nanoseconds into epochMicros surfaces as a datetime overflow.
+    intercept[SparkArithmeticException] {
+      TimestampAdd("NANOSECOND", Literal(1000L), ntz(Long.MaxValue, 999)).eval(null)
+    }
+  }
+
   test("SPARK-42635: timestampadd near daylight saving transition") {
     // In America/Los_Angeles timezone, timestamp value `skippedTime` is 2011-03-13 03:00:00.
     // The next second of 2011-03-13 01:59:59 jumps to 2011-03-13 03:00:00.
