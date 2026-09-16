@@ -3705,6 +3705,10 @@ Command types in proto.</td>
 Please refer to the [Security](security.html) page for available options on how to secure different
 Spark subsystems.
 
+For OIDC credential propagation (obtaining and distributing short-lived, identity-derived
+credentials to executors), the `spark.security.oidc.*` configuration keys are documented under
+[OIDC Credential Propagation](security.html#oidc-credential-propagation).
+
 
 ### Spark SQL
 
