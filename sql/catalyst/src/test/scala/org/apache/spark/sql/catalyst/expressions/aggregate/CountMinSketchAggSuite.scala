@@ -114,24 +114,26 @@ class CountMinSketchAggSuite extends SparkFunSuite {
   // TIME is physically a long of nanos-of-day, so it sketches exactly like an integral column.
   testDataType[Long](TimeType(), Seq.fill(100) { rand.nextInt(10).toLong * 1000000000L })
 
-  test("count_min_sketch accepts the TIME type and keeps AnyTimeType last") {
-    // The analyzer admits a TIME column as the value to sketch.
-    val agg = new CountMinSketchAgg(BoundReference(0, TimeType(6), nullable = true),
-      Literal(epsOfTotalCount), Literal(confidence), Literal(seed))
-    assert(agg.checkInputDataTypes().isSuccess)
+  // The full nanos-of-day is hashed: TIME(9) values that differ only below a microsecond stay
+  // distinct (a regression truncating to micros before hashing would merge them and fail here).
+  testDataType[Long](TimeType(9), {
+    val noon = 12L * 3600 * 1000000000L
+    Seq.fill(40)(noon) ++ Seq.fill(30)(noon + 1L) ++ Seq.fill(30)(noon + 2L)
+  })
 
-    // AnyTimeType MUST stay after the string member: ANSI coercion walks the collection in order,
-    // and a TIMESTAMP/DATE store-assigns to both STRING and TIME, so a TIME member ahead of the
-    // string type would coerce datetimes to TIME (nanos-of-day only) and silently under-count.
-    val members = agg.inputTypes.head match {
-      case TypeCollection(types) => types
-      case other => fail(s"expected the value input type to be a TypeCollection, got $other")
+  test("count_min_sketch accepts TIME but rejects DATE/TIMESTAMP (no implicit coercion)") {
+    // A TIME column is accepted as the value to sketch.
+    val timeAgg = new CountMinSketchAgg(BoundReference(0, TimeType(6), nullable = true),
+      Literal(epsOfTotalCount), Literal(confidence), Literal(seed))
+    assert(timeAgg.checkInputDataTypes().isSuccess)
+
+    // CountMinSketchAgg is ExpectsInputTypes (not ImplicitCastInputTypes), so DATE/TIMESTAMP inputs
+    // are not coerced to STRING or TIME -- they are analysis errors regardless of member order.
+    Seq(DateType, TimestampType, TimestampNTZType).foreach { dt =>
+      val agg = new CountMinSketchAgg(BoundReference(0, dt, nullable = true),
+        Literal(epsOfTotalCount), Literal(confidence), Literal(seed))
+      assert(agg.checkInputDataTypes().isFailure, s"$dt should be rejected, not coerced")
     }
-    val stringIdx = members.indexWhere(_.acceptsType(StringType))
-    val timeIdx = members.indexWhere(_.acceptsType(TimeType(6)))
-    assert(stringIdx >= 0 && timeIdx >= 0)
-    assert(stringIdx < timeIdx,
-      "the string member must precede AnyTimeType so datetimes coerce to STRING, not TIME")
   }
 
   test("serialize and de-serialize") {

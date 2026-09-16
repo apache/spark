@@ -82,4 +82,23 @@ class CountMinSketchAggQuerySuite extends SharedSparkSession {
 
     assert(sketch == reference)
   }
+
+  test("count_min_sketch TIME frequency is looked up by nanoseconds-of-day") {
+    val eps = 0.1
+    val confidence = 0.95
+    val seed = 11
+
+    val sketch = CountMinSketch.readFrom(
+      spark.sql(
+        s"SELECT count_min_sketch(t, ${eps}d, ${confidence}d, $seed) FROM VALUES " +
+          "(TIME'12:00:00'), (TIME'12:00:00'), (TIME'12:00:00'), (TIME'09:00:00') AS tab(t)")
+        .head().get(0).asInstanceOf[Array[Byte]])
+
+    // A TIME value is looked up by its nanoseconds-of-day (LocalTime.toNanoOfDay), not by a
+    // LocalTime -- the underlying sketch key is the same long the aggregate stored.
+    assert(sketch.estimateCount(LocalTime.of(12, 0, 0).toNanoOfDay) == 3L)
+    assert(sketch.estimateCount(LocalTime.of(9, 0, 0).toNanoOfDay) == 1L)
+    // Passing the LocalTime itself is not a valid lookup key.
+    intercept[IllegalArgumentException](sketch.estimateCount(LocalTime.of(12, 0, 0)))
+  }
 }
