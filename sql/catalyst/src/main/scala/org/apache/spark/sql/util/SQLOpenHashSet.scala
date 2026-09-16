@@ -138,6 +138,10 @@ object SQLOpenHashSet {
       }
   }
 
+  /**
+   * `valueName` must refer to a writable generated-code local because zero normalization assigns
+   * the canonical value back to it.
+   */
   def withNaNAndZeroCheckCode(
       dataType: DataType,
       valueName: String,

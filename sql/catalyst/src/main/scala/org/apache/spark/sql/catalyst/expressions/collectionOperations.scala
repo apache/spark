@@ -4618,15 +4618,14 @@ trait ArraySetLike {
   @transient protected lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(et)
 
-  @transient private lazy val normalizeElement: Any => Any = et match {
-    case dt if NormalizeFloatingNumbers.needNormalize(dt) =>
-      val ref = BoundReference(0, dt, nullable = true)
-      val projection = UnsafeProjection.create(NormalizeFloatingNumbers.normalize(ref))
-      (value: Any) => InternalRow.copyValue(projection(InternalRow(value)).get(0, dt))
-    case _ => identity
-  }
-
-  protected def normalizedElement(value: Any): Any = normalizeElement(value)
+  @transient protected lazy val normalizedElement: Any => Any =
+    if (NormalizeFloatingNumbers.needNormalize(et)) {
+      val ref = BoundReference(0, et, nullable = true)
+      val normalizer = NormalizeFloatingNumbers.normalize(ref)
+      (value: Any) => InternalRow.copyValue(normalizer.eval(InternalRow(value)))
+    } else {
+      identity
+    }
 
   protected def resultArrayElementNullable = dt.asInstanceOf[ArrayType].containsNull
 

@@ -3533,8 +3533,9 @@ class CollectionExpressionsSuite
   }
 
   test("SPARK-54918: array set operations normalize special floating-point values") {
+    val nonCanonicalNaN = java.lang.Double.longBitsToDouble(0x7ff8000000000001L)
     val doubles = Literal.create(
-      Seq(-0.0d, 0.0d, Double.NaN, Double.NaN), ArrayType(DoubleType, false))
+      Seq(-0.0d, 0.0d, nonCanonicalNaN, Double.NaN), ArrayType(DoubleType, false))
     val doubleSet = Literal.create(Seq(0.0d, Double.NaN), ArrayType(DoubleType, false))
     checkEvaluation(ArrayDistinct(doubles), Seq(0.0d, Double.NaN))
     checkEvaluation(ArrayUnion(doubles, doubleSet), Seq(0.0d, Double.NaN))

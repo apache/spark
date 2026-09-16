@@ -56,18 +56,18 @@ import org.apache.spark.util.ArrayImplicits._
  * Cases 3 and 4 are handled by this optimizer rule. Array set operations handle case 5 in their
  * expression evaluation.
  *
- * Ideally we should do the normalization in the physical operators that compare the
- * binary `UnsafeRow` directly. We don't need this normalization if the Spark SQL execution engine
- * is not optimized to run on binary data. This rule is created to simplify the implementation, so
- * that we have a single place to do normalization, which is more maintainable.
+ * Ideally we should do the normalization in the physical operators that compare the binary
+ * `UnsafeRow` directly. We don't need this normalization if the Spark SQL execution engine is not
+ * optimized to run on binary data. Array set operations normalize values during expression
+ * evaluation instead, where values enter hash-based comparisons or result arrays.
  *
  * Note that, this rule must be executed at the end of optimizer, because the optimizer may create
  * new joins(the subquery rewrite) and new join conditions(the join reorder).
  */
 object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan match {
-    case _ => plan.transformWithPruning( _.containsAnyPattern(WINDOW, JOIN)) {
+  def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformWithPruning(_.containsAnyPattern(WINDOW, JOIN)) {
       case w: Window if w.partitionSpec.exists(p => needNormalize(p)) =>
         // Although the `windowExpressions` may refer to `partitionSpec` expressions, we don't need
         // to normalize the `windowExpressions`, as they are executed per input row and should take
@@ -99,7 +99,6 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       // here. For now we normalize grouping expressions during planning. See Case 2 in the
       // Scaladoc just above.
     }
-  }
 
   /**
    * Short circuit if the underlying expression is already normalized

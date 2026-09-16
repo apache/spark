@@ -38,6 +38,11 @@ object MimaExcludes {
 
   // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
   lazy val v44excludes: Seq[Problem => Boolean] = v43excludes ++ Seq(
+    // [SPARK-54918][SQL] SQLOpenHashSet helper methods are internal and marked @Private.
+    ProblemFilters.exclude[DirectMissingMethodProblem](
+      "org.apache.spark.sql.util.SQLOpenHashSet.withNaNCheckFunc"),
+    ProblemFilters.exclude[DirectMissingMethodProblem](
+      "org.apache.spark.sql.util.SQLOpenHashSet.withNaNCheckCode"),
     // [SPARK-58896] Decision tree leaf counts moved behind NodeStats. The old package-private
     // numLeave accessors are removed from concrete models.
     ProblemFilters.exclude[DirectMissingMethodProblem](
