@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 
 
 /**
@@ -203,8 +202,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
       case Seq(child: PythonUDF) =>
         correctEvalType(e, pythonUDFArrowFallbackOnUDT) ==
           correctEvalType(child, pythonUDFArrowFallbackOnUDT) &&
-          !(child.applyCharVarcharChecks &&
-            CharVarcharUtils.hasCharVarchar(child.dataType)) &&
+          !(child.applyCharVarcharChecks && child.hasCharVarcharResult) &&
           shouldExtractUDFExpressionTree(child, pythonUDFArrowFallbackOnUDT)
       // Python UDF can't be evaluated directly in JVM
       case children => !children.exists(hasScalarPythonUDF)

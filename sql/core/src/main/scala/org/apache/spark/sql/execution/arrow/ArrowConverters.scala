@@ -560,7 +560,7 @@ private[sql] object ArrowConverters extends Logging {
       CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(schema).asInstanceOf[StructType]
     val attrs = toAttributes(physicalSchema)
     val applyCharVarcharChecks =
-      CharVarcharUtils.hasCharVarchar(schema) &&
+      CharVarcharUtils.physicalTypeHasCharVarchar(schema) &&
         CharVarcharUtils.shouldApplyWriteSideLengthCheck(session.sessionState.conf)
     val checkedAttrs = if (applyCharVarcharChecks) {
       attrs.zip(schema.fields).map { case (attr, field) =>

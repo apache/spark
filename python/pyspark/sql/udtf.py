@@ -34,11 +34,13 @@ from pyspark.errors import (
 )
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import (
+    ArrayType,
     CharType,
     DataType,
+    MapType,
     StructType,
+    UserDefinedType,
     VarcharType,
-    _has_type,
     _parse_datatype_string,
 )
 from pyspark.sql.udf import _wrap_function
@@ -325,8 +327,24 @@ def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]
         )
 
 
+def _physical_type_has_char_varchar(data_type: DataType) -> bool:
+    if isinstance(data_type, (CharType, VarcharType)):
+        return True
+    if isinstance(data_type, ArrayType):
+        return _physical_type_has_char_varchar(data_type.elementType)
+    if isinstance(data_type, MapType):
+        return _physical_type_has_char_varchar(
+            data_type.keyType
+        ) or _physical_type_has_char_varchar(data_type.valueType)
+    if isinstance(data_type, StructType):
+        return any(_physical_type_has_char_varchar(field.dataType) for field in data_type.fields)
+    if isinstance(data_type, UserDefinedType):
+        return _physical_type_has_char_varchar(data_type.sqlType())
+    return False
+
+
 def _check_udtf_return_type(return_type: DataType) -> None:
-    if _has_type(return_type, (CharType, VarcharType)):
+    if _physical_type_has_char_varchar(return_type):
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",
             messageParameters={

@@ -894,7 +894,7 @@ class SparkSession private(
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
     val applyCharVarcharChecks =
-      CharVarcharUtils.hasCharVarchar(schema) &&
+      CharVarcharUtils.physicalTypeHasCharVarchar(schema) &&
         CharVarcharUtils.shouldApplyWriteSideLengthCheck(sessionState.conf)
     val outputSchema = if (applyCharVarcharChecks) {
       schema
