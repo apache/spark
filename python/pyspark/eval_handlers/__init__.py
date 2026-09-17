@@ -25,4 +25,4 @@ declares its ``eval_type`` and self-registers at class definition, which
 imports the concrete handler submodules (``_arrow``) so they register.
 """
 
-from pyspark.sql.eval_handlers import _arrow  # noqa: F401  # registers handlers on import
+from pyspark.eval_handlers import _arrow  # noqa: F401  # registers handlers on import

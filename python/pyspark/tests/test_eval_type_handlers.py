@@ -17,8 +17,8 @@
 
 import unittest
 
-from pyspark.sql.eval_handlers._arrow import ArrowScalarUDFHandler
-from pyspark.sql.eval_handlers._base import (
+from pyspark.eval_handlers._arrow import ArrowScalarUDFHandler
+from pyspark.eval_handlers._base import (
     BatchEvalTypeHandler,
     CoGroupedEvalTypeHandler,
     EvalTypeHandler,

@@ -25,13 +25,13 @@ from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Optional
 
-from pyspark.serializers import Serializer
-from pyspark.sql.eval_handlers._typing import (
+from pyspark.eval_handlers._typing import (
     CoGroupedBatch,
     GroupedBatch,
     InputBatch,
     OutputBatch,
 )
+from pyspark.serializers import Serializer
 from pyspark.sql.pandas.serializers import (
     ArrowStreamCoGroupSerializer,
     ArrowStreamGroupSerializer,

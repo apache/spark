@@ -58,6 +58,11 @@ from pyspark.accumulators import (
     _deserialize_accumulator,
 )
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers.verification import (
+    verify_result_row_count,
+    verify_scalar_result,
+)
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.messages import (
     SparkMessageReceiver,
@@ -76,11 +81,6 @@ from pyspark.sql.conversion import (
     ArrowToPandasConversion,
     LocalDataToArrowConversion,
     PandasToArrowConversion,
-)
-from pyspark.sql.eval_handlers._base import get_eval_type_handler
-from pyspark.sql.eval_handlers.verification import (
-    verify_result_row_count,
-    verify_scalar_result,
 )
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
