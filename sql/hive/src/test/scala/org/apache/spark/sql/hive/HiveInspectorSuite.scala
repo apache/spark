@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.typeinfo.{CharTypeInfo, DecimalTypeInfo, VarcharTypeInfo}
 import org.apache.hadoop.io.LongWritable
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row, TestUserClassUDT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, SpecificInternalRow}
@@ -453,8 +453,20 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
   test("SPARK-59277: Hive CHAR/VARCHAR inspectors remain STRING under legacy semantics") {
     withFirstClassCharVarchar(enabled = false) {
       Seq[DataType](CharType(5), VarcharType(7)).foreach { dataType =>
-        assert(inspectorToDataType(toInspector(dataType)) === StringType)
+        val inspector = toInspector(dataType)
+        assert(inspectorToDataType(inspector) === StringType)
+        assert(inspectorToDataType(inspector, preserveCharVarchar = true) === dataType)
       }
+    }
+  }
+
+  test("SPARK-59277: Hive return types stay compatible across string-family drift") {
+    checkCompatibleHiveReturnType(StringType, CharType(5))
+    checkCompatibleHiveReturnType(CharType(5), StringType)
+    checkCompatibleHiveReturnType(VarcharType(3), CharType(5))
+    checkCompatibleHiveReturnType(ArrayType(StringType), ArrayType(VarcharType(7)))
+    intercept[SparkException] {
+      checkCompatibleHiveReturnType(IntegerType, CharType(5))
     }
   }
 

@@ -178,8 +178,11 @@ private[hive] class HiveGenericUDFEvaluator(
   private lazy val argumentInspectors = children.map(toInspector).toArray
 
   @transient
-  lazy val returnInspector =
-    HiveGenericUDFEvaluator.initialize(function, argumentInspectors)
+  lazy val returnInspector = {
+    val inspector = HiveGenericUDFEvaluator.initialize(function, argumentInspectors)
+    checkCompatibleHiveReturnType(inspector, catalystReturnType)
+    inspector
+  }
 
   @transient
   private lazy val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {

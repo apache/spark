@@ -1171,25 +1171,39 @@ private[hive] trait HiveInspectors {
     case _ => e.children.forall(canEarlyEval)
   }
 
-  def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {
+  def inspectorToDataType(inspector: ObjectInspector): DataType =
+    inspectorToDataType(inspector, SQLConf.get.charVarcharFirstClassTypes)
+
+  /**
+   * Maps a Hive inspector to a Catalyst type. When `preserveCharVarchar` is true, CHAR/VARCHAR
+   * inspectors stay CHAR/VARCHAR even if first-class types are disabled. Runtime compatibility
+   * checks use that mode so analysis snapshots are not compared against a conf-dependent STRING
+   * rewrite.
+   */
+  def inspectorToDataType(
+      inspector: ObjectInspector,
+      preserveCharVarchar: Boolean): DataType = inspector match {
     case s: StructObjectInspector =>
       StructType(s.getAllStructFieldRefs.asScala.map(f =>
         types.StructField(
-          f.getFieldName, inspectorToDataType(f.getFieldObjectInspector), nullable = true)
+          f.getFieldName,
+          inspectorToDataType(f.getFieldObjectInspector, preserveCharVarchar),
+          nullable = true)
       ).toArray)
-    case l: ListObjectInspector => ArrayType(inspectorToDataType(l.getListElementObjectInspector))
+    case l: ListObjectInspector =>
+      ArrayType(inspectorToDataType(l.getListElementObjectInspector, preserveCharVarchar))
     case m: MapObjectInspector =>
       MapType(
-        inspectorToDataType(m.getMapKeyObjectInspector),
-        inspectorToDataType(m.getMapValueObjectInspector))
+        inspectorToDataType(m.getMapKeyObjectInspector, preserveCharVarchar),
+        inspectorToDataType(m.getMapValueObjectInspector, preserveCharVarchar))
     case _: WritableStringObjectInspector => StringType
     case _: JavaStringObjectInspector => StringType
     // Hive object inspectors cannot represent collations, so Hive function results use the
     // default collation while preserving CHAR/VARCHAR length under first-class semantics.
-    case hvoi: HiveVarcharObjectInspector if SQLConf.get.charVarcharFirstClassTypes =>
+    case hvoi: HiveVarcharObjectInspector if preserveCharVarchar =>
       VarcharType(hvoi.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength)
     case _: HiveVarcharObjectInspector => StringType
-    case hcoi: HiveCharObjectInspector if SQLConf.get.charVarcharFirstClassTypes =>
+    case hcoi: HiveCharObjectInspector if preserveCharVarchar =>
       CharType(hcoi.getTypeInfo.asInstanceOf[CharTypeInfo].getLength)
     case _: HiveCharObjectInspector => StringType
     case _: WritableIntObjectInspector => IntegerType
@@ -1220,6 +1234,45 @@ private[hive] trait HiveInspectors {
     case _: JavaHiveIntervalYearMonthObjectInspector => YearMonthIntervalType()
     case _: WritableVoidObjectInspector => NullType
     case _: JavaVoidObjectInspector => NullType
+  }
+
+  /**
+   * Analysis snapshots the Catalyst return type, but runtime inspectors are rebuilt from the
+   * current children (including foldability). Accept string-family drift so CHAR/VARCHAR
+   * conversion can still apply when Hive surfaces STRING, and require other types to match.
+   */
+  def checkCompatibleHiveReturnType(
+      inspector: ObjectInspector,
+      expectedType: DataType): Unit = {
+    checkCompatibleHiveReturnType(
+      inspectorToDataType(inspector, preserveCharVarchar = true),
+      expectedType)
+  }
+
+  def checkCompatibleHiveReturnType(
+      runtimeType: DataType,
+      expectedType: DataType): Unit = {
+    if (!compatibleHiveReturnType(runtimeType, expectedType)) {
+      throw SparkException.internalError(
+        s"Hive function runtime type ${runtimeType.catalogString} is incompatible " +
+          s"with analysis type ${expectedType.catalogString}.")
+    }
+  }
+
+  private def compatibleHiveReturnType(
+      runtimeType: DataType,
+      expectedType: DataType): Boolean = {
+    (runtimeType, expectedType) match {
+      case (_: StringType, _: StringType) => true
+      case (ArrayType(rt, _), ArrayType(et, _)) => compatibleHiveReturnType(rt, et)
+      case (MapType(rk, rv, _), MapType(ek, ev, _)) =>
+        compatibleHiveReturnType(rk, ek) && compatibleHiveReturnType(rv, ev)
+      case (rt: StructType, et: StructType) if rt.length == et.length =>
+        rt.fields.zip(et.fields).forall { case (rf, ef) =>
+          compatibleHiveReturnType(rf.dataType, ef.dataType)
+        }
+      case (rt, et) => rt.sameType(et)
+    }
   }
 
   private def decimalTypeInfoToCatalyst(inspector: PrimitiveObjectInspector): DecimalType = {

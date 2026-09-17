@@ -20,8 +20,15 @@ package org.apache.spark.sql.hive.execution
 import java.sql.Timestamp
 import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
+import java.util.{Arrays, Properties}
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.serde.serdeConstants
+import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
+import org.apache.hadoop.io.{Text, Writable}
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
@@ -418,6 +425,62 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     }
   }
 
+  test("SPARK-59277: TRANSFORM VARCHAR overflow with Hive SerDe raises EXCEED_LIMIT_LENGTH") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val exception = intercept[Exception] {
+        sql(
+          """
+            |SELECT TRANSFORM('abcdefgh')
+            |USING 'cat'
+            |AS (v VARCHAR(5))
+            |FROM VALUES (1) input(dummy)
+            |""".stripMargin).collect()
+      }
+      val runtimeException = exception match {
+        case s: org.apache.spark.SparkRuntimeException => s
+        case other =>
+          other.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException]
+      }
+      checkError(
+        exception = runtimeException,
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5"))
+    }
+  }
+
+  test("SPARK-59277: output SerDe CHAR/VARCHAR rewrite is LazySimpleSerDe-only") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val output = Seq(
+        AttributeReference("c", CharType(4))(),
+        AttributeReference("v", VarcharType(5))(),
+        AttributeReference("nested", ArrayType(CharType(4)))())
+
+      val (_, lazySoi) = HiveScriptIOSchema.initOutputSerDe(hiveIOSchema, output).get
+      assert(lazySoi.getAllStructFieldRefs.get(0).getFieldObjectInspector.getTypeName ===
+        "string")
+      assert(lazySoi.getAllStructFieldRefs.get(1).getFieldObjectInspector.getTypeName ===
+        "string")
+      assert(lazySoi.getAllStructFieldRefs.get(2).getFieldObjectInspector.getTypeName ===
+        "array<string>")
+
+      val subclassSchema = hiveIOSchema.copy(
+        outputSerdeClass = Some(classOf[TestLazySimpleSerDe].getCanonicalName))
+      val (_, subclassSoi) = HiveScriptIOSchema.initOutputSerDe(subclassSchema, output).get
+      assert(subclassSoi.getAllStructFieldRefs.get(0).getFieldObjectInspector.getTypeName ===
+        "string")
+
+      SchemaCapturingSerDe.lastColumnTypes = null
+      val customSchema = defaultIOSchema.copy(
+        outputSerdeClass = Some(classOf[SchemaCapturingSerDe].getCanonicalName))
+      HiveScriptIOSchema.initOutputSerDe(customSchema, output)
+      val captured = SchemaCapturingSerDe.lastColumnTypes
+      assert(captured.contains("char(4)"))
+      assert(captured.contains("varchar(5)"))
+      assert(captured.contains("array<char(4)>"))
+    }
+  }
+
   test("SPARK-32400: TRANSFORM doesn't support CalendarIntervalType/UserDefinedType (hive serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
@@ -713,4 +776,30 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           """.stripMargin), identity, Row("1,2") :: Nil)
     }
   }
+}
+
+class TestLazySimpleSerDe extends LazySimpleSerDe
+
+class SchemaCapturingSerDe extends AbstractSerDe {
+  override def initialize(conf: Configuration, tbl: Properties): Unit = {
+    SchemaCapturingSerDe.lastColumnTypes =
+      tbl.getProperty(serdeConstants.LIST_COLUMN_TYPES)
+  }
+
+  override def getObjectInspector: ObjectInspector =
+    ObjectInspectorFactory.getStandardStructObjectInspector(
+      Arrays.asList("col"),
+      Arrays.asList(PrimitiveObjectInspectorFactory.javaStringObjectInspector))
+
+  override def getSerializedClass: Class[_ <: Writable] = classOf[Text]
+
+  override def getSerDeStats: SerDeStats = null
+
+  override def serialize(obj: Any, inspector: ObjectInspector): Writable = null
+
+  override def deserialize(blob: Writable): AnyRef = null
+}
+
+object SchemaCapturingSerDe {
+  @volatile var lastColumnTypes: String = _
 }

@@ -104,17 +104,15 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-59277: TRANSFORM CHAR/VARCHAR overflow without SerDe raises EXCEED_LIMIT_LENGTH") {
+  test("SPARK-59277: TRANSFORM CHAR overflow without SerDe raises EXCEED_LIMIT_LENGTH") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      val input = Seq(("abcdef", "abcdefgh")).toDF("c", "v")
+      val input = Seq("abcdef").toDF("c")
       val exception = intercept[Exception] {
         QueryTest.executePlan(
           createScriptTransformationExec(
             script = "cat",
-            output = Seq(
-              AttributeReference("c", CharType(4))(),
-              AttributeReference("v", VarcharType(5))()),
+            output = Seq(AttributeReference("c", CharType(4))()),
             child = input.queryExecution.sparkPlan,
             ioschema = defaultIOSchema),
           spark.sqlContext)
@@ -128,6 +126,31 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
         exception = runtimeException,
         condition = "EXCEED_LIMIT_LENGTH",
         parameters = Map("limit" -> "4"))
+    }
+  }
+
+  test("SPARK-59277: TRANSFORM VARCHAR overflow without SerDe raises EXCEED_LIMIT_LENGTH") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val input = Seq("abcdefgh").toDF("v")
+      val exception = intercept[Exception] {
+        QueryTest.executePlan(
+          createScriptTransformationExec(
+            script = "cat",
+            output = Seq(AttributeReference("v", VarcharType(5))()),
+            child = input.queryExecution.sparkPlan,
+            ioschema = defaultIOSchema),
+          spark.sqlContext)
+      }
+      val runtimeException = exception match {
+        case s: org.apache.spark.SparkRuntimeException => s
+        case other =>
+          other.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException]
+      }
+      checkError(
+        exception = runtimeException,
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5"))
     }
   }
 

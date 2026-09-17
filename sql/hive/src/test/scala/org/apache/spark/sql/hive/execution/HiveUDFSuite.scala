@@ -42,14 +42,14 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, CodegenObjectFactoryMode, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.{call_function, max}
-import org.apache.spark.sql.hive.HiveGenericUDF
+import org.apache.spark.sql.hive.{HiveGenericUDF, HiveGenericUDTF}
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CharType, DataType, StringType, TimestampType, TimeType, VarcharType}
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -1077,6 +1077,41 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
         exception = exception.getCause.asInstanceOf[SparkRuntimeException],
         condition = "EXCEED_LIMIT_LENGTH",
         parameters = Map("limit" -> "3"))
+    }
+  }
+
+  test("SPARK-59277: HiveGenericUDF keeps analysis type after child constantness changes") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val attr = AttributeReference("value", CharType(5))()
+      val original = HiveGenericUDF(
+        "hive_upper",
+        HiveFunctionWrapper(classOf[GenericUDFUpper].getName),
+        Seq(Literal.create(UTF8String.fromString("Ab"), CharType(5))))
+      assert(original.dataType === CharType(5))
+      val copied = original.withNewChildren(Seq(attr)).asInstanceOf[HiveGenericUDF]
+      assert(copied.dataType === CharType(5))
+      val bound = BindReferences.bindReference(copied, Seq(attr))
+      assert(bound.eval(InternalRow(UTF8String.fromString("Ab   "))) ===
+        UTF8String.fromString("AB   "))
+    }
+  }
+
+  test("SPARK-59277: HiveGenericUDTF keeps analysis schema after child constantness changes") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val arrayType = ArrayType(VarcharType(7))
+      val values = new GenericArrayData(Array[Any](UTF8String.fromString("abc")))
+      val original = HiveGenericUDTF(
+        "hive_explode",
+        HiveFunctionWrapper(classOf[GenericUDTFExplode].getName),
+        Seq(Literal(values, arrayType)))
+      assert(original.elementSchema.head.dataType === VarcharType(7))
+      val attr = AttributeReference("values", arrayType)()
+      val copied = original.withNewChildren(Seq(attr)).asInstanceOf[HiveGenericUDTF]
+      assert(copied.elementSchema === original.elementSchema)
+      val bound = BindReferences.bindReference(copied, Seq(attr))
+        .asInstanceOf[HiveGenericUDTF]
+      val rows = bound.eval(InternalRow(values)).iterator.toSeq
+      assert(rows.map(_.get(0, VarcharType(7))) === Seq(UTF8String.fromString("abc")))
     }
   }
 

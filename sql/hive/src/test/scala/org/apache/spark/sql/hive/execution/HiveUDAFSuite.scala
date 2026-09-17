@@ -31,14 +31,18 @@ import test.org.apache.spark.sql.MyDoubleAvg
 
 import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
+import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
+import org.apache.spark.sql.hive.HiveUDAFFunction
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CharType, VarcharType}
 import org.apache.spark.tags.SlowHiveTest
+import org.apache.spark.unsafe.types.UTF8String
 
 @SlowHiveTest
 class HiveUDAFSuite extends QueryTest
@@ -218,6 +222,20 @@ class HiveUDAFSuite extends QueryTest
         assert(aggregate.schema.head.dataType === expectedType)
         checkAnswer(aggregate, expectedRow)
       }
+    }
+  }
+
+  test("SPARK-59277: HiveUDAFFunction keeps analysis type after child constantness changes") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val attr = AttributeReference("value", VarcharType(7))()
+      val original = HiveUDAFFunction(
+        "hive_max",
+        HiveFunctionWrapper(classOf[GenericUDAFMax].getName),
+        Seq(Literal.create(UTF8String.fromString("abc"), VarcharType(7))))
+      assert(original.dataType === VarcharType(7))
+      val copied = original.withNewChildren(Seq(attr)).asInstanceOf[HiveUDAFFunction]
+      assert(copied.dataType === original.dataType)
+      copied.serialize(null)
     }
   }
 
