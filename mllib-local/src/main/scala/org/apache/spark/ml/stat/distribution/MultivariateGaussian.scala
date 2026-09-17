@@ -21,7 +21,7 @@ import breeze.linalg.{diag, eigSym, max, DenseMatrix => BDM, DenseVector => BDV}
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.impl.Utils
-import org.apache.spark.ml.linalg.{LAPACKInitializer, _}
+import org.apache.spark.ml.linalg._
 
 
 /**

@@ -17,10 +17,7 @@
 
 package org.apache.spark.ml.stat.distribution
 
-import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
-
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.concurrent.duration._
+import java.util.concurrent.{Callable, CountDownLatch, Executors, TimeUnit}
 
 import org.apache.spark.ml.SparkMLFunSuite
 import org.apache.spark.ml.linalg.{Matrices, Vectors}
@@ -38,24 +35,25 @@ class MultivariateGaussianSuite extends SparkMLFunSuite {
       thread.setDaemon(true)
       thread
     })
-    implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutorService(executor)
 
     try {
       val results = (0 until numThreads).map { _ =>
-        Future {
-          ready.countDown()
-          start.await()
-          val dist = new MultivariateGaussian(
-            Vectors.dense(0.0, 0.0),
-            Matrices.dense(2, 2, Array(1.0, 0.0, 0.0, 1.0)))
-          dist.pdf(Vectors.dense(0.0, 0.0))
-        }
+        executor.submit(new Callable[Double] {
+          override def call(): Double = {
+            ready.countDown()
+            start.await()
+            val dist = new MultivariateGaussian(
+              Vectors.dense(0.0, 0.0),
+              Matrices.dense(2, 2, Array(1.0, 0.0, 0.0, 1.0)))
+            dist.pdf(Vectors.dense(0.0, 0.0))
+          }
+        })
       }
       assert(ready.await(10, TimeUnit.SECONDS))
       start.countDown()
 
-      Await.result(Future.sequence(results), 30.seconds).foreach { result =>
-        assert(result ~== 0.15915 absTol 1E-5)
+      results.foreach { result =>
+        assert(result.get(30, TimeUnit.SECONDS) ~== 0.15915 absTol 1E-5)
       }
     } finally {
       executor.shutdownNow()
