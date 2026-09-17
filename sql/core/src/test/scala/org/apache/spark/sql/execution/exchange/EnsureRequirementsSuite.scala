@@ -2395,8 +2395,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // count, nor a reducer, nor a replication. So a node carrying one of those is wrapped instead:
     // the positions index what it reports, and that is what the node built over it projects.
     //
-    // This was an assert. The shape it guarded against is one a re-run can construct, and a
-    // planner crash is the wrong answer where a sound plan is available.
+    // The rebuild is this change's: the base replaced a node's positions with a `copy`, which
+    // re-derives nothing and so had no case to tell apart. A re-run can hand this site an aligned
+    // node, and a planner crash would be the wrong answer where a sound plan is available.
     val leaf = DummySparkPlan(outputPartitioning =
       KeyedPartitioning(Seq(exprA, exprB), Seq(InternalRow(1, 1), InternalRow(1, 1))))
     val aligned = GroupPartitionsExec(leaf, expectedPartitionKeys = Some(Seq(

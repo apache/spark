@@ -87,9 +87,9 @@ case class EnsureRequirements(
     // own. Whether it needs a `GroupPartitionsExec`, and on which keys, depends on what the other
     // side turns out to offer. So this loop resolves only the children that answer for themselves,
     // and `coPartitionChildren` owns the rest end to end.
-    val resolved = originalChildren.zip(requiredChildDistributions).zip(coPartitioned).map {
-      case ((child, _), Some(_)) => child
-      case ((child, distribution), None) =>
+    val resolved = originalChildren.lazyZip(requiredChildDistributions).lazyZip(coPartitioned).map {
+      case (child, _, Some(_)) => child
+      case (child, distribution, None) =>
         resolveChild(child, distribution, shuffleOrigin)
     }
 
@@ -408,9 +408,9 @@ case class EnsureRequirements(
     //
     // Ranked by parallelism, preferring the finest.
     pairings
-      .filterNot { case (_, paired) =>
-        paired.zip(reached).exists { case (pairedMember, isReached) =>
-          isReached && pairedMember.isEmpty
+      .filter { case (_, paired) =>
+        paired.zip(reached).forall { case (pairedMember, isReached) =>
+          pairedMember.isDefined || !isReached
         }
       }
       .maxByOption { case (member, _) => member.numPartitions }
@@ -645,35 +645,19 @@ case class EnsureRequirements(
     def bothUnprojected(l: KeyedShuffleSpec, r: KeyedShuffleSpec): Boolean =
       l.joinKeyPositions.isEmpty && r.joinKeyPositions.isEmpty
 
-    // Whether the merged key list below may be narrowed to what the join type allows. A marked
-    // layout is left alone: only an identity regrouping keeps its claim (see
-    // `GroupPartitionsExec`), and losing it costs the pair its join at the gate at the end of this
-    // method.
+    // Whether the merged key list below may be narrowed to what the join type allows. Not when
+    // either side is marked. Narrowing drops groups that side holds, so its regrouping stops being
+    // the identity, and `GroupPartitionsExec` gives up a marked claim it does not regroup
+    // identically. That costs the pair its join at the gate at the end of this method, which is a
+    // poor trade for pruning a few groups.
     //
-    // Filtering is then the only thing that can shrink the merged list *below* the marked side's
-    // own declared keys. The merging arms take the union, and `KeyedShuffleSpec.areKeysCompatible`
-    // pairs a marked layout only with one whose keys are a subset of its declared keys, so the
-    // union is that side's own key set. The count its hash is taken modulo survives the dedup
-    // because a marked layout is always grouped: `canCreatePartitioning` is the only producer of
-    // the marker and it refuses an ungrouped one. A reduce is the other way a merged list comes
-    // out smaller, and it cannot happen here, since the marked arm of `areKeysCompatible` admits
-    // only positions holding the same transform function and `reducersBothWays` finds nothing to
-    // reduce between those.
+    // Narrowing is the only thing here that can shrink the list below a marked side's own keys: the
+    // merging arms take the union, and `KeyedShuffleSpec.areKeysCompatible` pairs a marked layout
+    // only with one whose keys are a subset of its own.
     //
-    // What filtering does instead: an intersection with a strictly smaller partner, or the
-    // one-sided arm that keeps the *other* side's keys, drops groups the marked side holds, and
-    // the regrouping stops being the identity. The pair would then trade its whole join for
-    // pruning those groups.
-    //
-    // Sorting is the other way a regrouping stops being the identity, and is not addressed here.
-    // `mergeAndDedupPartitions` sorts, so a marked layout whose declared order is not the sorted
-    // one is relabelled even where the set is unchanged. Handing it its own list verbatim looks
-    // like the same fix and is not, because `KeyedPartitioning.createShuffleSpec` sorts through
-    // `toGrouped` under `v2BucketingAllowKeysSubsetOfPartitionKeys` while it hands a marked layout
-    // back unprojected: the two children would hold one partitioning and report two specs that
-    // `describesSameKeys` calls different, and `ValidateRequirements` rejects the join this method
-    // just allowed. Measured on the generated sweep in `EnsureRequirementsSuite`, cell
-    // `left=id/12 right=id/312/marked Inner`.
+    // Sorting is the other way a regrouping stops being the identity, and this does not address it.
+    // `mergeAndDedupPartitions` sorts, so a marked side whose declared order is not the sorted one
+    // is relabelled even where the key set is unchanged.
     val partitionFilter = conf.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)
     def filtersKeys(l: KeyedPartitioning, r: KeyedPartitioning): Boolean =
       partitionFilter && !l.mayContainUnknownPartitionKeys && !r.mayContainUnknownPartitionKeys
@@ -696,7 +680,7 @@ case class EnsureRequirements(
     // Each side may offer several members, and the right one is the one the other side can pair
     // with, which neither side can tell on its own. So pick the pair rather than a member per side,
     // and rank the pairs that agree on the keys by the parallelism they offer, the same trade
-    // `coPartitionChildren` makes between children when it picks `bestSpecOpt`.
+    // `pickCoPartitionTarget` makes between children when it picks the layout to shuffle onto.
     //
     // Two things keep `rank` from being what the join actually gets, both on the merging arms.
     // `InnerLike` and `LeftSemi` intersect under `v2BucketingPartitionFilterEnabled`, unless
@@ -746,7 +730,7 @@ case class EnsureRequirements(
     // grouping node instead, which it needs exactly when its source reports more than one partition
     // per key. Building both eagerly would derive a grouping the push branch throws away, and that
     // is one hash per partition key.
-    val pushed = if (pushCommonValues) {
+    val pushed = Option.when(pushCommonValues) {
       // Partition expressions are compatible. Regardless of whether partition values
       // match from both sides of children, we can calculate a superset of partition values and
       // push-down to respective data sources so they can adjust their output partitioning by
@@ -918,15 +902,13 @@ case class EnsureRequirements(
       }
 
       // Now we need to push-down the common partition information to the `GroupPartitionsExec`s.
-      Some((
+      (
         GroupPartitionsExec(rawLeft, leftSpec.joinKeyPositions,
           Some(mergedPartitionKeys), leftReducers,
           distributePartitions = applyPartialClustering && !replicateLeftSide),
         GroupPartitionsExec(rawRight, rightSpec.joinKeyPositions,
           Some(mergedPartitionKeys), rightReducers,
-          distributePartitions = applyPartialClustering && !replicateRightSide)))
-    } else {
-      None
+          distributePartitions = applyPartialClustering && !replicateRightSide))
     }
 
     // The pairing is only worth committing to if both children still declare the same aligned key
@@ -972,10 +954,15 @@ case class EnsureRequirements(
 
   /**
    * Whether the two children satisfy their distributions and line up with each other as they
-   * arrive, so that the pairing has nothing to add. This is the question `ValidateRequirements`
-   * asks of a finished plan, restricted to these two children.
+   * arrive, so that the pairing has nothing to add.
    *
-   * Both sides have to answer with an unprojected spec. A projected one describes the layout a
+   * Close to what `ValidateRequirements` asks of a finished plan, but not the same question, and
+   * the difference is deliberate. This goes through `createKeyedShuffleSpecs`, so it also applies
+   * `REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION`, admits a member on `keysMaySatisfy`, and looks at
+   * keyed members only. The per-side half is the validator's: `satisfies`, which is strict, so a
+   * child that still needs a node answers no.
+   *
+   * Both sides also have to answer with an unprojected spec. A projected one describes the layout a
    * [[GroupPartitionsExec]] would emit rather than the one the child has, so two sides can agree
    * through their projections while their partitions do not line up at all.
    */
@@ -1023,15 +1010,11 @@ case class EnsureRequirements(
    * scan would derive the alignment from an already aligned layout and duplicate rows.
    *
    * The descent only traverses a `GroupPartitionsExec` and a *local* `SortExec`. That bound is a
-   * decision, not an omission: a `GroupPartitionsExec` hidden behind any other node belongs to a
-   * different operator, and peeling it would undo that operator's alignment. Instrumentation of
-   * the descent over `KeyGroupedPartitioningSuite` found these non-`SortExec` shapes hiding a
-   * node: `Project > SortMergeJoin > Sort > GroupPartitions` and `Project > Filter > Window >
-   * WindowGroupLimit > GroupPartitions`, where refusing to descend is right every time. A global
-   * `SortExec` also stops the descent: it requires `OrderedDistribution`, which a
-   * `KeyedPartitioning` can satisfy (behind `spark.sql.sources.v2.bucketing.sorting.enabled`)
-   * through a `GroupPartitionsExec` built to emit the partition keys in sorted order, and peeling
-   * that node would destroy the ordering it exists to provide.
+   * decision, not an omission: a node hidden behind anything else belongs to a different operator,
+   * and peeling it would undo that operator's alignment. A global `SortExec` stops the descent for
+   * the same reason. It requires `OrderedDistribution`, which a `KeyedPartitioning` can satisfy
+   * (behind `spark.sql.sources.v2.bucketing.sorting.enabled`) through a node built to emit the keys
+   * in sorted order, and peeling that node would destroy the ordering it exists to provide.
    *
    * A local sort that is peeled off is re-added by the ordering step at the end of
    * `ensureDistributionAndOrdering`, which is what put it there in the first place.
@@ -1085,8 +1068,8 @@ case class EnsureRequirements(
         newGroupPartitions
       // Everything else is wrapped, an aligned grouping included. `positions` index what `plan`
       // reports, which is exactly what the node built here projects, so the two line up with no
-      // composition. This used to be an assert on the aligned case, which crashes the planner
-      // where a sound plan was available.
+      // composition. The base replaced a node's positions with a `copy` instead, which neither
+      // composes nor re-derives the grouping, so it had no case to tell apart.
       case _ => GroupPartitionsExec(plan, joinKeyPositions = Some(positions))
     }
   }

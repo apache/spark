@@ -53,10 +53,9 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  *                            the child still reports what it was planned over, see
  *                            `outputPartitioning`.
  * @param childPartitioning The child's partitioning this node was decided for. Kept so that a node
- *                          handed a different child can say so. A `Partitioning` that is an
- *                          `Expression` is in the case class product on purpose, so that
- *                          `QueryPlan.doCanonicalize` normalizes its exprIds along with
- *                          `plannedPartitioning`'s and the comparison stays meaningful.
+ *                          handed a different child can say so, and in the case class product so
+ *                          that `QueryPlan.doCanonicalize` normalizes its exprIds along with
+ *                          `plannedPartitioning`'s, which is what keeps the comparison meaningful.
  * @param joinKeyPositions Optional projection selecting a subset of the partitioning key positions,
  *                         so that partitions sharing the projected key are coalesced. Used whenever
  *                         the cluster keys are a subset of the partition keys, either the join
@@ -103,17 +102,18 @@ case class GroupPartitionsExec(
    * node a child reporting something else invalidates both, so the keyed claim is dropped and only
    * the physical output count is reported. `ValidateRequirements` then finds the parent's
    * distribution unsatisfied and `AdaptiveSparkPlanExec` reverts the rewrite, which is what an
-   * `AQEShuffleReadExec` landing over a keyed shuffle stage relies on.
+   * `AQEShuffleReadExec` landing over a keyed shuffle stage relies on. That revert is also what
+   * keeps `doExecute` off the changed child, since it still coalesces on the planning-time
+   * `grouping.partitions`. The base relied on the same revert, having re-derived to get there.
    *
-   * Re-deriving from the new child instead would be worse. The recipe was chosen for a pairing, and
-   * applying it to a different child yields a claim nothing validated against the other side. It
-   * would also buy nothing today: no rule in the tree is known to report a *different*
-   * `KeyedPartitioning`, so the two reachable outcomes are an equal one, where this check passes,
-   * and `UnknownPartitioning`, where re-deriving reports exactly what this reports.
+   * Re-deriving instead would apply a recipe chosen for one pairing to a different child, yielding
+   * a claim nothing validated against the other side. It would also buy nothing today: no rule is
+   * known to report a *different* `KeyedPartitioning`, so the reachable outcomes are an equal one,
+   * where this check passes, and `UnknownPartitioning`, where re-deriving reports the same thing.
    *
-   * Asked on the read rather than in `withNewChildInternal` because plan canonicalization rebuilds
-   * this node over a canonicalized child and never reads its partitioning, which it cannot: a
-   * canonicalized `BatchScanExec` throws from `reportedKeyedPartitioning`.
+   * Asked on the read rather than in `withNewChildInternal` because canonicalization rebuilds this
+   * node over a canonicalized child whose partitioning cannot be read at all: a canonicalized
+   * `BatchScanExec` throws from `reportedKeyedPartitioning`.
    */
   @transient override lazy val outputPartitioning: Partitioning =
     if (child.outputPartitioning == childPartitioning) {
@@ -417,15 +417,11 @@ case class GroupPartitionsExec(
  * @param isIdentity whether the grouping leaves the declared keys and every partition where they
  *                   were. Nothing rewrote the keys, output partition i holds exactly input
  *                   partition i, and there is one output per input. That is the only grouping that
- *                   keeps a marked layout's undeclared rows at hash(key) % numPartitions. A
- *                   projection or reduction re-labels the groups into a different key space, so
- *                   even a grouping whose indices line up would pin the claim to keys it no longer
- *                   declares. A rewrite is rejected up front, covering a narrowing
- *                   projection, a reordering one, and any reducer slot. A reducer slot counts as
- *                   key-changing even though a conforming self-reducer cannot rewrite a reachable
- *                   key value, so the give-up there loses at most an optimization. A grouping that
- *                   drops trailing declared keys reads identity for every group it keeps, but the
- *                   partition count shrinks and the hash modulus with it.
+ *                   keeps a marked layout's undeclared rows at hash(key) % numPartitions, so a
+ *                   projection, a reduction or a dropped trailing key all fail it: each moves the
+ *                   claim into a different key space or changes the modulus. A reducer slot counts
+ *                   as key-changing even where a conforming self-reducer could not rewrite a
+ *                   reachable key value, so the give-up there loses at most an optimization.
  * @param numPrunedPartitions the alignment's effect on the reads of the child's splits, 0 outside
  *                            the alignment path. See `alignToExpectedKeys`.
  * @param numReplicatedPartitionReads as above.
@@ -501,15 +497,16 @@ private[sql] object GroupPartitionsExec {
     // describes the keys, so the reduce marks it (see `KeyedShuffleSpec.reducersBothWays`).
     //
     // A marked claim pins undeclared rows to hash(key) % numPartitions (see [[KeyLayout]]'s
-    // `mayContainUnknownPartitionKeys`). Only an identity grouping keeps that relationship: a
-    // reorder, a coalesce, or a resize moves those rows, and a projection or reduction rewrites
-    // the keys the claim speaks for (see `PartitionGrouping.isIdentity`). Clearing only the marker
-    // would misreport the undeclared rows that remain, so give up the keyed partitioning at the
-    // physical output count (one per group, padding included) that a parent's
-    // `PartitioningCollection` requires for uniformity. The give-up deliberately under-reports.
-    // The node still physically groups the partitions but no longer claims a keyed layout, so a
-    // join planned over it does not see its required distribution satisfied. `EnsureRequirements`
-    // asks this before it commits to a pairing and falls back to a shuffle when it happens.
+    // `mayContainUnknownPartitionKeys`), and only an identity grouping keeps that relationship (see
+    // `PartitionGrouping.isIdentity`). Clearing the marker alone would misreport the undeclared
+    // rows that remain, so the keyed partitioning goes and only the physical output count is
+    // reported, one per group with padding included, which is the count a parent's
+    // `PartitioningCollection` needs for uniformity. `EnsureRequirements` asks this before it
+    // commits to a pairing and falls back to a shuffle when it happens.
+    //
+    // The marker read off `p` is the same bit the `else` branch publishes through
+    // `grouping.layout`, since `computeGrouping` copies the child's layout without touching it. A
+    // change to that copy has to move this guard with it.
     if (PartitioningCollection.keyedMarkerOf(p).contains(true) && !grouping.isIdentity) {
       UnknownPartitioning(grouping.partitions.size)
     } else {

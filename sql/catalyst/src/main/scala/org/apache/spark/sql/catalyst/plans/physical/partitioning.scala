@@ -582,6 +582,8 @@ case class KeyLayout(
  *
  * - `keysSatisfy()`: do the keys as they stand co-locate every cluster key, with nothing left for
  *   a node to project away? This is the strict question, and `satisfies()` is it plus `isGrouped`.
+ *   Strict for a `ClusteredDistribution`; its `OrderedDistribution` arm is a gate on what may claim
+ *   a global ordering, and the order itself is still the caller's to check.
  * - `keysCanSatisfy()`: `keysSatisfy()`, or the keys co-locate them after a node has projected
  *   away the expressions that carry none. Only
  *   `spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys` admits the second half.
@@ -818,22 +820,18 @@ case class KeyedPartitioning(
   /**
    * The counts `numPartitionsProjectedOn` has already worked out, by position set.
    *
-   * Memoized here rather than at a caller because there is no one caller. `satisfies` asks this
-   * question now, and `EnsureRequirements`, `ValidateRequirements` and every `AQEShuffleReadRule`
-   * application all ask `satisfies` of the same partitioning, so a memo scoped to one rule pass
-   * would miss most of the repeats. The partitioning is immutable and the answer depends only on
-   * the keys and the position set, so the cache cannot go stale.
+   * Kept on the partitioning rather than at a caller because there is no one caller: `satisfies`
+   * asks this question, and the planner, `ValidateRequirements` and every `AQEShuffleReadRule`
+   * application all ask `satisfies` of the same partitioning. The partitioning is immutable and the
+   * answer depends only on the keys and the position set, so the cache cannot go stale.
    *
    * Not a constructor field, so it stays out of the product and leaves equality, `hashCode` and
-   * canonicalization alone. The map is built on first use, and only for a partitioning something
-   * actually asks a narrowing question of. On the default configuration nothing does, since
-   * `mayProjectToClusterKeys` requires
+   * canonicalization alone. The map is built on first use, and on the default configuration nothing
+   * asks a narrowing question at all, since `mayProjectToClusterKeys` requires
    * `spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys`.
    *
-   * [[TransientBestEffortLazyVal]] rather than a `lazy val`, for the reason that class exists: a
-   * Scala 2 `lazy val` locks the instance to initialize it, and this is read from whichever thread
-   * is planning or validating. Two threads racing here each build an empty map and one is dropped,
-   * which is all the best-effort part costs.
+   * [[TransientBestEffortLazyVal]] because a Scala 2 `lazy val` locks the instance to initialize
+   * it, and this is read from whichever thread is planning or validating.
    */
   private val projectedPartitionCounts =
     new TransientBestEffortLazyVal[ConcurrentHashMap[BitSet, java.lang.Integer]](
@@ -935,8 +933,8 @@ case class KeyedPartitioning(
       expressions.forall(_.references.size == 1)
 
   /**
-   * The strict question of the family the class doc lists. `true` only when the
-   * keys as they stand co-locate every cluster key, with nothing left for a
+   * The strict question of the family the class doc lists, for a [[ClusteredDistribution]]. `true`
+   * only when the keys as they stand co-locate every cluster key, with nothing left for a
    * `GroupPartitionsExec` to do about it.
    *
    * Two ways to be true. Every partition expression is a function of cluster keys alone, so
@@ -945,6 +943,12 @@ case class KeyedPartitioning(
    * second is the only branch that reads a partition key, and only
    * `spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys` admits it, so the ordinary
    * configuration answers structurally.
+   *
+   * The strictness claim stops at [[ClusteredDistribution]]. The [[OrderedDistribution]] arm is a
+   * local gate on what may claim a global ordering at all, and it does not read the key order, so a
+   * side whose keys run the wrong way still answers `true` here. `EnsureRequirements.resolveChild`
+   * is what compares the keys against the required ordering and builds the sorting node, and it has
+   * to stay: nothing below tells it the keys are already in order.
    */
   private def keysSatisfy(required: Distribution): Boolean = {
     required match {
@@ -1383,24 +1387,18 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
     // `maySatisfyAfterProjection`, not `satisfies`. A spec says what its partitioning could
     // co-partition on, and a grouped `KeyedPartitioning` whose keys are coarser than the
-    // operation's still can, through the projection a `GroupPartitionsExec` performs. The strict
-    // question would drop it, which is narrower than what this filter admitted before `satisfies`
-    // became strict.
+    // operation's still can, through the projection a `GroupPartitionsExec` performs. That is the
+    // admission set this filter had before `satisfies` became strict, up to one shape it now also
+    // keeps, a partition expression that *is* a cluster key, which `areKeysCompatible` turns away
+    // anyway. The set matters because `ValidateRequirements` builds a spec from a finished plan
+    // through here.
     //
-    // It is not wider either. `ValidateRequirements` builds a spec from a finished plan through
-    // here, and is the gate that makes AQE drop a rewrite that breaks co-partitioning, so this
-    // admits exactly what it admitted before and no more. `checkKeyedPartitioningInvariant` forces
-    // one `KeyLayout` on all keyed members, so `isGrouped` is uniform across them and the filter
-    // either keeps every keyed member or none: the latter only for a partitioning that does not
-    // serve the distribution through a keyed member at all, which neither caller passes.
-    //
-    // Every admitted member has to stay, because `isCompatibleWith` answers for any of them and
-    // the collection cannot know which one the other side matched. That has a cost worth knowing:
-    // `KeyedShuffleSpec.canCreatePartitioning` is false without `v2BucketingShuffleEnabled` and
-    // `ShuffleSpecCollection.canCreatePartitioning` is a `forall`, so a groupable keyed member
-    // beside a usable non-keyed one would cost the collection its role as a shuffle template. No
-    // operator is known to report that mixture, since `EnsureRequirements` groups a keyed child
-    // before it can reach a join's output.
+    // Every admitted member stays, because `isCompatibleWith` answers for any of them and the
+    // collection cannot know which one the other side matched. The cost is that
+    // `ShuffleSpecCollection.canCreatePartitioning` is a `forall` over members whose keyed half is
+    // false without `v2BucketingShuffleEnabled`, so a groupable keyed member beside a usable
+    // non-keyed one would cost the collection its role as a shuffle template. No operator is known
+    // to report that mixture.
     val filtered =
       partitionings.filter(PartitioningCollection.maySatisfyAfterProjection(_, distribution))
     ShuffleSpecCollection(filtered.map(_.createShuffleSpec(distribution)))
@@ -1446,18 +1444,15 @@ object PartitioningCollection {
    * finished plan is checked against. `EnsureRequirements.createKeyedShuffleSpecs` is where the
    * planner asks the wider question, for a child it is about to group itself.
    *
-   * A required partition count still has to match, which is what `satisfies` applies to every other
-   * partitioning. A node changes the count, so the pre-grouping one is not a bound on what it will
-   * be. This clause is here for consistency with the strict question, not as a prediction.
+   * The partition count clause is here for consistency with the strict question. A node changes the
+   * count, so the pre-grouping one is no prediction of it.
    */
   private[sql] def maySatisfyAfterProjection(
       p: Partitioning,
-      required: ClusteredDistribution): Boolean = p match {
+      required: ClusteredDistribution): Boolean = flatten(p).exists {
     case k: KeyedPartitioning =>
       k.isGrouped && required.requiredNumPartitions.forall(_ == k.numPartitions) &&
         k.keysMaySatisfy(required)
-    case pc: PartitioningCollection =>
-      pc.partitionings.exists(maySatisfyAfterProjection(_, required))
     case other => other.satisfies(required)
   }
 

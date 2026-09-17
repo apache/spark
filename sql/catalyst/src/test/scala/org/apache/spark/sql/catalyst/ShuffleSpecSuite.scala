@@ -63,20 +63,28 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("SPARK-59289: createShuffleSpec drops a member that is not grouped") {
+  test("SPARK-59289: createShuffleSpec drops a keyed member that is not grouped") {
     val a = AttributeReference("a", IntegerType)()
     val clustered = ClusteredDistribution(Seq(a))
     // A node would group this one too, but the admission set here is what a finished plan is
     // checked against by `ValidateRequirements`, so it stays what the strict question admitted
-    // before a projection was allowed to answer it. Asked of the predicate rather than of a mixed
-    // collection, since `checkKeyedPartitioningInvariant` forces one `KeyLayout` on all keyed
-    // members and `isGrouped` is therefore uniform across them.
+    // before a projection was allowed to answer it.
     val ungrouped = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
     val grouped = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
     assert(!ungrouped.isGrouped && grouped.isGrouped, "test setup")
 
     assert(!PartitioningCollection.maySatisfyAfterProjection(ungrouped, clustered))
     assert(PartitioningCollection.maySatisfyAfterProjection(grouped, clustered))
+
+    // And through the filter itself, which is the predicate's one caller. The keyed member goes and
+    // the hash member stays, so the collection keeps a spec and its `require` is not tripped. The
+    // pairing is asked of a mixed collection rather than of two keyed members, because
+    // `checkKeyedPartitioningInvariant` forces one `KeyLayout` on all keyed members and `isGrouped`
+    // is therefore uniform across them: a collection cannot hold one of each.
+    val mixed = PartitioningCollection(Seq(ungrouped, HashPartitioning(Seq(a), 3)))
+    val specs = mixed.createShuffleSpec(clustered).asInstanceOf[ShuffleSpecCollection].specs
+    assert(specs.size == 1, s"only the hash member survives the filter, got $specs")
+    assert(specs.head.isInstanceOf[HashShuffleSpec], s"and it is the hash one, got $specs")
   }
 
   protected def checkCompatible(
