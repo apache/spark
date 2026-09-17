@@ -161,6 +161,10 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
         ("""["ab"]""", ArrayType(CharType(4)), Row(Seq("ab  "))),
         ("""["xy"]""", ArrayType(VarcharType(4)), Row(Seq("xy"))),
         (
+          """{"1":"ab"}""",
+          MapType(IntegerType, CharType(4)),
+          Row(Map(1 -> "ab  "))),
+        (
           """{"value":"xy"}""",
           StructType(Seq(StructField("value", CharType(5)))),
           Row(Row("xy   ")))).foreach { case (json, dataType, expected) =>
@@ -183,6 +187,7 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       Seq(
         (ArrayType(CharType(4)), """["abcdef"]"""),
+        (MapType(IntegerType, CharType(4)), """{"1":"abcdef"}"""),
         (
           StructType(Seq(StructField("value", VarcharType(4)))),
           """{"value":"abcdef"}""")).foreach { case (dataType, json) =>
@@ -207,6 +212,23 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
           parameters = Map("limit" -> "4"))
       }
     }
+  }
+
+  test("SPARK-59277: malformed nested CHAR JSON without SerDe returns null") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val input = Seq("""{"1":""").toDF("value")
+      checkAnswer(
+        input,
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(
+            AttributeReference("value", MapType(IntegerType, CharType(4)))()),
+          child = child,
+          ioschema = defaultIOSchema),
+        Seq(Row(null)))
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
   test("script transformation should not swallow errors from upstream operators (no serde)") {

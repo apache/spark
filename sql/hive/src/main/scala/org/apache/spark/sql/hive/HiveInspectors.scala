@@ -1246,8 +1246,10 @@ private[hive] trait HiveInspectors {
 
   /**
    * Analysis snapshots the Catalyst return type, but runtime inspectors are rebuilt from the
-   * current children (including foldability). Accept string-family drift so CHAR/VARCHAR
-   * conversion can still apply when Hive surfaces STRING, and require other types to match.
+   * current children (including foldability and session CHAR/VARCHAR settings). STRING may drift
+   * to or from a bounded string type across that boundary. Two bounded types must match exactly:
+   * accepting a different kind or length would apply the snapshotted conversion to an incompatible
+   * runtime value.
    */
   def checkCompatibleHiveReturnType(
       inspector: ObjectInspector,
@@ -1271,7 +1273,11 @@ private[hive] trait HiveInspectors {
       runtimeType: DataType,
       expectedType: DataType): Boolean = {
     (runtimeType, expectedType) match {
-      case (_: StringType, _: StringType) => true
+      case (rt: CharType, et: CharType) => rt == et
+      case (rt: VarcharType, et: VarcharType) => rt == et
+      case (_: CharType | _: VarcharType, _: CharType | _: VarcharType) => false
+      case (_: StringType, _: CharType | _: VarcharType) => true
+      case (_: CharType | _: VarcharType, _: StringType) => true
       case (ArrayType(rt, _), ArrayType(et, _)) => compatibleHiveReturnType(rt, et)
       case (MapType(rk, rv, _), MapType(ek, ev, _)) =>
         compatibleHiveReturnType(rk, ek) && compatibleHiveReturnType(rv, ev)

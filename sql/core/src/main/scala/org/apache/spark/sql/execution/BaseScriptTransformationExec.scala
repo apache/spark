@@ -31,7 +31,17 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute,
+  AttributeSet,
+  BoundReference,
+  Cast,
+  Expression,
+  GenericInternalRow,
+  JsonToStructs,
+  Literal,
+  StructsToJson,
+  UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
@@ -251,19 +261,32 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         converter)
       case dt @ (_: ArrayType | _: MapType | _: StructType)
           if CharVarcharUtils.hasCharVarchar(dt) =>
-        val physicalType = CharVarcharUtils.replaceCharVarcharWithString(dt)
+        val physicalType = ScriptTransformationIOSchema.toUnboundedStringType(dt)
+        // JSON object keys are strings. Cast them to the declared map key type after parsing.
+        val jsonType = physicalType.transformRecursively {
+          case map: MapType if !map.keyType.isInstanceOf[StringType] =>
+            map.copy(keyType = StringType)
+        }
         val complexTypeFactory = JsonToStructs(
-          physicalType,
+          jsonType,
           ioschema.outputSerdeProps.toMap,
           Literal(null),
           Some(conf.sessionLocalTimeZone))
+        val parsedToPhysical = if (jsonType.sameType(physicalType)) {
+          identity[Any] _
+        } else {
+          val cast = Cast(
+            BoundReference(0, jsonType, nullable = true),
+            physicalType,
+            Some(conf.sessionLocalTimeZone))
+          value: Any => cast.eval(InternalRow(value))
+        }
         val toScala = CatalystTypeConverters.createToScalaConverter(physicalType)
-        (data: String) =>
-          if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
-            null
-          } else {
-            converter(toScala(complexTypeFactory.nullSafeEval(UTF8String.fromString(data))))
-          }
+        val parser = wrapperConvertException(
+          data => parsedToPhysical(
+            complexTypeFactory.nullSafeEval(UTF8String.fromString(data))),
+          identity)
+        data => converter(toScala(parser(data)))
       case _: ArrayType | _: MapType | _: StructType =>
         val complexTypeFactory = JsonToStructs(attr.dataType,
           ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
@@ -399,6 +422,13 @@ case class ScriptTransformationIOSchema(
 }
 
 object ScriptTransformationIOSchema {
+  private[sql] def toUnboundedStringType(dataType: DataType): DataType = {
+    dataType.transformRecursively {
+      case c: CharType => c.toStringType
+      case v: VarcharType => v.toStringType
+    }
+  }
+
   val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\u0001"),
     ("TOK_TABLEROWFORMATLINES", "\n"),

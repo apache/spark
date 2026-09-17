@@ -460,13 +460,21 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     }
   }
 
-  test("SPARK-59277: Hive return types stay compatible across string-family drift") {
+  test("SPARK-59277: Hive return type compatibility allows only STRING boundary drift") {
     checkCompatibleHiveReturnType(StringType, CharType(5))
     checkCompatibleHiveReturnType(CharType(5), StringType)
-    checkCompatibleHiveReturnType(VarcharType(3), CharType(5))
     checkCompatibleHiveReturnType(ArrayType(StringType), ArrayType(VarcharType(7)))
-    intercept[SparkException] {
-      checkCompatibleHiveReturnType(IntegerType, CharType(5))
+    checkCompatibleHiveReturnType(CharType(5), CharType(5))
+    checkCompatibleHiveReturnType(VarcharType(3), VarcharType(3))
+
+    Seq[(DataType, DataType)](
+      VarcharType(3) -> CharType(5),
+      CharType(4) -> CharType(5),
+      VarcharType(4) -> VarcharType(5),
+      IntegerType -> CharType(5)).foreach { case (runtimeType, expectedType) =>
+      intercept[SparkException] {
+        checkCompatibleHiveReturnType(runtimeType, expectedType)
+      }
     }
   }
 

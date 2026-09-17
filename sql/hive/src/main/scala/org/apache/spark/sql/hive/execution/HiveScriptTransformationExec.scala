@@ -274,26 +274,15 @@ object HiveScriptIOSchema extends HiveInspectors {
 
   /**
    * Hive LazySimpleSerDe CHAR/VARCHAR types truncate on deserialize. Map them to STRING so
-   * Spark applies first-class length checks. Unlike `replaceCharVarcharWithString`, this must
-   * run even when first-class CHAR/VARCHAR is enabled. Only LazySimpleSerDe and subclasses
-   * get this rewrite; other SerDes keep the declared CHAR/VARCHAR schema.
+   * Spark applies first-class length checks. Only LazySimpleSerDe and subclasses get this
+   * rewrite; other SerDes keep the declared CHAR/VARCHAR schema.
    */
-  private def toHiveSerdePhysicalType(dt: DataType): DataType = dt match {
-    case ArrayType(et, n) => ArrayType(toHiveSerdePhysicalType(et), n)
-    case MapType(kt, vt, n) =>
-      MapType(toHiveSerdePhysicalType(kt), toHiveSerdePhysicalType(vt), n)
-    case StructType(fields) =>
-      StructType(fields.map(f => f.copy(dataType = toHiveSerdePhysicalType(f.dataType))))
-    case _: CharType | _: VarcharType => StringType
-    case other => other
-  }
-
   private def outputTypesForSerDe(
       serdeClassName: String,
       columnTypes: Seq[DataType]): Seq[DataType] = {
     val serdeClass = Utils.classForName[AbstractSerDe](serdeClassName)
     if (classOf[LazySimpleSerDe].isAssignableFrom(serdeClass)) {
-      columnTypes.map(toHiveSerdePhysicalType)
+      columnTypes.map(ScriptTransformationIOSchema.toUnboundedStringType)
     } else {
       columnTypes
     }

@@ -33,7 +33,9 @@ import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.{
+  HiveCharObjectInspector,
+  PrimitiveObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
 import org.apache.hadoop.io.{LongWritable, Writable}
 
@@ -900,10 +902,13 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       withUserDefinedFunction(
           "hive_simple_concat" -> true,
+          "hive_char_padded" -> true,
           "hive_upper" -> true,
           "hive_explode" -> true) {
         sql(s"CREATE TEMPORARY FUNCTION hive_simple_concat AS " +
           s"'${classOf[UDFStringString].getName}'")
+        sql(s"CREATE TEMPORARY FUNCTION hive_char_padded AS " +
+          s"'${classOf[InspectCharGenericUDF].getName}'")
         sql(s"CREATE TEMPORARY FUNCTION hive_upper AS '${classOf[GenericUDFUpper].getName}'")
         sql(s"CREATE TEMPORARY FUNCTION hive_explode AS '${classOf[GenericUDTFExplode].getName}'")
 
@@ -912,7 +917,13 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
             |  CAST('A' AS CHAR(3)),
             |  CAST('b' AS VARCHAR(2))) AS value""".stripMargin)
         assert(simple.schema.head.dataType === StringType)
+        // Hive's simple-UDF conversion from CHAR to a Java String strips trailing spaces.
         checkAnswer(simple, Row("A b"))
+
+        // A GenericUDF reading the HiveChar directly observes the padded CHAR value.
+        checkAnswer(
+          sql("SELECT hive_char_padded(CAST('A' AS CHAR(3)))"),
+          Row("A  "))
 
         val scalar = sql(
           "SELECT hive_upper(CAST('Ab' AS CHAR(5) COLLATE UTF8_LCASE)) AS value")
@@ -1267,6 +1278,20 @@ class ReturnStringGenericUDF extends GenericUDF {
     arguments(0).get.toString
 
   override def getDisplayString(children: Array[String]): String = "return_string"
+}
+
+class InspectCharGenericUDF extends GenericUDF {
+  private var inspector: HiveCharObjectInspector = _
+
+  override def initialize(arguments: Array[ObjectInspector]): ObjectInspector = {
+    inspector = arguments(0).asInstanceOf[HiveCharObjectInspector]
+    PrimitiveObjectInspectorFactory.javaStringObjectInspector
+  }
+
+  override def evaluate(arguments: Array[DeferredObject]): AnyRef =
+    inspector.getPrimitiveJavaObject(arguments(0).get).getPaddedValue
+
+  override def getDisplayString(children: Array[String]): String = "inspect_char"
 }
 
 @UDFType(stateful = true)

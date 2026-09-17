@@ -449,6 +449,38 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     }
   }
 
+  test("SPARK-59277: nested CHAR/VARCHAR overflow with Hive SerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq(
+        """
+          |SELECT TRANSFORM(array('abcdef'))
+          |USING 'cat'
+          |AS (value ARRAY<CHAR(4)>)
+          |FROM VALUES (1) input(dummy)
+          |""".stripMargin,
+        """
+          |SELECT TRANSFORM(named_struct('value', 'abcdef'))
+          |USING 'cat'
+          |AS (value STRUCT<value: VARCHAR(4)>)
+          |FROM VALUES (1) input(dummy)
+          |""".stripMargin).foreach { query =>
+        val exception = intercept[Exception] {
+          sql(query).collect()
+        }
+        val runtimeException = exception match {
+          case s: org.apache.spark.SparkRuntimeException => s
+          case other =>
+            other.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException]
+        }
+        checkError(
+          exception = runtimeException,
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "4"))
+      }
+    }
+  }
+
   test("SPARK-59277: output SerDe CHAR/VARCHAR rewrite is LazySimpleSerDe-only") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       val output = Seq(
