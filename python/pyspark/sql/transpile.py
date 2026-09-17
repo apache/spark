@@ -107,6 +107,7 @@ from pyspark.sql.functions import (
     coalesce,
     col,
     concat,
+    isnan,
     lit,
     pmod,
     raise_error,
@@ -125,6 +126,23 @@ from pyspark.sql.types import (
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
     from pyspark.sql._typing import DataTypeOrString
+
+# Categories that represent numeric (non-string) scalar types.
+_NUMERIC_CATS = frozenset(("numeric", "integer", "float"))
+
+
+def _is_numeric_cat(cat: str) -> bool:
+    """True for any numeric sub-category (``"numeric"``, ``"integer"``, ``"float"``)."""
+    return cat in _NUMERIC_CATS
+
+
+def _wider_numeric(lc: str, rc: str) -> str:
+    """Return the wider of two numeric categories (float > integer > numeric)."""
+    if "float" in (lc, rc):
+        return "float"
+    if "integer" in (lc, rc):
+        return "integer"
+    return "numeric"
 
 
 class AbstractTranspiler(object):
@@ -257,6 +275,12 @@ class CatalystTranspiler(AbstractTranspiler):
             body_c = self._safe_category(params, node.body[0]) if node.body else None
             else_c = self._safe_category(params, node.orelse[0]) if node.orelse else None
             if body_c is not None and else_c is not None and body_c != else_c:
+                # Numeric sub-categories are mutually compatible; return the
+                # wider one. Truly mismatched families (e.g. numeric vs string)
+                # return None so the branch-compatibility check in
+                # _convert_if_like raises and the variant is dropped.
+                if _is_numeric_cat(body_c) and _is_numeric_cat(else_c):
+                    return _wider_numeric(body_c, else_c)
                 return None
             return body_c if body_c is not None else else_c
         if isinstance(node, ast.Constant) and node.value is None:
@@ -307,11 +331,15 @@ class CatalystTranspiler(AbstractTranspiler):
         body_cat = self._safe_category(params, body_node)
         else_cat = self._safe_category(params, else_node)
         if body_cat is not None and else_cat is not None and body_cat != else_cat:
-            raise UnsupportedOperationException(
-                f"if/else branches have incompatible categories ({body_cat} vs "
-                f"{else_cat}); the lowered CASE WHEN has no common type under ANSI, "
-                "so the transpiler falls back to interpreted Python"
-            )
+            # Numeric sub-categories (integer/float) are compatible: Spark widens
+            # to double in the CASE WHEN expression. Truly mismatched families
+            # (e.g. numeric vs string) are still refused.
+            if not (_is_numeric_cat(body_cat) and _is_numeric_cat(else_cat)):
+                raise UnsupportedOperationException(
+                    f"if/else branches have incompatible categories ({body_cat} vs "
+                    f"{else_cat}); the lowered CASE WHEN has no common type under ANSI, "
+                    "so the transpiler falls back to interpreted Python"
+                )
         safe_test = coalesce(test_col, lit(False))
         return when(safe_test, body_col).otherwise(else_col)
 
@@ -322,7 +350,7 @@ class CatalystTranspiler(AbstractTranspiler):
         right_node: ast.AST,
         equal: bool,
     ) -> Column:
-        """Lower ``==`` / ``!=`` with Python's None-equality semantics.
+        """Lower ``==`` / ``!=`` with Python's None- and NaN-equality semantics.
 
         Unlike ordering operators, Python doesn't raise on ``None == x`` /
         ``None != x``: ``None == None`` is True, ``None == 0`` is False,
@@ -339,31 +367,53 @@ class CatalystTranspiler(AbstractTranspiler):
         where Python's ``==`` is simply False. Refuse those so the UDF falls
         back to interpreted Python. A ``None`` literal operand stays allowed
         (the four-branch NULL handling above reproduces Python exactly).
+        Numeric sub-categories (``"integer"`` vs ``"float"``) are treated as
+        compatible; Spark widens to double in the comparison.
 
-        One value-level difference remains (needs runtime values, so it is
-        documented, not guarded): Spark treats ``NaN = NaN`` as true, while
-        Python's ``nan == nan`` is False.
+        For floating-point operands a NaN guard is added: ``NaN == NaN`` is
+        ``False`` in Python (IEEE 754), but Spark's ``EqualTo`` returns
+        ``True`` for ``NaN = NaN``. When both operands are provably integral
+        the guard is skipped because integers cannot be NaN.
+
+        One value-level difference remains for ordering comparisons (tracked
+        separately): Spark orders NaN as greater than every value, whereas
+        Python's NaN comparisons are all False.
         """
         lc = self._safe_category(params, left_node)
         rc = self._safe_category(params, right_node)
         if lc is not None and rc is not None and lc != rc:
-            raise UnsupportedOperationException(
-                f"`==`/`!=` operands have incompatible categories ({lc} vs {rc}); "
-                "Python compares across types as unequal while Spark would coerce "
-                "or fail analysis, so the transpiler falls back to interpreted Python"
-            )
+            # Numeric sub-categories are mutually compatible for equality.
+            if not (_is_numeric_cat(lc) and _is_numeric_cat(rc)):
+                raise UnsupportedOperationException(
+                    f"`==`/`!=` operands have incompatible categories ({lc} vs {rc}); "
+                    "Python compares across types as unequal while Spark would coerce "
+                    "or fail analysis, so the transpiler falls back to interpreted Python"
+                )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
         left_null = left_col.isNull()
         right_null = right_col.isNull()
+        # NaN guard: Python's `NaN == NaN` is False (IEEE 754 reflexivity fails),
+        # but Spark's EqualTo returns True. Only emit when at least one operand
+        # is "float" -- the "float" variant is only selected for FractionalType
+        # columns (see ResolveTranspiledPythonUDFOptions), so isnan() is safe to
+        # call without a cast. For "integer" and "numeric" (integral columns)
+        # NaN is impossible and the guard is dead code.
+        has_float = lc == "float" or rc == "float"
+        if has_float:
+            nan_result = lit(not equal)
+            nan_cmp = isnan(left_col) | isnan(right_col)
+            value_cmp: Column = when(nan_cmp, nan_result).otherwise(
+                left_col == right_col if equal else left_col != right_col
+            )
+        else:
+            value_cmp = left_col == right_col if equal else left_col != right_col
         if equal:
             both_null_val: Column = lit(True)
             one_null_val: Column = lit(False)
-            value_cmp = left_col == right_col
         else:
             both_null_val = lit(False)
             one_null_val = lit(True)
-            value_cmp = left_col != right_col
         return (
             when(left_null & right_null, both_null_val)
             .when(left_null | right_null, one_null_val)
@@ -402,7 +452,7 @@ class CatalystTranspiler(AbstractTranspiler):
         """
         lc = self._category(params, left_node)
         rc = self._category(params, right_node)
-        if lc != rc:
+        if lc != rc and not (_is_numeric_cat(lc) and _is_numeric_cat(rc)):
             raise UnsupportedOperationException(
                 f"`{op_repr}` compares operands of different categories "
                 f"({lc} vs {rc}); Python would raise TypeError, so the "
@@ -419,8 +469,11 @@ class CatalystTranspiler(AbstractTranspiler):
         return when(null_guard, raise_error(err)).otherwise(op(left_col, right_col))
 
     def _category(self, params: List[str], node: ast.AST) -> str:
-        """Infer ``"numeric"`` or ``"string"`` for ``node`` under the current
+        """Infer the scalar category of ``node`` under the current
         ``self._param_categories`` assumption (set per input-type variant).
+
+        Returns one of ``"integer"``, ``"float"``, ``"numeric"`` (unknown
+        numeric sub-type), ``"string"``, ``"bool"``, or ``"binary"``.
 
         Drives operator selection (``+`` -> add vs concat, ``*`` -> multiply vs
         repeat) and raises ``UnsupportedOperationException`` when an operator's
@@ -429,18 +482,21 @@ class CatalystTranspiler(AbstractTranspiler):
         """
         match node:
             case ast.Constant(value=v):
-                # bool subclasses int, so classify it first: int/float -> numeric,
-                # str -> string, bool -> bool, bytes -> binary. None/complex/
-                # Ellipsis have no usable Spark column type, so raise to drop this
-                # variant and fall back rather than emit an option that fails
-                # CheckAnalysis or silently diverges (e.g. `x + None` -> NULL where
-                # Python raises TypeError).
+                # bool subclasses int, so classify it first.
+                # int -> "integer", float -> "float", str -> "string",
+                # bool -> "bool", bytes -> "binary".
+                # None/complex/Ellipsis have no usable Spark column type, so
+                # raise to drop this variant and fall back rather than emit an
+                # option that fails CheckAnalysis or silently diverges (e.g.
+                # `x + None` -> NULL where Python raises TypeError).
                 if isinstance(v, bool):
                     return "bool"
                 if isinstance(v, bytes):
                     return "binary"
-                if isinstance(v, (int, float)):
-                    return "numeric"
+                if isinstance(v, float):
+                    return "float"
+                if isinstance(v, int):
+                    return "integer"
                 if isinstance(v, str):
                     return "string"
                 raise UnsupportedOperationException(
@@ -454,15 +510,25 @@ class CatalystTranspiler(AbstractTranspiler):
             case ast.BinOp(left=left, op=op, right=right):
                 lc = self._category(params, left)
                 rc = self._category(params, right)
-                if isinstance(op, ast.Add) and lc == rc:
-                    return lc  # str + str -> str, num + num -> num
+                if isinstance(op, ast.Add):
+                    if lc == rc:
+                        return lc  # str+str, integer+integer, float+float
+                    if _is_numeric_cat(lc) and _is_numeric_cat(rc):
+                        return _wider_numeric(lc, rc)  # integer+float -> float
                 if isinstance(op, ast.Mult):
-                    if {lc, rc} == {"numeric", "numeric"}:
-                        return "numeric"
-                    if {lc, rc} == {"numeric", "string"}:
-                        return "string"  # str * int / int * str -> repeat
-                if isinstance(op, (ast.Sub, ast.Mod)) and lc == rc == "numeric":
-                    return "numeric"
+                    if _is_numeric_cat(lc) and _is_numeric_cat(rc):
+                        return _wider_numeric(lc, rc)
+                    # repeat(str, n): second operand must be integral (not float).
+                    # Python raises TypeError for `str * float`, so we allow only
+                    # "integer" or the legacy "numeric" catch-all (which the JVM
+                    # will validate against the actual column type at query time).
+                    if lc == "string" and rc in ("integer", "numeric"):
+                        return "string"
+                    if rc == "string" and lc in ("integer", "numeric"):
+                        return "string"
+                if isinstance(op, (ast.Sub, ast.Mod)):
+                    if _is_numeric_cat(lc) and _is_numeric_cat(rc):
+                        return _wider_numeric(lc, rc)
                 raise UnsupportedOperationException(
                     f"operands of `{type(op).__name__}` are not type-compatible "
                     "for this input-type variant"
@@ -486,6 +552,11 @@ class CatalystTranspiler(AbstractTranspiler):
                 body_cat = branch_category(if_body)
                 else_cat = branch_category(if_orelse)
                 if body_cat is not None and else_cat is not None and body_cat != else_cat:
+                    # Numeric sub-categories (integer/float) are mutually
+                    # compatible: `1 if c else 1.0` is valid Python and Spark
+                    # widens to double in the CASE WHEN.
+                    if _is_numeric_cat(body_cat) and _is_numeric_cat(else_cat):
+                        return _wider_numeric(body_cat, else_cat)
                     raise UnsupportedOperationException(
                         f"ternary branches have mismatched categories ({body_cat} "
                         f"vs {else_cat}) and cannot drive operator selection"
@@ -540,7 +611,7 @@ class CatalystTranspiler(AbstractTranspiler):
                 # of falling back, since the option is type-checked as a
                 # child of TranspiledPythonUDF before ConvertToCatalyst can
                 # drop it. Fail closed for every non-numeric category.
-                if self._category(params, operand) != "numeric":
+                if not _is_numeric_cat(self._category(params, operand)):
                     raise UnsupportedOperationException(
                         "unary `+`/`-` is only supported for numeric operands "
                         "(Python raises TypeError on strings, and Spark would "
@@ -703,20 +774,20 @@ class CatalystTranspiler(AbstractTranspiler):
                     case ast.Add():
                         if lc == rc == "string":
                             return concat(left_col, right_col)
-                        if lc == rc == "numeric":
+                        if _is_numeric_cat(lc) and _is_numeric_cat(rc):
                             return left_col.__add__(right_col)
                     case ast.Sub():
-                        if lc == rc == "numeric":
+                        if _is_numeric_cat(lc) and _is_numeric_cat(rc):
                             return left_col.__sub__(right_col)
                     case ast.Mult():
-                        if lc == "numeric" and rc == "numeric":
+                        if _is_numeric_cat(lc) and _is_numeric_cat(rc):
                             return left_col.__mul__(right_col)
-                        if lc == "string" and rc == "numeric":
+                        if lc == "string" and rc in ("integer", "numeric"):
                             return repeat(left_col, right_col.cast("int"))
-                        if lc == "numeric" and rc == "string":
+                        if lc in ("integer", "numeric") and rc == "string":
                             return repeat(right_col, left_col.cast("int"))
                     case ast.Mod():
-                        if lc == rc == "numeric":
+                        if _is_numeric_cat(lc) and _is_numeric_cat(rc):
                             # Python's `%` takes the sign of the divisor; Spark's
                             # takes the dividend's. `sign(b) * pmod(sign(b) * a,
                             # abs(b))` reproduces Python for every non-zero divisor
@@ -821,7 +892,7 @@ class CatalystTranspiler(AbstractTranspiler):
             cast_ok = (
                 body_cat is None
                 or (
-                    body_cat == "numeric"
+                    _is_numeric_cat(body_cat)
                     and isinstance(returnType, NumericType)
                     and not isinstance(returnType, DecimalType)
                 )
@@ -862,21 +933,24 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
 
 
 def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
-    """Map a parameter's type annotation to a category
-    (``"numeric"``/``"string"``/``"bool"``/``"binary"``), or ``None`` when it's
-    absent or unrecognised (the caller then tries both numeric and string)."""
+    """Map a parameter's type annotation to a category, or ``None`` when absent
+    or unrecognised (the caller then tries all numeric and string variants).
+
+    Returns one of ``"integer"``, ``"float"``, ``"string"``, ``"bool"``, or
+    ``"binary"`` (matching the constant handling in ``_category``). ``int``
+    maps to ``"integer"`` and ``float`` maps to ``"float"`` so the JVM can
+    select the variant whose NaN semantics match the bound column type."""
     name: Optional[str] = None
     if isinstance(annotation, ast.Name):
         name = annotation.id
     elif isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
         name = annotation.value  # stringized annotation, e.g. def f(a: "int")
-    # str -> "string", int/float -> "numeric", bool -> "bool", bytes -> "binary"
-    # (matching the constant handling in ``_category``). complex and anything
-    # unrecognised return None so the caller tries both numeric and string.
     if name == "str":
         return "string"
-    if name in ("int", "float"):
-        return "numeric"
+    if name == "int":
+        return "integer"
+    if name == "float":
+        return "float"
     if name == "bool":
         return "bool"
     if name == "bytes":
@@ -885,14 +959,16 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
 
 
 def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[str]) -> List[dict]:
-    """Per-variant maps ``{public_param_index -> category}`` where category is
-    one of ``"numeric"``/``"string"``/``"bool"``/``"binary"``.
+    """Per-variant maps ``{public_param_index -> category}``.
 
-    A typed param (``def f(a: str, b: int)``) is pinned to its category; an
-    untyped param is tried as both numeric and string. To cap plan growth, when
-    more than three params are untyped we collapse the untyped ones to the
-    all-numeric and all-string variants (encourage typing inputs to keep the
-    matrix small) while keeping every typed param pinned.
+    A typed param (``def f(a: str, b: int)``) is pinned to its category
+    (``"integer"``/``"float"``/``"string"``/``"bool"``/``"binary"``); an
+    untyped param is tried as ``"integer"``, ``"float"``, and ``"string"``
+    separately so the JVM can select the variant that matches the bound column
+    type and apply the right NaN semantics. To cap plan growth, when more than
+    three params are untyped we collapse the untyped ones to one variant per
+    base category (encourage typing inputs to keep the matrix small) while
+    keeping every typed param pinned.
     """
     n = len(public_params)
     all_args = _positional_args(function_ast)
@@ -902,17 +978,16 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     for arg in public_args:
         cat = _annotation_category(arg.annotation)
         if cat is None:
-            candidates.append(["numeric", "string"])
+            candidates.append(["integer", "float", "string"])
             untyped += 1
         else:
             candidates.append([cat])
     if untyped > 3:
-        # Cap the 2**untyped blow-up, but keep each typed param pinned to its
-        # category (a single-element ``candidates`` entry); only the untyped
-        # params collapse to the all-numeric / all-string pair.
+        # Cap the 3**untyped blow-up; collapse untyped params to one variant
+        # per base fill while keeping typed params pinned.
         return [
             {i: c[0] if len(c) == 1 else fill for i, c in enumerate(candidates)}
-            for fill in ("numeric", "string")
+            for fill in ("integer", "float", "string")
         ]
     return [{i: choice[i] for i in range(n)} for choice in itertools.product(*candidates)] or [{}]
 
