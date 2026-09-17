@@ -3414,4 +3414,31 @@ class ColumnExpressionSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-59603: a subexpression repeated in one branch is evaluated once for a row") {
+    val counter = spark.sparkContext.longAccumulator
+    val counted = udf((x: Long) => { counter.add(1); x * 2 })
+    def evaluations(memoize: Boolean): (Long, Boolean) = {
+      withSQLConf(SQLConf.MEMOIZE_COMMON_EXPRESSIONS_IN_BRANCHES.key -> memoize.toString) {
+        counter.reset()
+        // Five of the ten rows take the branch, and only those rows evaluate the UDF at all: the
+        // memoized definition stays inside the branch, where a `Project` column could not.
+        // `collect` rather than `checkAnswer`, which runs the plan more than once and would count
+        // the evaluations of each run.
+        val df = spark.range(0, 10, 1, 1)
+          .select(when($"id" < 5, counted($"id") + counted($"id")).otherwise(0L).as("r"))
+        val kept = df.queryExecution.optimizedPlan.expressions.exists(_.exists {
+          case _: With => true
+          case _ => false
+        })
+        val rows = df.collect()
+        assert(rows.map(_.getLong(0)).toSeq == Seq(0L, 4L, 8L, 12L, 16L, 0L, 0L, 0L, 0L, 0L))
+        (counter.value, kept)
+      }
+    }
+    val memoized = evaluations(memoize = true)
+    val inlined = evaluations(memoize = false)
+    assert(memoized == (5L, true) && inlined == (10L, false),
+      s"expected (5, true) and (10, false), got $memoized and $inlined")
+  }
 }
