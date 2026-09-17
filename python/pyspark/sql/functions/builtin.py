@@ -109,6 +109,8 @@ if TYPE_CHECKING:
 # even though there might be few exceptions for legacy or inevitable reasons.
 # If you are fixing other language APIs together, also please note that Scala side is not the case
 # since it requires making every single overridden definition.
+# Public function groups are defined by pyspark.sql.functions.__all__ and mirrored in the API
+# reference.
 
 
 def _get_jvm_function(name: str, sc: "SparkContext") -> Callable:
@@ -9295,9 +9297,6 @@ def factorial(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("factorial", col)
 
 
-# ---------------  Window functions ------------------------
-
-
 @_try_remote_functions
 def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> Column:
     """
@@ -9896,9 +9895,6 @@ def ntile(n: int) -> Column:
     +---+---+-----+
     """
     return _invoke_function("ntile", int(_enum_to_value(n)))
-
-
-# ---------------------- Date/Timestamp functions ------------------------------
 
 
 @_try_remote_functions
@@ -14343,7 +14339,8 @@ def time_bucket(
         A day-time or year-month interval defining the bucket size. Must be positive
         and foldable.
     ts : :class:`~pyspark.sql.Column` or column name
-        A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+        A TIMESTAMP, TIMESTAMP_NTZ, or nanosecond-precision
+        (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p in [7, 9]) value to bucket.
     origin : :class:`~pyspark.sql.Column`, optional
         Alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as
         ``ts`` and must be foldable.
@@ -14882,9 +14879,6 @@ def to_timestamp_ntz(
         return _invoke_function_over_columns("to_timestamp_ntz", timestamp, format)
     else:
         return _invoke_function_over_columns("to_timestamp_ntz", timestamp)
-
-
-# ---------------------------- misc functions ----------------------------------
 
 
 @_try_remote_functions
@@ -15568,9 +15562,6 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
             },
         )
     return _invoke_function_over_columns("raise_error", lit(errMsg))
-
-
-# ---------------------- String/Binary functions ------------------------------
 
 
 @_try_remote_functions
@@ -20320,9 +20311,6 @@ def quote(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("quote", col)
 
 
-# ---------------------- Collection functions ------------------------------
-
-
 @overload
 def create_map(*cols: "ColumnOrName") -> Column: ...
 
@@ -23948,6 +23936,73 @@ def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Colum
 
 
 @_try_remote_functions
+def variant_pick(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
+    """
+    Keeps only the fields or array elements of a variant at the given JSONPath locations, preserving
+    their enclosing structure; kept array elements are compacted into a new array in their
+    original order. If no path matches, an object or array input yields an empty object or array,
+    while a scalar or variant-null input is unchanged. Returns NULL if `v` is NULL; NULL paths are
+    skipped.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    paths : :class:`~pyspark.sql.Column` or str
+        one or more JSONPaths identifying substructures to keep. A `str` is a literal path; a
+        :class:`~pyspark.sql.Column` supplies the path at runtime. A valid path should start with
+        `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
+        `["name"]`.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column keeping only the specified paths
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_pick
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''{ "a": {"b": 1, "c": 2}, "items": [10, 20, 30, 40] }''',
+    ...     'path': '$.a.b'
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_pick(v, "$.a.b")).alias("r")).collect()
+    [Row(r='{"a":{"b":1}}')]
+    >>> df.select(to_json(variant_pick(v, lit(None), "$.a.c", "$.items[0]")).alias("r")).collect()
+    [Row(r='{"a":{"c":2},"items":[10]}')]
+    >>> df.select(to_json(variant_pick(v, "$.items[0]", "$.items[2]")).alias("r")).collect()
+    [Row(r='{"items":[10,30]}')]
+    >>> df.select(to_json(variant_pick(v, df.path)).alias("r")).collect()
+    [Row(r='{"a":{"b":1}}')]
+    >>> df.select(to_json(variant_pick(v, "$.missing")).alias("r")).collect()
+    [Row(r='{}')]
+    >>> df.select(to_json(variant_pick(parse_json(lit('[1, 2, 3]')), "$[9]")).alias("r")).collect()
+    [Row(r='[]')]
+    >>> df.select(variant_pick(lit(None), "$.a").alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
+
+    if len(paths) == 0:
+        raise PySparkValueError(
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "paths"},
+        )
+    sc = _get_active_spark_context()
+
+    path_cols = [p if isinstance(p, Column) else lit(p) for p in paths]
+    return _invoke_function(
+        "variant_pick",
+        _to_java_column(v),
+        _to_java_column(path_cols[0]),
+        _to_seq(sc, path_cols[1:], _to_java_column),
+    )
+
+
+@_try_remote_functions
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
@@ -27360,9 +27415,6 @@ def str_to_map(
     return _invoke_function_over_columns("str_to_map", text, pairDelim, keyValueDelim)
 
 
-# ---------------------- Partition transform functions --------------------------------
-
-
 @_try_remote_functions
 def years(col: "ColumnOrName") -> Column:
     """
@@ -29468,9 +29520,6 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     return partitioning.bucket(numBuckets, col)
 
 
-# Geospatial ST Functions
-
-
 @_try_remote_functions
 def st_asbinary(geo: "ColumnOrName", endianness: Optional["ColumnOrName"] = None) -> Column:
     """Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
@@ -29636,9 +29685,6 @@ def st_srid(geo: "ColumnOrName") -> Column:
     [Row(st_srid(st_geomfromwkb(wkb, 0))=0)]
     """
     return _invoke_function_over_columns("st_srid", geo)
-
-
-# Call Functions
 
 
 @_try_remote_functions
@@ -29927,9 +29973,6 @@ def wrap_udt(col: "ColumnOrName", udt: "Union[UserDefinedType, Column]") -> Colu
     return _invoke_function("wrap_udt", _to_java_column(col), _to_java_column(udt_col))
 
 
-# ---------------------- Datasketch functions ------------------------------
-
-
 @_try_remote_functions
 def hll_sketch_agg(
     col: "ColumnOrName",
@@ -29941,10 +29984,13 @@ def hll_sketch_agg(
 
     .. versionadded:: 3.5.0
 
+    .. versionchanged:: 4.4.0
+        Supports the TIME type for the ``col`` argument.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        A column that evaluates to an integer, long, string, or binary.
+        A column that evaluates to an integer, long, time, string, or binary.
     lgConfigK : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of K, where K is the number of buckets or slots for the HllSketch.
         A column that evaluates to an integer.
@@ -32473,9 +32519,6 @@ def tuple_union_theta_integer(
     return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
 
 
-# ---------------------- Predicates functions ------------------------------
-
-
 @_try_remote_functions
 def ifnull(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
@@ -34038,9 +34081,6 @@ def bitmap_xor_agg(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitmap_xor_agg", col)
 
 
-# ---------------------------- User Defined Function ----------------------------------
-
-
 def udaf(agg: "Aggregator") -> "UserDefinedFunctionLike":
     """Turn an :class:`~pyspark.sql.aggregator.Aggregator` instance into a callable usable in
     ``groupBy().agg(...)`` (and as a window function), the Python counterpart of Scala's
@@ -34612,9 +34652,6 @@ def arrow_udtf(
         return functools.partial(_create_pyarrow_udtf, returnType=returnType)
     else:
         return _create_pyarrow_udtf(cls=cls, returnType=returnType)
-
-
-# ---------------------- Vector Functions ----------------------
 
 
 @_try_remote_functions

@@ -122,4 +122,59 @@ class KafkaRedactionUtilSuite extends SparkFunSuite with KafkaDelegationTokenTes
     assert(redactedJaasParams.contains(tokenId1))
     assert(!redactedJaasParams.contains(tokenPassword1))
   }
+
+  test("redactJaasParam should redact secret options in all quoting styles, keeping context") {
+    val prefix = "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"u\" "
+    val oauth = "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required " +
+      "clientId=\"id\" "
+    // (input, secret value that must be gone, non-secret context that must survive)
+    val cases = Seq(
+      (prefix + "password=\"double-quoted-secret\";", "double-quoted-secret", "username=\"u\""),
+      (prefix + "password='single-quoted-secret';", "single-quoted-secret", "username=\"u\""),
+      (prefix + "password=unquoted-secret;", "unquoted-secret", "username=\"u\""),
+      (oauth + "clientSecret=\"oauth-secret\";", "oauth-secret", "clientId=\"id\"")
+    )
+    cases.foreach { case (param, secret, context) =>
+      val redacted = KafkaRedactionUtil.redactJaasParam(param)
+      assert(!redacted.contains(secret), s"credential not redacted in output: $redacted")
+      assert(redacted.contains(REDACTION_REPLACEMENT_TEXT), s"no redaction marker in: $redacted")
+      assert(redacted.contains(context), s"non-secret context dropped from output: $redacted")
+    }
+  }
+
+  test("redactJaasParam should not leak the tail of an escaped-quote credential value") {
+    // The value contains an escaped double quote, so the whole value must be treated as one token
+    // rather than ending at the embedded quote (which would leak the trailing characters).
+    val param = "org.apache.kafka.common.security.plain.PlainLoginModule required " +
+      "username=\"u\" password=\"ab\\\"TAIL_SECRET\";"
+    val redacted = KafkaRedactionUtil.redactJaasParam(param)
+    assert(!redacted.contains("TAIL_SECRET"), s"escaped-quote credential tail leaked: $redacted")
+    assert(redacted.contains(REDACTION_REPLACEMENT_TEXT), s"no redaction marker in: $redacted")
+    assert(redacted.contains("username=\"u\""), s"non-secret context dropped: $redacted")
+  }
+
+  test("redactJaasParam always redacts credentials even when spark.redaction.regex omits them") {
+    // spark.redaction.regex replaces the default rather than extending it. A user pattern that does
+    // not mention `password` must not disable the built-in credential masking (fail-open guard).
+    setSparkEnv(Map(SECRET_REDACTION_PATTERN.key -> "(?i)my_custom_key"))
+    val param = "org.apache.kafka.common.security.plain.PlainLoginModule required " +
+      "username=\"u\" password=\"PLAINTEXT_SECRET\";"
+    val redacted = KafkaRedactionUtil.redactJaasParam(param)
+    assert(!redacted.contains("PLAINTEXT_SECRET"),
+      s"password leaked despite custom regex: $redacted")
+    assert(redacted.contains(REDACTION_REPLACEMENT_TEXT), s"no redaction marker in: $redacted")
+    assert(redacted.contains("username=\"u\""), s"non-secret context dropped: $redacted")
+  }
+
+  test("redactJaasParam additionally honors a configured spark.redaction.regex") {
+    // A user-configured pattern widens coverage on top of the always-redacted options: an option
+    // whose name matches the configured regex is redacted too, while non-matching options survive.
+    setSparkEnv(Map(SECRET_REDACTION_PATTERN.key -> "(?i)my_custom_key"))
+    val param = "org.apache.kafka.common.security.plain.PlainLoginModule required " +
+      "username=\"u\" my_custom_key=\"CUSTOM_SECRET\";"
+    val redacted = KafkaRedactionUtil.redactJaasParam(param)
+    assert(!redacted.contains("CUSTOM_SECRET"), s"configured secret not redacted: $redacted")
+    assert(redacted.contains(REDACTION_REPLACEMENT_TEXT), s"no redaction marker in: $redacted")
+    assert(redacted.contains("username=\"u\""), s"non-secret context dropped: $redacted")
+  }
 }

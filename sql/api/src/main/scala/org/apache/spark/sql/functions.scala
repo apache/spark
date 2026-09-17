@@ -53,33 +53,34 @@ import org.apache.spark.util.SparkClassUtils
  * only `Column` but also other types such as a native string. The other variants currently exist
  * for historical reasons.
  *
- * @groupname udf_funcs UDF, UDAF and UDT
- * @groupname agg_funcs Aggregate functions
- * @groupname datetime_funcs Date and Timestamp functions
- * @groupname sort_funcs Sort functions
  * @groupname normal_funcs Normal functions
- * @groupname math_funcs Mathematical functions
- * @groupname bitwise_funcs Bitwise functions
- * @groupname predicate_funcs Predicate functions
  * @groupname conditional_funcs Conditional functions
+ * @groupname predicate_funcs Predicate functions
+ * @groupname sort_funcs Sort functions
+ * @groupname math_funcs Mathematical functions
+ * @groupname string_funcs String functions
+ * @groupname bitwise_funcs Bitwise functions
+ * @groupname datetime_funcs Date and Timestamp functions
  * @groupname hash_funcs Hash functions
- * @groupname misc_funcs Misc functions
- * @groupname sketch_funcs Datasketch functions
+ * @groupname collection_funcs Collection functions
+ * @groupname lambda_funcs Lambda functions
+ * @groupname array_funcs Array functions
+ * @groupname struct_funcs Struct functions
+ * @groupname map_funcs Map functions
+ * @groupname agg_funcs Aggregate functions
  * @groupname window_funcs Window functions
  * @groupname generator_funcs Generator functions
- * @groupname string_funcs String functions
- * @groupname collection_funcs Collection functions
- * @groupname array_funcs Array functions
- * @groupname map_funcs Map functions
- * @groupname struct_funcs Struct functions
- * @groupname st_funcs ST geospatial functions
+ * @groupname partition_transforms Partition transform functions
  * @groupname csv_funcs CSV functions
  * @groupname json_funcs JSON functions
  * @groupname variant_funcs VARIANT functions
- * @groupname vector_funcs Vector functions
  * @groupname xml_funcs XML functions
  * @groupname url_funcs URL functions
- * @groupname partition_transforms Partition transform functions
+ * @groupname misc_funcs Misc functions
+ * @groupname sketch_funcs Datasketch functions
+ * @groupname st_funcs ST geospatial functions
+ * @groupname vector_funcs Vector functions
+ * @groupname udf_funcs UDF, UDAF and UDT
  * @groupname Ungrouped Support functions for DataFrames
  * @since 1.3.0
  */
@@ -87,6 +88,9 @@ import org.apache.spark.util.SparkClassUtils
 // scalastyle:off
 object functions {
 // scalastyle:on
+
+  // Function groups are defined by the @group tags above each function and the corresponding
+  // @groupname declarations.
 
   /**
    * Returns a [[Column]] based on the given column name.
@@ -171,10 +175,6 @@ object functions {
     }
   }
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Sort functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Returns a sort expression based on ascending order of the column.
    * {{{
@@ -244,10 +244,6 @@ object functions {
    * @since 2.1.0
    */
   def desc_nulls_last(columnName: String): Column = Column(columnName).desc_nulls_last
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Aggregate functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
    * @group agg_funcs
@@ -898,8 +894,8 @@ object functions {
    * configured with lgConfigK arg.
    *
    * @param e
-   *   the column to compute the sketch on. A column that evaluates to an integral, a string or a
-   *   binary.
+   *   the column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or a binary.
    * @param lgConfigK
    *   the log-base-2 of K, where K is the number of buckets or slots for the HllSketch. A column
    *   that evaluates to an integral. Must be a constant.
@@ -916,8 +912,8 @@ object functions {
    * configured with lgConfigK arg.
    *
    * @param e
-   *   the column to compute the sketch on. A column that evaluates to an integral, a string or a
-   *   binary.
+   *   the column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or a binary.
    * @param lgConfigK
    *   the log-base-2 of K, where K is the number of buckets or slots for the HllSketch. A column
    *   that evaluates to an integral. Must be a constant.
@@ -935,7 +931,7 @@ object functions {
    *
    * @param columnName
    *   the name of the column to compute the sketch on. A column that evaluates to an integral, a
-   *   string or a binary.
+   *   time, a string or a binary.
    * @param lgConfigK
    *   the log-base-2 of K, where K is the number of buckets or slots for the HllSketch. A column
    *   that evaluates to an integral. Must be a constant.
@@ -953,8 +949,8 @@ object functions {
    * configured with default lgConfigK value.
    *
    * @param e
-   *   the column to compute the sketch on. A column that evaluates to an integral, a string or a
-   *   binary.
+   *   the column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or a binary.
    * @group agg_funcs
    * @since 3.5.0
    * @return
@@ -969,7 +965,7 @@ object functions {
    *
    * @param columnName
    *   the name of the column to compute the sketch on. A column that evaluates to an integral, a
-   *   string or a binary.
+   *   time, a string or a binary.
    * @group agg_funcs
    * @since 3.5.0
    * @return
@@ -3873,10 +3869,6 @@ object functions {
    */
   def bit_xor(e: Column): Column = Column.fn("bit_xor", e)
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Window functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Window function: computes the differences between consecutive cumulative counter values in a
    * time series, thereby converting the counter from the cumulative to the delta format.
@@ -4286,10 +4278,6 @@ object functions {
    *   Returns a column that evaluates to an integer.
    */
   def row_number(): Column = Column.fn("row_number")
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Non-aggregate functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
    * Creates a new array column. The input columns must all have the same data type.
@@ -4754,7 +4742,7 @@ object functions {
    *
    * @param e
    *   the value to compute the mean of. A column that evaluates to a numeric or interval.
-   * @group math_funcs
+   * @group agg_funcs
    * @since 3.5.0
    * @return
    *   Returns a column that evaluates to a double.
@@ -4825,7 +4813,7 @@ object functions {
    *
    * @param e
    *   the value to compute the sum of. A column that evaluates to a numeric or interval.
-   * @group math_funcs
+   * @group agg_funcs
    * @since 3.5.0
    * @return
    *   Returns a column that evaluates to a numeric.
@@ -4975,10 +4963,6 @@ object functions {
    * @since 1.5.0
    */
   def expr(expr: String): Column = Column(internal.SqlExpression(expr))
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Math Functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
    * Computes the absolute value of a numeric value.
@@ -6639,10 +6623,6 @@ object functions {
   def width_bucket(v: Column, min: Column, max: Column, numBucket: Column): Column =
     Column.fn("width_bucket", v, min, max, numBucket)
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Misc functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Returns the current catalog.
    *
@@ -7616,10 +7596,6 @@ object functions {
    *   Returns a column that evaluates to a binary.
    */
   def bitmap_xor_agg(col: Column): Column = Column.fn("bitmap_xor_agg", col)
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // String functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
    * Computes the numeric value of the first character of the string column, and returns the
@@ -9700,10 +9676,6 @@ object functions {
    */
   def quote(str: Column): Column = Column.fn("quote", str)
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Datasketch functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Returns the estimated number of unique values given the binary representation of a
    * Datasketches HllSketch.
@@ -11703,10 +11675,6 @@ object functions {
   def kll_sketch_get_rank_double(sketch: Column, quantile: Column): Column =
     Column.fn("kll_sketch_get_rank_double", sketch, quantile)
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // DateTime functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Returns the date that is `numMonths` after `startDate`.
    *
@@ -13329,7 +13297,8 @@ object functions {
    * @param bucketSize
    *   A day-time or year-month interval defining the bucket size. Must be positive and foldable.
    * @param ts
-   *   A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+   *   A TIMESTAMP, TIMESTAMP_NTZ, or nanosecond-precision (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p
+   *   in [7, 9]) value to bucket.
    * @group datetime_funcs
    * @since 4.2.0
    * @return
@@ -13351,7 +13320,8 @@ object functions {
    * @param bucketSize
    *   A day-time or year-month interval defining the bucket size. Must be positive and foldable.
    * @param ts
-   *   A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+   *   A TIMESTAMP, TIMESTAMP_NTZ, or nanosecond-precision (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p
+   *   in [7, 9]) value to bucket.
    * @param origin
    *   Alignment anchor. Must be the same type as `ts` and must be foldable.
    * @group datetime_funcs
@@ -13645,10 +13615,6 @@ object functions {
   def dayname(timeExp: Column): Column =
     Column.fn("dayname", timeExp)
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Collection functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Returns true if the array contains `value`, false if not. Returns null if the array or
    * `value` is null, or if `value` is not found and the array contains a null element.
@@ -13904,7 +13870,7 @@ object functions {
    *
    * @param e
    *   The array to sort. A column that evaluates to an array.
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 2.4.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -13922,7 +13888,7 @@ object functions {
    * @param comparator
    *   A binary comparator function that returns a negative integer, 0, or a positive integer as
    *   the first element is less than, equal to, or greater than the second element.
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.4.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -14082,7 +14048,7 @@ object functions {
    * @param f
    *   col => transformed_col, the lambda function to transform the input column.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -14103,7 +14069,7 @@ object functions {
    *   (col, index) => transformed_col, the lambda function to transform the input column given
    *   the index. Indices start at 0.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -14122,7 +14088,7 @@ object functions {
    * @param f
    *   col => predicate, the Boolean predicate to check the input column.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to a boolean.
@@ -14141,7 +14107,7 @@ object functions {
    * @param f
    *   col => predicate, the Boolean predicate to check the input column.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to a boolean.
@@ -14160,7 +14126,7 @@ object functions {
    * @param f
    *   col => predicate, the Boolean predicate to filter the input column.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -14180,7 +14146,7 @@ object functions {
    *   (col, index) => predicate, the Boolean predicate to filter the input column given the
    *   index. Indices start at 0.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -14207,7 +14173,7 @@ object functions {
    *   combined_value => final_value, the lambda function to convert the combined value of all
    *   inputs to final result.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column of the same type as the initial value.
@@ -14233,7 +14199,7 @@ object functions {
    * @param merge
    *   (combined_value, input_value) => combined_value, the merge function to merge an input value
    *   to the combined_value
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column of the same type as the initial value.
@@ -14260,7 +14226,7 @@ object functions {
    *   combined_value => final_value, the lambda function to convert the combined value of all
    *   inputs to final result.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.5.0
    * @return
    *   Returns a column of the same type as the initial value.
@@ -14286,7 +14252,7 @@ object functions {
    * @param merge
    *   (combined_value, input_value) => combined_value, the merge function to merge an input value
    *   to the combined_value
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.5.0
    * @return
    *   Returns a column of the same type as the initial value.
@@ -14309,7 +14275,7 @@ object functions {
    * @param f
    *   (lCol, rCol) => col, the lambda function to merge two input columns into one column.
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to an array.
@@ -14329,7 +14295,7 @@ object functions {
    * @param f
    *   (key, value) => new_key, the lambda function to transform the key of input map column
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to a map.
@@ -14353,7 +14319,7 @@ object functions {
    * @param f
    *   (key, value) => new_value, the lambda function to transform the value of input map column
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to a map.
@@ -14372,7 +14338,7 @@ object functions {
    * @param f
    *   (key, value) => predicate, the Boolean predicate to filter the input map column
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to a map.
@@ -14393,7 +14359,7 @@ object functions {
    * @param f
    *   (key, value1, value2) => new_value, the lambda function to merge the map values
    *
-   * @group collection_funcs
+   * @group lambda_funcs
    * @since 3.0.0
    * @return
    *   Returns a column that evaluates to a map.
@@ -15320,6 +15286,53 @@ object functions {
    */
   def variant_strip_nulls(v: Column, includeArrays: Boolean): Column =
     Column.fn("variant_strip_nulls", v, lit(includeArrays))
+
+  /**
+   * Keeps only the fields or array elements of a variant at the given JSONPath locations,
+   * preserving their enclosing structure; kept array elements are compacted into a new array in
+   * their original order. If no path matches, an object or array input yields an empty object or
+   * array, while a scalar or variant-null input is unchanged. Returns NULL if `v` is NULL; NULL
+   * paths are skipped.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the first JSONPath string identifying a substructure to keep. A valid
+   *   path should start with `$` and is followed by zero or more segments like `[123]`, `.name`,
+   *   `['name']`, or `["name"]`.
+   * @param paths
+   *   additional JSONPath arguments.
+   * @group variant_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a variant.
+   */
+  @scala.annotation.varargs
+  def variant_pick(v: Column, path: Column, paths: Column*): Column =
+    Column.fn("variant_pick", (v +: path +: paths): _*)
+
+  /**
+   * Keeps only the fields or array elements of a variant at the given JSONPath locations,
+   * preserving their enclosing structure; kept array elements are compacted into a new array in
+   * their original order. If no path matches, an object or array input yields an empty object or
+   * array, while a scalar or variant-null input is unchanged. Returns NULL if `v` is NULL; NULL
+   * paths are skipped.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the first JSONPath identifying a substructure to keep. A valid path should start with `$`
+   *   and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   * @param paths
+   *   additional JSONPath strings.
+   * @group variant_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a variant.
+   */
+  @scala.annotation.varargs
+  def variant_pick(v: Column, path: String, paths: String*): Column =
+    Column.fn("variant_pick", (v +: lit(path) +: paths.map(lit)): _*)
 
   /**
    * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
@@ -17693,10 +17706,6 @@ object functions {
    */
   def bucket(numBuckets: Int, e: Column): Column = partitioning.bucket(numBuckets, e)
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Predicates functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Returns `col2` if `col1` is null, or `col1` otherwise.
    *
@@ -17850,10 +17859,6 @@ object functions {
 
    */
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // ST geospatial functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
    *
@@ -17991,10 +17996,6 @@ object functions {
    */
   def st_srid(geo: Column): Column =
     Column.fn("st_srid", geo)
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Scala UDF functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
    * Obtains a `UserDefinedFunction` that wraps the given `Aggregator` so that it may be used with
@@ -18338,10 +18339,6 @@ object functions {
       implicitly[TypeTag[A10]])
   }
 
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Java UDF functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-
   /**
    * Defines a Java UDF0 instance as user-defined function (UDF). The caller must specify the
    * output data type, and there is no automatic input type coercion. By default the returned UDF
@@ -18598,8 +18595,6 @@ object functions {
   def wrap_udt(column: Column, udt: Column): Column = {
     Column.internalFn("wrap_udt", column, udt)
   }
-
-  // ---------------------- Vector Functions ----------------------
 
   /**
    * Returns the cosine similarity between two float vectors.

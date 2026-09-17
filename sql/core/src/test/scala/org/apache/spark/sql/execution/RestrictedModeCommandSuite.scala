@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -64,5 +64,36 @@ class RestrictedModeCommandSuite extends QueryTest with SharedSparkSession {
   test("the restricted mode config cannot be turned off at runtime") {
     val e = intercept[AnalysisException](sql(s"SET $restricted=false"))
     assert(e.getCondition == "CANNOT_MODIFY_STATIC_CONFIG")
+  }
+
+  test("restricted mode is enforced with the single-pass resolver enabled") {
+    // The restricted-mode gate runs in `CheckAnalysis`, which only the fixed-point analyzer
+    // invokes. The single-pass resolver would otherwise resolve `reflect` and mark the plan
+    // analyzed without the gate; a restricted-mode session must fall back to the fixed-point
+    // analyzer in every single-pass mode (fully enabled, which skips the ResolverGuard, and
+    // tentative, which consults it) so the gate cannot be bypassed.
+    Seq(
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key,
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key).foreach { key =>
+      withSQLConf(key -> "true") {
+        checkRestricted("SELECT reflect('java.lang.Math', 'abs', -1)", "The `reflect` function")
+      }
+    }
+  }
+
+  test("restricted mode reaches a feature nested inside a scalar subquery") {
+    checkRestricted(
+      "SELECT (SELECT reflect('java.lang.Math', 'abs', -1)) AS c",
+      "The `reflect` function")
+  }
+
+  test("restricted mode allows deeply nested subqueries with no restricted feature") {
+    // `checkRestrictedMode` descends into subquery plans, which are also part of `innerChildren`.
+    // Visiting them through both paths doubles the traversal at every nesting level, so a modest
+    // chain of nested scalar subqueries would take exponential time. Analyzing this query must
+    // stay feasible (it is linear once each subquery is traversed only once).
+    val depth = 40
+    val nested = (1 to depth).foldLeft("SELECT 1 AS c") { (inner, _) => s"SELECT ($inner) AS c" }
+    checkAnswer(sql(nested), Row(1))
   }
 }

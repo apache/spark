@@ -22,10 +22,11 @@ import scala.concurrent.Future
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
 
 /**
- * Callbacks invoked by deploy client when various events happen. There are currently six events:
- * connecting to the cluster, disconnecting, being given an executor, having an executor removed
- * (either due to failure or due to revocation), having a worker removed, and being asked by the
- * Master to hold or resume the application.
+ * Callbacks invoked by deploy client when various events happen. There are currently eight
+ * events: connecting to the cluster, disconnecting, an application death, being given an
+ * executor, having an executor removed (either due to failure or due to revocation), having an
+ * executor decommissioned, having a worker removed, and being asked by the Master to hold or
+ * resume the application.
  *
  * Users of this API should *not* block inside the callback methods.
  */
