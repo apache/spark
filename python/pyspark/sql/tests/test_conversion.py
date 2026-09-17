@@ -115,6 +115,58 @@ class ArrowBatchTransformerTests(unittest.TestCase):
         self.assertEqual(flattened.num_rows, 0)
         self.assertEqual(flattened.num_columns, 2)
 
+    def test_concat_batches(self):
+        import pyarrow as pa
+
+        batches = [
+            pa.RecordBatch.from_arrays([pa.array([1, 2])], ["x"]),
+            pa.RecordBatch.from_arrays([pa.array([3])], ["x"]),
+        ]
+        result = ArrowBatchTransformer.concat_batches(batches)
+        self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
+        self.assertIs(ArrowBatchTransformer.concat_batches(batches[:1]), batches[0])
+
+    def test_flatten_elementwise_inputs_and_renest_outputs(self):
+        import pyarrow as pa
+
+        int_values = pa.array(
+            [[[1, 2], []], None, [[3], None]],
+            type=pa.large_list(pa.list_(pa.int64())),
+        )
+        string_values = pa.array(
+            [[["a", "b"], []], None, [["c"], None]],
+            type=pa.large_list(pa.list_(pa.string())),
+        )
+        batch = pa.RecordBatch.from_arrays([int_values, string_values], ["ints", "strings"])
+
+        flat, shape_levels, is_large_levels = ArrowBatchTransformer.flatten_elementwise_inputs(
+            batch, [0, 1], depth=2
+        )
+        self.assertEqual(flat.schema.names, ["_0", "_1"])
+        self.assertEqual(flat.column(0).to_pylist(), [1, 2, 3])
+        self.assertEqual(flat.column(1).to_pylist(), ["a", "b", "c"])
+        self.assertEqual(shape_levels, [[2, None, 2], [2, 0, 1, None]])
+        self.assertEqual(is_large_levels, [True, False])
+
+        restored = ArrowBatchTransformer.renest_elementwise_outputs(
+            [
+                (
+                    pa.RecordBatch.from_arrays([flat.column(0)], ["_0"]),
+                    shape_levels,
+                    is_large_levels,
+                ),
+                (
+                    pa.RecordBatch.from_arrays([flat.column(1)], ["_0"]),
+                    shape_levels,
+                    is_large_levels,
+                ),
+            ],
+            ["ints", "strings"],
+        )
+        self.assertEqual(restored.schema.names, ["ints", "strings"])
+        self.assertTrue(restored.column(0).equals(int_values))
+        self.assertTrue(restored.column(1).equals(string_values))
+
     def test_wrap_struct_basic(self):
         """Test wrapping columns into a struct."""
         import pyarrow as pa
