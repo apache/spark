@@ -38,6 +38,7 @@ class MavenUtilsSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
     with BeforeAndAfterEach {
 
+  private val resolverTimeoutMs = 30 * 1000
   private var tempIvyPath: String = _
 
   private val noOpOutputStream = new OutputStream {
@@ -178,7 +179,10 @@ class MavenUtilsSuite
         configuredRepositories = Nil,
         ivyPath = Some(tempIvyPath))
 
-      val resolved = resolver.resolve(URI.create(s"ivy://${main.toString}"))
+      val resolved = resolver.resolve(
+        URI.create(s"ivy://${main.toString}"),
+        resolverTimeoutMs,
+        resolverTimeoutMs)
 
       assert(resolved.exists(_.getFileName.toString.contains("my.runtime.lib_mylib-0.1")))
       assert(resolved.forall(_.startsWith(Paths.get(tempIvyPath))))
@@ -190,6 +194,8 @@ class MavenUtilsSuite
     val error = intercept[IllegalArgumentException] {
       resolver.resolve(
         URI.create("ivy://my.runtime.lib:mylib:0.1?repos=https://example.com/repository"),
+        resolverTimeoutMs,
+        resolverTimeoutMs,
         RuntimeDependencyResolver.RejectRequestedRepositories)
     }
 
@@ -202,6 +208,8 @@ class MavenUtilsSuite
     intercept[CancellationException] {
       resolver.resolve(
         URI.create("ivy://my.runtime.lib:mylib:0.1"),
+        resolverTimeoutMs,
+        resolverTimeoutMs,
         isCancelled = () => true)
     }
   }
