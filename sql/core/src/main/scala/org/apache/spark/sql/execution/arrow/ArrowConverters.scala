@@ -519,7 +519,7 @@ private[sql] object ArrowConverters extends Logging {
   // buffer usually needs no reallocation; a larger header just costs one resize.
   private val IPC_HEADER_SIZE_ESTIMATE = 1024
 
-  private[arrow] def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
+  private[sql] def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
     val estimatedSize =
       (batch.computeBodyLength() + IPC_HEADER_SIZE_ESTIMATE).min(Int.MaxValue).max(0L).toInt
     val out = new ByteArrayOutputStream(estimatedSize)

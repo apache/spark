@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.ByteArrayInputStream
 import java.nio.channels.Channels
 
 import scala.jdk.CollectionConverters._
@@ -27,7 +27,7 @@ import org.apache.arrow.flatbuf.{RecordBatch => FlatBufRecordBatch}
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{TypeLayout, VectorLoader, VectorSchemaRoot, VectorUnloader}
 import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
-import org.apache.arrow.vector.ipc.{ReadChannel, WriteChannel}
+import org.apache.arrow.vector.ipc.ReadChannel
 import org.apache.arrow.vector.ipc.message.{ArrowBodyCompression, ArrowFieldNode}
 import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
 import org.apache.arrow.vector.types.pojo.Field
@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.errors.ExecutionErrors
-import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
@@ -282,12 +282,8 @@ private object ArrowCachedBatchSerializer {
   }
   // scalastyle:on caselocale
 
-  def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
-    val out = new ByteArrayOutputStream()
-    val writeChannel = new WriteChannel(Channels.newChannel(out))
-    MessageSerializer.serialize(writeChannel, batch)
-    out.toByteArray
-  }
+  def serializeBatch(batch: ArrowRecordBatch): Array[Byte] =
+    ArrowConverters.serializeBatch(batch)
 
   /**
    * Number of Arrow buffers a field occupies in a RecordBatch body, including all of its
