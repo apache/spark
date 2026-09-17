@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.python
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.nio.channels.SelectionKey
-import java.util.HashMap
 import java.util.concurrent.TimeUnit
 
 import scala.jdk.CollectionConverters._
@@ -74,7 +73,9 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       }
     }
 
-    val envVars = new HashMap[String, String](func.envVars)
+    // Installed at worker launch, the same as the execution-side runners, so a planning
+    // worker sees the environment the session holds when planning runs.
+    val envVars = PythonWorkerEnvironment.mergeValidated(func.envVars, SQLConf.get)
     val pythonExec = func.pythonExec
     val pythonVer = func.pythonVer
     val pythonIncludes = func.pythonIncludes.asScala.toSet

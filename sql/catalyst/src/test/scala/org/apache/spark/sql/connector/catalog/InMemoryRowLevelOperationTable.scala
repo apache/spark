@@ -28,7 +28,6 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -311,9 +310,7 @@ class InMemoryRowLevelOperationTable private (
     with CatalystRuntimeFilteringScan {
 
     override def filterAttributes(): Array[NamedReference] = {
-      partitioning.flatMap(_.references())
-        .filter(ref => readSchema.findNestedField(
-          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
+      identityPartitionAttributes
     }
   }
 }

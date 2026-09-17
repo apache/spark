@@ -18,7 +18,7 @@ FROM   m
 WHERE  a NOT IN (null)
 -- !query analysis
 Project [a#x, b#x]
-+- Filter NOT cast(a#x as int) IN (cast(null as int))
++- Filter NOT a#x IN (cast(null as int))
    +- SubqueryAlias m
       +- View (`m`, [a#x, b#x])
          +- Project [cast(col1#x as int) AS a#x, cast(col2#x as decimal(2,1)) AS b#x]
