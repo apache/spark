@@ -348,7 +348,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     uri.getScheme match {
       case "ivy" =>
         runtimeDependencyResolver
-          .resolve(uri, repositoryPolicy, connectTimeoutMs, readTimeoutMs, isCancelled)
+          .resolve(uri, connectTimeoutMs, readTimeoutMs, repositoryPolicy, isCancelled)
           .map(path => Artifact.newJarArtifact(path.getFileName, new Artifact.LocalFile(path)))
       case _ => Artifact.parseArtifacts(uri)
     }

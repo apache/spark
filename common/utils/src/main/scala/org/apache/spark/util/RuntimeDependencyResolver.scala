@@ -35,9 +35,9 @@ private[spark] final class RuntimeDependencyResolver(
   /** Resolve an ivy URI. Calls are serialized because Ivy mutates process-wide state. */
   def resolve(
       uri: URI,
+      connectTimeoutMs: Int,
+      readTimeoutMs: Int,
       repositoryPolicy: RepositoryPolicy = AllowRequestedRepositories,
-      connectTimeoutMs: Int = DefaultConnectTimeoutMs,
-      readTimeoutMs: Int = DefaultReadTimeoutMs,
       isCancelled: () => Boolean = () => false): Seq[Path] = {
     checkCancelled(isCancelled)
     try {
@@ -102,9 +102,6 @@ private[spark] final class RuntimeDependencyResolver(
 }
 
 private[spark] object RuntimeDependencyResolver {
-  val DefaultConnectTimeoutMs: Int = 30 * 1000
-  val DefaultReadTimeoutMs: Int = 5 * 60 * 1000
-
   private val ivyLock = new ReentrantLock()
 
   trait RepositoryPolicy {
