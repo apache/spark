@@ -326,9 +326,10 @@ class StringType(AtomicType):
 class CharType(AtomicType):
     """Char data type.
 
-    A standalone collated ``CharType`` writes its collation inline in JSON and therefore requires
-    a current reader. Within a ``StructField``, schema JSON stores the collation in field metadata
-    and emits an uncollated ``char(n)`` type so readers preceding this support can still read it.
+    A standalone collated ``CharType`` writes its collation inline in JSON. A preceding Python
+    reader may accept only the ``char(n)`` prefix and silently drop the collation; a current reader
+    is required to preserve it. Within a ``StructField``, schema JSON stores the collation in field
+    metadata and emits an uncollated ``char(n)`` type so preceding readers can still read it.
 
     Parameters
     ----------
@@ -365,10 +366,11 @@ class CharType(AtomicType):
 class VarcharType(AtomicType):
     """Varchar data type.
 
-    A standalone collated ``VarcharType`` writes its collation inline in JSON and therefore
-    requires a current reader. Within a ``StructField``, schema JSON stores the collation in field
-    metadata and emits an uncollated ``varchar(n)`` type so readers preceding this support can
-    still read it.
+    A standalone collated ``VarcharType`` writes its collation inline in JSON. A preceding Python
+    reader may accept only the ``varchar(n)`` prefix and silently drop the collation; a current
+    reader is required to preserve it. Within a ``StructField``, schema JSON stores the collation
+    in field metadata and emits an uncollated ``varchar(n)`` type so preceding readers can still
+    read it.
 
     Parameters
     ----------
@@ -2709,13 +2711,13 @@ def _parse_datatype_json_value(  # type: ignore[return]
             return YearMonthIntervalType(first_field, second_field)
         elif m := _STRING_WITH_COLLATION.match(json_value):
             return StringType(m.group(1))
-        elif m := _LENGTH_CHAR.match(json_value):
+        elif m := _LENGTH_CHAR.fullmatch(json_value):
             collation = m.group(2)
             if in_char_varchar:
                 assert charVarcharCollationsMap is not None
                 collation = charVarcharCollationsMap[fieldPath]
             return CharType(int(m.group(1)), collation)
-        elif m := _LENGTH_VARCHAR.match(json_value):
+        elif m := _LENGTH_VARCHAR.fullmatch(json_value):
             collation = m.group(2)
             if in_char_varchar:
                 assert charVarcharCollationsMap is not None

@@ -425,6 +425,7 @@ object DataType {
           ("pyClass", _),
           ("sqlType", _),
           ("type", JString("udt"))) =>
+      assertValidTypeForCharVarcharCollations(fieldPath, "udt", charVarcharCollationsMap)
       if (!SqlApiConf.get.allowCreatingUDTFromString &&
         !SqlApiConf.get.allowedDynamicUDTClasses.contains(udtClass)) {
         throw DataTypeErrors.udtClassLoadingDisabledError(
@@ -454,6 +455,7 @@ object DataType {
           ("serializedClass", JString(serialized)),
           ("sqlType", v: JValue),
           ("type", JString("udt"))) =>
+      assertValidTypeForCharVarcharCollations(fieldPath, "udt", charVarcharCollationsMap)
       new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
 
     case other =>
