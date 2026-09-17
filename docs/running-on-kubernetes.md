@@ -2132,9 +2132,7 @@ See the below table for the full list of pod specifications that will be overwri
 </tr>
 <tr>
   <td>serviceAccount</td>
-  <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>; for executor
-  pods, of <code>spark.kubernetes.authenticate.executor.serviceAccountName</code>, falling back to
-  the driver's</td>
+  <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
     For driver pods Spark will override <code>serviceAccount</code> with the value of
     <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>, but only if that
@@ -2150,20 +2148,9 @@ See the below table for the full list of pod specifications that will be overwri
 </tr>
 <tr>
   <td>serviceAccountName</td>
-  <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>; for executor
-  pods, of <code>spark.kubernetes.authenticate.executor.serviceAccountName</code>, falling back to
-  the driver's</td>
+  <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
-    For driver pods Spark will override <code>serviceAccountName</code> with the value of
-    <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>, but only if that
-    configuration is set and no driver credentials are submitted for Spark to mount as a secret.
-    For executor pods Spark writes both fields with the same value: the account the template names,
-    if it names one in either field, and otherwise
-    <code>spark.kubernetes.authenticate.executor.serviceAccountName</code>, falling back to the
-    driver's. When the template names both fields, <code>serviceAccountName</code> is the one that
-    decides, as it is for Kubernetes itself. Spark warns when
-    <code>spark.kubernetes.authenticate.executor.serviceAccountName</code> named an account the
-    template displaced.
+    Same as <code>serviceAccount</code>.
   </td>
 </tr>
 <tr>
