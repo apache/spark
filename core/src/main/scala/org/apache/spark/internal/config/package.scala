@@ -2835,7 +2835,8 @@ package object config {
   private[spark] val STANDALONE_SUBMIT_FILTER_ENVIRONMENT =
     ConfigBuilder("spark.standalone.submit.filterEnvironment")
       .doc("In standalone cluster mode, controls whether the client forwards only " +
-        "Spark-related environment variables (e.g. SPARK_*) to the driver, " +
+        "Spark-related environment variables (e.g. SPARK_* excluding " +
+        "SPARK_ENV_LOADED, SPARK_HOME, SPARK_CONF_DIR) to the driver, " +
         "matching the REST submission client. If set to false, the full environment is " +
         "forwarded to the driver. This does not impact REST submissions except if they fall back.")
       .version("4.3.0")
