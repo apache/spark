@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
+import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -37,6 +38,8 @@ import org.apache.spark.sql.util.QueryExecutionListener
  */
 class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
+
+  import testImplicits._
 
   private val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   private val catalogName = "ppd_cat"
@@ -281,7 +284,8 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
   test("SPARK-59457: group-based UPDATE receives a second-pass PartitionPredicate") {
     withTable(deleteTableName) {
       sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
-        s"USING $v2Source PARTITIONED BY (dep)")
+        s"USING $v2Source PARTITIONED BY (dep) " +
+        "TBLPROPERTIES('iterative-row-level-pushdown' = 'true')")
       sql(s"INSERT INTO $deleteTableName VALUES " +
         "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
 
@@ -292,6 +296,71 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
         expectedOrdinals = Array(0),
         expectedPartitionFieldNames = Array("dep"),
         expectedReplacedDeps = Set("hr", "software"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "hr", 101), Row(2, "software", 201), Row(3, "marketing", 300)))
+    }
+  }
+
+  // The scan evaluates the pushed predicate, so Spark drops that conjunct from the MERGE join
+  // condition. It must therefore have pruned to the partitions the conjunct accepts.
+  test("SPARK-59457: group-based MERGE receives a second-pass PartitionPredicate") {
+    withTable(deleteTableName) {
+      withTempView("source") {
+        sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+          s"USING $v2Source PARTITIONED BY (dep) " +
+          "TBLPROPERTIES('iterative-row-level-pushdown' = 'true')")
+        sql(s"INSERT INTO $deleteTableName VALUES " +
+          "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+        Seq((1, 1000), (3, 3000)).toDF("pk", "salary").createOrReplaceTempView("source")
+
+        val plan = executeAndKeepPlan {
+          sql(
+            s"""MERGE INTO $deleteTableName t
+               |USING source s
+               |ON t.pk = s.pk AND t.dep IN ('hr', 'software')
+               |WHEN MATCHED THEN
+               | UPDATE SET salary = s.salary
+               |""".stripMargin)
+        }
+        assertRowLevelScanPrunedByPartitionPredicate(plan,
+          expectedOrdinals = Array(0),
+          expectedPartitionFieldNames = Array("dep"),
+          expectedReplacedDeps = Set("hr", "software"))
+
+        val joins = collect(plan) { case j: BaseJoinExec => j }
+        assert(joins.nonEmpty, "Expected a join in the MERGE plan")
+        joins.foreach { j =>
+          assert(!j.condition.exists(_.references.exists(_.name == "dep")),
+            s"Evaluated IN on dep should be dropped from the join condition: ${j.condition}")
+        }
+
+        // Row 3 is in a pruned partition, so it is never read and stays unchanged.
+        checkAnswer(
+          sql(s"SELECT * FROM $deleteTableName"),
+          Seq(Row(1, "hr", 1000), Row(2, "software", 200), Row(3, "marketing", 300)))
+      }
+    }
+  }
+
+  // A delta-based operation plans its scan through V2ScanRelationPushDown rather than
+  // GroupBasedRowLevelOperationScanPlanning, and reads the same wrapped partitioning.
+  test("SPARK-59457: delta-based UPDATE receives a second-pass PartitionPredicate") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT NOT NULL, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep) " +
+        "TBLPROPERTIES('supports-deltas' = 'true', 'iterative-row-level-pushdown' = 'true')")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+
+      val plan = executeAndKeepPlan {
+        sql(s"UPDATE $deleteTableName SET salary = salary + 1 WHERE dep IN ('hr', 'software')")
+      }
+      assert(plan.isInstanceOf[WriteDeltaExec],
+        s"Expected WriteDeltaExec but got: ${plan.getClass.getSimpleName}")
+      assertPartitionFieldReferences(
+        rowLevelScanPartitionPredicates(plan).toArray, Seq(Array(0)), Array("dep"))
 
       checkAnswer(
         sql(s"SELECT * FROM $deleteTableName"),
@@ -436,21 +505,24 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
       expectedReplacedDeps: Set[String]): Unit = {
     assert(plan.isInstanceOf[ReplaceDataExec],
       s"Expected ReplaceDataExec but got: ${plan.getClass.getSimpleName}")
-    val scans = collect(plan) { case s: BatchScanExec => s }
-    val scan = scans.map(_.scan).collectFirst {
-      case s: InMemoryPartitionPredicateDeleteTable#PartitionPredicateRowLevelBatchScan => s
-    }.getOrElse(fail("Expected the row-level scan of the in-memory table"))
     assertPartitionFieldReferences(
-      scan.pushedPartitionPredicates.toArray, Seq(expectedOrdinals), expectedPartitionFieldNames)
+      rowLevelScanPartitionPredicates(plan).toArray,
+      Seq(expectedOrdinals),
+      expectedPartitionFieldNames)
 
-    val table = scans.map(_.table).collectFirst {
+    val table = collect(plan) { case s: BatchScanExec => s }.map(_.table).collectFirst {
       case RowLevelOperationTable(t: InMemoryPartitionPredicateDeleteTable, _) => t
     }.getOrElse(fail("Expected the row-level operation table"))
     val replacedDeps = table.replacedPartitions.map(_.head.toString)
-    assert(
-      replacedDeps.toSet === expectedReplacedDeps &&
-        replacedDeps.size === expectedReplacedDeps.size,
-      s"Expected replaced partitions for $expectedReplacedDeps, got ${table.replacedPartitions}")
+    assert(replacedDeps.sorted === expectedReplacedDeps.toSeq.sorted)
+  }
+
+  /** The PartitionPredicates the in-memory row-level scan in `plan` was pruned by. */
+  private def rowLevelScanPartitionPredicates(plan: SparkPlan): Seq[PartitionPredicate] = {
+    collect(plan) { case s: BatchScanExec => s }.map(_.scan).collectFirst {
+      case s: InMemoryPartitionPredicateDeleteTable#PartitionPredicateRowLevelBatchScan => s
+    }.getOrElse(fail("Expected the row-level scan of the in-memory table"))
+      .pushedPartitionPredicates
   }
 
   private def assertDeleteWithRowLevel(query: String): Unit = {

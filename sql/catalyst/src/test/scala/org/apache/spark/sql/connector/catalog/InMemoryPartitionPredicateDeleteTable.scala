@@ -34,8 +34,8 @@ import org.apache.spark.util.ArrayImplicits._
 
 /**
  * In-memory table that supports row-level operations and accepts [[PartitionPredicate]]s
- * in V2 [[canDeleteWhere]]/[[deleteWhere]] for metadata-only deletes, and in the scan of a
- * group-based UPDATE, MERGE or DELETE, which pushes V2 predicates iteratively.
+ * in V2 [[canDeleteWhere]]/[[deleteWhere]] for metadata-only deletes, and, when
+ * `iterative-row-level-pushdown` is set, in the scan of a row-level operation.
  *
  * Contains some knobs to control acceptance of various partition and data predicates.
  */
@@ -49,6 +49,10 @@ class InMemoryPartitionPredicateDeleteTable(
   private val acceptPartitionPredicates: Boolean =
     properties.getOrDefault(
       InMemoryPartitionPredicateDeleteTable.AcceptPartitionPredicatesKey, "true").toBoolean
+
+  private val iterativeRowLevelPushdown: Boolean =
+    properties.getOrDefault(
+      InMemoryPartitionPredicateDeleteTable.IterativeRowLevelPushdownKey, "false").toBoolean
 
   private val acceptDataPredicates: Boolean =
     properties.getOrDefault(
@@ -114,35 +118,43 @@ class InMemoryPartitionPredicateDeleteTable(
   }
 
   /**
-   * Row-level scans push V2 predicates iteratively, so a group-based operation receives a
-   * second-pass [[PartitionPredicate]] the same way a metadata-only DELETE does. Only partition
-   * predicates prune, by partition key; a data predicate is always returned since the scan
-   * cannot filter rows.
+   * With `iterative-row-level-pushdown`, the scan of a row-level operation pushes V2 predicates
+   * iteratively, so it receives a second-pass [[PartitionPredicate]] the same way a
+   * metadata-only DELETE does. It accepts only partition predicates and returns every other
+   * predicate for Spark to evaluate.
+   *
+   * Otherwise the inherited builder is used, which pushes V1 filters and reports runtime filter
+   * attributes. One builder cannot do both: Spark pushes V1 filters whenever a builder offers
+   * them, and only the V2 interface has a second pass.
    */
   override protected def newRowLevelScanBuilder(
       options: CaseInsensitiveStringMap)(
       onBuild: BatchScanBaseClass => Unit): ScanBuilder = {
-    new PartitionPredicateRowLevelScanBuilder(onBuild)
+    if (iterativeRowLevelPushdown) {
+      new PartitionPredicateRowLevelScanBuilder(onBuild)
+    } else {
+      super.newRowLevelScanBuilder(options)(onBuild)
+    }
   }
 
   class PartitionPredicateRowLevelScanBuilder(onBuild: BatchScanBaseClass => Unit)
     extends ScanBuilder with SupportsPushDownV2Filters with SupportsPushDownRequiredColumns {
 
     private var readSchema: StructType = schema
-    private val pushed = ArrayBuffer.empty[Predicate]
+    private val pushed = ArrayBuffer.empty[PartitionPredicate]
 
     override def supportsIterativePushdown(): Boolean = true
 
     override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
       val (accepted, returned) = predicates.partition {
         case _: PartitionPredicate => acceptPartitionPredicates
-        case p => refsOnlyPartCols(p) && InMemoryTableWithV2Filter.supportsPredicates(Array(p))
+        case _ => false
       }
-      pushed ++= accepted
+      pushed ++= accepted.map(_.asInstanceOf[PartitionPredicate])
       returned
     }
 
-    override def pushedPredicates(): Array[Predicate] = pushed.toArray
+    override def pushedPredicates(): Array[Predicate] = pushed.toArray[Predicate]
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
       val metadataNames = metadataColumns.map(_.name).toSet
@@ -154,18 +166,10 @@ class InMemoryPartitionPredicateDeleteTable(
     }
 
     override def build(): Scan = {
-      val (partPreds, stdPreds) = pushed.toArray.partition(_.isInstanceOf[PartitionPredicate])
-      val partitionPredicates = partPreds.map(_.asInstanceOf[PartitionPredicate])
-      val keys = InMemoryTableWithV2Filter.filtersToKeys(
-        data.map(_.key).toImmutableArraySeq,
-        partCols.map(_.toSeq.quoted).toImmutableArraySeq,
-        stdPreds).toSet
-      val partitions = data.filter { p =>
-        keys.contains(p.key) && partitionPredicates.forall(_.eval(p.partitionKey()))
-      }
+      val partitions = data.filter(p => pushed.forall(_.eval(p.partitionKey())))
       val scan = PartitionPredicateRowLevelBatchScan(
         partitions.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq,
-        readSchema, schema, partitionPredicates.toImmutableArraySeq)
+        readSchema, schema, pushed.toSeq)
       onBuild(scan)
       scan
     }
@@ -195,6 +199,7 @@ class InMemoryPartitionPredicateDeleteTable(
 object InMemoryPartitionPredicateDeleteTable {
   private[catalog] val AcceptPartitionPredicatesKey = "accept-partition-predicates"
   private[catalog] val AcceptDataPredicatesKey = "accept-data-predicates"
+  private[catalog] val IterativeRowLevelPushdownKey = "iterative-row-level-pushdown"
 }
 
 class InMemoryPartitionPredicateDeleteCatalog extends InMemoryTableCatalog {
