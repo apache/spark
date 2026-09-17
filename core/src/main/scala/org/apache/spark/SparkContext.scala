@@ -228,7 +228,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // The CredentialProviderLoader created by the OIDC selection phase (applyProviderProperties),
   // retained so the later credential resolution phase (UserCredentialManager, started by the
   // scheduler backend) reuses the same loader. None when OIDC credential propagation is
-  // disabled or in local mode (the selection phase is skipped and allocates no loader).
+  // disabled (the selection phase is skipped and allocates no loader). The selection phase runs
+  // in local mode as well, since LocalSchedulerBackend now starts a resolution phase.
   // SparkContext is the single owner of this loader and is responsible for closing it in stop().
   private var _userCredentialProviderLoader: Option[CredentialProviderLoader] = None
   private var _executorMemory: Int = _
@@ -348,7 +349,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // The CredentialProviderLoader from the OIDC selection phase, reused by the credential
   // resolution phase so providers are initialized exactly once. `None` when OIDC credential
-  // propagation is disabled, in local mode, or before initialization. Internal.
+  // propagation is disabled or before initialization. Internal.
   private[spark] def userCredentialProviderLoader: Option[CredentialProviderLoader] =
     _userCredentialProviderLoader
 
@@ -448,17 +449,18 @@ class SparkContext(config: SparkConf) extends Logging {
     // This should be set as early as possible.
     SparkContext.enableMagicCommitterIfNeeded(_conf)
 
-    // OIDC credential propagation: provider SELECTION phase. When enabled (and not in local
-    // mode), discover the credential provider(s) for the configured scheme(s) and apply their
-    // declared Spark properties (e.g. the S3A credentials provider class) into _conf, so that
-    // the driver's Hadoop Configuration built later -- and other config-derived components --
-    // pick them up. This is done here, at the "as early as possible" slot, so the applied keys
-    // are visible to the spark.logConf dump and to any Hadoop Configuration built during
-    // createSparkEnv (e.g. by SecurityManager). It performs no credential resolution and no
-    // network I/O (providers are selected without init()); actual acquisition happens later in
-    // the scheduler backend (UserCredentialManager). Any returned loader is retained so the
-    // resolution phase reuses it, and SparkContext closes it in stop().
-    _userCredentialProviderLoader = UserCredentialManager.applyProviderProperties(_conf, isLocal)
+    // OIDC credential propagation: provider SELECTION phase. When enabled, discover the
+    // credential provider(s) for the configured scheme(s) and apply their declared Spark
+    // properties (e.g. the S3A credentials provider class) into _conf, so that the driver's
+    // Hadoop Configuration built later -- and other config-derived components -- pick them up.
+    // This is done here, at the "as early as possible" slot, so the applied keys are visible to
+    // the spark.logConf dump and to any Hadoop Configuration built during createSparkEnv (e.g.
+    // by SecurityManager). It performs no credential resolution and no network I/O (providers
+    // are selected without init()); actual acquisition happens later in the scheduler backend
+    // (UserCredentialManager) -- including in local mode, where LocalSchedulerBackend now starts
+    // a resolution phase. Any returned loader is retained so the resolution phase reuses it, and
+    // SparkContext closes it in stop().
+    _userCredentialProviderLoader = UserCredentialManager.applyProviderProperties(_conf)
 
     SparkContext.supplementJavaModuleOptions(_conf)
     SparkContext.supplementJavaIPv6Options(_conf)
