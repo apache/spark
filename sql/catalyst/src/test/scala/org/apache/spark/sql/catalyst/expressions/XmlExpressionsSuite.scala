@@ -371,6 +371,15 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "STRUCT<col: BIGINT>")
   }
 
+  test("schema_of_xml and from_xml trim CHAR padding") {
+    val document = "<ROW><col>1</col></ROW>   "
+    val input = Literal.create(document, CharType(document.length, "UTF8_LCASE"))
+    val schema = new StructType().add("col", LongType)
+
+    checkEvaluation(SchemaOfXml(input, Map.empty), "STRUCT<col: BIGINT>")
+    checkEvaluation(XmlToStructs(schema, Map.empty, input, UTC_OPT), InternalRow(1L))
+  }
+
   test("parse date with locale") {
     Seq("en-US", "ru-RU").foreach { langTag =>
       val locale = Locale.forLanguageTag(langTag)
