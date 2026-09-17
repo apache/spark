@@ -61,8 +61,13 @@ case class CachedData(
 }
 
 private[sql] case class TableCacheDescriptor(
-    storageLevel: StorageLevel,
-    charVarcharScanMode: Option[CharVarcharScanMode])
+    plan: LogicalPlan,
+    storageLevel: StorageLevel) {
+  def charVarcharScanMode: Option[CharVarcharScanMode] =
+    plan.collectFirst {
+      case r: DataSourceV2Relation => r.charVarcharScanMode
+    }.flatten
+}
 
 /**
  * Provides support in a SQLContext for caching query results and automatically using these cached
@@ -379,17 +384,31 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Describes direct cache entries for a V2 table mutation while ignoring scan mode identity.
+   * Describes direct named cache entries for a V2 table. Matching the cache's table name excludes
+   * dependent query caches while retaining the padding project of a standard-semantics scan.
+   * Scan mode is ignored for the relation match.
    */
   def lookupCacheDescriptorsByV2Relation(
-      relation: DataSourceV2Relation): Seq[TableCacheDescriptor] = {
+      relation: DataSourceV2Relation,
+      directNamedCacheOnly: Boolean = false): Seq[TableCacheDescriptor] = {
+    val directCacheName = for {
+      catalog <- relation.catalog
+      ident <- relation.identifier
+    } yield ident.toQualifiedNameParts(catalog).quoted
     cachedData.flatMap { cd =>
-      cd.plan.collectFirst {
-        case cached: DataSourceV2Relation
-            if cached.sameResultWithUnboundCharVarcharScanMode(relation) =>
-          TableCacheDescriptor(
-            cd.cachedRepresentation.cacheBuilder.storageLevel,
-            cached.charVarcharScanMode)
+      val isDirectCache = !directNamedCacheOnly ||
+        cd.cachedRepresentation.cacheBuilder.tableName == directCacheName
+      val hasRelation = cd.plan.exists {
+        case cached: DataSourceV2Relation =>
+          cached.sameResultWithUnboundCharVarcharScanMode(relation)
+        case _ => false
+      }
+      if (isDirectCache && hasRelation) {
+        Some(TableCacheDescriptor(
+          cd.plan,
+          cd.cachedRepresentation.cacheBuilder.storageLevel))
+      } else {
+        None
       }
     }
   }
