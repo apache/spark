@@ -70,6 +70,9 @@ case class InProcessArrowEvalExec(
     val timeZoneId = conf.sessionLocalTimeZone
 
     child.execute().mapPartitions { rows =>
+      val context = Option(TaskContext.get())
+      def checkCancellation(): Unit = context.foreach(_.killTaskIfInterrupted())
+
       val resultProjection = UnsafeProjection.create(resultOutput, resultOutput)
       val projectInput: InternalRow => InternalRow =
         if (inputExpressions.size == childOutput.size) {
@@ -102,12 +105,13 @@ case class InProcessArrowEvalExec(
         }
       }
 
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => close()))
+      context.foreach(_.addTaskCompletionListener[Unit](_ => close()))
 
       new Iterator[InternalRow] {
         private var batchIter: Iterator[InternalRow] = Iterator.empty
 
         override def hasNext: Boolean = {
+          checkCancellation()
           val available = !closed && (batchIter.hasNext || rows.hasNext)
           if (!available) close()
           available
@@ -122,12 +126,14 @@ case class InProcessArrowEvalExec(
               var count = 0
               while (rows.hasNext && (batchSize <= 0 || count < batchSize) &&
                   (count == 0 || maxBytes <= 0 || writer.sizeInBytes() < maxBytes)) {
+                checkCancellation()
                 writer.write(projectInput(rows.next()))
                 count += 1
               }
               writer.finish()
 
               udfs.zip(inputOrdinals).foreach { case (udf, ordinals) =>
+                checkCancellation()
                 // Register each acquired resource immediately, including partially exported
                 // inputs and results of earlier UDFs if a later UDF throws.
                 val structs = ArrayBuffer.empty[AutoCloseable]

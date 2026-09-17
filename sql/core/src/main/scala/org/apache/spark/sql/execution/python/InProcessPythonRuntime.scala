@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.util.concurrent.{Callable, ExecutionException, ExecutorService}
+import java.util.concurrent.{Callable, ExecutionException, ExecutorService, TimeUnit}
+import java.util.concurrent.locks.ReentrantLock
 
 import scala.jdk.CollectionConverters._
 
 import jep.{JepException, SharedInterpreter}
 
+import org.apache.spark.TaskContext
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -36,9 +38,29 @@ private[python] object InProcessPythonRuntime extends Logging {
 
   // Access to the executor is serialized by onInterpreterThread and shutdown. The interpreter
   // itself is accessed only by the executor's thread.
+  private val interpreterLock = new ReentrantLock()
   private var executor: ExecutorService = _
   private var interp: SharedInterpreter = _
   private val TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
+
+  private def withInterpreterLock[T](cancellable: Boolean)(body: => T): T = {
+    if (cancellable) {
+      val context = Option(TaskContext.get())
+      context.foreach(_.killTaskIfInterrupted())
+      // Poll the task state as cancellation need not interrupt the Java thread.
+      while (!interpreterLock.tryLock(100, TimeUnit.MILLISECONDS)) {
+        context.foreach(_.killTaskIfInterrupted())
+      }
+    } else {
+      interpreterLock.lock()
+    }
+    try {
+      if (cancellable) Option(TaskContext.get()).foreach(_.killTaskIfInterrupted())
+      body
+    } finally {
+      interpreterLock.unlock()
+    }
+  }
 
   /**
    * Wait for native code to finish even if the task is interrupted. Returning early would let
@@ -46,29 +68,35 @@ private[python] object InProcessPythonRuntime extends Logging {
    * afterwards so Spark can observe cancellation. Arbitrary Python code cannot be forcibly
    * interrupted safely in the executor process.
    */
-  private[python] def onInterpreterThread[T](body: => T): T = synchronized {
-    if (executor == null) {
-      executor = ThreadUtils.newDaemonSingleThreadExecutor("inprocess-python")
-    }
-    val future = executor.submit(new Callable[T] {
-      override def call(): T = body
-    })
-    var interrupted = false
-    try {
-      var result: Option[T] = None
-      while (result.isEmpty) {
-        try {
-          result = Some(future.get())
-        } catch {
-          case _: InterruptedException => interrupted = true
-          case e: ExecutionException => throw e.getCause
-        }
-      }
-      result.get
-    } finally {
-      if (interrupted) Thread.currentThread().interrupt()
-    }
+  private[python] def onInterpreterThread[T](body: => T): T = {
+    runOnInterpreterThread(cancellable = true)(body)
   }
+
+  private def runOnInterpreterThread[T](cancellable: Boolean)(body: => T): T =
+    withInterpreterLock(cancellable) {
+      if (executor == null) {
+        executor = ThreadUtils.newDaemonSingleThreadExecutor("inprocess-python")
+      }
+      val future = executor.submit(new Callable[T] {
+        override def call(): T = body
+      })
+      var interrupted = false
+      try {
+        var result: Option[T] = None
+        while (result.isEmpty) {
+          try {
+            result = Some(future.get())
+          } catch {
+            case _: InterruptedException => interrupted = true
+            case e: ExecutionException => throw e.getCause
+          }
+        }
+        if (cancellable) Option(TaskContext.get()).foreach(_.killTaskIfInterrupted())
+        result.get
+      } finally {
+        if (interrupted) Thread.currentThread().interrupt()
+      }
+    }
 
   private def initializeInterpreter(sitePackages: Seq[String]): Unit = {
     if (interp == null) {
@@ -88,21 +116,22 @@ private[python] object InProcessPythonRuntime extends Logging {
     }
   }
 
-  def initialize(sitePackages: Seq[String] = Seq.empty): Unit = synchronized {
-    try {
-      onInterpreterThread { initializeInterpreter(sitePackages) }
-    } catch {
-      case t: Throwable =>
-        executor.shutdown()
-        executor = null
-        throw t
+  def initialize(sitePackages: Seq[String] = Seq.empty): Unit =
+    withInterpreterLock(cancellable = false) {
+      try {
+        runOnInterpreterThread(cancellable = false) { initializeInterpreter(sitePackages) }
+      } catch {
+        case t: Throwable =>
+          executor.shutdown()
+          executor = null
+          throw t
+      }
     }
-  }
 
-  def shutdown(): Unit = synchronized {
+  def shutdown(): Unit = withInterpreterLock(cancellable = false) {
     if (executor != null) {
       try {
-        onInterpreterThread {
+        runOnInterpreterThread(cancellable = false) {
           if (interp != null) {
             try {
               interp.eval("from pyspark.inprocess.runtime import _load_udf")
