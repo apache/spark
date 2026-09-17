@@ -626,6 +626,12 @@ class JacksonParser(
     var partialResultException: Option[Throwable] = None
     var badMapException: Option[Throwable] = None
 
+    val constrainedKeys =
+      keyType.isInstanceOf[CharType] || keyType.isInstanceOf[VarcharType]
+    // CHAR/VARCHAR maps always drain to END_OBJECT so mapKeyDedupPolicy is applied
+    // before a stored length error. Partial results still control STRING maps.
+    val drainErrors = constrainedKeys || enablePartialResults
+
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       val rawKey = UTF8String.fromString(parser.currentName)
       val value = try {
@@ -635,7 +641,7 @@ class JacksonParser(
           partialResultException = partialResultException.orElse(Some(err.cause))
           Some(err.partialResult)
         case DuplicateMapKeyUtils(e) => throw e
-        case NonFatal(e) if enablePartialResults =>
+        case NonFatal(e) if drainErrors =>
           badMapException = badMapException.orElse(Some(e))
           parser.skipChildren()
           None
@@ -644,31 +650,13 @@ class JacksonParser(
         val key = CharVarcharUtils.applyTextParseSemantics(rawKey, keyType)
         entries += ((rawKey, key, value))
       } catch {
-        case NonFatal(e) if enablePartialResults =>
+        case NonFatal(e) if drainErrors =>
           badMapException = badMapException.orElse(Some(e))
       }
     }
 
-    val mapData = keyType match {
-      case _: CharType | _: VarcharType =>
-        // JSON object parsing historically keeps the last value for an exactly repeated field
-        // name. Apply mapKeyDedupPolicy only when distinct serialized names normalize to one key.
-        // Include entries with failed values so normalized key collisions still take precedence.
-        DuplicateMapKeyUtils.buildMapWithLastRawKeyWins(
-          entries.map(_._1).toSeq,
-          entries.map(_._2).toSeq,
-          entries.map(_._3).toSeq,
-          keyType,
-          valueType)
-      case _ =>
-        // Preserve the historical behavior for ordinary string keys.
-        val retainedEntries = entries.flatMap {
-          case (_, key, value) => value.map(key -> _)
-        }
-        ArrayBasedMapData(
-          retainedEntries.map(_._1).toArray,
-          retainedEntries.map(_._2).toArray)
-    }
+    val mapData = DuplicateMapKeyUtils.buildParsedMap(
+      entries.toSeq, keyType, valueType, collapseOrdinaryStringKeys = false)
 
     // Ordinary value or key conversion failures invalidate the whole map. Delay throwing until
     // the closing brace has been consumed and constrained-key deduplication has been applied.
