@@ -151,7 +151,7 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     assert(nestedExpr.dataType == normalizedExpr.dataType)
   }
 
-  test("SPARK-54918: array set operations are not normalized by a plan rewrite") {
+  test("SPARK-59602: array set operations are not normalized by a plan rewrite") {
     val relation = LocalRelation($"a".array(DoubleType), $"b".array(DoubleType))
     val Seq(array1, array2) = relation.output
     val query = relation.select(

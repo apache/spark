@@ -4745,7 +4745,7 @@ case class ArrayDistinct(child: Expression)
     (array: ArrayData) =>
       val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
       val hs = new SQLOpenHashSet[Any]()
-      val withNaNAndZeroCheckFunc = SQLOpenHashSet.withNaNAndZeroCheckFunc(elementType, hs,
+      val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
         (value: Any) =>
           if (!hs.contains(value)) {
             if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
@@ -4757,7 +4757,7 @@ case class ArrayDistinct(child: Expression)
           },
         (valueNaN: Any) => arrayBuffer += valueNaN)
       val withNullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
-        (value: Any) => withNaNAndZeroCheckFunc(value),
+        (value: Any) => withNaNCheckFunc(value),
         () => arrayBuffer += null)
       var i = 0
       while (i < array.numElements()) {
@@ -4832,10 +4832,10 @@ case class ArrayDistinct(child: Expression)
              |}
            """.stripMargin
 
-        val withNaNAndZeroCheckCodeGenerator =
+        val withNaNCheckCodeGenerator =
           (array: String, index: String) =>
               s"$jt $value = ${genGetValue(array, index)};" +
-                SQLOpenHashSet.withNaNAndZeroCheckCode(elementType, value, hashSet, body,
+                SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
                   (valueNaN: String) =>
                     s"""
                        |$size++;
@@ -4845,7 +4845,7 @@ case class ArrayDistinct(child: Expression)
         val processArray = SQLOpenHashSet.withNullCheckCode(
           resultArrayElementNullable,
           resultArrayElementNullable,
-          array, i, hashSet, withNaNAndZeroCheckCodeGenerator,
+          array, i, hashSet, withNaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
              |$size++;
@@ -4926,7 +4926,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
       (array1, array2) =>
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
         val hs = new SQLOpenHashSet[Any]()
-        val withNaNAndZeroCheckFunc = SQLOpenHashSet.withNaNAndZeroCheckFunc(elementType, hs,
+        val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
           (value: Any) =>
             if (!hs.contains(value)) {
               if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
@@ -4938,7 +4938,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
             },
           (valueNaN: Any) => arrayBuffer += valueNaN)
         val withNullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
-          (value: Any) => withNaNAndZeroCheckFunc(value),
+          (value: Any) => withNaNCheckFunc(value),
           () => arrayBuffer += null
         )
         Seq(array1, array2).foreach { array =>
@@ -5022,10 +5022,10 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
              |}
            """.stripMargin
 
-        val withNaNAndZeroCheckCodeGenerator =
+        val withNaNCheckCodeGenerator =
           (array: String, index: String) =>
             s"$jt $value = ${genGetValue(array, index)};" +
-            SQLOpenHashSet.withNaNAndZeroCheckCode(elementType, value, hashSet, body,
+            SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
               (valueNaN: String) =>
                 s"""
                    |$size++;
@@ -5035,7 +5035,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         val processArray = SQLOpenHashSet.withNullCheckCode(
           resultArrayElementNullable,
           resultArrayElementNullable,
-          array, i, hashSet, withNaNAndZeroCheckCodeGenerator,
+          array, i, hashSet, withNaNCheckCodeGenerator,
           s"""
              |$nullElementIndex = $size;
              |$size++;
@@ -5119,14 +5119,14 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
           val hs = new SQLOpenHashSet[Any]
           val hsResult = new SQLOpenHashSet[Any]
           val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-          val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNAndZeroCheckFunc(elementType, hs,
+          val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
             (value: Any) => hs.add(value),
             (valueNaN: Any) => {} )
           val withArray2NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
             (value: Any) => withArray2NaNCheckFunc(value),
             () => {}
           )
-          val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNAndZeroCheckFunc(elementType, hsResult,
+          val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hsResult,
             (value: Any) =>
               if (hs.contains(value) && !hsResult.contains(value)) {
                 arrayBuffer += value
@@ -5237,7 +5237,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
         val withArray2NaNCheckCodeGenerator =
           (array: String, index: String) =>
             s"$jt $value = ${genGetValue(array, index)};" +
-              SQLOpenHashSet.withNaNAndZeroCheckCode(elementType, value, hashSet,
+              SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
                 s"$hashSet.add$hsPostFix($hsValueCast$value);",
                 (valueNaN: String) => "")
 
@@ -5260,7 +5260,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
         val withArray1NaNCheckCodeGenerator =
           (array: String, index: String) =>
             s"$jt $value = ${genGetValue(array, index)};" +
-              SQLOpenHashSet.withNaNAndZeroCheckCode(elementType, value, hashSetResult, body,
+              SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSetResult, body,
                 (valueNaN: Any) =>
                   s"""
                      |if ($hashSet.containsNaN()) {
@@ -5320,7 +5320,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 }
 
 /**
- * Returns an array of the elements in the intersect of x and y, without duplicates
+ * Returns an array of the elements in x but not in y, without duplicates
  */
 @ExpressionDescription(
   usage = """
@@ -5356,14 +5356,14 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
       (array1, array2) =>
         val hs = new SQLOpenHashSet[Any]
         val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-        val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNAndZeroCheckFunc(elementType, hs,
+        val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
           (value: Any) => hs.add(value),
           (valueNaN: Any) => {})
         val withArray2NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
           (value: Any) => withArray2NaNCheckFunc(value),
           () => {}
         )
-        val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNAndZeroCheckFunc(elementType, hs,
+        val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
           (value: Any) =>
             if (!hs.contains(value)) {
               arrayBuffer += value
@@ -5460,7 +5460,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         val withArray2NaNCheckCodeGenerator =
           (array: String, index: String) =>
             s"$jt $value = ${genGetValue(array, i)};" +
-              SQLOpenHashSet.withNaNAndZeroCheckCode(elementType, value, hashSet,
+              SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet,
                 s"$hashSet.add$hsPostFix($hsValueCast$value);",
                 (valueNaN: Any) => "")
 
@@ -5482,7 +5482,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         val withArray1NaNCheckCodeGenerator =
           (array: String, index: String) =>
             s"$jt $value = ${genGetValue(array, index)};" +
-              SQLOpenHashSet.withNaNAndZeroCheckCode(elementType, value, hashSet, body,
+              SQLOpenHashSet.withNaNCheckCode(elementType, value, hashSet, body,
                 (valueNaN: String) =>
                   s"""
                      |$size++;

@@ -3532,7 +3532,7 @@ class CollectionExpressionsSuite
       Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType))), true)
   }
 
-  test("SPARK-54918: array set operations normalize special floating-point values") {
+  test("SPARK-59602: array set operations normalize special floating-point values") {
     val nonCanonicalNaN = java.lang.Double.longBitsToDouble(0x7ff8000000000001L)
     val doubles = Literal.create(
       Seq(-0.0d, 0.0d, nonCanonicalNaN, Double.NaN), ArrayType(DoubleType, false))
@@ -3544,8 +3544,9 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayExcept(doubleSet, doubles), Seq.empty[Double])
     checkEvaluation(ArraysOverlap(doubles, doubleSet), true)
 
+    val nonCanonicalFloatNaN = java.lang.Float.intBitsToFloat(0x7f800001)
     val floats = Literal.create(
-      Seq(-0.0f, 0.0f, Float.NaN, Float.NaN), ArrayType(FloatType, false))
+      Seq(-0.0f, 0.0f, nonCanonicalFloatNaN, Float.NaN), ArrayType(FloatType, false))
     val floatSet = Literal.create(Seq(0.0f, Float.NaN), ArrayType(FloatType, false))
     checkEvaluation(ArrayDistinct(floats), Seq(0.0f, Float.NaN))
     checkEvaluation(ArrayUnion(floats, floatSet), Seq(0.0f, Float.NaN))
@@ -3555,7 +3556,7 @@ class CollectionExpressionsSuite
     checkEvaluation(ArraysOverlap(floats, floatSet), true)
   }
 
-  test("SPARK-54918: array set operations normalize nested floating-point values") {
+  test("SPARK-59602: array set operations normalize nested floating-point values") {
     val nestedType = ArrayType(DoubleType, containsNull = false)
     val nested = Literal.create(
       Seq(Seq(-0.0d), Seq(0.0d), Seq(Double.NaN)), ArrayType(nestedType, false))

@@ -111,7 +111,10 @@ object SQLOpenHashSet {
     }
   }
 
-  def withNaNAndZeroCheckFunc(
+  /**
+   * Handles NaNs specially and normalizes negative zero before invoking `handleNotNaN`.
+   */
+  def withNaNCheckFunc(
       dataType: DataType,
       hashSet: SQLOpenHashSet[Any],
       handleNotNaN: Any => Unit,
@@ -139,10 +142,11 @@ object SQLOpenHashSet {
   }
 
   /**
+   * Handles NaNs specially and normalizes negative zero before invoking `handleNotNaN`.
    * `valueName` must refer to a writable generated-code local because zero normalization assigns
    * the canonical value back to it.
    */
-  def withNaNAndZeroCheckCode(
+  def withNaNCheckCode(
       dataType: DataType,
       valueName: String,
       hashSet: String,
