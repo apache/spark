@@ -2532,6 +2532,18 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
             MapType(CharType(2), IntegerType, valueContainsNull = true))
         checkAnswer(xmlDataFrame, Row(Map("a " -> 1)))
       }
+      withTempPath { path =>
+        Seq("""{"c":"ab"}""").toDS().write.text(path.getCanonicalPath)
+        val jsonDataFrame = spark.read.schema("c CHAR(4)").json(path.getCanonicalPath)
+        assert(jsonDataFrame.schema("c").dataType === CharType(4))
+        checkAnswer(jsonDataFrame, Row("ab  "))
+      }
+      withTempPath { path =>
+        Seq("abcdef").toDS().write.text(path.getCanonicalPath)
+        val csvOverflow = spark.read.schema("c VARCHAR(4)").csv(path.getCanonicalPath)
+        assert(csvOverflow.schema("c").dataType === VarcharType(4))
+        checkAnswer(csvOverflow, Row(null))
+      }
 
       checkAnswer(
         sql("""SELECT schema_of_json(CAST('{"a":1}' AS VARCHAR(20)))"""),
@@ -2690,6 +2702,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(sql(badXmlKeyThenSiblingQuery), Row(2))
       withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
         assertDuplicateMapKey(jsonQuery)
+        assertDuplicateMapKey(overflowAfterCollisionQuery)
+        assertDuplicateMapKey(badJsonKeyBeforeDuplicateQuery)
         checkAnswer(sql(varcharOverflowQuery), Row(null))
         assertParseExceedLimit(varcharOverflowFailfastQuery, expectedLimit = "2")
       }
@@ -2719,6 +2733,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         checkAnswer(sql(ignoreCorruptXmlQuery), Row(Map("a " -> 2)))
         withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
           checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
+          checkAnswer(sql(overflowAfterCollisionQuery), Row(null))
+          checkAnswer(sql(badJsonKeyBeforeDuplicateQuery), Row(null))
         }
       }
     }
@@ -2802,6 +2818,34 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
                 }
             }
           }
+      }
+    }
+  }
+
+  test("SPARK-59274: collated CHAR/VARCHAR map keys honor the dedup policy") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+      val jsonQuery =
+        """SELECT from_json('{"a":1,"A":2}', 'MAP<CHAR(2) COLLATE UTF8_LCASE, INT>')"""
+      val xmlQuery =
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a><A>2</A></m></ROW>',
+          |  'm MAP<CHAR(2) COLLATE UTF8_LCASE, INT>').m""".stripMargin
+      val varcharJsonQuery =
+        """SELECT from_json(
+          |  '{"ab":1,"AB":2}',
+          |  'MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>')""".stripMargin
+
+      assertDuplicateMapKey(jsonQuery, expectedKey = "A ")
+      assertDuplicateMapKey(xmlQuery, expectedKey = "A ")
+      assertDuplicateMapKey(varcharJsonQuery, expectedKey = "AB")
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        checkAnswer(sql(jsonQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(xmlQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(varcharJsonQuery), Row(Map("ab" -> 2)))
       }
     }
   }

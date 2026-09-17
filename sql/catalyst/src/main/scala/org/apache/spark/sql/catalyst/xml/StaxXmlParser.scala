@@ -41,7 +41,7 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, DuplicateMapKeyUtils, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, DuplicateMapKeyUtils, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -341,11 +341,11 @@ class StaxXmlParser(
         StaxXmlParserUtils.skipNextEndElement(parser, startElementName, options)
         null
       case (c: Characters, ArrayType(st, _)) =>
-        // For `ArrayType`, it needs to return the type of element. The values are merged later.
+        // Consume the element before conversion so a length check cannot leave the
+        // parser on the original text or an unmatched end tag.
         parser.next
-        val value = convertTo(c.getData, st)
         StaxXmlParserUtils.skipNextEndElement(parser, startElementName, options)
-        value
+        convertTo(c.getData, st)
       case (_: Characters, st: StructType) =>
         convertObject(parser, st)
       case (_: Characters, VariantType) =>
@@ -361,10 +361,9 @@ class StaxXmlParser(
         parser.next
         convertField(parser, dataType, startElementName, attributes)
       case (c: Characters, dt: DataType) =>
-        val value = convertTo(c.getData, dt)
         parser.next
         StaxXmlParserUtils.skipNextEndElement(parser, startElementName, options)
-        value
+        convertTo(c.getData, dt)
       case (e: XMLEvent, dt: DataType) =>
         throw new SparkIllegalArgumentException(
           errorClass = "_LEGACY_ERROR_TEMP_3240",
@@ -410,7 +409,6 @@ class StaxXmlParser(
       parser.nextEvent match {
         case e: StartElement =>
           val rawKey = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          val valueStartEvent = parser.peek()
           val value = try {
             Some(convertField(parser, valueType, rawKey))
           } catch {
@@ -418,22 +416,6 @@ class StaxXmlParser(
             case DuplicateMapKeyUtils(e) => throw e
             case NonFatal(e) =>
               badMapException = badMapException.orElse(Some(e))
-              // Primitive conversion can fail while still positioned on its original text.
-              // String and nested conversions consume the element before failing, so any
-              // following whitespace or sibling must remain for the map loop.
-              if (valueStartEvent.isInstanceOf[Characters] &&
-                  (parser.peek() eq valueStartEvent)) {
-                StaxXmlParserUtils.skipChildren(parser, rawKey, options)
-              } else if (valueStartEvent.isInstanceOf[Characters] &&
-                  valueType.isInstanceOf[ArrayType]) {
-                // The array scalar path consumes its text before conversion, but not its end tag.
-                parser.peek() match {
-                  case end: EndElement
-                      if StaxXmlParserUtils.getName(end.getName, options) == rawKey =>
-                    parser.nextEvent()
-                  case _ =>
-                }
-              }
               None
           }
           appendPair(rawKey, value)
@@ -454,23 +436,10 @@ class StaxXmlParser(
         case _ => // do nothing
       }
     }
-    keyType match {
-      case _: CharType | _: VarcharType =>
-        val mapData = DuplicateMapKeyUtils.buildMapWithLastRawKeyWins(
-          kvPairs.map(_._1).toSeq,
-          kvPairs.map(_._2).toSeq,
-          kvPairs.map(_._3).toSeq,
-          keyType,
-          valueType)
-        badMapException.foreach(throw _)
-        mapData
-      case _ =>
-        badMapException.foreach(throw _)
-        // Preserve historical binary exact-name last-wins behavior for ordinary STRING keys,
-        // including strings with a non-binary collation.
-        ArrayBasedMapData(
-          kvPairs.flatMap { case (_, key, value) => value.map(key -> _) }.toMap)
-    }
+    val mapData = DuplicateMapKeyUtils.buildParsedMap(
+      kvPairs.toSeq, keyType, valueType, collapseOrdinaryStringKeys = true)
+    badMapException.foreach(throw _)
+    mapData
   }
 
   /**
