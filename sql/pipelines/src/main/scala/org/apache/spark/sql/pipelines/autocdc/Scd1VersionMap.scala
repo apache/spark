@@ -22,31 +22,18 @@ import org.apache.spark.sql.types.{DataType, MapType, StringType}
 /**
  * Per-leaf sequencing clocks for SCD1 reconciliation.
  *
- * The map type is `Map(String, sequencingType)`. Keys are field paths rendered as fully quoted
- * multipart identifiers using
+ * The SCD1 version map contains one entry for every non-key user-data leaf in the
+ * target-table-aligned row. Each value is the sequencing clock of the event that authored the
+ * leaf's current stored value. A null value means no event has authored the leaf so far.
+ *
+ * A user-data leaf is a non-framework field obtained by recursively expanding structs. A
+ * target-table-aligned row uses the target's field set, order, and spelling. Alignment ensures
+ * every target leaf has a stable map entry across reductive schema evolution and case differences.
+ *
+ * Version-map keys are field paths rendered as fully quoted multipart identifiers using
  * [[org.apache.spark.sql.catalyst.util.QuotingUtils.quoteNameParts]]. Quoting each name part
- * distinguishes a nested path from a column whose name contains dots. Name parts use the
- * persisted target schema's canonical spelling. Values are the non-null sequencing clocks that
- * determined those leaves.
- *
- * Below, the stored leaf value referes to the column's actual data value in the SCD1 row.
- *
- * If the stored leaf value is null:
- *
- *   - If the leaf does not have an entry in the version map, it is unauthored and has no
- *     sequencing clock.
- *   - If the leaf has an entry in the version map, the null was authored at the entry's
- *     sequencing clock.
- *
- * If the stored leaf value is non-null:
- *
- *   - If the leaf does not have an entry in the version map, it was authored at the row's upsert
- *     sequence.
- *   - If the leaf has an entry in the version map, it was authored at the entry's sequencing
- *     clock.
- *
- * Thus, authored nulls and non-null leaves carrying a clock other than the row's upsert sequence
- * require entries; unauthored nulls and non-null leaves authored by that upsert omit them.
+ * distinguishes a nested path from a column whose name contains dots. Name parts use the persisted
+ * target schema's canonical spelling.
  */
 private[pipelines] object Scd1VersionMap {
 
@@ -54,5 +41,5 @@ private[pipelines] object Scd1VersionMap {
    * The version map's Spark data type.
    */
   def mapType(sequencingType: DataType): MapType =
-    MapType(StringType, sequencingType, valueContainsNull = false)
+    MapType(StringType, sequencingType, valueContainsNull = true)
 }
