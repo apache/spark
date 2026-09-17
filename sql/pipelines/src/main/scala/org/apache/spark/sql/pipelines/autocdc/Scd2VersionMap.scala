@@ -60,20 +60,6 @@ import org.apache.spark.sql.types.{BooleanType, MapType, StringType, StructType}
  * map or has a false value in the version map, the null is considered unauthored by the
  * upsert event that spawned this row. Otherwise the null value was explicitly authored by
  * the row.
- *
- * As mentioned above, authorship is dependent on the configured ignore-null selection, which
- * is free to change between pipeline runs for the same AutoCDC flow. As such, we choose that
- * the version map strictly reflects authorship as of the ignore-null selection that was active
- * when the upsert event that produced this row was ingested. This means the authorship
- * information the version map encoded at creation time is invariant/frozen -- even if the
- * ignore-null selection changes on a future run, the version map is not rewritten (unless the
- * table is full refreshed).
- *
- * It's worth noting that while contract case (3) materializes new entries in the version map
- * after creation, it does not change the set of columns whose null values are considered
- * authored/unauthored. Therefore authorship information encoded by the mutated version map is
- * still invariant, and independent of a changing ignore-null configuration. New rows materialized
- * in the map are still compliant with whatever the ignore-null selection was at ingestion time.
  */
 private[pipelines] object Scd2VersionMap {
 

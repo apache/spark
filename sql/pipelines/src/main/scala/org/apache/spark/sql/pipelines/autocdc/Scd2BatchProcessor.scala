@@ -219,6 +219,12 @@ case class Scd2BatchProcessor(
    *
    * TODO(SPARK-59343): decide how to handle the ignore-null selection changing between
    * partial-retry attempts of the same microbatch.
+   *
+   * @param alignedDf Microbatch rows aligned to the target schema, with a CDC metadata column whose
+   *                  version map field is initialized to null.
+   * @return `alignedDf` unchanged when ignore-null is disabled; otherwise, a DataFrame whose
+   *         upsert-row version maps record null authorship under the active ignore-null selection.
+   *         Delete-encoded rows retain a null version map.
    */
   private def extendMicrobatchRowsWithVersionMap(alignedDf: DataFrame): DataFrame =
     changeArgs.ignoreNullSelection match {
@@ -1677,8 +1683,8 @@ object Scd2BatchProcessor {
         // decomposition tails, which are temporarily and synthetically constructed during
         // reconciliation, have a null record start at.
         StructField(recordStartAtFieldName, sequencingType, nullable = true),
-        // The version map representing null-authorship for the row. If the version map is null for
-        // a row, that row was ingested with ignore-null off, and all columns are considered
+        // The version map representing null-authorship for the row. For persisted rows:
+        // If the version map is null, that row was ingested with ignore-null off, and all columns are considered
         // explicitly authored (null or not). If the version map is non-null, the row was ingested
         // with ignore-null on, and contents of the map comply with the contract defined in
         // [[Scd2VersionMap]].
