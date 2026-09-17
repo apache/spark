@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
@@ -668,6 +668,12 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
         s"a child reporting $changed invalidates the grouping, so the claim goes")
       assert(rebuilt.plannedPartitioning === gpe.outputPartitioning,
         "what it was planned to report is still carried, it is just no longer reported")
+
+      // Giving up the claim is only half of it. `ValidateRequirements` rejects such a plan, but
+      // `AdaptiveSparkPlanExec.optimizeQueryStage` validates an `AQEShuffleReadRule`'s result and
+      // nothing else, so execution refuses rather than coalescing the new child on the old indices.
+      val e = intercept[SparkException](rebuilt.execute())
+      assert(e.getMessage.contains("no longer reports the partitioning it was planned over"))
     }
   }
 }

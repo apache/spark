@@ -102,14 +102,18 @@ case class GroupPartitionsExec(
    * node a child reporting something else invalidates both, so the keyed claim is dropped and only
    * the physical output count is reported. `ValidateRequirements` then finds the parent's
    * distribution unsatisfied and `AdaptiveSparkPlanExec` reverts the rewrite, which is what an
-   * `AQEShuffleReadExec` landing over a keyed shuffle stage relies on. That revert is also what
-   * keeps `doExecute` off the changed child, since it still coalesces on the planning-time
-   * `grouping.partitions`. The base relied on the same revert, having re-derived to get there.
+   * `AQEShuffleReadExec` landing over a keyed shuffle stage relies on. Only an `AQEShuffleReadRule`
+   * is validated that way, so `checkChildStillMatches` covers the rest at execution.
    *
    * Re-deriving instead would apply a recipe chosen for one pairing to a different child, yielding
    * a claim nothing validated against the other side. It would also buy nothing today: no rule is
    * known to report a *different* `KeyedPartitioning`, so the reachable outcomes are an equal one,
    * where this check passes, and `UnknownPartitioning`, where re-deriving reports the same thing.
+   *
+   * The comparison is by reference for a child that reports the same object, which the columnar and
+   * codegen wrappers do. `PlanAdaptiveDynamicPruningFilters` rebuilds `BatchScanExec`, so there it
+   * compares the partition keys by value, and reads equal only while the connector returns the same
+   * input partitions for the same scan.
    *
    * Asked on the read rather than in `withNewChildInternal` because canonicalization rebuilds this
    * node over a canonicalized child whose partitioning cannot be read at all: a canonicalized
@@ -308,7 +312,24 @@ case class GroupPartitionsExec(
       sparkContext, executionId, driverAccumUpdates.toSeq)
   }
 
+  /**
+   * `grouping.partitions` indexes the child's partitions as of planning, so a child that no longer
+   * reports what this node was decided over would be coalesced on the wrong indices.
+   * `outputPartitioning` gives up its keyed claim in that case, which lets `ValidateRequirements`
+   * reject the plan, but only an `AQEShuffleReadRule`'s result is validated (see
+   * `AdaptiveSparkPlanExec.optimizeQueryStage`), so nothing catches a rewrite from any other rule.
+   * No rule is known to perform one; this makes the failure explicit rather than silent if one
+   * starts.
+   */
+  private def checkChildStillMatches(): Unit = {
+    if (child.outputPartitioning != childPartitioning) {
+      throw SparkException.internalError(
+        "GroupPartitionsExec's child no longer reports the partitioning it was planned over")
+    }
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
+    checkChildStillMatches()
     sendDriverMetrics()
     if (groupedPartitions.isEmpty) {
       sparkContext.emptyRDD
@@ -329,6 +350,7 @@ case class GroupPartitionsExec(
   override def supportsColumnar: Boolean = child.supportsColumnar && !usesSortedMerge
 
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    checkChildStillMatches()
     sendDriverMetrics()
     if (groupedPartitions.isEmpty) {
       sparkContext.emptyRDD
