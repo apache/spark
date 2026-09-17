@@ -2002,7 +2002,7 @@ def _elementwise_flatten_column(flat, element_type, is_pandas, runner_conf):
     if not is_pandas:
         return flat
 
-    return ArrowToPandasConversion._convert_column(
+    return ArrowToPandasConversion._convert_array(
         flat,
         element_type,
         timezone=runner_conf.timezone,
