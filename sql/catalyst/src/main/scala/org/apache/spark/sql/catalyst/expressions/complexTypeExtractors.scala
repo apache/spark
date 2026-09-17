@@ -661,8 +661,8 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
    *     the hash/equal logic on the Scala side for non-primitive keys.
    *   - `buckets` / `hashMask`: power-of-two open-addressed `int[]` table used by codegen so
    *     primitive-keyed lookups can use inline hash / primitive `==` compare without
-   *     autoboxing. Populated by [[GetMapValueUtil.buildHashBuckets]] using a Scala hash that
-   *     mirrors [[GetMapValueUtil.genHash]].
+   *     autoboxing. Populated by [[PrebuiltHashProbe.buildBuckets]] using a Scala hash that
+   *     mirrors [[PrebuiltHashProbe.genHash]].
    *   - `keys` / `values`: the constant map's key and value arrays, embedded in the generated
    *     class via [[CodegenContext.addReferenceObj]].
    */

@@ -307,6 +307,14 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
   private def eqBranch(key: Expression, keyValue: Any, label: Any): (Expression, Expression) =
     (EqualTo(key, Literal.create(keyValue, key.dataType)), Literal(label))
 
+  // Whether codegen compiles `cw` to the hash probe rather than the if/else-if chain. Code past
+  // `methodSplitThreshold` moves into an added function, so those are searched too.
+  private def usesProbe(cw: CaseWhen): Boolean = {
+    val ctx = new CodegenContext()
+    val code = cw.genCode(ctx).code.toString
+    (code + ctx.declareAddedFunctions()).contains("caseWhenBuckets")
+  }
+
   test("CaseWhen lookup: hash probe matches the if/else-if chain (string keys)") {
     val n = CaseWhen.LookupThreshold + 2
     val key = BoundReference(0, StringType, nullable = true)
@@ -373,10 +381,10 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
       code.contains("caseWhenResultState") && !code.contains("caseWhenBuckets")
     }
     val strKey = BoundReference(0, StringType, nullable = true)
-    def elseVal = Some(Literal("else"))
+    def elseVal: Option[Expression] = Some(Literal("else"))
 
     // Ineligible key types (only binary-collation strings use the probe):
-    // integer/long -- cheap compares, the chain wins (measured); float -- NaN/-0.0 equality;
+    // integer/long -- cheap compares, the chain is already fast; float -- NaN/-0.0 equality;
     // non-binary-collation string -- collation-aware equality a hash bucket cannot honor.
     val intKey = BoundReference(0, IntegerType, nullable = true)
     assert(usesChain(CaseWhen((0 until n).map(i => eqBranch(intKey, i, s"v$i")), elseVal)))
@@ -408,5 +416,56 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     // fewer distinct keys than the fixed threshold
     assert(usesChain(CaseWhen(
       (0 until CaseWhen.LookupThreshold - 1).map(i => eqBranch(strKey, s"k$i", s"v$i")), elseVal)))
+  }
+
+  test("CaseWhen lookup: a branch value that throws keeps the chain and its per-row error") {
+    val key = BoundReference(0, StringType, nullable = true)
+    // Under ANSI, casting 'x' to int throws, so the value table cannot be built up front.
+    val throwing = Cast(Literal("x"), IntegerType, evalMode = EvalMode.ANSI)
+    val cw = CaseWhen(
+      (0 until CaseWhen.LookupThreshold + 2).map { i =>
+        (EqualTo(key, Literal(s"k$i")), if (i == 3) throwing else Literal(i))
+      },
+      Some(Literal(-1)))
+    assert(!usesProbe(cw))
+    // The error surfaces only on a row that reaches the throwing branch.
+    checkEvaluation(cw, 1, create_row("k1"))
+    checkEvaluation(cw, -1, create_row("absent"))
+    checkExceptionInExpression[NumberFormatException](cw, create_row("k3"), "CAST_INVALID_INPUT")
+  }
+
+  test("CaseWhen lookup: the else value is evaluated only on a miss") {
+    val key = BoundReference(0, StringType, nullable = true)
+    val raise = RaiseError(
+      Literal("USER_RAISED_EXCEPTION"),
+      CreateMap(Seq(Literal("errorMessage"), Literal("no lookup match"))),
+      StringType)
+    val cw = CaseWhen(
+      (0 until CaseWhen.LookupThreshold + 2).map(i => eqBranch(key, s"k$i", s"v$i")), Some(raise))
+    assert(usesProbe(cw))
+    checkEvaluation(cw, "v1", create_row("k1"))
+    checkExceptionInExpression[RuntimeException](cw, create_row("absent"), "no lookup match")
+    checkExceptionInExpression[RuntimeException](cw, create_row(null), "no lookup match")
+  }
+
+  test("CaseWhen lookup: decimal and struct branch values") {
+    val key = BoundReference(0, StringType, nullable = true)
+    def lookup(value: Int => Expression, elseValue: Expression): CaseWhen = CaseWhen(
+      (0 until CaseWhen.LookupThreshold + 2).map(i => (EqualTo(key, Literal(s"k$i")), value(i))),
+      Some(elseValue))
+
+    val decimals = lookup(
+      i => Literal(Decimal(BigDecimal(s"$i.25"), 10, 2)),
+      Literal(Decimal(BigDecimal("-1.00"), 10, 2)))
+    assert(usesProbe(decimals))
+    checkEvaluation(decimals, Decimal(BigDecimal("4.25"), 10, 2), create_row("k4"))
+    checkEvaluation(decimals, Decimal(BigDecimal("-1.00"), 10, 2), create_row("absent"))
+
+    def struct(id: Int, label: String): Expression =
+      CreateNamedStruct(Seq(Literal("id"), Literal(id), Literal("label"), Literal(label)))
+    val structs = lookup(i => struct(i, s"v$i"), struct(-1, "else"))
+    assert(usesProbe(structs))
+    checkEvaluation(structs, create_row(4, "v4"), create_row("k4"))
+    checkEvaluation(structs, create_row(-1, "else"), create_row("absent"))
   }
 }

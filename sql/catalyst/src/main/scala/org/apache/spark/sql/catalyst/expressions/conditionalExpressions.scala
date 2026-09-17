@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistryBase, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -421,9 +423,8 @@ case class CaseWhen(
       val keyType = key.dataType
       // Restricted to one shared, deterministic, binary-collation string key. Strings are where
       // the probe pays off: a string compare is expensive, so replacing the chain's O(N) scan
-      // with a single hash probe wins (measured up to ~2.6x, and never regresses). Cheap-compare
-      // integral/temporal keys do NOT benefit -- the chain's compares are near-free and well
-      // branch-predicted (measured: no win, and a regression on the common all-miss case) -- and
+      // with a single hash probe wins. Cheap-compare integral/temporal keys do not benefit --
+      // the chain's compares are near-free and well branch-predicted -- and
       // float/double/non-binary-collation strings have equality a hash bucket cannot honor.
       val eligibleKey = key.deterministic &&
         pairs.forall(_._1._1.semanticEquals(key)) &&
@@ -438,24 +439,25 @@ case class CaseWhen(
         // true) and keep the first value for each distinct key (first-wins, matching eval order).
         // A foldable value/key that throws (e.g. an un-folded ANSI cast) makes us bail, so the
         // error still surfaces only per-row when that branch matches -- today's behavior.
-        try {
-          val seen = scala.collection.mutable.LinkedHashMap.empty[Any, Any]
+        val seen = scala.collection.mutable.LinkedHashMap.empty[Any, Any]
+        val evaluated = try {
           pairs.foreach { case ((_, constExpr), valueExpr) =>
             val k = constExpr.eval(EmptyRow)
             if (k != null && !seen.contains(k)) {
               seen(k) = valueExpr.eval(EmptyRow)
             }
           }
-          if (seen.size < CaseWhen.LookupThreshold) {
-            None
-          } else {
-            val keysArray = new GenericArrayData(seen.keys.toArray)
-            val valuesArray = new GenericArrayData(seen.values.toArray)
-            val (buckets, hashMask) = PrebuiltHashProbe.buildBuckets(keysArray, keyType)
-            Some(CaseWhen.LookupProbe(key, keyType, buckets, hashMask, keysArray, valuesArray))
-          }
+          true
         } catch {
-          case _: Exception => None
+          case NonFatal(_) => false
+        }
+        if (!evaluated || seen.size < CaseWhen.LookupThreshold) {
+          None
+        } else {
+          val keysArray = new GenericArrayData(seen.keys.toArray)
+          val valuesArray = new GenericArrayData(seen.values.toArray)
+          val (buckets, hashMask) = PrebuiltHashProbe.buildBuckets(keysArray, keyType)
+          Some(CaseWhen.LookupProbe(key, keyType, buckets, hashMask, keysArray, valuesArray))
         }
       }
     }

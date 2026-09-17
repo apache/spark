@@ -19,18 +19,24 @@ package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Benchmark for a lookup-shaped `CASE WHEN` -- one whose branches are all `key = literal THEN
- * constant` -- comparing the constant hash probe (spark.sql.optimizer.caseWhenLookup.enabled=true)
- * against the if/else-if chain (false) over 10M rows. Covers int and string keys, an N sweep, and
- * three key distributions: all-miss (worst case for the chain), first-key (best case for the
- * chain's short-circuit), and uniform over the keys.
+ * Benchmark for a lookup-shaped `CASE WHEN` on a string key -- one whose branches are all
+ * `key = literal THEN constant` -- comparing the constant hash probe
+ * (`spark.sql.optimizer.caseWhenLookup.enabled` true) against the if/else-if chain (false) over
+ * 10M rows, for 10 to 200 branches and three key distributions: all-miss (every row falls to the
+ * ELSE, the worst case for the chain), first-key (every row matches the first branch, the best
+ * case for the chain's short-circuit) and uniform over the keys.
  *
+ * To run this benchmark:
  * {{{
- *   build/sbt "sql/Test/runMain org.apache.spark.sql.execution.benchmark.CaseWhenBenchmark"
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark sql test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result:
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
+ *      Results will be written to "benchmarks/CaseWhenBenchmark-results.txt".
  * }}}
  */
 object CaseWhenBenchmark extends SqlBasedBenchmark {
@@ -61,11 +67,13 @@ object CaseWhenBenchmark extends SqlBasedBenchmark {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Lookup CASE WHEN on a string key: hash probe vs if/else-if chain") {
       sizes.foreach { n =>
-        // Keys are 'k0'..'k(n-1)'. Rows either match no key (fall to ELSE) or hit keys uniformly.
-        val allMiss = spark.range(numRows).select(lit("absent").as("k"))
-        sweep(s"string, N=$n, all-miss", allMiss, n)
-        val uniform = spark.range(numRows).selectExpr(s"concat('k', cast(id % $n as string)) as k")
-        sweep(s"string, N=$n, uniform", uniform, n)
+        // Keys are 'k0'..'k(n-1)'. Every distribution builds its key from `id` the same way, so
+        // the optimizer cannot fold the CASE away and each one pays the same cost to build it.
+        def keys(prefix: String, mod: Int): DataFrame =
+          spark.range(numRows).selectExpr(s"concat('$prefix', cast(id % $mod as string)) as k")
+        sweep(s"string, N=$n, all-miss", keys("x", n), n)
+        sweep(s"string, N=$n, first-key", keys("k", 1), n)
+        sweep(s"string, N=$n, uniform", keys("k", n), n)
       }
     }
   }
