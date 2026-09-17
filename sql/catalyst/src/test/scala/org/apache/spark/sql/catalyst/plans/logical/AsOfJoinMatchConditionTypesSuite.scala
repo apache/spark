@@ -47,6 +47,14 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
       !MatchConditionTypes.stringComparisonCommonType(IntegerType, StringType).contains(StringType))
   }
 
+  test("scalar string and boolean or binary coerce, matching the comparison operator") {
+    // BOOLEAN/BINARY vs STRING have a comparison common type, so ASOF accepts them like `>=`.
+    assert(MatchConditionTypes.areOperandsCompatible(BooleanType, StringType))
+    assert(MatchConditionTypes.areOperandsCompatible(StringType, BinaryType))
+    assert(MatchConditionTypes.stringComparisonCommonType(BooleanType, StringType).nonEmpty)
+    assert(MatchConditionTypes.stringComparisonCommonType(StringType, BinaryType).nonEmpty)
+  }
+
   test("scalar string vs interval is rejected, matching the comparison operator") {
     // No comparison common type exists, so reject it instead of leaving it uncoerced.
     val interval = DayTimeIntervalType()

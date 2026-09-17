@@ -78,6 +78,11 @@ SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (t.trade_time >= q.bid_price)
   ON t.symbol = q.symbol;
 
+-- FVT-ASOF-3-012a: STRING vs INTERVAL has no comparison common type, rejected like `>=`
+SELECT * FROM VALUES ('2026-06-29') AS t(s) ASOF JOIN
+     VALUES (INTERVAL '1-2' YEAR TO MONTH) AS r(iv)
+  MATCH_CONDITION (t.s >= r.iv);
+
 -- FVT-ASOF-3-013: STRUCT with non-orderable field rejected
 SELECT * FROM VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS t(s) ASOF JOIN
      VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS r(s)

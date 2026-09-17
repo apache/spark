@@ -316,6 +316,29 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM VALUES ('2026-06-29') AS t(s) ASOF JOIN
+     VALUES (INTERVAL '1-2' YEAR TO MONTH) AS r(iv)
+  MATCH_CONDITION (t.s >= r.iv)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "type1" : "\"STRING\"",
+    "type2" : "\"INTERVAL YEAR TO MONTH\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 137,
+    "fragment" : "ASOF JOIN\n     VALUES (INTERVAL '1-2' YEAR TO MONTH) AS r(iv)\n  MATCH_CONDITION (t.s >= r.iv)"
+  } ]
+}
+
+
+-- !query
 SELECT * FROM VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS t(s) ASOF JOIN
      VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS r(s)
   MATCH_CONDITION (t.s >= r.s)

@@ -331,6 +331,34 @@ Project [k#x, s#x AS matched_s#x]
 
 
 -- !query
+SELECT t.s, r.d AS matched_d
+FROM VALUES ('2026-06-29') AS t(s) ASOF JOIN
+     VALUES (DATE '2026-06-28'), (DATE '2026-06-29') AS r(d)
+  MATCH_CONDITION (t.s >= r.d)
+-- !query analysis
+Project [s#x, d#x AS matched_d#x]
++- AsOfJoin (cast(s#x as date) >= d#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [s#x]
+   +- SubqueryAlias r
+      +- LocalRelation [d#x]
+
+
+-- !query
+SELECT t.ts, r.s AS matched_s
+FROM VALUES (TIMESTAMP_NTZ '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
+     VALUES ('2026-06-29 09:00:00'), ('2026-06-29 10:00:00') AS r(s)
+  MATCH_CONDITION (t.ts >= r.s)
+-- !query analysis
+Project [ts#x, s#x AS matched_s#x]
++- AsOfJoin (ts#x >= cast(s#x as timestamp_ntz)), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [ts#x]
+   +- SubqueryAlias r
+      +- LocalRelation [s#x]
+
+
+-- !query
 SELECT t.a, r.a AS matched_a
 FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
      VALUES (ARRAY(1, 2)), (ARRAY(1, 4)) AS r(a)

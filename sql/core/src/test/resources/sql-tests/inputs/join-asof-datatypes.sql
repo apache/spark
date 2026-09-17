@@ -146,6 +146,18 @@ FROM VALUES (25) AS t(k) ASOF JOIN
      VALUES ('9'), ('10'), ('20') AS r(s)
   MATCH_CONDITION (t.k >= r.s);
 
+-- FVT-ASOF-4-016d: coercion STRING vs DATE with the string on the left (SPARK-59527)
+SELECT t.s, r.d AS matched_d
+FROM VALUES ('2026-06-29') AS t(s) ASOF JOIN
+     VALUES (DATE '2026-06-28'), (DATE '2026-06-29') AS r(d)
+  MATCH_CONDITION (t.s >= r.d);
+
+-- FVT-ASOF-4-016e: coercion TIMESTAMP_NTZ vs STRING (NTZ common type via AtomicType fallback)
+SELECT t.ts, r.s AS matched_s
+FROM VALUES (TIMESTAMP_NTZ '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
+     VALUES ('2026-06-29 09:00:00'), ('2026-06-29 10:00:00') AS r(s)
+  MATCH_CONDITION (t.ts >= r.s);
+
 -- FVT-ASOF-4-017: ARRAY<INT> operand
 SELECT t.a, r.a AS matched_a
 FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
