@@ -17,12 +17,50 @@
 
 package org.apache.spark.ml.stat.distribution
 
+import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
+
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration._
+
 import org.apache.spark.ml.SparkMLFunSuite
 import org.apache.spark.ml.linalg.{Matrices, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
 
 
 class MultivariateGaussianSuite extends SparkMLFunSuite {
+
+  test("SPARK-59618: multivariate Gaussian can be initialized concurrently") {
+    val numThreads = 16
+    val ready = new CountDownLatch(numThreads)
+    val start = new CountDownLatch(1)
+    val executor = Executors.newFixedThreadPool(numThreads, (runnable: Runnable) => {
+      val thread = new Thread(runnable, "multivariate-gaussian-test")
+      thread.setDaemon(true)
+      thread
+    })
+    implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutorService(executor)
+
+    try {
+      val results = (0 until numThreads).map { _ =>
+        Future {
+          ready.countDown()
+          start.await()
+          val dist = new MultivariateGaussian(
+            Vectors.dense(0.0, 0.0),
+            Matrices.dense(2, 2, Array(1.0, 0.0, 0.0, 1.0)))
+          dist.pdf(Vectors.dense(0.0, 0.0))
+        }
+      }
+      assert(ready.await(10, TimeUnit.SECONDS))
+      start.countDown()
+
+      Await.result(Future.sequence(results), 30.seconds).foreach { result =>
+        assert(result ~== 0.15915 absTol 1E-5)
+      }
+    } finally {
+      executor.shutdownNow()
+    }
+  }
 
   test("univariate") {
     val x1 = Vectors.dense(0.0)
