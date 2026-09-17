@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import scala.util.chaining._
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
@@ -239,9 +237,14 @@ case class Scd2BatchProcessor(
         // dropped the column the delete condition references.
         val isUpsertRow = F.col(Scd2BatchProcessor.endAtColName).isNull
         val versionMap = F.when(isUpsertRow, Scd2VersionMap.buildVersionMap(
-          schema = alignedDf.schema
-            .pipe(Scd2BatchProcessor.filterOutKeyColumns(_, changeArgs.keys, resolver))
-            .pipe(Scd2BatchProcessor.filterOutReservedFrameworkColumns(_, resolver)),
+          schema = AutoCdcSchemaUtils.excludeColumns(
+            schema = alignedDf.schema,
+            // Keys and framework columns always author nulls, so they should not be part of the
+            // schema the version map is constructed from.
+            columnNamesToExclude =
+              changeArgs.keys.map(_.name) ++ Scd2BatchProcessor.reservedFrameworkColNames,
+            resolver = resolver
+          ),
           ignoreNullSelection = ignoreNullSelection,
           resolver = resolver
         ))
@@ -1513,35 +1516,18 @@ object Scd2BatchProcessor {
     ColumnSelection
       .applyToSchema(
         schemaName = "trackHistorySelection",
-        schema = schema
-          .pipe(filterOutKeyColumns(_, changeArgs.keys, resolver))
-          .pipe(filterOutReservedFrameworkColumns(_, resolver)),
+        schema = AutoCdcSchemaUtils.excludeColumns(
+          schema = schema,
+          // Keys and framework columns are not eligible for track history. Keys are identity rows,
+          // and framework columns are operational metadata, not data emitted by events from the
+          // change feed.
+          columnNamesToExclude = changeArgs.keys.map(_.name) ++ reservedFrameworkColNames,
+          resolver = resolver),
         columnSelection = changeArgs.trackHistorySelection,
         resolver = resolver
       )
       .fieldNames
       .toImmutableArraySeq
-
-  /**
-   * Returns `schema` without fields matching the configured key columns, preserving field order.
-   */
-  private def filterOutKeyColumns(
-      schema: StructType,
-      keyColumns: Seq[UnqualifiedColumnName],
-      resolver: Resolver): StructType = {
-    val keyColumnNames = keyColumns.map(_.name)
-    StructType(schema.fields.filterNot(field => keyColumnNames.exists(resolver(_, field.name))))
-  }
-
-  /**
-   * Returns `schema` without fields matching SCD2's reserved framework columns, preserving field
-   * order.
-   */
-  private def filterOutReservedFrameworkColumns(
-      schema: StructType,
-      resolver: Resolver): StructType =
-    StructType(schema.fields.filterNot(field =>
-      reservedFrameworkColNames.exists(resolver(_, field.name))))
 
   /**
    * Name of temporary column projected onto microbatch to compute the min sequencing value per

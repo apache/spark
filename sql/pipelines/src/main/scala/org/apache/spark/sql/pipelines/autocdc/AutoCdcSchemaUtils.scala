@@ -17,9 +17,20 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.types.StructType
 
 private[autocdc] object AutoCdcSchemaUtils {
+
+  /**
+   * Returns `schema` without fields matching `columnNamesToExclude`, preserving field order.
+   */
+  def excludeColumns(
+      schema: StructType,
+      columnNamesToExclude: Iterable[String],
+      resolver: Resolver): StructType =
+    StructType(schema.fields.filterNot(field =>
+      columnNamesToExclude.exists(resolver(_, field.name))))
 
   /**
    * Returns field-name paths after recursively flattening nested structs, preserving schema order.
