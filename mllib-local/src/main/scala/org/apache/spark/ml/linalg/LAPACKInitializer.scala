@@ -28,6 +28,12 @@ private[spark] object LAPACKInitializer {
   // while concurrent threads wait for class initialization to finish. Later initialize() calls are
   // cheap reads of the completed Unit field. In local mode, the driver and executor share the JVM,
   // so the warm-up also runs only once there.
+  //
+  // The warm-up uses Breeze's selected LAPACK backend. It is required only for F2J; a native
+  // provider such as OpenBLAS or MKL only incurs this one-time 2-by-2 decomposition. Later calls
+  // remain concurrent. A 2-by-2 matrix is used because DSYEV returns early for a 1-by-1 matrix
+  // without initializing floating-point limits such as epsilon, the safe minimum, and the maximum
+  // finite value.
   private val initialized: Unit = {
     eigSym(BDM.eye[Double](2))
   }
