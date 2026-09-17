@@ -20,6 +20,7 @@ import java.net.URI
 import java.nio.file.Files
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config.{JAR_IVY_CONNECT_TIMEOUT, JAR_IVY_READ_TIMEOUT}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{IvyTestUtils, MavenUtils, Utils}
 import org.apache.spark.util.MavenUtils.MavenCoordinate
@@ -45,6 +46,8 @@ class ArtifactManagerIvySettingsSuite extends SharedSparkSession {
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set(MavenUtils.JAR_IVY_SETTING_PATH_KEY, ivySettings.toString)
+      .set(JAR_IVY_CONNECT_TIMEOUT, 7000L)
+      .set(JAR_IVY_READ_TIMEOUT, 11000L)
   }
 
   override def afterAll(): Unit = {
@@ -53,6 +56,12 @@ class ArtifactManagerIvySettingsSuite extends SharedSparkSession {
     } finally {
       Utils.deleteRecursively(ivySettingsDir)
     }
+  }
+
+  test("Ivy timeout configurations have defaults") {
+    val conf = new SparkConf(loadDefaults = false)
+    assert(conf.get(JAR_IVY_CONNECT_TIMEOUT) == 30000L)
+    assert(conf.get(JAR_IVY_READ_TIMEOUT) == 300000L)
   }
 
   test("SparkSession artifact APIs use spark.jars.ivySettings") {
@@ -72,5 +81,7 @@ class ArtifactManagerIvySettingsSuite extends SharedSparkSession {
     assert(
       spark.artifactManager.artifactPath.resolve(".ivy-cache") !=
         otherSession.artifactManager.artifactPath.resolve(".ivy-cache"))
+    assert(spark.artifactManager.ivyConnectTimeoutMs == 7000)
+    assert(spark.artifactManager.ivyReadTimeoutMs == 11000)
   }
 }

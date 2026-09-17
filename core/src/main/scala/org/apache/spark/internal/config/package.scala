@@ -3054,6 +3054,28 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val JAR_IVY_CONNECT_TIMEOUT =
+    ConfigBuilder("spark.jars.ivyConnectTimeout")
+      .doc("Connection timeout for Ivy repository requests made during runtime dependency " +
+        "resolution. This must be set before the SparkContext starts.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(
+        timeout => timeout > 0 && timeout <= Int.MaxValue,
+        s"Timeout must be positive and no greater than ${Int.MaxValue} milliseconds.")
+      .createWithDefaultString("30s")
+
+  private[spark] val JAR_IVY_READ_TIMEOUT =
+    ConfigBuilder("spark.jars.ivyReadTimeout")
+      .doc("Read timeout for Ivy repository requests made during runtime dependency resolution. " +
+        "This must be set before the SparkContext starts.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(
+        timeout => timeout > 0 && timeout <= Int.MaxValue,
+        s"Timeout must be positive and no greater than ${Int.MaxValue} milliseconds.")
+      .createWithDefaultString("5m")
+
   private[spark] val JAR_PACKAGES =
     ConfigBuilder("spark.jars.packages")
       .doc("Comma-separated list of Maven coordinates of jars to include " +
@@ -3081,7 +3103,8 @@ package object config {
   private[spark] val JAR_REPOSITORIES =
     ConfigBuilder("spark.jars.repositories")
       .doc("Comma-separated list of additional remote repositories to search " +
-        "for the maven coordinates given with --packages or spark.jars.packages.")
+        "for the maven coordinates given with --packages, spark.jars.packages, or ivy:// URIs " +
+        "passed to SparkSession.addArtifact.")
       .version("2.3.0")
       .stringConf
       .toSequence

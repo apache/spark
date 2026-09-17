@@ -562,7 +562,10 @@ abstract class SparkSession extends Serializable with Closeable {
    * Add a single artifact to the current session.
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs.
-   * Ivy URIs are resolved using `spark.jars.ivySettings` when it is configured.
+   * Ivy URIs are resolved using `spark.jars.ivySettings` when it is configured. When using Spark
+   * Connect, Ivy URIs with repositories in the `repos` query parameter, or sent to servers that do
+   * not support server-side Maven resolution, are resolved by the client without the server's Ivy
+   * settings.
    *
    * @since 4.0.0
    */
@@ -573,7 +576,10 @@ abstract class SparkSession extends Serializable with Closeable {
    * Add a single artifact to the current session.
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs.
-   * Ivy URIs are resolved using `spark.jars.ivySettings` when it is configured.
+   * Ivy URIs are resolved using `spark.jars.ivySettings` when it is configured. When using Spark
+   * Connect, Ivy URIs with repositories in the `repos` query parameter, or sent to servers that do
+   * not support server-side Maven resolution, are resolved by the client without the server's Ivy
+   * settings.
    *
    * @since 4.0.0
    */
@@ -625,7 +631,10 @@ abstract class SparkSession extends Serializable with Closeable {
    * Add one or more artifacts to the session.
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs.
-   * Ivy URIs are resolved using `spark.jars.ivySettings` when it is configured.
+   * Ivy URIs are resolved using `spark.jars.ivySettings` when it is configured. When using Spark
+   * Connect, Ivy URIs with repositories in the `repos` query parameter, or sent to servers that do
+   * not support server-side Maven resolution, are resolved by the client without the server's Ivy
+   * settings.
    *
    * @since 4.0.0
    */

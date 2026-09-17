@@ -39,7 +39,7 @@ import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.sql.util.ArtifactUtils
-import org.apache.spark.util.{RuntimeDependencyResolver, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.RuntimeDependencyResolver.RejectRequestedRepositories
 
 /**
@@ -190,8 +190,8 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     val timeoutAsInt = math.min(timeoutMs, Int.MaxValue.toLong).toInt
     val connectTimeoutMs = math.min(
       timeoutAsInt,
-      RuntimeDependencyResolver.DefaultConnectTimeoutMs)
-    val readTimeoutMs = math.min(timeoutAsInt, RuntimeDependencyResolver.DefaultReadTimeoutMs)
+      holder.artifactManager.ivyConnectTimeoutMs)
+    val readTimeoutMs = math.min(timeoutAsInt, holder.artifactManager.ivyReadTimeoutMs)
     val task = try {
       SparkConnectAddArtifactsHandler.mavenResolutionExecutor.submit(
         new Callable[Map[URI, Seq[Artifact]]] {

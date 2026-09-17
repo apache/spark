@@ -33,7 +33,7 @@ import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST, JAR_IVY_SETTING_PATH, JAR_REPOSITORIES}
+import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST, JAR_IVY_CONNECT_TIMEOUT, JAR_IVY_READ_TIMEOUT, JAR_IVY_SETTING_PATH, JAR_REPOSITORIES}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -79,6 +79,12 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       configuredRepositories = sparkConf.get(JAR_REPOSITORIES),
       ivyPath = Some(ivyPath))
   }
+
+  private[sql] lazy val ivyConnectTimeoutMs: Int =
+    session.sparkContext.getConf.get(JAR_IVY_CONNECT_TIMEOUT).toInt
+
+  private[sql] lazy val ivyReadTimeoutMs: Int =
+    session.sparkContext.getConf.get(JAR_IVY_READ_TIMEOUT).toInt
 
   // The base directory/URI where all class file artifacts are stored for this `sessionUUID`.
   protected[artifact] val (classDir, replClassURI): (Path, String) =
@@ -336,8 +342,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
   private[sql] def resolveArtifacts(
       uri: URI,
       repositoryPolicy: RepositoryPolicy = AllowRequestedRepositories,
-      connectTimeoutMs: Int = RuntimeDependencyResolver.DefaultConnectTimeoutMs,
-      readTimeoutMs: Int = RuntimeDependencyResolver.DefaultReadTimeoutMs,
+      connectTimeoutMs: Int = ivyConnectTimeoutMs,
+      readTimeoutMs: Int = ivyReadTimeoutMs,
       isCancelled: () => Boolean = () => false): Seq[Artifact] = {
     uri.getScheme match {
       case "ivy" =>
