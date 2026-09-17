@@ -44,7 +44,8 @@ private[spark] case class InstanceBlock(
   require(labels.length == matrix.numRows,
     s"The number of labels (${labels.length}) must match the number of matrix rows " +
     s"(${matrix.numRows}).")
-  require(matrix.isTransposed, "The matrix must be transposed (stored in row-major order).")
+  require(matrix.isTransposed,
+    "The matrix must be transposed (row-major for dense, CSR for sparse).")
   if (weights.nonEmpty) {
     require(labels.length == weights.length,
       s"The number of weights (${weights.length}) must match the number of labels " +
@@ -169,8 +170,8 @@ private[spark] object InstanceBlock {
           val instance = instanceIterator.next()
           if (numCols < 0L) numCols = instance.features.size
           require(numCols == instance.features.size,
-            "All instances must have the same number of features, but got " +
-            s"${instance.features.size} != $numCols.")
+            s"All instances must have the same number of features: expected $numCols " +
+            s"but got ${instance.features.size}.")
 
           buff += instance
           buffCnt += 1L
