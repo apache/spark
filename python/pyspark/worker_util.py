@@ -265,36 +265,6 @@ def send_accumulator_updates(outfile: IO) -> None:
         pickleSer._write_with_length((aid, accum._value), outfile)
 
 
-def extract_key_value_indexes(grouped_arg_offsets: list) -> list:
-    """
-    Helper function to extract the key and value indexes from arg_offsets for the grouped and
-    cogrouped grouped-map udfs. See BasePandasGroupExec.resolveArgOffsets for equivalent scala code.
-
-    Parameters
-    ----------
-    grouped_arg_offsets:  list
-        List containing the key and value indexes of columns of the
-        DataFrames to be passed to the udf. It consists of n repeating groups where n is the
-        number of DataFrames.  Each group has the following format:
-            group[0]: length of group
-            group[1]: length of key indexes
-            group[2.. group[1] +2]: key attributes
-            group[group[1] +3 group[0]]: value attributes
-    """
-    parsed = []
-    idx = 0
-    while idx < len(grouped_arg_offsets):
-        offsets_len = grouped_arg_offsets[idx]
-        idx += 1
-        offsets = grouped_arg_offsets[idx : idx + offsets_len]
-        split_index = offsets[0] + 1
-        offset_keys = offsets[1:split_index]
-        offset_values = offsets[split_index:]
-        parsed.append([offset_keys, offset_values])
-        idx += offsets_len
-    return parsed
-
-
 class Conf:
     def __init__(self, infile_or_dict: Optional[Union[dict[str, str], IO]] = None) -> None:
         self._conf: dict[str, Any] = {}

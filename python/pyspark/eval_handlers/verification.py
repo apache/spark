@@ -21,7 +21,7 @@ Used by the eval type handlers and by the worker's ``read_udfs``.
 """
 
 from collections.abc import Iterator
-from typing import Any, Callable, Type, TypeVar, Union, get_args, get_origin
+from typing import Any, Callable, Type, TypeVar, Union, cast, get_args, get_origin
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
 
@@ -99,7 +99,7 @@ def verify_return_type(result: T, expected_type: Type[T]) -> T:
                 )
             return element
 
-        return map(check_element, result)  # type: ignore[return-value]
+        return cast(T, map(check_element, result))
 
     if not isinstance(result, expected_type):
         raise PySparkTypeError(

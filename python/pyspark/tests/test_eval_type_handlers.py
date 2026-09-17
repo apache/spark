@@ -17,14 +17,6 @@
 
 import unittest
 
-from pyspark.eval_handlers._arrow import (
-    ArrowCoGroupedMapUDFHandler,
-    ArrowGroupedMapIterUDFHandler,
-    ArrowGroupedMapUDFHandler,
-    ArrowMapUDFHandler,
-    ArrowScalarIterUDFHandler,
-    ArrowScalarUDFHandler,
-)
 from pyspark.eval_handlers._base import (
     BatchEvalTypeHandler,
     CoGroupedEvalTypeHandler,
@@ -42,6 +34,17 @@ from pyspark.sql.types import LongType, StructField, StructType
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
 from pyspark.util import PythonEvalType
 
+if have_pyarrow:
+    # The handlers live in ``_arrow``, which imports pyarrow at module top.
+    from pyspark.eval_handlers._arrow import (
+        ArrowCoGroupedMapUDFHandler,
+        ArrowGroupedMapIterUDFHandler,
+        ArrowGroupedMapUDFHandler,
+        ArrowMapUDFHandler,
+        ArrowScalarIterUDFHandler,
+        ArrowScalarUDFHandler,
+    )
+
 
 class _RunnerConf:
     """Minimal stand-in for the worker's RunnerConf, exposing only the fields
@@ -52,6 +55,7 @@ class _RunnerConf:
     map_in_batch_legacy_accept_any_iterable = False
 
 
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class EvalTypeHandlerTests(unittest.TestCase):
     def test_arrow_eval_types_are_registered(self):
         # Every migrated Arrow map/iter eval type dispatches to its handler by lookup.
