@@ -63,17 +63,25 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     // Exception should be detected in analysis phase first when we resolve a schema from
     // through JDBC by sending SELECT * FROM (<subquery>) [LIMIT 1][WHERE 1=0] query.
-    checkErrorMatchPVals(
-      ex,
+    checkError(
+      exception = ex,
       condition = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+      sqlState = Some("42000"),
       parameters = Map(
         "jdbcQuery" -> "SELECT \\* FROM \\(.*",
-        "externalEngineError" -> "[\\s\\S]*",
-        "externalEngineSqlState" -> "[\\s\\S]*"
-      )
+        "externalEngineError" -> "[\\s\\S]+",
+        "externalEngineSqlState" -> ".+"
+      ),
+      matchPVals = true
     )
-    assert(ex.getMessageParameters.get("externalEngineSqlState") ===
-      Option(ex.getCause.asInstanceOf[SQLException].getSQLState).getOrElse("unknown"))
+    ex.getCause match {
+      case cause: SQLException =>
+        val expectedSqlState =
+          Option(cause.getSQLState).filter(_.nonEmpty).getOrElse("unknown")
+        assert(ex.getMessageParameters.get("externalEngineSqlState") === expectedSqlState)
+      case other =>
+        fail(s"Expected SQLException cause, but got: $other")
+    }
   }
 
   test("SPARK-53386: Parameter `query` should work when ending with semicolons") {
