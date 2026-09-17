@@ -263,10 +263,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
           if CharVarcharUtils.hasCharVarchar(dt) =>
         val physicalType = ScriptTransformationIOSchema.toUnboundedStringType(dt)
         // JSON object keys are strings. Cast them to the declared map key type after parsing.
-        val jsonType = physicalType.transformRecursively {
-          case map: MapType if !map.keyType.isInstanceOf[StringType] =>
-            map.copy(keyType = StringType)
-        }
+        val jsonType = ScriptTransformationIOSchema.toJsonMapKeyType(physicalType)
         val complexTypeFactory = JsonToStructs(
           jsonType,
           ioschema.outputSerdeProps.toMap,
@@ -427,6 +424,18 @@ object ScriptTransformationIOSchema {
       case c: CharType => c.toStringType
       case v: VarcharType => v.toStringType
     }
+  }
+
+  // JSON object keys are always strings. Rewrite every map key, including nested maps.
+  // `transformRecursively` would stop at the first matching MapType and skip children.
+  private[sql] def toJsonMapKeyType(dataType: DataType): DataType = dataType match {
+    case ArrayType(et, n) => ArrayType(toJsonMapKeyType(et), n)
+    case MapType(kt, vt, n) =>
+      val jsonKey = if (kt.isInstanceOf[StringType]) kt else StringType
+      MapType(jsonKey, toJsonMapKeyType(vt), n)
+    case StructType(fields) =>
+      StructType(fields.map(f => f.copy(dataType = toJsonMapKeyType(f.dataType))))
+    case other => other
   }
 
   val defaultFormat = Map(

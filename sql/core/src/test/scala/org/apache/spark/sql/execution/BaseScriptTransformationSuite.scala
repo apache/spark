@@ -165,6 +165,18 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
           MapType(IntegerType, CharType(4)),
           Row(Map(1 -> "ab  "))),
         (
+          """{"1":{"2":"ab"}}""",
+          MapType(IntegerType, MapType(IntegerType, CharType(4))),
+          Row(Map(1 -> Map(2 -> "ab  ")))),
+        (
+          """[{"1":"ab"}]""",
+          ArrayType(MapType(IntegerType, CharType(4))),
+          Row(Seq(Map(1 -> "ab  ")))),
+        (
+          """{"m":{"1":"ab"}}""",
+          StructType(Seq(StructField("m", MapType(IntegerType, CharType(4))))),
+          Row(Row(Map(1 -> "ab  ")))),
+        (
           """{"value":"xy"}""",
           StructType(Seq(StructField("value", CharType(5)))),
           Row(Row("xy   ")))).foreach { case (json, dataType, expected) =>
@@ -188,6 +200,9 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
       Seq(
         (ArrayType(CharType(4)), """["abcdef"]"""),
         (MapType(IntegerType, CharType(4)), """{"1":"abcdef"}"""),
+        (
+          MapType(IntegerType, MapType(IntegerType, CharType(4))),
+          """{"1":{"2":"abcdef"}}"""),
         (
           StructType(Seq(StructField("value", VarcharType(4)))),
           """{"value":"abcdef"}""")).foreach { case (dataType, json) =>
