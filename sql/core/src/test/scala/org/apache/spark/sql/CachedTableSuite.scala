@@ -2357,10 +2357,12 @@ class CachedTableSuite extends SharedSparkSession
     val boundModes = Seq(
       (Seq(
         SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"), MEMORY_ONLY, "MEMORY_ONLY"),
-      (Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"), DISK_ONLY, "DISK_ONLY"))
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
+        MEMORY_ONLY, "MEMORY_ONLY", CharVarcharScanMode.PreserveNative),
+      (Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
+        DISK_ONLY, "DISK_ONLY", CharVarcharScanMode.SparkStandard))
     withTable(t, tRenamed, "cached_tt1", "cached_tt2") {
-      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"CREATE TABLE $t (id int, data varchar(4)) USING foo")
       sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
 
       // pin v1
@@ -2374,7 +2376,7 @@ class CachedTableSuite extends SharedSparkSession
       sql(s"INSERT INTO $t VALUES (4, 'e'), (5, 'f')")
 
       // Cache both mode-specific variants of the base table at once.
-      boundModes.foreach { case (modeConf, storageLevel, storageLevelName) =>
+      boundModes.foreach { case (modeConf, storageLevel, storageLevelName, _) =>
         withSQLConf(modeConf: _*) {
           sql(s"CACHE TABLE $t OPTIONS('storageLevel' '$storageLevelName')")
           assertCached(sql(s"SELECT * FROM $t"))
@@ -2392,10 +2394,17 @@ class CachedTableSuite extends SharedSparkSession
 
       // Time-travel and dependent caches are invalidated; both direct mode variants are restored.
       assert(cacheManager.numCachedEntries == 2)
-      boundModes.foreach { case (modeConf, storageLevel, _) =>
+      boundModes.foreach { case (modeConf, storageLevel, _, expectedMode) =>
         withSQLConf(modeConf: _*) {
-          assertCached(sql(s"SELECT * FROM $tRenamed"))
+          val renamed = sql(s"SELECT * FROM $tRenamed")
+          assertCached(renamed)
           assert(spark.table(tRenamed).storageLevel === storageLevel)
+          val mode = cacheManager.lookupCachedData(renamed).flatMap { cached =>
+            cached.plan.collectFirst {
+              case relation: DataSourceV2Relation => relation.charVarcharScanMode
+            }.flatten
+          }
+          assert(mode.contains(expectedMode))
         }
       }
     }

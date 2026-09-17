@@ -18,24 +18,27 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.execution.TableCacheDescriptor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 
 /**
  * Physical plan node for renaming a table.
  */
-case class RenameTableExec(
+private[sql] case class RenameTableExec(
     catalog: TableCatalog,
     oldIdent: Identifier,
     newIdent: Identifier,
     invalidateCache: () => Seq[TableCacheDescriptor],
     cacheTable: (SparkSession, LogicalPlan, Option[String], StorageLevel) => Unit)
-  extends LeafV2CommandExec {
+  extends LeafV2CommandExec with SQLConfHelper {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -52,14 +55,37 @@ case class RenameTableExec(
 
     oldCaches.foreach { cache =>
       val tbl = catalog.loadTable(qualifiedNewIdent)
-      val newRelation = DataSourceV2Relation
-        .create(tbl, Some(catalog), Some(qualifiedNewIdent))
-        .copy(charVarcharScanMode = cache.charVarcharScanMode)
-      cacheTable(
-        session,
-        newRelation,
-        Some(qualifiedNewIdent.quoted), cache.storageLevel)
+      val rewritten = cache.plan.transformUp {
+        case relation: DataSourceV2Relation
+            if relation.catalog.contains(catalog) && relation.identifier.contains(oldIdent) =>
+          val restored = relation.copy(
+            table = tbl,
+            catalog = Some(catalog),
+            identifier = Some(qualifiedNewIdent))
+          restored.copyTagsFrom(relation)
+          restored.setAnalyzed()
+          restored
+      }
+      withCharVarcharScanModeConf(cache.charVarcharScanMode) {
+        cacheTable(
+          session,
+          rewritten,
+          Some(qualifiedNewIdent.quoted), cache.storageLevel)
+      }
     }
     Seq.empty
+  }
+
+  // Re-cache under the mode that produced the original plan so CHAR/VARCHAR output is legal.
+  private def withCharVarcharScanModeConf[T](mode: Option[CharVarcharScanMode])(body: => T): T = {
+    mode match {
+      case Some(CharVarcharScanMode.SparkStandard) =>
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")(body)
+      case Some(CharVarcharScanMode.PreserveNative) =>
+        withSQLConf(
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")(body)
+      case None => body
+    }
   }
 }
