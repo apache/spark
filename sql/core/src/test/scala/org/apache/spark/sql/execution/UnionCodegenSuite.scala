@@ -22,6 +22,7 @@ import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioningLike, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_NUM, ShuffleExchangeExec}
@@ -106,6 +107,17 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       .createOrReplaceTempView(view)
     spark.catalog.cacheTable(view)
   }
+
+  /**
+   * Drive a union barrier the way a preparation would: the rules take one `UnionConfSnapshot` for
+   * the whole pipeline, so a test driving them by hand samples it where the rule it is standing in
+   * for runs, which is what the surrounding `withSQLConf` decides.
+   */
+  private def stampUnionDecisions(plan: SparkPlan): SparkPlan =
+    new StampUnionDecisions(UnionConfSnapshot(SQLConf.get))(plan)
+
+  private def snapshotUnionOutputPartitioningConf(plan: SparkPlan): SparkPlan =
+    new SnapshotUnionOutputPartitioningConf(UnionConfSnapshot(SQLConf.get))(plan)
 
   /**
    * Run `buildDf()` with union codegen on, then again with it off, and assert the two agree.
@@ -512,8 +524,8 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         val smj = left.join(right, "k")
         smj.union(rangeDF(100).select(col("id").as("k")))
       }
-      // Not `fusedUnions`: this union would not root a stage anyway, so that would hold with or
-      // without the denylist. What the denylist owes is that it takes no part in codegen.
+      // `codegenUnions`, not `fusedUnions`: what the denylist owes is that this union takes no part
+      // in codegen at any depth, and without it the union would root a stage here.
       assert(codegenUnions(fused).isEmpty,
         s"the denylist has to keep this union out of codegen:\n${fused.queryExecution}")
     }
@@ -703,11 +715,13 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     // it false, and without one `supportCodegenFailureReason` reports `columnar` and nothing
     // fuses. `SELECT *` or a plain alias collapses the projection away and does not reproduce
     // this. Once the cache stages finalise, both children report the same concrete layout, and
-    // re-deriving the decision at that point left `metrics` empty while `doProduce` asked
-    // `metricTerm` for `numOutputRows`.
+    // re-deriving the decision at that point answered "partitioning-aware", so `metrics` came back
+    // empty while `doProduce` asked `metricTerm` for `numOutputRows`.
     //
-    // Both halves of the decision are asserted here. Registering the metric unconditionally would
-    // fix the crash and leave the other half broken: a fused union concatenates its children's
+    // Executing the query is what proves that crash is gone: an empty `metrics` throws at
+    // `metricTerm` while `doProduce` runs. The metric's value then says the fused code ran and
+    // counted, and the partitioning assertion is the other half, which registering the metric
+    // unconditionally would have left broken: a fused union concatenates its children's
     // partitions, so claiming their partitioning would let a parent satisfy a clustered
     // distribution from an RDD that does not have it.
     withSQLConf(
@@ -734,8 +748,8 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
             s"premise: got $childPartitionings")
           assert(childPartitionings.map(_.numPartitions).distinct.size == 1,
             s"premise: got $childPartitionings")
-          assert(u.metrics.contains("numOutputRows"),
-            "a fused union must register the metric its generated code increments")
+          assert(u.metrics("numOutputRows").value == 20,
+            "a fused union must count the rows its generated code emitted")
           assert(u.outputPartitioning.isInstanceOf[UnknownPartitioning],
             s"a fused union must not claim a concrete partitioning, got ${u.outputPartitioning}")
         }
@@ -944,19 +958,20 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     // from the outside by the extension-driven cases in `SparkSessionExtensionSuite`, which need a
     // session of their own.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      // Pins the property the standard pipeline has to keep: a stamping pass runs after
-      // `EnsureRequirements`, so the decision is taken from the plan the exchanges were placed in.
-      // A count would break on a sixth legitimate pass and say nothing about the order. The AQE
-      // lists are private to `AdaptiveSparkPlanExec`, so their first pass has no counterpart here.
+      // Pins the property the standard pipeline has to keep: a stamping pass runs immediately after
+      // `EnsureRequirements`, so the decision is taken from the plan the exchanges were placed in
+      // and no rule in between can change a partitioning the parent already planned against. A
+      // count would break on a sixth legitimate pass and say nothing about the order.
+      // `AdaptiveQueryExecSuite` asserts the same adjacency for the list AQE builds.
       val rules = QueryExecution.preparations(spark, subquery = false)
-      val firstStamp = rules.indexWhere(_ eq StampUnionDecisions)
+      val firstStamp = rules.indexWhere(_.isInstanceOf[StampUnionDecisions])
       val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
       val columnarRules =
         rules.indexWhere(_.isInstanceOf[ApplyColumnarRulesAndInsertTransitions])
-      assert(ensureRequirements >= 0 && firstStamp > ensureRequirements &&
+      assert(ensureRequirements >= 0 && firstStamp == ensureRequirements + 1 &&
           firstStamp < columnarRules,
-        "expected a stamping pass between EnsureRequirements and the columnar rules, got " +
-          s"$ensureRequirements/$firstStamp/$columnarRules")
+        "expected a stamping pass right behind EnsureRequirements and before the columnar " +
+          s"rules, got $ensureRequirements/$firstStamp/$columnarRules")
 
       val stamped = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
         val df = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k"))
@@ -969,7 +984,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       // A fresh node standing in for one an extension made after the first pass: no decision yet.
       val fresh = UnionExec(stamped.children)
       withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
-        StampUnionDecisions(fresh)
+        stampUnionDecisions(fresh)
       }
       // Read back with the conf the other way round, so the answer can only come from the stamp:
       // deriving here would make it non-plain, these children being co-partitioned.
@@ -988,7 +1003,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         union.head
       }
       withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false") {
-        StampUnionDecisions(fused)
+        stampUnionDecisions(fused)
         assert(fused.supportCodegen, "a second pass must not restamp the conf it was decided with")
       }
     }
@@ -1008,7 +1023,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       // cannot land between them, but an edit to the list can. AQE builds its own list, and
       // `AdaptiveQueryExecSuite` asserts the same order there.
       val rules = QueryExecution.preparations(spark, subquery = false)
-      val snapshot = rules.indexWhere(_ eq SnapshotUnionOutputPartitioningConf)
+      val snapshot = rules.indexWhere(_.isInstanceOf[SnapshotUnionOutputPartitioningConf])
       val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
       assert(snapshot >= 0 && snapshot == ensureRequirements - 1,
         s"expected the conf snapshot right before EnsureRequirements at $ensureRequirements, " +
@@ -1018,7 +1033,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         .union(spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k")))
         .groupBy("k").count()
       val required = EnsureRequirements()(
-        SnapshotUnionOutputPartitioningConf(df.queryExecution.sparkPlan.clone()))
+        snapshotUnionOutputPartitioningConf(df.queryExecution.sparkPlan.clone()))
       assert(required.collect { case s: ShuffleExchangeExec => s.shuffleOrigin } ==
         Seq(REPARTITION_BY_NUM, REPARTITION_BY_NUM),
         "the aggregate's exchange must have been elided, or the window has nothing at stake")
@@ -1026,10 +1041,48 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       val union = required.collect { case u: UnionExec => u }
       assert(union.size == 1)
       withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
-        StampUnionDecisions(required)
+        stampUnionDecisions(required)
         assert(!union.head.outputPartitioning.isInstanceOf[UnknownPartitioning],
           "the answer must come from the conf snapshot, not from the value read now, got " +
             s"${union.head.outputPartitioning}")
+      }
+    }
+  }
+
+  test("SPARK-59122: a late barrier stamps a replacement from the preparation's conf") {
+    // An injected rule can return a `UnionExec` of its own in place of a stamped one, and
+    // `copyTagsFrom` gives nothing to a node already carrying a tag, so such a replacement reaches
+    // the barrier behind the extension hooks with no record of the value the exchanges above it
+    // were planned against. Every barrier in one preparation answers from the same
+    // `UnionConfSnapshot`, so that is still the value the replacement is stamped with.
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+      val df = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k"))
+        .union(spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k")))
+        .groupBy("k").count()
+      val prepared = stampUnionDecisions(EnsureRequirements()(
+        snapshotUnionOutputPartitioningConf(df.queryExecution.sparkPlan.clone())))
+      val union = prepared.collect { case u: UnionExec => u }
+      assert(union.size == 1)
+      // The value a preparation would carry to its late barrier, taken while the conf still says
+      // what `EnsureRequirements` read above.
+      val prepConf = UnionConfSnapshot(SQLConf.get)
+
+      // What `transformUp` leaves behind for a rule that replaced the node: `copyTagsFrom` is
+      // all-or-nothing, so one unrelated tag of its own costs the replacement both of ours.
+      val replacement = UnionExec(union.head.children)
+      replacement.setTagValue(TreeNodeTag[Unit]("SPARK-59122-injected"), ())
+      replacement.copyTagsFrom(union.head)
+
+      withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+        assert(replacement.isPlainUnion,
+          "the replacement must reach the barrier with no decision of its own, or this case " +
+            "exercises nothing")
+        new StampUnionDecisions(prepConf)(replacement)
+        assert(!replacement.outputPartitioning.isInstanceOf[UnknownPartitioning],
+          "the late barrier must stamp from the preparation's conf, not the value read now, got " +
+            s"${replacement.outputPartitioning}")
       }
     }
   }

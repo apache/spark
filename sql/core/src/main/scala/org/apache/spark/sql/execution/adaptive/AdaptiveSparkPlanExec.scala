@@ -119,6 +119,11 @@ case class AdaptiveSparkPlanExec(
         conf.costEvaluatorCountLocalSortEnabled)
     }
 
+  // Read once for this execution so that the union barriers in the lists below, which run per
+  // re-planning round and per stage created, cannot answer from different values. Taken from the
+  // same session conf this query's `QueryExecution.preparations` reads.
+  @transient private val unionConf = UnionConfSnapshot(context.session.sessionState.conf)
+
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
@@ -138,12 +143,12 @@ case class AdaptiveSparkPlanExec(
       // Must run before `ensureRequirements`, which asks a `UnionExec` what it reports: it
       // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
       // decision under the same value the exchanges were planned against.
-      SnapshotUnionOutputPartitioningConf,
+      new SnapshotUnionOutputPartitioningConf(unionConf),
       ensureRequirements,
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, so
       // every rule below and the execution itself read the answer the exchanges above it were
       // planned against.
-      StampUnionDecisions,
+      new StampUnionDecisions(unionConf),
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       AdjustShuffleExchangePosition,
@@ -175,7 +180,7 @@ case class AdaptiveSparkPlanExec(
     ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules :+
       // A barrier for a `UnionExec` an injected prep rule just created. Decisions already stamped
       // above are kept.
-      StampUnionDecisions
+      new StampUnionDecisions(unionConf)
   }
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
@@ -203,7 +208,7 @@ case class AdaptiveSparkPlanExec(
     // A barrier for a `UnionExec` an injected stage-optimizer or columnar rule just created, which
     // has no decision yet and would otherwise take one wherever it is first asked. A decision
     // already stamped on a node is kept, so this pass cannot move one.
-    StampUnionDecisions,
+    new StampUnionDecisions(unionConf),
     collapseCodegenStagesRule
   )
 

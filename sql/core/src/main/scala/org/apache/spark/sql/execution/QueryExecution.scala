@@ -818,6 +818,9 @@ object QueryExecution {
       sparkSession: SparkSession,
       adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None,
       subquery: Boolean): Seq[Rule[SparkPlan]] = {
+    // Read once here so that both union barriers below, and the codegen gate they stamp for, answer
+    // from the same values however long preparation takes.
+    val unionConf = UnionConfSnapshot(sparkSession.sessionState.conf)
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
@@ -829,11 +832,11 @@ object QueryExecution {
       // Must run before `EnsureRequirements`, which asks a `UnionExec` what it reports: it
       // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
       // decision under the same value the exchanges were planned against.
-      SnapshotUnionOutputPartitioningConf,
+      new SnapshotUnionOutputPartitioningConf(unionConf),
       EnsureRequirements(),
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
       // the answer to fix is the one the exchanges around it were planned against.
-      StampUnionDecisions,
+      new StampUnionDecisions(unionConf),
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       // `PushDownLocalSort` pushes a wider local sort down onto a narrower one below it, so a
@@ -862,7 +865,7 @@ object QueryExecution {
       // A barrier for a `UnionExec` an injected columnar rule just created, which has no decision
       // yet and would otherwise take one wherever it is first asked. A decision already stamped on
       // a node is kept.
-      StampUnionDecisions,
+      new StampUnionDecisions(unionConf),
       CollapseCodegenStages()) ++
       (if (subquery) {
         Nil

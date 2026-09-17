@@ -51,12 +51,10 @@ import org.apache.spark.sql.internal.SQLConf
  * exchanges; a round whose plan loses on cost is discarded whole, stamps included. A union inside a
  * stage is not revisited, since `foreach` stops at `QueryStageExec`.
  */
-object StampUnionDecisions extends Rule[SparkPlan] {
+class StampUnionDecisions(snapshot: UnionConfSnapshot) extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = {
-    val codegenEnabled = plan.conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED)
-    val maxChildren = plan.conf.getConf(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN)
     plan.foreach {
-      case u: UnionExec => u.stampDecisions(codegenEnabled, maxChildren)
+      case u: UnionExec => u.stampDecisions(snapshot)
       case _ =>
     }
     plan
@@ -77,16 +75,36 @@ object StampUnionDecisions extends Rule[SparkPlan] {
  * exchanges it adds yet, so a decision taken now would freeze plain on a union whose children only
  * become co-partitioned there, which is why the decision itself waits for the barrier behind it.
  *
- * One read per plan, so every union in it answers from the same value. Writing the tag in place is
- * safe for the reason given on [[StampUnionDecisions]].
+ * The value comes from the preparation's [[UnionConfSnapshot]], so every union in it answers from
+ * the same read. Writing the tag in place is safe for the reason given on [[StampUnionDecisions]].
  */
-object SnapshotUnionOutputPartitioningConf extends Rule[SparkPlan] {
+class SnapshotUnionOutputPartitioningConf(snapshot: UnionConfSnapshot) extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = {
-    val enabled = plan.conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)
     plan.foreach {
-      case u: UnionExec => u.snapshotOutputPartitioningConf(enabled)
+      case u: UnionExec => u.snapshotOutputPartitioningConf(snapshot.outputPartitioning)
       case _ =>
     }
     plan
   }
+}
+
+/**
+ * The union confs one preparation answers from, read once and shared by every barrier in it.
+ *
+ * A barrier that read the live conf instead would let two of them disagree: an injected rule can
+ * return an equivalent `UnionExec` carrying tags it set itself, and `copyTagsFrom` adds nothing to
+ * a node that already has one, so such a replacement reaches the late barrier with no record of its
+ * own and would be stamped from whatever the conf says by then, rather than from what the exchanges
+ * above it were planned against.
+ */
+case class UnionConfSnapshot(
+    outputPartitioning: Boolean,
+    codegenEnabled: Boolean,
+    maxChildren: Int)
+
+object UnionConfSnapshot {
+  def apply(conf: SQLConf): UnionConfSnapshot = UnionConfSnapshot(
+    outputPartitioning = conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING),
+    codegenEnabled = conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED),
+    maxChildren = conf.getConf(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN))
 }

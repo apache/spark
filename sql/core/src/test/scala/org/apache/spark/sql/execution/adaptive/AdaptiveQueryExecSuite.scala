@@ -5345,13 +5345,13 @@ class AdaptiveQueryExecSuite
       }
       assert(aqe.isDefined, s"expected an AdaptiveSparkPlanExec:\n${df.queryExecution}")
       val rules = aqe.get.queryStagePreparationRules
-      val snapshot = rules.indexWhere(_ eq SnapshotUnionOutputPartitioningConf)
+      val snapshot = rules.indexWhere(_.isInstanceOf[SnapshotUnionOutputPartitioningConf])
       val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
       // Both barriers, not the first one: the list ends with a second `StampUnionDecisions` for a
       // union an injected prep rule created, and asking only for the first index would let that one
       // stand in for the barrier behind `EnsureRequirements`.
       val stamps = rules.zipWithIndex.collect {
-        case (rule, i) if rule eq StampUnionDecisions => i
+        case (rule, i) if rule.isInstanceOf[StampUnionDecisions] => i
       }
       assert(snapshot >= 0 && snapshot == ensureRequirements - 1,
         s"expected the conf snapshot right before EnsureRequirements at $ensureRequirements, " +
