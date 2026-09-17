@@ -37,7 +37,12 @@ def determine_modules_for_files(filenames):
     file to belong to the 'root' module. `.github` directory is counted only in GitHub Actions.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
-    ['pyspark-core', 'pyspark-install', 'sql']
+    ['pyspark-core-source', 'pyspark-install-source', 'sql-source']
+    >>> [x.name for x in determine_modules_for_files(\
+            ["python/pyspark/sql/tests/connect/arrow/test_parity_arrow.py"])]
+    ['pyspark-connect']
+    >>> [x.name for x in determine_modules_for_files(["core/src/test/scala/FooSuite.scala"])]
+    ['core']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
     >>> [x.name for x in determine_modules_for_files(["python/README.md"])]
@@ -50,7 +55,7 @@ def determine_modules_for_files(filenames):
         if ("GITHUB_ACTIONS" not in os.environ) and filename.startswith(".github"):
             continue
         matched_at_least_one_module = False
-        for module in modules.all_modules:
+        for module in modules.all_modules_for_file_detection:
             if module.contains_file(filename):
                 changed_modules.add(module)
                 matched_at_least_one_module = True
@@ -66,7 +71,7 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
 
     >>> [x.name for x in determine_modules_for_files( \
             identify_changed_files_from_git_commits("fc0a1475ef", target_ref="5da21f07"))]
-    ['graphx']
+    ['graphx-source']
     >>> 'root' in [x.name for x in determine_modules_for_files( \
          identify_changed_files_from_git_commits("50a0496a43", target_ref="6765ef9"))]
     True
@@ -100,13 +105,15 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ['root']
     >>> [x.name for x in determine_modules_to_test([modules.build])]
     ['root']
+    >>> [x.name for x in determine_modules_to_test([modules.core.source_module])]
+    ['root']
     >>> [x.name for x in determine_modules_to_test([modules.core])]
+    ['core']
+    >>> [x.name for x in determine_modules_to_test([modules.launcher.source_module])]
     ['root']
-    >>> [x.name for x in determine_modules_to_test([modules.launcher])]
-    ['root']
-    >>> [x.name for x in determine_modules_to_test([modules.graphx])]
-    ['graphx', 'examples']
-    >>> sorted([x.name for x in determine_modules_to_test([modules.sql])])
+    >>> sorted(x.name for x in determine_modules_to_test([modules.graphx.source_module]))
+    ['examples', 'graphx']
+    >>> sorted([x.name for x in determine_modules_to_test([modules.sql.source_module])])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
      'mllib', 'pipelines', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect',
@@ -115,7 +122,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
      'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
-    ...     [modules.sparkr, modules.sql], deduplicated=False)])
+    ...     [modules.sparkr, modules.sql.source_module], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
      'mllib', 'pipelines', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect',
@@ -124,7 +131,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
      'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
-    ...     [modules.sql, modules.core], deduplicated=False)])
+    ...     [modules.sql.source_module, modules.core.source_module], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'catalyst', 'connect', 'core', 'credential-aws', 'docker-integration-tests',
      'examples', 'graphx',
@@ -142,6 +149,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
             determine_modules_to_test(module.dependent_modules, deduplicated)
         )
     modules_to_test = modules_to_test.union(set(changed_modules))
+    modules_to_test = {module for module in modules_to_test if not module.is_internal}
 
     if not deduplicated:
         return modules_to_test
