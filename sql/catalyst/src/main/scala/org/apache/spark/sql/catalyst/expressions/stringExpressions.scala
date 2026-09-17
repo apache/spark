@@ -2410,11 +2410,17 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val argListGen = children.tail.map(x => (x.dataType, x.genCode(ctx)))
     val argList = ctx.freshName("argLists")
     val numArgLists = argListGen.length
+    val decimalClass = classOf[Decimal].getName
     val argListCode = argListGen.zipWithIndex.map { case(v, index) =>
+      val argClass = CodeGenerator.javaClass(v._1)
       val value =
-        if (CodeGenerator.javaClass(v._1) == classOf[Decimal]) {
+        if (argClass == classOf[Decimal]) {
           // Keep in sync with toFormatterArg in the interpreted path above.
           s"(${v._2.isNull}) ? null : ${v._2.value}.toJavaBigDecimal()"
+        } else if (argClass.isAssignableFrom(classOf[Decimal])) {
+          // Keep in sync with toFormatterArg in the interpreted path above.
+          s"(${v._2.isNull}) ? null : ((${v._2.value} instanceof $decimalClass) ? " +
+            s"(($decimalClass) ${v._2.value}).toJavaBigDecimal() : ${v._2.value})"
         } else if (CodeGenerator.boxedType(v._1) != CodeGenerator.javaType(v._1)) {
           // Java primitives get boxed in order to allow null values.
           s"(${v._2.isNull}) ? (${CodeGenerator.boxedType(v._1)}) null : " +

@@ -1107,6 +1107,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(FormatString(Literal("%s"), arg), "1.5")
   }
 
+  test("FormatString with a decimal under a broader object type") {
+    val objType = ObjectType(classOf[Object])
+    val ref = BoundReference(0, objType, nullable = true)
+    checkEvaluation(FormatString(Literal("%f"), ref), "1.500000", create_row(Decimal("1.5")))
+    checkEvaluation(FormatString(Literal("%s"), ref), "1.5", create_row(Decimal("1.5")))
+    checkEvaluation(FormatString(Literal("%s"), ref), "abc", create_row("abc"))
+    checkEvaluation(FormatString(Literal("%f"), ref), "null", create_row(null))
+  }
+
   test("SPARK-22603: FormatString should not generate codes beyond 64KB") {
     val N = 4500
     val args = (1 to N).map(i => Literal.create(i.toString, StringType))
