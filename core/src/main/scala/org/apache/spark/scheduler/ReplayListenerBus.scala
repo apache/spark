@@ -35,7 +35,7 @@ import org.apache.spark.util.JsonProtocol
 /**
  * A SparkListenerBus that can be used to replay events from serialized event data.
  *
- * @param maxLineLength Maximum number of characters of a single event log line that will be
+ * @param maxLineLength Maximum number of byes (1/2 chars) of a single event log line that will be
  *                      materialized during replay. Longer lines are drained, skipped and
  *                      logged, bounding the memory replay can use when an event log is
  *                      corrupt or unexpectedly large.
