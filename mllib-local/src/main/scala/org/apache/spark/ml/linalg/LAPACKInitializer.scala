@@ -21,19 +21,23 @@ import breeze.linalg.{eigSym, DenseMatrix => BDM}
 
 private[spark] object LAPACKInitializer {
 
-  // F2J's machine-parameter discovery uses unsynchronized mutable static state. A concurrent
-  // first invocation can observe partially initialized values and make some LAPACK routines loop
-  // forever. JVM class initialization serializes this warm-up before real calls run concurrently.
+  // Breeze's eigSym delegates to the selected LAPACK backend. When LAPACK selects its F2J fallback,
+  // F2J's Dlamc2 discovers and caches machine parameters: the floating-point radix and precision,
+  // rounding behavior, epsilon, minimum safe positive value and exponent, and maximum finite value
+  // and exponent. Dlamc2 stores them in unsynchronized mutable static fields and sets first to
+  // false before all fields are initialized. A concurrent first invocation can therefore observe
+  // partial values and make some LAPACK routines loop forever.
+  //
+  // JVM class initialization serializes this warm-up before real calls run concurrently.
   // It runs once per Spark classloader in each executor JVM: the first thread performs the warm-up
   // while concurrent threads wait for class initialization to finish. Later initialize() calls are
   // cheap reads of the completed Unit field. In local mode, the driver and executor share the JVM,
   // so the warm-up also runs only once there.
   //
-  // The warm-up uses Breeze's selected LAPACK backend. It is required only for F2J; a native
-  // provider such as OpenBLAS or MKL only incurs this one-time 2-by-2 decomposition. Later calls
-  // remain concurrent. A 2-by-2 matrix is used because DSYEV returns early for a 1-by-1 matrix
-  // without initializing floating-point limits such as epsilon, the safe minimum, and the maximum
-  // finite value.
+  // The warm-up follows the same Breeze -> LAPACK -> F2J path as the real operation when F2J is
+  // selected. A native provider such as OpenBLAS or MKL only incurs this one-time 2-by-2
+  // decomposition, and later calls remain concurrent. A 2-by-2 matrix is used because DSYEV returns
+  // early for a 1-by-1 matrix without requesting the machine parameters.
   private val initialized: Unit = {
     eigSym(BDM.eye[Double](2))
   }
