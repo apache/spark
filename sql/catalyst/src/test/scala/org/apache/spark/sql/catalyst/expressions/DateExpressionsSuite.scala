@@ -2953,6 +2953,52 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57833: timestampdiff over nanosecond-precision timestamps") {
+    val sec = 1000000L // microseconds per second
+    def ntz(micros: Long, frac: Int, p: Int = 9): Literal =
+      Literal(TimestampNanosVal.fromParts(micros, frac.toShort), TimestampNTZNanosType(p))
+    def ltz(micros: Long, frac: Int, p: Int = 9): Literal =
+      Literal(TimestampNanosVal.fromParts(micros, frac.toShort), TimestampLTZNanosType(p))
+
+    // NANOSECOND unit reports the exact sub-microsecond difference (within a microsecond, across
+    // microseconds, and negative).
+    checkEvaluation(TimestampDiff("NANOSECOND", ntz(0, 100), ntz(0, 900)), 800L)
+    checkEvaluation(TimestampDiff("NANOSECOND", ntz(0, 900), ntz(2, 100)), 1200L)
+    checkEvaluation(TimestampDiff("NANOSECOND", ntz(2, 100), ntz(0, 900)), -1200L)
+
+    // The sub-microsecond fraction participates in the truncated count for coarser units too: a
+    // start fraction larger than the end fraction means a whole second/microsecond has NOT elapsed.
+    // SECOND: 1s + 100ns - 900ns = 0.9999992s -> 0 (the micros-only count would wrongly be 1).
+    checkEvaluation(TimestampDiff("SECOND", ntz(0, 900), ntz(sec, 100)), 0L)
+    // 1s + 900ns - 100ns = 1.0000008s -> 1.
+    checkEvaluation(TimestampDiff("SECOND", ntz(0, 100), ntz(sec, 900)), 1L)
+    // MICROSECOND: 2100ns - 900ns = 1200ns -> 1 (the micros-only count would wrongly be 2).
+    checkEvaluation(TimestampDiff("MICROSECOND", ntz(0, 900), ntz(2, 100)), 1L)
+
+    // Precision 7 (100ns step) and 8 (10ns step) fractions.
+    checkEvaluation(TimestampDiff("NANOSECOND", ntz(0, 100, 7), ntz(0, 300, 7)), 200L)
+    checkEvaluation(TimestampDiff("NANOSECOND", ntz(0, 110, 8), ntz(0, 200, 8)), 90L)
+
+    // LTZ (zone-aware), exact whole minute with equal fractions.
+    checkEvaluation(
+      TimestampDiff("MINUTE", ltz(0, 500), ltz(60 * sec, 500), Some("UTC")), 1L)
+
+    // Mixed operands: a microsecond TIMESTAMP_LTZ start (zero fraction) and a nanosecond LTZ end.
+    checkEvaluation(
+      TimestampDiff("SECOND", Literal(0L, TimestampType), ltz(sec, 500), Some("UTC")), 1L)
+
+    // NANOSECOND between two microsecond timestamps is well-defined (fractions are zero): the
+    // difference is a whole number of microseconds times 1000.
+    checkEvaluation(
+      TimestampDiff("NANOSECOND", Literal(0L, TimestampType), Literal(1L, TimestampType)), 1000L)
+
+    // Null propagation on either operand.
+    checkEvaluation(
+      TimestampDiff("SECOND", Literal.create(null, TimestampNTZNanosType(9)), ntz(sec, 0)), null)
+    checkEvaluation(
+      TimestampDiff("NANOSECOND", ntz(0, 1), Literal.create(null, TimestampNTZNanosType(9))), null)
+  }
+
   /**
    * Helper method to create a DATE literal from a string in date format.
    */

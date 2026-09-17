@@ -574,3 +574,10 @@ SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_NTZ '2020-01-01 00:00:00');
 -- .0000001 value lands on .0000002, and a sub-step +50ns is truncated back to .0000001.
 SELECT timestampadd(NANOSECOND, 150, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7));
 SELECT timestampadd(NANOSECOND, 50, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7));
+
+-- SPARK-57833: timestampdiff over TIMESTAMP_NTZ(p). NANOSECOND reports the exact sub-microsecond
+-- difference, and the fraction participates in the truncated count for coarser units too: SECOND
+-- between .000000900 and the next second's .000000100 is 0 (only 0.9999992s elapsed).
+SELECT timestampdiff(NANOSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900');
+SELECT timestampdiff(SECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900', TIMESTAMP_NTZ '2020-01-01 00:00:01.000000100');
+SELECT timestampdiff(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900', TIMESTAMP_NTZ '2020-01-01 00:00:00.000002100');

@@ -580,3 +580,8 @@ SELECT timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2020-01-01 00:00:00.0000001
 SELECT timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000200 UTC');
 -- NANOSECOND is rejected on a microsecond-precision timestamp (nanoseconds are unrepresentable).
 SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC');
+
+-- SPARK-57833: timestampdiff over TIMESTAMP_LTZ(p). NANOSECOND reports the exact difference; the
+-- fraction also tips coarser units (SECOND is 0 here because only 0.9999992s elapsed).
+SELECT timestampdiff(NANOSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100 UTC', TIMESTAMP_LTZ '2020-01-01 00:00:00.000000900 UTC');
+SELECT timestampdiff(SECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000900 UTC', TIMESTAMP_LTZ '2020-01-01 00:00:01.000000100 UTC');
