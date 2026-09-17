@@ -5910,6 +5910,7 @@ object SQLConf {
         "struct arity.")
       .internal()
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
