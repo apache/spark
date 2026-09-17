@@ -72,7 +72,7 @@ private[spark] class ReplayListenerBus(
 
   /**
    * Reads '\n'-terminated lines like Source.getLines(), but never materializes more than
-   * [[maxLineLength]] characters of a single line. An over-long line is drained and skipped
+   * `maxLineLength` bytes of a single line. An over-long line is drained and skipped
    * with a warning instead of being turned into a String.
    */
   private def boundedLines(logData: InputStream, sourceName: String): Iterator[String] = {
@@ -112,7 +112,7 @@ private[spark] class ReplayListenerBus(
           null
         } else {
           while (c != -1 && c != '\n') {
-            if (sb.length() < maxLineLength) {
+            if (sb.length() * 2 < maxLineLength) {
               sb.append(c.toChar)
             } else {
               overLong = true
