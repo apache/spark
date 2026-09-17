@@ -82,7 +82,8 @@ object ValidatorUtil extends Logging {
    * entities, or schema references found in the document being validated. The record
    * parser does not process DTDs, so validation applies the same restrictions to keep
    * the two consistent. All validation of record data must use a Validator returned by
-   * this method, or one reused through [[reset]].
+   * this method, or one reused through [[reset]]. Validators must not be shared between
+   * threads.
    */
   def newValidator(schema: Schema): Validator = {
     val validator = schema.newValidator()
@@ -95,7 +96,7 @@ object ValidatorUtil extends Logging {
    * record-validation configuration. [[Validator.reset]] does not retain configuration
    * applied after construction, so the secure-processing settings must be re-applied on
    * every reset. Reusing one Validator across records avoids the per-record allocation
-   * cost of [[newValidator]].
+   * cost of [[newValidator]]. Validators must not be shared between threads.
    */
   def reset(validator: Validator): Unit = {
     validator.reset()
