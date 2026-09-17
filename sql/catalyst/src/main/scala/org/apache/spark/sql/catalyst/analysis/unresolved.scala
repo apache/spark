@@ -394,6 +394,10 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
  * Represents an unresolved function that is being invoked. The analyzer will resolve the function
  * arguments first, then look up the function by name and arguments, and return an expression that
  * can be evaluated to get the result of this function invocation.
+ *
+ * `boundOwner`, when set, is the fully-qualified candidate that direct-star preprocessing selected
+ * as this call's owner; later resolution binds to exactly it instead of re-walking the SQL PATH
+ * (see [[FunctionResolution.selectRoutedSqlJsonDirectStarOwner]]).
  */
 case class UnresolvedFunction(
     nameParts: Seq[String],
@@ -402,7 +406,8 @@ case class UnresolvedFunction(
     filter: Option[Expression] = None,
     ignoreNulls: Option[Boolean] = None,
     orderingWithinGroup: Seq[SortOrder] = Seq.empty,
-    isInternal: Boolean = false)
+    isInternal: Boolean = false,
+    boundOwner: Option[Seq[String]] = None)
   extends Expression with Unevaluable {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
