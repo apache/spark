@@ -303,6 +303,21 @@ Project [a#x, a#x AS matched_a#x]
 
 
 -- !query
+SELECT t.a, r.a AS matched_a
+FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
+     VALUES (ARRAY(CAST(1 AS BIGINT), CAST(2 AS BIGINT))),
+            (ARRAY(CAST(1 AS BIGINT), CAST(4 AS BIGINT))) AS r(a)
+  MATCH_CONDITION (t.a >= r.a)
+-- !query analysis
+Project [a#x, a#x AS matched_a#x]
++- AsOfJoin (cast(a#x as array<bigint>) >= a#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [a#x]
+   +- SubqueryAlias r
+      +- LocalRelation [a#x]
+
+
+-- !query
 SELECT r.a
 FROM VALUES (ARRAY(named_struct('seq', 1, 'val', 3))) AS t(a)
 ASOF JOIN (

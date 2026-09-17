@@ -293,6 +293,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM VALUES (ARRAY(1)) AS t(a) ASOF JOIN VALUES (ARRAY('x')) AS r(a)
+  MATCH_CONDITION (t.a >= r.a)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "type1" : "\"ARRAY<INT>\"",
+    "type2" : "\"ARRAY<STRING>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 108,
+    "fragment" : "ASOF JOIN VALUES (ARRAY('x')) AS r(a)\n  MATCH_CONDITION (t.a >= r.a)"
+  } ]
+}
+
+
+-- !query
 SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (t.trade_time >= q.symbol)
   ON t.symbol = q.symbol

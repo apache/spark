@@ -67,9 +67,34 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(MatchConditionTypes.usesStructDecomposition(leftStruct, rightStruct))
   }
 
-  test("array operands require identical element types") {
+  test("array operands with identical element types are compatible") {
     val leftArray = ArrayType(IntegerType)
     val rightArray = ArrayType(IntegerType)
+    assert(MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
+    assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
+  }
+
+  test("array operands with coercible element types are compatible") {
+    // SPARK-59528: elements widen via findTightestCommonType, like the array `>=` comparison.
+    val intArray = ArrayType(IntegerType)
+    val longArray = ArrayType(LongType)
+    assert(MatchConditionTypes.areOperandsCompatible(intArray, longArray))
+    assert(MatchConditionTypes.usesArrayOrderExpression(intArray, longArray))
+    assert(MatchConditionTypes.areOperandsCompatible(longArray, intArray))
+    assert(MatchConditionTypes.areOperandsCompatible(intArray, ArrayType(DoubleType)))
+  }
+
+  test("array operands whose elements only string-promote are rejected") {
+    // SPARK-59528: INT vs STRING has no tightest common type, so the array `>=` cannot coerce it.
+    val intArray = ArrayType(IntegerType)
+    val stringArray = ArrayType(StringType)
+    assert(!MatchConditionTypes.areOperandsCompatible(intArray, stringArray))
+    assert(!MatchConditionTypes.usesArrayOrderExpression(intArray, stringArray))
+  }
+
+  test("nested array operands with coercible element types are compatible") {
+    val leftArray = ArrayType(ArrayType(IntegerType))
+    val rightArray = ArrayType(ArrayType(LongType))
     assert(MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
     assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
   }
@@ -89,9 +114,10 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
   }
 
-  test("array operands with different element types are rejected") {
+  test("array operands with non-coercible element types are rejected") {
+    // INT and BINARY are both orderable but have no common type.
     val leftArray = ArrayType(IntegerType)
-    val rightArray = ArrayType(StringType)
+    val rightArray = ArrayType(BinaryType)
     assert(!MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
     assert(!MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
   }
