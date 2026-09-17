@@ -514,8 +514,15 @@ private[sql] object ArrowConverters extends Logging {
       new ReadChannel(Channels.newChannel(in)), allocator)  // throws IOException
   }
 
+  // computeBodyLength() gives the batch body size only; the IPC message adds a metadata header
+  // (flatbuffer + framing + alignment) before it. This estimates that header so the pre-sized
+  // buffer usually needs no reallocation; a larger header just costs one resize.
+  private val IPC_HEADER_SIZE_ESTIMATE = 1024
+
   private[arrow] def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
-    val out = new ByteArrayOutputStream()
+    val estimatedSize =
+      (batch.computeBodyLength() + IPC_HEADER_SIZE_ESTIMATE).min(Int.MaxValue).max(0L).toInt
+    val out = new ByteArrayOutputStream(estimatedSize)
     val writeChannel = new WriteChannel(Channels.newChannel(out))
     MessageSerializer.serialize(writeChannel, batch)
     out.toByteArray
