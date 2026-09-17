@@ -66,7 +66,8 @@ case class CsvToStructs(
     requiredSchema: Option[StructType] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with ExpectsInputTypes {
+  with ExpectsInputTypes
+  with SupportTrimmedCharInput {
 
   override def nullable: Boolean = child.nullable
 
@@ -116,9 +117,11 @@ case class CsvToStructs(
     evaluator.evaluate(input.asInstanceOf[UTF8String])
   }
 
+  override def eval(input: InternalRow): Any = evalStringInput(input)
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
-    val eval = child.genCode(ctx)
+    val eval = stringInput.genCode(ctx)
     val resultType = CodeGenerator.boxedType(dataType)
     val resultTerm = ctx.freshName("result")
     ev.copy(code =
@@ -161,7 +164,8 @@ case class SchemaOfCsv(
   extends UnaryExpression
   with RuntimeReplaceable
   with DefaultStringProducingExpression
-  with QueryErrorsBase {
+  with QueryErrorsBase
+  with SupportTrimmedCharInput {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -205,19 +209,12 @@ case class SchemaOfCsv(
   @transient
   private lazy val evaluator: SchemaOfCsvEvaluator = SchemaOfCsvEvaluator(options)
 
-  // Keep this type-based so the replacement expression does not change if SQLConf changes after
-  // analysis. A first-class CharType child already establishes that CHAR semantics apply.
-  private lazy val csvInput = child.dataType match {
-    case _: CharType => StringTrimRight(child)
-    case _ => child
-  }
-
   override def replacement: Expression = Invoke(
     Literal.create(evaluator, ObjectType(classOf[SchemaOfCsvEvaluator])),
     "evaluate",
     dataType,
-    Seq(csvInput),
-    Seq(csvInput.dataType),
+    Seq(stringInput),
+    Seq(stringInput.dataType),
     returnNullable = false)
 }
 
