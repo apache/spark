@@ -580,10 +580,10 @@ Spark applications supports the following configuration properties specific to s
   <td><code>true</code></td>
   <td>
   In standalone cluster mode, controls whether the client forwards only Spark-related environment
-  variables to the driver, matching the REST submission client. If set to <code>false</code>,
-  the full environment of the submitting process is forwarded to the driver.
+  variables to the driver (e.g. SPARK_*), matching the REST submission client. If set to <code>false</code>,
+  the full environment of the submitting process is forwarded to the driver. This does not impact REST submissions unless they fall back.
   </td>
-  <td>4.4.0</td>
+  <td>4.3.0</td>
   </tr>
 </table>
 
