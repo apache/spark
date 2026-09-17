@@ -64,7 +64,6 @@ private[spark] final class RuntimeDependencyResolver(
       val (transitive, exclusions, requestedRepositories) = MavenUtils.parseQueryParams(uri)
       val requested = requestedRepositories
         .split(",")
-        .iterator
         .map(_.trim)
         .filter(_.nonEmpty)
         .toImmutableArraySeq
@@ -86,7 +85,6 @@ private[spark] final class RuntimeDependencyResolver(
       checkCancelled(isCancelled)
       val exclusionsList = exclusions
         .split(",")
-        .iterator
         .map(_.trim)
         .filter(_.nonEmpty)
         .toImmutableArraySeq

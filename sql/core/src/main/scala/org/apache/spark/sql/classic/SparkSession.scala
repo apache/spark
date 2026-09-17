@@ -753,7 +753,7 @@ class SparkSession private(
   @Experimental
   @scala.annotation.varargs
   override def addArtifacts(uri: URI*): Unit = {
-    artifactManager.addLocalArtifacts(uri.flatMap(artifactManager.resolveArtifacts))
+    artifactManager.addLocalArtifacts(uri.flatMap(artifactManager.resolveArtifacts(_)))
   }
 
   /** @inheritdoc */
