@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Final, Partial, PartialMerge}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -43,6 +44,10 @@ import org.apache.spark.sql.internal.SQLConf
  *       Exchange
  *
  * It supports [[HashAggregateExec]], [[SortAggregateExec]] and [[ObjectHashAggregateExec]].
+ *
+ * A [[GroupPartitionsExec]] and the local sorts `EnsureRequirements` put between the two aggregates
+ * are looked through, so the pair is combined even when the final aggregate's distribution was
+ * satisfied without a shuffle. See `detachAggregate`.
  */
 object CombineAdjacentAggregation extends Rule[SparkPlan] {
   private case class CombinedAggregate(
@@ -55,34 +60,91 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
     }
 
     plan.transformDown {
-      case finalAgg @ HashAggregateExec(_, _, _, _, _, _, _, _, partialAgg: HashAggregateExec) =>
-        combinedAggregate(partialAgg, finalAgg)
-          .map(combineHashAggregates(partialAgg, finalAgg, _))
-          .getOrElse(finalAgg)
+      case finalAgg: HashAggregateExec =>
+        detachAggregate(finalAgg.child, hasUpperSort = false) match {
+          case Some((partialAgg: HashAggregateExec, child)) =>
+            combinedAggregate(partialAgg, finalAgg)
+              .map(combineHashAggregates(partialAgg, finalAgg, _, child))
+              .getOrElse(finalAgg)
+          case _ => finalAgg
+        }
 
-      case finalAgg @ SortAggregateExec(_, _, _, _, _, _, _, _, partialAgg: SortAggregateExec)
-          if isPartialAgg(partialAgg, finalAgg) =>
-        finalAgg.copy(
-          groupingExpressions = partialAgg.groupingExpressions,
-          aggregateExpressions = partialAgg.aggregateExpressions.map(_.copy(mode = Complete)),
-          initialInputBufferOffset = 0,
-          child = partialAgg.child)
+      case finalAgg: SortAggregateExec =>
+        detachAggregate(finalAgg.child, hasUpperSort = false) match {
+          case Some((partialAgg: SortAggregateExec, child)) if isPartialAgg(partialAgg, finalAgg) =>
+            finalAgg.copy(
+              groupingExpressions = partialAgg.groupingExpressions,
+              aggregateExpressions = partialAgg.aggregateExpressions.map(_.copy(mode = Complete)),
+              initialInputBufferOffset = 0,
+              child = child)
+          case _ => finalAgg
+        }
 
-      case finalAgg @ ObjectHashAggregateExec(_, _, _, _, _, _, _, _,
-        partialAgg: ObjectHashAggregateExec)
-          if isPartialAgg(partialAgg, finalAgg) =>
-        finalAgg.copy(
-          groupingExpressions = partialAgg.groupingExpressions,
-          aggregateExpressions = partialAgg.aggregateExpressions.map(_.copy(mode = Complete)),
-          initialInputBufferOffset = 0,
-          child = partialAgg.child)
+      case finalAgg: ObjectHashAggregateExec =>
+        detachAggregate(finalAgg.child, hasUpperSort = false) match {
+          case Some((partialAgg: ObjectHashAggregateExec, child))
+              if isPartialAgg(partialAgg, finalAgg) =>
+            finalAgg.copy(
+              groupingExpressions = partialAgg.groupingExpressions,
+              aggregateExpressions = partialAgg.aggregateExpressions.map(_.copy(mode = Complete)),
+              initialInputBufferOffset = 0,
+              child = child)
+          case _ => finalAgg
+        }
     }
+  }
+
+  /**
+   * Detaches the aggregate at the bottom of the chain `plan` starts and hands it back together with
+   * the subtree to leave where it was, or `None` when the chain bottoms out at no aggregate, or at
+   * one that cannot leave. The chain's `GroupPartitionsExec` and local sorts are crossed in place,
+   * so the combined aggregate reads whatever ends up on top of them.
+   *
+   * A sort crossed above the aggregate orders the rows the combined aggregate reads, by the
+   * grouping the two aggregates share, so the sort the aggregate reads goes with it: that crossed
+   * sort is what orders those rows. Where the aggregate holds no sort of its own, it stays, being
+   * the only cardinality reducer before that sort. With no sort crossed at all, the sort below the
+   * aggregate stays below it: the aggregate reads what it read, and the ordering it claims is the
+   * one it had.
+   *
+   * @param hasUpperSort whether a local sort has been crossed above `plan`, which is what makes the
+   *                     sort below the aggregate dead.
+   */
+  private def detachAggregate(
+      plan: SparkPlan,
+      hasUpperSort: Boolean): Option[(BaseAggregateExec, SparkPlan)] = plan match {
+    case aggregate: BaseAggregateExec =>
+      if (!hasUpperSort) {
+        Some((aggregate, aggregate.child))
+      } else {
+        aggregate.child match {
+          case sort: SortExec if !sort.global => Some((aggregate, sort.child))
+          case _ => None
+        }
+      }
+
+    case group: GroupPartitionsExec =>
+      detachAggregate(group.child, hasUpperSort) match {
+        case Some((aggregate, child)) =>
+          group.withKeyPositionsFor(child).map(regrouped => (aggregate, regrouped))
+        case _ => None
+      }
+
+    case sort: SortExec if !sort.global =>
+      detachAggregate(sort.child, hasUpperSort = true) match {
+        case Some((aggregate, child)) =>
+          Some((aggregate, sort.withNewChildren(Seq(child))))
+        case _ => None
+      }
+
+    case _ => None
   }
 
   private def combineHashAggregates(
       partialAgg: HashAggregateExec,
       finalAgg: HashAggregateExec,
-      combined: CombinedAggregate): HashAggregateExec = {
+      combined: CombinedAggregate,
+      child: SparkPlan): HashAggregateExec = {
     // Keep the final aggregate's distribution requirement because the rule runs after
     // EnsureRequirements. The other child-facing metadata comes from the removed aggregate.
     finalAgg.copy(
@@ -91,7 +153,7 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
       groupingExpressions = partialAgg.groupingExpressions,
       aggregateExpressions = combined.aggregateExpressions,
       initialInputBufferOffset = combined.initialInputBufferOffset,
-      child = partialAgg.child)
+      child = child)
   }
 
   private def combinedAggregate(
