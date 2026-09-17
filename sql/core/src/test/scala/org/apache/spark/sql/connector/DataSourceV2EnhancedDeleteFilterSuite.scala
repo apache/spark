@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionPredicateDeleteCatalog
 import org.apache.spark.sql.connector.expressions.PartitionFieldReference
@@ -241,7 +241,42 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
     }
   }
 
-  private def executeAndKeepPlan(func: => Unit): SparkPlan = {
+  // A metadata-only DELETE has no post-scan filter, so the PartitionPredicate is the only
+  // evaluator. `to_int('hr')` throws, so the condition is never true for that partition, and
+  // reporting the failed evaluation as a match would delete it.
+  test("SPARK-59572: metadata-only DELETE must not drop a partition whose predicate failed") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep)")
+      sql(s"INSERT INTO $deleteTableName VALUES (1, 'hr', 100), (2, '1', 200)")
+
+      spark.udf.register("to_int", (s: String) => s.toInt)
+
+      val (e, plan) = keepingPlan {
+        intercept[SparkException] {
+          sql(s"DELETE FROM $deleteTableName WHERE to_int(dep) = 1").collect()
+        }
+      }
+      assert(e.getCondition == "FAILED_EXECUTE_UDF")
+      assert(e.getCause.isInstanceOf[NumberFormatException])
+      // The fallback row-level DELETE raises the same error, so pin the metadata-only path.
+      assert(plan.isInstanceOf[DeleteFromTableExec],
+        s"Expected a metadata-only DELETE but got ${plan.getClass.getSimpleName}")
+
+      // The partition whose predicate could not be evaluated must still be there.
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "hr", 100), Row(2, "1", 200)))
+    }
+  }
+
+  private def executeAndKeepPlan(func: => Unit): SparkPlan = keepingPlan(func)._2
+
+  /**
+   * Runs `func` and returns its result with the executed plan. The plan is captured for a failed
+   * query too, so a test that intercepts the failure can still assert which plan produced it.
+   */
+  private def keepingPlan[T](func: => T): (T, SparkPlan) = {
     var executedPlan: SparkPlan = null
 
     val listener = new QueryExecutionListener {
@@ -250,20 +285,23 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
         executedPlan = qe.executedPlan
       }
       override def onFailure(
-          funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+          funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        executedPlan = qe.executedPlan
+      }
     }
     spark.listenerManager.register(listener)
 
-    try {
-      func
+    val result = try {
+      val r = func
       sparkContext.listenerBus.waitUntilEmpty()
+      r
     } finally {
       spark.listenerManager.unregister(listener)
     }
 
     assert(executedPlan != null,
       "QueryExecutionListener did not capture the executed plan")
-    executedPlan
+    (result, executedPlan)
   }
 
   /**

@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.2.0 to 4.2.1
+
+- Since Spark 4.2.1, when a data source cannot evaluate a partition predicate that Spark pushed down, for example because an ANSI cast of a partition value fails, the error is raised instead of the partition being reported as a match. Previously the failure was ignored, so a scan could return rows the filter does not accept and a metadata-only `DELETE` could remove a partition its condition never matched. Queries that appeared to succeed may now fail with the same error they raise without pushdown, and the error can surface while the scan is built rather than while rows are read. The same applies when a partition key does not match the width of `Table.partitioning()`. Runtime filters are unaffected.
+
 ## Upgrading from Spark SQL 4.1 to 4.2
 
 - Since Spark 4.2, Spark enables order-independent checksums for shuffle outputs by default to detect data inconsistencies during indeterminate shuffle stage retries. If a checksum mismatch is detected, Spark rolls back and re-executes all succeeding stages that depend on the shuffle output. If rolling back is not possible for some succeeding stages, the job will fail. To restore the previous behavior, set `spark.sql.shuffle.orderIndependentChecksum.enabled` and `spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch` to `false`.
