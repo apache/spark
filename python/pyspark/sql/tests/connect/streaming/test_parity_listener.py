@@ -100,6 +100,11 @@ class StreamingQueryListenerBusTests(unittest.TestCase):
         listener_bus = StreamingQueryListenerBus(sqm)
         listener_bus._listener_bus.append(listener)
 
+        # Reproduce the ordering that used to deadlock: removal holds _lock while
+        # requesting server-side shutdown, and the event thread starts dispatching a
+        # pending event that also needs _lock. If removal keeps _lock while joining the
+        # event thread, each thread waits for the other. After dispatch, keep the event
+        # thread alive long enough to verify that append waits for shutdown to finish.
         remove_command_started = threading.Event()
         event_dispatch_started = threading.Event()
         event_dispatched = threading.Event()
