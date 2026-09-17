@@ -47,7 +47,7 @@ from pyspark.testing.utils import (
 )
 
 
-class DataFrameCreationTestsMixin:
+class CreateDataFrameTestsMixin:
     def test_create_str_from_dict(self):
         data = [
             {"broker": {"teamId": 3398, "contactEmail": "abc.xyz@123.ca"}},
@@ -326,8 +326,8 @@ class DataFrameCreationTestsMixin:
             self.assertEqual(len(df.collect()), 5)
 
 
-class DataFrameCreationTests(
-    DataFrameCreationTestsMixin,
+class CreateDataFrameTests(
+    CreateDataFrameTestsMixin,
     ReusedSQLTestCase,
 ):
     pass
