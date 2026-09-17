@@ -35,8 +35,8 @@ from pyspark.sql.types import (
     MapType,
     StringType,
     StructType,
-    UserDefinedType,
     VarcharType,
+    _has_char_varchar_in_udt,
     _has_physical_type,
     _has_type,
     _parse_datatype_string,
@@ -331,20 +331,7 @@ class UserDefinedFunction:
         class _InvalidCharVarcharArrowTypeError(TypeError):
             pass
 
-        def has_char_varchar_in_udt(data_type: DataType) -> bool:
-            if isinstance(data_type, UserDefinedType):
-                return _has_physical_type(data_type.sqlType(), (CharType, VarcharType))
-            if isinstance(data_type, StructType):
-                return any(has_char_varchar_in_udt(f.dataType) for f in data_type.fields)
-            if isinstance(data_type, ArrayType):
-                return has_char_varchar_in_udt(data_type.elementType)
-            if isinstance(data_type, MapType):
-                return has_char_varchar_in_udt(data_type.keyType) or has_char_varchar_in_udt(
-                    data_type.valueType
-                )
-            return False
-
-        if has_char_varchar_in_udt(returnType):
+        if _has_char_varchar_in_udt(returnType):
             raise PySparkNotImplementedError(
                 errorClass="NOT_IMPLEMENTED",
                 messageParameters={

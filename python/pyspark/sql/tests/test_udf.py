@@ -77,6 +77,19 @@ class BaseUDFTestsMixin:
             ]
         )
 
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "false",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            default_result = self.spark.range(1).select(
+                udf(lambda _: "a", CharType(3), useArrow=False)("id").alias("c")
+            )
+            self.assertEqual(default_result.schema["c"].dataType, StringType())
+            self.assertEqual(default_result.first().c, "a  ")
+
         with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
             result = self.spark.range(1).select(
                 udf(

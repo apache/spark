@@ -43,7 +43,12 @@ from typing import (
 )
 
 from pyspark.conf import SparkConf
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    PySparkNotImplementedError,
+    PySparkRuntimeError,
+    PySparkTypeError,
+    PySparkValueError,
+)
 from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
@@ -59,6 +64,7 @@ from pyspark.sql.types import (
     StructType,
     VariantVal,
     _create_converter,
+    _has_char_varchar_in_udt,
     _has_nulltype,
     _infer_schema,
     _make_type_verifier,
@@ -1611,6 +1617,13 @@ class SparkSession(SparkConversionMixin):
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
             schema = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
+        if isinstance(schema, DataType) and _has_char_varchar_in_udt(schema):
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={
+                    "feature": f"CHAR/VARCHAR inside createDataFrame UDT schema: {schema}"
+                },
+            )
 
         try:
             import pandas as pd

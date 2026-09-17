@@ -116,7 +116,7 @@ case class UserDefinedPythonFunction(
       }
       val charVarcharCheckedResultType =
         if (CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) &&
-            CharVarcharUtils.physicalTypeHasCharVarchar(dataType)) {
+            CharVarcharUtils.hasCharVarchar(dataType)) {
           Some(dataType)
         } else {
           None

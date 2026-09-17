@@ -352,7 +352,7 @@ object EvaluatePython {
           row
       }
 
-    case udt: UserDefinedType[_] => makeFromJava(udt.sqlType, applyCharVarcharChecks)
+    case udt: UserDefinedType[_] => makeFromJava(udt.sqlType, applyCharVarcharChecks = false)
 
     case VariantType => (obj: Any) => nullSafeConvert(obj) {
       case s: java.util.HashMap[_, _] =>

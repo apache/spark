@@ -34,8 +34,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   private[sql] val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
   /**
-   * Returns whether a physical representation contains CHAR/VARCHAR. Unlike [[hasCharVarchar]],
-   * this descends into a UDT's SQL type because Python and Arrow operate on that representation.
+   * Returns whether a type contains CHAR/VARCHAR, including inside UDT storage. This is intended
+   * for validation at boundaries that do not support CHAR/VARCHAR in UDT storage.
    */
   private[sql] def physicalTypeHasCharVarchar(dt: DataType): Boolean = dt match {
     case ArrayType(elementType, _) => physicalTypeHasCharVarchar(elementType)
@@ -64,8 +64,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       StructType(fields.map { field =>
         field.copy(dataType = replaceCharVarcharWithStringForPhysicalType(field.dataType))
       })
-    case udt: UserDefinedType[_] =>
-      replaceCharVarcharWithStringForPhysicalType(udt.sqlType)
+    case udt: UserDefinedType[_] => udt.sqlType
     case c: CharType => c.toStringType
     case v: VarcharType => v.toStringType
     case other => other
@@ -282,14 +281,6 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         } else {
           MapFromArrays(newKeys, newValues)
         }
-
-      case udt: UserDefinedType[_] =>
-        val storageExpr = expr.dataType match {
-          case _: UserDefinedType[_] => UnwrapUDT(expr)
-          case _ => expr
-        }
-        processStringForCharVarchar(
-          storageExpr, udt.sqlType, charFuncName, varcharFuncName)
 
       case _ => expr
     }

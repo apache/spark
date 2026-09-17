@@ -556,12 +556,13 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean): DataFrame = {
+    val conf = session.sessionState.conf
     val physicalSchema =
       CharVarcharUtils.replaceCharVarcharWithStringForPhysicalType(schema).asInstanceOf[StructType]
     val attrs = toAttributes(physicalSchema)
     val applyCharVarcharChecks =
-      CharVarcharUtils.physicalTypeHasCharVarchar(schema) &&
-        CharVarcharUtils.shouldApplyWriteSideLengthCheck(session.sessionState.conf)
+      CharVarcharUtils.hasCharVarchar(schema) &&
+        CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf)
     val checkedAttrs = if (applyCharVarcharChecks) {
       attrs.zip(schema.fields).map { case (attr, field) =>
         CharVarcharUtils.stringLengthCheck(attr, field.dataType)
@@ -569,14 +570,14 @@ private[sql] object ArrowConverters extends Logging {
     } else {
       attrs
     }
-    val outputSchema = if (applyCharVarcharChecks) {
+    val outputSchema = if (conf.charVarcharFirstClassTypes) {
       schema
     } else {
       CharVarcharUtils.replaceCharVarcharWithString(schema).asInstanceOf[StructType]
     }
     val batchesInDriver = arrowBatches.toArray
-    val shouldUseRDD = session.sessionState.conf
-      .arrowLocalRelationThreshold < batchesInDriver.map(_.length.toLong).sum
+    val shouldUseRDD =
+      conf.arrowLocalRelationThreshold < batchesInDriver.map(_.length.toLong).sum
 
     if (shouldUseRDD) {
       logDebug("Using RDD-based createDataFrame with Arrow optimization.")
