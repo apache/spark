@@ -443,18 +443,22 @@ object PushDownUtils extends Logging {
    * @param flattenedFilters Catalyst filter expressions with partition field references
    *                         already flattened.
    * @param partitionFields Partition field metadata.
+   * @param keepOnEvalFailure whether a created predicate reports a partition as matching when it
+   *                          cannot be evaluated, instead of propagating the failure.
+   *                          See [[PartitionPredicateImpl]].
    * @return a pair of (created partition predicates, remaining filters not converted).
    */
   private[v2] def createPartitionPredicates(
       flattenedFilters: Seq[Expression],
-      partitionFields: Seq[PartitionPredicateField])
+      partitionFields: Seq[PartitionPredicateField],
+      keepOnEvalFailure: Boolean = false)
   : (Seq[PartitionPredicateImpl], Seq[Expression]) = {
     val partitionAttributes = partitionFields.map(_.attrRef)
     val (partFilters, nonPartitionFilters) =
       DataSourceUtils.getPartitionFiltersAndDataFilters(partitionAttributes, flattenedFilters)
     val (pushable, nonPushable) = partFilters.partition(isPushablePartitionFilter(_))
     val (partitionPredicates, errorPartitionPredicates) = pushable.partitionMap { e =>
-      PartitionPredicateImpl(e, partitionFields).toLeft(e)
+      PartitionPredicateImpl(e, partitionFields, keepOnEvalFailure).toLeft(e)
     }
     (partitionPredicates, nonPartitionFilters ++ nonPushable ++ errorPartitionPredicates)
   }
@@ -489,7 +493,11 @@ object PushDownUtils extends Logging {
       partitionFields: Seq[PartitionPredicateField]): Seq[PartitionPredicateImpl] = {
     val catalystExprs = runtimeFilters.flatMap(unwrapRuntimeFilterExpression)
     val flattened = flattenNestedPartitionFilters(catalystExprs, partitionFields).keys
-    createPartitionPredicates(flattened.toSeq, partitionFields)._1
+    // A runtime filter only prunes: its rows are filtered anyway, by the post-scan `FilterExec`
+    // for a scalar subquery filter, by the join it was derived from for a DPP filter, and by the
+    // rewrite re-applying its own condition for a row-level operation's group filter. So a
+    // partition the source cannot evaluate can be kept rather than failing the query.
+    createPartitionPredicates(flattened.toSeq, partitionFields, keepOnEvalFailure = true)._1
   }
 
   /** Unwraps a runtime filter to the Catalyst predicate for pushdown. */
