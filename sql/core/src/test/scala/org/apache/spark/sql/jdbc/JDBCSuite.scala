@@ -1715,7 +1715,7 @@ class JDBCSuite extends SharedSparkSession {
     val newScale = DecimalType.DEFAULT_SCALE // 18
     val oldScale = 10
 
-    // High-precision fraction: 15 fractional digits.
+    // High-precision fraction: 18 fractional digits (14 significant).
     // New Decimal(38,18) preserves it; old Decimal(38,10) would truncate to 10 digits.
     val highPrecFraction = new java.math.BigDecimal("0.000012345678912345")
     val preserved = Decimal(highPrecFraction, p, newScale)
