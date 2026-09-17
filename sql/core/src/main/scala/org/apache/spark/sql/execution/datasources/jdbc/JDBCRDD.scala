@@ -88,7 +88,7 @@ object JDBCRDD extends Logging {
           messageParameters = Map(
             "jdbcQuery" -> fullQuery,
             "externalEngineError" -> e.getMessage.replaceAll("\\.+$", ""),
-            "externalEngineSqlState" -> jdbcExternalEngineSqlState(e)
+            "externalEngineSqlState" -> getSQLState(e)
           ),
           cause = e)
     }
@@ -120,8 +120,10 @@ object JDBCRDD extends Logging {
     }
   }
 
-  // Treat null or blank driver SQLSTATE as missing.
-  private def jdbcExternalEngineSqlState(e: SQLException): String = {
+  /**
+   * Gets the SQLSTATE of the provided SQL exception or "unknown" if it is not defined.
+   */
+  private def getSQLState(e: SQLException): String = {
     Option(e.getSQLState).filter(_.nonEmpty).getOrElse("unknown")
   }
 
@@ -386,7 +388,7 @@ class JDBCRDD(
             messageParameters = Map(
               "jdbcQuery" -> sqlText,
               "externalEngineError" -> e.getMessage.replaceAll("\\.+$", ""),
-              "externalEngineSqlState" -> JDBCRDD.jdbcExternalEngineSqlState(e)
+              "externalEngineSqlState" -> JDBCRDD.getSQLState(e)
             ),
             cause = e)
       }

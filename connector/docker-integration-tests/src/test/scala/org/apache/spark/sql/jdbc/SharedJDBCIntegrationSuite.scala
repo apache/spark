@@ -78,7 +78,9 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
       case cause: SQLException =>
         val expectedSqlState =
           Option(cause.getSQLState).filter(_.nonEmpty).getOrElse("unknown")
-        assert(ex.getMessageParameters.get("externalEngineSqlState") === expectedSqlState)
+        assertResult(expectedSqlState) {
+          ex.getMessageParameters.get("externalEngineSqlState")
+        }
       case other =>
         fail(s"Expected SQLException cause, but got: $other")
     }
