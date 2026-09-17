@@ -1622,19 +1622,12 @@ class SparkConnectPlanner(
    * Restores requested logical wrappers that remain compatible after local-data reconciliation.
    *
    * For example, `createDataFrame(rows, schemaWithChar)` produces CHAR under standard semantics,
-   * STRING under legacy-as-string, and is rejected by the default policy. A requested UDT is
-   * restored only when the reconciled physical type still matches its normalized `sqlType`.
+   * STRING under legacy-as-string, and is rejected by the default policy. Existing UDT wrappers
+   * are retained without extending CHAR/VARCHAR reconciliation into their storage types.
    */
   private def restoreRequestedLogicalType(actual: DataType, requested: DataType): DataType =
     (actual, requested) match {
-      case (_, requestedUdt: UserDefinedType[_]) =>
-        val requestedSqlType = normalizeLocalRelationType(requestedUdt.sqlType)
-        val reconciledActual = restoreRequestedLogicalType(actual, requestedSqlType)
-        if (DataType.equalsIgnoreCompatibleNullability(reconciledActual, requestedSqlType)) {
-          requestedUdt
-        } else {
-          actual
-        }
+      case (_, requestedUdt: UserDefinedType[_]) => requestedUdt
       case (actualString: StringType, requestedString: StringType)
           if !actualString.isInstanceOf[CharType] &&
             !actualString.isInstanceOf[VarcharType] &&

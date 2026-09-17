@@ -35,7 +35,6 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
-    UserDefinedType,
     VarcharType,
 )
 from pyspark.testing import assertDataFrameEqual
@@ -57,28 +56,6 @@ if should_test_connect:
     from pyspark.sql.connect.proto import ExecutePlanResponse
     from pyspark.sql.connect.proto import Expression as ProtoExpression
     from pyspark.sql.dataframe import DataFrame
-
-
-class CharValueUDT(UserDefinedType):
-    @classmethod
-    def sqlType(cls):
-        return CharType(4, "UTF8_LCASE")
-
-    def serialize(self, obj):
-        return obj.value
-
-    def deserialize(self, datum):
-        return CharValue(datum)
-
-
-class CharValue:
-    __UDT__ = CharValueUDT()
-
-    def __init__(self, value):
-        self.value = value
-
-    def __eq__(self, other):
-        return isinstance(other, CharValue) and self.value == other.value
 
 
 @unittest.skipIf(
@@ -664,96 +641,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                     exception=ctx.exception,
                     errorClass="UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
                 )
-
-    def test_create_dataframe_with_udt_char_schema(self):
-        schema = StructType([StructField("value", CharValueUDT())])
-        rows = [(CharValue("ab"),)]
-
-        standard_conf = {
-            "spark.sql.charVarchar.standardSemantics.enabled": "true",
-            "spark.sql.legacy.charVarcharAsString": "false",
-        }
-        with self.both_conf(standard_conf):
-            populated = self.connect.createDataFrame(rows, schema)
-            self.assertEqual(populated.schema, schema)
-            self.assertEqual(populated.collect(), [Row(value=CharValue("ab  "))])
-            self.assertEqual(self.connect.createDataFrame([], schema).schema, schema)
-
-        legacy_conf = {
-            "spark.sql.charVarchar.standardSemantics.enabled": "false",
-            "spark.sql.legacy.charVarcharAsString": "true",
-        }
-        with self.both_conf(legacy_conf):
-            expected = StructType([StructField("value", StringType("UTF8_LCASE"))])
-            populated = self.connect.createDataFrame(rows, schema)
-            self.assertEqual(populated.schema, expected)
-            self.assertEqual(populated.collect(), [Row(value="ab")])
-            self.assertEqual(self.connect.createDataFrame([], schema).schema, expected)
-
-        default_conf = {
-            "spark.sql.charVarchar.standardSemantics.enabled": "false",
-            "spark.sql.legacy.charVarcharAsString": "false",
-        }
-        with self.both_conf(default_conf):
-            for data in (rows, []):
-                with self.assertRaises(AnalysisException) as ctx:
-                    self.connect.createDataFrame(data, schema).schema
-                self.check_error(
-                    exception=ctx.exception,
-                    errorClass="UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
-                )
-
-    def test_create_dataframe_with_explicit_binary_string_schema(self):
-        explicit_binary = StringType("UTF8_BINARY")
-        schema = StructType(
-            [
-                StructField("implicit", StringType()),
-                StructField("s", explicit_binary),
-                StructField(
-                    "nested",
-                    StructType(
-                        [
-                            StructField("s", explicit_binary),
-                            StructField("a", ArrayType(explicit_binary)),
-                            StructField(
-                                "m",
-                                MapType(explicit_binary, explicit_binary),
-                            ),
-                        ]
-                    ),
-                ),
-            ]
-        )
-        rows = [
-            (
-                "implicit",
-                "direct",
-                Row(s="nested", a=["array"], m={"key": "value"}),
-            )
-        ]
-
-        populated = self.connect.createDataFrame(rows, schema)
-        self.assertEqual(populated.schema, schema)
-        self.assertFalse(
-            populated.schema["implicit"].dataType._isCollationExplicitlySpecified()
-        )
-        self.assertTrue(populated.schema["s"].dataType._isCollationExplicitlySpecified())
-        self.assertEqual(
-            populated.collect(),
-            [
-                Row(
-                    implicit="implicit",
-                    s="direct",
-                    nested=Row(s="nested", a=["array"], m={"key": "value"}),
-                )
-            ],
-        )
-
-        empty = self.connect.createDataFrame([], schema)
-        self.assertEqual(empty.schema, schema)
-        self.assertFalse(empty.schema["implicit"].dataType._isCollationExplicitlySpecified())
-        self.assertTrue(empty.schema["s"].dataType._isCollationExplicitlySpecified())
-        self.assertEqual(empty.collect(), [])
 
     def test_to(self):
         # SPARK-41464: test DataFrame.to()

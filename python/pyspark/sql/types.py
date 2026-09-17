@@ -282,9 +282,6 @@ class FractionalType(NumericType):
     """Fractional data types."""
 
 
-_DEFAULT_STRING_COLLATION = cast(str, object())
-
-
 class StringType(AtomicType):
     """String data type.
 
@@ -298,11 +295,8 @@ class StringType(AtomicType):
     providerICU = "icu"
     providers = [providerSpark, providerICU]
 
-    __slots__ = ("_collation_explicit",)
-
-    def __init__(self, collation: str = _DEFAULT_STRING_COLLATION):
-        self._collation_explicit = collation is not _DEFAULT_STRING_COLLATION
-        self.collation = "UTF8_BINARY" if collation is _DEFAULT_STRING_COLLATION else collation
+    def __init__(self, collation: str = "UTF8_BINARY"):
+        self.collation = collation
 
     @classmethod
     def collationProvider(cls, collationName: str) -> str:
@@ -327,9 +321,6 @@ class StringType(AtomicType):
 
     def isUTF8BinaryCollation(self) -> bool:
         return self.collation == "UTF8_BINARY"
-
-    def _isCollationExplicitlySpecified(self) -> bool:
-        return self._collation_explicit
 
 
 class CharType(AtomicType):
@@ -1469,6 +1460,11 @@ class StructField(DataType):
         return "StructField('%s', %s, %s)" % (self.name, self.dataType, str(self.nullable))
 
     def jsonValue(self) -> Dict[str, Any]:
+        if _CHAR_VARCHAR_COLLATIONS_METADATA_KEY in self.metadata:
+            raise PySparkTypeError(
+                errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+                messageParameters={"jsonType": _CHAR_VARCHAR_COLLATIONS_METADATA_KEY},
+            )
         string_metadata = self.getCollationMetadata()
         char_varchar_metadata = self.getCharVarcharCollationMetadata()
         metadata = dict(self.metadata)
@@ -1586,11 +1582,7 @@ class StructField(DataType):
         return isinstance(dt, (CharType, VarcharType)) and dt.collation is not None
 
     def _isCollatedPlainString(self, dt: DataType) -> bool:
-        return (
-            isinstance(dt, StringType)
-            and not isinstance(dt, (CharType, VarcharType))
-            and dt._isCollationExplicitlySpecified()
-        )
+        return isinstance(dt, StringType) and not dt.isUTF8BinaryCollation()
 
     def schemaCollationValue(self, dt: DataType) -> str:
         assert isinstance(dt, (StringType, CharType, VarcharType))
@@ -2676,17 +2668,20 @@ def _parse_datatype_json_value(  # type: ignore[return]
             errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
             messageParameters={"jsonType": str(json_value)},
         )
+    json_type = json_value["type"] if isinstance(json_value, dict) else json_value
+    if in_string:
+        assert collationsMap is not None
+        _assert_valid_type_for_collation(fieldPath, json_type, collationsMap)
+    if in_char_varchar:
+        assert charVarcharCollationsMap is not None
+        _assert_valid_type_for_char_varchar_collation(
+            fieldPath, json_type, charVarcharCollationsMap
+        )
 
     if not isinstance(json_value, dict):
         if json_value in _all_mappable_types.keys():
-            if in_char_varchar:
-                assert charVarcharCollationsMap is not None
-                _assert_valid_type_for_char_varchar_collation(
-                    fieldPath, json_value, charVarcharCollationsMap
-                )
             if in_string:
                 assert collationsMap is not None
-                _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
                 collation_name = collationsMap[fieldPath]
                 return StringType(collation_name)
             return _all_mappable_types[json_value]()
@@ -2718,25 +2713,13 @@ def _parse_datatype_json_value(  # type: ignore[return]
             collation = m.group(2)
             if in_char_varchar:
                 assert charVarcharCollationsMap is not None
-                _assert_valid_type_for_char_varchar_collation(
-                    fieldPath, json_value, charVarcharCollationsMap
-                )
                 collation = charVarcharCollationsMap[fieldPath]
-            elif in_string:
-                assert collationsMap is not None
-                _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
             return CharType(int(m.group(1)), collation)
         elif m := _LENGTH_VARCHAR.match(json_value):
             collation = m.group(2)
             if in_char_varchar:
                 assert charVarcharCollationsMap is not None
-                _assert_valid_type_for_char_varchar_collation(
-                    fieldPath, json_value, charVarcharCollationsMap
-                )
                 collation = charVarcharCollationsMap[fieldPath]
-            elif in_string:
-                assert collationsMap is not None
-                _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
             return VarcharType(int(m.group(1)), collation)
         elif _GEOMETRY.match(json_value):
             return GeometryType._from_crs(GeometryType.DEFAULT_CRS)
@@ -2766,15 +2749,6 @@ def _parse_datatype_json_value(  # type: ignore[return]
     else:
         tpe = json_value["type"]
         if tpe in _all_complex_types:
-            if in_string:
-                assert collationsMap is not None
-                _assert_valid_type_for_collation(fieldPath, tpe, collationsMap)
-            if in_char_varchar:
-                assert charVarcharCollationsMap is not None
-                _assert_valid_type_for_char_varchar_collation(
-                    fieldPath, tpe, charVarcharCollationsMap
-                )
-
             complex_type = _all_complex_types[tpe]
             if complex_type is ArrayType:
                 return ArrayType.fromJson(

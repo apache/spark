@@ -100,7 +100,6 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     TimestampType,
-    UserDefinedType,
     VarcharType,
     _has_nulltype,
     _infer_schema,
@@ -117,10 +116,6 @@ def _replace_char_varchar_with_collation_preserving_string(
         if data_type.collation is None:
             return StringType()
         return StringType(data_type.collation)
-    if isinstance(data_type, UserDefinedType):
-        # LocalDataToArrowConversion needs the wrapper to call serialize. Its Arrow schema
-        # conversion independently lowers the UDT through sqlType.
-        return data_type
     if isinstance(data_type, ArrayType):
         return ArrayType(
             _replace_char_varchar_with_collation_preserving_string(data_type.elementType),
@@ -643,13 +638,9 @@ class SparkSession:
             spark_types: List[Optional[DataType]]
             if isinstance(schema, StructType):
                 deduped_schema = cast(StructType, _deduplicate_field_names(schema))
-                arrow_compatible_schema = cast(
-                    StructType,
-                    _replace_char_varchar_with_collation_preserving_string(deduped_schema),
-                )
-                spark_types = [field.dataType for field in arrow_compatible_schema.fields]
+                spark_types = [field.dataType for field in deduped_schema.fields]
                 arrow_schema = to_arrow_schema(
-                    arrow_compatible_schema,
+                    deduped_schema,
                     timezone="UTC",
                     prefers_large_types=prefers_large_types,
                 )
@@ -710,10 +701,7 @@ class SparkSession:
                 _check_arrow_table_timestamps_localize(data, schema, True, timezone)
                 .cast(
                     to_arrow_schema(
-                        cast(
-                            StructType,
-                            _replace_char_varchar_with_collation_preserving_string(schema),
-                        ),
+                        schema,
                         error_on_duplicated_field_names_in_struct=True,
                         timezone="UTC",
                         prefers_large_types=prefers_large_types,

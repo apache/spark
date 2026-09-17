@@ -933,6 +933,38 @@ class TypesTestsMixin:
             lambda: _parse_datatype_json_string(json.dumps(collations_on_char_json)),
         )
 
+        char_varchar_collations_on_decimal_json = {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "d",
+                    "type": "decimal(10,2)",
+                    "nullable": True,
+                    "metadata": {
+                        _CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {
+                            "d": "spark.UTF8_LCASE"
+                        },
+                    },
+                }
+            ],
+        }
+        self.assertRaises(
+            PySparkTypeError,
+            lambda: _parse_datatype_json_string(
+                json.dumps(char_varchar_collations_on_decimal_json)
+            ),
+        )
+
+    def test_char_varchar_collation_metadata_key_collision_is_rejected(self):
+        from pyspark.sql.types import _CHAR_VARCHAR_COLLATIONS_METADATA_KEY
+
+        field = StructField(
+            "c",
+            CharType(4, "UTF8_LCASE"),
+            metadata={_CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {"caller": "value"}},
+        )
+        self.assertRaises(PySparkTypeError, field.jsonValue)
+
     def test_preceding_reader_retains_unknown_char_varchar_collation_metadata(self):
         # Reduced independent reader copied from the relevant parser branches at base
         # 389de941f002a5c92e22dc3ed0f65af602a174db. It intentionally does not use any
@@ -3500,24 +3532,6 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         lt = LongType()
         lt2 = pickle.loads(pickle.dumps(LongType()))
         self.assertEqual(lt, lt2)
-
-    def test_explicit_binary_string_json_representation(self):
-        implicit = StringType()
-        explicit = StringType("UTF8_BINARY")
-        self.assertEqual(implicit, explicit)
-
-        implicit_json = StructField("s", implicit).jsonValue()
-        explicit_json = StructField("s", explicit).jsonValue()
-        self.assertNotIn("__COLLATIONS", implicit_json["metadata"])
-        self.assertEqual(
-            explicit_json["metadata"]["__COLLATIONS"],
-            {"s": "spark.UTF8_BINARY"},
-        )
-
-        implicit_result = StructField.fromJson(implicit_json).dataType
-        explicit_result = StructField.fromJson(explicit_json).dataType
-        self.assertFalse(implicit_result._isCollationExplicitlySpecified())
-        self.assertTrue(explicit_result._isCollationExplicitlySpecified())
 
     # regression test for SPARK-7978
     def test_decimal_type(self):

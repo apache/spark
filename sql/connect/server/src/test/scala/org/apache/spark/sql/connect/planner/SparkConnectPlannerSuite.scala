@@ -37,7 +37,6 @@ import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.execution.arrow.ArrowConverters
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -546,85 +545,17 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     }
   }
 
-  test("SPARK-59276: reconstruct explicit UTF8_BINARY strings in local relations") {
-    val physicalSchema = StructType(
-      StructField("s", StringType) ::
-        StructField("nested", StructType(StructField("s", StringType) :: Nil)) :: Nil)
-    val requestedSchema =
-      "STRUCT<s: STRING COLLATE UTF8_BINARY, " +
-        "nested: STRUCT<s: STRING COLLATE UTF8_BINARY>>"
-    val projection = UnsafeProjection.create(physicalSchema)
-    val row = projection(
-      InternalRow(UTF8String.fromString("direct"), InternalRow(UTF8String.fromString("nested"))))
-      .copy()
-
-    val populatedBuilder = createLocalRelationProto(physicalSchema, Seq(row)).toBuilder
-    populatedBuilder.getLocalRelationBuilder.setSchema(requestedSchema)
-    val emptyRelation = proto.Relation
-      .newBuilder()
-      .setLocalRelation(proto.LocalRelation.newBuilder().setSchema(requestedSchema))
-      .build()
-
-    Seq(populatedBuilder.build(), emptyRelation).zipWithIndex.foreach {
-      case (relation, index) =>
-        val dataFrame = Dataset.ofRows(spark, transform(relation))
-        val directType = dataFrame.schema("s").dataType.asInstanceOf[StringType]
-        val nestedType = dataFrame.schema("nested").dataType
-          .asInstanceOf[StructType]("s").dataType.asInstanceOf[StringType]
-        assert(!(directType eq StringType))
-        assert(!(nestedType eq StringType))
-        assert(dataFrame.count() === (if (index == 0) 1L else 0L))
-    }
-  }
-
-  test("SPARK-59276: restore requested UDT only with compatible local relation storage") {
-    def transformedType(requestedType: DataType): DataType = {
-      val requestedSchema = StructType(StructField("value", requestedType) :: Nil)
-      val relation = proto.Relation
-        .newBuilder()
-        .setLocalRelation(proto.LocalRelation.newBuilder().setSchema(requestedSchema.json))
-        .build()
-      Dataset.ofRows(spark, transform(relation)).schema("value").dataType
-    }
-
-    val charUdt = new PythonUserDefinedType(
-      CharType(4, "UTF8_LCASE"),
-      "pyspark.testing.CharUdt",
-      "serialized")
-    val policies = Seq(
-      ("legacy-as-string", false, true, false, false),
-      ("preserve-type-info", false, false, true, true),
-      ("standard", true, false, false, true))
-
-    policies.foreach { case (name, standard, legacy, preserve, expectUdt) =>
-      withClue(name) {
-        withSQLConf(
-          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standard.toString,
-          SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
-          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString) {
-          val actual = transformedType(charUdt)
-          if (expectUdt) {
-            assert(actual === charUdt)
-          } else {
-            assert(actual === StringType("UTF8_LCASE"))
-          }
-        }
-      }
-    }
-
-    withSQLConf(
-      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
-      SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
-      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
-      val error = intercept[AnalysisException](transformedType(charUdt))
-      assert(error.getCondition === "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING")
-    }
-
+  test("SPARK-59276: restore an ordinary requested UDT in a local relation") {
     val ordinaryUdt = new PythonUserDefinedType(
       ArrayType(DoubleType, containsNull = false),
       "pyspark.testing.objects.PythonOnlyUDT",
       "serialized")
-    assert(transformedType(ordinaryUdt) === ordinaryUdt)
+    val requestedSchema = StructType(StructField("value", ordinaryUdt) :: Nil)
+    val relation = proto.Relation
+      .newBuilder()
+      .setLocalRelation(proto.LocalRelation.newBuilder().setSchema(requestedSchema.json))
+      .build()
+    assert(Dataset.ofRows(spark, transform(relation)).schema("value").dataType === ordinaryUdt)
   }
 
   test("Empty ArrowBatch") {

@@ -23,7 +23,7 @@ import org.json4s.{JObject, JString}
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.{CollationFactory, QuotingUtils, StringConcat}
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
@@ -98,6 +98,12 @@ case class StructField(
   }
 
   private def metadataJson: JValue = {
+    if (metadata.contains(DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY)) {
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+        messageParameters =
+          Map("jsonType" -> DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY))
+    }
     metadata.jsonValue match {
       case JObject(fields) =>
         val withString =
@@ -168,7 +174,7 @@ case class StructField(
 
   private def isCollatedPlainString(dt: DataType): Boolean = dt match {
     case _: CharType | _: VarcharType => false
-    case st: StringType => (st ne StringType) && (st ne IndeterminateStringType)
+    case st: StringType => !st.isUTF8BinaryCollation
     case _ => false
   }
 
