@@ -1198,6 +1198,11 @@ case class HiveTableRelation(
 
   def isPartitioned: Boolean = partitionCols.nonEmpty
 
+  def hasCharVarchar: Boolean = output.exists { attr =>
+    CharVarcharUtils.hasCharVarchar(attr.dataType) ||
+      CharVarcharUtils.getRawType(attr.metadata).exists(CharVarcharUtils.hasCharVarchar)
+  }
+
   override def doCanonicalize(): HiveTableRelation = copy(
     tableMeta = CatalogTable.normalize(tableMeta),
     dataCols = dataCols.zipWithIndex.map {

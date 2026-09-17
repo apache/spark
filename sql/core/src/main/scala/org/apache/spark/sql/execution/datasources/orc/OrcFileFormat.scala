@@ -147,12 +147,7 @@ class OrcFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    // The analyzed CHAR/VARCHAR scan mode, if any, is bridged in via an engine-private Hadoop
-    // entry by FileFormat's mode-aware overload. Reading it here (rather than taking it as a
-    // parameter) keeps this public override's signature stable, so a subclass that delegates to
-    // `super` retains the bound mode. Absent an entry, keep native constrained ORC types.
-    val charVarcharStandardSemantics =
-      FileFormat.charVarcharScanMode(hadoopConf).contains(CharVarcharScanMode.SparkStandard)
+    val charVarcharScanMode = FileFormat.charVarcharScanMode(hadoopConf)
     buildReaderWithPartitionValues(
       sparkSession,
       dataSchema,
@@ -161,7 +156,7 @@ class OrcFileFormat
       filters,
       options,
       hadoopConf,
-      charVarcharStandardSemantics = charVarcharStandardSemantics)
+      charVarcharScanMode)
   }
 
   private[sql] def buildReaderWithPartitionValues(
@@ -172,7 +167,8 @@ class OrcFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration,
-      charVarcharStandardSemantics: Boolean): (PartitionedFile) => Iterator[InternalRow] = {
+      charVarcharScanMode: Option[CharVarcharScanMode])
+      : (PartitionedFile) => Iterator[InternalRow] = {
     val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
     val sqlConf = getSqlConf(sparkSession)
     val capacity = sqlConf.orcVectorizedReaderBatchSize
@@ -231,7 +227,7 @@ class OrcFileFormat
 
         val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
         val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
-          dataSchema, resultSchema, partitionSchema, conf, charVarcharStandardSemantics)
+          dataSchema, resultSchema, partitionSchema, conf, charVarcharScanMode)
         assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)

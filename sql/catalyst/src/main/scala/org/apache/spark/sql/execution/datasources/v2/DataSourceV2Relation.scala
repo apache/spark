@@ -148,6 +148,16 @@ case class DataSourceV2Relation(
   def autoSchemaEvolution: Boolean =
     table.capabilities.contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
 
+  def hasCharVarchar: Boolean = output.exists { attr =>
+    CharVarcharUtils.hasCharVarchar(attr.dataType) ||
+      CharVarcharUtils.getRawType(attr.metadata).exists(CharVarcharUtils.hasCharVarchar)
+  }
+
+  def sameResultWithUnboundCharVarcharScanMode(other: DataSourceV2Relation): Boolean = {
+    copy(output = other.output, charVarcharScanMode = None)
+      .sameResult(other.copy(charVarcharScanMode = None))
+  }
+
   def isVersioned: Boolean = table.version != null
 
   override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_RELATION)

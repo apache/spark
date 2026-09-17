@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CaseInsensitiveMap, CharVarcharScanMode, CharVarcharUtils}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils, SupportsArchiveFormat}
@@ -428,27 +428,28 @@ object OrcUtils extends Logging {
    * in ORC.
    */
   def getOrcSchemaString(dt: DataType): String = {
-    getOrcSchemaString(dt, SQLConf.get.charVarcharStandardSemantics)
+    getOrcSchemaString(dt, CharVarcharScanMode(SQLConf.get.charVarcharStandardSemantics))
   }
 
   private def getOrcSchemaString(
       dt: DataType,
-      charVarcharStandardSemantics: Boolean): String = dt match {
+      charVarcharScanMode: CharVarcharScanMode): String = dt match {
     case s: StructType =>
       val fieldTypes = s.fields.map { f =>
         s"${quoteIdentifier(f.name)}:" +
-          s"${getOrcSchemaString(f.dataType, charVarcharStandardSemantics)}"
+          s"${getOrcSchemaString(f.dataType, charVarcharScanMode)}"
       }
       s"struct<${fieldTypes.mkString(",")}>"
     case a: ArrayType =>
-      s"array<${getOrcSchemaString(a.elementType, charVarcharStandardSemantics)}>"
+      s"array<${getOrcSchemaString(a.elementType, charVarcharScanMode)}>"
     case m: MapType =>
-      s"map<${getOrcSchemaString(m.keyType, charVarcharStandardSemantics)}," +
-        s"${getOrcSchemaString(m.valueType, charVarcharStandardSemantics)}>"
+      s"map<${getOrcSchemaString(m.keyType, charVarcharScanMode)}," +
+        s"${getOrcSchemaString(m.valueType, charVarcharScanMode)}>"
     // Under standard semantics, keep Spark responsible for CHAR/VARCHAR assignment and scan
     // checks. Native ORC would truncate or pad before Spark can validate the original value.
     // Preserve-only mode retains the native constrained schema and its legacy enforcement.
-    case _: CharType | _: VarcharType if charVarcharStandardSemantics =>
+    case _: CharType | _: VarcharType
+        if charVarcharScanMode == CharVarcharScanMode.SparkStandard =>
       StringType.catalogString
     case _: DayTimeIntervalType | _: TimestampNTZType => LongType.catalogString
     case _: YearMonthIntervalType => IntegerType.catalogString
@@ -541,9 +542,7 @@ object OrcUtils extends Logging {
    * @param resultSchema Result data schema created after pruning cols.
    * @param partitionSchema Schema of partitions.
    * @param conf Hadoop Configuration.
-   * @param charVarcharStandardSemantics When true, request physical ORC STRING so Spark can
-   *                                 apply CHAR/VARCHAR length checks. When false, keep native
-   *                                 constrained ORC CHAR/VARCHAR types.
+   * @param charVarcharScanMode The mode bound during analysis, if first-class types are enabled.
    * @return Returns the result schema as string.
    */
   def orcResultSchemaString(
@@ -552,13 +551,14 @@ object OrcUtils extends Logging {
       resultSchema: StructType,
       partitionSchema: StructType,
       conf: Configuration,
-      charVarcharStandardSemantics: Boolean): String = {
+      charVarcharScanMode: Option[CharVarcharScanMode]): String = {
+    val mode = charVarcharScanMode.getOrElse(CharVarcharScanMode.PreserveNative)
     val resultSchemaString = if (canPruneCols) {
-      OrcUtils.getOrcSchemaString(resultSchema, charVarcharStandardSemantics)
+      OrcUtils.getOrcSchemaString(resultSchema, mode)
     } else {
       OrcUtils.getOrcSchemaString(
         StructType(dataSchema.fields ++ partitionSchema.fields),
-        charVarcharStandardSemantics)
+        mode)
     }
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     resultSchemaString

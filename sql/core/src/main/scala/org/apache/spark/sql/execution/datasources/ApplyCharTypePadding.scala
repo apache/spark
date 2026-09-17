@@ -54,20 +54,25 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     val standardSemantics = conf.charVarcharStandardSemantics
     val scanMode = CharVarcharScanMode(standardSemantics)
 
-    // Bind into case-class state, not a TreeNodeTag: tags do not participate in structural plan
-    // equality / sameResult, so cache lookup and scan reuse would treat preserve-only and standard
-    // scans as the same plan. A case-class field does participate. Keep an already-bound value
-    // (views, catalog-cached relations) unchanged.
-    def bindStandardSemantics(p: LogicalPlan): LogicalPlan = p match {
-      case relation: LogicalRelation if relation.charVarcharScanMode.isEmpty =>
+    /**
+     * Binds the mode captured while analyzing a first-class CHAR/VARCHAR relation.
+     *
+     * For example, `SELECT c FROM t` retains its analyzed mode if the session setting changes
+     * before the physical scan is built. Relations without CHAR/VARCHAR columns remain unbound.
+     */
+    def bindCharVarcharScanMode(p: LogicalPlan): LogicalPlan = p match {
+      case relation: LogicalRelation
+          if relation.charVarcharScanMode.isEmpty && relation.hasCharVarchar =>
         val bound = relation.copy(charVarcharScanMode = Some(scanMode))
         bound.copyTagsFrom(relation)
         bound
-      case relation: DataSourceV2Relation if relation.charVarcharScanMode.isEmpty =>
+      case relation: DataSourceV2Relation
+          if relation.charVarcharScanMode.isEmpty && relation.hasCharVarchar =>
         val bound = relation.copy(charVarcharScanMode = Some(scanMode))
         bound.copyTagsFrom(relation)
         bound
-      case relation: HiveTableRelation if relation.charVarcharScanMode.isEmpty =>
+      case relation: HiveTableRelation
+          if relation.charVarcharScanMode.isEmpty && relation.hasCharVarchar =>
         val bound = relation.copy(charVarcharScanMode = Some(scanMode))
         bound.copyTagsFrom(relation)
         bound
@@ -76,9 +81,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
     val boundPlan = if (conf.charVarcharFirstClassTypes) {
       plan.resolveOperatorsUp {
-        case relation: LogicalRelation => bindStandardSemantics(relation)
-        case relation: DataSourceV2Relation => bindStandardSemantics(relation)
-        case relation: HiveTableRelation => bindStandardSemantics(relation)
+        case relation: LogicalRelation => bindCharVarcharScanMode(relation)
+        case relation: DataSourceV2Relation => bindCharVarcharScanMode(relation)
+        case relation: HiveTableRelation => bindCharVarcharScanMode(relation)
       }
     } else {
       plan
@@ -97,18 +102,15 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
       val newPlan = boundPlan.resolveOperatorsUpWithNewOutput {
         case r: LogicalRelation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () =>
-            bindStandardSemantics(
-              r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))))
+            r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
         case r: DataSourceV2Relation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () =>
-            bindStandardSemantics(
-              r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))))
+            r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
         case r: HiveTableRelation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () => {
             val cleanedDataCols = r.dataCols.map(CharVarcharUtils.cleanAttrMetadata)
             val cleanedPartCols = r.partitionCols.map(CharVarcharUtils.cleanAttrMetadata)
-            bindStandardSemantics(
-              r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols))
+            r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols)
           })
       }
       ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false)

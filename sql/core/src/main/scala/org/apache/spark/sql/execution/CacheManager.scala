@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.catalyst.util.{sideBySide, CharVarcharScanMode}
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
@@ -59,6 +59,10 @@ case class CachedData(
        |InMemoryRelation=$cachedRepresentation)
        |""".stripMargin
 }
+
+private[sql] case class TableCacheDescriptor(
+    storageLevel: StorageLevel,
+    charVarcharScanMode: Option[CharVarcharScanMode])
 
 /**
  * Provides support in a SQLContext for caching query results and automatically using these cached
@@ -367,25 +371,25 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * invalidates preserve-native and standard cache entries without weakening normal cache identity.
    */
   def recacheByV2Relation(spark: SparkSession, relation: DataSourceV2Relation): Unit = {
-    val unboundRelation = relation.copy(charVarcharScanMode = None)
     recacheByCondition(spark, cd => cd.plan.exists {
       case cached: DataSourceV2Relation =>
-        cached.copy(charVarcharScanMode = None).sameResult(unboundRelation)
+        cached.sameResultWithUnboundCharVarcharScanMode(relation)
       case _ => false
     })
   }
 
   /**
-   * Looks up direct cache entries for a V2 table mutation while ignoring only their analyzed
-   * CHAR/VARCHAR scan mode. Normal cache substitution remains mode-sensitive.
+   * Describes direct cache entries for a V2 table mutation while ignoring scan mode identity.
    */
-  def lookupCachedDataByV2Relation(relation: DataSourceV2Relation): Seq[CachedData] = {
-    val unboundRelation = relation.copy(charVarcharScanMode = None)
-    cachedData.filter { cd =>
-      EliminateSubqueryAliases(cd.plan) match {
-        case cached: DataSourceV2Relation =>
-          cached.copy(charVarcharScanMode = None).sameResult(unboundRelation)
-        case _ => false
+  def lookupCacheDescriptorsByV2Relation(
+      relation: DataSourceV2Relation): Seq[TableCacheDescriptor] = {
+    cachedData.flatMap { cd =>
+      cd.plan.collectFirst {
+        case cached: DataSourceV2Relation
+            if cached.sameResultWithUnboundCharVarcharScanMode(relation) =>
+          TableCacheDescriptor(
+            cd.cachedRepresentation.cacheBuilder.storageLevel,
+            cached.charVarcharScanMode)
       }
     }
   }
