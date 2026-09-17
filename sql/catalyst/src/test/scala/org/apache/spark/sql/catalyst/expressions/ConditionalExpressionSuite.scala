@@ -373,7 +373,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
       code.contains("caseWhenResultState") && !code.contains("caseWhenBuckets")
     }
     val strKey = BoundReference(0, StringType, nullable = true)
-    def elseVal = Some(Literal("else"))
+    def elseVal: Option[Expression] = Some(Literal("else"))
 
     // Ineligible key types (only binary-collation strings use the probe):
     // integer/long -- cheap compares, the chain wins (measured); float -- NaN/-0.0 equality;
