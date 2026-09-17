@@ -137,7 +137,9 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         if data_type.collation is not None:
             ret.var_char.collation = data_type.collation
     elif isinstance(data_type, StringType):
-        ret.string.collation = data_type.collation
+        ret.string.CopyFrom(pb2.DataType.String())
+        if data_type._isCollationExplicitlySpecified():
+            ret.string.collation = data_type.collation
     elif isinstance(data_type, BooleanType):
         ret.boolean.CopyFrom(pb2.DataType.Boolean())
     elif isinstance(data_type, BinaryType):
@@ -247,8 +249,9 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         s = schema.decimal.scale if schema.decimal.HasField("scale") else 0
         return DecimalType(precision=p, scale=s)
     elif schema.HasField("string"):
-        collation = schema.string.collation if schema.string.collation != "" else "UTF8_BINARY"
-        return StringType(collation)
+        if schema.string.collation != "":
+            return StringType(schema.string.collation)
+        return StringType()
     elif schema.HasField("char"):
         return CharType(
             schema.char.length,

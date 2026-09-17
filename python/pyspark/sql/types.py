@@ -282,6 +282,9 @@ class FractionalType(NumericType):
     """Fractional data types."""
 
 
+_DEFAULT_STRING_COLLATION = cast(str, object())
+
+
 class StringType(AtomicType):
     """String data type.
 
@@ -295,8 +298,11 @@ class StringType(AtomicType):
     providerICU = "icu"
     providers = [providerSpark, providerICU]
 
-    def __init__(self, collation: str = "UTF8_BINARY"):
-        self.collation = collation
+    __slots__ = ("_collation_explicit",)
+
+    def __init__(self, collation: str = _DEFAULT_STRING_COLLATION):
+        self._collation_explicit = collation is not _DEFAULT_STRING_COLLATION
+        self.collation = "UTF8_BINARY" if collation is _DEFAULT_STRING_COLLATION else collation
 
     @classmethod
     def collationProvider(cls, collationName: str) -> str:
@@ -321,6 +327,9 @@ class StringType(AtomicType):
 
     def isUTF8BinaryCollation(self) -> bool:
         return self.collation == "UTF8_BINARY"
+
+    def _isCollationExplicitlySpecified(self) -> bool:
+        return self._collation_explicit
 
 
 class CharType(AtomicType):
@@ -1580,7 +1589,7 @@ class StructField(DataType):
         return (
             isinstance(dt, StringType)
             and not isinstance(dt, (CharType, VarcharType))
-            and not dt.isUTF8BinaryCollation()
+            and dt._isCollationExplicitlySpecified()
         )
 
     def schemaCollationValue(self, dt: DataType) -> str:

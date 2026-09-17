@@ -3501,6 +3501,24 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         lt2 = pickle.loads(pickle.dumps(LongType()))
         self.assertEqual(lt, lt2)
 
+    def test_explicit_binary_string_json_representation(self):
+        implicit = StringType()
+        explicit = StringType("UTF8_BINARY")
+        self.assertEqual(implicit, explicit)
+
+        implicit_json = StructField("s", implicit).jsonValue()
+        explicit_json = StructField("s", explicit).jsonValue()
+        self.assertNotIn("__COLLATIONS", implicit_json["metadata"])
+        self.assertEqual(
+            explicit_json["metadata"]["__COLLATIONS"],
+            {"s": "spark.UTF8_BINARY"},
+        )
+
+        implicit_result = StructField.fromJson(implicit_json).dataType
+        explicit_result = StructField.fromJson(explicit_json).dataType
+        self.assertFalse(implicit_result._isCollationExplicitlySpecified())
+        self.assertTrue(explicit_result._isCollationExplicitlySpecified())
+
     # regression test for SPARK-7978
     def test_decimal_type(self):
         t1 = DecimalType()

@@ -1233,6 +1233,21 @@ class ClientE2ETestSuite
     }
   }
 
+  test("SPARK-59276: createDataFrame preserves explicit binary STRING identity") {
+    val schema = new StructType()
+      .add("implicit", StringType)
+      .add("explicit", StringType("UTF8_BINARY"))
+    val rows = java.util.Arrays.asList(Row("a", "b"))
+    val emptyRows = java.util.Collections.emptyList[Row]()
+
+    Seq(rows, emptyRows).foreach { input =>
+      val dataFrame = spark.createDataFrame(input, schema)
+      assert(dataFrame.schema("implicit").dataType.eq(StringType))
+      assert(!dataFrame.schema("explicit").dataType.eq(StringType))
+      assert(dataFrame.schema("explicit").dataType === StringType("UTF8_BINARY"))
+    }
+  }
+
   test("SparkSession.createDataFrame - bean") {
     def bean(v: String): SimpleBean = {
       val bean = new SimpleBean

@@ -32,6 +32,7 @@ from pyspark.sql.conversion import (
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
+    CharType,
     DecimalType,
     DoubleType,
     Geography,
@@ -49,6 +50,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     TimestampType,
     UserDefinedType,
+    VarcharType,
     VariantType,
     VariantVal,
 )
@@ -81,6 +83,25 @@ class Score:
 
     def __eq__(self, other):
         return self.score == other.score
+
+
+class CharScoreUDT(UserDefinedType):
+    @classmethod
+    def sqlType(cls):
+        return CharType(4)
+
+    def serialize(self, obj):
+        return obj.score
+
+    def deserialize(self, datum):
+        return CharScore(datum)
+
+
+class CharScore:
+    __UDT__ = CharScoreUDT()
+
+    def __init__(self, score):
+        self.score = score
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -621,6 +642,24 @@ class ConversionTests(unittest.TestCase):
         tbl = LocalDataToArrowConversion.convert([None], schema, use_large_var_types=False)
         actual = ArrowTableToRowsConversion.convert(tbl, schema)
         self.assertEqual(actual[0], Row(x=None))
+
+    def test_char_varchar_local_data_to_arrow_conversion(self):
+        schema = StructType(
+            [
+                StructField("char", CharType(4)),
+                StructField("varchar", VarcharType(4)),
+                StructField("udt", CharScoreUDT()),
+            ]
+        )
+        table = LocalDataToArrowConversion.convert(
+            [(1, False, CharScore(2))],
+            schema,
+            use_large_var_types=False,
+        )
+        self.assertEqual(
+            table.to_pylist(),
+            [{"char": "1", "varchar": "false", "udt": "2"}],
+        )
 
     def test_return_as_tuples(self):
         schema = StructType([StructField("x", IntegerType())])
