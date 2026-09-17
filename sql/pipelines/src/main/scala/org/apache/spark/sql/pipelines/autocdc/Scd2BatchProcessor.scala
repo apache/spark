@@ -1670,10 +1670,10 @@ object Scd2BatchProcessor {
         // reconciliation, have a null record start at.
         StructField(recordStartAtFieldName, sequencingType, nullable = true),
         // The version map representing null-authorship for the row. For persisted rows:
-        // If the version map is null, that row was ingested with ignore-null off, and all columns are considered
-        // explicitly authored (null or not). If the version map is non-null, the row was ingested
-        // with ignore-null on, and contents of the map comply with the contract defined in
-        // [[Scd2VersionMap]].
+        // If the version map is null, that row was ingested with ignore-null off, and all columns
+        // are considered explicitly authored (null or not). If the version map is non-null, the
+        // row was ingested with ignore-null on, and contents of the map comply with the contract
+        // defined in [[Scd2VersionMap]].
         //
         // Tombstones and decomposition tails also always hold null version maps because column
         // authorship is not applicable - they are delete markers.
