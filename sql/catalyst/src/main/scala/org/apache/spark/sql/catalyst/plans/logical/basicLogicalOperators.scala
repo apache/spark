@@ -2708,7 +2708,7 @@ object AsOfJoin {
     if (MatchConditionTypes.isCompositeOperand(leftType, rightType)) {
       (leftOperand, rightOperand)
     } else {
-      MatchConditionTypes.matchComparisonCommonType(leftType, rightType) match {
+      MatchConditionTypes.stringComparisonCommonType(leftType, rightType) match {
         case Some(commonType) =>
           (castMatchOperand(leftOperand, commonType), castMatchOperand(rightOperand, commonType))
         case None => (leftOperand, rightOperand)
@@ -2740,18 +2740,28 @@ object AsOfJoin {
       } else if (isCompositeOperand(leftType, rightType)) {
         areFieldTypesCompatible(leftType, rightType)
       } else if (isExactlyOneStringPair(leftType, rightType)) {
-        matchComparisonCommonType(leftType, rightType).isDefined
+        stringComparisonCommonType(leftType, rightType).isDefined
       } else {
         TypeCoercion.findWiderTypeForTwo(leftType, rightType).isDefined
       }
     }
+
+    /** True when either operand is a STRUCT or ARRAY, left uncoerced under the strict rule. */
+    private[catalyst] def isCompositeOperand(
+        leftType: DataType,
+        rightType: DataType): Boolean =
+      Seq(leftType, rightType).exists(t => t.isInstanceOf[StructType] || t.isInstanceOf[ArrayType])
+
+    /** True when exactly one operand is a string, the only pair that needs comparison coercion. */
+    private def isExactlyOneStringPair(leftType: DataType, rightType: DataType): Boolean =
+      leftType.isInstanceOf[StringType] != rightType.isInstanceOf[StringType]
 
     /**
      * The type a string vs non-string scalar pair is cast to for comparison, ordering, and sort,
      * mirroring the comparison operator's string coercion in the active mode (ANSI or default).
      * Returns [[None]] for other pairs, whose monotonic widening keeps the raw operands.
      */
-    private[catalyst] def matchComparisonCommonType(
+    private[catalyst] def stringComparisonCommonType(
         leftType: DataType,
         rightType: DataType): Option[DataType] = {
       if (!isExactlyOneStringPair(leftType, rightType)) {
@@ -2765,19 +2775,6 @@ object AsOfJoin {
         commonType.filter(isValidOperandType)
       }
     }
-
-    /**
-     * True when either operand is a STRUCT or ARRAY. These keep the stricter widening rule and are
-     * left uncoerced; [[areOperandsCompatible]] and the leaf coercion both branch on this.
-     */
-    private[catalyst] def isCompositeOperand(
-        leftType: DataType,
-        rightType: DataType): Boolean =
-      Seq(leftType, rightType).exists(t => t.isInstanceOf[StructType] || t.isInstanceOf[ArrayType])
-
-    /** True when exactly one operand is a string, the only pair that needs comparison coercion. */
-    private def isExactlyOneStringPair(leftType: DataType, rightType: DataType): Boolean =
-      leftType.isInstanceOf[StringType] != rightType.isInstanceOf[StringType]
 
     /**
      * Strict rule for STRUCT fields, ARRAY elements, and composite operands: widen only, with

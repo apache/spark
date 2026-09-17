@@ -318,7 +318,7 @@ Project [ts#x, s#x AS matched_s#x]
 
 -- !query
 SELECT t.k, r.s AS matched_s
-FROM VALUES (20) AS t(k) ASOF JOIN
+FROM VALUES (25) AS t(k) ASOF JOIN
      VALUES ('9'), ('10'), ('20') AS r(s)
   MATCH_CONDITION (t.k >= r.s)
 -- !query analysis

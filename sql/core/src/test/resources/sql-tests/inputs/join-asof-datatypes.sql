@@ -140,9 +140,9 @@ FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
   MATCH_CONDITION (t.ts >= r.s);
 
 -- FVT-ASOF-4-016c: coercion INT vs STRING sorts the right buffer by value, not lexicographically.
--- '9' sorts after '10'/'20' as text but 9 < 10 < 20 by value; the as-of match for 20 must be 20.
+-- '9' sorts after '10'/'20' as text but 9 < 10 < 20 by value; the as-of match for 25 must be 20.
 SELECT t.k, r.s AS matched_s
-FROM VALUES (20) AS t(k) ASOF JOIN
+FROM VALUES (25) AS t(k) ASOF JOIN
      VALUES ('9'), ('10'), ('20') AS r(s)
   MATCH_CONDITION (t.k >= r.s);
 

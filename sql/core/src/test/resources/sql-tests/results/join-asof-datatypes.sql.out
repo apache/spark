@@ -249,13 +249,13 @@ struct<ts:timestamp,matched_s:string>
 
 -- !query
 SELECT t.k, r.s AS matched_s
-FROM VALUES (20) AS t(k) ASOF JOIN
+FROM VALUES (25) AS t(k) ASOF JOIN
      VALUES ('9'), ('10'), ('20') AS r(s)
   MATCH_CONDITION (t.k >= r.s)
 -- !query schema
 struct<k:int,matched_s:string>
 -- !query output
-20	20
+25	20
 
 
 -- !query
