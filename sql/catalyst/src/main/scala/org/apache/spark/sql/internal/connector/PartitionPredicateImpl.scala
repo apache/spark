@@ -28,18 +28,18 @@ import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
  * An implementation for [[PartitionPredicate]] that wraps a Catalyst Expression representing a
  * partition filter.
  *
+ * Reporting a partition [[eval]] cannot evaluate as matching only prunes less, which is safe for a
+ * runtime filter, whose rows are filtered anyway: by the post-scan `FilterExec` for a scalar
+ * subquery filter, by the join it was derived from for a dynamic partition pruning filter, and by
+ * the rewrite re-applying its own condition for a row-level operation's group filter. Everywhere
+ * else Spark drops a filter the connector accepts, leaving this predicate as the only evaluator,
+ * so the failure is propagated instead: reporting a match would return or write rows the filter
+ * does not accept.
+ *
  * @param catalystExpr the partition filter this predicate evaluates.
  * @param partitionFields one entry per transform of `Table.partitioning()`, in that order, so a
  *                        bound ordinal matches the partition key a connector passes to [[eval]].
- * @param keepOnEvalFailure what [[eval]] does when it cannot evaluate the expression for a
- *                          partition. When true it reports the partition as matching, which only
- *                          prunes less; that is safe for a runtime filter, whose rows are
- *                          filtered anyway, by the post-scan `FilterExec` for a scalar subquery
- *                          filter and by the join it was derived from for a dynamic partition
- *                          pruning filter. When false the failure is propagated, because Spark
- *                          drops a filter the connector accepts, leaving this predicate as the
- *                          only evaluator: reporting a match would return or write rows the
- *                          filter does not accept.
+ * @param keepOnEvalFailure whether [[eval]] reports a partition it cannot evaluate as matching.
  */
 class PartitionPredicateImpl private (
     private val catalystExpr: CatalystExpression,

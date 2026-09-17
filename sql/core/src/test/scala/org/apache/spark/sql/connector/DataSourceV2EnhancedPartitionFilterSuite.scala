@@ -415,9 +415,11 @@ class DataSourceV2EnhancedPartitionFilterSuite
       // `to_int('hr')` throws, so the filter is never true for that partition. The filter is
       // untranslatable, so it is pushed as a PartitionPredicate and accepted, which removes it
       // from the post-scan filters. The source is then its only evaluator, so reporting a failed
-      // evaluation as a match returns the 'hr' row. The error surfaces while the scan is built.
+      // evaluation as a match returns the 'hr' row. Optimizing is enough to raise it, which the
+      // fallback path cannot do: there the filter stays post-scan and only execution fails.
       val e = intercept[SparkException] {
-        sql(s"SELECT * FROM $partFilterTableName WHERE to_int(part_col) = 1").collect()
+        sql(s"SELECT * FROM $partFilterTableName WHERE to_int(part_col) = 1")
+          .queryExecution.optimizedPlan
       }
       assert(e.getCondition == "FAILED_EXECUTE_UDF")
       assert(e.getCause.isInstanceOf[NumberFormatException])

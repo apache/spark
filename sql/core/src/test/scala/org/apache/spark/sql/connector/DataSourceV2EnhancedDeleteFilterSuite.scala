@@ -252,11 +252,16 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
 
       spark.udf.register("to_int", (s: String) => s.toInt)
 
-      val e = intercept[SparkException] {
-        sql(s"DELETE FROM $deleteTableName WHERE to_int(dep) = 1").collect()
+      val (e, plan) = keepingPlan {
+        intercept[SparkException] {
+          sql(s"DELETE FROM $deleteTableName WHERE to_int(dep) = 1").collect()
+        }
       }
       assert(e.getCondition == "FAILED_EXECUTE_UDF")
       assert(e.getCause.isInstanceOf[NumberFormatException])
+      // The fallback row-level DELETE raises the same error, so pin the metadata-only path.
+      assert(plan.isInstanceOf[DeleteFromTableExec],
+        s"Expected a metadata-only DELETE but got ${plan.getClass.getSimpleName}")
 
       // The partition whose predicate could not be evaluated must still be there.
       checkAnswer(
@@ -265,7 +270,13 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
     }
   }
 
-  private def executeAndKeepPlan(func: => Unit): SparkPlan = {
+  private def executeAndKeepPlan(func: => Unit): SparkPlan = keepingPlan(func)._2
+
+  /**
+   * Runs `func` and returns its result with the executed plan. The plan is captured for a failed
+   * query too, so a test that intercepts the failure can still assert which plan produced it.
+   */
+  private def keepingPlan[T](func: => T): (T, SparkPlan) = {
     var executedPlan: SparkPlan = null
 
     val listener = new QueryExecutionListener {
@@ -274,20 +285,23 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
         executedPlan = qe.executedPlan
       }
       override def onFailure(
-          funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+          funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        executedPlan = qe.executedPlan
+      }
     }
     spark.listenerManager.register(listener)
 
-    try {
-      func
+    val result = try {
+      val r = func
       sparkContext.listenerBus.waitUntilEmpty()
+      r
     } finally {
       spark.listenerManager.unregister(listener)
     }
 
     assert(executedPlan != null,
       "QueryExecutionListener did not capture the executed plan")
-    executedPlan
+    (result, executedPlan)
   }
 
   /**

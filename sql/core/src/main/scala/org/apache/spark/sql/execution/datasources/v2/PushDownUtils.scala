@@ -486,7 +486,8 @@ object PushDownUtils extends Logging {
     val catalystExprs = runtimeFilters.flatMap(unwrapRuntimeFilterExpression)
     val flattened = flattenNestedPartitionFilters(catalystExprs, partitionFields).keys
     // A runtime filter only prunes: its rows are filtered anyway, by the post-scan `FilterExec`
-    // for a scalar subquery filter and by the join it was derived from for a DPP filter. So a
+    // for a scalar subquery filter, by the join it was derived from for a DPP filter, and by the
+    // rewrite re-applying its own condition for a row-level operation's group filter. So a
     // partition the source cannot evaluate can be kept rather than failing the query.
     createPartitionPredicates(flattened.toSeq, partitionFields, keepOnEvalFailure = true)._1
   }
