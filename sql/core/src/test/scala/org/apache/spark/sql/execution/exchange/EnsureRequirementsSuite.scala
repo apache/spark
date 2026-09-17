@@ -1178,9 +1178,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val right = partitioning(2, 3, 4)
     val intersected = partitioning(2, 3).partitionKeys
     val union = partitioning(1, 2, 3, 4).partitionKeys
-    def merge(joinType: JoinType): Seq[InternalRow] =
+    def merge(joinType: JoinType, filterPartitions: Boolean): Seq[InternalRow] =
       EnsureRequirements.mergeAndDedupPartitions(
-        left.partitionKeys, right.partitionKeys, joinType, left.keyOrdering).map(_.row)
+        left.partitionKeys, right.partitionKeys, joinType, left.keyOrdering,
+        filterPartitions).map(_.row)
 
     val expected = Seq(
       Inner -> intersected,
@@ -1193,15 +1194,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       RightOuter -> right.partitionKeys,
       FullOuter -> union)
 
-    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
-      expected.foreach { case (joinType, keys) =>
-        assert(merge(joinType) === keys.map(_.row), joinType)
-      }
-    }
-    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
-      expected.foreach { case (joinType, _) =>
-        assert(merge(joinType) === union.map(_.row), joinType)
-      }
+    expected.foreach { case (joinType, keys) =>
+      assert(merge(joinType, filterPartitions = true) === keys.map(_.row), joinType)
+      assert(merge(joinType, filterPartitions = false) === union.map(_.row), joinType)
     }
   }
 
@@ -2699,6 +2694,51 @@ class EnsureRequirementsSuite extends SharedSparkSession {
               s"left=$leftName right=$rightName joinType=$joinType " +
               s"settings=${settings.mkString(",")}\n${planned.treeString}")
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59272: partition filtering leaves a marked pair's merged keys alone") {
+    // Both arms of the filter would narrow this pair below the marked side's three declared keys:
+    // `Inner` intersects to [1, 2], and `LeftOuter` keeps the unmarked left's [1, 2]. Either way
+    // the marked side regroups two groups over three input partitions, its regrouping stops being
+    // the identity and it forfeits its keyed claim. See `filtersKeys` in
+    // `EnsureRequirements.checkKeyGroupCompatible`. Both settings push all three keys and neither
+    // side is shuffled.
+    //
+    // The two join types put the marker on opposite sides on purpose, because that is the side
+    // `rank` reads for the one-sided arms.
+    val marked = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
+      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    val plain = KeyedPartitioning(Seq(exprB), Seq(InternalRow(1), InternalRow(2)))
+    val markedRight = KeyedPartitioning(
+      Seq(exprB), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
+      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    val plainLeft = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(2)))
+
+    Seq(
+      (Inner: JoinType, marked, plain),
+      (LeftOuter, plainLeft, markedRight)).foreach { case (joinType, left, right) =>
+      Seq(false, true).foreach { partitionFilter =>
+        withSQLConf(
+            SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> partitionFilter.toString) {
+          val smj = SortMergeJoinExec(Seq(exprA), Seq(exprB), joinType, None,
+            DummySparkPlan(outputPartitioning = left),
+            DummySparkPlan(outputPartitioning = right))
+          val planned = EnsureRequirements.apply(smj)
+
+          assert(planned.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+            s"$joinType: a marked pair keeps its storage-partitioned join either way:\n" +
+              planned.treeString)
+          assert(groupPartitionsNodes(planned).map(_.expectedPartitionKeys.map(_.size)) ===
+            Seq(Some(3), Some(3)),
+            s"$joinType: both sides are pushed the marked side's three keys:\n" +
+              planned.treeString)
+          assert(ValidateRequirements.validate(planned),
+            s"$joinType: the planned join must satisfy both children's required distribution:\n" +
+              planned.treeString)
         }
       }
     }
