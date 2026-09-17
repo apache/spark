@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-from pyspark.sql.tests.test_create_dataframe import CreateDataFrameTestsMixin
+from pyspark.sql.tests.test_dataframe_creation import DataFrameCreationTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class CreateDataFrameParityTests(
-    CreateDataFrameTestsMixin,
+class DataFrameCreationParityTests(
+    DataFrameCreationTestsMixin,
     ReusedConnectTestCase,
 ):
     pass

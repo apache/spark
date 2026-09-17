@@ -44,7 +44,7 @@ if should_test_connect:
     from pyspark.sql.connect import functions as CF
 
 
-class SparkConnectCreateDataFrameTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
+class SparkConnectDataFrameCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
     def test_with_local_data(self):
         """SPARK-41114: Test creating a dataframe using local data"""
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
