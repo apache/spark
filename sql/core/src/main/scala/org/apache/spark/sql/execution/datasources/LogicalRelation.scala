@@ -80,6 +80,16 @@ case class LogicalRelation(
     case _ =>  // Do nothing.
   }
 
+  def hasCharVarchar: Boolean = output.exists { attr =>
+    CharVarcharUtils.hasCharVarchar(attr.dataType) ||
+      CharVarcharUtils.getRawType(attr.metadata).exists(CharVarcharUtils.hasCharVarchar)
+  }
+
+  def sameResultWithUnboundCharVarcharScanMode(other: LogicalRelation): Boolean = {
+    copy(output = other.output, charVarcharScanMode = None)
+      .sameResult(other.copy(charVarcharScanMode = None))
+  }
+
   override def simpleString(maxFields: Int): String = {
     s"Relation ${catalogTable.map(_.identifier.unquotedString).getOrElse("")}" +
       s"[${truncatedString(output, ",", maxFields)}] $relation"

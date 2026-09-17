@@ -2425,8 +2425,10 @@ class CachedTableSuite extends SharedSparkSession
     val standardConf = Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
 
     withTable(t) {
-      sql(s"CREATE TABLE $t (id int, data string) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, 'a')")
+      withSQLConf(preserveConf: _*) {
+        sql(s"CREATE TABLE $t (id int, data varchar(4)) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 'a')")
+      }
 
       def cachedData(modeConf: Seq[(String, String)]): CachedData = {
         withSQLConf(modeConf: _*) {
@@ -2469,6 +2471,49 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  test("CHAR/VARCHAR scan modes do not split caches for non-CHAR relations") {
+    val t = "testcat.int_only"
+    val preserveConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
+    val standardConf = Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
+
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+      sql(s"INSERT INTO $t VALUES (1)")
+      val initialCacheCount = cacheManager.numCachedEntries
+
+      withSQLConf(preserveConf: _*) {
+        sql(s"CACHE TABLE $t")
+      }
+      withSQLConf(standardConf: _*) {
+        assertCached(sql(s"SELECT * FROM $t"))
+        sql(s"CACHE TABLE $t")
+      }
+
+      assert(cacheManager.numCachedEntries === initialCacheCount + 1)
+      val cached = cacheManager.lookupCachedData(sql(s"SELECT * FROM $t")).get
+      val scanMode = cached.plan.collectFirst {
+        case relation: DataSourceV2Relation => relation.charVarcharScanMode
+      }.flatten
+      assert(scanMode.isEmpty)
+    }
+  }
+
+  test("non-first-class CHAR relations keep an unbound scan mode") {
+    withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      withTable("unbound_char") {
+        sql("CREATE TABLE unbound_char (c char(4)) USING parquet")
+        val scanMode = spark.table("unbound_char").queryExecution.analyzed.collectFirst {
+          case relation: LogicalRelation => relation.charVarcharScanMode
+        }.flatten
+        assert(scanMode.isEmpty)
+      }
+    }
+  }
+
   test("refreshTable recaches all bound CHAR/VARCHAR V1 scan modes") {
     val preserveConf = Seq(
       SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
@@ -2476,7 +2521,7 @@ class CachedTableSuite extends SharedSparkSession
     val standardConf = Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
 
     withTable("cached_cv") {
-      sql("CREATE TABLE cached_cv (id int, data string) USING parquet")
+      sql("CREATE TABLE cached_cv (id int, data varchar(4)) USING parquet")
       sql("INSERT INTO cached_cv VALUES (1, 'a')")
 
       def cachedData(modeConf: Seq[(String, String)]): CachedData = {
@@ -2515,10 +2560,14 @@ class CachedTableSuite extends SharedSparkSession
 
       withSQLConf(preserveConf: _*) {
         checkCacheLoading(sql("SELECT * FROM cached_cv"), isLoaded = false)
-        checkAnswer(sql("SELECT * FROM cached_cv"), Row(1, "a"))
       }
       withSQLConf(standardConf: _*) {
         checkCacheLoading(sql("SELECT * FROM cached_cv"), isLoaded = false)
+      }
+      withSQLConf(preserveConf: _*) {
+        checkAnswer(sql("SELECT * FROM cached_cv"), Row(1, "a"))
+      }
+      withSQLConf(standardConf: _*) {
         checkAnswer(sql("SELECT * FROM cached_cv"), Row(1, "a"))
       }
       assert(scanMode(preserveConf).contains(CharVarcharScanMode.PreserveNative))

@@ -26,6 +26,16 @@ package org.apache.spark.sql.catalyst.util
  */
 private[sql] sealed trait CharVarcharScanMode
 
+/**
+ * A scan builder that accepts the CHAR/VARCHAR mode captured during relation analysis.
+ *
+ * For example, if `SELECT c FROM t` is analyzed with standard semantics enabled, the relation
+ * binds [[CharVarcharScanMode.SparkStandard]] before the builder creates the physical scan.
+ */
+private[sql] trait SupportsCharVarcharScanMode {
+  def bindCharVarcharScanMode(mode: CharVarcharScanMode): Unit
+}
+
 private[sql] object CharVarcharScanMode {
   /**
    * Preserve the native, constrained CHAR/VARCHAR types of the source (e.g. native ORC

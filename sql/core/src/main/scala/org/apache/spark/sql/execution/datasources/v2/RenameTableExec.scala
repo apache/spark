@@ -20,10 +20,10 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
+import org.apache.spark.sql.execution.TableCacheDescriptor
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -33,7 +33,7 @@ case class RenameTableExec(
     catalog: TableCatalog,
     oldIdent: Identifier,
     newIdent: Identifier,
-    invalidateCache: () => Seq[(StorageLevel, Option[CharVarcharScanMode])],
+    invalidateCache: () => Seq[TableCacheDescriptor],
     cacheTable: (SparkSession, LogicalPlan, Option[String], StorageLevel) => Unit)
   extends LeafV2CommandExec {
 
@@ -50,15 +50,15 @@ case class RenameTableExec(
     } else newIdent
     catalog.renameTable(oldIdent, qualifiedNewIdent)
 
-    oldCaches.foreach { case (oldStorageLevel, scanMode) =>
+    oldCaches.foreach { cache =>
       val tbl = catalog.loadTable(qualifiedNewIdent)
       val newRelation = DataSourceV2Relation
         .create(tbl, Some(catalog), Some(qualifiedNewIdent))
-        .copy(charVarcharScanMode = scanMode)
+        .copy(charVarcharScanMode = cache.charVarcharScanMode)
       cacheTable(
         session,
         newRelation,
-        Some(qualifiedNewIdent.quoted), oldStorageLevel)
+        Some(qualifiedNewIdent.quoted), cache.storageLevel)
     }
     Seq.empty
   }

@@ -167,17 +167,8 @@ trait FileFormat {
   }
 
   /**
-   * Same as [[buildReaderWithPartitionValues]] but also carries the analyzed CHAR/VARCHAR scan
-   * mode. [[FileSourceScanExec]] calls this overload whenever the relation has a bound mode,
-   * regardless of the concrete file format.
-   *
-   * The default implementation bridges the mode across the legacy seven-argument signature: it
-   * clones the per-call Hadoop configuration, writes an engine-private entry with the explicit
-   * mode, then invokes the seven-argument method virtually. A format that honors first-class
-   * CHAR/VARCHAR types (e.g. [[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat]])
-   * reads that entry in its seven-argument override, so existing subclasses keep their override
-   * and a call to `super` retains the bound mode. The Hadoop entry is only a transport across the
-   * legacy signature; the authoritative state remains the typed plan field and this parameter.
+   * Same as [[buildReaderWithPartitionValues]], with the CHAR/VARCHAR mode bound during analysis.
+   * The mode is encoded only while crossing the legacy seven-argument virtual method boundary.
    */
   private[sql] def buildReaderWithPartitionValues(
       sparkSession: SparkSession,
@@ -296,10 +287,7 @@ object FileFormat {
   val OPTION_RETURNING_BATCH = "returning_batch"
 
   /**
-   * Engine-private Hadoop configuration entry that transports the analyzed CHAR/VARCHAR scan mode
-   * across the legacy [[FileFormat.buildReaderWithPartitionValues]] signature. It is written by the
-   * mode-aware overload and read by formats that honor first-class CHAR/VARCHAR types. This is not
-   * a public option; the authoritative state is the typed plan field and overload parameter.
+   * Engine-private entry used only at the legacy seven-argument reader boundary.
    */
   private[sql] val CHAR_VARCHAR_SCAN_MODE = "__spark_sql_char_varchar_scan_mode"
 
