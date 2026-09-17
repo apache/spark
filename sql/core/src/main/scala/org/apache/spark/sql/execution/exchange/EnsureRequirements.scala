@@ -541,17 +541,52 @@ case class EnsureRequirements(
     def bothUnprojected(l: KeyedShuffleSpec, r: KeyedShuffleSpec): Boolean =
       l.joinKeyPositions.isEmpty && r.joinKeyPositions.isEmpty
 
+    // Whether the merged key list below may be narrowed to what the join type allows. A marked
+    // layout is left alone: only an identity regrouping keeps its claim (see
+    // `GroupPartitionsExec`), and losing it costs the pair its join at the gate at the end of this
+    // method.
+    //
+    // Filtering is then the only thing that can shrink the merged list *below* the marked side's
+    // own declared keys. The merging arms take the union, and `KeyedShuffleSpec.areKeysCompatible`
+    // pairs a marked layout only with one whose keys are a subset of its declared keys, so the
+    // union is that side's own key set. The count its hash is taken modulo survives the dedup
+    // because a marked layout is always grouped: `canCreatePartitioning` is the only producer of
+    // the marker and it refuses an ungrouped one. A reduce is the other way a merged list comes
+    // out smaller, and it cannot happen here, since the marked arm of `areKeysCompatible` admits
+    // only positions holding the same transform function and `reducersBothWays` finds nothing to
+    // reduce between those.
+    //
+    // What filtering does instead: an intersection with a strictly smaller partner, or the
+    // one-sided arm that keeps the *other* side's keys, drops groups the marked side holds, and
+    // the regrouping stops being the identity. The pair would then trade its whole join for
+    // pruning those groups.
+    //
+    // Sorting is the other way a regrouping stops being the identity, and is not addressed here.
+    // `mergeAndDedupPartitions` sorts, so a marked layout whose declared order is not the sorted
+    // one is relabelled even where the set is unchanged. Handing it its own list verbatim looks
+    // like the same fix and is not, because `KeyedPartitioning.createShuffleSpec` sorts through
+    // `toGrouped` under `v2BucketingAllowKeysSubsetOfPartitionKeys` while it hands a marked layout
+    // back unprojected: the two children would hold one partitioning and report two specs that
+    // `describesSameKeys` calls different, and `ValidateRequirements` rejects the join this method
+    // just allowed. Measured on the generated sweep in `EnsureRequirementsSuite`, cell
+    // `left=id/12 right=id/312/marked Inner`.
+    val partitionFilter = conf.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)
+    def filtersKeys(l: KeyedPartitioning, r: KeyedPartitioning): Boolean =
+      partitionFilter && !l.mayContainUnknownPartitionKeys && !r.mayContainUnknownPartitionKeys
+
     // How many key groups the pushdown below would leave this pair. `mergeAndDedupPartitions`
     // keeps one side's keys and drops the other's for the filtered one-sided join types, and there
     // the dropped side's count says nothing, so rank on the side that survives. The arms that
     // really merge have no cheap answer, so they take the larger of the two counts. Keep the join
     // types here in step with `mergeAndDedupPartitions`.
-    val partitionFilter = conf.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)
-    def rank(l: KeyedShuffleSpec, r: KeyedShuffleSpec): Int = joinType match {
-      case LeftOuter | LeftAnti | LeftSingle | ExistenceJoin(_) if partitionFilter =>
-        l.numPartitions
-      case RightOuter if partitionFilter => r.numPartitions
-      case _ => l.numPartitions.max(r.numPartitions)
+    def rank(l: KeyedShuffleSpec, r: KeyedShuffleSpec): Int = {
+      val filtered = filtersKeys(l.partitioning, r.partitioning)
+      joinType match {
+        case LeftOuter | LeftAnti | LeftSingle | ExistenceJoin(_) if filtered =>
+          l.numPartitions
+        case RightOuter if filtered => r.numPartitions
+        case _ => l.numPartitions.max(r.numPartitions)
+      }
     }
 
     // Each side may offer several members, and the right one is the one the other side can pair
@@ -560,7 +595,8 @@ case class EnsureRequirements(
     // `ensureDistributionAndOrdering` makes between children when it picks `bestSpecOpt`.
     //
     // Two things keep `rank` from being what the join actually gets, both on the merging arms.
-    // `InnerLike` and `LeftSemi` intersect under `v2BucketingPartitionFilterEnabled`, and an
+    // `InnerLike` and `LeftSemi` intersect under `v2BucketingPartitionFilterEnabled`, unless
+    // `filtersKeys` turned filtering off for the pair, and an
     // intersection is not monotone in member granularity: members cover different clustering keys
     // rather than nested ones, so a finer pair can rank above a coarser one and still meet the
     // other side in fewer groups. And a union does not merely exceed the rank either, because
@@ -592,16 +628,15 @@ case class EnsureRequirements(
     // compatible with each other.
     val compatibleAsIs =
       bothUnprojected(leftSpec, rightSpec) && leftSpec.isCompatibleWith(rightSpec)
-    // Entering the push branch is the same as taking it. The keys agree for this pair by
+    // Entering the push branch is not the same as taking it. The keys agree for this pair by
     // construction, since `agreeingPairs` filtered on exactly that and an empty result returned
-    // above, so what the branch pushes always applies.
+    // above, so what the branch pushes always applies to the pair it was chosen for. The gate at
+    // the end can still discard the result, when a node it builds gives up its keyed claim.
     val pushCommonValues =
       (!compatibleAsIs || conf.v2BucketingPartiallyClusteredDistributionEnabled) &&
         (conf.v2BucketingPushPartValuesEnabled ||
           conf.v2BucketingAllowKeysSubsetOfPartitionKeys)
     if (pushCommonValues) {
-      logInfo("Pushing common partition values for storage-partitioned join")
-
       // Partition expressions are compatible. Regardless of whether partition values
       // match from both sides of children, we can calculate a superset of partition values and
       // push-down to respective data sources so they can adjust their output partitioning by
@@ -656,7 +691,8 @@ case class EnsureRequirements(
 
       // merge values on both sides
       var mergedPartitionKeys =
-        mergeAndDedupPartitions(leftReducedKeys, rightReducedKeys, joinType, reducedKeyOrdering)
+        mergeAndDedupPartitions(leftReducedKeys, rightReducedKeys, joinType, reducedKeyOrdering,
+          filterPartitions = filtersKeys(leftPartitioning, rightPartitioning))
           .map((_, 1))
 
       logInfo(log"After merging, there are " +
@@ -794,7 +830,45 @@ case class EnsureRequirements(
         rightReducers, distributePartitions = applyPartialClustering && !replicateRightSide)
     }
 
-    if (compatibleAsIs || pushCommonValues) Some(Seq(newLeft, newRight)) else None
+    // The pairing is only worth committing to if both children still declare the same aligned key
+    // sequence once the grouping has been pushed into them. A `GroupPartitionsExec` gives up its
+    // keyed claim when it turns out to regroup a layout that pins undeclared rows to
+    // `hash(key) % numPartitions` (see `KeyLayout.mayContainUnknownPartitionKeys`), and only the
+    // node knows the permutation it performs, so that answer arrives after the pairing was chosen.
+    // Asking before returning is what keeps the join from skipping both shuffles for a child that
+    // no longer satisfies its distribution, which is a plan `ValidateRequirements` rejects and
+    // every AQE rule that needs a valid plan then refuses to touch.
+    //
+    // The check is pairwise, not a per-side `satisfies`. Partially clustered distribution leaves
+    // both children value-aligned yet not grouped on purpose, so a per-side gate would refuse that
+    // whole family. What both sides owe each other is the key sequence `alignToExpectedKeys`
+    // guarantees, each key repeated as many times as the merge expects, whichever side replicates.
+    // `KeyLayout.describesSameKeys` asks exactly that, and it compares the key types as well as
+    // the rows.
+    //
+    // Only the push branch rebuilds the children, so only it has to be asked. Where it did not run,
+    // the children are the ones the pairing read: `KeyedShuffleSpec.isCompatibleWith` already ends
+    // in `describesSameKeys`, and all keyed members of a `PartitioningCollection` share one
+    // `KeyLayout`, so whichever member the spec matched on declares what the representative does.
+    def declaredLayout(plan: SparkPlan): Option[KeyLayout] =
+      PartitioningCollection.representativeOf(plan.outputPartitioning).map(_.layout)
+    def sidesDeclareSameKeys: Boolean =
+      (declaredLayout(newLeft), declaredLayout(newRight)) match {
+        case (Some(left), Some(right)) => left.describesSameKeys(right)
+        case _ => false
+      }
+    val committed = if (pushCommonValues) sidesDeclareSameKeys else compatibleAsIs
+    // Announced here rather than where the branch runs, since the gate can still discard what it
+    // built, and a log that names a pushdown should name one that happens.
+    if (pushCommonValues) {
+      if (committed) {
+        logInfo("Pushing common partition values for storage-partitioned join")
+      } else {
+        logInfo("Not storage-partitioning this join after all: the two sides no longer declare " +
+          "the same partition keys once regrouped onto the merged partition values")
+      }
+    }
+    Option.when(committed)(Seq(newLeft, newRight))
   }
 
   private def checkShufflePartitionIdPassThroughCompatible(
@@ -969,18 +1043,22 @@ case class EnsureRequirements(
   /**
    * Merge, dedup and sort partitions keys for SPJ and optionally enable partition filtering.
    * Both sides must have matching partition expressions.
+   *
    * @param leftPartitionKeys left side partition keys
    * @param rightPartitionKeys right side partition keys
    * @param joinType join type for optional partition filtering
    * @param keyOrdering ordering to sort partition keys
+   * @param filterPartitions whether to narrow the merged list to the keys the join type allows.
+   *                         The caller decides, see `filtersKeys` in `checkKeyGroupCompatible`.
    * @return merged and sorted partition values
    */
   def mergeAndDedupPartitions(
       leftPartitionKeys: Seq[InternalRowComparableWrapper],
       rightPartitionKeys: Seq[InternalRowComparableWrapper],
       joinType: JoinType,
-      keyOrdering: Ordering[InternalRowComparableWrapper]): Seq[InternalRowComparableWrapper] = {
-    val merged = if (SQLConf.get.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)) {
+      keyOrdering: Ordering[InternalRowComparableWrapper],
+      filterPartitions: Boolean): Seq[InternalRowComparableWrapper] = {
+    val merged = if (filterPartitions) {
       // Rows with matching join keys land in the same key group. If a group is absent from one
       // side, whether it can produce output depends on which side's unmatched rows the join
       // preserves. Only equi-joins reach this method, since every SMJ/SHJ takes its keys from

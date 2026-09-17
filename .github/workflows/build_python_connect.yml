@@ -33,7 +33,7 @@ jobs:
     if: github.repository == 'apache/spark'
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Setup build environment
         uses: ./.github/actions/setup-build-env
         with:
