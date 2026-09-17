@@ -181,6 +181,115 @@ class ArrowBatchTransformer:
         )
 
     @staticmethod
+    def concat_batches(batches: Sequence["pa.RecordBatch"]) -> "pa.RecordBatch":
+        """Concatenate same-schema RecordBatches by row.
+
+        A single batch is returned unchanged. PyArrow before 19.0.0 has no ``concat_batches``;
+        the fallback concatenates the equivalent StructArrays and converts the result back to a
+        RecordBatch. Element-wise iterator UDFs use this when one input batch's flattened result
+        spans multiple output chunks.
+        """
+        import pyarrow as pa
+
+        assert batches
+        if len(batches) == 1:
+            return batches[0]
+        if hasattr(pa, "concat_batches"):
+            return pa.concat_batches(batches)
+        return pa.RecordBatch.from_struct_array(
+            pa.concat_arrays([batch.to_struct_array() for batch in batches])
+        )
+
+    @staticmethod
+    def flatten_elementwise_inputs(
+        batch: "pa.RecordBatch", input_column_indices: Sequence[int], depth: int
+    ) -> tuple["pa.RecordBatch", list[list[Optional[int]]], list[bool]]:
+        """Flatten ``depth`` list levels from an element-wise UDF's input columns.
+
+        Returns ``(flat_input_batch, shape_levels, is_large_levels)``. ``flat_input_batch``
+        contains each selected input's fully flattened leaf Array under a positional ``_N`` name.
+        ``shape_levels[k]`` contains the per-slot list length at level ``k`` (0 is outermost),
+        using ``None`` for a null list. ``is_large_levels[k]`` records whether that level uses
+        ``LargeListArray`` and therefore requires int64 rather than int32 offsets when rebuilt.
+
+        Only the first selected column supplies shape and list-width metadata. The other inputs are
+        aligned to it by ``ExtractPythonUDFFromLambda``, so recording their shapes would repeat
+        the ``list_value_length(...).to_pylist()`` work without changing re-nesting. ``depth`` is 1
+        for a UDF in one higher-order-function lambda and greater for nested lambdas.
+
+        Shared by the row, scalar pandas / Arrow, and iterator element-wise worker paths. See
+        ``ExtractPythonUDFFromLambda``.
+        """
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        assert input_column_indices
+        assert depth > 0
+
+        flat_inputs = []
+        shape_levels = []
+        is_large_levels = []
+        for input_index, column_index in enumerate(input_column_indices):
+            current = batch.column(column_index)
+            for _ in range(depth):
+                if input_index == 0:
+                    shape_levels.append(pc.list_value_length(current).to_pylist())
+                    is_large_levels.append(pa.types.is_large_list(current.type))
+                current = current.flatten()
+            flat_inputs.append(current)
+
+        return (
+            pa.RecordBatch.from_arrays(
+                flat_inputs, names=[f"_{index}" for index in range(len(flat_inputs))]
+            ),
+            shape_levels,
+            is_large_levels,
+        )
+
+    @staticmethod
+    def renest_elementwise_outputs(
+        flat_outputs: Sequence[tuple["pa.RecordBatch", list[list[Optional[int]]], list[bool]]],
+        column_names: Sequence[str],
+    ) -> "pa.RecordBatch":
+        """Rebuild nested list columns from flattened element-wise UDF result batches.
+
+        Each input tuple contains a one-column flat result batch plus the ``shape_levels`` and
+        ``is_large_levels`` returned by ``flatten_elementwise_inputs`` for that UDF. Levels are
+        rebuilt from innermost to outermost. A ``None`` length creates a null list and consumes no
+        flat values; a zero length creates an empty, non-null list. ``is_large_levels`` preserves
+        each input level's int32 ``ListArray`` versus int64 ``LargeListArray`` offset width.
+
+        Different fused UDFs may carry different shapes, so every result batch is rebuilt with its
+        own metadata before the columns are assembled into one output RecordBatch. This is the
+        batch-level inverse of ``flatten_elementwise_inputs``.
+        """
+        import pyarrow as pa
+
+        assert len(flat_outputs) == len(column_names)
+        nested_columns = []
+        for flat_batch, shape_levels, is_large_levels in flat_outputs:
+            assert flat_batch.num_columns == 1
+            result = flat_batch.column(0)
+            for shape_lengths, is_large in zip(reversed(shape_levels), reversed(is_large_levels)):
+                offsets = [0]
+                running = 0
+                nulls = []
+                for length in shape_lengths:
+                    nulls.append(length is None)
+                    if length is not None:
+                        running += length
+                    offsets.append(running)
+                list_type = pa.LargeListArray if is_large else pa.ListArray
+                result = list_type.from_arrays(
+                    pa.array(offsets, type=pa.int64() if is_large else pa.int32()),
+                    result,
+                    mask=pa.array(nulls, type=pa.bool_()),
+                )
+            nested_columns.append(result)
+
+        return pa.RecordBatch.from_arrays(nested_columns, names=column_names)
+
+    @staticmethod
     def wrap_struct(batch: "pa.RecordBatch") -> "pa.RecordBatch":
         """
         Wrap a RecordBatch's columns into a single struct column.
