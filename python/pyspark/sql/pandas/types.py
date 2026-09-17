@@ -35,7 +35,6 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     ByteType,
-    CharType,
     DataType,
     DateType,
     DayTimeIntervalType,
@@ -61,7 +60,6 @@ from pyspark.sql.types import (
     TimestampType,
     TimeType,
     UserDefinedType,
-    VarcharType,
     VariantType,
     VariantVal,
     YearMonthIntervalType,
@@ -159,7 +157,7 @@ def to_arrow_type(
         arrow_type = pa.float64()
     elif isinstance(dt, DecimalType):
         arrow_type = pa.decimal128(dt.precision, dt.scale)
-    elif isinstance(dt, (StringType, CharType, VarcharType)):
+    elif isinstance(dt, StringType):
         arrow_type = pa.large_string() if prefers_large_types else pa.string()
     elif isinstance(dt, BinaryType):
         arrow_type = pa.large_binary() if prefers_large_types else pa.binary()

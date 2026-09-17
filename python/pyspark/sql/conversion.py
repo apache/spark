@@ -48,7 +48,6 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     ByteType,
-    CharType,
     DataType,
     DateType,
     DayTimeIntervalType,
@@ -74,7 +73,6 @@ from pyspark.sql.types import (
     TimestampType,
     TimeType,
     UserDefinedType,
-    VarcharType,
     VariantType,
     VariantVal,
     YearMonthIntervalType,
@@ -612,7 +610,7 @@ class LocalDataToArrowConversion:
             # Convert Decimal('NaN') to None
             # Rescale Decimal values
             return True
-        elif isinstance(dataType, (StringType, CharType, VarcharType)):
+        elif isinstance(dataType, StringType):
             # Coercion to StringType is allowed
             return True
         elif isinstance(dataType, UserDefinedType):
@@ -890,7 +888,7 @@ class LocalDataToArrowConversion:
 
             return convert_decimal
 
-        elif isinstance(dataType, (StringType, CharType, VarcharType)):
+        elif isinstance(dataType, StringType):
 
             def convert_string(value: Any) -> Any:
                 if value is None:

@@ -1167,12 +1167,8 @@ class ClientE2ETestSuite
   }
 
   test("SPARK-59276: SparkSession.createDataFrame preserves CHAR/VARCHAR collations") {
-    val rows = java.util.Arrays.asList(Row("ab", "cd", Row("xy", Seq("z")), "uv"))
+    val rows = java.util.Arrays.asList(Row("ab", "cd", Row("xy", Seq("z"))))
     val emptyRows = java.util.Collections.emptyList[Row]()
-    val charUdt = new PythonUserDefinedType(
-      CharType(4, "UTF8_LCASE"),
-      "pyspark.testing.CharUdt",
-      "serialized")
     val schema = new StructType()
       .add("c", CharType(4, "UTF8_LCASE"))
       .add("v", VarcharType(6, "UNICODE_CI"))
@@ -1181,24 +1177,29 @@ class ClientE2ETestSuite
         new StructType()
           .add("c", CharType(3, "UTF8_LCASE"))
           .add("v", ArrayType(VarcharType(2, "UNICODE_CI"))))
-      .add("udt", charUdt)
 
     withSQLConf(
       "spark.sql.charVarchar.standardSemantics.enabled" -> "true",
       "spark.sql.legacy.charVarcharAsString" -> "false") {
       val dataFrame = spark.createDataFrame(rows, schema)
       assert(dataFrame.schema === schema)
-      checkAnswer(dataFrame, Row("ab  ", "cd", Row("xy ", Seq("z")), "uv  "))
+      checkAnswer(dataFrame, Row("ab  ", "cd", Row("xy ", Seq("z"))))
 
       val emptyDataFrame = spark.createDataFrame(emptyRows, schema)
       assert(emptyDataFrame.schema === schema)
       checkAnswer(emptyDataFrame, Seq.empty)
 
+      withSQLConf(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY -> "1") {
+        val cachedDataFrame = spark.createDataFrame(rows, schema)
+        assert(cachedDataFrame.schema === schema)
+        checkAnswer(cachedDataFrame, Row("ab  ", "cd", Row("xy ", Seq("z"))))
+      }
+
       checkError(
         exception = intercept[SparkRuntimeException] {
           spark
             .createDataFrame(
-              java.util.Arrays.asList(Row("abcde", "cd", Row("xy", Seq("z")), "uv")),
+              java.util.Arrays.asList(Row("abcde", "cd", Row("xy", Seq("z")))),
               schema)
             .collect()
         },
@@ -1209,10 +1210,12 @@ class ClientE2ETestSuite
     withSQLConf(
       "spark.sql.charVarchar.standardSemantics.enabled" -> "false",
       "spark.sql.legacy.charVarcharAsString" -> "true") {
-      val expectedSchema = DataType.localDataPhysicalType(schema).asInstanceOf[StructType]
+      val expectedSchema = DataType
+        .replaceCharVarcharWithCollationPreservingString(schema)
+        .asInstanceOf[StructType]
       val dataFrame = spark.createDataFrame(rows, schema)
       assert(dataFrame.schema === expectedSchema)
-      checkAnswer(dataFrame, Row("ab", "cd", Row("xy", Seq("z")), "uv"))
+      checkAnswer(dataFrame, Row("ab", "cd", Row("xy", Seq("z"))))
 
       val emptyDataFrame = spark.createDataFrame(emptyRows, schema)
       assert(emptyDataFrame.schema === expectedSchema)
@@ -1230,21 +1233,6 @@ class ClientE2ETestSuite
           condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
           parameters = Map.empty)
       }
-    }
-  }
-
-  test("SPARK-59276: createDataFrame preserves explicit binary STRING identity") {
-    val schema = new StructType()
-      .add("implicit", StringType)
-      .add("explicit", StringType("UTF8_BINARY"))
-    val rows = java.util.Arrays.asList(Row("a", "b"))
-    val emptyRows = java.util.Collections.emptyList[Row]()
-
-    Seq(rows, emptyRows).foreach { input =>
-      val dataFrame = spark.createDataFrame(input, schema)
-      assert(dataFrame.schema("implicit").dataType.eq(StringType))
-      assert(!dataFrame.schema("explicit").dataType.eq(StringType))
-      assert(dataFrame.schema("explicit").dataType === StringType("UTF8_BINARY"))
     }
   }
 

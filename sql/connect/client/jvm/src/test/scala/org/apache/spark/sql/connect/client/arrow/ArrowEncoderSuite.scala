@@ -331,6 +331,13 @@ class ArrowEncoderSuite extends ConnectFunSuite {
     }
   }
 
+  test("SPARK-59276: local data physical schema does not unwrap UDTs") {
+    val schema = new StructType().add("udt", new UDTNotSupported)
+    val physicalSchema =
+      DataType.replaceCharVarcharWithCollationPreservingString(schema).asInstanceOf[StructType]
+    assert(physicalSchema === schema)
+  }
+
   test("single batch") {
     val inspector = new CountingBatchInspector
     roundTripAndCheckIdentical(singleIntEncoder, inspectBatch = inspector) { () =>

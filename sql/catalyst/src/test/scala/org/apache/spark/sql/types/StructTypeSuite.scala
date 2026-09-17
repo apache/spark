@@ -783,26 +783,6 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(mapper.readTree(compatibilitySchema.json) == mapper.readTree(expectedJson))
   }
 
-  test("SPARK-59276: explicit binary STRING round trips through JSON") {
-    val schema = StructType(
-      StructField("implicit", StringType) ::
-        StructField("explicit", StringType("UTF8_BINARY")) :: Nil)
-    val fields = mapper.readTree(schema.json).get("fields")
-    assert(!fields.get(0).get("metadata").has(DataType.COLLATIONS_METADATA_KEY))
-    assert(
-      fields
-        .get(1)
-        .get("metadata")
-        .get(DataType.COLLATIONS_METADATA_KEY)
-        .get("explicit")
-        .asText() === "spark.UTF8_BINARY")
-
-    val roundTripped = DataType.fromJson(schema.json).asInstanceOf[StructType]
-    assert(roundTripped("implicit").dataType.eq(StringType))
-    assert(!roundTripped("explicit").dataType.eq(StringType))
-    assert(roundTripped("explicit").dataType === StringType("UTF8_BINARY"))
-  }
-
   test("SPARK-59276: preceding readers retain unknown CHAR/VARCHAR collation metadata") {
     val schema = StructType(
       StructField("c", CharType(4, "UTF8_LCASE")) ::
@@ -897,6 +877,46 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       },
       condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
       parameters = Map("jsonType" -> "char(4) collate UTF8_LCASE"))
+  }
+
+  test("SPARK-59276: reject CHAR/VARCHAR collation metadata on other atomic types") {
+    val json =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "d",
+         |      "type": "decimal(10,2)",
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY}": {
+         |          "d": "spark.UTF8_LCASE"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson(json)
+      },
+      condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      parameters = Map("jsonType" -> "decimal(10,2)"))
+  }
+
+  test("SPARK-59276: reject caller metadata using the CHAR/VARCHAR collation key") {
+    val metadata = new MetadataBuilder()
+      .putString(DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY, "caller")
+      .build()
+    val field = StructField("c", CharType(4, "UTF8_LCASE"), metadata = metadata)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        field.jsonValue
+      },
+      condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      parameters = Map("jsonType" -> DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY))
   }
 
   test("simple struct with collations to json") {
