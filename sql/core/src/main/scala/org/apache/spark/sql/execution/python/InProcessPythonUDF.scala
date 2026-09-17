@@ -31,13 +31,13 @@ import org.apache.spark.sql.types.DataType
  * out-of-process Python worker connected via socket.
  *
  * Evaluated by [[InProcessArrowEvalExec]], which passes Arrow column buffers to CPython
- * as PyArrow arrays via native memory addresses (zero-copy input), then copies the
- * PyArrow result array back into a JVM-managed Arrow buffer (one copy on output).
+ * as PyArrow arrays via native memory addresses (zero-copy input), then imports the
+ * PyArrow result buffers through CDI without copying.
  *
  * @param name            display name for plan explain output
  * @param serializedFunc  cloudpickle-serialized Python function bytes
  * @param children        input column expressions
- * @param dataType        return type (Phase 1: fixed-width types only)
+ * @param dataType        declared return type (validated against the Arrow result)
  * @param udfDeterministic whether the UDF is deterministic
  * @param resultId        unique identifier for this UDF result
  */

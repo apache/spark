@@ -22,6 +22,7 @@ import org.apache.arrow.vector.FieldVector
 
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ArrowColumnVector
+import org.apache.spark.util.Utils
 
 /**
  * Bridges JVM Arrow column buffers with Python PyArrow arrays for in-process UDF execution.
@@ -39,11 +40,11 @@ import org.apache.spark.sql.vectorized.ArrowColumnVector
  * Output path (Python to JVM, zero-copy via CDI):
  *   JVM pre-allocates [[ArrowArray]] and [[ArrowSchema]] C structs. Python calls
  *   ``arr._export_to_c(array_ptr, schema_ptr)`` to fill those structs in-place. The JVM
- *   calls [[Data.importVector]] to reconstruct the [[FieldVector]] without copying. When the
+ *   calls [[Data.importIntoVector]] to reconstruct the [[FieldVector]] without copying. When the
  *   imported [[FieldVector]] is closed, Arrow Java invokes PyArrow's CDI release callback,
  *   decrementing the Python array refcount and allowing garbage collection.
  *
- * Because CDI carries the full Arrow schema, all Arrow types are supported on both paths.
+ * The runtime validates the returned schema before ArrowColumnVector reads the buffers.
  */
 private[python] object InProcessArrowBridge {
 
@@ -56,8 +57,7 @@ private[python] object InProcessArrowBridge {
    * array is GC'd) decrements the buffer reference counts; the [[FieldVector]] continues
    * to hold its own reference.
    *
-   * Caller must close ``outArray`` and ``outSchema`` after [[InProcessPythonRuntime.invoke]]
-   * returns (by which time Python's ``_import_from_c`` has already consumed the structs).
+   * Caller must release any unconsumed exports and close both structs on every exit path.
    */
   def exportColumn(vector: FieldVector, outArray: ArrowArray, outSchema: ArrowSchema): Unit =
     Data.exportVector(ArrowUtils.rootAllocator, vector, null, outArray, outSchema)
@@ -67,19 +67,29 @@ private[python] object InProcessArrowBridge {
    *
    * The JVM pre-allocates [[ArrowArray]] and [[ArrowSchema]] before invoking Python.
    * Python fills them via ``arr._export_to_c(array_ptr, schema_ptr)``. This method
-   * calls [[Data.importVector]] to wrap Python's Arrow buffers (zero-copy).
+   * calls [[Data.importIntoVector]] to wrap Python's Arrow buffers (zero-copy).
    *
    * Lifecycle:
-   *  - [[Data.importVector]] internally calls ``ArrayImporter.importArray()``, which
-   *    copies the struct snapshot, calls ``markReleased()`` + ``close()`` on ``arrowArray``
-   *    (idempotent -- caller's try-finally close is safe), and wraps the data buffers via
+   *  - [[Data.importIntoVector]] internally calls ``ArrayImporter.importArray()``, which
+   *    moves the struct snapshot through a non-owning wrapper, leaving the caller's struct
+   *    storage alive for cleanup, and wraps the data buffers via
    *    ``ReferenceCountedArrowArray`` (ForeignAllocation, zero-copy).
-   *  - [[ArrowSchema]] is NOT closed by importVector; the caller must close it.
+   *  - Data.importField releases and closes a non-owning schema wrapper too.
+   *    The caller closes the original struct storage.
    *  - When the returned [[ArrowColumnVector]] is closed, the reference count drops to
    *    zero, PyArrow's C ``release`` callback is invoked, and the Python array is GC'd.
    */
   def cdiToColumn(arrowArray: ArrowArray, arrowSchema: ArrowSchema): ArrowColumnVector = {
-    val vector = Data.importVector(ArrowUtils.rootAllocator, arrowArray, arrowSchema, null)
-    new ArrowColumnVector(vector)
+    val field = Data.importField(
+      ArrowUtils.rootAllocator, ArrowSchema.wrap(arrowSchema.memoryAddress()), null)
+    val vector = field.createVector(ArrowUtils.rootAllocator)
+    try {
+      Data.importIntoVector(
+        ArrowUtils.rootAllocator, ArrowArray.wrap(arrowArray.memoryAddress()), vector, null)
+      new ArrowColumnVector(vector)
+    } catch {
+      case t: Throwable =>
+        Utils.tryWithSafeFinally { throw t } { vector.close() }
+    }
   }
 }

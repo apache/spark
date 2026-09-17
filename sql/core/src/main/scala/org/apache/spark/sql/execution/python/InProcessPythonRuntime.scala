@@ -17,119 +17,120 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.util.concurrent.{Callable, ExecutionException, ExecutorService}
+
 import scala.jdk.CollectionConverters._
 
-import jep.{JepConfig, JepException, SharedInterpreter}
+import jep.{JepException, SharedInterpreter}
 
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
- * Singleton runtime holding one jep [[SharedInterpreter]] per executor JVM process.
- *
- * Lifecycle:
- *  - Initialized once at executor startup by [[InProcessPythonPlugin]]
- *  - Used by [[InProcessArrowEvalExec]] to invoke Python UDFs on each batch
- *  - Shut down at executor shutdown
- *
- * Thread safety: designed for single-task-per-executor use (enforced by
- * [[InProcessPythonChecks]]). [[SharedInterpreter]] is not thread-safe; the
- * single-task constraint ensures only one thread calls [[invoke]] at a time.
+ * Owns one interpreter on a dedicated thread per executor. JEP requires construction,
+ * invocation and close to happen on the same thread, even when Spark tasks run serially.
  */
 private[python] object InProcessPythonRuntime extends Logging {
-
-  /**
-   * Spark config key for extra Python site-packages paths to add to the interpreter's
-   * ``sys.path`` at startup.  Accepts a comma-separated list of absolute directory paths.
-   *
-   * Typical usage with ``--archives``::
-   *
-   *   spark.inprocess.python.sitePackages=./venv.zip/venv/lib/python3.11/site-packages
-   *
-   * The paths are appended in order after the bridge module is imported, so they take
-   * lower priority than the packages already on ``sys.path`` (e.g. pyspark itself).
-   */
   val SITE_PACKAGES_CONFIG = "spark.inprocess.python.sitePackages"
 
-  @volatile private var interp: SharedInterpreter = _
-  @volatile private var initialized: Boolean = false
+  // Access to the executor is serialized by onInterpreterThread and shutdown. The interpreter
+  // itself is accessed only by the executor's thread.
+  private var executor: ExecutorService = _
+  private var interp: SharedInterpreter = _
+  private val TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
 
   /**
-   * Initialize the embedded CPython interpreter. Called once per executor JVM process.
-   * Bootstraps the bridge module so `_inprocess_invoke` is available, then appends
-   * any user-specified site-packages paths to `sys.path`.
-   *
-   * @param sitePackages extra paths to append to ``sys.path`` inside the interpreter,
-   *                     typically the site-packages directory of a distributed venv.
-   *                     Defaults to empty (no extra paths added).
+   * Wait for native code to finish even if the task is interrupted. Returning early would let
+   * the task free CDI pointers that Python may still be accessing. Restore the interruption
+   * afterwards so Spark can observe cancellation. Arbitrary Python code cannot be forcibly
+   * interrupted safely in the executor process.
    */
-  def initialize(sitePackages: Seq[String] = Seq.empty): Unit = synchronized {
-    if (!initialized) {
-      val config = new JepConfig()
-      SharedInterpreter.setConfig(config)
-      interp = new SharedInterpreter()
-      // Import the bridge entry point into the interpreter's global namespace
-      interp.eval("from pyspark.inprocess.runtime import _inprocess_invoke")
-      // Append user-specified site-packages paths to sys.path.
-      // Use set() + eval() rather than string interpolation to avoid path-escaping issues.
-      if (sitePackages.nonEmpty) {
-        interp.set("_site_packages", sitePackages.asJava)
-        interp.eval("import sys; sys.path.extend(list(_site_packages)); del _site_packages")
-        logInfo(s"Appended ${sitePackages.size} path(s) to sys.path: " +
-          sitePackages.mkString(", "))
+  private[python] def onInterpreterThread[T](body: => T): T = synchronized {
+    if (executor == null) {
+      executor = ThreadUtils.newDaemonSingleThreadExecutor("inprocess-python")
+    }
+    val future = executor.submit(new Callable[T] {
+      override def call(): T = body
+    })
+    var interrupted = false
+    try {
+      var result: Option[T] = None
+      while (result.isEmpty) {
+        try {
+          result = Some(future.get())
+        } catch {
+          case _: InterruptedException => interrupted = true
+          case e: ExecutionException => throw e.getCause
+        }
       }
-      initialized = true
-      logInfo("jep SharedInterpreter ready; bridge module loaded.")
+      result.get
+    } finally {
+      if (interrupted) Thread.currentThread().interrupt()
+    }
+  }
+
+  private def initializeInterpreter(sitePackages: Seq[String]): Unit = {
+    if (interp == null) {
+      val candidate = new SharedInterpreter()
+      try {
+        // Configure paths before importing the bridge and its dependencies.
+        if (sitePackages.nonEmpty) {
+          candidate.set("_site_packages", sitePackages.asJava)
+          candidate.eval("import sys; sys.path.extend(list(_site_packages)); del _site_packages")
+        }
+        candidate.eval("from pyspark.inprocess.runtime import _inprocess_invoke")
+        interp = candidate
+      } catch {
+        case t: Throwable =>
+          Utils.tryWithSafeFinally { throw t } { candidate.close() }
+      }
+    }
+  }
+
+  def initialize(sitePackages: Seq[String] = Seq.empty): Unit = synchronized {
+    try {
+      onInterpreterThread { initializeInterpreter(sitePackages) }
+    } catch {
+      case t: Throwable =>
+        executor.shutdown()
+        executor = null
+        throw t
     }
   }
 
   def shutdown(): Unit = synchronized {
-    if (initialized && interp != null) {
-      try { interp.close() } catch {
-        case e: JepException => logWarning("Error closing jep interpreter", e)
+    if (executor != null) {
+      try {
+        onInterpreterThread {
+          if (interp != null) {
+            try {
+              interp.eval("from pyspark.inprocess.runtime import _load_udf")
+              interp.eval("_load_udf.cache_clear()")
+            } finally {
+              try { interp.close() } finally { interp = null }
+            }
+          }
+        }
       } finally {
-        interp = null
-        initialized = false
+        executor.shutdown()
+        executor = null
       }
     }
   }
 
-  /**
-   * Invoke a Python UDF in-process via jep.
-   *
-   * Called from [[InProcessArrowEvalExec]] once per Arrow batch. The interpreter is
-   * shared for the executor process lifetime, so this call is serialized by the
-   * single-task-per-executor constraint.
-   *
-   * Both input and output use the Arrow C Data Interface. The JVM pre-allocates
-   * [[ArrowArray]] / [[ArrowSchema]] structs for every input column and for the output,
-   * then passes their native addresses here. Python reconstructs input arrays via
-   * ``pa.Array._import_from_c`` (zero-copy) and exports the result via
-   * ``arr._export_to_c(output_array_ptr, output_schema_ptr)`` (zero-copy).
-   *
-   * Input pointer arrays are converted to [[java.util.List]] of boxed [[java.lang.Long]]
-   * before being passed to jep, so Python always receives a plain list of ints regardless
-   * of column count.  (jep converts primitive long[] inconsistently for single-element
-   * arrays -- it may return a scalar instead of an iterable.)
-   *
-   * @param serializedUdf    cloudpickle bytes of the Python function (cached inside Python)
-   * @param inputArrayPtrs   native addresses of JVM-allocated input ArrowArray C structs
-   * @param inputSchemaPtrs  native addresses of JVM-allocated input ArrowSchema C structs
-   * @param outputArrayAddr  native address of a JVM-allocated output ArrowArray C struct
-   * @param outputSchemaAddr native address of a JVM-allocated output ArrowSchema C struct
-   */
+  /** Pass CDI addresses to Python and wait until it has finished consuming them. */
   def invoke(
       serializedUdf: Array[Byte],
       inputArrayPtrs: Array[Long],
       inputSchemaPtrs: Array[Long],
       outputArrayAddr: Long,
-      outputSchemaAddr: Long): Unit = {
-    // Lazily initialize on the first executor thread that calls invoke.
-    // This ensures the SharedInterpreter is created on the task thread (required by jep).
-    if (!initialized) initialize()
-    // jep converts primitive long[] inconsistently for single-element arrays (may return a
-    // Python scalar rather than an iterable).  Box to java.util.List<Long> so Python always
-    // receives a plain list of ints regardless of column count.
+      outputSchemaAddr: Long,
+      expectedRows: Int,
+      returnTypeJson: String,
+      timeZoneId: String): Unit = onInterpreterThread {
+    initializeInterpreter(Seq.empty)
+    // Box long[] so JEP treats even single-column inputs as an iterable.
     val arrayPtrList = inputArrayPtrs.map(java.lang.Long.valueOf).toSeq.asJava
     val schemaPtrList = inputSchemaPtrs.map(java.lang.Long.valueOf).toSeq.asJava
     try {
@@ -139,32 +140,24 @@ private[python] object InProcessPythonRuntime extends Logging {
         arrayPtrList,
         schemaPtrList,
         java.lang.Long.valueOf(outputArrayAddr),
-        java.lang.Long.valueOf(outputSchemaAddr))
+        java.lang.Long.valueOf(outputSchemaAddr),
+        java.lang.Integer.valueOf(expectedRows),
+        returnTypeJson,
+        timeZoneId)
     } catch {
       case e: JepException =>
         val msg = e.getMessage
         val sentinelIdx = if (msg != null) msg.indexOf(TRACEBACK_SENTINEL) else -1
         if (sentinelIdx >= 0) {
-          // UDF logic error: Python raised an exception inside user code.
-          // The Python side embedded the full formatted traceback after the sentinel.
-          val traceback = msg.substring(sentinelIdx + TRACEBACK_SENTINEL.length)
           throw new PythonException(
             errorClass = "PYTHON_EXCEPTION",
             messageParameters = Map(
               "msg" -> "An exception was thrown from the in-process Python UDF",
-              "traceback" -> traceback),
+              "traceback" -> msg.substring(sentinelIdx + TRACEBACK_SENTINEL.length)),
             cause = e)
         } else {
-          // Infrastructure error: interpreter issue, CDI contract violation,
-          // UDF deserialization failure, etc.
-          throw new RuntimeException(
-            s"In-process Python infrastructure error: $msg", e)
+          throw new RuntimeException(s"In-process Python infrastructure error: $msg", e)
         }
     }
   }
-
-  // Sentinel embedded by the Python bridge in RuntimeError messages when a UDF raises an
-  // exception.  Its presence distinguishes UDF logic errors (full traceback available) from
-  // infrastructure errors (no Python traceback).
-  private val TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
 }

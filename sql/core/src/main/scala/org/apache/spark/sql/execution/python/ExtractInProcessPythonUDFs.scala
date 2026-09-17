@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.python
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression,
-  NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, ExternalUserDefinedFunction, NamedExpression, PythonUDF, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -45,7 +45,7 @@ object ExtractInProcessPythonUDFs extends Rule[LogicalPlan] {
     e.exists(_.isInstanceOf[InProcessPythonUDF])
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
-    // Already extracted — skip to avoid double-wrapping
+    // Already extracted - skip to avoid double-wrapping
     case p: InProcessEvalPython => p
 
     case node: LogicalPlan if node.expressions.exists(hasInProcessUDF) =>
@@ -60,12 +60,22 @@ object ExtractInProcessPythonUDFs extends Rule[LogicalPlan] {
 
     if (udfs.isEmpty) return plan
 
+    udfs.foreach { udf =>
+      require(!udf.children.exists(_.exists {
+        case _: InProcessPythonUDF | _: PythonUDF | _: ExternalUserDefinedFunction |
+            _: AggregateExpression | _: WindowExpression => true
+        case _ => false
+      }), "In-process Python UDFs do not support nested UDF, aggregate or window arguments")
+    }
+
     // Map each UDF to a fresh AttributeReference that will hold its result
     val attributeMap = mutable.LinkedHashMap[InProcessPythonUDF, NamedExpression]()
 
     // For each child plan, find UDFs whose inputs are fully satisfied by that child
     val newChildren = plan.children.map { child =>
-      val validUdfs = udfs.filter(_.references.subsetOf(child.outputSet))
+      val validUdfs = udfs.filter { udf =>
+        !attributeMap.contains(udf) && udf.references.subsetOf(child.outputSet)
+      }
       if (validUdfs.nonEmpty) {
         val resultAttrs: Seq[Attribute] = validUdfs.zipWithIndex.map { case (u, i) =>
           AttributeReference(s"inprocessUDF$i", u.dataType)()
@@ -76,6 +86,9 @@ object ExtractInProcessPythonUDFs extends Rule[LogicalPlan] {
         child
       }
     }
+
+    require(udfs.forall(attributeMap.contains),
+      "In-process Python UDF inputs must be evaluable by one child of the plan")
 
     // Replace InProcessPythonUDF expressions with their result attributes
     val rewritten = plan.withNewChildren(newChildren).transformExpressions {

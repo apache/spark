@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.Column
+import org.apache.spark.sql.{Column, QueryTest}
 import org.apache.spark.sql.classic.ExpressionUtils
-import org.apache.spark.sql.execution.SparkPlanTest
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -35,7 +34,7 @@ import org.apache.spark.sql.types._
  * with the "inprocess" test tag and skipped in CI unless jep is present on the classpath.
  * Plan-shape tests run without jep because they only inspect the logical/physical plan.
  */
-class InProcessPythonUDFSuite extends SparkPlanTest with SharedSparkSession {
+class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 
@@ -115,6 +114,25 @@ class InProcessPythonUDFSuite extends SparkPlanTest with SharedSparkSession {
       val plan = df.select(doubled).queryExecution.optimizedPlan
       assert(plan.collect { case n: InProcessEvalPython => n }.size === 1)
     }
+  }
+
+  test("nested in-process UDF arguments fail during planning") {
+    val df = spark.range(3)
+    val nested = makeUDF("outer", makeUDF("inner", df("id"), LongType), LongType)
+    val error = intercept[IllegalArgumentException] {
+      df.select(nested).queryExecution.optimizedPlan
+    }
+    assert(error.getMessage.contains("nested UDF"))
+  }
+
+  test("cross-side join UDF arguments fail during planning") {
+    val left = spark.range(3).toDF("a")
+    val right = spark.range(3).toDF("b")
+    val condition = makeUDF("both", left("a") + right("b"), LongType) > 0L
+    val error = intercept[IllegalArgumentException] {
+      left.join(right, condition).queryExecution.optimizedPlan
+    }
+    assert(error.getMessage.contains("one child"))
   }
 
   // ---------------------------------------------------------------------------

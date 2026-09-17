@@ -36,19 +36,33 @@ jep type conversions (Java -> Python):
 """
 
 import traceback as _traceback
+from functools import lru_cache
 
 import pyarrow as pa
-import cloudpickle
 
-# Sentinel prefix embedded in the RuntimeError message when a UDF raises an exception.
-# The JVM side detects this prefix to distinguish UDF logic errors (which carry a full
-# Python traceback) from infrastructure errors (interpreter not initialized, CDI failure,
-# etc., which propagate as plain JepException messages without this prefix).
+from pyspark import cloudpickle
+from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.types import _parse_datatype_json_string
+
 _UDF_TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
 
-# UDF deserialization cache: cloudpickle bytes -> callable
-# Avoids re-deserializing the same UDF for every batch on this executor.
-_udf_cache: dict = {}
+
+@lru_cache(maxsize=128)
+def _load_udf(serialized_udf: bytes, return_type_json: str, timezone: str):
+    return (
+        cloudpickle.loads(serialized_udf),
+        to_arrow_type(_parse_datatype_json_string(return_type_json), timezone=timezone),
+    )
+
+
+def _validate_result(result, expected_rows: int, expected_type: pa.DataType) -> None:
+    if not isinstance(result, pa.Array):
+        raise TypeError(f"In-process UDF must return a pyarrow.Array, got {type(result).__name__}")
+    if len(result) != expected_rows:
+        raise ValueError(f"In-process UDF returned {len(result)} rows; expected {expected_rows}")
+    if result.type != expected_type:
+        raise TypeError(f"In-process UDF returned {result.type}; expected {expected_type}")
+    result.validate()
 
 
 def _inprocess_invoke(
@@ -57,66 +71,26 @@ def _inprocess_invoke(
     input_schema_ptrs,
     output_array_ptr: int,
     output_schema_ptr: int,
+    expected_rows: int,
+    return_type_json: str,
+    timezone: str,
 ) -> None:
+    """Consume input CDI structs and export a validated, row-preserving result.
+
+    The caller owns the struct memory and releases any unconsumed exports on failure.
+    Imported input arrays and exported output buffers follow Arrow's release callbacks.
     """
-    Execute a Python UDF in-process for one Arrow batch.
-
-    Called from JVM via jep. Arguments are automatically type-converted by jep.
-
-    Args:
-        serialized_udf:    cloudpickle bytes of the Python function (Java byte[])
-        input_array_ptrs:  native addresses of JVM-allocated input ArrowArray C structs
-                           (Java List<Long> -> Python list of ints)
-        input_schema_ptrs: native addresses of JVM-allocated input ArrowSchema C structs
-                           (Java List<Long> -> Python list of ints)
-        output_array_ptr:  native address of a JVM-allocated output ArrowArray C struct
-                           (Java Long -> Python int)
-        output_schema_ptr: native address of a JVM-allocated output ArrowSchema C struct
-                           (Java Long -> Python int)
-
-    Returns:
-        None -- the result is written directly into the JVM-owned ArrowArray/ArrowSchema
-        structs via ``arr._export_to_c``. No Python-side lifecycle management needed:
-        input arrays are freed when this function returns (CPython refcount drops to 0);
-        output lifecycle is managed by Arrow Java's CDI release callback.
-    """
-    # jep converts Java byte[] to a sequence of signed Java integers (-128..127).
-    # Mask each byte to unsigned (0..255) before constructing Python bytes.
     udf_key = bytes(b & 0xFF for b in serialized_udf)
-
-    # Deserialize UDF once; cache for subsequent batches on this executor
-    if udf_key not in _udf_cache:
-        _udf_cache[udf_key] = cloudpickle.loads(udf_key)
-    udf_func = _udf_cache[udf_key]
-
-    # Reconstruct PyArrow arrays from CDI struct addresses (zero-copy).
-    # _import_from_c takes ownership of the CDI structs; when these local variables
-    # go out of scope at function return, CPython immediately decrements their refcounts
-    # and the CDI release callbacks decrement the buffer references on the JVM side.
+    udf_func, expected_type = _load_udf(udf_key, return_type_json, timezone)
+    if len(input_array_ptrs) != len(input_schema_ptrs):
+        raise ValueError("Mismatched input ArrowArray and ArrowSchema pointer counts")
     input_arrays = [
         pa.Array._import_from_c(int(ap), int(sp))
         for ap, sp in zip(input_array_ptrs, input_schema_ptrs)
     ]
-
-    # Execute UDF and export result.
-    # Any exception from user code (TypeError, ValueError, etc.) or from a bad return
-    # value (wrong pa.Array type causing _export_to_c to fail) is caught here and
-    # re-raised with the full Python traceback embedded in the message.  Infrastructure
-    # errors above this block (CDI import failure, cloudpickle deserialization failure)
-    # propagate as-is so the Scala side can tell them apart.
     try:
-        if len(input_arrays) == 1:
-            result = udf_func(input_arrays[0])
-        else:
-            result = udf_func(*input_arrays)
+        result = udf_func(*input_arrays)
+        _validate_result(result, int(expected_rows), expected_type)
+        result._export_to_c(int(output_array_ptr), int(output_schema_ptr))
     except Exception:
-        raise RuntimeError(
-            _UDF_TRACEBACK_SENTINEL + _traceback.format_exc()
-        ) from None
-
-    # Export result into the JVM-pre-allocated ArrowArray/ArrowSchema C structs.
-    # PyArrow fills the structs in-place and registers its own CDI release callback.
-    # The JVM calls Data.importVector to wrap the buffers (zero-copy). When the
-    # imported FieldVector is closed, Arrow Java invokes PyArrow's release callback,
-    # which decrements the Python array refcount -- no Python-side registry needed.
-    result._export_to_c(int(output_array_ptr), int(output_schema_ptr))
+        raise RuntimeError(_UDF_TRACEBACK_SENTINEL + _traceback.format_exc()) from None

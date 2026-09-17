@@ -34,12 +34,18 @@ Usage::
 
 from typing import Callable
 
-import cloudpickle
 import pyarrow as pa
 
+from pyspark import cloudpickle
 from pyspark.sql.types import (
-    DataType, LongType, IntegerType, DoubleType, FloatType,
-    BooleanType, ShortType, ByteType,
+    BooleanType,
+    ByteType,
+    DataType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    ShortType,
 )
 
 # Map from Spark SQL DataType to PyArrow type for output type enforcement.
@@ -73,11 +79,15 @@ class InProcessUDFWrapper:
         # the declared return type (e.g. input is int64, return_type is IntegerType).
         arrow_type = _SPARK_TO_ARROW.get(return_type)
         if arrow_type is not None:
+
             def _wrapped(*args, _fn=func, _atype=arrow_type):
                 result = _fn(*args)
+                if not isinstance(result, pa.Array):
+                    raise TypeError("In-process UDF must return a pyarrow.Array")
                 if result.type != _atype:
                     result = result.cast(_atype)
                 return result
+
             self._serialized: bytes = cloudpickle.dumps(_wrapped)
         else:
             self._serialized = cloudpickle.dumps(func)
@@ -93,13 +103,14 @@ class InProcessUDFWrapper:
             pyspark.sql.Column
         """
         from pyspark import SparkContext
-        from pyspark.sql.column import Column
         from pyspark.sql.classic.column import _to_java_column
+        from pyspark.sql.column import Column
 
         sc = SparkContext._active_spark_context
         if sc is None:
             raise RuntimeError(
-                "No active SparkContext. Start a SparkSession before calling an inprocess_udf.")
+                "No active SparkContext. Start a SparkSession before calling an inprocess_udf."
+            )
 
         jvm = sc._jvm
 
@@ -130,8 +141,10 @@ def inprocess_udf(return_type: DataType, deterministic: bool = True) -> Callable
     The decorated function receives one ``pa.Array`` per input column and must
     return a single ``pa.Array`` of the declared ``return_type``.
 
-    All Arrow types are supported via the Arrow C Data Interface (CDI), including
-    primitives, strings, binary, temporal types, arrays, maps, and structs.
+    The result must have the same length as the input batch and its Arrow type
+    must match the declared Spark type, including nested fields and timestamp
+    timezone. Numeric and boolean results are cast to the declared primitive type.
+    Nested UDF, aggregate and window arguments are not supported.
 
     Args:
         return_type:   Spark SQL DataType for the UDF return value
@@ -155,6 +168,8 @@ def inprocess_udf(return_type: DataType, deterministic: bool = True) -> Callable
             import pyarrow as pa, numpy as np
             return pa.array(np.random.randint(0, 100, len(x)), type=pa.int64())
     """
+
     def decorator(func: Callable) -> InProcessUDFWrapper:
         return InProcessUDFWrapper(func, return_type, deterministic)
+
     return decorator

@@ -23,7 +23,7 @@ import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext,
 import org.apache.spark.internal.Logging
 
 /**
- * Spark plugin that initializes jep's SharedInterpreter on each executor JVM process,
+ * Spark plugin that initializes jep's SharedInterpreter on a dedicated executor thread,
  * enabling in-process Python UDF execution with zero-copy Arrow data passing.
  *
  * Register via Spark config:
@@ -33,7 +33,8 @@ import org.apache.spark.internal.Logging
  *  - jep (Java Embedded Python) must be on the executor classpath (provided scope)
  *  - Python 3.8+ with PyArrow and cloudpickle installed in the executor environment
  *  - spark.executor.cores == spark.task.cpus (enforced at query planning time by
- *    [[InProcessPythonChecks]] to prevent GIL contention on the shared interpreter)
+ *    [[InProcessPythonChecks]] as the initial deployment policy; the runtime separately
+ *    enforces JEP thread affinity)
  *
  * @see [[InProcessPythonRuntime]] for the interpreter singleton
  * @see [[InProcessPythonChecks]] for the concurrency config validation rule
