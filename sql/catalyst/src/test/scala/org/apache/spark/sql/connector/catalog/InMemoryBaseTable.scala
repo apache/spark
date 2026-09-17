@@ -761,10 +761,10 @@ abstract class InMemoryBaseTable(
               pred.eval(p.asInstanceOf[BufferedRows].partitionKey())
             } catch {
               // Keep the partition on eval failure, which is safe here because every predicate
-              // the fixture pushes evaluates cleanly. `PartitionPredicateImpl` fails open only
-              // for a runtime filter, whose rows are filtered anyway, so failing open costs just
-              // a pruning opportunity; everywhere else it propagates, because Spark drops a
-              // filter the connector accepts. A scan declaring an attribute in
+              // the fixture pushes evaluates cleanly. `PartitionPredicateImpl` keeps a partition
+              // it cannot evaluate only for a runtime filter, whose rows are filtered anyway, so
+              // it costs just a pruning opportunity; everywhere else it propagates, because Spark
+              // drops a filter the connector accepts. A scan declaring an attribute in
               // `fullyPushedFilterAttributes()` likewise stands alone as the evaluator, so
               // keeping an unevaluated partition would return nonmatching rows.
               case _: Exception => true

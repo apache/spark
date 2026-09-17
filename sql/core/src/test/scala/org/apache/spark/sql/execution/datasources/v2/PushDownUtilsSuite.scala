@@ -27,7 +27,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class PushDownUtilsSuite extends SparkFunSuite {
 
-  test("SPARK-59572: only a runtime partition predicate may fail open") {
+  test("SPARK-59572: only a runtime partition predicate keeps a key it cannot evaluate") {
     val ref = DataTypeUtils.toAttribute(StructField("p", StringType, nullable = true))
     val fields = Seq(PartitionPredicateField(Seq("p"), ref))
     // An ANSI cast of a non-numeric string throws when evaluated.

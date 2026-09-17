@@ -54,7 +54,7 @@ class PartitionPredicateImplSuite extends SparkFunSuite with QueryErrorsBase {
     checkNestedPartitionPathReferencesAfterSerialization(serializer)
   }
 
-  test("SPARK-59572: eval propagates a failure unless the predicate may fail open") {
+  test("SPARK-59572: eval propagates a failure unless the predicate may keep the partition") {
     val ref = DataTypeUtils.toAttribute(StructField("p", StringType, nullable = true))
     val fields = Seq(PartitionPredicateField(Seq("p"), ref))
     // An ANSI cast of a non-numeric string throws when evaluated.
@@ -79,10 +79,10 @@ class PartitionPredicateImplSuite extends SparkFunSuite with QueryErrorsBase {
     assert(strict.eval(notMatching) === false)
 
     // Runtime filters are re-evaluated after the scan, so failing open only prunes less.
-    val lenient = PartitionPredicateImpl(expr, fields, failOpen = true).get
+    val lenient = PartitionPredicateImpl(expr, fields, keepOnEvalFailure = true).get
     assert(lenient.eval(failing) === true)
     assert(lenient.eval(matching) === true)
-    // Failing open must not degrade into always matching: a key it can evaluate still decides.
+    // Keeping on failure must not degrade into always matching: an evaluable key still decides.
     assert(lenient.eval(notMatching) === false)
 
     // The flag is part of the predicate's identity.
