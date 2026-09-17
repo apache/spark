@@ -190,6 +190,20 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 180.15) :: Nil)
   }
 
+  test("MATCH_CONDITION right operand first (>=) forward match is inclusive at the boundary") {
+    setupTradeQuoteViews()
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT q.bid_price
+          |FROM VALUES (TIMESTAMP '2026-06-29 10:00:07', 'AAPL') AS t(trade_time, symbol)
+          |ASOF JOIN quotes q
+          |  MATCH_CONDITION (q.quote_time >= t.trade_time)
+          |  ON t.symbol = q.symbol
+          |""".stripMargin),
+      Row(180.15) :: Nil)
+  }
+
   test("DATE scalar MATCH_CONDITION") {
     checkSortMergeAsOf(
       sql(
