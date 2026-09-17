@@ -276,6 +276,27 @@ class ArtifactSuite extends ConnectFunSuite {
     assert(batch.getEntries(2).getArtifact.getName == "jars/smallJar.jar")
   }
 
+  test("server-side Maven mode resolves requested repositories on the client") {
+    val main = new MavenCoordinate("my.artifactsuite.client", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val classFile = artifactFilePath.resolve("smallClassFile.class").toUri
+      val clientIvyUri = URI.create(s"ivy://${main.toString}?repos=$repo")
+      val serverIvyUri = URI.create("ivy://my.artifactsuite.server:mylib:0.1")
+
+      artifactManager.addArtifacts(
+        Seq(classFile, clientIvyUri, serverIvyUri),
+        serverSideMavenArtifacts = true)
+
+      val requests = service.getAndClearLatestAddArtifactRequests()
+      assert(requests.size == 1)
+      val batch = requests.head.getBatch
+      assert(batch.getEntriesCount == 3)
+      assert(batch.getEntries(0).getArtifact.getName == "classes/smallClassFile.class")
+      assert(batch.getEntries(1).getArtifact.getName.contains("my.artifactsuite.client_mylib-0.1"))
+      assert(batch.getEntries(2).getMavenDependency.getUri == serverIvyUri.toString)
+    }
+  }
+
   test("Spark Connect uses server-side Maven resolution when advertised") {
     service.serverCapabilities = Seq(
       SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY)
@@ -288,6 +309,26 @@ class ArtifactSuite extends ConnectFunSuite {
     assert(requests.size == 1)
     assert(requests.head.getBatch.getEntriesCount == 1)
     assert(requests.head.getBatch.getEntries(0).getMavenDependency.getUri == ivyUri.toString)
+  }
+
+  test("Spark Connect resolves requested Maven repositories on the client") {
+    val main = new MavenCoordinate("my.artifactsuite.clientcapability", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      service.serverCapabilities = Seq(
+        SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY)
+      client = new SparkConnectClient(Configuration(), channel)
+
+      client.addArtifact(URI.create(s"ivy://${main.toString}?repos=$repo"))
+
+      val requests = service.getAndClearLatestAddArtifactRequests()
+      assert(requests.size == 1)
+      val batch = requests.head.getBatch
+      assert(batch.getEntriesCount == 1)
+      assert(batch.getEntries(0).hasArtifact)
+      assert(
+        batch.getEntries(0).getArtifact.getName.contains(
+          "my.artifactsuite.clientcapability_mylib-0.1"))
+    }
   }
 
   test("Spark Connect falls back only when the Maven capability is absent") {
