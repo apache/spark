@@ -915,7 +915,7 @@ case class KeyedPartitioning(
     }
 
   /**
-   * Whether a [[GroupPartitionsExec]] may project these keys down to the cluster keys at all. Only
+   * Whether a `GroupPartitionsExec` may project these keys down to the cluster keys at all. Only
    * `spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys` permits it, and a marked
    * layout cannot survive it, since the projection coarsens the declared set the out-of-set routing
    * speaks for (see the `@param`). Whole keys co-locate there and subsets do not, so a window or
@@ -934,8 +934,9 @@ case class KeyedPartitioning(
 
   /**
    * The strict question of the family the class doc lists, for a [[ClusteredDistribution]]. `true`
-   * only when the keys as they stand co-locate every cluster key, with nothing left for a
-   * `GroupPartitionsExec` to do about it.
+   * only when the keys as they stand co-locate every cluster key, with no projection left for a
+   * `GroupPartitionsExec` to perform. It says nothing about duplicate keys, which such a node also
+   * coalesces, so an admitted layout can still need one: `satisfies` adds `isGrouped` on top.
    *
    * Two ways to be true. Every partition expression is a function of cluster keys alone, so
    * nothing needs projecting. Or one is not, in which case the projection that drops it may still
@@ -1434,7 +1435,7 @@ object PartitioningCollection {
     representativeOf(partitioning).map(_.numPartitions)
 
   /**
-   * Whether `p` can serve `required` once a [[GroupPartitionsExec]] has projected a
+   * Whether `p` can serve `required` once a `GroupPartitionsExec` has projected a
    * [[KeyedPartitioning]]'s keys down to the cluster keys. `satisfies` asks whether it serves as it
    * stands, and only a keyed partitioning answers the two differently.
    *

@@ -226,8 +226,8 @@ case class EnsureRequirements(
     // their sources report them, so when it succeeds nothing here is asked for.
     lazy val resolved = resolveEachChild(children, coPartitioned, shuffleOrigin)
 
-    // Special case: if all sides of the join are single partition and it's physical size less than
-    // or equal spark.sql.maxSinglePartitionBytes.
+    // Special case: if all sides of the join are single partition and their physical size is at
+    // most spark.sql.maxSinglePartitionBytes.
     val preferSinglePartition = children.zip(coPartitioned).forall {
       case (child, Some(_)) =>
         child.outputPartitioning == SinglePartition &&
@@ -335,12 +335,12 @@ case class EnsureRequirements(
    * least the child offering it keeps its partitioning and only the others are shuffled. `None`
    * when no child can serve, and then they all take a shuffle.
    *
-   * Find out the shuffle spec that gives better parallelism. Currently this is done by
-   * picking the spec with the largest number of partitions.
+   * Find out the shuffle spec that gives better parallelism. A child with no `ShuffleExchangeLike`
+   * node comes first, and the largest number of partitions decides among those.
    *
    * NOTE: this is not optimal for the case when there are more than 2 children. Consider:
    *   (10, 10, 11)
-   * where the number represent the number of partitions for each child, it's better to pick 10
+   * where each number is that child's partition count, it's better to pick 10
    * here since we only need to shuffle one side - we'd need to shuffle two sides if we pick 11.
    *
    * However this should be sufficient for now since in Spark nodes with multiple children
@@ -353,10 +353,10 @@ case class EnsureRequirements(
     // during shuffle. To achieve a good trade-off between parallelism and shuffle cost, we only
     // consider the minimum parallelism iff ALL children need to be re-shuffled.
     //
-    // A child needs to be re-shuffled iff either one of below is true:
+    // A child needs to be re-shuffled iff either of the following is true:
     //   1. It can't create partitioning by itself, i.e., `canCreatePartitioning` returns false
     //      (as for the case of `RangePartitioning`), therefore it needs to be re-shuffled
-    //      according to other shuffle spec.
+    //      according to another child's shuffle spec.
     //   2. It already has `ShuffleExchangeLike`, so we can re-use existing shuffle without
     //      introducing extra shuffle.
     //
@@ -609,8 +609,8 @@ case class EnsureRequirements(
       joinType: JoinType): Option[Seq[SparkPlan]] = {
     // Plan from the children as their sources report them, stripping any grouping this rule put
     // there: the one the distribution step above just added, and on a re-run the aligned one an
-    // earlier pass left behind. Everything below then lives in a single index space, the raw
-    // partition keys', so the positions, the reducers and the merged keys all mean one thing. This
+    // earlier pass left behind. Everything below then lives in one index space, the source's raw
+    // partition keys, so the positions, the reducers and the merged keys all mean one thing. This
     // is also what lets the node be built once, here, instead of being placed as a guess and
     // rewritten.
     val rawLeft = peelGroupPartitions(left)

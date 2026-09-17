@@ -471,8 +471,8 @@ private[sql] object GroupPartitionsExec {
    * Two other `copy` calls in this file are deliberate. `withNewChildInternal` carries both fields
    * over a child rewrite, and a child that turns out to report something else is what
    * `outputPartitioning` answers for, so the carried pair is never reported as if it still held.
-   * And `doCanonicalize` rewrites `reducers` without re-deriving, which holds because neither field
-   * carries an exprId, so normalizing the reducers cannot change what they describe.
+   * And `doCanonicalize` rewrites `reducers` on what `super.doCanonicalize()` returned, which has
+   * already normalized the exprIds in both partitioning fields, and the rewrite touches neither.
    */
   def apply(
       child: SparkPlan,
@@ -499,7 +499,7 @@ private[sql] object GroupPartitionsExec {
 
   /**
    * What a node with this `grouping` over `child` reports. Derived once, at planning time, because
-   * this rebuilds every `KeyedPartitioning` in the child's on top of the grouping and the planner
+   * this rebuilds every `KeyedPartitioning` of the child's on top of the grouping, and the planner
    * asks a node for its partitioning many times. Reads no live config, or storing it would freeze
    * one.
    */
@@ -601,8 +601,8 @@ private[sql] object GroupPartitionsExec {
         Seq.fill(numSplits)((key, splits))
       }
     }
-    // The keyMap groups partition every input index, so the pruned inputs are the total minus
-    // the matched.
+    // The keyMap's groups partition the input indices between them, so the pruned inputs are the
+    // total minus the matched.
     val numPrunedPartitions = numInputPartitions - numMatchedPartitions
     (alignedPartitions, isGrouped, numPrunedPartitions, numReplicatedPartitionReads)
   }

@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWay
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class GroupPartitionsExecSuite extends SharedSparkSession {
 
@@ -351,8 +352,8 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
   }
 
   test("SPARK-59050: a grouping that rewrites the declared keys drops the claim") {
-    // `PartitionGrouping.isIdentity` also asks whether the grouping rewrote the keys. The claim
-    // goes on to declare lives in the projected or reduced key space, while the child's
+    // `PartitionGrouping.isIdentity` also asks whether the grouping rewrote the keys. The keys the
+    // node goes on to declare live in the projected or reduced key space, while the child's
     // undeclared rows still sit at hash(originalKey) % numPartitions. A reducer slot, a
     // narrowing projection, or a reordering projection therefore gives up the claim even when
     // every group keeps its index and the count is unchanged. A conforming self-reducer cannot
@@ -672,17 +673,30 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       // Giving up the claim is only half of it. `ValidateRequirements` rejects such a plan, but
       // `AdaptiveSparkPlanExec.optimizeQueryStage` validates an `AQEShuffleReadRule`'s result and
       // nothing else, so execution refuses rather than coalescing the new child on the old indices.
+      // Both paths are checked, since each has its own call.
       val e = intercept[SparkException](rebuilt.execute())
       assert(e.getMessage.contains("no longer reports the partitioning it was planned over"))
+
+      val columnarPlanned = GroupPartitionsExec(
+        DummyLeafSparkPlan(outputPartitioning = childKp, supportsColumnar = true))
+      val columnarRebuilt = columnarPlanned.withNewChildren(Seq(
+        DummyLeafSparkPlan(outputPartitioning = changed, supportsColumnar = true)))
+        .asInstanceOf[GroupPartitionsExec]
+      assert(columnarRebuilt.supportsColumnar, "test setup: the columnar path is the one taken")
+      val ce = intercept[SparkException](columnarRebuilt.executeColumnar())
+      assert(ce.getMessage.contains("no longer reports the partitioning it was planned over"))
     }
   }
 }
 
 private case class DummyLeafSparkPlan(
     override val outputOrdering: Seq[SortOrder] = Nil,
-    override val outputPartitioning: Partitioning = UnknownPartitioning(0)
+    override val outputPartitioning: Partitioning = UnknownPartitioning(0),
+    override val supportsColumnar: Boolean = false
   ) extends LeafExecNode with SafeForKWayMerge {
   override protected def doExecute(): RDD[InternalRow] =
+    throw new UnsupportedOperationException
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
     throw new UnsupportedOperationException
   override def output: Seq[Attribute] = Seq.empty
 }
