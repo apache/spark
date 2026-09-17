@@ -40,7 +40,7 @@ import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
 import org.apache.spark.network.util.JavaUtils.sha256Hex
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.Artifact.{newCacheArtifact, newIvyArtifacts}
-import org.apache.spark.util.{SparkFileUtils, SparkStringUtils, SparkThreadUtils}
+import org.apache.spark.util.{MavenUtils, SparkFileUtils, SparkStringUtils, SparkThreadUtils}
 
 /**
  * The Artifact Manager is responsible for handling and transferring artifacts from the local
@@ -107,6 +107,11 @@ class ArtifactManager(
       case other =>
         throw new UnsupportedOperationException(s"Unsupported scheme: $other")
     }
+  }
+
+  private def hasRequestedRepositories(uri: URI): Boolean = {
+    val (_, _, repositories) = MavenUtils.parseQueryParams(uri)
+    repositories.split(",").exists(_.trim.nonEmpty)
   }
 
   /**
@@ -182,7 +187,9 @@ class ArtifactManager(
     if (serverSideMavenArtifacts) {
       val entries = uris.flatMap { uri =>
         uri.getScheme match {
-          case "ivy" => MavenDependency(uri) :: Nil
+          // Resolve explicit repositories on the client so arbitrary repositories are never
+          // accessed from the server.
+          case "ivy" if !hasRequestedRepositories(uri) => MavenDependency(uri) :: Nil
           case _ => parseArtifacts(uri).map(UploadedArtifact)
         }
       }
@@ -436,6 +443,7 @@ class ArtifactManager(
           } else {
             builder.getBatchBuilder.addArtifacts(uploaded)
           }
+          ()
         } catch {
           case NonFatal(e) =>
             stream.onError(e)
@@ -449,6 +457,7 @@ class ArtifactManager(
           .addEntriesBuilder()
           .getMavenDependencyBuilder
           .setUri(uri.toString)
+        ()
       }
     stream.onNext(builder.build())
   }
