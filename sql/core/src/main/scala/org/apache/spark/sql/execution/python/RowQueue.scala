@@ -146,14 +146,17 @@ private[python] case class DiskRowQueue(
   }
 
   def remove(): UnsafeRow = synchronized {
-    if (out != null) {
-      out.close()
-      out = null
-      in = new DataInputStream(serMgr.wrapForEncryption(
-        new NioBufferedFileInputStream(file)))
-    }
+    // Writing is over once anyone reads, so release the output stream if it is still held.
+    closeOutputStream()
 
     if (unreadBytes > 0) {
+      // Opening is keyed off `in`, not `out`: the output stream may already have been released
+      // by `closeOutputStream()` when this queue was completed, and this can still be the first
+      // read. Opening it here rather than above also avoids opening a file we never read from.
+      if (in == null) {
+        in = new DataInputStream(serMgr.wrapForEncryption(
+          new NioBufferedFileInputStream(file)))
+      }
       val size = in.readInt()
       val bytes = new Array[Byte](size)
       in.readFully(bytes)
@@ -162,6 +165,13 @@ private[python] case class DiskRowQueue(
       resultRow
     } else {
       null
+    }
+  }
+
+  override def closeOutputStream(): Unit = synchronized {
+    if (out != null) {
+      out.close()
+      out = null
     }
   }
 
