@@ -36,7 +36,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SPARK_HOME="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-VENV_DIR="$SPARK_HOME/python/.venv-inprocess"
+VENV_DIR="${INPROCESS_VENV:-$SPARK_HOME/python/.venv-inprocess}"
 VENV_PY="$VENV_DIR/bin/python"
 
 if [[ ! -x "$VENV_PY" ]]; then
@@ -62,7 +62,9 @@ VENV_SITE="$(dirname "$JEP_NATIVE_DIR")"
 
 export SPARK_HOME
 export INPROCESS_TESTS=1
-export PYTHONPATH="$VENV_SITE:$SPARK_HOME/python:$PY4J_ZIP"
+export PYSPARK_PYTHON="$VENV_PY"
+export PYSPARK_DRIVER_PYTHON="$VENV_PY"
+export PYTHONPATH="$SPARK_HOME/python:$PY4J_ZIP:$VENV_SITE"
 # Add jep JAR to driver classpath; set java.library.path for libjep native library.
 export PYSPARK_SUBMIT_ARGS="--driver-class-path $JEP_JAR --driver-java-options -Djava.library.path=$JEP_NATIVE_DIR pyspark-shell"
 

@@ -1,5 +1,11 @@
 # In-Process Python UDF for Apache Spark — Design & Implementation Plan
 
+> Historical design: the sketches below describe the original prototype, including
+> raw buffer addresses and a copied output path. The implementation now uses Arrow
+> CDI in both directions, a dedicated JEP owner thread, explicit resource cleanup,
+> and validated result schemas. See [the current runtime contract](sql-pyspark-inprocess-udf.html#runtime-and-result-contract)
+> for the supported behavior and cancellation limits.
+
 ## 1. Motivation
 
 Current PySpark Python UDF execution suffers from significant overhead due to its out-of-process

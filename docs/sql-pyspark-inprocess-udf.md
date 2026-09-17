@@ -22,6 +22,33 @@ license: |
 * Table of contents
 {:toc}
 
+## Runtime and result contract
+
+Each executor owns a dedicated interpreter thread. The plugin initializes the
+interpreter on that thread, and task calls and shutdown are dispatched to the
+same thread. The initial single-task-per-executor deployment restriction remains,
+but it is not relied on for JEP thread affinity.
+
+Task cancellation cannot safely stop arbitrary native Python code. An interrupted
+caller waits for the current invocation to finish before freeing the Arrow CDI
+structures, then restores its interrupt status. A UDF that never returns can
+therefore prevent its task from completing cancellation.
+
+A scalar UDF must return a `pyarrow.Array` with exactly one element per input row.
+The runtime checks the result type against the declared Spark type, including
+nested fields, decimal scale, and timestamp unit/timezone. Existing numeric and
+boolean output casts are preserved. Invalid results fail before being read by
+Spark. Ordinary column expressions and literals may be passed as arguments;
+nested UDF, aggregate and window arguments must be evaluated in a separate stage.
+Cross-side join arguments are rejected during planning.
+
+`maxRecordsPerBatch <= 0` means no row-count limit. The independent
+`spark.sql.execution.arrow.maxBytesPerBatch` limit still applies when positive.
+Input vectors and completed result vectors are released on task completion,
+early termination and failure. Extra site-packages paths are appended before
+loading the runtime bridge. UDF deserialization uses PySpark's bundled cloudpickle
+and a bounded executor-local cache.
+
 ## Overview
 
 In-process Python UDFs embed CPython directly into the Spark executor JVM using
@@ -29,7 +56,7 @@ In-process Python UDFs embed CPython directly into the Spark executor JVM using
 standard Python UDFs and pandas UDFs. Data is passed to Python as
 [PyArrow](https://arrow.apache.org/docs/python/) arrays via the
 [Arrow C Data Interface](https://arrow.apache.org/docs/format/CDataInterface.html) — zero-copy
-for inputs, one copy for outputs.
+for both input and output buffer transfer. Row-to-Arrow conversion still copies data.
 
 **Use `inprocess_udf` when:**
 - You are already using `pandas_udf` for vectorized transformations and want lower latency.

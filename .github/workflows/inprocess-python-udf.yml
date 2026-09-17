@@ -29,14 +29,26 @@ on:
     branches: ['**']
     paths:
       - 'python/pyspark/inprocess/**'
-      - 'sql/core/src/main/scala/org/apache/spark/sql/execution/python/InProcess*.scala'
+      - 'sql/core/src/main/scala/org/apache/spark/sql/execution/python/*InProcess*.scala'
+      - 'sql/core/src/main/scala/org/apache/spark/sql/execution/SparkOptimizer.scala'
+      - 'sql/core/src/main/scala/org/apache/spark/sql/execution/SparkStrategies.scala'
+      - 'sql/core/src/test/scala/org/apache/spark/sql/execution/python/*InProcess*.scala'
+      - 'pom.xml'
+      - 'sql/core/pom.xml'
+      - 'python/packaging/classic/setup.py'
       - 'python/integration/run_inprocess_udf_tests.sh'
       - 'python/integration/benchmark_inprocess_udf.py'
       - '.github/workflows/inprocess-python-udf.yml'
   pull_request:
     paths:
       - 'python/pyspark/inprocess/**'
-      - 'sql/core/src/main/scala/org/apache/spark/sql/execution/python/InProcess*.scala'
+      - 'sql/core/src/main/scala/org/apache/spark/sql/execution/python/*InProcess*.scala'
+      - 'sql/core/src/main/scala/org/apache/spark/sql/execution/SparkOptimizer.scala'
+      - 'sql/core/src/main/scala/org/apache/spark/sql/execution/SparkStrategies.scala'
+      - 'sql/core/src/test/scala/org/apache/spark/sql/execution/python/*InProcess*.scala'
+      - 'pom.xml'
+      - 'sql/core/pom.xml'
+      - 'python/packaging/classic/setup.py'
       - 'python/integration/run_inprocess_udf_tests.sh'
       - 'python/integration/benchmark_inprocess_udf.py'
       - '.github/workflows/inprocess-python-udf.yml'
@@ -77,7 +89,7 @@ jobs:
     # the build as fast as possible; the Maven cache makes subsequent
     # CI runs significantly faster.
     - name: Build Spark assembly (skipping tests)
-      run: build/mvn -pl assembly -am -DskipTests -Dscaladoc.skip=true -q package
+      run: build/mvn -pl assembly -am -Phive -DskipTests -Dmaven.scaladoc.skip=true -q package
 
     - name: Set up Python 3.12
       uses: actions/setup-python@v5
@@ -90,7 +102,7 @@ jobs:
     - name: Install Python dependencies
       run: |
         python3 -m venv python/.venv-inprocess
-        python/.venv-inprocess/bin/pip install --quiet "jep>=4.2" pyarrow cloudpickle pytest
+        python/.venv-inprocess/bin/pip install --quiet "jep==4.2.0" pyarrow pandas cffi pytest
 
     # run_inprocess_udf_tests.sh sets INPROCESS_TESTS=1, configures
     # PYTHONPATH (venv site-packages + pyspark source), and passes
@@ -100,3 +112,8 @@ jobs:
     # full failure summary is visible in the CI log.
     - name: Run integration tests
       run: bash python/integration/run_inprocess_udf_tests.sh --no-x
+
+    - name: Run Arrow CDI contract tests
+      run: |
+        PYTHONPATH="$PWD/python" python/.venv-inprocess/bin/python -m unittest \
+          pyspark.inprocess.tests.test_runtime
