@@ -142,6 +142,33 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
+  test("Aggregate: NAAJ pushdown follows the effective broadcast threshold") {
+    val aggregate = testRelation.groupBy($"b")($"b")
+    val equality = $"b" === $"d"
+    val originalQuery = aggregate.join(
+      testRelation1,
+      joinType = LeftAnti,
+      condition = Some(equality || IsNull(equality)))
+    val pushedDownQuery = testRelation
+      .join(
+        testRelation1,
+        joinType = LeftAnti,
+        condition = Some(equality || IsNull(equality)))
+      .groupBy($"b")($"b")
+
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      comparePlans(Optimize.execute(originalQuery.analyze), pushedDownQuery.analyze)
+    }
+
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+    }
+  }
+
   test("Aggregate: LeftSemi join no pushdown") {
     val originalQuery = testRelation
       .groupBy($"b")($"b", sum($"c").as("sum"))

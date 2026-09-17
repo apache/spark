@@ -443,11 +443,18 @@ trait JoinSelectionHelper extends Logging {
     // would still broadcast it with a slower nested-loop join.
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) =>
       val dedicatedThreshold = conf.nullAwareAntiJoinBroadcastThreshold
-      val canBroadcast = dedicatedThreshold < 0 || {
-        val effectiveThreshold = math.max(dedicatedThreshold, conf.autoBroadcastJoinThreshold)
-        effectiveThreshold > 0 && {
-          val rightSize = j.right.stats.sizeInBytes
-          rightSize >= 0 && rightSize <= effectiveThreshold
+      val canBroadcast = if (dedicatedThreshold < 0) {
+        true
+      } else {
+        val automaticBroadcastDisabled = conf.autoBroadcastJoinThreshold <= 0 &&
+          conf.getConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD).forall(_ <= 0)
+        if (dedicatedThreshold == 0 && automaticBroadcastDisabled) {
+          false
+        } else {
+          canBroadcastBySize(j.right, conf) || (dedicatedThreshold > 0 && {
+            val rightSize = j.right.stats.sizeInBytes
+            rightSize >= 0 && rightSize <= dedicatedThreshold
+          })
         }
       }
       if (canBroadcast) {

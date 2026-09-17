@@ -1308,7 +1308,7 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-36082: left-broadcast NAAJ fallback uses nested-loop join") {
+  test("SPARK-36082: automatic threshold enables NAAJ hash join despite left broadcast hint") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
@@ -1332,9 +1332,9 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
         val nullAwareHashJoins = plan.collect {
           case join: BroadcastHashJoinExec if join.isNullAwareAntiJoin => join
         }
-        assert(nestedLoopJoins.size === 1)
-        assert(nestedLoopJoins.head.buildSide === BuildLeft)
-        assert(nullAwareHashJoins.isEmpty)
+        assert(nestedLoopJoins.isEmpty)
+        assert(nullAwareHashJoins.size === 1)
+        assert(nullAwareHashJoins.head.buildSide === BuildRight)
         checkAnswer(result, Row(2.0d))
       }
     }

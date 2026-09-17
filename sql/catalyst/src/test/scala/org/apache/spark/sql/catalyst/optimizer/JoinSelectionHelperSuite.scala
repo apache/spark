@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, EqualTo, IsNull, Or}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LeafNode, LogicalPlan, NO_BROADCAST_HASH, SHUFFLE_HASH}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LeafNode, LogicalPlan, NO_BROADCAST_HASH, SHUFFLE_HASH, Statistics}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
 
@@ -204,6 +204,9 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     val autoThresholdRight = right.copy(
       rowCount = 10 * 1024 * 1024,
       size = Some(10 * 1024 * 1024))
+    val betweenThresholdsRight = right.copy(
+      rowCount = 8 * 1024 * 1024,
+      size = Some(8 * 1024 * 1024))
     val largeRight = right.copy(rowCount = 20000000, size = Some(20000000))
 
     withSQLConf(
@@ -227,15 +230,63 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
     withSQLConf(
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "5MB") {
+      assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoin(betweenThresholdsRight), SQLConf.get) === Some(BuildRight))
+    }
+
+    withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
       assert(getBroadcastHashJoinBuildSide(nullAwareAntiJoin(), SQLConf.get).isEmpty)
     }
   }
 
+  test("NAAJ broadcast threshold is unlimited by default") {
+    val overLongMaxRight = right.copy(
+      rowCount = BigInt(Long.MaxValue) + 1,
+      size = Some(BigInt(Long.MaxValue) + 1))
+
+    withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoin(overLongMaxRight), SQLConf.get) === Some(BuildRight))
+    }
+  }
+
+  test("NAAJ broadcast threshold uses the adaptive threshold for runtime statistics") {
+    case class RuntimeStatsPlan(size: BigInt) extends LeafNode {
+      override def output: Seq[Attribute] = right.output
+      override def computeStats(): Statistics = Statistics(sizeInBytes = size, isRuntime = true)
+    }
+    val runtimeRight = RuntimeStatsPlan(5 * 1024 * 1024)
+
+    withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+      SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "1MB",
+      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      assert(getBroadcastHashJoinBuildSide(nullAwareAntiJoin(runtimeRight), SQLConf.get).isEmpty)
+    }
+
+    withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1MB",
+      SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoin(runtimeRight), SQLConf.get) === Some(BuildRight))
+    }
+  }
+
   test("NAAJ broadcast threshold short-circuits config-only decisions") {
     case class ThrowingStatsPlan() extends LeafNode {
       override def output: Seq[Attribute] = right.output
+      override def computeStats(): Statistics =
+        throw new IllegalStateException("statistics should not be read")
     }
     val nullAwareAntiJoinWithoutStats = nullAwareAntiJoin(ThrowingStatsPlan())
 
@@ -259,6 +310,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "10MB") {
+      assert(getBroadcastHashJoinBuildSide(nullAwareAntiJoin(), SQLConf.get) === Some(BuildRight))
       assert(getBroadcastHashJoinBuildSide(
         nullAwareAntiJoin(right.copy(size = Some(-1))), SQLConf.get).isEmpty)
     }
