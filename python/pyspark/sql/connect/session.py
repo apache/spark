@@ -90,6 +90,7 @@ from pyspark.sql.session import SparkSession as PySparkSession
 from pyspark.sql.session import classproperty
 from pyspark.sql.types import (
     AtomicType,
+    CharType,
     DataType,
     DayTimeIntervalType,
     MapType,
@@ -97,6 +98,8 @@ from pyspark.sql.types import (
     StringType,
     StructType,
     TimestampType,
+    VarcharType,
+    _has_physical_type,
     _has_nulltype,
     _infer_schema,
     _merge_type,
@@ -501,6 +504,13 @@ class SparkSession:
                 _num_cols = len(schema.fields)
             else:
                 _num_cols = 1
+            if _has_physical_type(schema, (CharType, VarcharType)):
+                raise PySparkNotImplementedError(
+                    errorClass="NOT_IMPLEMENTED",
+                    messageParameters={
+                        "feature": f"CHAR/VARCHAR in Spark Connect createDataFrame schema: {schema}"
+                    },
+                )
 
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names

@@ -3106,6 +3106,20 @@ def _first_timestamp_nanos_map_key_type(dt: DataType) -> Optional["DataType"]:
         return None
 
 
+def _has_char_varchar_in_udt(dt: DataType) -> bool:
+    """Return whether `dt` contains a UDT whose storage type contains CHAR/VARCHAR."""
+    if isinstance(dt, UserDefinedType):
+        return _has_physical_type(dt.sqlType(), (CharType, VarcharType))
+    elif isinstance(dt, StructType):
+        return any(_has_char_varchar_in_udt(f.dataType) for f in dt.fields)
+    elif isinstance(dt, ArrayType):
+        return _has_char_varchar_in_udt(dt.elementType)
+    elif isinstance(dt, MapType):
+        return _has_char_varchar_in_udt(dt.keyType) or _has_char_varchar_in_udt(dt.valueType)
+    else:
+        return False
+
+
 @overload
 def _merge_type(a: StructType, b: StructType, name: Optional[str] = None) -> StructType: ...
 

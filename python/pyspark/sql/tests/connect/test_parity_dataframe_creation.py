@@ -15,7 +15,9 @@
 # limitations under the License.
 #
 
+from pyspark.errors import PySparkNotImplementedError
 from pyspark.sql.tests.test_dataframe_creation import DataFrameCreationTestsMixin
+from pyspark.sql.types import ArrayType, CharType, StructField, StructType, UserDefinedType
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
@@ -23,7 +25,37 @@ class DataFrameCreationParityTests(
     DataFrameCreationTestsMixin,
     ReusedConnectTestCase,
 ):
-    pass
+    def test_char_varchar_explicit_schema_is_unsupported(self):
+        class CharStorageUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return CharType(3)
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+            def serialize(self, obj):
+                return obj
+
+            def deserialize(self, datum):
+                return datum
+
+        schemas = [
+            StructType([StructField("value", ArrayType(CharType(3)))]),
+            StructType([StructField("value", CharStorageUDT())]),
+        ]
+        for schema in schemas:
+            with self.subTest(schema=schema):
+                with self.assertRaisesRegex(
+                    PySparkNotImplementedError,
+                    "CHAR/VARCHAR in Spark Connect createDataFrame schema",
+                ):
+                    self.spark.createDataFrame([(["a"],)], schema)
 
 
 if __name__ == "__main__":

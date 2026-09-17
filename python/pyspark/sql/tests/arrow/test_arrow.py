@@ -55,7 +55,6 @@ from pyspark.sql.types import (
     TimestampNTZType,
     TimestampType,
     TimeType,
-    UserDefinedType,
     VarcharType,
     VariantType,
 )
@@ -75,68 +74,6 @@ if have_pandas:
 
 if have_pyarrow:
     import pyarrow as pa
-
-
-class CharValue:
-    def __init__(self, value):
-        self.value = value
-
-    def __eq__(self, other):
-        return isinstance(other, CharValue) and self.value == other.value
-
-
-class CharStorageUDT(UserDefinedType):
-    @classmethod
-    def sqlType(cls):
-        return CharType(3)
-
-    @classmethod
-    def module(cls):
-        return __name__
-
-    @classmethod
-    def scalaUDT(cls):
-        return ""
-
-    def serialize(self, obj):
-        return obj.value
-
-    def deserialize(self, datum):
-        return CharValue(datum)
-
-
-CharValue.__UDT__ = CharStorageUDT()
-
-
-class VarcharValue:
-    def __init__(self, value):
-        self.value = value
-
-    def __eq__(self, other):
-        return isinstance(other, VarcharValue) and self.value == other.value
-
-
-class VarcharStorageUDT(UserDefinedType):
-    @classmethod
-    def sqlType(cls):
-        return VarcharType(3)
-
-    @classmethod
-    def module(cls):
-        return __name__
-
-    @classmethod
-    def scalaUDT(cls):
-        return ""
-
-    def serialize(self, obj):
-        return obj.value
-
-    def deserialize(self, datum):
-        return VarcharValue(datum)
-
-
-VarcharValue.__UDT__ = VarcharStorageUDT()
 
 
 class ArrowTestsMixin:
@@ -1514,6 +1451,19 @@ class ArrowTestsMixin:
 
         with self.sql_conf(
             {
+                "spark.sql.legacy.charVarcharAsString": "false",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+            }
+        ):
+            default_df = self.spark.createDataFrame(inputs[0], schema)
+            self.assertEqual(default_df.schema["c"].dataType, StringType())
+            self.assertEqual(default_df.first(), Row(c="ab  ", s=Row(v="xyz"), a=["z "]))
+            self.assertEqual(default_df.toArrow().schema.field("c").type, pa.string())
+
+        with self.sql_conf(
+            {
                 "spark.sql.charVarchar.standardSemantics.enabled": "true",
                 "spark.sql.execution.arrow.pyspark.enabled": "true",
             }
@@ -1571,62 +1521,6 @@ class ArrowTestsMixin:
             df = self.spark.createDataFrame(pa.table({"c": ["a"], "v": ["abcd"]}), legacy_schema)
             self.assertEqual(df.schema, StructType().add("c", "string").add("v", "string"))
             self.assertEqual(df.first(), Row(c="a", v="abcd"))
-
-    def test_char_varchar_udt_storage_explicit_schema(self):
-        char_schema = StructType([StructField("value", CharStorageUDT())])
-        varchar_schema = StructType([StructField("value", VarcharStorageUDT())])
-        array_char_schema = StructType(
-            [StructField("value", ArrayType(CharStorageUDT()))]
-        )
-        map_varchar_schema = StructType(
-            [StructField("value", MapType(StringType(), VarcharStorageUDT()))]
-        )
-
-        with self.sql_conf(
-            {
-                "spark.sql.charVarchar.standardSemantics.enabled": "true",
-                "spark.sql.execution.arrow.pyspark.enabled": "true",
-            }
-        ):
-            for threshold in (str(2**63 - 1), "0"):
-                with self.subTest(local_relation_threshold=threshold):
-                    with self.sql_conf(
-                        {"spark.sql.execution.arrow.localRelationThreshold": threshold}
-                    ):
-                        df = self.spark.createDataFrame(
-                            pd.DataFrame({"value": [CharValue("a")]}), char_schema
-                        )
-                        self.assertEqual(df.schema, char_schema)
-                        self.assertEqual(df.first(), Row(value=CharValue("a  ")))
-
-                        array_df = self.spark.createDataFrame(
-                            pd.DataFrame({"value": [[CharValue("a")]]}),
-                            array_char_schema,
-                        )
-                        self.assertEqual(array_df.schema, array_char_schema)
-                        self.assertEqual(array_df.first(), Row(value=[CharValue("a  ")]))
-
-                        map_df = self.spark.createDataFrame(
-                            pd.DataFrame({"value": [{"key": VarcharValue("abc")}]}),
-                            map_varchar_schema,
-                        )
-                        self.assertEqual(map_df.schema, map_varchar_schema)
-                        self.assertEqual(
-                            map_df.first(),
-                            Row(value={"key": VarcharValue("abc")}),
-                        )
-
-                        with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
-                            self.spark.createDataFrame(
-                                pd.DataFrame({"value": [VarcharValue("abcd")]}),
-                                varchar_schema,
-                            ).collect()
-
-                        with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
-                            self.spark.createDataFrame(
-                                pd.DataFrame({"value": [{"key": VarcharValue("abcd")}]}),
-                                map_varchar_schema,
-                            ).collect()
 
     def test_createDataFrame_pandas_duplicate_field_names(self):
         for arrow_enabled in [True, False]:

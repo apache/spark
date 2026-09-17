@@ -32,7 +32,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -40,21 +40,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.Utils
-
-
-private class ArrowCharStorageUDT extends UserDefinedType[String] {
-  override def sqlType: DataType = CharType(3)
-  override def serialize(value: String): Any = value
-  override def deserialize(value: Any): String = value.toString
-  override def userClass: Class[String] = classOf[String]
-}
-
-private class ArrowVarcharStorageUDT extends UserDefinedType[String] {
-  override def sqlType: DataType = VarcharType(3)
-  override def serialize(value: String): Any = value
-  override def deserialize(value: Any): String = value.toString
-  override def userClass: Class[String] = classOf[String]
-}
 
 class ArrowConvertersSuite extends SharedSparkSession {
   import testImplicits._
@@ -1482,98 +1467,21 @@ class ArrowConvertersSuite extends SharedSparkSession {
     assert(ArrowUtils.rootAllocator.getAllocatedMemory === allocatedBefore)
   }
 
-  test("Arrow DataFrame conversion checks UDT-backed CHAR/VARCHAR storage") {
-    def batches(value: Any, dataType: DataType): Array[Array[Byte]] = {
-      ArrowConverters.toBatchIterator(
-        Iterator.single(InternalRow(value)),
-        StructType(Seq(StructField("value", dataType))),
-        1,
-        "UTC",
-        errorOnDuplicatedFieldNames = true,
-        largeVarTypes = false,
-        TaskContext.empty()).toArray
-    }
-
-    val charSchema = StructType(Seq(StructField("value", new ArrowCharStorageUDT())))
-    val varcharSchema = StructType(Seq(StructField("value", new ArrowVarcharStorageUDT())))
-    val arrayCharSchema =
-      StructType(Seq(StructField("value", ArrayType(new ArrowCharStorageUDT()))))
-    val mapVarcharSchema = StructType(Seq(
-      StructField("value", MapType(StringType, new ArrowVarcharStorageUDT()))))
-    Seq(Long.MaxValue, 0L).foreach { threshold =>
-      withSQLConf(
-          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
-          SQLConf.ARROW_LOCAL_RELATION_THRESHOLD.key -> threshold.toString) {
-        val charDataFrame = ArrowConverters.toDataFrame(
-          batches(UTF8String.fromString("a"), StringType).iterator,
-          charSchema,
-          spark,
-          "UTC",
-          errorOnDuplicatedFieldNames = true,
-          largeVarTypes = false)
-        assert(charDataFrame.schema === charSchema)
-        assert(charDataFrame.queryExecution.toRdd.collect().head.getUTF8String(0) ===
-          UTF8String.fromString("a  "))
-
-        val arrayCharDataFrame = ArrowConverters.toDataFrame(
-          batches(
-            new GenericArrayData(Array[Any](UTF8String.fromString("a"))),
-            ArrayType(StringType)).iterator,
-          arrayCharSchema,
-          spark,
-          "UTC",
-          errorOnDuplicatedFieldNames = true,
-          largeVarTypes = false)
-        assert(arrayCharDataFrame.schema === arrayCharSchema)
-        assert(arrayCharDataFrame.queryExecution.toRdd.collect().head
-          .getArray(0).getUTF8String(0) === UTF8String.fromString("a  "))
-
-        def mapData(value: String): ArrayBasedMapData = {
-          ArrayBasedMapData(
-            Array(UTF8String.fromString("key")),
-            Array(UTF8String.fromString(value)))
-        }
-        val physicalMapType = MapType(StringType, StringType)
-        val mapVarcharDataFrame = ArrowConverters.toDataFrame(
-          batches(mapData("abc"), physicalMapType).iterator,
-          mapVarcharSchema,
-          spark,
-          "UTC",
-          errorOnDuplicatedFieldNames = true,
-          largeVarTypes = false)
-        assert(mapVarcharDataFrame.schema === mapVarcharSchema)
-        assert(mapVarcharDataFrame.queryExecution.toRdd.collect().head
-          .getMap(0).valueArray().getUTF8String(0) === UTF8String.fromString("abc"))
-
-        val error = intercept[Exception] {
-          ArrowConverters.toDataFrame(
-            batches(UTF8String.fromString("abcd"), StringType).iterator,
-            varcharSchema,
-            spark,
-            "UTC",
-            errorOnDuplicatedFieldNames = true,
-            largeVarTypes = false).queryExecution.toRdd.collect()
-        }
-        assert(error.getMessage.contains("EXCEED_LIMIT_LENGTH"))
-
-        val mapError = intercept[Exception] {
-          ArrowConverters.toDataFrame(
-            batches(mapData("abcd"), physicalMapType).iterator,
-            mapVarcharSchema,
-            spark,
-            "UTC",
-            errorOnDuplicatedFieldNames = true,
-            largeVarTypes = false).queryExecution.toRdd.collect()
-        }
-        assert(mapError.getMessage.contains("EXCEED_LIMIT_LENGTH"))
-      }
-    }
-  }
-
   test("Python RDD conversion captures CHAR/VARCHAR policy at DataFrame creation") {
     val classicSession = spark.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
     val charSchema = StructType(Seq(StructField("value", CharType(3))))
     val varcharSchema = StructType(Seq(StructField("value", VarcharType(3))))
+
+    val defaultDataFrame = withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      classicSession.applySchemaToPythonRDD(
+        spark.sparkContext.parallelize(Seq(Array[Any]("a"))), charSchema)
+    }
+    assert(defaultDataFrame.schema.head.dataType === StringType)
+    assert(defaultDataFrame.queryExecution.toRdd.collect().head.getUTF8String(0) ===
+      UTF8String.fromString("a  "))
 
     val standardDataFrame = withSQLConf(
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {

@@ -81,6 +81,21 @@ class ScalarArrowUDFTestsMixin:
             for values in batches:
                 yield pa.array(["abcd"] * len(values))
 
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "false",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            for function in (scalar_char, iterator_char):
+                result = self.spark.range(1).select(function("id").alias("c"))
+                self.assertEqual(result.schema["c"].dataType, StringType())
+                self.assertEqual(result.first().c, "a  ")
+            for function in (scalar_varchar, iterator_varchar):
+                with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                    self.spark.range(1).select(function("id")).collect()
+
         with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
             for function in (scalar_char, iterator_char):
                 rows = self.spark.range(2).select(function("id")).collect()

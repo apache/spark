@@ -887,10 +887,11 @@ class SparkSession private(
   private[sql] def applySchemaToPythonRDD(
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
+    val conf = sessionState.conf
     val applyCharVarcharChecks =
-      CharVarcharUtils.physicalTypeHasCharVarchar(schema) &&
-        CharVarcharUtils.shouldApplyWriteSideLengthCheck(sessionState.conf)
-    val outputSchema = if (applyCharVarcharChecks) {
+      CharVarcharUtils.hasCharVarchar(schema) &&
+        CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf)
+    val outputSchema = if (conf.charVarcharFirstClassTypes) {
       schema
     } else {
       CharVarcharUtils

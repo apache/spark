@@ -99,6 +99,19 @@ class ScalarPandasUDFTestsMixin:
             for series in iterator:
                 yield pd.Series(["abcd"] * len(series))
 
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "false",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            default_result = self.spark.range(1).select(char_udf("id").alias("c"))
+            self.assertEqual(default_result.schema["c"].dataType, StringType())
+            self.assertEqual(default_result.first().c, "a  ")
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                self.spark.range(1).select(varchar_udf("id")).collect()
+
         with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
             rows = self.spark.range(2).select(char_udf("id")).collect()
             self.assertEqual([row[0] for row in rows], ["a  ", "a  "])
