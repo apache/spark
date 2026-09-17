@@ -386,9 +386,11 @@ private[joins] class SortMergeAsOfJoinScanner(
     var bestMatch: InternalRow = null
     val iter = rightGroupBuffer.generateIterator()
 
+    // `leftRow` is fixed for this scan, so bind it once; only the right side changes per row.
+    joinedRow.withLeft(leftRow)
     while (iter.hasNext) {
       val rightRow = iter.next()
-      joinedRow.withLeft(leftRow).withRight(rightRow)
+      joinedRow.withRight(rightRow)
 
       val asOfSatisfied = boundAsOfCond.eval(joinedRow)
       if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
@@ -418,9 +420,11 @@ private[joins] class SortMergeAsOfJoinScanner(
     var bestDistance: Any = null
     val iter = rightGroupBuffer.generateIterator()
 
+    // `leftRow` is fixed for this scan, so bind it once; only the right side changes per row.
+    joinedRow.withLeft(leftRow)
     while (iter.hasNext) {
       val rightRow = iter.next()
-      joinedRow.withLeft(leftRow).withRight(rightRow)
+      joinedRow.withRight(rightRow)
 
       val asOfSatisfied = boundAsOfCond.eval(joinedRow)
       if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
