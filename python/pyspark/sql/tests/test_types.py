@@ -778,6 +778,19 @@ class TypesTestsMixin:
             {"c": "spark.UTF8_LCASE"},
         )
 
+    def test_char_varchar_json_rejects_trailing_tokens(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        for data_type in [
+            "char(4) collate UTF8_LCASE junk",
+            "varchar(6) collate UNICODE_CI junk",
+        ]:
+            with self.subTest(data_type=data_type):
+                self.assertRaises(
+                    PySparkValueError,
+                    lambda: _parse_datatype_json_string(json.dumps(data_type)),
+                )
+
     def test_schema_with_collations_json_ser_de(self):
         from pyspark.sql.types import _parse_datatype_json_string
 

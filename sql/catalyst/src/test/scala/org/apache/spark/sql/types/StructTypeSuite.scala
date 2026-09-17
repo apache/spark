@@ -906,6 +906,38 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("jsonType" -> "decimal(10,2)"))
   }
 
+  test("SPARK-59276: reject CHAR/VARCHAR collation metadata on UDT fields") {
+    val udtTypes = Seq(
+      """{"type":"udt","class":"invalid.Class","pyClass":null,"sqlType":"string"}""",
+      """{"type":"udt","pyClass":"test.Udt","serializedClass":"","sqlType":"string"}""")
+    udtTypes.foreach { udtType =>
+      val json =
+        s"""
+           |{
+           |  "type": "struct",
+           |  "fields": [
+           |    {
+           |      "name": "u",
+           |      "type": $udtType,
+           |      "nullable": true,
+           |      "metadata": {
+           |        "${DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY}": {
+           |          "u": "spark.UTF8_LCASE"
+           |        }
+           |      }
+           |    }
+           |  ]
+           |}
+           |""".stripMargin
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          DataType.fromJson(json)
+        },
+        condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+        parameters = Map("jsonType" -> "udt"))
+    }
+  }
+
   test("SPARK-59276: reject caller metadata using the CHAR/VARCHAR collation key") {
     val metadata = new MetadataBuilder()
       .putString(DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY, "caller")
