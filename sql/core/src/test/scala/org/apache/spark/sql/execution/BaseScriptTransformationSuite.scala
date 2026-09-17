@@ -154,6 +154,61 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     }
   }
 
+  test("SPARK-59277: TRANSFORM converts nested CHAR/VARCHAR without SerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq(
+        ("""["ab"]""", ArrayType(CharType(4)), Row(Seq("ab  "))),
+        ("""["xy"]""", ArrayType(VarcharType(4)), Row(Seq("xy"))),
+        (
+          """{"value":"xy"}""",
+          StructType(Seq(StructField("value", CharType(5)))),
+          Row(Row("xy   ")))).foreach { case (json, dataType, expected) =>
+        val input = Seq(json).toDF("value")
+        checkAnswer(
+          input,
+          (child: SparkPlan) => createScriptTransformationExec(
+            script = "cat",
+            output = Seq(AttributeReference("value", dataType)()),
+            child = child,
+            ioschema = defaultIOSchema),
+          Seq(expected))
+      }
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-59277: TRANSFORM nested CHAR/VARCHAR overflow without SerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq(
+        (ArrayType(CharType(4)), """["abcdef"]"""),
+        (
+          StructType(Seq(StructField("value", VarcharType(4)))),
+          """{"value":"abcdef"}""")).foreach { case (dataType, json) =>
+        val input = Seq(json).toDF("value")
+        val exception = intercept[Exception] {
+          QueryTest.executePlan(
+            createScriptTransformationExec(
+              script = "cat",
+              output = Seq(AttributeReference("value", dataType)()),
+              child = input.queryExecution.sparkPlan,
+              ioschema = defaultIOSchema),
+            spark.sqlContext)
+        }
+        val runtimeException = exception match {
+          case s: org.apache.spark.SparkRuntimeException => s
+          case other =>
+            other.getCause.asInstanceOf[org.apache.spark.SparkRuntimeException]
+        }
+        checkError(
+          exception = runtimeException,
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "4"))
+      }
+    }
+  }
+
   test("script transformation should not swallow errors from upstream operators (no serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 

@@ -304,7 +304,6 @@ private[hive] case class HiveGenericUDTF(
 object HiveGenericUDTF extends HiveInspectors {
   private[hive] case class InitializedUDTF(
       function: GenericUDTF,
-      inputInspector: StructObjectInspector,
       outputInspector: StructObjectInspector)
 
   def apply(
@@ -327,7 +326,7 @@ object HiveGenericUDTF extends HiveInspectors {
       ObjectInspectorFactory.getStandardStructObjectInspector(fields, inspectors.asJava)
     val outputInspector = function.initialize(inputInspector)
     expectedSchema.foreach(checkCompatibleHiveReturnType(outputInspector, _))
-    InitializedUDTF(function, inputInspector, outputInspector)
+    InitializedUDTF(function, outputInspector)
   }
 
   def inferElementSchema(

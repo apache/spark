@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -249,6 +249,21 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         data => IntervalUtils.microsToDuration(
           IntervalUtils.castStringToDTInterval(UTF8String.fromString(data), start, end)),
         converter)
+      case dt @ (_: ArrayType | _: MapType | _: StructType)
+          if CharVarcharUtils.hasCharVarchar(dt) =>
+        val physicalType = CharVarcharUtils.replaceCharVarcharWithString(dt)
+        val complexTypeFactory = JsonToStructs(
+          physicalType,
+          ioschema.outputSerdeProps.toMap,
+          Literal(null),
+          Some(conf.sessionLocalTimeZone))
+        val toScala = CatalystTypeConverters.createToScalaConverter(physicalType)
+        (data: String) =>
+          if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
+            null
+          } else {
+            converter(toScala(complexTypeFactory.nullSafeEval(UTF8String.fromString(data))))
+          }
       case _: ArrayType | _: MapType | _: StructType =>
         val complexTypeFactory = JsonToStructs(attr.dataType,
           ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))

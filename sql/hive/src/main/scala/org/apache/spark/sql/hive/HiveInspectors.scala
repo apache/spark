@@ -277,6 +277,30 @@ private[hive] trait HiveInspectors {
       (o: Any) =>
         x.getWritableConstantValue
     case x: PrimitiveObjectInspector => x match {
+      case hvoi: HiveVarcharObjectInspector =>
+        val length = hvoi.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength
+        charVarcharWrapper(
+          dataType match {
+            case v: VarcharType => Some(v.length)
+            case _ => None
+          },
+          length,
+          hvoi.preferWritable(),
+          CharVarcharCodegenUtils.varcharTypeWriteSideCheck,
+          (value, size) => new HiveVarchar(value, size),
+          (value, size) => new hiveIo.HiveVarcharWritable(new HiveVarchar(value, size)))
+      case hcoi: HiveCharObjectInspector =>
+        val length = hcoi.getTypeInfo.asInstanceOf[CharTypeInfo].getLength
+        charVarcharWrapper(
+          dataType match {
+            case c: CharType => Some(c.length)
+            case _ => None
+          },
+          length,
+          hcoi.preferWritable(),
+          CharVarcharCodegenUtils.charTypeWriteSideCheck,
+          (value, size) => new HiveChar(value, size),
+          (value, size) => new hiveIo.HiveCharWritable(new HiveChar(value, size)))
       case _: StringObjectInspector if x.preferWritable() =>
         withNullSafe(o => getStringWritable(o))
       case _: StringObjectInspector =>
@@ -309,30 +333,6 @@ private[hive] trait HiveInspectors {
         withNullSafe(o => getByteWritable(o))
       case _: ByteObjectInspector =>
         withNullSafe(o => o.asInstanceOf[java.lang.Byte])
-      case hvoi: HiveVarcharObjectInspector =>
-        val length = hvoi.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength
-        charVarcharWrapper(
-          dataType match {
-            case v: VarcharType => Some(v.length)
-            case _ => None
-          },
-          length,
-          hvoi.preferWritable(),
-          CharVarcharCodegenUtils.varcharTypeWriteSideCheck,
-          (value, size) => new HiveVarchar(value, size),
-          (value, size) => new hiveIo.HiveVarcharWritable(new HiveVarchar(value, size)))
-      case hcoi: HiveCharObjectInspector =>
-        val length = hcoi.getTypeInfo.asInstanceOf[CharTypeInfo].getLength
-        charVarcharWrapper(
-          dataType match {
-            case c: CharType => Some(c.length)
-            case _ => None
-          },
-          length,
-          hcoi.preferWritable(),
-          CharVarcharCodegenUtils.charTypeWriteSideCheck,
-          (value, size) => new HiveChar(value, size),
-          (value, size) => new hiveIo.HiveCharWritable(new HiveChar(value, size)))
       case _: JavaHiveDecimalObjectInspector =>
         withNullSafe(o =>
           HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal))
@@ -958,14 +958,22 @@ private[hive] trait HiveInspectors {
     }
 
   /**
-   * Builds an in-place unwrapper using the target Catalyst `dataType`. This preserves all
-   * target-aware conversion, including CHAR/VARCHAR checks and nanosecond timestamp precision.
+   * Builds an in-place unwrapper using the target Catalyst `dataType` only when target-aware
+   * conversion is required. Other types retain the primitive setter fast paths.
    */
   def unwrapperFor(
       field: HiveStructField,
       dataType: DataType): (Any, InternalRow, Int) => Unit = {
-    val unwrapper = unwrapperFor(field.getFieldObjectInspector, dataType)
-    (value: Any, row: InternalRow, ordinal: Int) => row(ordinal) = unwrapper(value)
+    val requiresTypedConversion = dataType.existsRecursively {
+      case _: CharType | _: VarcharType | _: AnyTimestampNanoType => true
+      case _ => false
+    }
+    if (requiresTypedConversion) {
+      val unwrapper = unwrapperFor(field.getFieldObjectInspector, dataType)
+      (value: Any, row: InternalRow, ordinal: Int) => row(ordinal) = unwrapper(value)
+    } else {
+      unwrapperFor(field)
+    }
   }
 
   def wrap(a: Any, oi: ObjectInspector, dataType: DataType): AnyRef = {
