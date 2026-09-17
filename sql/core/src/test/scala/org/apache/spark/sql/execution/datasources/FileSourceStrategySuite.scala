@@ -588,7 +588,7 @@ class FileSourceStrategySuite extends SharedSparkSession {
     checkScan(table.where("(c1 = 1) OR (c1 = 2)")) { partitions =>
       assert(partitions.size == 1, "when checking partitions")
     }
-    checkDataFilters(Set(Or(EqualTo("c1", 1), EqualTo("c1", 2))))
+    checkDataFilters(Set(In("c1", Array(1, 2))))
 
     checkScan(table.where("(p1 = 1 AND c1 = 1) OR (p1 = 2 and c1 = 2)")) { partitions =>
       assert(partitions.size == 1, "when checking partitions")
