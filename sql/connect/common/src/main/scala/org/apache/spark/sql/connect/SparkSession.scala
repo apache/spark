@@ -230,9 +230,7 @@ class SparkSession private[sql] (
     // RowEncoder applies CHAR/VARCHAR semantics from the client process's local SqlApiConf, which
     // can differ from the server-side configuration visible through SparkSession.conf. Send raw
     // string values and let the server apply its policy to the separately provided logical schema.
-    val physicalSchema = DataType
-      .replaceCharVarcharWithCollationPreservingString(schema)
-      .asInstanceOf[StructType]
+    val physicalSchema = DataType.localDataPhysicalType(schema).asInstanceOf[StructType]
     createDataset(
       RowEncoder.encoderForResultSchema(physicalSchema),
       rows.iterator().asScala,

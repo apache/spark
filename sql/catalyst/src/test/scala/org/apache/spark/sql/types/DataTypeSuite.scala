@@ -62,6 +62,32 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(MapType(StringType, IntegerType, true) === map)
   }
 
+  test("local data physical type unwraps UDTs and preserves struct fields") {
+    val metadata = new MetadataBuilder().putString("comment", "preserve me").build()
+    val charUdt = new PythonUserDefinedType(
+      CharType(4, "UTF8_LCASE"),
+      "pyspark.testing.CharUdt",
+      "serialized")
+    val nestedUdt = new PythonUserDefinedType(
+      StructType(StructField("inner", CharType(2, "UNICODE_CI")) :: Nil),
+      "pyspark.testing.StructUdt",
+      "serialized")
+    val schema = StructType(
+      StructField("named", charUdt, nullable = false, metadata = metadata) ::
+        StructField("wrapped", nestedUdt) :: Nil)
+
+    val expected = StructType(
+      StructField(
+        "named",
+        StringType("UTF8_LCASE"),
+        nullable = false,
+        metadata = metadata) ::
+        StructField(
+          "wrapped",
+          StructType(StructField("inner", StringType("UNICODE_CI")) :: Nil)) :: Nil)
+    assert(DataType.localDataPhysicalType(schema) === expected)
+  }
+
   test("construct with add") {
     val struct = (new StructType)
       .add("a", IntegerType, true)

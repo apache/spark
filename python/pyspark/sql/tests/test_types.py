@@ -754,11 +754,14 @@ class TypesTestsMixin:
             mixed_field.getCharVarcharCollationMetadata(),
             {"mixed.value": "icu.UNICODE_CI"},
         )
+        mixed_metadata = mixed_field.jsonValue()["metadata"]
         self.assertEqual(
-            mixed_field.getCollationsMap(
-                {"__COLLATIONS": {"mixed.key": "spark.UTF8_LCASE"}}
-            ),
+            mixed_field.getCollationsMap(mixed_metadata),
             {"mixed.key": "UTF8_LCASE"},
+        )
+        self.assertEqual(
+            mixed_field.getCharVarcharCollationsMap(mixed_metadata),
+            {"mixed.value": "UNICODE_CI"},
         )
 
     def test_standalone_collated_char_varchar_json_is_current_reader_only(self):
@@ -975,6 +978,10 @@ class TypesTestsMixin:
                         VarcharType(5, "UTF8_LCASE"),
                     ),
                 ),
+                StructField(
+                    "nestedStruct",
+                    StructType([StructField("c", CharType(2, "UNICODE_CI"))]),
+                ),
             ]
         )
         preceding_schema = preceding_read_type(json.loads(schema.json()))
@@ -987,6 +994,8 @@ class TypesTestsMixin:
             preceding_schema["mapped"].dataType,
             MapType(CharType(3), VarcharType(5)),
         )
+        nested_struct = preceding_schema["nestedStruct"].dataType
+        self.assertEqual(nested_struct["c"].dataType, CharType(2))
 
         metadata_key = "__CHAR_VARCHAR_COLLATIONS"
         self.assertEqual(
@@ -1003,6 +1012,10 @@ class TypesTestsMixin:
                 "mapped.key": "spark.UTF8_BINARY",
                 "mapped.value": "spark.UTF8_LCASE",
             },
+        )
+        self.assertEqual(
+            nested_struct["c"].metadata[metadata_key],
+            {"c": "icu.UNICODE_CI"},
         )
 
     def test_schema_with_collations_on_non_string_types(self):

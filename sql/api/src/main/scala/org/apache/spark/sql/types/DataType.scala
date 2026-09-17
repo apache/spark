@@ -154,6 +154,31 @@ object DataType {
     }
   }
 
+  /**
+   * Converts a logical schema to the physical schema used to encode local data. UDTs are replaced
+   * by their recursively unwrapped SQL types, and CHAR/VARCHAR types are lowered to STRING while
+   * preserving explicit collations. Struct field names and metadata are preserved.
+   */
+  private[spark] def localDataPhysicalType(dataType: DataType): DataType = {
+    def unwrapUserDefinedTypes(dataType: DataType): DataType = dataType match {
+      case udt: UserDefinedType[_] => unwrapUserDefinedTypes(udt.sqlType)
+      case StructType(fields) =>
+        StructType(fields.map { field =>
+          field.copy(dataType = unwrapUserDefinedTypes(field.dataType))
+        })
+      case ArrayType(elementType, containsNull) =>
+        ArrayType(unwrapUserDefinedTypes(elementType), containsNull)
+      case MapType(keyType, valueType, valueContainsNull) =>
+        MapType(
+          unwrapUserDefinedTypes(keyType),
+          unwrapUserDefinedTypes(valueType),
+          valueContainsNull)
+      case _ => dataType
+    }
+
+    replaceCharVarcharWithCollationPreservingString(unwrapUserDefinedTypes(dataType))
+  }
+
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
       ddl,

@@ -1532,7 +1532,16 @@ class StructField(DataType):
         )
 
     def getCollationsMap(self, metadata: Dict[str, Any]) -> Dict[str, str]:
+        """Return STRING-only collations from ``__COLLATIONS`` in field metadata.
+
+        CHAR/VARCHAR collations are stored separately and are not returned here.
+        Use :meth:`getCharVarcharCollationsMap` for ``__CHAR_VARCHAR_COLLATIONS``.
+        """
         return _parse_collation_metadata_map(metadata, _COLLATIONS_METADATA_KEY)
+
+    def getCharVarcharCollationsMap(self, metadata: Dict[str, Any]) -> Dict[str, str]:
+        """Return CHAR/VARCHAR collations from ``__CHAR_VARCHAR_COLLATIONS`` metadata."""
+        return _parse_collation_metadata_map(metadata, _CHAR_VARCHAR_COLLATIONS_METADATA_KEY)
 
     def getCollationMetadata(self) -> Dict[str, str]:
         """Return field paths and collations for plain STRING types."""
