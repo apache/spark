@@ -58,6 +58,10 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         CharType(name.stripPrefix("char(").stripSuffix(")").toInt)
       case JString(name) if name.startsWith("varchar(") =>
         VarcharType(name.stripPrefix("varchar(").stripSuffix(")").toInt)
+      case JObject(fields) if fields.toMap.get("type").contains(JString("struct")) =>
+        val values = fields.toMap
+        val JArray(nestedFields) = values("fields")
+        StructType(nestedFields.map(readField))
       case JObject(fields) if fields.toMap.get("type").contains(JString("array")) =>
         val values = fields.toMap
         ArrayType(readType(values("elementType")), values("containsNull").asInstanceOf[JBool].value)
@@ -785,12 +789,17 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         StructField("nested", ArrayType(VarcharType(6, "UNICODE_CI"))) ::
         StructField(
           "mapped",
-          MapType(CharType(3, "UTF8_BINARY"), VarcharType(5, "UTF8_LCASE"))) :: Nil)
+          MapType(CharType(3, "UTF8_BINARY"), VarcharType(5, "UTF8_LCASE"))) ::
+        StructField(
+          "nestedStruct",
+          StructType(StructField("c", CharType(2, "UNICODE_CI")) :: Nil)) :: Nil)
 
     val precedingSchema = readWithPreCharVarcharCollationReader(schema.json)
     assert(precedingSchema("c").dataType === CharType(4))
     assert(precedingSchema("nested").dataType === ArrayType(VarcharType(6)))
     assert(precedingSchema("mapped").dataType === MapType(CharType(3), VarcharType(5)))
+    val nestedStruct = precedingSchema("nestedStruct").dataType.asInstanceOf[StructType]
+    assert(nestedStruct("c").dataType === CharType(2))
 
     val metadataKey = DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY
     assert(precedingSchema("c").metadata.getMetadata(metadataKey).getString("c") ===
@@ -801,6 +810,8 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val mapMetadata = precedingSchema("mapped").metadata.getMetadata(metadataKey)
     assert(mapMetadata.getString("mapped.key") === "spark.UTF8_BINARY")
     assert(mapMetadata.getString("mapped.value") === "spark.UTF8_LCASE")
+    assert(nestedStruct("c").metadata.getMetadata(metadataKey).getString("c") ===
+      "icu.UNICODE_CI")
   }
 
   test("SPARK-59276: STRING and CHAR collations use separate JSON keys") {

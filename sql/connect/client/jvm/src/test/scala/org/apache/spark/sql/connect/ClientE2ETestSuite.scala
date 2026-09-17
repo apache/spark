@@ -1167,8 +1167,12 @@ class ClientE2ETestSuite
   }
 
   test("SPARK-59276: SparkSession.createDataFrame preserves CHAR/VARCHAR collations") {
-    val rows = java.util.Arrays.asList(Row("ab", "cd", Row("xy", Seq("z"))))
+    val rows = java.util.Arrays.asList(Row("ab", "cd", Row("xy", Seq("z")), "uv"))
     val emptyRows = java.util.Collections.emptyList[Row]()
+    val charUdt = new PythonUserDefinedType(
+      CharType(4, "UTF8_LCASE"),
+      "pyspark.testing.CharUdt",
+      "serialized")
     val schema = new StructType()
       .add("c", CharType(4, "UTF8_LCASE"))
       .add("v", VarcharType(6, "UNICODE_CI"))
@@ -1177,13 +1181,14 @@ class ClientE2ETestSuite
         new StructType()
           .add("c", CharType(3, "UTF8_LCASE"))
           .add("v", ArrayType(VarcharType(2, "UNICODE_CI"))))
+      .add("udt", charUdt)
 
     withSQLConf(
       "spark.sql.charVarchar.standardSemantics.enabled" -> "true",
       "spark.sql.legacy.charVarcharAsString" -> "false") {
       val dataFrame = spark.createDataFrame(rows, schema)
       assert(dataFrame.schema === schema)
-      checkAnswer(dataFrame, Row("ab  ", "cd", Row("xy ", Seq("z"))))
+      checkAnswer(dataFrame, Row("ab  ", "cd", Row("xy ", Seq("z")), "uv  "))
 
       val emptyDataFrame = spark.createDataFrame(emptyRows, schema)
       assert(emptyDataFrame.schema === schema)
@@ -1193,7 +1198,7 @@ class ClientE2ETestSuite
         exception = intercept[SparkRuntimeException] {
           spark
             .createDataFrame(
-              java.util.Arrays.asList(Row("abcde", "cd", Row("xy", Seq("z")))),
+              java.util.Arrays.asList(Row("abcde", "cd", Row("xy", Seq("z")), "uv")),
               schema)
             .collect()
         },
@@ -1204,15 +1209,10 @@ class ClientE2ETestSuite
     withSQLConf(
       "spark.sql.charVarchar.standardSemantics.enabled" -> "false",
       "spark.sql.legacy.charVarcharAsString" -> "true") {
-      val expectedSchema = schema
-        .transformRecursively {
-          case c: CharType => c.toStringType
-          case v: VarcharType => v.toStringType
-        }
-        .asInstanceOf[StructType]
+      val expectedSchema = DataType.localDataPhysicalType(schema).asInstanceOf[StructType]
       val dataFrame = spark.createDataFrame(rows, schema)
       assert(dataFrame.schema === expectedSchema)
-      checkAnswer(dataFrame, Row("ab", "cd", Row("xy", Seq("z"))))
+      checkAnswer(dataFrame, Row("ab", "cd", Row("xy", Seq("z")), "uv"))
 
       val emptyDataFrame = spark.createDataFrame(emptyRows, schema)
       assert(emptyDataFrame.schema === expectedSchema)

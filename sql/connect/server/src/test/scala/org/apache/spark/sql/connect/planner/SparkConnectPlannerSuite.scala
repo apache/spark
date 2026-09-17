@@ -593,6 +593,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       "serialized")
     val policies = Seq(
       ("legacy-as-string", false, true, false, false),
+      ("preserve-type-info", false, false, true, true),
       ("standard", true, false, false, true))
 
     policies.foreach { case (name, standard, legacy, preserve, expectUdt) =>
