@@ -17,9 +17,14 @@
 
 package org.apache.spark.status
 
+import java.util.ServiceLoader
+
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SparkListener
-import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.{SparkUI, WebUI}
+import org.apache.spark.util.Utils
 
 /**
  * An interface for creating history listeners(to replay event logs) defined in other modules like
@@ -37,7 +42,25 @@ private[spark] trait AppHistoryServerPlugin {
   def setupUI(ui: SparkUI): Unit
 
   /**
+   * Registers static resource handlers (JS/CSS bundled with the plugin) directly on the
+   * History Server's own UI, rather than on a per-application SparkUI. Invoked exactly once,
+   * when the History Server starts up.
+   *
+   * A handler attached via [[setupUI]] lives on that one application's SparkUI and is torn
+   * down whenever the application cache evicts it, even though the underlying Jetty context
+   * path and resources are shared by every application on that server. Registering it here
+   * instead ties its lifetime to the History Server process itself.
+   */
+  def setupStaticResources(ui: WebUI): Unit = {}
+
+  /**
    * The position of a plugin tab relative to the other plugin tabs in the history UI.
    */
   def displayOrder: Int = Integer.MAX_VALUE
+}
+
+private[spark] object AppHistoryServerPlugin {
+  def loadPlugins(): Iterable[AppHistoryServerPlugin] = {
+    ServiceLoader.load(classOf[AppHistoryServerPlugin], Utils.getContextOrSparkClassLoader).asScala
+  }
 }
