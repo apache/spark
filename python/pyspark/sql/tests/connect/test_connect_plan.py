@@ -104,6 +104,19 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertTrue(explicit_binary_char.HasField("collation"))
         self.assertEqual(explicit_binary_char.collation, "UTF8_BINARY")
 
+        implicit_string = pyspark_types_to_proto_types(StringType())
+        explicit_binary_string = pyspark_types_to_proto_types(StringType("UTF8_BINARY"))
+        self.assertEqual(implicit_string.string.collation, "")
+        self.assertEqual(explicit_binary_string.string.collation, "UTF8_BINARY")
+        self.assertFalse(
+            proto_schema_to_pyspark_data_type(implicit_string)._isCollationExplicitlySpecified()
+        )
+        self.assertTrue(
+            proto_schema_to_pyspark_data_type(
+                explicit_binary_string
+            )._isCollationExplicitlySpecified()
+        )
+
     def test_sql_project(self):
         plan = self.connect.sql("SELECT 1")._plan.to_proto(self.connect)
         self.assertEqual(plan.root.sql.query, "SELECT 1")

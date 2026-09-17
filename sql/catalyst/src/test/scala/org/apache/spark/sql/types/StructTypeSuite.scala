@@ -783,6 +783,26 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(mapper.readTree(compatibilitySchema.json) == mapper.readTree(expectedJson))
   }
 
+  test("SPARK-59276: explicit binary STRING round trips through JSON") {
+    val schema = StructType(
+      StructField("implicit", StringType) ::
+        StructField("explicit", StringType("UTF8_BINARY")) :: Nil)
+    val fields = mapper.readTree(schema.json).get("fields")
+    assert(!fields.get(0).get("metadata").has(DataType.COLLATIONS_METADATA_KEY))
+    assert(
+      fields
+        .get(1)
+        .get("metadata")
+        .get(DataType.COLLATIONS_METADATA_KEY)
+        .get("explicit")
+        .asText() === "spark.UTF8_BINARY")
+
+    val roundTripped = DataType.fromJson(schema.json).asInstanceOf[StructType]
+    assert(roundTripped("implicit").dataType.eq(StringType))
+    assert(!roundTripped("explicit").dataType.eq(StringType))
+    assert(roundTripped("explicit").dataType === StringType("UTF8_BINARY"))
+  }
+
   test("SPARK-59276: preceding readers retain unknown CHAR/VARCHAR collation metadata") {
     val schema = StructType(
       StructField("c", CharType(4, "UTF8_LCASE")) ::

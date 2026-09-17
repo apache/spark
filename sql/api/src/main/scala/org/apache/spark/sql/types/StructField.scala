@@ -168,7 +168,7 @@ case class StructField(
 
   private def isCollatedPlainString(dt: DataType): Boolean = dt match {
     case _: CharType | _: VarcharType => false
-    case st: StringType => !st.isUTF8BinaryCollation
+    case st: StringType => (st ne StringType) && (st ne IndeterminateStringType)
     case _ => false
   }
 
