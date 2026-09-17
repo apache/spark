@@ -306,6 +306,11 @@ object PushDownUtils extends Logging {
                 "filtering")
           }
 
+          // Re-reported rows from `filter()` that never pass through `KeyedPartitioning.apply`.
+          KeyedPartitioning.checkPartitionKeyArity(
+            k.expressions,
+            newPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey()).toSeq)
+
           val inputMap = k.partitionKeys.groupBy(identity).view.mapValues(_.size)
           val comparableKeyWrapperFactory = InternalRowComparableWrapper
             .getInternalRowComparableWrapperFactory(k.keyDataTypes)

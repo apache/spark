@@ -962,6 +962,7 @@ object KeyedPartitioning {
   def apply(
       expressions: Seq[Expression],
       partitionKeys: Seq[InternalRow]): KeyedPartitioning = {
+    checkPartitionKeyArity(expressions, partitionKeys)
     val factory = InternalRowComparableWrapper
       .getInternalRowComparableWrapperFactory(expressions.map(_.dataType))
     val comparablePartitionKeys = partitionKeys.map(factory)
@@ -970,6 +971,21 @@ object KeyedPartitioning {
     new KeyedPartitioning(
       expressions,
       KeyLayout(comparablePartitionKeys, factory.dataTypes, isGrouped, isCollapsed = false))
+  }
+
+  // The key's arity is implicit in `HasPartitionKey` and read positionally downstream, so an
+  // inconsistent key would otherwise fail far away as an opaque `ArrayIndexOutOfBoundsException`.
+  def checkPartitionKeyArity(
+      expressions: Seq[Expression],
+      partitionKeys: Seq[InternalRow]): Unit = {
+    partitionKeys.foreach { key =>
+      if (key.numFields != expressions.length) {
+        throw new SparkException("Data source reported a partition key with " +
+          s"${key.numFields} field(s) from HasPartitionKey.partitionKey(), but reported " +
+          s"${expressions.length} partition expression(s). Every reported partition key " +
+          "must have one field per reported partition expression.")
+      }
+    }
   }
 
   /**
