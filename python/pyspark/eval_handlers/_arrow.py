@@ -34,7 +34,6 @@ from pyspark.eval_handlers._base import (
     BatchEvalTypeHandler,
     CoGroupedEvalTypeHandler,
     GroupedEvalTypeHandler,
-    extract_key_value_indexes,
 )
 from pyspark.eval_handlers.verification import (
     verify_iter_result_row_count,
@@ -47,11 +46,12 @@ from pyspark.sql.conversion import ArrowBatchTransformer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
 from pyspark.sql.types import DataType, StructField, StructType
 from pyspark.util import PythonEvalType
+from pyspark.worker_util import extract_key_value_indexes
 
 if TYPE_CHECKING:
-    # Annotation-only: these live in worker-only or forward-ref modules, so they are
-    # not imported at runtime. ``from __future__ import annotations`` keeps every
-    # annotation below an unevaluated name rather than a string literal.
+    # Annotation-only, so they are not imported at runtime. ``from __future__ import
+    # annotations`` keeps every annotation below an unevaluated name rather than a
+    # string literal.
     from pyspark.eval_handlers._typing import CoGroupedBatch, GroupedBatch
     from pyspark.worker_util import EvalConf, RunnerConf
 

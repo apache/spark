@@ -52,7 +52,7 @@ from pyspark.accumulators import (
     _deserialize_accumulator,
 )
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
-from pyspark.eval_handlers._base import extract_key_value_indexes, get_eval_type_handler
+from pyspark.eval_handlers._base import get_eval_type_handler
 from pyspark.eval_handlers.verification import (
     verify_iter_result_row_count,
     verify_iterator_exhausted,
@@ -116,6 +116,7 @@ from pyspark.worker_util import (
     EvalConf,
     RunnerConf,
     check_python_version,
+    extract_key_value_indexes,
     get_sock_file_to_executor,
     pickleSer,
     read_command,
