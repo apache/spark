@@ -106,8 +106,8 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
   }
 
   /**
-   * A real table, so that a self-join of it dedups into two structurally identical sides. See the
-   * class comment for why a temp view over VALUES cannot be used for a self-joined fixture.
+   * A real table, mirroring the Parquet-backed shape this rule targets. See the class comment for
+   * why a self-joined fixture need not be a real table.
    */
   private def createTable(name: String, schema: String, values: String): Unit = {
     spark.sql(s"DROP TABLE IF EXISTS $name")
@@ -159,21 +159,37 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
   // ==================== Positive: rewrite fires and is semantically equivalent ===============
 
-  test("Pattern A': direct InSubquery self-join is rewritten") {
+  test("Pattern A': direct InSubquery self-join is rewritten (real table and LocalRelation)") {
+    // LocalRelation is a documented supported leaf with no other firing test; loop the same
+    // query over T and an equivalent VALUES-backed temp view.
     withTable("T") {
-      setupTable()
-      val sql =
-        """SELECT k FROM T outer_t WHERE k IN (
-          |  SELECT s1.k FROM T s1 JOIN T s2
-          |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
+      withTempView("TV") {
+        setupTable()
+        spark.sql(
+          """CREATE OR REPLACE TEMP VIEW TV AS SELECT * FROM VALUES
+            |  (1, 10), (1, 10), (1, 20),
+            |  (2, 30),
+            |  (3, 40), (3, 50), (3, 60),
+            |  (4, 70), (4, CAST(NULL AS INT)),
+            |  (5, CAST(NULL AS INT)), (5, CAST(NULL AS INT)),
+            |  (6, 80), (6, 90), (6, CAST(NULL AS INT)),
+            |  (7, 100), (7, 100) AS TV(k, v)""".stripMargin)
 
-      assertRuleFired(sql)
-      assertMinMaxRewriteShape(optimizedPlanWith(sql, rewrite = true))
-      val (on, off) = runBoth(sql)
-      assert(on == off, s"rewrite ON $on != OFF $off")
-      // `setupTable()` seeds duplicate-only groups and NULL neq values, so this also pins the neq
-      // 3VL: k=4 (v={70,NULL}) and k=5 (v={NULL,NULL}) do not satisfy SQL `<>`, leaving {1,3,6}.
-      assert(on == Set(Row(1), Row(3), Row(6)), s"expected {1,3,6}, got $on")
+        Seq("T", "TV").foreach { rel =>
+          val sql =
+            s"""SELECT k FROM $rel outer_t WHERE k IN (
+               |  SELECT s1.k FROM $rel s1 JOIN $rel s2
+               |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
+
+          assertRuleFired(sql)
+          assertMinMaxRewriteShape(optimizedPlanWith(sql, rewrite = true))
+          val (on, off) = runBoth(sql)
+          assert(on == off, s"$rel rewrite ON $on != OFF $off")
+          // Duplicate-only groups and NULL neq values also pin the neq 3VL: k=4 (v={70,NULL}) and
+          // k=5 (v={NULL,NULL}) do not satisfy `<>`, leaving {1,3,6}.
+          assert(on == Set(Row(1), Row(3), Row(6)), s"$rel: expected {1,3,6}, got $on")
+        }
+      }
     }
   }
 
@@ -217,19 +233,21 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
     }
   }
 
-  test("Pattern A2: nested self-join is rewritten") {
+  test("Pattern A2: nested self-join is rewritten, incl. a sjRight top-Project remap") {
     withTable("T") {
       withTempView("D") {
+        // Selecting `k2`, originally derived from sjRight, exercises sjRight -> sjLeft
+        // rebinding in canonicalizeWrapper and the rebuilt output in the top Project.
         setupTable()
         spark.sql(
           """CREATE OR REPLACE TEMP VIEW D AS SELECT * FROM VALUES
             |  (1), (3), (6) AS D(k)""".stripMargin)
         val sql =
           """SELECT k FROM T outer_t WHERE k IN (
-            |  SELECT d.k
-            |  FROM D d, (SELECT s1.k FROM T s1 JOIN T s2
+            |  SELECT sj.k2
+            |  FROM D d, (SELECT s1.k AS k1, s2.k AS k2 FROM T s1 JOIN T s2
             |             ON s1.k = s2.k AND s1.v <> s2.v) sj
-            |  WHERE d.k = sj.k)""".stripMargin
+            |  WHERE d.k = sj.k1)""".stripMargin
 
         assertRuleFired(sql)
         assertMinMaxRewriteShape(optimizedPlanWith(sql, rewrite = true))
@@ -1227,6 +1245,43 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
       assertRuleNotFired(structSql)
       val (structOn, structOff) = runBoth(structSql)
       assert(structOn == structOff, s"struct-neq semantics diverge: ON=$structOn OFF=$structOff")
+    }
+  }
+
+  test("Every remaining allowed type family fires as both equi-key and neq column") {
+    // Int and String are covered elsewhere; these have no firing test at all. Same type for k
+    // and v exercises isSafeEquiKeyType and isSafeNeqColumnType together.
+    case class TypeCase(sqlType: String, lo: String, hi: String)
+    val cases = Seq(
+      TypeCase("DECIMAL(10,2)", "100.50", "200.75"),
+      TypeCase("BOOLEAN", "true", "false"),
+      TypeCase("DATE", "DATE'2024-01-01'", "DATE'2024-06-01'"),
+      TypeCase("TIMESTAMP", "TIMESTAMP'2024-01-01 00:00:00'", "TIMESTAMP'2024-06-01 00:00:00'"),
+      TypeCase(
+        "TIMESTAMP_NTZ",
+        "CAST(TIMESTAMP'2024-01-01 00:00:00' AS TIMESTAMP_NTZ)",
+        "CAST(TIMESTAMP'2024-06-01 00:00:00' AS TIMESTAMP_NTZ)"),
+      TypeCase("BINARY", "X'AA'", "X'BB'"))
+
+    cases.foreach { c =>
+      withTable("TTypes") {
+        createTable(
+          "TTypes",
+          s"k ${c.sqlType}, v ${c.sqlType}",
+          s"""  (${c.lo}, ${c.lo}), (${c.lo}, ${c.hi}),
+             |  (${c.hi}, ${c.lo})""".stripMargin)
+        // Project a constant, not `k`: `k` still exercises the equi-key gate and `v` the
+        // neq-column gate, while keeping the raw value under test (e.g. BINARY's Array[Byte])
+        // out of runBoth's Set[Row].
+        val sql =
+          """SELECT 1 AS matched FROM TTypes outer_t WHERE k IN (
+            |  SELECT s1.k FROM TTypes s1 JOIN TTypes s2
+            |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
+        assertRuleFired(sql)
+        val (on, off) = runBoth(sql)
+        assert(on == off, s"${c.sqlType} control diverges: ON=$on OFF=$off")
+        assert(on == Set(Row(1)), s"${c.sqlType} unexpected result: $on")
+      }
     }
   }
 
