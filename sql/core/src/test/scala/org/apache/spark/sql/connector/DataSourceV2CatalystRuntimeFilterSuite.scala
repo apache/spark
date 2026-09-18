@@ -529,7 +529,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
-  test("two predicates on filter attributes -> pushed together in a single filter() call") {
+  test("two predicates on filter attributes -> handed over in a single call") {
     val tbl = s"$catalogName.tbl_two_predicates"
     val dim1 = s"$catalogName.dim_two_predicates1"
     val dim2 = s"$catalogName.dim_two_predicates2"
@@ -553,7 +553,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       assertPushedCatalystPredicatesEqual(
         df, EqualTo(p1, Literal(3)), EqualTo(p2, Literal(30)))
       assert(getCatalystScan(df).filterCallCount === 1,
-        "expected both predicates pushed in a single filter() call")
+        "expected both predicates in a single planInputPartitionsWithRuntimeFilters call")
     }
   }
 
@@ -619,7 +619,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
-  test("no runtime filter -> filter() is never called") {
+  test("no runtime filter -> the scan is never asked to re-plan") {
     val tbl = s"$catalogName.tbl5"
     withTable(tbl) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")

@@ -237,33 +237,39 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Screens runtime filters for a [[SupportsRuntimeCatalystFiltering]] scan and unwraps them to
-   * the Catalyst predicates the scan should plan with. No translation to connector predicates and
-   * no `filterAttributes` gating happens here: what a scan can actually apply is the scan's own
-   * business, and `DataSourceV2Strategy` has already restricted a routed filter to the attributes
-   * the scan declared.
+   * Screens runtime filters for a [[SupportsRuntimeCatalystFiltering]] scan and unwraps them to the
+   * Catalyst predicates the scan should plan with. No translation to connector predicates happens
+   * here: what a scan can apply is the scan's own business.
    *
-   * A runtime filter derived from a scalar subquery is normally evaluated twice: the source prunes
-   * with it, and the FilterExec above the scan applies it again. The two have to agree, so this
-   * screen keeps only predicates the source can be trusted to evaluate in Spark's place. A dynamic
-   * pruning filter never has that second evaluator -- `DataSourceV2Strategy` removes it from the
-   * post-scan filters unconditionally -- but it is implied by the join it came from, so dropping it
-   * costs pruning and not correctness.
+   * Only filters over attributes the scan declared filterable are kept. `DataSourceV2Strategy`
+   * routes a dynamic pruning filter without checking that declaration, and the key of a filter
+   * inserted over one union branch is pushed positionally into the others, so a scan can be handed
+   * a filter over a column it never declared. Dropping it costs pruning and not correctness: its
+   * rows are filtered anyway, by the join a DPP filter was derived from, and by the rewrite
+   * re-applying its own condition for a row-level operation's group filter. For a filter derived
+   * from a scalar subquery this drops nothing: the strategy already required its references to be a
+   * subset of the same declaration.
    *
-   * But pushing a non-deterministic one would let the source prune on its own coin flip and Spark
-   * flip again for the rows that survive, so we handle that specially.
+   * The determinism screen is the other half. A scalar subquery filter is evaluated twice, by the
+   * source and by the FilterExec above the scan, so pushing a non-deterministic one would let the
+   * two disagree. `DataSourceV2Strategy` deletes that FilterExec only for a filter this method
+   * keeps, which is why both sites decide with `isPushablePartitionFilter`.
    *
-   * Not pushing a filter is safe only while its FilterExec still evaluates it. A fully pushed
-   * filter has none, so the source is its only evaluator. That is why DataSourceV2Strategy deletes
-   * a FilterExec at planning time only for a filter we keep here, and we use the same method
-   * (isPushablePartitionFilter) to decide.
-   *
-   * A DPP filter degrades to TrueLiteral once its subquery is pruned away, so it matches every
-   * row. The V2 path drops these implicitly, since translateRuntimeFilterV2 returns None; here the
+   * A DPP filter degrades to TrueLiteral once its subquery is pruned away, so it matches every row.
+   * The V2 path drops these implicitly, since translateRuntimeFilterV2 returns None; here the
    * expressions reach the scan directly, so we remove them explicitly.
    */
-  private def catalystRuntimeFilters(runtimeFilters: Seq[Expression]): Seq[Expression] = {
+  private def catalystRuntimeFilters(
+      scan: SupportsRuntimeCatalystFiltering,
+      runtimeFilters: Seq[Expression],
+      output: Seq[AttributeReference]): Seq[Expression] = {
+    val filterAttrs = V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
+      scan.filterAttributes(),
+      output,
+      "filterAttributes()",
+      scan.getClass.getName)
     runtimeFilters
+      .filter(f => f.references.subsetOf(filterAttrs))
       .filter(isPushablePartitionFilter(_, includeSubquery = true))
       .flatMap(unwrapRuntimeFilterExpression)
       .filterNot(_ == Literal.TrueLiteral)
@@ -311,7 +317,7 @@ object PushDownUtils extends Logging {
       // which rejects it.
       case catalystScan: SupportsRuntimeCatalystFiltering
           if runtimeFilters.nonEmpty && !catalystScan.isInstanceOf[SupportsRuntimeV2Filtering] =>
-        val catalystFilters = catalystRuntimeFilters(runtimeFilters)
+        val catalystFilters = catalystRuntimeFilters(catalystScan, runtimeFilters, output)
         if (catalystFilters.nonEmpty) {
           (true, catalystScan.planInputPartitionsWithRuntimeFilters(catalystFilters.toArray))
         } else {

@@ -821,9 +821,11 @@ abstract class InMemoryBaseTable(
     /**
      * Every partition [[planInputPartitionsWithRuntimeFilters]] handed to Spark, unioned over its
      * calls because two scan nodes can share one scan and the group-based write has to replace
-     * everything they read; `data` when Spark never called it. A node that read through
-     * `planInputPartitions()` without runtime filters is not represented, which holds while every
-     * sharing node gets the same filters -- the only case in this repo.
+     * everything they read; `data` when Spark never called it. What the union needs is that every
+     * sharing node went through this method: a node that read through `planInputPartitions()`
+     * because all of its filters were screened out is invisible here, which does not happen in this
+     * repo. The nodes need not push the same filters, since the union is then still exactly what
+     * they collectively read.
      */
     override def readPartitions: Seq[InputPartition] =
       if (plannedPartitions.isEmpty) self.data else plannedPartitions.flatten.distinct.toSeq
