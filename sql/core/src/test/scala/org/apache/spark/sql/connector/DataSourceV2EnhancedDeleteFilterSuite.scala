@@ -191,6 +191,69 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
     }
   }
 
+  // Mixed partitioning: the bucket field keeps its ordinal but is never referenced, so the
+  // IN on the identity column still becomes a PartitionPredicate over the full partition key.
+  test("second pass accepted: identity column next to a bucket transform") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk))")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+
+      assertDeleteWithFilters(
+        s"DELETE FROM $deleteTableName WHERE dep IN ('hr', 'software')",
+        expectedNumConditions = 1,
+        expectedNumPartitionPredicates = 1,
+        expectedOrdinalsPerPredicate = Seq(Array(0)),
+        expectedPartitionFieldNames = Array("dep", "bucket(4, pk)"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Row(3, "marketing", 300) :: Nil)
+    }
+  }
+
+  // `dt = DATE'...'` is analyzed as `cast(dt AS DATE) = DATE'...'`, which the table cannot
+  // evaluate in the first pass; the second pass turns it into a PartitionPredicate.
+  test("second pass accepted: cast on a string identity column next to a bucket transform") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dt STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dt, bucket(4, pk))")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, '2026-09-01', 100), (2, '2026-09-02', 200), (3, '2026-09-03', 300)")
+
+      assertDeleteWithFilters(
+        s"DELETE FROM $deleteTableName WHERE dt = DATE'2026-09-02'",
+        expectedNumConditions = 1,
+        expectedNumPartitionPredicates = 1,
+        expectedOrdinalsPerPredicate = Seq(Array(0)),
+        expectedPartitionFieldNames = Array("dt", "bucket(4, pk)"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "2026-09-01", 100), Row(3, "2026-09-03", 300)))
+    }
+  }
+
+  // A filter on the source column of a bucket transform is a data filter: its value is not in
+  // the partition key, whose slot holds the bucket instead. The metadata-only path must decline
+  // it and fall back, rather than compare `pk` with a bucket value.
+  test("second pass skipped: filter on the source column of a bucket transform") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk))")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, 'hr', 100), (5, 'hr', 500), (2, 'software', 200)")
+
+      // `bucket(4, 5)` is 1, so comparing the bucket slot with 5 would match nothing.
+      assertDeleteWithRowLevel(s"DELETE FROM $deleteTableName WHERE pk = 5")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "hr", 100), Row(2, "software", 200)))
+    }
+  }
+
   // Table property disables PartitionPredicate acceptance;
   // both passes rejected, falls back to row-level operation.
   test("first and second pass rejected: table rejects all") {
@@ -365,6 +428,62 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
       checkAnswer(
         sql(s"SELECT * FROM $deleteTableName"),
         Seq(Row(1, "hr", 101), Row(2, "software", 201), Row(3, "marketing", 300)))
+    }
+  }
+
+  // A mixed partitioning: the bucket field keeps its ordinal but is never referenced, so the
+  // IN on the identity column still becomes a PartitionPredicate over the full partition key.
+  test("group-based UPDATE prunes by the identity field of a mixed partitioning") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk)) " +
+        "TBLPROPERTIES('iterative-row-level-pushdown' = 'true')")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+
+      val plan = executeAndKeepPlan {
+        sql(s"UPDATE $deleteTableName SET salary = salary + 1 WHERE dep IN ('hr', 'software')")
+      }
+      assertRowLevelScanPrunedByPartitionPredicate(plan,
+        expectedOrdinals = Array(0),
+        expectedPartitionFieldNames = Array("dep", "bucket(4, pk)"),
+        expectedReplacedDeps = Set("hr", "software"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "hr", 101), Row(2, "software", 201), Row(3, "marketing", 300)))
+    }
+  }
+
+  test("group-based MERGE prunes by the identity field of a mixed partitioning") {
+    withTable(deleteTableName) {
+      withTempView("source") {
+        sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+          s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk)) " +
+          "TBLPROPERTIES('iterative-row-level-pushdown' = 'true')")
+        sql(s"INSERT INTO $deleteTableName VALUES " +
+          "(1, 'hr', 100), (2, 'software', 200), (3, 'marketing', 300)")
+        Seq((1, 1000), (3, 3000)).toDF("pk", "salary").createOrReplaceTempView("source")
+
+        val plan = executeAndKeepPlan {
+          sql(
+            s"""MERGE INTO $deleteTableName t
+               |USING source s
+               |ON t.pk = s.pk AND t.dep IN ('hr', 'software')
+               |WHEN MATCHED THEN
+               | UPDATE SET salary = s.salary
+               |""".stripMargin)
+        }
+        assertRowLevelScanPrunedByPartitionPredicate(plan,
+          expectedOrdinals = Array(0),
+          expectedPartitionFieldNames = Array("dep", "bucket(4, pk)"),
+          expectedReplacedDeps = Set("hr", "software"))
+
+        // Row 3 is in a pruned partition, so it is never read and stays unchanged.
+        checkAnswer(
+          sql(s"SELECT * FROM $deleteTableName"),
+          Seq(Row(1, "hr", 1000), Row(2, "software", 200), Row(3, "marketing", 300)))
+      }
     }
   }
 
