@@ -15,10 +15,16 @@
 # limitations under the License.
 #
 
-"""Tests for the Arrow eval type handlers (``_arrow``)."""
+"""Tests for the Arrow eval type handlers (``_arrow``).
+
+Each handler has one test class. The helpers below build handler input in the
+same wire format the serializers produce, so every test constructs its input the
+same way: ``run(0, <input>)`` and assert on the output batches.
+"""
 
 import unittest
 
+from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import get_eval_type_handler
 from pyspark.sql.pandas.serializers import ArrowStreamCoGroupSerializer, ArrowStreamSerializer
 from pyspark.sql.types import LongType, StructField, StructType
@@ -28,7 +34,6 @@ from pyspark.util import PythonEvalType
 if have_pyarrow:
     import pyarrow as pa
 
-    # The handlers live in ``_arrow``, which imports pyarrow at module top.
     from pyspark.eval_handlers._arrow import (
         ArrowCoGroupedMapUDFHandler,
         ArrowGroupedMapIterUDFHandler,
@@ -37,6 +42,7 @@ if have_pyarrow:
         ArrowScalarIterUDFHandler,
         ArrowScalarUDFHandler,
     )
+    from pyspark.sql.conversion import ArrowBatchTransformer
 
 
 class _RunnerConf:
@@ -46,6 +52,69 @@ class _RunnerConf:
     use_large_var_types = False
     assign_cols_by_name = True
     map_in_batch_legacy_accept_any_iterable = False
+
+
+def _batch(**columns):
+    """A RecordBatch of int64 columns, one per ``name=values`` kwarg."""
+    return pa.RecordBatch.from_arrays(
+        [pa.array(values, type=pa.int64()) for values in columns.values()],
+        list(columns),
+    )
+
+
+def _struct_batch(**columns):
+    """``_batch`` wrapped into a single struct column (the grouped/map wire format)."""
+    return ArrowBatchTransformer.wrap_struct(_batch(**columns))
+
+
+def _one_group(*batches):
+    """One group of the given batches, shaped as the group serializer yields it."""
+    return iter([iter(batches)])
+
+
+def _one_cogroup(left, right):
+    """One co-group of a left and a right batch, as the co-group serializer yields it."""
+    return iter([([left], [right])])
+
+
+def _grouped_arg_offsets(*dataframes):
+    """Encode ``arg_offsets`` from ``(key_cols, value_cols)`` per DataFrame.
+
+    Mirrors BasePandasGroupExec.resolveArgOffsets: each DataFrame is laid out as
+    ``[length, num_keys, *key_cols, *value_cols]``.
+    """
+    offsets: list = []
+    for key_cols, value_cols in dataframes:
+        group = [len(key_cols), *key_cols, *value_cols]
+        offsets += [len(group), *group]
+    return offsets
+
+
+def _scalar_handler(handler_cls, udf):
+    """Build a scalar handler whose one UDF reads column 0 and returns LongType.
+
+    The scalar UDF tuple is ``(func, args_offsets, kwargs_offsets, return_type)``.
+    """
+    return handler_cls(udfs=[(udf, [0], {}, LongType())], runner_conf=_RunnerConf(), eval_conf=None)
+
+
+def _grouped_handler(handler_cls, udf, arg_offsets, num_udf_args):
+    """Build a grouped/cogrouped-map handler with the shared return type.
+
+    The grouped-map UDF tuple is ``(func, arg_offsets, return_type, num_udf_args)``.
+    """
+    return handler_cls(
+        udfs=[(udf, arg_offsets, _RETURN_TYPE, num_udf_args)],
+        runner_conf=_RunnerConf(),
+        eval_conf=None,
+    )
+
+
+# arg_offsets for one DataFrame with key column 0 and value column 1.
+_GROUP_OFFSETS = _grouped_arg_offsets(([0], [1]))
+# arg_offsets for two DataFrames (co-group), each with key column 0 and value column 1.
+_COGROUP_OFFSETS = _grouped_arg_offsets(([0], [1]), ([0], [1]))
+_RETURN_TYPE = StructType([StructField("v", LongType())])
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -65,184 +134,125 @@ class ArrowEvalTypeHandlerRegistrationTests(unittest.TestCase):
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowScalarUDFHandlerTests(unittest.TestCase):
-    def test_end_to_end_output(self):
-        # One UDF reading column 0 (a pa.Array) and returning column + 1.
+    def test_invokes_udf_per_batch(self):
         def add_one(col):
             return pa.array([v.as_py() + 1 for v in col], type=pa.int64())
 
-        udfs = [(add_one, [0], {}, LongType())]
-        handler = ArrowScalarUDFHandler(udfs=udfs, runner_conf=_RunnerConf(), eval_conf=None)
+        handler = _scalar_handler(ArrowScalarUDFHandler, add_one)
+        out = list(handler.run(0, iter([_batch(a=[1, 2, 3])])))
+        self.assertEqual([b.column(0).to_pylist() for b in out], [[2, 3, 4]])
 
-        batch = pa.RecordBatch.from_arrays([pa.array([1, 2, 3], type=pa.int64())], ["_0"])
-        out = list(handler.run(0, iter([batch])))
-
-        self.assertEqual(len(out), 1)
-        self.assertEqual(out[0].num_columns, 1)
-        self.assertEqual(out[0].column(0).to_pylist(), [2, 3, 4])
-
-    def test_output_schema_enforced(self):
+    def test_coerces_output_to_return_type(self):
         # The UDF returns int32, but the declared return type is LongType (int64).
-        # run must enforce the declared schema onto the output batch.
         def add_one(col):
             return pa.array([v.as_py() + 1 for v in col], type=pa.int32())
 
-        udfs = [(add_one, [0], {}, LongType())]
-        handler = ArrowScalarUDFHandler(udfs=udfs, runner_conf=_RunnerConf(), eval_conf=None)
-
-        batch = pa.RecordBatch.from_arrays([pa.array([10, 20], type=pa.int64())], ["_0"])
-        out = list(handler.run(0, iter([batch])))
-        # The int32 the UDF produced is coerced to the declared LongType (int64).
+        handler = _scalar_handler(ArrowScalarUDFHandler, add_one)
+        out = list(handler.run(0, iter([_batch(a=[10, 20])])))
         self.assertEqual(out[0].schema.field(0).type, pa.int64())
         self.assertEqual(out[0].column(0).to_pylist(), [11, 21])
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowScalarIterUDFHandlerTests(unittest.TestCase):
-    def test_end_to_end_output(self):
-        # The UDF receives an iterator of the single argument column and yields
-        # an iterator of pa.Array; the handler assembles each into a RecordBatch.
+    def test_invokes_udf_over_batch_stream(self):
         def add_one(col_iter):
             for col in col_iter:
                 yield pa.array([v.as_py() + 1 for v in col], type=pa.int64())
 
-        udfs = [(add_one, [0], {}, LongType())]
-        handler = ArrowScalarIterUDFHandler(udfs=udfs, runner_conf=_RunnerConf(), eval_conf=None)
-
-        batches = [
-            pa.RecordBatch.from_arrays([pa.array([1, 2], type=pa.int64())], ["_0"]),
-            pa.RecordBatch.from_arrays([pa.array([3], type=pa.int64())], ["_0"]),
-        ]
-        out = list(handler.run(0, iter(batches)))
+        handler = _scalar_handler(ArrowScalarIterUDFHandler, add_one)
+        out = list(handler.run(0, iter([_batch(a=[1, 2]), _batch(a=[3])])))
         self.assertEqual([b.column(0).to_pylist() for b in out], [[2, 3], [4]])
 
-    def test_row_count_mismatch_is_rejected(self):
-        from pyspark.errors import PySparkRuntimeError
-
+    def test_rejects_row_count_mismatch(self):
         # Emitting more rows than were consumed must fail (fail-fast row limit).
         def too_many(col_iter):
             for col in col_iter:
                 yield pa.array(list(range(len(col) + 1)), type=pa.int64())
 
-        udfs = [(too_many, [0], {}, LongType())]
-        handler = ArrowScalarIterUDFHandler(udfs=udfs, runner_conf=_RunnerConf(), eval_conf=None)
-        batch = pa.RecordBatch.from_arrays([pa.array([1, 2], type=pa.int64())], ["_0"])
+        handler = _scalar_handler(ArrowScalarIterUDFHandler, too_many)
         with self.assertRaises(PySparkRuntimeError):
-            list(handler.run(0, iter([batch])))
+            list(handler.run(0, iter([_batch(a=[1, 2])])))
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowMapUDFHandlerTests(unittest.TestCase):
-    def test_end_to_end_output(self):
-        from pyspark.sql.conversion import ArrowBatchTransformer
-
-        # mapInArrow exchanges a single struct column on the wire; the handler
-        # flattens it for the UDF and re-wraps the UDF's output.
-        def double_a(batch_iter):
+    def test_maps_batch_stream(self):
+        # mapInArrow flattens the wire struct for the UDF and re-wraps its output.
+        def double_v(batch_iter):
             for batch in batch_iter:
-                doubled = pa.array([v.as_py() * 2 for v in batch.column(0)], type=pa.int64())
-                yield pa.RecordBatch.from_arrays([doubled], ["a"])
+                yield _batch(v=[c.as_py() * 2 for c in batch.column("v")])
 
-        inner = pa.RecordBatch.from_arrays([pa.array([1, 2, 3], type=pa.int64())], ["a"])
-        wrapped = ArrowBatchTransformer.wrap_struct(inner)
-
-        udfs = [(double_a, None, None, None)]
-        handler = ArrowMapUDFHandler(udfs=udfs, runner_conf=_RunnerConf(), eval_conf=None)
-        out = list(handler.run(0, iter([wrapped])))
-
-        self.assertEqual(len(out), 1)
-        # Output is a single struct column; its "a" field carries the doubled values.
-        self.assertEqual(out[0].num_columns, 1)
-        self.assertEqual(out[0].column(0).field("a").to_pylist(), [2, 4, 6])
+        handler = ArrowMapUDFHandler(
+            udfs=[(double_v, None, None, None)], runner_conf=_RunnerConf(), eval_conf=None
+        )
+        out = list(handler.run(0, iter([_struct_batch(v=[1, 2, 3])])))
+        self.assertEqual(out[0].column(0).field("v").to_pylist(), [2, 4, 6])
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowGroupedMapUDFHandlerTests(unittest.TestCase):
-    # arg_offsets encoding for one DataFrame with key column 0 and value column 1:
-    #   [group_len=3, num_keys=1, key_offset=0, value_offset=1]
-    _ARG_OFFSETS = [3, 1, 0, 1]
-
-    def _grouped_input(self):
-        from pyspark.sql.conversion import ArrowBatchTransformer
-
-        inner = pa.RecordBatch.from_arrays(
-            [pa.array([7, 7], type=pa.int64()), pa.array([1, 2], type=pa.int64())], ["k", "v"]
-        )
-        wrapped = ArrowBatchTransformer.wrap_struct(inner)
-        # One group, whose batches arrive as an iterator (matching the group serializer).
-        return iter([iter([wrapped])])
-
-    def test_values_only(self):
-        return_type = StructType([StructField("v", LongType())])
-
+    def test_applies_udf_per_group(self):
         def grouped_udf(value_table):
             return pa.table({"v": pa.array([c.as_py() * 10 for c in value_table.column("v")])})
 
-        udfs = [(grouped_udf, self._ARG_OFFSETS, return_type, 1)]
-        handler = ArrowGroupedMapUDFHandler(udfs=udfs, runner_conf=_RunnerConf(), eval_conf=None)
-        out = list(handler.run(0, self._grouped_input()))
+        handler = _grouped_handler(ArrowGroupedMapUDFHandler, grouped_udf, _GROUP_OFFSETS, 1)
+        out = list(handler.run(0, _one_group(_struct_batch(k=[7, 7], v=[1, 2]))))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [10, 20])
 
-    def test_key_and_values(self):
-        return_type = StructType([StructField("v", LongType())])
-
+    def test_passes_key_when_udf_takes_key(self):
         def grouped_udf(key, value_table):
-            # key is the grouping-key tuple; add it to every value.
             k = key[0].as_py()
             return pa.table({"v": pa.array([c.as_py() + k for c in value_table.column("v")])})
 
-        udfs = [(grouped_udf, self._ARG_OFFSETS, return_type, 2)]
-        handler = ArrowGroupedMapUDFHandler(udfs=udfs, runner_conf=_RunnerConf(), eval_conf=None)
-        out = list(handler.run(0, self._grouped_input()))
+        handler = _grouped_handler(ArrowGroupedMapUDFHandler, grouped_udf, _GROUP_OFFSETS, 2)
+        out = list(handler.run(0, _one_group(_struct_batch(k=[7, 7], v=[1, 2]))))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [8, 9])
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowGroupedMapIterUDFHandlerTests(unittest.TestCase):
-    def test_end_to_end_output(self):
-        from pyspark.sql.conversion import ArrowBatchTransformer
-
-        return_type = StructType([StructField("v", LongType())])
-
+    def test_applies_udf_per_group(self):
         def grouped_udf(value_batches):
             for batch in value_batches:
-                yield pa.RecordBatch.from_arrays(
-                    [pa.array([c.as_py() + 1 for c in batch.column("v")], type=pa.int64())], ["v"]
-                )
+                yield _batch(v=[c.as_py() + 1 for c in batch.column("v")])
 
-        inner = pa.RecordBatch.from_arrays(
-            [pa.array([7], type=pa.int64()), pa.array([41], type=pa.int64())], ["k", "v"]
-        )
-        wrapped = ArrowBatchTransformer.wrap_struct(inner)
-        udfs = [(grouped_udf, [3, 1, 0, 1], return_type, 1)]
-        handler = ArrowGroupedMapIterUDFHandler(
-            udfs=udfs, runner_conf=_RunnerConf(), eval_conf=None
-        )
-        out = list(handler.run(0, iter([iter([wrapped])])))
+        handler = _grouped_handler(ArrowGroupedMapIterUDFHandler, grouped_udf, _GROUP_OFFSETS, 1)
+        out = list(handler.run(0, _one_group(_struct_batch(k=[7], v=[41]))))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [42])
+
+    def test_passes_key_when_udf_takes_key(self):
+        def grouped_udf(key, value_batches):
+            k = key[0].as_py()
+            for batch in value_batches:
+                yield _batch(v=[c.as_py() + k for c in batch.column("v")])
+
+        handler = _grouped_handler(ArrowGroupedMapIterUDFHandler, grouped_udf, _GROUP_OFFSETS, 2)
+        out = list(handler.run(0, _one_group(_struct_batch(k=[10], v=[5]))))
+        self.assertEqual(out[0].column(0).field("v").to_pylist(), [15])
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowCoGroupedMapUDFHandlerTests(unittest.TestCase):
-    def test_end_to_end_output(self):
-        return_type = StructType([StructField("out", LongType())])
-
+    # Co-group batches arrive un-wrapped (columns k, v), unlike the grouped-map wire format.
+    def test_applies_udf_per_cogroup(self):
         def cogrouped_udf(left_values, right_values):
-            total = left_values.column("lv")[0].as_py() + right_values.column("rv")[0].as_py()
-            return pa.table({"out": pa.array([total], type=pa.int64())})
+            total = left_values.column("v")[0].as_py() + right_values.column("v")[0].as_py()
+            return pa.table({"v": pa.array([total], type=pa.int64())})
 
-        # A co-group deserializes to a pair of lists of (non-struct-wrapped) batches.
-        left = pa.RecordBatch.from_arrays(
-            [pa.array([5], type=pa.int64()), pa.array([10], type=pa.int64())], ["k", "lv"]
-        )
-        right = pa.RecordBatch.from_arrays(
-            [pa.array([5], type=pa.int64()), pa.array([20], type=pa.int64())], ["k", "rv"]
-        )
-        # Two DataFrames, each key column 0 and value column 1.
-        arg_offsets = [3, 1, 0, 1, 3, 1, 0, 1]
-        udfs = [(cogrouped_udf, arg_offsets, return_type, 2)]
-        handler = ArrowCoGroupedMapUDFHandler(udfs=udfs, runner_conf=_RunnerConf(), eval_conf=None)
-        out = list(handler.run(0, iter([([left], [right])])))
-        self.assertEqual(out[0].column(0).field("out").to_pylist(), [30])
+        handler = _grouped_handler(ArrowCoGroupedMapUDFHandler, cogrouped_udf, _COGROUP_OFFSETS, 2)
+        out = list(handler.run(0, _one_cogroup(_batch(k=[5], v=[10]), _batch(k=[5], v=[20]))))
+        self.assertEqual(out[0].column(0).field("v").to_pylist(), [30])
+
+    def test_passes_key_when_udf_takes_key(self):
+        def cogrouped_udf(key, left_values, right_values):
+            k = key[0].as_py()
+            total = left_values.column("v")[0].as_py() + right_values.column("v")[0].as_py()
+            return pa.table({"v": pa.array([total + k], type=pa.int64())})
+
+        handler = _grouped_handler(ArrowCoGroupedMapUDFHandler, cogrouped_udf, _COGROUP_OFFSETS, 3)
+        out = list(handler.run(0, _one_cogroup(_batch(k=[5], v=[10]), _batch(k=[5], v=[20]))))
+        self.assertEqual(out[0].column(0).field("v").to_pylist(), [35])
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -259,13 +269,10 @@ class CoGroupedBatchTests(unittest.TestCase):
             ArrowStreamSerializer().dump_stream(iter(batches), buf)
             return buf.getvalue()
 
-        left = pa.RecordBatch.from_arrays([pa.array([1, 2])], ["_0"])
-        right = pa.RecordBatch.from_arrays([pa.array([9])], ["_0"])
-
         stream = io.BytesIO()
         write_int(2, stream)  # two DataFrames in the co-group
-        stream.write(arrow_bytes([left]))
-        stream.write(arrow_bytes([right]))
+        stream.write(arrow_bytes([_batch(v=[1, 2])]))
+        stream.write(arrow_bytes([_batch(v=[9])]))
         write_int(0, stream)  # end of stream
         stream.seek(0)
 
