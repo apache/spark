@@ -1445,7 +1445,7 @@ shiftOperator
 datetimeUnit
     : YEAR | QUARTER | MONTH
     | WEEK | DAY | DAYOFYEAR
-    | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
+    | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND | NANOSECOND
     ;
 
 primaryExpression
