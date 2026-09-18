@@ -28,6 +28,52 @@ from pyspark.errors import PySparkRuntimeError, PySparkTypeError
 T = TypeVar("T")
 
 
+def _top_level_package(t: type) -> str:
+    """Return the top-level package of ``t`` (``pandas`` for ``pd.DataFrame``)."""
+    return (t.__module__ or "").split(".", 1)[0]
+
+
+def verify_iter_result_row_count(
+    iterator: Iterator,
+    expected_rows: Callable[[], int],
+) -> Iterator:
+    """Yield elements and verify final row count matches expected exactly.
+
+    ``expected_rows`` is a callable because the expected count is only known once
+    the iterator is fully consumed (input rows are counted lazily as a side effect
+    of pulling batches), so it must be read after this generator is exhausted.
+    """
+    actual_rows = 0
+    for element in iterator:
+        actual_rows += len(element)
+        yield element
+
+    verify_result_row_count(actual_rows, expected_rows())
+
+
+def verify_iterator_exhausted(iterator: Iterator) -> None:
+    """Verify that an iterator has been fully consumed."""
+    try:
+        next(iterator)
+    except StopIteration:
+        pass
+    else:
+        raise PySparkRuntimeError(errorClass="INPUT_NOT_FULLY_CONSUMED", messageParameters={})
+
+
+def verify_output_row_limit(
+    iterator: Iterator,
+    max_rows: Union[int, Callable[[], int]],
+) -> Iterator:
+    """Yield elements while verifying total rows do not exceed a limit (fail-fast)."""
+    total_rows = 0
+    for element in iterator:
+        total_rows += len(element)
+        if total_rows > (max_rows() if callable(max_rows) else max_rows):
+            raise PySparkRuntimeError(errorClass="OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={})
+        yield element
+
+
 def verify_result_row_count(result_length: int, expected: int) -> None:
     """Raise if the result row count doesn't match the expected input row count."""
     if result_length != expected:
@@ -38,36 +84,6 @@ def verify_result_row_count(result_length: int, expected: int) -> None:
                 "input_length": str(expected),
             },
         )
-
-
-def verify_scalar_result(result: Any, num_rows: int) -> Any:
-    """
-    Verify a scalar UDF result is array-like and has the expected number of rows.
-
-    Parameters
-    ----------
-    result : Any
-        The UDF result to verify.
-    num_rows : int
-        Expected number of rows (must match input batch size).
-    """
-    try:
-        result_length = len(result)
-    except TypeError:
-        raise PySparkTypeError(
-            errorClass="UDF_RETURN_TYPE",
-            messageParameters={
-                "expected": "array-like object",
-                "actual": type(result).__name__,
-            },
-        )
-    verify_result_row_count(result_length, num_rows)
-    return result
-
-
-def _top_level_package(t: type) -> str:
-    """Return the top-level package of ``t`` (``pandas`` for ``pd.DataFrame``)."""
-    return (t.__module__ or "").split(".", 1)[0]
 
 
 def verify_return_type(result: T, expected_type: Type[T]) -> T:
@@ -112,42 +128,26 @@ def verify_return_type(result: T, expected_type: Type[T]) -> T:
     return result
 
 
-def verify_iterator_exhausted(iterator: Iterator) -> None:
-    """Verify that an iterator has been fully consumed."""
-    try:
-        next(iterator)
-    except StopIteration:
-        pass
-    else:
-        raise PySparkRuntimeError(errorClass="INPUT_NOT_FULLY_CONSUMED", messageParameters={})
-
-
-def verify_output_row_limit(
-    iterator: Iterator,
-    max_rows: Union[int, Callable[[], int]],
-) -> Iterator:
-    """Yield elements while verifying total rows do not exceed a limit (fail-fast)."""
-    total_rows = 0
-    for element in iterator:
-        total_rows += len(element)
-        if total_rows > (max_rows() if callable(max_rows) else max_rows):
-            raise PySparkRuntimeError(errorClass="OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={})
-        yield element
-
-
-def verify_iter_result_row_count(
-    iterator: Iterator,
-    expected_rows: Callable[[], int],
-) -> Iterator:
-    """Yield elements and verify final row count matches expected exactly.
-
-    ``expected_rows`` is a callable because the expected count is only known once
-    the iterator is fully consumed (input rows are counted lazily as a side effect
-    of pulling batches), so it must be read after this generator is exhausted.
+def verify_scalar_result(result: Any, num_rows: int) -> Any:
     """
-    actual_rows = 0
-    for element in iterator:
-        actual_rows += len(element)
-        yield element
+    Verify a scalar UDF result is array-like and has the expected number of rows.
 
-    verify_result_row_count(actual_rows, expected_rows())
+    Parameters
+    ----------
+    result : Any
+        The UDF result to verify.
+    num_rows : int
+        Expected number of rows (must match input batch size).
+    """
+    try:
+        result_length = len(result)
+    except TypeError:
+        raise PySparkTypeError(
+            errorClass="UDF_RETURN_TYPE",
+            messageParameters={
+                "expected": "array-like object",
+                "actual": type(result).__name__,
+            },
+        )
+    verify_result_row_count(result_length, num_rows)
+    return result
