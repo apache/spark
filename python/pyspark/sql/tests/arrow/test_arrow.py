@@ -1441,137 +1441,6 @@ class ArrowTestsMixin:
         ):
             df.limit(0).toArrow()
 
-    def test_char_varchar_explicit_schema_and_to_arrow(self):
-        schema = StructType(
-            [
-                StructField("c", CharType(4)),
-                StructField("s", StructType([StructField("v", VarcharType(3))])),
-                StructField("a", ArrayType(CharType(2))),
-            ]
-        )
-        values = [{"c": "ab", "s": {"v": "xyz"}, "a": ["z"]}]
-        inputs = [
-            pd.DataFrame(values),
-            pa.Table.from_pylist(values),
-        ]
-
-        with self.sql_conf(
-            {
-                "spark.sql.legacy.charVarcharAsString": "false",
-                "spark.sql.preserveCharVarcharTypeInfo": "false",
-                "spark.sql.charVarchar.standardSemantics.enabled": "false",
-                "spark.sql.execution.arrow.pyspark.enabled": "true",
-            }
-        ):
-            for data in inputs:
-                with self.subTest(input_type=type(data).__name__):
-                    default_df = self.spark.createDataFrame(data, schema)
-                    self.assertEqual(default_df.schema["c"].dataType, StringType())
-                    self.assertEqual(
-                        default_df.first(),
-                        Row(c="ab  ", s=Row(v="xyz"), a=["z "]),
-                    )
-                    self.assertEqual(default_df.toArrow().schema.field("c").type, pa.string())
-
-        with self.sql_conf(
-            {
-                "spark.sql.charVarchar.standardSemantics.enabled": "true",
-                "spark.sql.execution.arrow.pyspark.enabled": "true",
-            }
-        ):
-            for data in inputs:
-                with self.subTest(input_type=type(data).__name__):
-                    df = self.spark.createDataFrame(data, schema)
-                    self.assertEqual(df.schema, schema)
-                    self.assertEqual(
-                        df.first(),
-                        Row(c="ab  ", s=Row(v="xyz"), a=["z "]),
-                    )
-
-                    table = df.toArrow()
-                    self.assertEqual(table.schema.field("c").type, pa.string())
-                    self.assertEqual(table.schema.field("s").type.field("v").type, pa.string())
-                    self.assertEqual(table.schema.field("a").type.value_type, pa.string())
-                    self.assertEqual(
-                        table.to_pylist(),
-                        [{"c": "ab  ", "s": {"v": "xyz"}, "a": ["z "]}],
-                    )
-
-            invalid = pa.table({"c": ["abcd"]})
-            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
-                self.spark.createDataFrame(
-                    invalid, StructType([StructField("c", VarcharType(3))])
-                ).collect()
-
-            with self.sql_conf({"spark.sql.execution.arrow.localRelationThreshold": "0"}):
-                rdd_df = self.spark.createDataFrame(
-                    pa.table({"c": ["a"]}),
-                    StructType([StructField("c", CharType(3))]),
-                )
-                self.assertEqual(rdd_df.first(), Row(c="a  "))
-                with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
-                    self.spark.createDataFrame(
-                        pa.table({"v": ["abcd"]}),
-                        StructType([StructField("v", VarcharType(3))]),
-                    ).collect()
-
-        legacy_schema = StructType(
-            [
-                StructField("c", CharType(3)),
-                StructField("v", VarcharType(3)),
-            ]
-        )
-        legacy_inputs = [
-            pd.DataFrame({"c": ["a"], "v": ["abcd"]}),
-            pa.table({"c": ["a"], "v": ["abcd"]}),
-        ]
-        with self.sql_conf(
-            {
-                "spark.sql.legacy.charVarcharAsString": "true",
-                "spark.sql.preserveCharVarcharTypeInfo": "false",
-                "spark.sql.charVarchar.standardSemantics.enabled": "false",
-                "spark.sql.execution.arrow.pyspark.enabled": "true",
-                "spark.sql.execution.arrow.localRelationThreshold": "0",
-            }
-        ):
-            for data in legacy_inputs:
-                with self.subTest(input_type=type(data).__name__):
-                    df = self.spark.createDataFrame(data, legacy_schema)
-                    self.assertEqual(
-                        df.schema,
-                        StructType().add("c", "string").add("v", "string"),
-                    )
-                    self.assertEqual(df.first(), Row(c="a", v="abcd"))
-                    self.assertEqual(df.toArrow().to_pylist(), [{"c": "a", "v": "abcd"}])
-
-    def test_to_arrow_char_varchar_udt_storage_is_unsupported(self):
-        class CharStorageUDT(UserDefinedType):
-            @classmethod
-            def sqlType(cls):
-                return CharType(2)
-
-            @classmethod
-            def module(cls):
-                return __name__
-
-            @classmethod
-            def scalaUDT(cls):
-                return ""
-
-            def serialize(self, obj):
-                return obj
-
-            def deserialize(self, datum):
-                return datum
-
-        df = self.spark.createDataFrame([("a",)], "value string")
-        df._schema = StructType([StructField("value", CharStorageUDT())])
-        with self.assertRaisesRegex(
-            PySparkNotImplementedError,
-            "CHAR/VARCHAR inside toArrow UDT schema",
-        ):
-            df.toArrow()
-
     def test_createDataFrame_pandas_duplicate_field_names(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
@@ -2075,7 +1944,141 @@ class ArrowTestsMixin:
     pandas_requirement_message or pyarrow_requirement_message,
 )
 class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
-    pass
+    # These CHAR/VARCHAR cases are Classic-only: they exercise standard-semantics
+    # createDataFrame/toArrow and assign a UDT-backed `_schema` directly, neither of which is
+    # supported by a Connect session (Connect rejects such schemas up front and `_schema` is
+    # read-only). They live here rather than in `ArrowTestsMixin` so the Connect parity suite
+    # does not inherit them.
+    def test_char_varchar_explicit_schema_and_to_arrow(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("s", StructType([StructField("v", VarcharType(3))])),
+                StructField("a", ArrayType(CharType(2))),
+            ]
+        )
+        values = [{"c": "ab", "s": {"v": "xyz"}, "a": ["z"]}]
+        inputs = [
+            pd.DataFrame(values),
+            pa.Table.from_pylist(values),
+        ]
+
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "false",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+            }
+        ):
+            for data in inputs:
+                with self.subTest(input_type=type(data).__name__):
+                    default_df = self.spark.createDataFrame(data, schema)
+                    self.assertEqual(default_df.schema["c"].dataType, StringType())
+                    self.assertEqual(
+                        default_df.first(),
+                        Row(c="ab  ", s=Row(v="xyz"), a=["z "]),
+                    )
+                    self.assertEqual(default_df.toArrow().schema.field("c").type, pa.string())
+
+        with self.sql_conf(
+            {
+                "spark.sql.charVarchar.standardSemantics.enabled": "true",
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+            }
+        ):
+            for data in inputs:
+                with self.subTest(input_type=type(data).__name__):
+                    df = self.spark.createDataFrame(data, schema)
+                    self.assertEqual(df.schema, schema)
+                    self.assertEqual(
+                        df.first(),
+                        Row(c="ab  ", s=Row(v="xyz"), a=["z "]),
+                    )
+
+                    table = df.toArrow()
+                    self.assertEqual(table.schema.field("c").type, pa.string())
+                    self.assertEqual(table.schema.field("s").type.field("v").type, pa.string())
+                    self.assertEqual(table.schema.field("a").type.value_type, pa.string())
+                    self.assertEqual(
+                        table.to_pylist(),
+                        [{"c": "ab  ", "s": {"v": "xyz"}, "a": ["z "]}],
+                    )
+
+            invalid = pa.table({"c": ["abcd"]})
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                self.spark.createDataFrame(
+                    invalid, StructType([StructField("c", VarcharType(3))])
+                ).collect()
+
+            with self.sql_conf({"spark.sql.execution.arrow.localRelationThreshold": "0"}):
+                rdd_df = self.spark.createDataFrame(
+                    pa.table({"c": ["a"]}),
+                    StructType([StructField("c", CharType(3))]),
+                )
+                self.assertEqual(rdd_df.first(), Row(c="a  "))
+                with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                    self.spark.createDataFrame(
+                        pa.table({"v": ["abcd"]}),
+                        StructType([StructField("v", VarcharType(3))]),
+                    ).collect()
+
+        legacy_schema = StructType(
+            [
+                StructField("c", CharType(3)),
+                StructField("v", VarcharType(3)),
+            ]
+        )
+        legacy_inputs = [
+            pd.DataFrame({"c": ["a"], "v": ["abcd"]}),
+            pa.table({"c": ["a"], "v": ["abcd"]}),
+        ]
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+                "spark.sql.execution.arrow.pyspark.enabled": "true",
+                "spark.sql.execution.arrow.localRelationThreshold": "0",
+            }
+        ):
+            for data in legacy_inputs:
+                with self.subTest(input_type=type(data).__name__):
+                    df = self.spark.createDataFrame(data, legacy_schema)
+                    self.assertEqual(
+                        df.schema,
+                        StructType().add("c", "string").add("v", "string"),
+                    )
+                    self.assertEqual(df.first(), Row(c="a", v="abcd"))
+                    self.assertEqual(df.toArrow().to_pylist(), [{"c": "a", "v": "abcd"}])
+
+    def test_to_arrow_char_varchar_udt_storage_is_unsupported(self):
+        class CharStorageUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return CharType(2)
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+            def serialize(self, obj):
+                return obj
+
+            def deserialize(self, datum):
+                return datum
+
+        df = self.spark.createDataFrame([("a",)], "value string")
+        df._schema = StructType([StructField("value", CharStorageUDT())])
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR inside toArrow UDT schema",
+        ):
+            df.toArrow()
 
 
 @unittest.skipIf(
