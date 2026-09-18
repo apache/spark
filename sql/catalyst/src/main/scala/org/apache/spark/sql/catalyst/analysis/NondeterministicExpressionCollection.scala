@@ -33,8 +33,18 @@ object NondeterministicExpressionCollection {
           case udf: UserDefinedExpression if !udf.deterministic => udf
           case udf: ExternalUserDefinedFunction if !udf.deterministic => udf
         }
+        val expressionsToCollect = if (leafNondeterministic.nonEmpty) {
+          leafNondeterministic
+        } else {
+          expr.collect {
+            case nondeterministicExpr
+                if !nondeterministicExpr.deterministic &&
+                  nondeterministicExpr.children.forall(_.deterministic) =>
+              nondeterministicExpr
+          }
+        }
 
-        for (nondeterministicExpr <- leafNondeterministic.distinct) {
+        for (nondeterministicExpr <- expressionsToCollect.distinct) {
           val namedExpression = nondeterministicExpr match {
             case namedExpression: NamedExpression => namedExpression
             case _ => Alias(nondeterministicExpr, "_nondeterministic")()

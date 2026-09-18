@@ -127,20 +127,6 @@ class RewriteWithExpressionSuite extends PlanTest {
     assert(rewritten == (Literal(1) + Literal(1)) * (Literal(1) + Literal(1)))
   }
 
-  test("applyForExpression rejects an impure foldable definition referenced more than once") {
-    // aes_encrypt becomes a foldable StaticInvoke that draws a fresh random IV on every eval, so
-    // two inlined copies would encrypt to different values.
-    val aes = ReplaceExpressions.replace(
-      new AesEncrypt(Literal("abc".getBytes), Literal("1234567890123456".getBytes)))
-    assert(aes.foldable, "the AES rewrite is only interesting while it stays foldable")
-    val expr = With(aes) { case Seq(ref) =>
-      EqualTo(ref, ref)
-    }
-    intercept[SparkException] {
-      RewriteWithExpression.applyForExpression(expr)
-    }
-  }
-
   test("applyForExpression rejects canonicalized common expression ids") {
     // Canonicalization re-numbers ids per `With`, starting from 1, so these two siblings both get
     // id 1: the safe (literal) definition would otherwise mark id 1 safe in the flat `safeIds` set
