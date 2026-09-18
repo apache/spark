@@ -44,7 +44,7 @@ from pyspark.eval_handlers.verification import (
 )
 from pyspark.sql.conversion import ArrowBatchTransformer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
-from pyspark.sql.types import DataType, StructField, StructType
+from pyspark.sql.types import StructField, StructType
 from pyspark.util import PythonEvalType
 from pyspark.worker_util import extract_key_value_indexes
 
@@ -54,18 +54,6 @@ if TYPE_CHECKING:
     # string literal.
     from pyspark.eval_handlers._typing import CoGroupedBatch, GroupedBatch
     from pyspark.worker_util import EvalConf, RunnerConf
-
-
-def _arrow_return_schema(return_type: DataType, use_large_var_types: bool) -> pa.Schema:
-    """Arrow schema for a grouped/cogrouped map UDF's declared struct return type.
-
-    The return type is a StructType, so ``to_arrow_type`` yields a struct type whose
-    fields are the output columns; the group's output batches carry those fields flat.
-    """
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=use_large_var_types
-    )
-    return pa.schema(list(arrow_return_type))
 
 
 class ArrowScalarUDFHandler(BatchEvalTypeHandler[pa.RecordBatch]):
@@ -215,8 +203,8 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler[pa.RecordBatch]):
         assert len(parsed_offsets) == 1, "Expected one pair of offsets for GROUPED_MAP_ARROW UDF."
         self._key_offsets = parsed_offsets[0][0]
         self._value_offsets = parsed_offsets[0][1]
-        self._arrow_return_schema = _arrow_return_schema(
-            return_type, runner_conf.use_large_var_types
+        self._arrow_return_schema = to_arrow_schema(
+            return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
@@ -281,8 +269,8 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler[pa.RecordBatch]):
         )
         self._key_offsets = parsed_offsets[0][0]
         self._value_offsets = parsed_offsets[0][1]
-        self._arrow_return_schema = _arrow_return_schema(
-            return_type, runner_conf.use_large_var_types
+        self._arrow_return_schema = to_arrow_schema(
+            return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
@@ -345,8 +333,8 @@ class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler[pa.RecordBatch]):
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         self._left_key_cols, self._left_val_cols = parsed_offsets[0]
         self._right_key_cols, self._right_val_cols = parsed_offsets[1]
-        self._arrow_return_schema = _arrow_return_schema(
-            return_type, runner_conf.use_large_var_types
+        self._arrow_return_schema = to_arrow_schema(
+            return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
 
     def run(self, split_index: int, data: Iterator[CoGroupedBatch]) -> Iterator[pa.RecordBatch]:
