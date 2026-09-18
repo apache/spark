@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
@@ -232,6 +232,19 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
         bucketSize = bucketSize,
         ts = Cast(date, TimestampType),
         originTs = Cast(string, TimestampType)))
+  }
+
+  test("time_bucket implicitly casts time arguments to timestamp") {
+    val bucketSize = Literal(Duration.ofMinutes(15))
+    val time = Literal(LocalTime.of(10, 23, 0))
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = TimeBucket(bucketSize = bucketSize, ts = time, originTs = time),
+      transformed = TimeBucket(
+        bucketSize = bucketSize,
+        ts = Cast(time, TimestampType),
+        originTs = Cast(time, TimestampType)))
   }
 
   test("time_bucket does not implicitly cast string bucket size") {
