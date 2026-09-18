@@ -145,14 +145,12 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(analyze(new Nvl(floatLit, doubleLit)).dataType == DoubleType)
   }
 
-  test("SPARK-56840: NullIf null branch is typed during analysis") {
+  test("SPARK-56840: NullIf replacement preserves its data type before type coercion") {
     Seq(true, false).foreach { alwaysInlineCommonExpr =>
       withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString) {
-        val nullIf = new NullIf(Literal(1), Literal(1))
-        assert(nullIf.replacement.exists {
-          case Literal(null, NullType) => true
-          case _ => false
-        })
+        val nullIf = new NullIf(Literal(1), Literal(2.1d))
+        assert(nullIf.dataType == IntegerType)
+        assert(nullIf.replacement.dataType == IntegerType)
 
         val plan = SimpleAnalyzer.execute(
           Project(Alias(nullIf, "out")() :: Nil, LocalRelation()))
@@ -171,34 +169,46 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Lower(Literal("ERROR_MULTIPLE_PROVIDERS"))))
         .asInstanceOf[NullIf]
 
-      assert(unresolvedNullIf.exists {
-        case Literal(null, NullType) => true
-        case _ => false
-      })
+      assert(unresolvedNullIf.exists(_.isInstanceOf[NullIfResult]))
 
       val resolvedNullIf = unresolvedNullIf.transformUp {
         case _: UnresolvedAttribute => Literal("lit")
       }
-      val plan = SimpleAnalyzer.execute(
-        Project(Alias(resolvedNullIf, "out")() :: Nil, LocalRelation()))
+      val result = resolvedNullIf.collectFirst { case result: NullIfResult => result }.get
 
-      assert(plan.expressions.head.dataType == StringType)
+      assert(result.dataType == StringType)
+      assert(result.replacement.exists {
+        case Literal(null, StringType) => true
+        case _ => false
+      })
     }
   }
 
-  test("NullIf only duplicates its left operand when common expressions are inlined") {
+  test("SPARK-59496: NullIf result validates only its always-evaluated predicate") {
+    val value = UnresolvedAttribute("value")
+    val result = NullIfResult(Literal(true), value)
+
+    assert(result.children == Seq(Literal(true), value))
+    assert(result.alwaysEvaluatedInputs == Seq(Literal(true)))
+    assert(result.branchGroups.isEmpty)
+    assert(result.checkInputDataTypes().isSuccess)
+    assert(NullIfResult(Literal(1), value).checkInputDataTypes().isFailure)
+  }
+
+  test("SPARK-59496: NullIf has linear or doubling construction growth") {
     Seq(true, false).foreach { alwaysInlineCommonExpr =>
       withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString) {
         val depth = 8
         val nestedNullIf = (1 to depth).foldLeft[Expression](Literal(0)) {
-          case (left, right) =>
-            SimpleAnalyzer.execute(Project(
-              Alias(new NullIf(left, Literal(right)), "out")() :: Nil,
-              LocalRelation())).expressions.head.asInstanceOf[Alias].child
+          case (left, right) => new NullIf(left, Literal(right))
         }
 
         val expectedCount = if (alwaysInlineCommonExpr) (1 << depth) - 1 else depth
         assert(nestedNullIf.collect { case _: NullIf => 1 }.size == expectedCount)
+
+        val analyzed = SimpleAnalyzer.execute(
+          Project(Alias(nestedNullIf, "out")() :: Nil, LocalRelation())).expressions.head
+        assert(analyzed.collect { case _: NullIf => 1 }.size == expectedCount)
       }
     }
   }

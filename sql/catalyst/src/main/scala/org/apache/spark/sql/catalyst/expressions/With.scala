@@ -213,17 +213,6 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
     }
   }
 
-  /**
-   * Transforms definitions before `child` so child rules see refreshed [[CommonExpressionRef]]s.
-   * Each direct child is transformed once.
-   */
-  override def mapChildren(f: Expression => Expression): Expression = {
-    val newDefs = defs.map(f(_).asInstanceOf[CommonExpressionDef])
-    val withNewDefs = withNewChildren(child +: newDefs).asInstanceOf[With]
-    val newChild = f(withNewDefs.child)
-    withNewDefs.withNewChildren(newChild +: withNewDefs.defs)
-  }
-
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
     val newDefs = newChildren.tail.map(_.asInstanceOf[CommonExpressionDef])

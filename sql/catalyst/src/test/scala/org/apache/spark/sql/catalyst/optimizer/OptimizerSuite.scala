@@ -26,9 +26,9 @@ import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   ArrayCompact,
   AttributeReference,
-  Cast,
   CreateArray,
   CreateStruct,
+  If,
   IntegerLiteral,
   Literal,
   MapFromEntries,
@@ -361,12 +361,14 @@ class OptimizerSuite extends PlanTest {
       val nullIf = new NullIf(Literal(true), Literal(true))
       val plan = Project(Alias(nullIf, "out")() :: Nil, OneRowRelation()).analyze
       val optimized = optimizer.execute(plan)
+      val replacement = optimized.expressions.head.asInstanceOf[Alias].child
 
-      assert(optimized.expressions.exists(_.exists {
-        case cast: Cast => cast.child == Literal(null) && cast.dataType == BooleanType
+      assert(replacement.isInstanceOf[If])
+      assert(replacement.exists {
+        case Literal(null, BooleanType) => true
         case _ => false
-      }))
-      assert(optimized.expressions.forall(!_.exists(_.isInstanceOf[RuntimeReplaceable])))
+      })
+      assert(!replacement.exists(_.isInstanceOf[RuntimeReplaceable]))
     }
   }
 }
