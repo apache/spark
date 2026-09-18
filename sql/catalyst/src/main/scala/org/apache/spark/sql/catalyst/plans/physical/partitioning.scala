@@ -973,8 +973,9 @@ object KeyedPartitioning {
       KeyLayout(comparablePartitionKeys, factory.dataTypes, isGrouped, isCollapsed = false))
   }
 
-  // The key's arity is implicit in `HasPartitionKey` and read positionally downstream, so an
-  // inconsistent key would otherwise fail far away as an opaque `ArrayIndexOutOfBoundsException`.
+  // The key's arity is implicit in `HasPartitionKey` and read positionally downstream: a short key
+  // runs off the end as an opaque `ArrayIndexOutOfBoundsException`, while a long key's trailing
+  // fields are silently dropped by readers built over `expressions.length`, grouping too loosely.
   def checkPartitionKeyArity(
       expressions: Seq[Expression],
       partitionKeys: Seq[InternalRow]): Unit = {
