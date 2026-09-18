@@ -1685,10 +1685,12 @@ object JsonArrayExpressionBuilder extends ExpressionBuilder {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_([key, value[, ...]]) - Returns a JSON object string from the key-value pairs.",
+  usage =
+    "_FUNC_([key, value [, key, value ...]]) - Returns a JSON object string built from the " +
+      "given key/value pairs.",
   arguments = """
     Arguments:
-      * key - a string naming an object member.
+      * key - a non-null string naming an object member.
       * value - the member's value.
   """,
   examples = """
@@ -2252,9 +2254,11 @@ case class JsonTypeof(child: Expression)
  * Keys must be non-null strings; a null key is an error. The `ON NULL` clause controls whether
  * null-valued pairs are included (NULL ON NULL, the standard default) or omitted (ABSENT ON NULL).
  *
- * A value is spliced in raw (unquoted) only when it is a lexically nested JSON constructor
- * (implicit `FORMAT JSON`, tracked by `rawJson`). The standard's explicit value-level `FORMAT JSON`
- * clause (e.g. `JSON_OBJECT('a' VALUE '{"b":1}' FORMAT JSON)`) is deferred.
+ * A value is spliced in raw (unquoted) when it is a lexically nested `ImplicitlyFormattedAsJson`
+ * producer whose `emitsImplicitJsonText` holds -- a nested JSON constructor, or `JSON_QUERY` under
+ * KEEP QUOTES -- tracked per member by `rawJson` (see `rawJsonValue`). The standard's explicit
+ * value-level `FORMAT JSON` clause (e.g. `JSON_OBJECT('a' VALUE '{"b":1}' FORMAT JSON)`) is
+ * deferred.
  *
  * Examples:
  *   JSON_OBJECT('id' VALUE 7, 'name' VALUE 'Ada')      -> '{"id":7,"name":"Ada"}'
@@ -2308,8 +2312,11 @@ case class JsonObjectExpr(
 
   override def dataType: DataType = returning
 
-  override def children: Seq[Expression] =
+  // Flattened `[k0, v0, k1, v1, ...]` view, cached since `children` is walked repeatedly.
+  @transient private lazy val childrenSeq: Seq[Expression] =
     memberArray.flatMap { case (k, v) => Seq(k, v) }.toImmutableArraySeq
+
+  override def children: Seq[Expression] = childrenSeq
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -2385,7 +2392,7 @@ case class JsonObjectExpr(
 
   // JacksonGenerator (shared with `to_json`, so rendering matches) can only serialize a container,
   // not a bare scalar, so each key/value is wrapped in a one-element array whose brackets are
-  // stripped in renderKey/renderValue below.
+  // stripped in renderKey/appendRenderedValue below.
   @transient private lazy val keyEvaluator: StructsToJsonEvaluator =
     StructsToJsonEvaluator(Map.empty, ArrayType(StringType), Some(resolvedZoneId))
 
@@ -2407,20 +2414,20 @@ case class JsonObjectExpr(
     Cast(BoundReference(0, StringType, nullable = true), returning, timeZoneId,
       EvalMode.ANSI)
 
+  // `evaluateString` returns the Java String directly, skipping `evaluate`'s UTF8String round trip.
+  // The key is cached or appended whole, so it still materializes the interior substring.
   private def renderKey(key: Any): String = {
     singleElem(0) = key
-    val arrJson = keyEvaluator
-      .evaluate(singleElemData).asInstanceOf[UTF8String]
-      .toString
+    val arrJson = keyEvaluator.evaluateString(singleElemData)
     arrJson.substring(1, arrJson.length - 1)
   }
 
-  private def renderValue(idx: Int, value: Any): String = {
+  // Append the interior of the "[<frag>]" wrapper straight into the builder (no per-value
+  // substring), mirroring `JsonArray.appendRenderedElement`.
+  private def appendRenderedValue(sb: java.lang.StringBuilder, idx: Int, value: Any): Unit = {
     singleElem(0) = value
-    val arrJson = valueEvaluators(idx)
-      .evaluate(singleElemData).asInstanceOf[UTF8String]
-      .toString
-    arrJson.substring(1, arrJson.length - 1)
+    val arrJson = valueEvaluators(idx).evaluateString(singleElemData)
+    sb.append(arrJson, 1, arrJson.length - 1)
   }
 
   // A foldable, non-null key (the common literal-key case, e.g. `JSON_OBJECT('id' VALUE col)`)
@@ -2438,7 +2445,7 @@ case class JsonObjectExpr(
   }
 
   override def eval(input: InternalRow): Any = {
-    val sb = new StringBuilder("{")
+    val sb = new java.lang.StringBuilder("{")
     var first = true
     var i = 0
     val localMembers = memberArray
@@ -2471,7 +2478,7 @@ case class JsonObjectExpr(
         } else if (localRawJson(i)) {
           sb.append(value.asInstanceOf[UTF8String].toString)
         } else {
-          sb.append(renderValue(i, value))
+          appendRenderedValue(sb, i, value)
         }
       }
       i += 1
@@ -2514,7 +2521,8 @@ case class JsonObjectExpr(
       else " ABSENT ON NULL"
     // Use reference identity, not value equality: an explicit `RETURNING STRING COLLATE ...`
     // produces a distinct StringType instance that `==` the default companion `StringType`, so `==`
-    // would drop it. Only the omitted default (the companion, by reference) should render nothing.
+    // would drop it. `eq` renders nothing for anything reaching the companion (omitted RETURNING or
+    // plain `RETURNING STRING` alike) and renders only the distinct instance: a collated STRING.
     val returningSQL = if (returning.eq(StringType)) "" else s" RETURNING ${returning.sql}"
     s"JSON_OBJECT($membersSQL$nullSQL$returningSQL)"
   }
