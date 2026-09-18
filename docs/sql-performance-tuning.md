@@ -668,7 +668,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code></td>
       <td>false</td>
       <td>
-        When enabled, try to avoid shuffle if join or MERGE condition does not include all partition columns. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true.
+        When enabled, try to avoid shuffle if join or MERGE condition does not include all partition columns. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
       </td>
       <td>4.0.0</td>
     </tr>
@@ -676,7 +676,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.allowCompatibleTransforms.enabled</code></td>
       <td>false</td>
       <td>
-        When enabled, try to avoid shuffle if partition transforms are compatible but not identical. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true.
+        When enabled, try to avoid shuffle if partition transforms are compatible but not identical. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true, and <code>spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled</code> to be false.
       </td>
       <td>4.0.0</td>
     </tr>
@@ -724,7 +724,6 @@ ON t.dep = s.dep AND t.id = s.id
 SET 'spark.sql.sources.v2.bucketing.enabled' 'true'
 SET 'spark.sql.iceberg.planning.preserve-data-grouping' 'true'
 SET 'spark.sql.sources.v2.bucketing.pushPartValues.enabled' 'true'
-SET 'spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled' 'true'
 
 -- Plan with Storage Partition Join
 == Physical Plan ==
@@ -739,3 +738,8 @@ SET 'spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled' 'tru
          +- * ColumnarToRow (6)
             +- BatchScan (5)
 ```
+
+For skewed joins, consider enabling
+`spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled` and measuring its
+effect on your workload. This option replicates partitions from one side of the join and may
+increase the amount of data read; the example above leaves it at its default of `false`.
