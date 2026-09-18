@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{CharType, StringType, StructField, StructType, VarcharType}
 
 class DataFrameNaFunctionsSuite extends SharedSparkSession {
   import testImplicits._
@@ -212,6 +212,17 @@ class DataFrameNaFunctionsSuite extends SharedSparkSession {
           .toDF("a", "b").na.fill(5),
         Row(5, 1.23) :: Row(3, 5.0) :: Row(4, 3.45) :: Nil
       )
+    }
+  }
+
+  test("SPARK-59273: fill CHAR/VARCHAR columns") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val schema = StructType(Seq(
+        StructField("c", CharType(3)),
+        StructField("v", VarcharType(3))))
+      val input = spark.createDataFrame(sparkContext.parallelize(Seq(Row(null, null))), schema)
+
+      checkAnswer(input.na.fill("x"), Row("x  ", "x"))
     }
   }
 

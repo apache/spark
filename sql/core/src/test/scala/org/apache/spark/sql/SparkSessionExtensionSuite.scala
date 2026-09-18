@@ -26,7 +26,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
@@ -184,6 +184,33 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
         Some(CatalogManager.BUILTIN_NAMESPACE),
         Some(CatalogManager.SYSTEM_CATALOG_NAME))
       assert(session.sessionState.functionRegistry.lookupFunction(builtinIdent).isDefined)
+    }
+  }
+
+  test("SPARK-59144: injected json_array replacement receives an expanded star") {
+    // An injected `json_array` takes over `system.builtin.json_array`, so `json_array(*)` must
+    // route to it with the star expanded, not hit the built-in routed-JSON direct-star rejection.
+    // The replacement returns its argument count, so two columns yield 2 iff the star was expanded.
+    val extensions = create { extensions =>
+      extensions.injectFunction((
+        FunctionIdentifier("json_array"),
+        new ExpressionInfo("noClass", "json_array"),
+        (children: Seq[Expression]) => Literal(children.size)))
+    }
+    withSession(extensions) { session =>
+      val query = "SELECT json_array(*) FROM VALUES (1, 'x') AS t(a, b)"
+      Seq(false, true).foreach { singlePass =>
+        session.conf.set(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+        val analyzed = session.sql(query).queryExecution.analyzed
+        assert(analyzed.resolved, s"singlePass=$singlePass")
+        assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
+          s"star should be expanded for the injected function, singlePass=$singlePass")
+      }
+      session.conf.unset(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key)
+      // The fixed-point analyzer runs it end to end: the two columns expand to two arguments.
+      val rows = session.sql(query).collect()
+      assert(rows.length === 1 && rows(0) === Row(2))
     }
   }
 

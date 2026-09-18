@@ -29,7 +29,7 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -186,11 +186,16 @@ abstract class InMemoryBaseTable(
   private val metadataColumnNames = metadataColumns.map(_.name).toSet
 
   // Metadata column renaming is supported -- see [[InMemoryScanBuilder.pruneColumns]] and
-  // [[BatchScanBaseClass.createReaderFactory]] for implementation details.
-  override val canRenameConflictingMetadataColumns: Boolean = true
+  // [[BatchScanBaseClass.createReaderFactory]] for implementation details. Set the property to
+  // false to act like a connector that suppresses such conflicts instead of renaming them.
+  override val canRenameConflictingMetadataColumns: Boolean =
+    properties.getOrDefault("rename-conflicting-metadata-columns", "true").toBoolean
 
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
+
+  private val simulatePartialColumnPruning = properties
+    .getOrDefault(InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING, "false").toBoolean
 
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
@@ -227,6 +232,10 @@ abstract class InMemoryBaseTable(
       case Some(_) => ref.fieldNames()
       case None => throw new IllegalArgumentException(s"${ref.describe()} does not exist.")
     }
+  }
+
+  protected def identityPartitionReferences: Array[NamedReference] = {
+    partitioning.collect { case IdentityTransform(ref) => ref }
   }
 
   private val UTC = ZoneId.of("UTC")
@@ -511,9 +520,10 @@ abstract class InMemoryBaseTable(
   }
 
   private def canEvaluate(filter: Filter): Boolean = {
-    if (partitioning.length == 1 && partitioning.head.references.length == 1) {
+    val identityRefs = identityPartitionReferences
+    if (partitioning.length == 1 && identityRefs.length == 1) {
       filter match {
-        case In(attrName, _) if attrName == partitioning.head.references.head.toString => true
+        case In(attrName, _) if attrName == identityRefs.head.toString => true
         case _ => false
       }
     } else {
@@ -565,10 +575,21 @@ abstract class InMemoryBaseTable(
       // them by their logical (original) names, not their current names.
       val schemaNames = tableSchema.map(_.name).toSet
       val prunedFields = requiredSchema.filter {
-        case MetadataStructFieldWithLogicalName(f, name) => metadataColumnNames.contains(name)
+        case MetadataStructFieldWithLogicalName(_, name) => metadataColumnNames.contains(name)
         case f => schemaNames.contains(f.name)
       }
-      schema = StructType(prunedFields)
+      schema = if (simulatePartialColumnPruning) {
+        // Prune the metadata columns as required, but report every data column back from
+        // `Scan.readSchema()` regardless of what was required.
+        StructType(tableSchema ++ prunedFields.filter(isRequiredMetadataField))
+      } else {
+        StructType(prunedFields)
+      }
+    }
+
+    private def isRequiredMetadataField(field: StructField): Boolean = field match {
+      case MetadataStructFieldWithLogicalName(_, name) => metadataColumnNames.contains(name)
+      case _ => false
     }
 
     override def pushFilters(filters: Array[Filter]): Array[Filter] = {
@@ -630,6 +651,12 @@ abstract class InMemoryBaseTable(
     extends Scan with Batch with SupportsReportStatistics with SupportsReportPartitioning {
 
     override def toBatch: Batch = this
+
+    protected def identityPartitionAttributes: Array[NamedReference] = {
+      identityPartitionReferences.distinct
+        .filter(ref => readSchema.findNestedField(
+          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
+    }
 
     override def estimateStatistics(): Statistics = {
       if (data.isEmpty) {
@@ -723,11 +750,10 @@ abstract class InMemoryBaseTable(
   /**
    * Reference implementation of
    * [[SupportsRuntimeCatalystFiltering.planInputPartitionsWithRuntimeFilters]] for the in-memory
-   * fixtures: records what was pushed, and for expressions referencing only partition columns
-   * binds them against the partition key and returns the partitions that match. Binding and
-   * interpreting rather than pattern matching a fixed set of operators is what lets the fixture
-   * honor an arbitrary pushed expression, the same way `PartitionPredicateImpl` does. Mixing
-   * classes supply their own `filterAttributes()`.
+   * fixtures: records what was pushed, and binds expressions referencing only identity partition
+   * columns against the partition key to return the partitions that match. Interpreting the bound
+   * expression lets the fixture honor arbitrary pushed expressions. Mixing classes supply their own
+   * `filterAttributes()`.
    */
   trait CatalystRuntimeFilteringScan extends SupportsRuntimeCatalystFiltering {
     self: BatchScanBaseClass =>
@@ -758,28 +784,26 @@ abstract class InMemoryBaseTable(
         expressions: Array[CatalystExpression]): Seq[InputPartition] = {
       val partAttrs = partitionAttributes
       if (partAttrs.isEmpty) return partitions
-      val partAttrRefs = partAttrs.map(_._2)
 
       expressions.foldLeft(partitions) { (remaining, expr) =>
         // Top down, so `s.part` is rewritten before its `s` child is considered.
         val remapped = expr.transformDown {
           case e => partitionAttrFor(e, partAttrs).getOrElse(e)
         }
-        // Only evaluate expressions whose refs are all partition columns, so we can bind
-        // against the partition key InternalRow (same approach as PartitionPredicateImpl).
-        if (remapped.references.forall(r => partAttrRefs.exists(_.exprId == r.exprId))) {
-          val bound = BindReferences.bindReference(remapped, partAttrRefs)
-          val pred = CatalystPredicate.createInterpreted(bound)
+        // Evaluate expressions only when every reference maps to an identity partition-key slot.
+        if (remapped.references.isEmpty) {
+          val pred = CatalystPredicate.createInterpreted(remapped)
           remaining.filter { p =>
             try {
               pred.eval(p.asInstanceOf[BufferedRows].partitionKey())
             } catch {
               // Keep the partition on eval failure, which is safe here because every predicate
-              // the fixture pushes evaluates cleanly. `PartitionPredicateImpl` fails open for a
-              // reason of its own: Spark keeps the post-scan `FilterExec` on that path, so
-              // failing open costs just a pruning opportunity. A scan declaring an attribute in
-              // `fullyPushedFilterAttributes()` stands alone as the evaluator, so keeping an
-              // unevaluated partition would return nonmatching rows.
+              // the fixture pushes evaluates cleanly. `PartitionPredicateImpl` keeps a partition
+              // it cannot evaluate only for a runtime filter, whose rows are filtered anyway, so
+              // it costs just a pruning opportunity; everywhere else it propagates, because Spark
+              // drops a filter the connector accepts. A scan declaring an attribute in
+              // `fullyPushedFilterAttributes()` likewise stands alone as the evaluator, so
+              // keeping an unevaluated partition would return nonmatching rows.
               case _: Exception => true
             }
           }
@@ -805,37 +829,33 @@ abstract class InMemoryBaseTable(
       if (plannedPartitions.isEmpty) self.data else plannedPartitions.flatten.distinct.toSeq
 
     /**
-     * The `AttributeReference`s standing for the partition key InternalRow fields, in its field
-     * order, each paired with the name-part sequence of its partition column. The parts are kept
-     * unflattened so a quoted top-level column `a.b` (parts `Seq("a.b")`) stays distinct from a
-     * nested column `a`.`b` (parts `Seq("a", "b")`). Example:
-     *   - `PARTITIONED BY (part, s.nested)` -> `(Seq("part"), AttributeReference(part))`, then
-     *     `(Seq("s", "nested"), AttributeReference(s.nested))`
+     * Identity partition columns paired with their bound partition-key slots.
+     *
+     * Only identity transforms expose a source path because their partition-key slot retains the
+     * source value. Name parts stay separate so a quoted top-level column `a.b` remains distinct
+     * from a nested column `a`.`b`.
      */
-    private def partitionAttributes: Seq[(Seq[String], AttributeReference)] = {
-      partitioning.flatMap(_.references()).flatMap { ref =>
-        val path = ref.fieldNames.toImmutableArraySeq
-        val resolver = SQLConf.get.resolver
-        readSchema.findNestedField(path, resolver = resolver)
-          .orElse(tableSchema.findNestedField(path, resolver = resolver)).map {
-          case (_, f) =>
-            path -> AttributeReference(ref.fieldNames.mkString("."), f.dataType, f.nullable)()
-        }
+    private def partitionAttributes: Seq[(Seq[String], BoundReference)] = {
+      partitioning.zipWithIndex.flatMap {
+        case (IdentityTransform(ref), ordinal) =>
+          val path = ref.fieldNames.toImmutableArraySeq
+          val resolver = SQLConf.get.resolver
+          readSchema.findNestedField(path, resolver = resolver)
+            .orElse(tableSchema.findNestedField(path, resolver = resolver)).map {
+            case (_, f) => path -> BoundReference(ordinal, f.dataType, f.nullable)
+          }
+        case _ => None
       }.toSeq
     }
 
     /**
-     * The partition key `AttributeReference` that `e` reads, or None if `e` reads no partition
-     * column. The path `e` reads is compared to each partition column's name parts component-wise
-     * with the resolver, so a quoted top-level column `a.b` cannot collide with a nested column
-     * `a`.`b`. Examples, under `PARTITIONED BY (part, s.nested)` where `nested` is field 0 of `s`:
-     *   - `AttributeReference(part)` -> `AttributeReference(part)`
-     *   - `GetStructField(AttributeReference(s), 0)` -> `AttributeReference(s.nested)`
-     *   - `AttributeReference(s)` -> None if `s` itself is not a partition column, only `s.nested`
+     * The partition-key slot that `e` reads, or None if `e` reads no identity partition column.
+     * The path `e` reads is compared to each partition column's name parts component-wise with the
+     * resolver, so a quoted top-level column `a.b` cannot collide with a nested column `a`.`b`.
      */
     private def partitionAttrFor(
         e: CatalystExpression,
-        partAttrs: Seq[(Seq[String], AttributeReference)]): Option[AttributeReference] = {
+        partAttrs: Seq[(Seq[String], BoundReference)]): Option[BoundReference] = {
       val resolver = SQLConf.get.resolver
       partitionKeyPath(e).flatMap { path =>
         partAttrs.collectFirst {
@@ -874,14 +894,16 @@ abstract class InMemoryBaseTable(
     var pushedFilters: Array[Filter] = Array.empty
 
     override def filterAttributes(): Array[NamedReference] = {
-      partitioning.flatMap(_.references)
-        .filter(ref => readSchema.findNestedField(
-          ref.fieldNames.toImmutableArraySeq, resolver = SQLConf.get.resolver).isDefined)
+      identityPartitionAttributes
     }
 
     override def filter(filters: Array[Filter]): Unit = {
-      if (partitioning.length == 1 && partitioning.head.references().length == 1) {
-        val ref = partitioning.head.references().head
+      if (filters.exists(_.isInstanceOf[AlwaysFalse])) {
+        this.data = Seq.empty
+        return
+      }
+      if (partitioning.length == 1 && identityPartitionReferences.length == 1) {
+        val ref = identityPartitionReferences.head
         filters.foreach {
           case In(attrName, values) if attrName == ref.toString =>
             val matchingKeys = values.map { value =>
@@ -1085,6 +1107,13 @@ object InMemoryBaseTable {
 
   // SQL conf key that enables column ID assignment
   val ASSIGN_COLUMN_IDS = "spark.sql.test.inMemoryTable.assignColumnIds"
+
+  // Test table property that simulates a connector which accepts a required schema but only
+  // partially applies it: every data column is reported from Scan.readSchema() while the required
+  // metadata columns are still pruned. `SupportsPushDownRequiredColumns` permits partial pruning of
+  // data columns; dropping the required metadata columns is not permitted, since
+  // `SupportsMetadataColumns` makes the read schema the only channel that delivers them.
+  val SIMULATE_PARTIAL_COLUMN_PRUNING = "simulate-partial-column-pruning"
 
   /**
    * Assigns fresh IDs to any top-level column or nested struct field that does not already

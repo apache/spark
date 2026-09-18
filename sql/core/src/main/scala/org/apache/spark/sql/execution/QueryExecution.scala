@@ -43,11 +43,11 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.LookupCatalog
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
-import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, InsertAdaptiveSparkPlan, QueryStageExec}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
-import org.apache.spark.sql.execution.exchange.EnsureRequirements
+import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, PipelinedShuffleEligibility, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, WatermarkPropagator}
@@ -408,6 +408,34 @@ class QueryExecution(
   }
 
   def assertExecutedPlanPrepared(): Unit = executedPlan
+
+  /**
+   * RDD consumers and partition-at-a-time iterators can outlive one SQL job. Give them a
+   * separate plan whose shuffles retain output, without changing this execution's plan.
+   * Reuse one fallback per execution and retain its session for lazy planning and AQE.
+   * Closing that session here would stop the shared SparkContext.
+   */
+  private val lazyRegularShuffle = LazyTry {
+    def hasShuffle(plan: SparkPlan): Boolean = plan match {
+      case _: ShuffleExchangeExec => true
+      case a: AdaptiveSparkPlanExec => hasShuffle(a.executedPlan)
+      case q: QueryStageExec => hasShuffle(q.plan)
+      case other => other.children.exists(hasShuffle)
+    }
+    if (!sparkSession.sessionState.conf.localPipelinedShuffleEnabled ||
+        !PipelinedShuffleEligibility.enabled(executedPlan, sparkSession.sessionState.conf) ||
+        !hasShuffle(executedPlan)) {
+      this
+    } else {
+      val session = SparkSession.getOrCloneSessionWithConfigsOff(
+        sparkSession, Seq(SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED))
+      new QueryExecution(session, commandExecuted, mode = mode,
+        shuffleCleanupModeOpt = shuffleCleanupModeOpt,
+        refreshPhaseEnabled = refreshPhaseEnabled, analyzerOpt = Some(analyzer))
+    }
+  }
+
+  private[sql] def withRegularShuffle: QueryExecution = lazyRegularShuffle.get
 
   val lazyToRdd = LazyTry {
     new SQLExecutionRDD(
@@ -829,7 +857,11 @@ object QueryExecution {
         Nil
       } else {
         Seq(ReuseExchangeAndSubquery)
-      })
+      }) ++
+      // Opt-in (SPARK-57399): runs last so it observes the final reuse decision (a reused
+      // exchange means fan-out, which it refuses to make pipelined).
+      // No-op unless spark.sql.shuffle.localPipelined.enabled=true and AQE is off.
+      Seq(EnablePipelinedShuffle)
   }
 
   /**

@@ -21,6 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CreateNamedStruct, DynamicPruningExpression, Expression, GetStructFieldObject}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryRowLevelOperationTable}
+import org.apache.spark.sql.connector.expressions.Expressions.bucket
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.InSubqueryExec
@@ -69,7 +70,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
       }
       assertCatalystGroupFilter(
         executedPlan,
-        expectedFilterAttrs = Seq("dep"),
+        expectedFilterPaths = Seq(Seq("dep")),
         expectedFilter = GroupFilter(scanSchema = "id INT, dep STRING", groups = Seq("hr")))
 
       // software was never read, so its rows must come back untouched
@@ -107,7 +108,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
       }
       assertCatalystGroupFilter(
         executedPlan,
-        expectedFilterAttrs = Seq("dep"),
+        expectedFilterPaths = Seq(Seq("dep")),
         expectedFilter = GroupFilter(scanSchema = "pk INT, dep STRING", groups = Seq("hr")))
 
       // software was never read, so its rows must come back untouched
@@ -147,10 +148,9 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
       }
       assertCatalystGroupFilter(
         executedPlan,
-        expectedFilterAttrs = Seq("dep.name"),
+        expectedFilterPaths = Seq(Seq("dep", "name")),
         expectedFilter = GroupFilter(
-          scanSchema = "pk INT, dep STRUCT<name: STRING>", groups = Seq("hr")),
-        expectedFilterPaths = Some(Seq(Seq("dep", "name"))))
+          scanSchema = "pk INT, dep STRUCT<name: STRING>", groups = Seq("hr")))
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -160,9 +160,26 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
     }
   }
 
+  test("non-identity partition transform does not enable runtime group filtering") {
+    val schema = "pk INT NOT NULL, id INT, salary INT, dep STRING"
+    createTable(schema, Array[Transform](bucket(4, "dep")))
+    append(schema,
+      """{ "pk": 1, "id": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    val executedPlan = executeAndKeepPlan {
+      sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE id = 1")
+    }
+    val batchScans = collect(executedPlan) { case s: BatchScanExec => s }
+    assert(batchScans.nonEmpty, "expected a batch scan for the row-level operation")
+    assert(batchScans.forall(_.runtimeFilters.isEmpty),
+      s"expected no runtime group filters, got ${batchScans.flatMap(_.runtimeFilters)}")
+  }
+
   /**
    * Asserts the injected group filter down to its contents: the scan declares
-   * `expectedFilterAttrs` in `filterAttributes`, every scan node carries one dynamic pruning
+   * `expectedFilterPaths` in `filterAttributes`, every scan node carries one dynamic pruning
    * filter matching `expectedFilter`, the connector received that same filter as a Catalyst
    * expression, and the scan then read only `expectedFilter.groups`.
    *
@@ -175,24 +192,22 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
    */
   protected def assertCatalystGroupFilter(
       executedPlan: SparkPlan,
-      expectedFilterAttrs: Seq[String],
-      expectedFilter: GroupFilter,
-      expectedFilterPaths: Option[Seq[Seq[String]]] = None): Unit = {
+      expectedFilterPaths: Seq[Seq[String]],
+      expectedFilter: GroupFilter): Unit = {
     val batchScans = collect(executedPlan) { case s: BatchScanExec => s }
     assert(batchScans.nonEmpty, "expected a batch scan for the row-level operation")
     val scan = catalystScan(batchScans.head)
     assert(batchScans.forall(_.scan eq scan),
       s"expected all ${batchScans.size} scan nodes to share one scan")
 
-    val filterAttrs = scan.filterAttributes().map(_.fieldNames.mkString(".")).toSeq
-    assert(filterAttrs === expectedFilterAttrs,
-      s"expected the scan to declare $expectedFilterAttrs as filter attributes, got $filterAttrs")
-    val filterPaths = expectedFilterPaths.getOrElse(expectedFilterAttrs.map(Seq(_)))
+    val filterPaths = scan.filterAttributes().map(_.fieldNames.toSeq).toSeq
+    assert(filterPaths === expectedFilterPaths,
+      s"expected the scan to declare $expectedFilterPaths as filter attributes, got $filterPaths")
 
     batchScans.foreach { batchScan =>
       batchScan.runtimeFilters match {
         case Seq(DynamicPruningExpression(inSubquery: InSubqueryExec)) =>
-          assertGroupFilter(inSubquery, filterPaths, expectedFilter)
+          assertGroupFilter(inSubquery, expectedFilterPaths, expectedFilter)
         case other => fail(s"expected a single dynamic pruning group filter, got $other")
       }
     }
@@ -204,7 +219,7 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
       s"expected each of the ${batchScans.size} scan node(s) to push the filter once, got $pushed")
     pushed.foreach {
       case inSubquery: InSubqueryExec =>
-        assertGroupFilter(inSubquery, filterPaths, expectedFilter)
+        assertGroupFilter(inSubquery, expectedFilterPaths, expectedFilter)
       case other =>
         fail(s"expected the group filter pushed as an InSubqueryExec, got $other")
     }

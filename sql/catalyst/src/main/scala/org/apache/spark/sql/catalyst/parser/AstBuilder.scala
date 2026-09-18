@@ -772,7 +772,7 @@ class AstBuilder extends DataTypeAstBuilder
   private def withCTE(ctx: CtesContext, plan: LogicalPlan): LogicalPlan = {
     val ctes = ctx.namedQuery.asScala.map { nCtx =>
       val namedQuery = visitNamedQuery(nCtx)
-      val rowLevelLimit: Option[Int] = if (nCtx.integerValue() != null) {
+      val maxDepth: Option[Int] = if (nCtx.integerValue() != null) {
         if (ctx.RECURSIVE() == null) {
           operationNotAllowed("Cannot specify MAX RECURSION LEVEL when the CTE is not marked as " +
             "RECURSIVE", ctx)
@@ -781,10 +781,11 @@ class AstBuilder extends DataTypeAstBuilder
       } else {
         None
       }
-      (namedQuery.alias, namedQuery, rowLevelLimit)
+      val materialized = if (nCtx.MATERIALIZED() != null) Some(nCtx.NOT() == null) else None
+      UnresolvedCTERelation(namedQuery.alias, namedQuery, maxDepth, materialized)
     }
     // Check for duplicate names.
-    val duplicates = ctes.groupBy(_._1.toLowerCase(Locale.ROOT)).filter(_._2.size > 1).keys
+    val duplicates = ctes.groupBy(_.name.toLowerCase(Locale.ROOT)).filter(_._2.size > 1).keys
     if (duplicates.nonEmpty) {
       throw QueryParsingErrors.duplicateCteDefinitionNamesError(
         duplicates.map(toSQLId).mkString(", "), ctx)
@@ -3810,7 +3811,8 @@ class AstBuilder extends DataTypeAstBuilder
         expr: Expression,
         patterns: Seq[UTF8String]): (Expression, Seq[UTF8String]) = ctx.kind.getType match {
       // scalastyle:off caselocale
-      case SqlBaseParser.ILIKE => (Lower(expr), patterns.map(_.toLowerCase))
+      case SqlBaseParser.ILIKE =>
+        (Lower(expr), patterns.map(pattern => Option(pattern).map(_.toLowerCase).orNull))
       // scalastyle:on caselocale
       case _ => (expr, patterns)
     }
@@ -3818,6 +3820,18 @@ class AstBuilder extends DataTypeAstBuilder
     def getLike(expr: Expression, pattern: Expression): Expression = ctx.kind.getType match {
       case SqlBaseParser.ILIKE => new ILike(expr, pattern)
       case _ => new Like(expr, pattern)
+    }
+
+    def buildBalanced(
+        expressions: Seq[Expression],
+        combine: (Expression, Expression) => Expression): Expression = {
+      assert(expressions.nonEmpty)
+      if (expressions.length == 1) {
+        expressions.head
+      } else {
+        val (left, right) = expressions.splitAt(expressions.length / 2)
+        combine(buildBalanced(left, combine), buildBalanced(right, combine))
+      }
     }
 
     val withNot = blockBang(ctx.errorCapturingNot)
@@ -3848,7 +3862,10 @@ class AstBuilder extends DataTypeAstBuilder
               throw QueryParsingErrors.emptyQuantifiedPatternError(ctx)
             }
             val expressions = expressionList(ctx.expression)
-            if (expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
+            if (expressions.forall(_.foldable) &&
+                expressions.forall(
+                  expression => expression.resolved &&
+                    DataTypeUtils.isDefaultStringCharOrVarcharType(expression.dataType))) {
               // If there are many pattern expressions, will throw StackOverflowError.
               // So we use LikeAny or NotLikeAny instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
@@ -3858,15 +3875,19 @@ class AstBuilder extends DataTypeAstBuilder
                 case _ => NotLikeAny(expr, pat)
               }
             } else {
-              ctx.expression.asScala.map(expression)
-                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(Or)
+              buildBalanced(
+                expressions.map(p => invertIfNotDefined(getLike(e, p))),
+                Or.apply)
             }
           case Some(SqlBaseParser.ALL) =>
             if (ctx.expression.isEmpty) {
               throw QueryParsingErrors.emptyQuantifiedPatternError(ctx)
             }
             val expressions = expressionList(ctx.expression)
-            if (expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
+            if (expressions.forall(_.foldable) &&
+                expressions.forall(
+                  expression => expression.resolved &&
+                    DataTypeUtils.isDefaultStringCharOrVarcharType(expression.dataType))) {
               // If there are many pattern expressions, will throw StackOverflowError.
               // So we use LikeAll or NotLikeAll instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
@@ -3876,8 +3897,9 @@ class AstBuilder extends DataTypeAstBuilder
                 case _ => NotLikeAll(expr, pat)
               }
             } else {
-              ctx.expression.asScala.map(expression)
-                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(And)
+              buildBalanced(
+                expressions.map(p => invertIfNotDefined(getLike(e, p))),
+                And.apply)
             }
           case _ =>
             val escapeChar = Option(ctx.escapeChar)
@@ -4160,6 +4182,24 @@ class AstBuilder extends DataTypeAstBuilder
       (JsonValueBehavior.Default, Some(expression(d.defaultExpr)))
   }
 
+  // A clause-free JSON_ARRAY / JSON_QUERY that is a top-level JSON_ARRAY element stays on the
+  // direct path. Those expressions emit JSON text implicitly, and the parent JSON_ARRAY must see
+  // that lexical fact before analyzer rewrites can wrap the child in a Cast.
+  private def isTopLevelJsonArrayElement(ctx: RuleContext): Boolean = {
+    @scala.annotation.tailrec
+    def loop(parent: RuleContext): Boolean = parent match {
+      case null => false
+      case _: JsonArrayValueContext => true
+      case _: ExpressionContext | _: ValueExpressionDefaultContext |
+          _: ParenthesizedExpressionContext | _: CollateContext =>
+        loop(parent.getParent)
+      case p: PredicatedContext if p.predicate() == null =>
+        loop(parent.getParent)
+      case _ => false
+    }
+    loop(ctx.getParent)
+  }
+
   /**
    * Create a [[JsonValue]] expression for the SQL:2016 `JSON_VALUE` scalar function. The `ON EMPTY`
    * / `ON ERROR` clauses default to `NULL` when absent, per the standard.
@@ -4167,16 +4207,21 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitJsonValue(ctx: JsonValueContext): Expression = withOrigin(ctx) {
     val jsonExpr = expression(ctx.jsonExpr)
     val path = string(visitStringLit(ctx.path))
-    // Default RETURNING type is STRING. Normalize CHAR/VARCHAR to STRING for the cast, as the value
-    // is produced by a `Cast` to the declared type (a raw CHAR/VARCHAR target has no encoder).
-    val returning = Option(ctx.returning)
-      .map(dt => CharVarcharUtils.replaceCharVarcharWithStringForCast(typedVisit[DataType](dt)))
-      .getOrElse(StringType)
-    val (onEmpty, emptyDefault) = Option(ctx.emptyBehavior)
-      .map(buildJsonValueBehavior).getOrElse((JsonValueBehavior.Null, None))
-    val (onError, errorDefault) = Option(ctx.errorBehavior)
-      .map(buildJsonValueBehavior).getOrElse((JsonValueBehavior.Null, None))
-    JsonValue(jsonExpr, path, returning, onEmpty, onError, emptyDefault, errorDefault)
+    if (ctx.returning == null && ctx.emptyBehavior == null && ctx.errorBehavior == null) {
+      UnresolvedFunction("json_value", Seq(jsonExpr, Literal(path)), isDistinct = false)
+    } else {
+      // Default RETURNING type is STRING. Normalize CHAR/VARCHAR to STRING for the cast, as the
+      // value is produced by a `Cast` to the declared type (a raw CHAR/VARCHAR target has no
+      // encoder).
+      val returning = Option(ctx.returning)
+        .map(dt => CharVarcharUtils.replaceCharVarcharWithStringForCast(typedVisit[DataType](dt)))
+        .getOrElse(StringType)
+      val (onEmpty, emptyDefault) = Option(ctx.emptyBehavior)
+        .map(buildJsonValueBehavior).getOrElse((JsonValueBehavior.Null, None))
+      val (onError, errorDefault) = Option(ctx.errorBehavior)
+        .map(buildJsonValueBehavior).getOrElse((JsonValueBehavior.Null, None))
+      JsonValue(jsonExpr, path, returning, onEmpty, onError, emptyDefault, errorDefault)
+    }
   }
 
   /**
@@ -4186,13 +4231,17 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitJsonExists(ctx: JsonExistsContext): Expression = withOrigin(ctx) {
     val jsonExpr = expression(ctx.jsonExpr)
     val path = string(visitStringLit(ctx.path))
-    val onError = Option(ctx.errorBehavior).map { b =>
-      if (b.TRUE != null) JsonExistsBehavior.True
-      else if (b.FALSE != null) JsonExistsBehavior.False
-      else if (b.UNKNOWN != null) JsonExistsBehavior.Unknown
-      else JsonExistsBehavior.Error
-    }.getOrElse(JsonExistsBehavior.False)
-    JsonExists(jsonExpr, path, onError)
+    if (ctx.errorBehavior == null) {
+      UnresolvedFunction("json_exists", Seq(jsonExpr, Literal(path)), isDistinct = false)
+    } else {
+      val onError = Option(ctx.errorBehavior).map { b =>
+        if (b.TRUE != null) JsonExistsBehavior.True
+        else if (b.FALSE != null) JsonExistsBehavior.False
+        else if (b.UNKNOWN != null) JsonExistsBehavior.Unknown
+        else JsonExistsBehavior.Error
+      }.getOrElse(JsonExistsBehavior.False)
+      JsonExists(jsonExpr, path, onError)
+    }
   }
 
   /**
@@ -4214,37 +4263,104 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitJsonQuery(ctx: JsonQueryContext): Expression = withOrigin(ctx) {
     val jsonExpr = expression(ctx.jsonExpr)
     val path = string(visitStringLit(ctx.path))
-    // Default RETURNING type is STRING; the result is JSON text. A CHAR/VARCHAR RETURNING is
-    // normalized to STRING truly unconditionally: JSON_QUERY returns the fragment verbatim without
-    // a length-enforcing cast, so the result type must never advertise a CHAR/VARCHAR length it
-    // cannot enforce. The CharVarcharUtils helpers cannot be used here: they honor
-    // spark.sql.preserveCharVarcharTypeInfo and would leave a VARCHAR(n) length in the output type
-    // when that flag is set. A non-string RETURNING is left intact for checkInputDataTypes to fail.
-    val returning = Option(ctx.returning).map(typedVisit[DataType]).map {
-      case c: CharType => c.toStringType
-      case v: VarcharType => v.toStringType
-      case other => other
-    }.getOrElse(StringType)
-    val wrapper = Option(ctx.wrapper).map {
-      case _: JsonQueryWrapperWithoutContext => JsonQueryWrapper.Without
-      case w: JsonQueryWrapperWithContext =>
-        if (w.wrapperType != null && w.wrapperType.getType == SqlBaseParser.CONDITIONAL) {
-          JsonQueryWrapper.Conditional
-        } else {
-          JsonQueryWrapper.Unconditional
-        }
-    }.getOrElse(JsonQueryWrapper.Without)
-    val quotes = Option(ctx.quotes).map {
-      case _: JsonQueryQuotesKeepContext => JsonQueryQuotes.Keep
-      case _: JsonQueryQuotesOmitContext => JsonQueryQuotes.Omit
-    }.getOrElse(JsonQueryQuotes.Keep)
-    // The OMIT QUOTES + array-wrapper invariant is enforced in JsonQuery.checkInputDataTypes so it
-    // holds for directly-constructed expressions too, not only this parser path.
-    val onEmpty =
-      Option(ctx.emptyBehavior).map(buildJsonQueryBehavior).getOrElse(JsonQueryBehavior.Null)
-    val onError =
-      Option(ctx.errorBehavior).map(buildJsonQueryBehavior).getOrElse(JsonQueryBehavior.Null)
-    JsonQuery(jsonExpr, path, returning, wrapper, quotes, onEmpty, onError)
+    if (ctx.returning == null && ctx.wrapper == null && ctx.quotes == null &&
+        ctx.emptyBehavior == null && ctx.errorBehavior == null &&
+        !isTopLevelJsonArrayElement(ctx)) {
+      UnresolvedFunction("json_query", Seq(jsonExpr, Literal(path)), isDistinct = false)
+    } else {
+      // Default RETURNING is STRING. JSON_QUERY returns the fragment verbatim (no length-enforcing
+      // cast), so a CHAR/VARCHAR RETURNING is normalized to STRING: the result type must not
+      // advertise a length it cannot enforce. CharVarcharUtils is unusable here -- it honors
+      // spark.sql.preserveCharVarcharTypeInfo and would keep the VARCHAR(n) length. A non-string
+      // RETURNING is left intact for checkInputDataTypes to reject.
+      val returning = Option(ctx.returning).map(typedVisit[DataType]).map {
+        case c: CharType => c.toStringType
+        case v: VarcharType => v.toStringType
+        case other => other
+      }.getOrElse(StringType)
+      val wrapper = Option(ctx.wrapper).map {
+        case _: JsonQueryWrapperWithoutContext => JsonQueryWrapper.Without
+        case w: JsonQueryWrapperWithContext =>
+          if (w.wrapperType != null && w.wrapperType.getType == SqlBaseParser.CONDITIONAL) {
+            JsonQueryWrapper.Conditional
+          } else {
+            JsonQueryWrapper.Unconditional
+          }
+      }.getOrElse(JsonQueryWrapper.Without)
+      val quotes = Option(ctx.quotes).map {
+        case _: JsonQueryQuotesKeepContext => JsonQueryQuotes.Keep
+        case _: JsonQueryQuotesOmitContext => JsonQueryQuotes.Omit
+      }.getOrElse(JsonQueryQuotes.Keep)
+      // The OMIT QUOTES + array-wrapper invariant is enforced in JsonQuery.checkInputDataTypes so
+      // it holds for directly-constructed expressions too, not only this parser path.
+      val onEmpty =
+        Option(ctx.emptyBehavior).map(buildJsonQueryBehavior).getOrElse(JsonQueryBehavior.Null)
+      val onError =
+        Option(ctx.errorBehavior).map(buildJsonQueryBehavior).getOrElse(JsonQueryBehavior.Null)
+      JsonQuery(jsonExpr, path, returning, wrapper, quotes, onEmpty, onError)
+    }
+  }
+
+  /**
+   * Resolve a `jsonConstructorNullBehavior` clause (`NULL` / `ABSENT`) into a
+   * [[JsonConstructorNullBehavior]].
+   */
+  private def buildJsonConstructorNullBehavior(
+      ctx: JsonConstructorNullBehaviorContext): JsonConstructorNullBehavior =
+    ctx match {
+      case _: JsonConstructorNullBehaviorNullContext =>
+        JsonConstructorNullBehavior.Null
+      case _: JsonConstructorNullBehaviorAbsentContext =>
+        JsonConstructorNullBehavior.Absent
+    }
+
+  /**
+   * Create a [[JsonArray]] expression for the SQL:2016 `JSON_ARRAY` constructor function.
+   * The `ON NULL` clause defaults to `ABSENT ON NULL` (drops NULL elements), and RETURNING
+   * defaults to STRING.
+   */
+  override def visitJsonArray(ctx: JsonArrayContext): Expression = withOrigin(ctx) {
+    val arrayValues = ctx.values.asScala.map(v => expression(v.value)).toSeq
+    // Route a flat, clause-free call through routine resolution so it can be shadowed. Cheap
+    // clause/nesting checks come first to skip the recursive per-value FORMAT scans when a clause
+    // already forces direct construction.
+    val routeThroughResolution =
+      ctx.returning == null && ctx.nullBehavior == null && !isTopLevelJsonArrayElement(ctx) &&
+        !ctx.values.asScala.exists(_.FORMAT() != null) &&
+        !arrayValues.exists(JsonArray.isImplicitlyJson)
+    if (routeThroughResolution) {
+      UnresolvedFunction("json_array", arrayValues, isDistinct = false)
+    } else {
+      // Decide each element's FORMAT JSON flags now, from the lexical argument, so a later
+      // rewrite that wraps or swaps the child cannot change them (see [[JsonArray]]):
+      //  - `formatJson`: spliced raw as already-JSON text -- an explicit `FORMAT JSON` clause,
+      //    or a lexically nested JSON constructor (via `JsonArray.isImplicitlyJson`).
+      //  - `needsValidation`: raw text is arbitrary user input to JSON-validate at eval -- only
+      //    an explicit `FORMAT JSON` on a non-constructor; a nested constructor is trusted.
+      val formatArgs = ctx.values.asScala.zip(arrayValues).map { case (v, expr) =>
+        val explicit = v.FORMAT() != null
+        val implicitlyJson = JsonArray.isImplicitlyJson(expr)
+        (explicit || implicitlyJson, explicit && !implicitlyJson)
+      }.toSeq
+      val formatJson = formatArgs.map(_._1)
+      val needsValidation = formatArgs.map(_._2)
+      // Default RETURNING type is STRING; the result is JSON text. A CHAR/VARCHAR RETURNING is
+      // normalized to STRING unconditionally: JSON_ARRAY serializes the fragment itself and never
+      // advertises a CHAR/VARCHAR length it does not enforce. The CharVarcharUtils helpers cannot
+      // be used here -- they honor spark.sql.preserveCharVarcharTypeInfo and would leave a
+      // VARCHAR(n) length in the output type when that flag is set. A non-string RETURNING is left
+      // intact for checkInputDataTypes to fail.
+      val returning = Option(ctx.returning).map(typedVisit[DataType]).map {
+        case c: CharType => c.toStringType
+        case v: VarcharType => v.toStringType
+        case other => other
+      }.getOrElse(StringType)
+      // Default ON NULL behavior is ABSENT ON NULL (drop NULL elements).
+      val nullBehavior = Option(ctx.nullBehavior)
+        .map(buildJsonConstructorNullBehavior)
+        .getOrElse(JsonConstructorNullBehavior.Absent)
+      JsonArray(arrayValues, formatJson, needsValidation, nullBehavior, returning)
+    }
   }
 
   /**
@@ -4518,7 +4634,10 @@ class AstBuilder extends DataTypeAstBuilder
     val path = if (field.startsWith("[")) "$" + field else s"$$.$field"
     val parsedPath = JsonPathParser.parse(path)
     if (parsedPath.isEmpty) {
-      throw new ParseException(errorClass = "PARSE_SYNTAX_ERROR", ctx = ctx)
+      throw new ParseException(
+        errorClass = "PARSE_SYNTAX_ERROR",
+        messageParameters = Map("error" -> s"'$field'", "hint" -> ""),
+        ctx = ctx)
     }
     val potentialAlias = parsedPath.get.collect { case Named(name) => name }.lastOption
     val node = SemiStructuredExtract(expression(ctx.col), path)
@@ -6111,7 +6230,7 @@ class AstBuilder extends DataTypeAstBuilder
     checkDuplicateClauses(ctx.clusterBySpec(), "CLUSTER BY", ctx)
     checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
 
-    if (ctx.skewSpec.size > 0) {
+    if (!ctx.skewSpec.isEmpty) {
       invalidStatement("CREATE TABLE ... SKEWED BY", ctx)
     }
 

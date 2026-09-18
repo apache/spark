@@ -205,6 +205,13 @@ class TimeTypeParquetOpsSuite extends SparkFunSuite {
       LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS))
   }
 
+  test("filterOpsAdjustedToUtc declares the isAdjustedToUTC=true TimeType Parquet encoding") {
+    val ops = TimeTypeParquetOps.filterOpsAdjustedToUtc
+    assert(ops.primitiveTypeName === INT64)
+    assert(ops.logicalTypeAnnotation ===
+      LogicalTypeAnnotation.timeType(true, TimeUnit.MICROS))
+  }
+
   test("filterOps builds predicates for LocalTime, converting to micros-of-day") {
     val ops = TimeTypeParquetOps.filterOps
     val path = Array("c")
@@ -237,15 +244,18 @@ class TimeTypeParquetOpsSuite extends SparkFunSuite {
     assert(ops.makeIn(path, Array[Any](null)) === FilterApi.in(col, set))
   }
 
-  test("ParquetTypeOps.filterOpsFor resolves the TimeType encoding and nothing else") {
+  test("ParquetTypeOps.filterOpsFor resolves the TimeType encodings and nothing else") {
+    // Both isAdjustedToUTC encodings of INT64 TIME(MICROS) resolve: `false` is what Spark writes,
+    // `true` (SPARK-53368) is what writers such as Apache Arrow emit. TimeType is zone-less, so the
+    // raw micros-of-day is pushed identically for either flag.
     assert(ParquetTypeOps.filterOpsFor(
       LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS), INT64).isDefined)
-    // A different unit, isAdjustedToUTC=true, primitive, or annotation kind is not the
-    // TimeType encoding, so no framework filter ops is returned (pushdown falls through).
+    assert(ParquetTypeOps.filterOpsFor(
+      LogicalTypeAnnotation.timeType(true, TimeUnit.MICROS), INT64).isDefined)
+    // A different unit, primitive, or annotation kind is not a pushable TimeType encoding, so no
+    // framework filter ops is returned (pushdown falls through).
     assert(ParquetTypeOps.filterOpsFor(
       LogicalTypeAnnotation.timeType(false, TimeUnit.NANOS), INT64).isEmpty)
-    assert(ParquetTypeOps.filterOpsFor(
-      LogicalTypeAnnotation.timeType(true, TimeUnit.MICROS), INT64).isEmpty)
     assert(ParquetTypeOps.filterOpsFor(
       LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS), INT32).isEmpty)
     assert(ParquetTypeOps.filterOpsFor(null, INT64).isEmpty)

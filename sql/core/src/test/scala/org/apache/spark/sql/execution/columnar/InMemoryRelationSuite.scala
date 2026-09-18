@@ -17,13 +17,19 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.AttributeSet
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions.expr
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSessionBase
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class InMemoryRelationSuite extends SparkFunSuite
   with SharedSparkSessionBase with AdaptiveSparkPlanHelper {
@@ -51,6 +57,38 @@ class InMemoryRelationSuite extends SparkFunSuite
     assert(r1.sameResult(r2))
   }
 
+  test("SPARK-59024: plan id cached name for anonymous cached tables") {
+    val d = spark.range(1)
+    withSQLConf(SQLConf.DATAFRAME_CACHE_PLAN_ID_NAME_ENABLED.key -> "true") {
+      val r1 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
+      // Caches of the same physical plan instance share the plan id.
+      val r1Again = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
+      val r2 = InMemoryRelation(StorageLevel.MEMORY_ONLY, spark.range(2).queryExecution, None)
+      assert(r1.cacheBuilder.cachedName.matches("CachedRDD \\(plan_id=\\d+\\)"))
+      assert(r1Again.cacheBuilder.cachedName == r1.cacheBuilder.cachedName)
+      assert(r1.cacheBuilder.cachedName != r2.cacheBuilder.cachedName)
+      // Named tables keep the usual name.
+      val r3 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, Some("t1"))
+      assert(r3.cacheBuilder.cachedName == "In-memory table t1")
+    }
+    // When disabled, the cached name keeps the abbreviated plan tree string.
+    withSQLConf(SQLConf.DATAFRAME_CACHE_PLAN_ID_NAME_ENABLED.key -> "false") {
+      val r4 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
+      assert(r4.cacheBuilder.cachedName ==
+        Utils.abbreviate(r4.cacheBuilder.cachedPlan.toString, 1024))
+    }
+  }
+
+  test("SPARK-59024: anonymous cached name is not rendered before materialization") {
+    val plan = ToStringCountingPlan()
+    val relation = InMemoryRelation(new DefaultCachedBatchSerializer, StorageLevel.MEMORY_ONLY,
+      plan, None, spark.range(1).queryExecution.optimizedPlan)
+    assert(plan.toStringCount == 0)
+    // Forcing the name renders the tree string exactly once.
+    relation.cacheBuilder.cachedName
+    assert(plan.toStringCount == 1)
+  }
+
   test("SPARK-47177: Cached SQL plan do not display final AQE plan in explain string") {
     def findIMRInnerChild(p: SparkPlan): SparkPlan = {
       val tableCache = find(p) {
@@ -72,5 +110,21 @@ class InMemoryRelationSuite extends SparkFunSuite
     df.collect()
     assert(findIMRInnerChild(df.queryExecution.executedPlan).treeString
       .contains("AdaptiveSparkPlan isFinalPlan=true"))
+  }
+}
+
+case class ToStringCountingPlan() extends LeafExecNode {
+  private val _toStringCount = new AtomicInteger(0)
+
+  def toStringCount: Int = _toStringCount.get()
+
+  override def output: Seq[Attribute] = Seq.empty
+
+  override protected def doExecute(): RDD[InternalRow] =
+    throw new UnsupportedOperationException
+
+  override def toString: String = {
+    _toStringCount.incrementAndGet()
+    "ToStringCountingPlan"
   }
 }

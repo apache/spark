@@ -98,7 +98,7 @@ object OrcUtils extends Logging {
     try {
       reader = OrcFile.createReader(file, readerOptions)
       val schema = reader.getSchema
-      if (schema.getFieldNames.size == 0) {
+      if (schema.getFieldNames.isEmpty) {
         None
       } else {
         Some(schema)

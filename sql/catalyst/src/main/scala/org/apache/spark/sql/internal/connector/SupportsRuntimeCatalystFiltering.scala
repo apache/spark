@@ -95,9 +95,10 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * must derive its result from the given expressions alone and must not carry state over from a
    * previous call.
    *
-   * Spark tracks runtime-filter eligibility by root attribute. If [[filterAttributes]] returns a
-   * nested reference, an expression may access another nested field under the same root. The scan
-   * must match each access against its own partition layout and use only expressions it can apply.
+   * Spark currently tracks runtime-filter eligibility by root attribute. If [[filterAttributes]]
+   * returns a nested reference, an expression may access another nested field under the same root.
+   * The scan must match each access against its own partition layout and use only expressions it
+   * can apply.
    *
    * If the scan also implements
    * [[org.apache.spark.sql.connector.read.SupportsReportPartitioning]], it must preserve
