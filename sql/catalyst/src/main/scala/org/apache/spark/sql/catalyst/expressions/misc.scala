@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -419,19 +421,31 @@ case class CurrentUser()
 private object AesEncryptDeterminism {
   def apply(arguments: Seq[Expression]): Boolean = {
     arguments.forall(_.deterministic) &&
-      (hasNonEmptyLiteral(arguments(4)) || isEcbLiteral(arguments(2)))
+      (hasNonEmptyFixedValue(arguments(4)) || isEcbFixedValue(arguments(2)))
   }
 
-  private def hasNonEmptyLiteral(expression: Expression): Boolean = expression match {
-    case Literal(value: Array[Byte], _) => value.nonEmpty
-    case Literal(value: UTF8String, _) => value.numBytes() > 0
-    case cast: Cast if cast.dataType == BinaryType => hasNonEmptyLiteral(cast.child)
-    case _ => false
+  private def fixedValue(expression: Expression): Option[Any] = {
+    if (expression.resolved && expression.foldable && expression.deterministic &&
+        expression.contextIndependentFoldable) {
+      try {
+        Option(expression.eval(EmptyRow))
+      } catch {
+        case NonFatal(_) => None
+      }
+    } else {
+      None
+    }
   }
 
-  private def isEcbLiteral(expression: Expression): Boolean = expression match {
-    case Literal(value: UTF8String, _) => value.toString.equalsIgnoreCase("ECB")
-    case cast: Cast if cast.dataType.isInstanceOf[StringType] => isEcbLiteral(cast.child)
+  private def hasNonEmptyFixedValue(expression: Expression): Boolean =
+    fixedValue(expression) match {
+      case Some(value: Array[Byte]) => value.nonEmpty
+      case Some(value: UTF8String) => value.numBytes() > 0
+      case _ => false
+    }
+
+  private def isEcbFixedValue(expression: Expression): Boolean = fixedValue(expression) match {
+    case Some(value: UTF8String) => value.toString.equalsIgnoreCase("ECB")
     case _ => false
   }
 }
