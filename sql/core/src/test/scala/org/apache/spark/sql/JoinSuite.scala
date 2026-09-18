@@ -1308,34 +1308,55 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-36082: automatic threshold enables NAAJ hash join despite left broadcast hint") {
+  test("SPARK-36082: NAAJ hash eligibility takes precedence over a left broadcast hint") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
-      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true") {
       withTempView("naajHintedLeft", "naajHintedRight") {
         Seq[java.lang.Double](-0.0d, 2.0d, null).toDF("key")
           .createOrReplaceTempView("naajHintedLeft")
         Seq[java.lang.Double](0.0d, 1.0d).toDF("key")
           .createOrReplaceTempView("naajHintedRight")
 
-        val result = sql(
+        val query =
           "select /*+ BROADCAST(naajHintedLeft) */ naajHintedLeft.* " +
             "from naajHintedLeft left anti join naajHintedRight on " +
             "naajHintedLeft.key = naajHintedRight.key or " +
-            "isnull(naajHintedLeft.key = naajHintedRight.key)")
-        val plan = result.queryExecution.sparkPlan
-        val nestedLoopJoins = plan.collect {
-          case join: BroadcastNestedLoopJoinExec => join
+            "isnull(naajHintedLeft.key = naajHintedRight.key)"
+
+        withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+          SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+          val result = sql(query)
+          val plan = result.queryExecution.sparkPlan
+          val nestedLoopJoins = plan.collect {
+            case join: BroadcastNestedLoopJoinExec => join
+          }
+          val nullAwareHashJoins = plan.collect {
+            case join: BroadcastHashJoinExec if join.isNullAwareAntiJoin => join
+          }
+          assert(nestedLoopJoins.isEmpty)
+          assert(nullAwareHashJoins.size === 1)
+          assert(nullAwareHashJoins.head.buildSide === BuildRight)
+          checkAnswer(result, Row(2.0d))
         }
-        val nullAwareHashJoins = plan.collect {
-          case join: BroadcastHashJoinExec if join.isNullAwareAntiJoin => join
+
+        withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+          val result = sql(query)
+          val plan = result.queryExecution.sparkPlan
+          val nestedLoopJoins = plan.collect {
+            case join: BroadcastNestedLoopJoinExec => join
+          }
+          val nullAwareHashJoins = plan.collect {
+            case join: BroadcastHashJoinExec if join.isNullAwareAntiJoin => join
+          }
+          assert(nestedLoopJoins.size === 1)
+          assert(nestedLoopJoins.head.buildSide === BuildLeft)
+          assert(nullAwareHashJoins.isEmpty)
+          checkAnswer(result, Row(2.0d))
         }
-        assert(nestedLoopJoins.isEmpty)
-        assert(nullAwareHashJoins.size === 1)
-        assert(nullAwareHashJoins.head.buildSide === BuildRight)
-        checkAnswer(result, Row(2.0d))
       }
     }
   }

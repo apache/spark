@@ -446,8 +446,8 @@ trait JoinSelectionHelper extends Logging {
       val canBroadcast = if (dedicatedThreshold < 0) {
         true
       } else {
-        val automaticBroadcastDisabled = conf.autoBroadcastJoinThreshold <= 0 &&
-          conf.getConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD).forall(_ <= 0)
+        val automaticBroadcastDisabled = conf.autoBroadcastJoinThreshold < 0 &&
+          conf.getConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD).forall(_ < 0)
         if (dedicatedThreshold == 0 && automaticBroadcastDisabled) {
           false
         } else {
