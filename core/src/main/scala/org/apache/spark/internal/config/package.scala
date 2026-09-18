@@ -921,6 +921,7 @@ package object config {
         "Workers report unscoped paths and their registrations are rejected while this is " +
         "enabled.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
