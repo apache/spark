@@ -33,7 +33,7 @@ private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
   val sc = parent.sc
   val conf = parent.conf
   val killEnabled = parent.killEnabled
-  val killViaGetEnabled = parent.killViaGetEnabled
+  val actionsViaGetEnabled = parent.actionsViaGetEnabled
   val csrfToken = parent.csrfToken
   val threadDumpEnabled =
     parent.sc.isDefined && parent.conf.get(UI_THREAD_DUMPS_ENABLED)

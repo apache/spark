@@ -610,7 +610,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     // GET mode is off by default outside YARN, and this test is about the token rather than
     // the default, so ask for GET explicitly.
     withSpark(newSparkContext(killEnabled = true,
-      additionalConfs = Map(UI_KILL_VIA_GET_ENABLED.key -> "true"))) { sc =>
+      additionalConfs = Map(UI_ACTIONS_VIA_GET_ENABLED.key -> "true"))) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       // java.net.HttpURLConnection silently drops some headers, so use Jetty's client
       // for requests that must carry specific prefetch headers.
@@ -655,7 +655,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
   test("kill job requires the CSRF token") {
     withSpark(newSparkContext(killEnabled = true,
-      additionalConfs = Map(UI_KILL_VIA_GET_ENABLED.key -> "true"))) { sc =>
+      additionalConfs = Map(UI_ACTIONS_VIA_GET_ENABLED.key -> "true"))) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       val base = sc.ui.get.webUrl.stripSuffix("/")
       // Retry only until the kill link appears; the accepted requests below kill the job.
@@ -671,26 +671,26 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     }
   }
 
-  test("kill stage is POST-only when spark.ui.killViaGetEnabled is disabled") {
+  test("kill stage is POST-only when spark.ui.actionsViaGetEnabled is disabled") {
     withSpark(newSparkContext(killEnabled = true,
-      additionalConfs = Map(UI_KILL_VIA_GET_ENABLED.key -> "false"))) { sc =>
+      additionalConfs = Map(UI_ACTIONS_VIA_GET_ENABLED.key -> "false"))) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       val client = new HttpClient()
       client.start()
       try {
-        eventually(timeout(5.seconds), interval(50.milliseconds)) {
-          val base = sc.ui.get.webUrl.stripSuffix("/")
-          val token = scrapeCsrfToken(sc)
-          val withToken = new URI(
-            base + s"/stages/stage/kill/?id=0&csrfToken=$token").toURL
-          TestUtils.httpResponseCode(withToken, "HEAD") should be (405)
-          TestUtils.httpResponseCode(withToken, "GET") should be (405)
-          TestUtils.httpResponseCode(withToken, "POST") should be (200)
-          // The browser path in this mode: the form posts id and token in the body.
-          client.POST(new URI(base + "/stages/stage/kill/")).body(
-            new StringRequestContent("application/x-www-form-urlencoded",
-              s"id=0&csrfToken=$token")).send().getStatus should be (200)
-        }
+        val base = sc.ui.get.webUrl.stripSuffix("/")
+        // Retry only until the kill form appears; the accepted requests below kill the
+        // stage, and the form is then gone.
+        val token = eventually(timeout(5.seconds), interval(50.milliseconds))(scrapeCsrfToken(sc))
+        val withToken = new URI(
+          base + s"/stages/stage/kill/?id=0&csrfToken=$token").toURL
+        TestUtils.httpResponseCode(withToken, "HEAD") should be (405)
+        TestUtils.httpResponseCode(withToken, "GET") should be (405)
+        TestUtils.httpResponseCode(withToken, "POST") should be (200)
+        // The browser path in this mode: the form posts id and token in the body.
+        client.POST(new URI(base + "/stages/stage/kill/")).body(
+          new StringRequestContent("application/x-www-form-urlencoded",
+            s"id=0&csrfToken=$token")).send().getStatus should be (200)
       } finally {
         client.stop()
       }
@@ -698,13 +698,17 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
   }
 
   test("hold and resume endpoints require the CSRF token") {
-    withSpark(newSparkContext(killEnabled = true)) { sc =>
+    // GET mode is off by default outside YARN; turn it on so the token check, rather than
+    // the method check, decides these requests.
+    withSpark(newSparkContext(killEnabled = true,
+      additionalConfs = Map(UI_ACTIONS_VIA_GET_ENABLED.key -> "true"))) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       eventually(timeout(5.seconds), interval(50.milliseconds)) {
         val base = sc.ui.get.webUrl.stripSuffix("/")
         val token = scrapeCsrfToken(sc)
-        // holdEnabled is off in this context, so the actions themselves no-op; what
-        // is exercised here is the guard wiring on the endpoints.
+        // The actions themselves no-op: spark.ui.holdEnabled defaults to true, but
+        // executorHoldSupported is false in local mode. What is exercised here is the
+        // guard wiring on the endpoints.
         Seq("hold", "resume").foreach { action =>
           TestUtils.httpResponseCode(
             new URI(base + s"/jobs/$action/").toURL, "GET") should be (403)
@@ -716,9 +720,30 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     }
   }
 
-  test("kill link rendering follows spark.ui.killViaGetEnabled") {
+  test("hold and resume are POST-only when spark.ui.actionsViaGetEnabled is disabled") {
+    withSpark(newSparkContext(killEnabled = true)) { sc =>
+      sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
+        val base = sc.ui.get.webUrl.stripSuffix("/")
+        val token = scrapeCsrfToken(sc)
+        // No explicit setting and spark.master is local, so GET is refused even with a
+        // valid token; POST with the token goes through (the actions no-op in local mode,
+        // where executorHoldSupported is false).
+        Seq("hold", "resume").foreach { action =>
+          TestUtils.httpResponseCode(
+            new URI(base + s"/jobs/$action/?csrfToken=$token").toURL,
+            "GET") should be (405)
+          TestUtils.httpResponseCode(
+            new URI(base + s"/jobs/$action/?csrfToken=$token").toURL,
+            "POST") should be (200)
+        }
+      }
+    }
+  }
+
+  test("kill link rendering follows spark.ui.actionsViaGetEnabled") {
     withSpark(newSparkContext(killEnabled = true,
-      additionalConfs = Map(UI_KILL_VIA_GET_ENABLED.key -> "true"))) { sc =>
+      additionalConfs = Map(UI_ACTIONS_VIA_GET_ENABLED.key -> "true"))) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       eventually(timeout(5.seconds), interval(50.milliseconds)) {
         val html = Utils.tryWithResource(

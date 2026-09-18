@@ -568,18 +568,18 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("kill via GET follows the cluster manager unless set explicitly") {
+  test("actions via GET follow the cluster manager unless set explicitly") {
     // The YARN ResourceManager/AM proxy does not forward POST (SPARK-6846), so GET is
     // accepted there and refused everywhere else.
-    assert(SparkUI.killViaGetEnabled(new SparkConf().set("spark.master", "yarn")))
-    assert(!SparkUI.killViaGetEnabled(new SparkConf().set("spark.master", "local[*]")))
-    assert(!SparkUI.killViaGetEnabled(new SparkConf()))
+    assert(SparkUI.actionsViaGetEnabled(new SparkConf().set("spark.master", "yarn")))
+    assert(!SparkUI.actionsViaGetEnabled(new SparkConf().set("spark.master", "local[*]")))
+    assert(!SparkUI.actionsViaGetEnabled(new SparkConf()))
 
     // An explicit setting wins in both directions.
-    assert(!SparkUI.killViaGetEnabled(
-      new SparkConf().set("spark.master", "yarn").set(UI.UI_KILL_VIA_GET_ENABLED, false)))
-    assert(SparkUI.killViaGetEnabled(
-      new SparkConf().set("spark.master", "local[*]").set(UI.UI_KILL_VIA_GET_ENABLED, true)))
+    assert(!SparkUI.actionsViaGetEnabled(
+      new SparkConf().set("spark.master", "yarn").set(UI.UI_ACTIONS_VIA_GET_ENABLED, false)))
+    assert(SparkUI.actionsViaGetEnabled(
+      new SparkConf().set("spark.master", "local[*]").set(UI.UI_ACTIONS_VIA_GET_ENABLED, true)))
   }
 }
 

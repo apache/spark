@@ -261,7 +261,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         "jobs", // subPath
         killEnabled,
         jobIdTitle,
-        parent.killViaGetEnabled,
+        parent.actionsViaGetEnabled,
         parent.csrfToken
       ).table(jobPage)
     } catch {
@@ -372,13 +372,26 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
                   "executors will be decommissioned after finishing their running tasks.")
               }
               val label = action.capitalize
-              <li>
-                <strong>Application:</strong>
-                {status}
+              // Same GET-link/POST-form split as the kill buttons, driven by
+              // spark.ui.actionsViaGetEnabled; the endpoint accepts only what
+              // SparkUI.initialize wired up.
+              val actionControl = if (parent.actionsViaGetEnabled) {
                 <a href={s"$basePathUri/jobs/$action/?csrfToken=${parent.csrfToken}"}
                    role="button"
                    data-confirm-message={confirm}
                    class="btn btn-sm btn-outline-secondary confirm-link">{label}</a>
+              } else {
+                <form action={s"$basePathUri/jobs/$action/"} method="POST" class="d-inline">
+                  <input type="hidden" name="csrfToken" value={parent.csrfToken}/>
+                  <button type="submit"
+                          data-confirm-message={confirm}
+                          class="btn btn-sm btn-outline-secondary confirm-link">{label}</button>
+                </form>
+              }
+              <li>
+                <strong>Application:</strong>
+                {status}
+                {actionControl}
                 {parent.lastHoldRequestStatus.getOrElse("")}
               </li>
             }
@@ -558,7 +571,7 @@ private[ui] class JobPagedTable(
     subPath: String,
     killEnabled: Boolean,
     jobIdTitle: String,
-    killViaGetEnabled: Boolean,
+    actionsViaGetEnabled: Boolean,
     csrfToken: String
   ) extends PagedTable[JobTableRowData] {
 
@@ -619,17 +632,18 @@ private[ui] class JobPagedTable(
 
     val killLink = if (killEnabled) {
       val killMessage = s"Are you sure you want to kill job ${job.jobId} ?"
-      if (killViaGetEnabled) {
-        // Default: a plain GET link, which also works through proxies that do not forward
-        // POST, such as the YARN ResourceManager/AM proxy (SPARK-6846). The endpoint
-        // requires the CSRF token and rejects prefetch requests (see SparkUI.initialize),
-        // and webui.js gates the click on the confirmation dialog.
+      if (actionsViaGetEnabled) {
+        // GET mode (spark.ui.actionsViaGetEnabled=true): a plain link, which also works
+        // through proxies that do not forward POST, such as the YARN ResourceManager/AM
+        // proxy (SPARK-6846). The endpoint requires the CSRF token and rejects prefetch
+        // requests (see SparkUI.initialize), and webui.js gates the click on the
+        // confirmation dialog.
         <a href={s"$basePath/jobs/job/kill/?id=${job.jobId}&csrfToken=$csrfToken"}
            role="button"
            data-kill-message={killMessage}
            class="btn btn-sm btn-outline-danger kill-link float-end">Kill</a>
       } else {
-        // POST-only mode (spark.ui.killViaGetEnabled=false): submit the kill as a form,
+        // POST-only mode (spark.ui.actionsViaGetEnabled=false): submit the kill as a form,
         // the same pattern the master UI uses for killing applications and drivers.
         <form action={s"$basePath/jobs/job/kill/"} method="POST" class="d-inline float-end">
           <input type="hidden" name="id" value={job.jobId.toString}/>

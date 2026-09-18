@@ -208,10 +208,9 @@ private[spark] object JettyUtils extends Logging {
    * prefetcher cannot trigger the action: a prefetch of a kill link must not kill.
    */
   private[spark] def isPrefetchRequest(request: HttpServletRequest): Boolean = {
-    val purpose = Option(request.getHeader("Sec-Purpose"))
-      .orElse(Option(request.getHeader("Purpose")))
-    purpose.exists(_.toLowerCase(Locale.ROOT).contains("prefetch")) ||
-      request.getHeader("X-Moz") != null
+    Seq("Sec-Purpose", "Purpose", "X-Moz")
+      .flatMap(h => Option(request.getHeader(h)))
+      .exists(_.toLowerCase(Locale.ROOT).contains("prefetch"))
   }
 
   /**
