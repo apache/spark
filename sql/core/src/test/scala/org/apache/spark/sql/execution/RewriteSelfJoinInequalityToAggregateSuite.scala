@@ -233,6 +233,33 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
     }
   }
 
+  test("Pattern A2: bare outer join with no top-level Project is rewritten") {
+    withTable("T") {
+      withTempView("D") {
+        // `SELECT *` over the whole D-plus-self-join subquery keeps its own Project only until
+        // `RemoveNoopOperators` removes the no-op identity projection, so this rule sees a bare
+        // outer `Join` (`projectListOpt == None`). That branch returns `newOuterJoin` directly,
+        // with no final `remapNamedExpressionAttributes` pass, so pin its output arity and
+        // semantics with a positive case.
+        setupTable()
+        spark.sql(
+          """CREATE OR REPLACE TEMP VIEW D AS SELECT * FROM VALUES
+            |  (1), (3), (6) AS D(k)""".stripMargin)
+        val sql =
+          """SELECT k FROM T outer_t WHERE (k, k) IN (
+            |  SELECT * FROM D d, (SELECT s1.k FROM T s1 JOIN T s2
+            |    ON s1.k = s2.k AND s1.v <> s2.v) sj
+            |  WHERE d.k = sj.k)""".stripMargin
+
+        assertRuleFired(sql)
+        assertMinMaxRewriteShape(optimizedPlanWith(sql, rewrite = true))
+        val (on, off) = runBoth(sql)
+        assert(on == off, s"bare-outer-join rewrite ON $on != OFF $off")
+        assert(on == Set(Row(1), Row(3), Row(6)), s"expected {1,3,6}, got $on")
+      }
+    }
+  }
+
   test("Pattern A2: nested self-join is rewritten, incl. a sjRight top-Project remap") {
     withTable("T") {
       withTempView("D") {
@@ -1489,12 +1516,15 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
     }
   }
 
-  test("ANSI: NULL equi-key row does not expose the neq cast to a different filter placement") {
+  test("ANSI: NULL equi-key cast outcomes with and without constraint propagation") {
     withTable("TAnsiNull") {
-      // Our injected `IsNotNull(k)` and the baseline's own `InferFiltersFromConstraints` (inferred
-      // from `s1.k = s2.k`) are different mechanisms that could place the guard differently
-      // relative to the throwing `CAST(s AS INT)`. Both end up pushing it below the Project before
-      // the cast runs (Cast.nullIntolerant), on either side of ANSI -- pin that so it stays true.
+      // Our injected `IsNotNull(k)` is unconditional, while the baseline relies on
+      // `InferFiltersFromConstraints`, which is gated by `constraintPropagation.enabled`. The
+      // observable outcomes agree in three of the four (ansi, constraintPropagation)
+      // combinations: with ANSI off the bad cast yields NULL even without an inferred guard,
+      // while with ANSI on the baseline succeeds only when constraint propagation inserts the
+      // guard. Thus ANSI=true with the conf off is the only divergent case: the baseline throws
+      // while the rewrite drops the NULL-key row first.
       createTable(
         "TAnsiNull",
         "k INT, s STRING",
@@ -1508,21 +1538,41 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
           |    ON s1.k = s2.k AND s1.x <> s2.x)""".stripMargin
 
       Seq("false", "true").foreach { ansi =>
-        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
-          assertRuleFired(sql)
-          val on = runOutcome(sql, rewrite = true)
-          val off = runOutcome(sql, rewrite = false)
-          (on, off) match {
-            case (Right(onRows), Right(offRows)) =>
-              QueryTest.sameRows(onRows, offRows).foreach { error =>
-                fail(s"ANSI=$ansi both succeeded but diverged:\n$error")
-              }
-              // Real membership: both TAnsiNull rows with k=1; NULL-key never contributes.
-              QueryTest.sameRows(Seq(Row(1), Row(1)), onRows).foreach { error =>
-                fail(s"ANSI=$ansi expected two copies of Row(1):\n$error")
-              }
-            case _ =>
-              fail(s"ANSI=$ansi expected both sides to succeed: ON=$on OFF=$off")
+        Seq("true", "false").foreach { constraintPropagation =>
+          withSQLConf(
+              SQLConf.ANSI_ENABLED.key -> ansi,
+              SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> constraintPropagation) {
+            val label = s"ANSI=$ansi constraintPropagation=$constraintPropagation"
+            assertRuleFired(sql)
+            val on = runOutcome(sql, rewrite = true)
+            val off = runOutcome(sql, rewrite = false)
+
+            // The rewrite's own IsNotNull(k) is unconditional, so it never depends on ANSI or
+            // constraintPropagation: real membership is always both TAnsiNull rows with k=1.
+            on match {
+              case Right(onRows) =>
+                QueryTest.sameRows(Seq(Row(1), Row(1)), onRows).foreach { error =>
+                  fail(s"$label: rewrite expected two copies of Row(1):\n$error")
+                }
+              case Left(err) => fail(s"$label: rewrite unexpectedly threw $err")
+            }
+
+            // ANSI off never throws on this bad cast (it just yields NULL) regardless of the
+            // guard; ANSI on only succeeds when constraintPropagation actually inferred the
+            // guard -- the one combination without it is where the baseline throws.
+            val baselineShouldSucceed = ansi == "false" || constraintPropagation == "true"
+            off match {
+              case Right(offRows) if baselineShouldSucceed =>
+                QueryTest.sameRows(Seq(Row(1), Row(1)), offRows).foreach { error =>
+                  fail(s"$label: baseline expected two copies of Row(1):\n$error")
+                }
+              case Left(err) if !baselineShouldSucceed =>
+                assert(err == "CAST_INVALID_INPUT",
+                  s"$label: expected baseline to throw CAST_INVALID_INPUT, got $err")
+              case _ =>
+                fail(s"$label: baseline outcome $off did not match " +
+                  s"baselineShouldSucceed=$baselineShouldSucceed")
+            }
           }
         }
       }
@@ -1530,10 +1580,9 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
   }
 
   /**
-   * Run `sql` with the rewrite on/off and capture observable behavior: `Right(rows)` on success or
-   * `Left(errorClass)` if execution throws. Used to assert the rewrite does not change whether, or
-   * with what error, a query fails (e.g. under ANSI). `Seq`, not `Set`: a `.toSet` here would hide
-   * a duplicated or dropped row the same way `runBoth`'s doc comment warns against.
+   * Run `sql` under the requested rewrite setting and capture observable behavior:
+   * `Right(rows)` on success or `Left(errorClass)` if execution throws. Keep rows as `Seq`, not
+   * `Set`, so callers can detect duplicated or dropped rows.
    */
   private def runOutcome(sql: String, rewrite: Boolean): Either[String, Seq[Row]] = {
     withSQLConf(rewriteConf -> rewrite.toString) {

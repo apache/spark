@@ -679,8 +679,11 @@ object SQLConf {
         "stock Parquet scans, Range, and local relations -- so it never changes results for " +
         "non-repeatable inputs. This is experimental and off by default: there is no cost " +
         "model, and the benefit depends on per-key multiplicity because the eliminated " +
-        "self-join can generate quadratically many candidate pairs. Enable it only for " +
-        "workloads known to contain such high-multiplicity self-joins.")
+        "self-join can generate quadratically many candidate pairs. A variable-width " +
+        "inequality column (STRING or BINARY) raises the break-even multiplicity further, " +
+        "because MIN/MAX over such a column falls back to sort-based aggregation instead of " +
+        "hashing. Enable it only for workloads known to contain such high-multiplicity " +
+        "self-joins.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
