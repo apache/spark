@@ -490,6 +490,7 @@ package object config {
       "requests and skip admission coordination. Consumers opt in to revocation of unused " +
       "speculative work for ordinary allocations, including allocations from other tasks.")
     .version("5.0.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(false)
 
