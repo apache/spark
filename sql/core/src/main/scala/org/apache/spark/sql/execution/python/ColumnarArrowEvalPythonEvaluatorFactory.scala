@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.File
-import java.util.ArrayDeque
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -60,10 +60,10 @@ private[python] object ColumnarArrowEvalPythonEvaluatorFactory {
  *
  * 1. '''Arrow columnar path''' (UDF inputs are simple column refs AND
  *    columns are [[ArrowColumnVector]]): Arrow FieldVectors are extracted
- *    directly and serialized to IPC. Pass-through columns are kept as
- *    [[ColumnVector]] references (safe because Arrow vectors are
- *    independently allocated per batch). Output is produced by columnar
- *    combining: passThruCols ++ resultCols -> ColumnarBatch.
+ *    directly and serialized to IPC. Pass-through columns are transferred
+ *    to independent vector views because the input reader may close its
+ *    vectors before the Python result is consumed. Output is produced by
+ *    columnar combining: passThruCols ++ resultCols -> ColumnarBatch.
  *
  * 2. '''Non-Arrow columnar path''' (UDF inputs are simple column refs
  *    BUT columns are NOT [[ArrowColumnVector]]): Non-Arrow columnar
@@ -173,7 +173,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
       val peekIter = new PeekableIterator(inputIter)
       val isArrow = peekIter.peek().exists { batch =>
         batch.numCols() > 0 &&
-          batch.column(0).isInstanceOf[ArrowColumnVector]
+          childOutput.indices.forall(i => batch.column(i).isInstanceOf[ArrowColumnVector])
       }
 
       if (ColumnarArrowEvalPythonEvaluatorFactory.canUseArrowColumnar(
@@ -201,8 +201,8 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     }
 
     /**
-     * Path 1: Arrow columnar. ColumnVector references are safe
-     * because Arrow vectors are independently allocated per batch.
+     * Path 1: Arrow columnar. Pass-through columns use independent transferred vector views so
+     * they remain valid if the input reader closes its vectors before Python output is consumed.
      * Combines pass-through + UDF result columns into ColumnarBatch.
      */
     private def evalArrowColumnar(
@@ -215,10 +215,12 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         columnIndices: Array[Int]): Iterator[ColumnarBatch] = {
 
       val passThruQueue =
-        new ArrayDeque[(Array[ColumnVector], Int)]()
+        new ConcurrentLinkedQueue[(Array[ColumnVector], Int)]()
       context.addTaskCompletionListener[Unit] { _ =>
-        while (!passThruQueue.isEmpty) {
-          passThruQueue.poll()._1.foreach(_.close())
+        var entry = passThruQueue.poll()
+        while (entry != null) {
+          entry._1.foreach(_.close())
+          entry = passThruQueue.poll()
         }
       }
 
