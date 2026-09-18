@@ -35,7 +35,7 @@ from pyspark.eval_handlers._base import (
     CoGroupedEvalTypeHandler,
     GroupedEvalTypeHandler,
 )
-from pyspark.eval_handlers._utils import extract_key_value_indexes
+from pyspark.eval_handlers.utils import extract_key_value_indexes
 from pyspark.eval_handlers.verification import (
     verify_iter_result_row_count,
     verify_iterator_exhausted,
