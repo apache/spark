@@ -22,7 +22,7 @@ import java.util.{Collections, Optional, OptionalLong}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, SortOrder, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
@@ -580,7 +580,7 @@ object DataSourceV2Relation {
     val v2ColumnStats = Option(v2Statistics.columnStats()).getOrElse(EMPTY_V2_COLUMN_STATS)
     if (!v2ColumnStats.isEmpty) {
       val keys = v2ColumnStats.keySet()
-
+      var keyed = Seq.empty[(Attribute, String, ColumnStat)]
       keys.forEach(key => {
         val colStat = v2ColumnStats.get(key)
         val distinct: Option[BigInt] =
@@ -604,24 +604,31 @@ object DataSourceV2Relation {
 
         val catalystColStat = ColumnStat(distinct, min, max, nullCount, avgLen, maxLen, histogram)
 
-        // Catalyst statistics are keyed by top-level Attribute, so only single-part references
-        // can be matched to an output column.
+        // Catalyst column statistics only support top-level attributes.
         val fieldNames = key.fieldNames
         if (fieldNames.length == 1) {
           val fieldName = fieldNames.head
-          val matches = output.filter(attribute => resolver(attribute.name, fieldName))
-          // On an ambiguous case-insensitive match (e.g. outputs "id" and "ID"), require a unique
-          // exact-name match, otherwise skip so CBO is not fed the wrong column.
-          val matched = matches match {
-            case Seq(single) => Some(single)
+          val exprIds = AttributeSeq.fromNormalOutput(output)
+            .getCandidatesForResolution(Seq(fieldName), resolver)._1
+            .map(_.exprId).toSet
+          output.filter(attr => exprIds.contains(attr.exprId)) match {
+            case Seq(single) => keyed = keyed :+ ((single, fieldName, catalystColStat))
             case multiple => multiple.filter(_.name == fieldName) match {
-              case Seq(exact) => Some(exact)
-              case _ => None
+              case Seq(exact) => keyed = keyed :+ ((exact, fieldName, catalystColStat))
+              case _ =>
             }
           }
-          matched.foreach(attribute => colStats = colStats :+ (attribute -> catalystColStat))
         }
       })
+      // Several keys can resolve to one attribute (e.g. "id" and "ID" when case-insensitive); keep
+      // a unique match, preferring an exact-name key, so the result is deterministic.
+      colStats = keyed.groupBy(_._1.exprId).values.toSeq.flatMap {
+        case Seq((attribute, _, stat)) => Some(attribute -> stat)
+        case many => many.filter { case (attr, fieldName, _) => fieldName == attr.name } match {
+          case Seq((attribute, _, stat)) => Some(attribute -> stat)
+          case _ => None
+        }
+      }
     }
     val attributeStats = AttributeMap(colStats)
     // Prefer the source-reported size. Otherwise infer a projection-aware size from the row count

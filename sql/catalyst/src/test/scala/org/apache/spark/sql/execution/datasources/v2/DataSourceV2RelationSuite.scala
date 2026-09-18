@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
-import java.util.OptionalLong
+import java.util.{HashMap, Map => JMap, OptionalLong}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
@@ -135,38 +135,31 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   private def optLong(value: Option[Long]): OptionalLong =
     value.map(OptionalLong.of).getOrElse(OptionalLong.empty())
 
-  /** Builds a [[ColumnStatistics]] overriding only the fields these tests exercise. */
-  private def columnStat(
+  private def v2ColumnStat(
       distinct: Option[Long] = None,
       avg: Option[Long] = None): ColumnStatistics = new ColumnStatistics {
     override def distinctCount(): OptionalLong = optLong(distinct)
     override def avgLen(): OptionalLong = optLong(avg)
   }
 
-  /** Builds a column-stats map keyed by [[NamedReference]] from `name -> stats` pairs. */
-  private def columnStatsMap(
-      entries: (String, ColumnStatistics)*): java.util.Map[NamedReference, ColumnStatistics] = {
-    val map = new java.util.HashMap[NamedReference, ColumnStatistics]()
+  private def v2ColumnStatsMap(
+      entries: (String, ColumnStatistics)*): JMap[NamedReference, ColumnStatistics] = {
+    val map = new HashMap[NamedReference, ColumnStatistics]()
     entries.foreach { case (name, stat) => map.put(FieldReference.column(name), stat) }
     map
   }
 
-  /** Builds a [[V2Statistics]]; `colStats` may be `null` to exercise null-tolerance. */
-  private def newStatistics(
+  private def v2Statistics(
       size: OptionalLong = OptionalLong.empty(),
       rows: OptionalLong = OptionalLong.empty(),
-      colStats: java.util.Map[NamedReference, ColumnStatistics] =
-        new java.util.HashMap[NamedReference, ColumnStatistics]()): V2Statistics =
+      colStats: JMap[NamedReference, ColumnStatistics] =
+        new HashMap[NamedReference, ColumnStatistics]()): V2Statistics =
     new V2Statistics {
       override def sizeInBytes(): OptionalLong = size
       override def numRows(): OptionalLong = rows
-      override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = colStats
+      override def columnStats(): JMap[NamedReference, ColumnStatistics] = colStats
     }
 
-  /**
-   * Builds a [[Scan]] reporting `stats` (evaluated on every `estimateStatistics()` call, so it may
-   * be `null` or count invocations). `sizeEstimate` backs `estimateSizeInBytes()`.
-   */
   private def newStatsScan(
       stats: => V2Statistics,
       schema: StructType = StructType(Seq(StructField("id", IntegerType))),
@@ -180,9 +173,9 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats uses non-empty scan stats with CBO") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = newStatsScan(newStatistics(
+    val scan = newStatsScan(v2Statistics(
       rows = OptionalLong.of(42L),
-      colStats = columnStatsMap("id" -> columnStat(distinct = Some(40L), avg = Some(4L)))))
+      colStats = v2ColumnStatsMap("id" -> v2ColumnStat(distinct = Some(40L), avg = Some(4L)))))
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val stats = scanRel(output, scan).computeStats()
@@ -200,9 +193,9 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     val colAttr = AttributeReference("col-1", IntegerType)()
     val output = Seq(colAttr)
     val scan = newStatsScan(
-      newStatistics(
+      v2Statistics(
         rows = OptionalLong.of(42L),
-        colStats = columnStatsMap("col-1" -> columnStat(distinct = Some(40L)))),
+        colStats = v2ColumnStatsMap("col-1" -> v2ColumnStat(distinct = Some(40L)))),
       schema = StructType(Seq(StructField("col-1", IntegerType))))
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
@@ -217,9 +210,9 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats matches column stats respecting case sensitivity") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = newStatsScan(newStatistics(
+    val scan = newStatsScan(v2Statistics(
       rows = OptionalLong.of(42L),
-      colStats = columnStatsMap("ID" -> columnStat(distinct = Some(40L)))))
+      colStats = v2ColumnStatsMap("ID" -> v2ColumnStat(distinct = Some(40L)))))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
@@ -245,9 +238,9 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     val output = Seq(idAttr, upperIdAttr)
 
     def scanKeyed(name: String): Scan = newStatsScan(
-      newStatistics(
+      v2Statistics(
         rows = OptionalLong.of(42L),
-        colStats = columnStatsMap(name -> columnStat(distinct = Some(40L)))),
+        colStats = v2ColumnStatsMap(name -> v2ColumnStat(distinct = Some(40L)))),
       schema = StructType(Seq(StructField("id", IntegerType), StructField("ID", IntegerType))))
 
     withSQLConf(
@@ -263,10 +256,50 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("DataSourceV2ScanRelation.computeStats prefers the exact-name key when several keys " +
+    "map to one output") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = newStatsScan(v2Statistics(
+      rows = OptionalLong.of(42L),
+      colStats = v2ColumnStatsMap(
+        "ID" -> v2ColumnStat(distinct = Some(10L)),
+        "id" -> v2ColumnStat(distinct = Some(40L)))))
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+      assert(stats.attributeStats.size === 1)
+      assert(stats.attributeStats(idAttr).distinctCount.contains(BigInt(40)),
+        "the exact-name key must win deterministically over a case-folded key")
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats matches column stats consistently with the " +
+    "analyzer for case-folding-equal names") {
+    val longS = "\u017f"
+    val colAttr = AttributeReference(longS, IntegerType)()
+    val output = Seq(colAttr)
+    val scan = newStatsScan(
+      v2Statistics(
+        rows = OptionalLong.of(42L),
+        colStats = v2ColumnStatsMap("s" -> v2ColumnStat(distinct = Some(40L)))),
+      schema = StructType(Seq(StructField(longS, IntegerType))))
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+      assert(stats.attributeStats.isEmpty,
+        "a stat keyed by an ASCII name must not attach to a case-folding-equal non-ASCII column")
+    }
+  }
+
   test("DataSourceV2ScanRelation.computeStats derives size 1 for a zero-row scan with CBO") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = newStatsScan(newStatistics(rows = OptionalLong.of(0L)))
+    val scan = newStatsScan(v2Statistics(rows = OptionalLong.of(0L)))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
@@ -282,7 +315,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
     val scan = newStatsScan(
-      newStatistics(size = OptionalLong.of(1000L), rows = OptionalLong.of(7L)),
+      v2Statistics(size = OptionalLong.of(1000L), rows = OptionalLong.of(7L)),
       sizeEstimate = OptionalLong.of(50L))
 
     withSQLConf(
@@ -298,8 +331,8 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats treats column-only scan stats as non-empty") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = newStatsScan(newStatistics(
-      colStats = columnStatsMap("id" -> columnStat(distinct = Some(7L)))))
+    val scan = newStatsScan(v2Statistics(
+      colStats = v2ColumnStatsMap("id" -> v2ColumnStat(distinct = Some(7L)))))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
@@ -317,7 +350,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
     val scan = newStatsScan(
-      newStatistics(size = OptionalLong.of(1000L), rows = OptionalLong.of(5L)),
+      v2Statistics(size = OptionalLong.of(1000L), rows = OptionalLong.of(5L)),
       sizeEstimate = OptionalLong.of(50L))
 
     withSQLConf(
@@ -334,7 +367,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats uses default estimateSizeInBytes without CBO") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = newStatsScan(newStatistics(size = OptionalLong.of(64L), rows = OptionalLong.of(5L)))
+    val scan = newStatsScan(v2Statistics(size = OptionalLong.of(64L), rows = OptionalLong.of(5L)))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "false",
@@ -350,7 +383,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats infers size-only estimates from row count") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
-    val scan = newStatsScan(newStatistics(rows = OptionalLong.of(5L)))
+    val scan = newStatsScan(v2Statistics(rows = OptionalLong.of(5L)))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "false",
@@ -372,7 +405,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     var estimateStatisticsCalls = 0
     val scan = newStatsScan({
       estimateStatisticsCalls += 1
-      newStatistics(rows = OptionalLong.of(5L))
+      v2Statistics(rows = OptionalLong.of(5L))
     })
 
     withSQLConf(
@@ -388,7 +421,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
 
   test("DataSourceV2ScanRelation.computeStats uses default size without CBO for empty stats") {
     val output = Seq(AttributeReference("id", IntegerType)())
-    val scan = newStatsScan(newStatistics())
+    val scan = newStatsScan(v2Statistics())
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "false",
@@ -429,7 +462,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
 
   test("DataSourceV2ScanRelation.computeStats uses default size for empty scan stats") {
     val output = Seq(AttributeReference("id", IntegerType)())
-    val scan = newStatsScan(newStatistics())
+    val scan = newStatsScan(v2Statistics())
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
@@ -444,7 +477,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
   test("DataSourceV2ScanRelation.computeStats uses default size for null scan stats") {
     val output = Seq(AttributeReference("id", IntegerType)())
     val nullStatsScan = newStatsScan(stats = null)
-    val nullColumnStatsScan = newStatsScan(newStatistics(colStats = null))
+    val nullColumnStatsScan = newStatsScan(v2Statistics(colStats = null))
 
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
@@ -475,10 +508,10 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     val output = Seq(idAttr)
     // numRows present, columnStats null: isNotEmpty is true (via numRows), so the conversion runs
     // and must not NPE on the null column-stats map.
-    val rowCountScan = newStatsScan(newStatistics(rows = OptionalLong.of(42L), colStats = null))
+    val rowCountScan = newStatsScan(v2Statistics(rows = OptionalLong.of(42L), colStats = null))
     // sizeInBytes present, columnStats null: same null-tolerance requirement, reached via
     // sizeInBytes instead of numRows.
-    val sizeScan = newStatsScan(newStatistics(size = OptionalLong.of(1000L), colStats = null))
+    val sizeScan = newStatsScan(v2Statistics(size = OptionalLong.of(1000L), colStats = null))
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val rowCountStats = scanRel(output, rowCountScan).computeStats()
