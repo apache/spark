@@ -39,7 +39,8 @@ import java.security.InvalidAlgorithmParameterException;
 
 public class GcmTransportCipher implements TransportCipher {
     private static final String HKDF_ALG = "HmacSha256";
-    private static final int LENGTH_HEADER_BYTES = 8;
+    @VisibleForTesting
+    static final int LENGTH_HEADER_BYTES = 8;
     @VisibleForTesting
     static final int CIPHERTEXT_BUFFER_SIZE = 32 * 1024; // 32KB
     // Maximum plaintext bytes to accumulate before flushing to downstream handlers, even
@@ -212,7 +213,7 @@ public class GcmTransportCipher implements TransportCipher {
 
         @Override
         public long transferTo(WritableByteChannel target, long position) throws IOException {
-            int transferredThisCall = 0;
+            long transferredThisCall = 0;
             // If the header has is not empty, try to write it out to the target.
             if (headerByteBuffer.hasRemaining()) {
                 int written = target.write(headerByteBuffer);
@@ -369,8 +370,9 @@ public class GcmTransportCipher implements TransportCipher {
                 }
                 expectedLengthBuffer.flip();
                 expectedLength = expectedLengthBuffer.getLong();
-                if (expectedLength < 0) {
-                    throw new IllegalStateException("Invalid expected ciphertext length.");
+                if (expectedLength < LENGTH_HEADER_BYTES + (long) headerLength) {
+                    throw new IllegalStateException(
+                            "Invalid expected ciphertext length: " + expectedLength);
                 }
                 ciphertextRead += LENGTH_HEADER_BYTES;
             }
@@ -442,8 +444,13 @@ public class GcmTransportCipher implements TransportCipher {
                         int readableBytes = Math.min(
                                 nettyBufReadableBytes,
                                 ciphertextBuffer.remaining());
-                        int expectedRemaining = (int) (expectedLength - ciphertextRead);
-                        int bytesToRead = Math.min(readableBytes, expectedRemaining);
+                        long expectedRemaining = expectedLength - ciphertextRead;
+                        if (expectedRemaining <= 0) {
+                            throw new IllegalStateException(
+                                    "Invalid ciphertext state: expectedLength=" + expectedLength
+                                            + ", ciphertextRead=" + ciphertextRead);
+                        }
+                        int bytesToRead = (int) Math.min((long) readableBytes, expectedRemaining);
                         // The smallest ciphertext size is 16 bytes for the auth tag
                         ciphertextBuffer.limit(ciphertextBuffer.position() + bytesToRead);
                         ciphertextNettyBuf.readBytes(ciphertextBuffer);
