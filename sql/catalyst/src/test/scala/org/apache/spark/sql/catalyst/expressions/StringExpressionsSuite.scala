@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.CharsetProvider
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -1058,6 +1059,22 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(StringTrim(Literal("yxTomxx"), Literal("xyz")), "Tom")
     checkEvaluation(StringTrim(Literal("xxxbarxxx"), Literal("x")), "bar")
+  }
+
+  test("default trim uses collation-aware space matching") {
+    val unicodeCi = CollationFactory.collationNameToId("UNICODE_CI")
+    val unicode = CollationFactory.collationNameToId("UNICODE")
+    val source = "\u00A0abc\u00A0"
+    val unicodeCiSource = Literal.create(source, StringType(unicodeCi))
+    val unicodeSource = Literal.create(source, StringType(unicode))
+
+    checkEvaluation(StringTrimLeft(unicodeCiSource), "abc\u00A0")
+    checkEvaluation(StringTrimRight(unicodeCiSource), "\u00A0abc")
+    checkEvaluation(StringTrim(unicodeCiSource), "abc")
+
+    checkEvaluation(StringTrimLeft(unicodeSource), source)
+    checkEvaluation(StringTrimRight(unicodeSource), source)
+    checkEvaluation(StringTrim(unicodeSource), source)
   }
 
   test("LTRIM") {
