@@ -682,7 +682,11 @@ trait DivModLike extends BinaryArithmetic {
   // Whether we should check overflow or not in ANSI mode.
   protected def checkDivideOverflow: Boolean = false
 
-  override def nullable: Boolean = true
+  // The result is null only when an input is, unless a divide/remainder-by-zero (or, for decimals,
+  // a precision overflow) can produce a null without failing. Under ANSI (`failOnError`) those
+  // conditions throw instead of returning null, so the result is null iff a child is. Non-ANSI /
+  // TRY stay conservatively nullable (zero -> null; decimal overflow -> null).
+  override def nullable: Boolean = left.nullable || right.nullable || !failOnError
 
   private lazy val isZero: Any => Boolean = right.dataType match {
     case _: DecimalType => x => x.asInstanceOf[Decimal].isZero
@@ -1152,7 +1156,9 @@ case class Pmod(
 
   override def inputType: AbstractDataType = NumericType
 
-  override def nullable: Boolean = true
+  // See DivModLike.nullable: pmod-by-zero (and decimal precision overflow) throw under ANSI rather
+  // than returning null, so the result is null iff a child is; non-ANSI stays nullable.
+  override def nullable: Boolean = left.nullable || right.nullable || !failOnError
 
   override def decimalMethod: String = "remainder"
 
