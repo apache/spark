@@ -19,7 +19,9 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.sql.{functions => F, Column}
 import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.expressions.{CreateMap, If, Literal, RaiseError}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
+import org.apache.spark.sql.classic.ExpressionUtils
 import org.apache.spark.sql.types.{BooleanType, MapType, StringType, StructType}
 
 /**
@@ -46,20 +48,14 @@ import org.apache.spark.sql.types.{BooleanType, MapType, StringType, StructType}
  * unauthored?
  *
  * Concretely, the contract of the version map is as follows.
- * 1. Every column that received a null in the event but is considered authored (i.e. not part
- *    of ignore-null selection at ingestion), receives an entry of (column name, true) in the
- *    version map.
- * 2. Every column that received a null in the event but is considered unauthored (i.e. part
- *    of the ignore-null selection at ingestion), receives an entry of (column name, false) in
- *    the version map.
- * 3. Every column that was not present in the event, but schema evolved in later with a null
- *    value, will be treated as unauthored BUT does not yet have any entry in the version map.
- *    An entry will be added as per (2).
+ * 1. Every null considered authored receives an entry of (column name, true).
+ * 2. Every null considered unauthored receives an entry of (column name, false).
+ * 3. Once a non-null map is established, every column added by later schema evolution has an
+ *    unauthored null but initially has no map entry. An entry will be added as per (2).
  *
- * In a single sentence: if a null column in the SCD2 row is either absent from the version
- * map or has a false value in the version map, the null is considered unauthored by the
- * upsert event that spawned this row. Otherwise the null value was explicitly authored by
- * the row.
+ * In a single sentence: if a null column in an SCD2 row with a non-null version map is either
+ * absent from the map or has a false value, the null is considered unauthored by the upsert event
+ * that spawned this row. Otherwise the row explicitly authored the null.
  */
 private[pipelines] object Scd2VersionMap {
 
@@ -74,15 +70,16 @@ private[pipelines] object Scd2VersionMap {
    * Values indicate authorship: `true` means authored-null, `false` means unauthored-null.
    * Null values never appear in the map.
    *
-   * Lack of entry in the map for a null-valued leaf column implies the column was
+   * Lack of entry in a non-null map for a null-valued leaf column implies the column was
    * schema-evolved with an unauthored-null.
    */
   def mapType: MapType = MapType(StringType, BooleanType, valueContainsNull = false)
 
   /**
-   * Builds the ingest-time version map column for a microbatch. For each null leaf, the map
-   * records whether the upsert event represented by the row authored that null or left the leaf
-   * unauthored under the active ignore-null selection.
+   * Builds a version map from a row's values and an ignore-null selection. For each null leaf,
+   * the map records whether the row authored that null or left the leaf unauthored under the
+   * selection. Used both when ingesting a new upsert and when lazily establishing a map for an
+   * existing row that has none.
    *
    * @param schema The schema whose leaves the version map covers. Null-authorship is tracked
    *   for every leaf column in this schema, as per the version map contract.
@@ -95,29 +92,22 @@ private[pipelines] object Scd2VersionMap {
       schema: StructType,
       ignoreNullSelection: ColumnSelection,
       resolver: Resolver): Column = {
-    val ignoreNullColumns = ColumnSelection.applyToSchema(
-      schemaName = "ignoreNullSelection",
-      schema = schema,
-      columnSelection = Some(ignoreNullSelection),
-      resolver = resolver
-    )
-    val ignoreNullLeafPaths = AutoCdcSchemaUtils.flattenStructFieldPaths(ignoreNullColumns).toSet
+    val ignoreNullLeafPaths =
+      resolveIgnoreNullLeafPaths(schema, ignoreNullSelection, resolver).toSet
 
     // For each leaf, build a nullable struct (key, value). The struct is non-null only when
     // the leaf column's runtime value is null (meaning the leaf needs a version map entry).
     // The value is a non-nullable BooleanType literal indicating authorship: true if the upsert
     // event authored the null, false if the event left the leaf unauthored.
     val candidateEntries = AutoCdcSchemaUtils.flattenStructFieldPaths(schema).map { path =>
-      val versionMapKey = QuotingUtils.quoteNameParts(path)
       val isIgnoreNullLeaf = ignoreNullLeafPaths.contains(path)
-      val leafIsNull = F.col(versionMapKey).isNull
+      val leafIsNull = F.col(QuotingUtils.quoteNameParts(path)).isNull
 
       // If the leaf is not null, this candidate entry will simply resolve to null and will not be
       // added to the version map during construction below.
-      F.when(leafIsNull, F.struct(
-        F.lit(versionMapKey).as("key"),
-        F.lit(!isIgnoreNullLeaf).as("value")
-      ))
+      F.when(
+        leafIsNull,
+        buildVersionMapEntry(path, authored = !isIgnoreNullLeaf))
     }
 
     if (candidateEntries.isEmpty) {
@@ -127,4 +117,118 @@ private[pipelines] object Scd2VersionMap {
       F.map_from_entries(nonNullEntries)
     }
   }
+
+  /** Resolves the active ignore-null selection to canonical leaf paths in schema order. */
+  private[autocdc] def resolveIgnoreNullLeafPaths(
+      schema: StructType,
+      ignoreNullSelection: ColumnSelection,
+      resolver: Resolver): Seq[Seq[String]] = {
+    val ignoreNullColumns = ColumnSelection.applyToSchema(
+      schemaName = "ignoreNullSelection",
+      schema = schema,
+      columnSelection = Some(ignoreNullSelection),
+      resolver = resolver
+    )
+    AutoCdcSchemaUtils.flattenStructFieldPaths(ignoreNullColumns)
+  }
+
+  /** The value for leaf `columnPath` in `versionMap`, or null when absent. */
+  private[autocdc] def entryValue(
+      versionMap: Column,
+      columnPath: Seq[String]): Column =
+    versionMap(QuotingUtils.quoteNameParts(columnPath))
+
+  /**
+   * Asserts that if the version map claims `columnPath` authored a null, then
+   * `currentColumnValue` is indeed null. Authored nulls are never overwritten by coalescing,
+   * so a `true` entry paired with a non-null stored value indicates data corruption or a bug.
+   */
+  private[autocdc] def validateAuthoredNullEntry(
+      authorshipEntry: Column,
+      currentColumnValue: Column,
+      columnPath: Seq[String]): Column = {
+    val authoredNullButValueNonNull =
+      F.coalesce(authorshipEntry, F.lit(false)) && currentColumnValue.isNotNull
+    val errorMessage = "Version map entry is true (authored null) " +
+      "but stored value is non-null for column " + QuotingUtils.quoteNameParts(columnPath)
+    ExpressionUtils.column(
+      If(
+        predicate = ExpressionUtils.expression(!authoredNullButValueNonNull),
+        trueValue = Literal(true, BooleanType),
+        falseValue = RaiseError(
+          Literal("INTERNAL_ERROR"),
+          CreateMap(Seq(Literal("message"), Literal(errorMessage))),
+          BooleanType)
+      )
+    )
+  }
+
+  /**
+   * Returns whether the [[currentColumnValue]] was authored by the upsert event that derived this
+   * row, according to the [[versionMap]].
+   */
+  private[autocdc] def isAuthored(
+      versionMap: Column,
+      currentColumnValue: Column,
+      columnPath: Seq[String]): Column = {
+    val authorshipEntry = entryValue(versionMap, columnPath)
+    // A null map carries no per-column authorship record. Callers that want ignore-null semantics
+    // initialize upsert maps before consulting them; treating any remaining null map as authored
+    // keeps delete-encoded rows from contributing user-data authorship.
+    val allWritesAreTriviallyAuthored = versionMap.isNull
+    // Otherwise, look at the non-null version map to deduce authorship.
+    val authoredAccordingToVersionMap = F.when(
+        currentColumnValue.isNull,
+        // Cases 1 and 2: a present entry is the source of truth for a stored null; an absent
+        // entry means the leaf was retroactively schema evolved and is unauthored.
+        F.coalesce(authorshipEntry, F.lit(false))
+      )
+      .otherwise({
+        // Case 3: Was the value non-null in the event, or was it null and it inherited
+        // another row's value instead?
+        //
+        // The stored value is currently non-null. If the version map has an entry for this
+        // column, that means it was originally null but inherited a non-null value due to the
+        // ignore-null selection. Otherwise if the version map does not contain an entry for
+        // this column, it must have been non-null in the event itself, and therefore
+        // necessarily authored.
+        validateAuthoredNullEntry(authorshipEntry, currentColumnValue, columnPath) &&
+          authorshipEntry.isNull
+      })
+
+    allWritesAreTriviallyAuthored || authoredAccordingToVersionMap
+  }
+
+  /**
+   * Returns whether a null column needs to retroactively gain an entry in the version map.
+   *
+   * This can only happen on retroactive schema evolution for an existing row, where the default
+   * value on schema evolution is null.
+   */
+  private[autocdc] def needsSchemaEvolutionEntry(
+      versionMap: Column,
+      currentColumnValue: Column,
+      columnPath: Seq[String],
+      candidateInheritedValue: Column): Column = {
+    val isIgnoreNullOn = versionMap.isNotNull
+    val isRetroactiveSchemaEvolution =
+      currentColumnValue.isNull && entryValue(versionMap, columnPath).isNull
+
+    // If there's no non-null value to inherit yet, then there's no need to materialize an entry
+    // for the retroactively schema evolved column yet. It can remain in its current state (null
+    // data column and absent from version map), and be reconsidered for materialization on the
+    // next reconciliation.
+    val hasValueToInherit = candidateInheritedValue.isNotNull
+
+    isIgnoreNullOn && isRetroactiveSchemaEvolution && hasValueToInherit
+  }
+
+  /** Builds a `(key, value)` entry struct for the version map. */
+  private[autocdc] def buildVersionMapEntry(
+      columnPath: Seq[String],
+      authored: Boolean): Column =
+    F.struct(
+      F.lit(QuotingUtils.quoteNameParts(columnPath)).as("key"),
+      F.lit(authored).as("value")
+    )
 }
