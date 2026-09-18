@@ -388,6 +388,27 @@ values (1) as t(a)
 |> set a = a + 1
 |> select a, t.a;
 
+-- A qualified star returns the original row in its original column order.
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> select t.*;
+
+-- The order is preserved across SET operators on different columns, in either order.
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> set a = 10
+|> select t.*;
+
+values (1, 2, 3) as t(a, b, c)
+|> set a = 10
+|> set c = 30
+|> select a, b, c, t.*;
+
+-- Assigning several columns in one SET operator.
+values (1, 2, 3) as t(a, b, c)
+|> set c = 30, a = 10
+|> select t.*;
+
 -- SET operators: negative tests.
 ---------------------------------
 

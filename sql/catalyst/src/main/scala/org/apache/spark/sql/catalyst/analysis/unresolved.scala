@@ -584,8 +584,15 @@ trait UnresolvedStarBase extends Star with Unevaluable {
       // keep any restrictions that may break column resolution for normal attributes.
       // See SPARK-42084 for more details.
       .map(_.markAsAllowAnyAccess())
-    val expandedAttributes = (hiddenOutput ++ parameters.childOperatorOutput)
-      .filter(matchedQualifier(_, target.get, parameters.resolver))
+    // Hidden output may also contain visible attributes to fix their position in the expansion,
+    // as the SQL pipe SET operator does to keep the original column order (SPARK-59146). Emit
+    // each such attribute once, at its hidden position, using the visible attribute itself.
+    val visibleById = parameters.childOperatorOutput.map(a => a.exprId -> a).toMap
+    val hiddenIds = hiddenOutput.map(_.exprId).toSet
+    val expandedAttributes =
+      (hiddenOutput.map(a => visibleById.getOrElse(a.exprId, a)) ++
+        parameters.childOperatorOutput.filterNot(a => hiddenIds.contains(a.exprId)))
+        .filter(matchedQualifier(_, target.get, parameters.resolver))
 
     if (expandedAttributes.nonEmpty) return expandedAttributes
 

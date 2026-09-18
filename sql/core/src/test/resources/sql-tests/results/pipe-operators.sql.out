@@ -963,6 +963,48 @@ struct<a:int,a:int>
 
 
 -- !query
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> select t.*
+-- !query schema
+struct<a:int,b:int,c:int>
+-- !query output
+1	2	3
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> set a = 10
+|> select t.*
+-- !query schema
+struct<a:int,b:int,c:int>
+-- !query output
+1	2	3
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> set a = 10
+|> set c = 30
+|> select a, b, c, t.*
+-- !query schema
+struct<a:int,b:int,c:int,a:int,b:int,c:int>
+-- !query output
+10	2	30	1	2	3
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> set c = 30, a = 10
+|> select t.*
+-- !query schema
+struct<a:int,b:int,c:int>
+-- !query output
+1	2	3
+
+
+-- !query
 table t
 |> set z = 1
 -- !query schema

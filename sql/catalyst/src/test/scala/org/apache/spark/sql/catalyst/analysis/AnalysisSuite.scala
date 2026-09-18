@@ -1894,6 +1894,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expectedPlan = Project(Seq(UnresolvedAttribute("i")), addColumnF).analyze
     checkAnalysis(inputPlan, expectedPlan)
   }
+
+  test("SPARK-59146: pipe SET keeps the original Project tags alongside the hidden output") {
+    // The Project that the SQL pipe SET operator builds, as a Spark Connect relation.
+    val set = Project(
+      Seq(UnresolvedStarExceptOrReplace(
+        target = None,
+        excepts = Seq(Seq("a")),
+        replacements = Some(Seq(Alias(Literal(1), "a")())),
+        retainExceptedColumnsAsHidden = true)),
+      testRelation.subquery("t"))
+    set.setTagValue(LogicalPlan.PLAN_ID_TAG, 42L)
+
+    val analyzed = getAnalyzer.execute(set)
+    assert(analyzed.isInstanceOf[Project], analyzed)
+    assert(analyzed.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(42L))
+    assert(analyzed.getTagValue(Project.hiddenOutputTag).exists(_.map(_.name) == Seq("a")))
+  }
 }
 
 /**

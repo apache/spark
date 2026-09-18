@@ -1052,6 +1052,55 @@ Project [a#x, a#x]
 
 
 -- !query
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> select t.*
+-- !query analysis
+Project [a#x, b#x, c#x]
++- Project [a#x, 20 AS b#x, c#x, b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x, c#x]
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> set a = 10
+|> select t.*
+-- !query analysis
+Project [a#x, b#x, c#x]
++- Project [10 AS a#x, b#x, c#x, a#x, b#x]
+   +- Project [a#x, 20 AS b#x, c#x, b#x]
+      +- SubqueryAlias t
+         +- LocalRelation [a#x, b#x, c#x]
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> set a = 10
+|> set c = 30
+|> select a, b, c, t.*
+-- !query analysis
+Project [a#x, b#x, c#x, a#x, b#x, c#x]
++- Project [a#x, b#x, 30 AS c#x, a#x, c#x]
+   +- Project [10 AS a#x, b#x, c#x, a#x]
+      +- SubqueryAlias t
+         +- LocalRelation [a#x, b#x, c#x]
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> set c = 30, a = 10
+|> select t.*
+-- !query analysis
+Project [a#x, b#x, c#x]
++- Project [10 AS a#x, b#x, c#x, a#x, c#x]
+   +- Project [a#x, b#x, 30 AS c#x, c#x]
+      +- SubqueryAlias t
+         +- LocalRelation [a#x, b#x, c#x]
+
+
+-- !query
 table t
 |> set z = 1
 -- !query analysis
