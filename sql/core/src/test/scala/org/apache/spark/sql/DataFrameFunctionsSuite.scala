@@ -370,7 +370,21 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
           SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString,
           SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
           SQLConf.CONCAT_BINARY_AS_STRING.key -> "true") {
-          checkAnswer(sql("SELECT nullif(concat(X'61', X'62'), 'z')"), Row("ab"))
+          // The analyzers apply different comparison coercions to binary concat. Exercise result
+          // typing under each analyzer independently. Pure single-pass does not support the RDD
+          // deserialization check performed by the suite's checkAnswer helper.
+          Seq(false, true).foreach { singlePassResolverEnabled =>
+            withSQLConf(
+              SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+              SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+              SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key ->
+                singlePassResolverEnabled.toString) {
+              QueryTest.checkAnswer(
+                sql("SELECT nullif(concat(X'61', X'62'), 'z')"),
+                Row("ab") :: Nil,
+                checkToRDD = false)
+            }
+          }
 
           val result = sql("SELECT nullif(1, 2.1D)")
           checkAnswer(result, Row(1))
