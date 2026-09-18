@@ -206,7 +206,7 @@ class PythonUDTFSuite extends SharedSparkSession {
       .collectFirst { case r: Repartition => r }.get match {
       case Repartition(
         1, true, SubqueryAlias(
-          _, _: LocalRelation), _, _) =>
+          _, _: LocalRelation)) =>
       case other =>
         failure(other)
     }

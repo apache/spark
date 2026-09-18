@@ -2264,32 +2264,9 @@ trait PlanReusableRepartition extends RepartitionOperation {
  * asked for `coalesce` or `repartition`. [[RepartitionByExpression]] is used when the consumer
  * of the output requires some specific ordering or distribution of the data.
  */
-case class Repartition(
-    numPartitions: Int,
-    shuffle: Boolean,
-    child: LogicalPlan,
-    localShuffle: Boolean = false,
-    id: Long = 0)
-  extends RepartitionOperation with PlanReusableRepartition {
+case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
+  extends RepartitionOperation {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
-
-  // Implement PlanReusableRepartition by delegating to `id`.
-  override def repartitionId: Long = id
-
-  override def addRepartitionId(reassign: Boolean = false): Repartition = {
-    if (localShuffle && (reassign || id == 0)) {
-      this.copy(id = RepartitionIdGenerator.newRepartitionId)
-    } else {
-      this
-    }
-  }
-
-  override def withRepartitionId(newId: Long): Repartition = {
-    if (localShuffle) this.copy(id = newId) else this
-  }
-
-  // A plan-reuse repartition has localShuffle set and a non-zero id.
-  override val isForPlanReuse: Boolean = localShuffle && id != 0L
 
   override def partitioning: Partitioning = {
     require(shuffle, "Partitioning can only be used in shuffle.")

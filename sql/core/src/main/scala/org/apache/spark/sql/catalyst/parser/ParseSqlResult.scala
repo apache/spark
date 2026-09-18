@@ -404,7 +404,7 @@ object ParseSqlResult {
     case GlobalLimit(_, child) => primaryQueryPlan(child)
     case LocalLimit(_, child) => primaryQueryPlan(child)
     case Offset(_, child) => primaryQueryPlan(child)
-    case Repartition(_, _, child, _, _) => primaryQueryPlan(child)
+    case Repartition(_, _, child) => primaryQueryPlan(child)
     case RepartitionByExpression(_, child, _, _, _) => primaryQueryPlan(child)
     case Sample(_, _, _, _, child, _) => primaryQueryPlan(child)
     case other => other

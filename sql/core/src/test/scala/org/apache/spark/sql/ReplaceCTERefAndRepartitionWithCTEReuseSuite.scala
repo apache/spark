@@ -70,8 +70,8 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
 
   private def rel: LocalRelation = LocalRelation(AttributeReference("a", IntegerType)())
 
-  private def planReuseRepartition(child: LogicalPlan, id: Long): Repartition =
-    Repartition(numPartitions = 1, shuffle = true, child = child, localShuffle = true, id = id)
+  private def planReuseRepartition(child: LogicalPlan, id: Long): RepartitionByExpression =
+    RepartitionByExpression(Seq.empty, child, optNumPartitions = Some(1), id = id)
 
   // A resolved WithCTE with a single non-inlined CTE def referenced `refCount` times.
   private def withCteRefs(cteBody: LogicalPlan, refCount: Int): WithCTE = {
@@ -230,8 +230,8 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     // Case A: two plan-reuse repartitions sharing one repartitionId -> two CTEReuseRelation
     // instances after conversion -> NOT a singleton -> kept.
     val sharedId = 12345L
-    val r1 = Repartition(1, shuffle = true, rel, localShuffle = true, id = sharedId)
-    val r2 = Repartition(1, shuffle = true, rel, localShuffle = true, id = sharedId)
+    val r1 = RepartitionByExpression(Seq.empty, rel, Some(1), id = sharedId)
+    val r2 = RepartitionByExpression(Seq.empty, rel, Some(1), id = sharedId)
     val multiPlan = Union(Seq(r1, r2))
     val multiResult = runReuseRules(multiPlan)
     val multiReuses = collectCTEReuseRelations(multiResult)
@@ -241,7 +241,7 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     // Case B: a single plan-reuse repartition -> one CTEReuseRelation instance -> singleton ->
     // unwrapped back to its sharedSubplan (the repartition), no CTEReuseRelation left.
     val loneId = 67890L
-    val lone = Repartition(1, shuffle = true, rel, localShuffle = true, id = loneId)
+    val lone = RepartitionByExpression(Seq.empty, rel, Some(1), id = loneId)
     val singleResult = runReuseRules(lone)
     val singleReuses = collectCTEReuseRelations(singleResult)
     assert(singleReuses.isEmpty,
@@ -277,7 +277,7 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     // Equivalently: a plain `collect` over the tree (which does NOT descend into a
     // CTEReuseRelation's metadata sharedSubplan) must find no plan-reuse Repartition -- if it does,
     // that repartition was left unconverted.
-    val unconverted = result.collect { case rp: Repartition if rp.isForPlanReuse => rp }
+    val unconverted = result.collect { case rp: PlanReusableRepartition if rp.isForPlanReuse => rp }
     assert(unconverted.isEmpty,
       s"Expected no unconverted plan-reuse Repartition outside a CTEReuseRelation, got:" +
         s"\n${result.treeString}")
