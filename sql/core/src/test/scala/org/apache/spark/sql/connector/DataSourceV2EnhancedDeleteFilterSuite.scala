@@ -235,6 +235,25 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
     }
   }
 
+  // A filter on the source column of a bucket transform is a data filter: its value is not in
+  // the partition key, whose slot holds the bucket instead. The metadata-only path must decline
+  // it and fall back, rather than compare `pk` with a bucket value.
+  test("second pass skipped: filter on the source column of a bucket transform") {
+    withTable(deleteTableName) {
+      sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
+        s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk))")
+      sql(s"INSERT INTO $deleteTableName VALUES " +
+        "(1, 'hr', 100), (5, 'hr', 500), (2, 'software', 200)")
+
+      // `bucket(4, 5)` is 1, so comparing the bucket slot with 5 would match nothing.
+      assertDeleteWithRowLevel(s"DELETE FROM $deleteTableName WHERE pk = 5")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $deleteTableName"),
+        Seq(Row(1, "hr", 100), Row(2, "software", 200)))
+    }
+  }
+
   // Table property disables PartitionPredicate acceptance;
   // both passes rejected, falls back to row-level operation.
   test("first and second pass rejected: table rejects all") {
@@ -414,7 +433,7 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
 
   // A mixed partitioning: the bucket field keeps its ordinal but is never referenced, so the
   // IN on the identity column still becomes a PartitionPredicate over the full partition key.
-  test("SPARK-59410: group-based UPDATE prunes by the identity field of a mixed partitioning") {
+  test("group-based UPDATE prunes by the identity field of a mixed partitioning") {
     withTable(deleteTableName) {
       sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
         s"USING $v2Source PARTITIONED BY (dep, bucket(4, pk)) " +
@@ -436,7 +455,7 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-59410: group-based MERGE prunes by the identity field of a mixed partitioning") {
+  test("group-based MERGE prunes by the identity field of a mixed partitioning") {
     withTable(deleteTableName) {
       withTempView("source") {
         sql(s"CREATE TABLE $deleteTableName (pk INT, dep STRING, salary INT) " +
