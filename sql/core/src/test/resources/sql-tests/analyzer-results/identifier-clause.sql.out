@@ -2737,7 +2737,7 @@ SELECT * FROM unpivot_test UNPIVOT ((v1, v2) FOR col IN ((a, b) AS IDENTIFIER('c
 -- !query analysis
 Sort [id#x ASC NULLS FIRST, col#x ASC NULLS FIRST, v1#x ASC NULLS FIRST, v2#x ASC NULLS FIRST], true
 +- Project [id#x, col#x, v1#x, v2#x]
-   +- Filter isnotnull(coalesce(v1#x, v2#x))
+   +- Filter (isnotnull(v1#x) OR isnotnull(v2#x))
       +- Expand [[id#x, cols_ab, a#x, b#x], [id#x, cols_bc, b#x, c#x]], [id#x, col#x, v1#x, v2#x]
          +- SubqueryAlias spark_catalog.identifier_clause_test_schema.unpivot_test
             +- Relation spark_catalog.identifier_clause_test_schema.unpivot_test[id#x,a#x,b#x,c#x] csv
