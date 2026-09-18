@@ -525,12 +525,12 @@
       </dependency>
       <!--
         SPARK-51806: Kryo 4.0.x depends on objenesis 2.5.1, while Spark currently
-        depends on objenesis 3.5. Here, it is uniformly defined as version 3.5.
+        depends on objenesis 3.6. Here, it is uniformly defined as version 3.6.
         -->
       <dependency>
         <groupId>org.objenesis</groupId>
         <artifactId>objenesis</artifactId>
-        <version>3.5</version>
+        <version>3.6</version>
       </dependency>
       <dependency>
         <groupId>com.github.jnr</groupId>
