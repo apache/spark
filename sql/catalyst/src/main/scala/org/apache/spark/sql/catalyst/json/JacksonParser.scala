@@ -28,6 +28,7 @@ import com.fasterxml.jackson.core._
 import org.apache.hadoop.fs.PositionedReadable
 
 import org.apache.spark.SparkUpgradeException
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
@@ -772,6 +773,9 @@ class JacksonParser(
           _: PartialArrayDataResultException | _: PartialMapDataResultException) =>
         throw badRecord(e, () => recordLiteral(record))
     }
+    // Abandoning the iterator before END_ARRAY (e.g. a LIMIT) skips finish()/fail(), so close the
+    // parser at task completion; close() is idempotent with those eager closes.
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => jsonParser.close()))
     def fail(error: Throwable): Nothing = {
       try jsonParser.close() catch {
         case NonFatal(closeError) => error.addSuppressed(closeError)

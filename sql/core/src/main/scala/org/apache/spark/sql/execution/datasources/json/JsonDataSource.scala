@@ -432,12 +432,13 @@ object MultiLineJsonDataSource extends JsonDataSource {
     // The entry is a single JSON document. Buffer its bytes so the corrupt-record column can echo
     // the whole document on a parse failure, mirroring `readFile`'s `partitionedFileString`.
     val bytes = in.readAllBytes()
+    lazy val documentLiteral: UTF8String = UTF8String.fromBytes(bytes)
     val streamParser = parser.options.encoding
       .map(enc => CreateJacksonParser.inputStream(enc, _: JsonFactory, _: InputStream))
       .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
 
     val safeParser = new FailureSafeParser[InputStream](
-      input => parser.parse[InputStream](input, streamParser, _ => UTF8String.fromBytes(bytes)),
+      input => parser.parse[InputStream](input, streamParser, _ => documentLiteral),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
@@ -447,7 +448,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       safeParser.parseIterator(
         input,
         input => parser.parseIterator[InputStream](
-          input, streamParser, _ => UTF8String.fromBytes(bytes)))
+          input, streamParser, _ => documentLiteral))
     } else {
       safeParser.parse(input)
     }
