@@ -612,7 +612,8 @@ pyspark_core = Module(
         "pyspark.tests.test_taskcontext",
         "pyspark.tests.test_util",
         "pyspark.tests.test_worker",
-        "pyspark.tests.test_eval_type_handlers",
+        "pyspark.tests.test_base_eval_type_handlers",
+        "pyspark.tests.test_arrow_eval_type_handlers",
         "pyspark.tests.test_stage_sched",
         "pyspark.tests.test_zero_copy_byte_stream",
         # unittests for upstream projects
