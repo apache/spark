@@ -3340,8 +3340,11 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     // is duplicated *inside* operand 2 (not split across operands 2 and 3) so the failure shape
     // does not depend on how many operands the one-level peel happened to drop, and operand 3 is
     // non-foldable to keep it in the plan. skipForShortcutExpr must peel every leading AND/OR
-    // operand, not just one, to make this hold for three or more operands.
+    // operand, not just one, to make this hold for three or more operands. ANSI mode is pinned
+    // because that is what turns the extra evaluation into a failure: with it off the division
+    // returns null and both answers hold either way.
     withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
       SQLConf.SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR.key -> "true") {
       val andQuery =

@@ -165,6 +165,9 @@ class EquivalentExpressions(
     // a candidate. The `With` itself may still be deduplicated as a whole, which is safe: it
     // carries its own definitions and brings their slots into scope wherever it is generated.
     case _: With => Nil
+    // Peeling here is redundant for safety: `updateExprTree` peels before it descends, so this
+    // method sees the peeled node either way. It stays because dropping it would pass
+    // `updateExprTree` the input itself rather than the operand its peel lands on.
     case c: ConditionalExpression => c.alwaysEvaluatedInputs.map(skipForShortcut)
     case h: HigherOrderFunction => h.alwaysEvaluatedArguments
     case other => other.children

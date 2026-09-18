@@ -640,9 +640,9 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     def assertNoneEliminated(expr: Expression, hint: String): Unit = {
       val states = statesOf(expr)
-      // `supportedExpression` refuses a tree that holds a `LambdaVariable`, and the lambda shape
-      // above gets through only because `NamedLambdaVariable` carries no `LAMBDA_VARIABLE` pattern.
-      // So check that the walk happened before reading anything into what it did not record.
+      // Guards the next assert against passing vacuously: `supportedExpression` would refuse the
+      // whole tree if `NamedLambdaVariable` ever carried the `LAMBDA_VARIABLE` pattern, and then
+      // nothing at all would be recorded.
       assert(states.nonEmpty, s"nothing was recorded, $hint: $expr")
       assert(states.forall(_.useCount == 1),
         s"eliminated ${states.filter(_.useCount > 1).map(_.expr)}, $hint: $expr")
