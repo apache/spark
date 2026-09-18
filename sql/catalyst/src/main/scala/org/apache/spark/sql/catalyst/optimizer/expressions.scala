@@ -568,9 +568,9 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
 
 /**
- * Derives predicates over integral operands from comparisons involving ANSI addition or
- * subtraction. The original comparison is retained to preserve overflow errors and exact
- * evaluation semantics.
+ * Derives a pushable predicate over an integral column from a comparison involving ANSI addition
+ * or subtraction by a literal. The original comparison is retained to preserve overflow errors and
+ * exact evaluation semantics.
  */
 object DeriveIntegralComparisonPredicates extends Rule[LogicalPlan] {
   private val derived = TreeNodeTag[Unit]("derived_integral_comparison_predicate")
@@ -624,13 +624,13 @@ object DeriveIntegralComparisonPredicates extends Rule[LogicalPlan] {
   private def arithmeticOperand(
       expression: Expression): Option[(Expression, Literal, BigInt)] = expression match {
     case add @ Add(operand, literal: Literal, _)
-        if add.evalMode == EvalMode.ANSI && operand.deterministic =>
+        if add.evalMode == EvalMode.ANSI && operand.isInstanceOf[Attribute] =>
       integralValue(literal).map((operand, literal, _))
     case add @ Add(literal: Literal, operand, _)
-        if add.evalMode == EvalMode.ANSI && operand.deterministic =>
+        if add.evalMode == EvalMode.ANSI && operand.isInstanceOf[Attribute] =>
       integralValue(literal).map((operand, literal, _))
     case subtract @ Subtract(operand, literal: Literal, _)
-        if subtract.evalMode == EvalMode.ANSI && operand.deterministic =>
+        if subtract.evalMode == EvalMode.ANSI && operand.isInstanceOf[Attribute] =>
       integralValue(literal).map(value => (operand, literal, -value))
     case _ => None
   }

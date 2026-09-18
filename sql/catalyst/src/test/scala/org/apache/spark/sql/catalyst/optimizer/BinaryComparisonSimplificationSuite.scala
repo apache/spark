@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DoubleType, IntegerType, LongType, ShortType, StructField, StructType}
 
 class BinaryComparisonSimplificationSuite extends PlanTest {
 
@@ -77,7 +77,11 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
       (subtract > Literal(Int.MaxValue),
         subtractOverflow && subtract > Literal(Int.MaxValue)),
       (Literal(100) < add, (a > Literal(90) || addOverflow) && Literal(100) < add),
-      (litFirstAdd < Literal(100), (a < Literal(90) || addOverflow) && litFirstAdd < Literal(100)))
+      (litFirstAdd < Literal(100), (a < Literal(90) || addOverflow) && litFirstAdd < Literal(100)),
+      // Out-of-range thresholds hit the constant-fold branch (true folds are absorbed).
+      (subtract < Literal(Int.MaxValue), subtract < Literal(Int.MaxValue)),
+      (add > Literal(Int.MinValue), add > Literal(Int.MinValue)),
+      (add === Literal(Int.MinValue), addOverflow && add === Literal(Int.MinValue)))
 
     cases.foreach { case (input, expected) =>
       checkCondition(nonNullableRelation, input, expected)
@@ -95,6 +99,29 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
     cases.foreach { condition =>
       checkCondition(nonNullableRelation, condition, condition)
     }
+  }
+
+  test("do not derive pruning predicates when the operand is not a column") {
+    val a = nonNullableRelation.output.head
+    val nonColumnOperand = Add(a, Literal(1), EvalMode.ANSI)
+    val condition = Add(nonColumnOperand, Literal(10), EvalMode.ANSI) > Literal(100)
+    checkCondition(nonNullableRelation, condition, condition)
+  }
+
+  gridTest("derive pruning predicates across integral types")(
+      Seq[DataType](ByteType, ShortType, LongType)) { dataType =>
+    val relation = LocalRelation(AttributeReference("a", dataType, nullable = false)())
+    val col = relation.output.head
+    val (lit, overflowBound): (Long => Literal, Literal) = dataType match {
+      case ByteType => ((v: Long) => Literal(v.toByte), Literal((Byte.MaxValue - 10).toByte))
+      case ShortType => ((v: Long) => Literal(v.toShort), Literal((Short.MaxValue - 10).toShort))
+      case _ => ((v: Long) => Literal(v), Literal(Long.MaxValue - 10L))
+    }
+    val add = Add(col, lit(10), EvalMode.ANSI)
+    checkCondition(
+      relation,
+      add > lit(100),
+      (col > lit(90) || col > overflowBound) && add > lit(100))
   }
 
 
