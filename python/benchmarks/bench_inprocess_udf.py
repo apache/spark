@@ -15,12 +15,14 @@
 # limitations under the License.
 #
 
-"""End-to-end in-process Arrow UDF vs pandas UDF benchmarks.
+"""End-to-end in-process, worker Arrow, and pandas UDF benchmarks.
 
 See README.md for the required Spark build and JEP launch environment. These
 measure steady-state queries, including JVM row/Arrow conversion and Python
-execution. The comparison also includes pandas conversion costs; it does not
-isolate IPC overhead. Historical standalone-script timings are a separate baseline.
+execution. Worker Arrow UDFs are the primary baseline and use the same Arrow
+operations as in-process UDFs. The supplementary pandas baseline also includes
+pandas conversion costs; neither comparison isolates IPC overhead alone.
+Historical standalone-script timings are a separate baseline.
 """
 
 from importlib.util import find_spec
@@ -34,7 +36,7 @@ class InProcessUDFTimeBench:
     warmup_time = 0
     timeout = 300
     params = [
-        ["pandas", "inprocess"],
+        ["arrow", "inprocess", "pandas"],
         [
             ("narrow", 100_000),
             ("narrow", 1_000_000),
@@ -60,9 +62,10 @@ class InProcessUDFTimeBench:
 
         import pyarrow.compute as pc
         from pyspark.sql import SparkSession
-        from pyspark.sql.functions import col, lpad, pandas_udf
+        from pyspark.sql.functions import arrow_udf, col, lpad, pandas_udf
         from pyspark.sql.types import LongType, StringType
 
+        use_arrow = udf_type != "pandas"
         scenario, n_rows = workload
         n_cols = 10 if scenario == "wide" else 1
         batch_size = {"narrow": 10_000, "wide": 1_000_000}.get(scenario, 100_000)
@@ -86,7 +89,7 @@ class InProcessUDFTimeBench:
                 def operation(*columns):
                     result = columns[0]
                     for column in columns[1:]:
-                        if udf_type == "inprocess":
+                        if use_arrow:
                             result = pc.add(result, column)
                         else:
                             result = result + column
@@ -102,12 +105,14 @@ class InProcessUDFTimeBench:
                 def operation(value):
                     if scenario == "long_string":
                         return value
-                    return pc.utf8_upper(value) if udf_type == "inprocess" else value.str.upper()
+                    return pc.utf8_upper(value) if use_arrow else value.str.upper()
 
             if udf_type == "inprocess":
                 from pyspark.inprocess.udf import inprocess_udf
 
                 udf = inprocess_udf(return_type=return_type)(operation)
+            elif udf_type == "arrow":
+                udf = arrow_udf(return_type)(operation)
             else:
                 udf = pandas_udf(return_type)(operation)
             self.data.cache()

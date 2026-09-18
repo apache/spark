@@ -88,7 +88,9 @@ See [ASV documentation](https://asv.readthedocs.io/en/stable/writing_benchmarks.
 ## In-process Python UDF benchmark
 
 `bench_inprocess_udf.InProcessUDFTimeBench` runs real Spark queries comparing
-in-process Arrow UDFs with pandas UDFs. It covers narrow/wide integer inputs,
+in-process Arrow UDFs with worker Arrow UDFs (the primary baseline) and pandas
+UDFs (a supplementary baseline). Both Arrow modes accept and return PyArrow arrays
+and execute the same Arrow operations. It covers narrow/wide integer inputs,
 short string uppercase, and 1000-character string identity. Input construction,
 cache materialization and two warmup queries are outside timing. Each sample
 executes one query to a noop sink; normal runs request five samples.
@@ -126,13 +128,16 @@ results from the existing environment. The quick run is a smoke check, not a
 performance result. An absent JEP package skips in-process cases;
 JEP loading errors fail the benchmark rather than silently falling back.
 
-Both modes use `local[1]`, one input partition, worker reuse, and a 128 MiB Arrow
+All three modes use `local[1]`, one input partition, worker reuse, and a 128 MiB Arrow
 byte limit. Row limits are 10K for narrow integers, 1M for wide integers, and 100K
 for strings. Thus the long-string workload permits about 95 MiB of string payload
 per full batch instead of splitting it at the default 64 MiB limit. Budget for
 8 GiB heap, 8 GiB direct memory, and additional Python/native allocations.
 
-Report dependency versions and the Spark commit with results. The pandas baseline
+Report dependency versions and the Spark commit with results. Compute the primary
+speedup as worker Arrow UDF median divided by in-process UDF median. This removes
+the pandas conversion difference, but still measures the complete execution paths,
+including serialization and framework overhead, rather than IPC alone. The pandas baseline
 includes pandas/Arrow conversion costs, so the ratio is not an isolated measurement
 of IPC savings. ASV's process/setup lifecycle differs from the historical script;
 its results establish a new baseline. The original scripts under `python/integration`
