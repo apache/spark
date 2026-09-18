@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Replaces CTE references that have not been previously inlined with [[Repartition]] operations
@@ -56,39 +55,40 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] with JoinIdHelper 
     case WithCTE(child, cteDefs) =>
       cteDefs.foreach { cteDef =>
         val inlined = replaceWithRepartition(cteDef.child, cteMap)
-        val withRepartition = cteDef.forcePartitioning match {
-          case Some(h: HashPartitioning) =>
-            // A pinned partitioning: materialize it as a plan-reuse RepartitionByExpression on the
-            // pinned expressions, so guaranteed CTE reuse can pick it up. This takes precedence
-            // over `canSkipExtraRepartition` -- the pin states the partitioning we must produce.
-            RepartitionByExpression(h.expressions, inlined, optNumPartitions = None)
-              .addRepartitionId(reassign = true)
-          case Some(other) =>
-            // forcePartitioning is an internal dev API; only HashPartitioning is supported today
-            // (see CTERelationDef.forcePartitioning).
-            throw new UnsupportedOperationException(
-              s"CTERelationDef.forcePartitioning supports only HashPartitioning, but got " +
-                s"${other.getClass.getSimpleName}")
-          case None =>
+        val withRepartition =
+          if (cteDef.forceSkipInline) {
+            cteDef.forcePartitioning match {
+              case Some(h: HashPartitioning) =>
+                // A pinned partitioning: materialize it as a plan-reuse RepartitionByExpression on
+                // the pinned expressions, so guaranteed CTE reuse can pick it up. This takes
+                // precedence over `canSkipExtraRepartition` -- the pin states the partitioning we
+                // must produce.
+                RepartitionByExpression(h.expressions, inlined, optNumPartitions = None)
+                  .addRepartitionId(reassign = true)
+              case Some(other) =>
+                // forcePartitioning is an internal dev API; only HashPartitioning is supported
+                // today (see CTERelationDef.forcePartitioning).
+                throw new UnsupportedOperationException(
+                  s"CTERelationDef.forcePartitioning supports only HashPartitioning, but got " +
+                    s"${other.getClass.getSimpleName}")
+              case None =>
+                if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
+                  // If the CTE definition plan itself is a repartition operation or if it hosts a
+                  // merged scalar subquery, we do not need to add an extra repartition shuffle.
+                  inlined
+                } else {
+                  RepartitionByExpression(Seq.empty, inlined, None)
+                }
+            }
+          } else {
             if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
               // If the CTE definition plan itself is a repartition operation or if it hosts a
               // merged scalar subquery, we do not need to add an extra repartition shuffle.
               inlined
-            } else if (conf.getConf(SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE)) {
-              // Guaranteed CTE reuse emits a plan-reuse local-shuffle repartition regardless of AQE
-              // (ReplaceRepartitionWithCTEReuse seals it into a CTEReuseRelation, which is reused
-              // both with and without AQE). This is separate from the AQE-only local-shuffle path
-              // below, which is a performance tweak for the canonical-reuse (flag-off) case.
-              Repartition(numPartitions = 1, shuffle = true, child = inlined, localShuffle = true)
-                .addRepartitionId(reassign = true)
-            } else if (SQLConf.get.getConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED) &&
-              conf.getConf(SQLConf.USE_LOCAL_SHUFFLE_FOR_CTE_REUSE)) {
-              Repartition(numPartitions = 1, shuffle = true, child = inlined, localShuffle = true)
-                .addRepartitionId(reassign = true)
             } else {
               RepartitionByExpression(Seq.empty, inlined, None)
             }
-        }
+          }
         cteMap.put(cteDef.id, withRepartition)
       }
       replaceWithRepartition(child, cteMap)
