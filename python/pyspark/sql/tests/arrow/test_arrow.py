@@ -2073,7 +2073,9 @@ class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
                 return datum
 
         df = self.spark.createDataFrame([("a",)], "value string")
-        df._schema = StructType([StructField("value", CharStorageUDT())])
+        # Override the cached schema to exercise the Python toArrow preflight. The JVM DataFrame
+        # cannot carry a UDT backed by CHAR because JVM-side boundaries reject it first.
+        df.__dict__["schema"] = StructType([StructField("value", CharStorageUDT())])
         with self.assertRaisesRegex(
             PySparkNotImplementedError,
             "CHAR/VARCHAR inside toArrow UDT schema",

@@ -102,6 +102,7 @@ from pyspark.sql.types import (
     TimestampType,
     VarcharType,
     _has_nulltype,
+    _has_physical_type,
     _infer_schema,
     _merge_type,
 )
