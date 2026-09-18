@@ -23,14 +23,17 @@ import tempfile
 import unittest
 from decimal import Decimal
 
+from pyspark.errors import PySparkNotImplementedError
 from pyspark.sql.streaming.state import GroupState, GroupStateTimeout
 from pyspark.sql.types import (
+    CharType,
     DecimalType,
     LongType,
     Row,
     StringType,
     StructField,
     StructType,
+    UserDefinedType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
@@ -97,6 +100,41 @@ class GroupedApplyInPandasWithStateTestsMixin:
         self.assertTrue(q.isActive)
         q.processAllAvailable()
         self.assertTrue(q.exception() is None)
+
+    def test_char_varchar_udt_output_is_unsupported(self):
+        class CharStorageUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return CharType(3)
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+            def serialize(self, obj):
+                return obj
+
+            def deserialize(self, datum):
+                return datum
+
+        def func(key, pdf_iter, state):
+            yield pd.DataFrame({"value": ["a"]})
+
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR inside Python UDF UDT return type",
+        ):
+            self.spark.range(1).groupBy("id").applyInPandasWithState(
+                func,
+                StructType([StructField("value", CharStorageUDT())]),
+                StructType([StructField("count", LongType())]),
+                "Update",
+                GroupStateTimeout.NoTimeout,
+            )
 
     def test_apply_in_pandas_with_state_basic(self):
         def func(key, pdf_iter, state):

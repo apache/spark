@@ -98,6 +98,7 @@ class BaseUDFTestsMixin:
                     useArrow=False,
                 )("id").alias("s")
             )
+            self.assertEqual(result.schema["s"].dataType, schema)
             self.assertEqual(
                 result.first().s,
                 Row(c="ab  ", v="xyz", nested=["z "], m={"k ": "xy"}),
@@ -120,6 +121,10 @@ class BaseUDFTestsMixin:
             result = self.spark.range(1).select(
                 udf(lambda _: "a", CharType(3), useArrow=False)("id").alias("c"),
                 udf(lambda _: "abcd", VarcharType(3), useArrow=False)("id").alias("v"),
+            )
+            self.assertEqual(
+                result.schema,
+                StructType().add("c", StringType()).add("v", StringType()),
             )
             self.assertEqual(result.first(), Row(c="a", v="abcd"))
 
@@ -194,7 +199,9 @@ class BaseUDFTestsMixin:
         nested_return_type = StructType([StructField("nested", ArrayType(CharType(3)))])
         struct_eval_types = [
             PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
             PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
             PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
             PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
             PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
@@ -205,8 +212,11 @@ class BaseUDFTestsMixin:
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         ]
         stateful_and_incremental_eval_types = [
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
             PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
             PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
             PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
@@ -246,14 +256,17 @@ class BaseUDFTestsMixin:
             def deserialize(self, datum):
                 return datum
 
-        with self.assertRaisesRegex(
-            PySparkNotImplementedError,
-            "CHAR/VARCHAR inside Python UDF UDT return type",
-        ):
-            UserDefinedFunction._check_return_type(
-                CharVarcharUDT(),
-                PythonEvalType.SQL_ARROW_BATCHED_UDF,
-            )
+        for eval_type in [
+            PythonEvalType.SQL_BATCHED_UDF,
+            PythonEvalType.SQL_ARROW_BATCHED_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+        ]:
+            with self.subTest(eval_type=eval_type):
+                with self.assertRaisesRegex(
+                    PySparkNotImplementedError,
+                    "CHAR/VARCHAR inside Python UDF UDT return type",
+                ):
+                    UserDefinedFunction._check_return_type(CharVarcharUDT(), eval_type)
 
     def test_udf_with_callable(self):
         data = self.spark.createDataFrame([(i, i**2) for i in range(10)], ["number", "squared"])

@@ -48,9 +48,10 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
-   * Replaces CHAR/VARCHAR with their unconstrained string representation regardless of session
-   * configuration. Use this only at physical boundaries, such as Arrow, that encode all character
-   * string types as UTF8.
+   * Replaces logical CHAR/VARCHAR with their unconstrained string representation regardless of
+   * session configuration. Use this only at physical boundaries, such as Arrow, that encode all
+   * character string types as UTF-8. UDTs are unwrapped without normalizing their storage types,
+   * so callers must reject CHAR/VARCHAR inside UDT storage first.
    */
   private[sql] def replaceCharVarcharWithStringForPhysicalType(dt: DataType): DataType = dt match {
     case ArrayType(elementType, containsNull) =>

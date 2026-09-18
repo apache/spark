@@ -1488,6 +1488,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
       classicSession.applySchemaToPythonRDD(
         spark.sparkContext.parallelize(Seq(Array[Any]("a"))), charSchema)
     }
+    assert(standardDataFrame.schema === charSchema)
     withSQLConf(
         SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
         SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",

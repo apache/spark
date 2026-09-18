@@ -24,7 +24,12 @@ import unittest
 from collections import namedtuple
 
 from pyspark import SparkConf
-from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
+from pyspark.errors import (
+    ArithmeticException,
+    PySparkNotImplementedError,
+    PySparkTypeError,
+    UnsupportedOperationException,
+)
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import assert_true, lit, rand, udf
 from pyspark.sql.pandas.types import (
@@ -55,6 +60,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     TimestampType,
     TimeType,
+    UserDefinedType,
     VarcharType,
     VariantType,
 )
@@ -1457,10 +1463,15 @@ class ArrowTestsMixin:
                 "spark.sql.execution.arrow.pyspark.enabled": "true",
             }
         ):
-            default_df = self.spark.createDataFrame(inputs[0], schema)
-            self.assertEqual(default_df.schema["c"].dataType, StringType())
-            self.assertEqual(default_df.first(), Row(c="ab  ", s=Row(v="xyz"), a=["z "]))
-            self.assertEqual(default_df.toArrow().schema.field("c").type, pa.string())
+            for data in inputs:
+                with self.subTest(input_type=type(data).__name__):
+                    default_df = self.spark.createDataFrame(data, schema)
+                    self.assertEqual(default_df.schema["c"].dataType, StringType())
+                    self.assertEqual(
+                        default_df.first(),
+                        Row(c="ab  ", s=Row(v="xyz"), a=["z "]),
+                    )
+                    self.assertEqual(default_df.toArrow().schema.field("c").type, pa.string())
 
         with self.sql_conf(
             {
@@ -1471,6 +1482,7 @@ class ArrowTestsMixin:
             for data in inputs:
                 with self.subTest(input_type=type(data).__name__):
                     df = self.spark.createDataFrame(data, schema)
+                    self.assertEqual(df.schema, schema)
                     self.assertEqual(
                         df.first(),
                         Row(c="ab  ", s=Row(v="xyz"), a=["z "]),
@@ -1509,6 +1521,10 @@ class ArrowTestsMixin:
                 StructField("v", VarcharType(3)),
             ]
         )
+        legacy_inputs = [
+            pd.DataFrame({"c": ["a"], "v": ["abcd"]}),
+            pa.table({"c": ["a"], "v": ["abcd"]}),
+        ]
         with self.sql_conf(
             {
                 "spark.sql.legacy.charVarcharAsString": "true",
@@ -1518,9 +1534,43 @@ class ArrowTestsMixin:
                 "spark.sql.execution.arrow.localRelationThreshold": "0",
             }
         ):
-            df = self.spark.createDataFrame(pa.table({"c": ["a"], "v": ["abcd"]}), legacy_schema)
-            self.assertEqual(df.schema, StructType().add("c", "string").add("v", "string"))
-            self.assertEqual(df.first(), Row(c="a", v="abcd"))
+            for data in legacy_inputs:
+                with self.subTest(input_type=type(data).__name__):
+                    df = self.spark.createDataFrame(data, legacy_schema)
+                    self.assertEqual(
+                        df.schema,
+                        StructType().add("c", "string").add("v", "string"),
+                    )
+                    self.assertEqual(df.first(), Row(c="a", v="abcd"))
+                    self.assertEqual(df.toArrow().to_pylist(), [{"c": "a", "v": "abcd"}])
+
+    def test_to_arrow_char_varchar_udt_storage_is_unsupported(self):
+        class CharStorageUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return CharType(2)
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+            def serialize(self, obj):
+                return obj
+
+            def deserialize(self, datum):
+                return datum
+
+        df = self.spark.createDataFrame([("a",)], "value string")
+        df._schema = StructType([StructField("value", CharStorageUDT())])
+        with self.assertRaisesRegex(
+            PySparkNotImplementedError,
+            "CHAR/VARCHAR inside toArrow UDT schema",
+        ):
+            df.toArrow()
 
     def test_createDataFrame_pandas_duplicate_field_names(self):
         for arrow_enabled in [True, False]:

@@ -339,7 +339,7 @@ case class PythonUDF(
     // for every non-element-wise eval type, where it stays at its default of 1.
     elementwiseNestingDepth: Int = 1,
     // Original CHAR/VARCHAR result type when write-side checks apply. Absent for unconstrained
-    // results so CHAR policy is not part of PythonUDF equality.
+    // results so CHAR/VARCHAR policy is not part of PythonUDF equality.
     charVarcharCheckedResultType: Option[DataType] = None)
   extends Expression with PythonFuncExpression with Unevaluable {
 

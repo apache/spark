@@ -16,6 +16,7 @@
 #
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from pyspark.sql.functions import lit, udtf
@@ -72,6 +73,24 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
             arrow()
             arrow()
             self.assertEqual(parse_ddl.call_count, 1)
+
+            other_session = SimpleNamespace(
+                _session_id="other-session",
+                _parse_ddl=self.spark._parse_ddl,
+            )
+            arrow._check_return_type(other_session)
+            self.assertEqual(arrow._validated_return_type_session_id, "other-session")
+            arrow._check_return_type(self.spark)
+            self.assertEqual(parse_ddl.call_count, 3)
+
+    def test_row_udtf_char_varchar_ddl_is_unsupported(self):
+        @udtf(returnType="value CHAR(3)", useArrow=False)
+        class CharUDTF:
+            def eval(self):
+                yield ("a",)
+
+        with self.assertRaisesRegex(Exception, "Python UDTFs do not support CHAR/VARCHAR"):
+            CharUDTF().collect()
 
     def test_udtf_with_invalid_return_type(self):
         @udtf(returnType="int")

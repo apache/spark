@@ -25,7 +25,7 @@ class DataFrameCreationParityTests(
     DataFrameCreationTestsMixin,
     ReusedConnectTestCase,
 ):
-    def test_char_varchar_explicit_schema_is_unsupported(self):
+    def test_char_varchar_schema_is_unsupported(self):
         class CharStorageUDT(UserDefinedType):
             @classmethod
             def sqlType(cls):
@@ -45,17 +45,24 @@ class DataFrameCreationParityTests(
             def deserialize(self, datum):
                 return datum
 
-        schemas = [
-            StructType([StructField("value", ArrayType(CharType(3)))]),
-            StructType([StructField("value", CharStorageUDT())]),
+        class CharValue:
+            __UDT__ = CharStorageUDT()
+
+            def __init__(self, value):
+                self.value = value
+
+        data_and_schemas = [
+            ([(["a"],)], StructType([StructField("value", ArrayType(CharType(3)))])),
+            ([("a",)], StructType([StructField("value", CharStorageUDT())])),
+            ([(CharValue("a"),)], None),
         ]
-        for schema in schemas:
+        for data, schema in data_and_schemas:
             with self.subTest(schema=schema):
                 with self.assertRaisesRegex(
                     PySparkNotImplementedError,
                     "CHAR/VARCHAR in Spark Connect createDataFrame schema",
                 ):
-                    self.spark.createDataFrame([(["a"],)], schema)
+                    self.spark.createDataFrame(data, schema)
 
 
 if __name__ == "__main__":

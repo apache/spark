@@ -3066,9 +3066,7 @@ def _has_physical_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool
     elif isinstance(dt, ArrayType):
         return _has_physical_type(dt.elementType, dts)
     elif isinstance(dt, MapType):
-        return _has_physical_type(dt.keyType, dts) or _has_physical_type(
-            dt.valueType, dts
-        )
+        return _has_physical_type(dt.keyType, dts) or _has_physical_type(dt.valueType, dts)
     else:
         return False
 
