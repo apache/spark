@@ -27,7 +27,7 @@ import org.apache.commons.lang3.mutable.MutableInt
 import org.apache.curator.test.TestingServer
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.{ApplicationDescription, Command, DeployTestUtils, DriverDescription}
+import org.apache.spark.deploy.{ApplicationDescription, Command, DeployTestUtils, DriverDescription, SparkCuratorUtil}
 import org.apache.spark.internal.config.Deploy.ZOOKEEPER_URL
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcEndpoint, RpcEnv}
@@ -135,17 +135,26 @@ class PersistenceEngineSuite extends SparkFunSuite {
     }
   }
 
-  test("ZooKeeperPersistenceEngine drops classes outside the serialization filter allowlist") {
+  test("ZooKeeperPersistenceEngine skips classes outside the serialization filter allowlist") {
     val conf = new SparkConf()
     val zkTestServer = new TestingServer(findFreePort(conf))
     try {
       conf.set(ZOOKEEPER_URL, zkTestServer.getConnectString)
       val engine = new ZooKeeperPersistenceEngine(conf, new JavaSerializer(conf))
       try {
-        // A class outside the java/scala/spark allowlist must be refused on read instead
-        // of instantiated: read() drops the znode and returns nothing.
+        // A class outside the java/scala/spark allowlist is skipped on read, not
+        // instantiated.
         engine.persist("test_filtered", new MutableInt(1))
         assert(engine.read[AnyRef]("test_filtered").isEmpty)
+
+        // The znode is skipped, not deleted: an overly narrow filter pattern must not
+        // wipe the recovery state.
+        val zk = SparkCuratorUtil.newClient(conf)
+        try {
+          assert(zk.checkExists().forPath("/spark/master_status/test_filtered") != null)
+        } finally {
+          zk.close()
+        }
 
         // Allowlisted JDK/Scala/Spark types still round-trip.
         engine.persist("test_allowed", "test_allowed_value")
