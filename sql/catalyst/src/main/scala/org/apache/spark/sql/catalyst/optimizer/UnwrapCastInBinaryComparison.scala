@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleId, UnknownRuleId}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN, INSET}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType}
 import org.apache.spark.sql.types._
@@ -102,11 +102,22 @@ import org.apache.spark.sql.types._
 object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(BINARY_COMPARISON, IN, INSET), ruleId) {
-    case l: LogicalPlan =>
-      l.transformExpressionsUpWithPruning(
-        _.containsAnyPattern(BINARY_COMPARISON, IN, INSET), ruleId) {
-        case e @ (BinaryComparison(_, _) | In(_, _) | InSet(_, _)) => unwrapCast(e).getOrElse(e)
-      }
+    case l: LogicalPlan => l.mapExpressions(unwrapCastInExpression(_, ruleId))
+  }
+
+  /**
+   * Unwraps the cast of every binary comparison, `In` and `InSet` of the given expression,
+   * leaving the ones whose cast can't be unwrapped as they are.
+   *
+   * Besides the rule, this is also used at runtime to unwrap the cast of a scalar subquery
+   * filter, whose value is only known once its subquery has been evaluated.
+   */
+  private[sql] def unwrapCastInExpression(
+      expr: Expression,
+      ruleId: RuleId = UnknownRuleId): Expression = {
+    expr.transformUpWithPruning(_.containsAnyPattern(BINARY_COMPARISON, IN, INSET), ruleId) {
+      case e @ (BinaryComparison(_, _) | In(_, _) | InSet(_, _)) => unwrapCast(e).getOrElse(e)
+    }
   }
 
   private def unwrapCast(exp: Expression): Option[Expression] = exp match {
