@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.io.File
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DynamicPruningExpression, DynamicPruningSubquery, EqualTo, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
@@ -258,6 +258,35 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
         val numOutputRows = factScanOf(df).metrics("numOutputRows").value
         assert(numOutputRows == 10,
           s"expected the partitioned branch to read 10 rows, got $numOutputRows")
+      }
+    }
+  }
+
+  test("a partition value the runtime filter cannot evaluate fails the query") {
+    // Directory selection is the only evaluator of a filter over declared fully pushed attributes,
+    // so a directory it cannot evaluate has to fail the query: keeping it would return rows that
+    // nothing filters. The exposure is the same one a compile-time partition filter over the same
+    // column has, and it is why this path must not gain the eval-failure tolerance the iterative
+    // PartitionPredicate path has.
+    withDppV2Conf {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        withTempDir { dir =>
+          writeFactAndDim(dir)
+          val strPath = new File(dir, "fact_str").getCanonicalPath
+          spark.range(10)
+            .selectExpr("id", "CASE WHEN id = 3 THEN 'abc' ELSE CAST(id AS STRING) END AS part")
+            .write.format("parquet").partitionBy("part").save(strPath)
+          spark.read.format("parquet").schema("id long, part string").load(strPath)
+            .createOrReplaceTempView("fact_str")
+          val e = intercept[SparkThrowable] {
+            sql(
+              """SELECT f.id FROM fact_str f
+                |WHERE f.part = (SELECT max(dim_id) FROM dim WHERE dim_val = 7)""".stripMargin)
+              .collect()
+          }
+          assert(e.getCondition === "CAST_INVALID_INPUT",
+            s"expected the failing cast to surface, got ${e.getCondition}")
+        }
       }
     }
   }
