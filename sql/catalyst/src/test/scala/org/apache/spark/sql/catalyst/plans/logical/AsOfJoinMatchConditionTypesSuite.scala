@@ -37,6 +37,10 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(
       MatchConditionTypes.stringComparisonCommonType(StringType, TimestampType)
         .contains(TimestampType))
+    // TIME reaches the same coercion via the generic atomic fallback, not a temporal special case.
+    assert(MatchConditionTypes.areOperandsCompatible(TimeType(), StringType))
+    assert(
+      MatchConditionTypes.stringComparisonCommonType(TimeType(), StringType).contains(TimeType()))
   }
 
   test("scalar string and numeric types coerce, matching the comparison operator") {
