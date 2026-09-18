@@ -160,6 +160,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
       override def columnStats(): JMap[NamedReference, ColumnStatistics] = colStats
     }
 
+  /** Evaluates stats for each estimateStatistics() call. */
   private def newStatsScan(
       stats: => V2Statistics,
       schema: StructType = StructType(Seq(StructField("id", IntegerType))),

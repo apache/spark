@@ -604,7 +604,8 @@ object DataSourceV2Relation {
 
         val catalystColStat = ColumnStat(distinct, min, max, nullCount, avgLen, maxLen, histogram)
 
-        // Catalyst column statistics only support top-level attributes.
+        // Catalyst column statistics only support top-level attributes. Prefer a unique exact name
+        // when the configured resolver matches multiple output attributes.
         val fieldNames = key.fieldNames
         if (fieldNames.length == 1) {
           val fieldName = fieldNames.head
