@@ -1554,6 +1554,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>false</code></td>
   <td>
     If set to true, Spark will store the exit exception failed applications in the Kubernetes API server using the <code>spark.exit-exception</code> annotation.
+    Note that the annotation is visible to anyone who can get the driver pod. The parts of the exit exception matching
+    <code>spark.redaction.string.regex</code> are redacted.
   </td>
   <td>4.1.0</td>
 </tr>
