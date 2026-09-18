@@ -26,6 +26,8 @@ from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
 from pyspark.util import PythonEvalType
 
 if have_pyarrow:
+    import pyarrow as pa
+
     # The handlers live in ``_arrow``, which imports pyarrow at module top.
     from pyspark.eval_handlers._arrow import (
         ArrowCoGroupedMapUDFHandler,
@@ -64,8 +66,6 @@ class ArrowEvalTypeHandlerRegistrationTests(unittest.TestCase):
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowScalarUDFHandlerTests(unittest.TestCase):
     def test_end_to_end_output(self):
-        import pyarrow as pa
-
         # One UDF reading column 0 (a pa.Array) and returning column + 1.
         def add_one(col):
             return pa.array([v.as_py() + 1 for v in col], type=pa.int64())
@@ -81,8 +81,6 @@ class ArrowScalarUDFHandlerTests(unittest.TestCase):
         self.assertEqual(out[0].column(0).to_pylist(), [2, 3, 4])
 
     def test_output_schema_enforced(self):
-        import pyarrow as pa
-
         # The UDF returns int32, but the declared return type is LongType (int64).
         # run must enforce the declared schema onto the output batch.
         def add_one(col):
@@ -101,8 +99,6 @@ class ArrowScalarUDFHandlerTests(unittest.TestCase):
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowScalarIterUDFHandlerTests(unittest.TestCase):
     def test_end_to_end_output(self):
-        import pyarrow as pa
-
         # The UDF receives an iterator of the single argument column and yields
         # an iterator of pa.Array; the handler assembles each into a RecordBatch.
         def add_one(col_iter):
@@ -120,8 +116,6 @@ class ArrowScalarIterUDFHandlerTests(unittest.TestCase):
         self.assertEqual([b.column(0).to_pylist() for b in out], [[2, 3], [4]])
 
     def test_row_count_mismatch_is_rejected(self):
-        import pyarrow as pa
-
         from pyspark.errors import PySparkRuntimeError
 
         # Emitting more rows than were consumed must fail (fail-fast row limit).
@@ -139,8 +133,6 @@ class ArrowScalarIterUDFHandlerTests(unittest.TestCase):
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowMapUDFHandlerTests(unittest.TestCase):
     def test_end_to_end_output(self):
-        import pyarrow as pa
-
         from pyspark.sql.conversion import ArrowBatchTransformer
 
         # mapInArrow exchanges a single struct column on the wire; the handler
@@ -170,8 +162,6 @@ class ArrowGroupedMapUDFHandlerTests(unittest.TestCase):
     _ARG_OFFSETS = [3, 1, 0, 1]
 
     def _grouped_input(self):
-        import pyarrow as pa
-
         from pyspark.sql.conversion import ArrowBatchTransformer
 
         inner = pa.RecordBatch.from_arrays(
@@ -182,8 +172,6 @@ class ArrowGroupedMapUDFHandlerTests(unittest.TestCase):
         return iter([iter([wrapped])])
 
     def test_values_only(self):
-        import pyarrow as pa
-
         return_type = StructType([StructField("v", LongType())])
 
         def grouped_udf(value_table):
@@ -195,8 +183,6 @@ class ArrowGroupedMapUDFHandlerTests(unittest.TestCase):
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [10, 20])
 
     def test_key_and_values(self):
-        import pyarrow as pa
-
         return_type = StructType([StructField("v", LongType())])
 
         def grouped_udf(key, value_table):
@@ -213,8 +199,6 @@ class ArrowGroupedMapUDFHandlerTests(unittest.TestCase):
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowGroupedMapIterUDFHandlerTests(unittest.TestCase):
     def test_end_to_end_output(self):
-        import pyarrow as pa
-
         from pyspark.sql.conversion import ArrowBatchTransformer
 
         return_type = StructType([StructField("v", LongType())])
@@ -240,8 +224,6 @@ class ArrowGroupedMapIterUDFHandlerTests(unittest.TestCase):
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowCoGroupedMapUDFHandlerTests(unittest.TestCase):
     def test_end_to_end_output(self):
-        import pyarrow as pa
-
         return_type = StructType([StructField("out", LongType())])
 
         def cogrouped_udf(left_values, right_values):
@@ -269,8 +251,6 @@ class CoGroupedBatchTests(unittest.TestCase):
         # CoGroupedBatch must match what ArrowStreamCoGroupSerializer yields: the
         # serializer eagerly materializes each side as a list, not an iterator.
         import io
-
-        import pyarrow as pa
 
         from pyspark.serializers import write_int
 
