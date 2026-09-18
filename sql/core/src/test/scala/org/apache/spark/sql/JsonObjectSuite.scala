@@ -238,6 +238,15 @@ world'))"""))
       Row("""{"a":[1,2]}"""))
   }
 
+  test("JSON_OBJECT nested directly in JSON_ARRAY is spliced as an object element") {
+    // The inverse nesting direction: a JSON_OBJECT in a JSON_ARRAY element position stays on the
+    // direct grammar path (JsonArrayValueContext), so it is spliced as a JSON object rather than
+    // routed through resolution and emitted as a quoted string.
+    checkAnswer(
+      sql("SELECT json_array(json_object('a', 1), json_object('b', 2))"),
+      Row("""[{"a":1},{"b":2}]"""))
+  }
+
   test("a nested JSON_QUERY value is spliced under KEEP QUOTES and quoted under OMIT QUOTES") {
     // JSON_QUERY emits JSON text under the default KEEP QUOTES, so a lexically nested JSON_QUERY is
     // spliced raw: the matched object is {"x":1}, not the quoted string "{\"x\":1}".
