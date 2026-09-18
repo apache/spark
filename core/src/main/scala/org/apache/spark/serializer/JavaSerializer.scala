@@ -90,8 +90,14 @@ private[spark] class JavaDeserializationStream(
 
   // A JEP-290 deserialization filter for callers that validate persisted data on read
   // (e.g. the master recovery store). Applied per-stream so it cannot affect other
-  // JavaSerializer users.
-  filter.foreach(objIn.setObjectInputFilter)
+  // JavaSerializer users. If the stream already has a filter (e.g. a JVM-wide
+  // jdk.serialFilter), compose the two instead of replacing it.
+  filter.foreach { newFilter =>
+    val composed = Option(objIn.getObjectInputFilter)
+      .map(JavaDeserializationStream.composeFilters(_, newFilter))
+      .getOrElse(newFilter)
+    objIn.setObjectInputFilter(composed)
+  }
 
   def readObject[T: ClassTag](): T = objIn.readObject().asInstanceOf[T]
   def close(): Unit = { objIn.close() }
@@ -103,7 +109,27 @@ private[spark] object DummyInvocationHandler extends InvocationHandler {
   }
 }
 
-private object JavaDeserializationStream {
+private[spark] object JavaDeserializationStream {
+
+  /**
+   * Compose two filters so that a rejection by either one rejects, otherwise an allow by
+   * either one allows, otherwise the result is undecided.
+   */
+  def composeFilters(
+      first: ObjectInputFilter,
+      second: ObjectInputFilter): ObjectInputFilter = {
+    new ObjectInputFilter {
+      override def checkInput(info: ObjectInputFilter.FilterInfo): ObjectInputFilter.Status = {
+        (first.checkInput(info), second.checkInput(info)) match {
+          case (ObjectInputFilter.Status.REJECTED, _) | (_, ObjectInputFilter.Status.REJECTED) =>
+            ObjectInputFilter.Status.REJECTED
+          case (ObjectInputFilter.Status.ALLOWED, _) | (_, ObjectInputFilter.Status.ALLOWED) =>
+            ObjectInputFilter.Status.ALLOWED
+          case _ => ObjectInputFilter.Status.UNDECIDED
+        }
+      }
+    }
+  }
 
   val primitiveMappings = Map[String, Class[_]](
     "boolean" -> classOf[Boolean],

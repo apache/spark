@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.master
 
-import java.io.ObjectInputFilter
+import java.io.{InvalidClassException, ObjectInputFilter}
 import java.nio.ByteBuffer
 
 import scala.jdk.CollectionConverters._
@@ -42,8 +42,7 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
   private val zk: CuratorFramework = SparkCuratorUtil.newClient(conf)
 
   // Only instantiate well-known classes while reading persisted state back, so corrupted
-  // or unexpected znode contents are dropped instead of being instantiated in the newly
-  // elected master.
+  // or unexpected znode contents are never instantiated in the newly elected master.
   private val serializationFilter: ObjectInputFilter =
     ObjectInputFilter.Config.createFilter(conf.get(RECOVERY_SERIALIZATION_FILTER))
 
@@ -80,8 +79,7 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
       val inputStream = new ByteBufferInputStream(ByteBuffer.wrap(fileData))
       val in = serializer match {
         case _: JavaSerializer =>
-          // A class rejected by the filter surfaces as InvalidClassException, which lands
-          // in the catch below: the znode is deleted and recovery continues.
+          // A class rejected by the filter surfaces as InvalidClassException.
           new JavaDeserializationStream(
             inputStream, Utils.getContextOrSparkClassLoader, Some(serializationFilter))
         case _ =>
@@ -93,10 +91,22 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
         in.close()
       }
     } catch {
+      case e: InvalidClassException if isFilterRejection(e) =>
+        // Rejected by the serialization filter, not found corrupt. Skip the znode without
+        // deleting it: an overly narrow filter pattern (e.g. "org.apache.spark.*", which
+        // does not match subpackages) must not wipe the whole recovery state on failover.
+        logError(s"Skipping persisted file $filename, rejected by the recovery " +
+          s"serialization filter (${RECOVERY_SERIALIZATION_FILTER.key})", e)
+        None
       case e: Exception =>
         logWarning("Exception while reading persisted file, deleting", e)
         zk.delete().forPath(workingDir + "/" + filename)
         None
     }
   }
+
+  // The JDK reports a filter rejection only as an InvalidClassException whose message is
+  // "filter status: REJECTED"; there is no more specific exception type to match on.
+  private def isFilterRejection(e: InvalidClassException): Boolean =
+    e.getMessage != null && e.getMessage.contains("filter status: REJECTED")
 }
