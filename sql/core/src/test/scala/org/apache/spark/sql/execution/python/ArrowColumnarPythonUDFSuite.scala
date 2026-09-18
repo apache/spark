@@ -162,6 +162,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       registerTestUDF(udtUDF, spark)
 
       val result = readArrowSource(numRows = 3).selectExpr(
+        "id", "name", "value", "data",
         "row_queue_char_udf(id) as char_result",
         "row_queue_udt_udf(id) as udt_result")
       val arrowExec = collectNodes[ArrowEvalPythonExec](result.queryExecution.executedPlan).head
@@ -169,7 +170,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       assert(!ColumnarArrowEvalPythonEvaluatorFactory.canUseArrowColumnar(
         Some(Array(0, 0)), isArrow = true, arrowExec.udfs))
       assert(result.schema("udt_result").dataType.isInstanceOf[StringStorageUDT])
-      assert(result.collect().map(row => (row.getString(0), row.getString(1))).toSeq ===
+      assert(result.collect().map(row => (row.getString(4), row.getString(5))).toSeq ===
         Seq(("0   ", "0"), ("1   ", "1"), ("2   ", "2")))
     }
   }
@@ -296,6 +297,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       registerTestUDF(varcharUDF, spark)
 
       val result = readArrowSource(numRows = 10).selectExpr(
+        "id", "name", "value", "data",
         "legacy_arrow_char_udf(id) as udf_id",
         "legacy_arrow_varchar_udf(name) as udf_name")
       val arrowExec = collectNodes[ArrowEvalPythonExec](
@@ -305,8 +307,8 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
 
       val rows = result.collect()
       rows.zipWithIndex.foreach { case (row, index) =>
-        assert(row.getString(0) === index.toString)
-        assert(row.getString(1) === s"row_$index")
+        assert(row.getString(4) === index.toString)
+        assert(row.getString(5) === s"row_$index")
       }
     }
   }
@@ -327,6 +329,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       registerTestUDF(udtUDF, spark)
 
       val result = readArrowSource(numRows = 2).selectExpr(
+        "id", "name", "value", "data",
         "optimized_char_udf(id) as char_result",
         "optimized_udt_udf(id) as udt_result")
       val arrowExec = collectNodes[ArrowEvalPythonExec](result.queryExecution.executedPlan).head
@@ -335,7 +338,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         Some(Array(0, 0)), isArrow = true, arrowExec.udfs))
       assert(result.schema("char_result").dataType === StringType)
       assert(result.schema("udt_result").dataType.isInstanceOf[StringStorageUDT])
-      assert(result.collect().map(row => (row.getString(0), row.getString(1))).toSeq ===
+      assert(result.collect().map(row => (row.getString(4), row.getString(5))).toSeq ===
         Seq(("0", "0"), ("1", "1")))
     }
   }

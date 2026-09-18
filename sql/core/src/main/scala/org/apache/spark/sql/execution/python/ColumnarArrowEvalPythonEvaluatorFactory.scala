@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.Utils
 
@@ -215,10 +216,22 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
       val passThruQueue =
         new ArrayDeque[(Array[ColumnVector], Int)]()
+      context.addTaskCompletionListener[Unit] { _ =>
+        while (!passThruQueue.isEmpty) {
+          passThruQueue.poll()._1.foreach(_.close())
+        }
+      }
 
       val bufferedIter = inputIter.map { batch =>
-        val passThruCols = childOutput.indices.map(
-          i => batch.column(i)).toArray
+        // The input reader owns and may close its vectors as soon as the Python runner consumes
+        // the input iterator. Create independent vector views whose buffers remain valid until
+        // the corresponding output batch is closed.
+        val passThruCols = childOutput.indices.map { i =>
+          val vector = batch.column(i).asInstanceOf[ArrowColumnVector].getValueVector
+          val transferPair = vector.getTransferPair(ArrowUtils.rootAllocator)
+          transferPair.splitAndTransfer(0, batch.numRows())
+          new ArrowColumnVector(transferPair.getTo): ColumnVector
+        }.toArray
         passThruQueue.add((passThruCols, batch.numRows()))
         batch
       }
@@ -237,10 +250,11 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         val numRows = resultBatch.numRows()
         val resultCols = (0 until resultBatch.numCols()).map(
           i => resultBatch.column(i)).toArray
-        val (passThruCols, passThruRows) = passThruQueue.poll()
+        val passThruRows = passThruQueue.peek()._2
         assert(passThruRows == numRows,
           s"Batch size mismatch: pass-through has " +
             s"$passThruRows rows but UDF result has $numRows rows.")
+        val passThruCols = passThruQueue.poll()._1
         new ColumnarBatch(passThruCols ++ resultCols, numRows)
       }
     }
