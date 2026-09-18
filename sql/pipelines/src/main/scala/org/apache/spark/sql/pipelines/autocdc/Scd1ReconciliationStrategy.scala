@@ -114,7 +114,7 @@ private[pipelines] trait Scd1ReconciliationStrategy {
 /** Row-level SCD1 reconciliation. */
 private[pipelines] object Scd1RowLevelReconciliation extends Scd1ReconciliationStrategy {
 
-  private val winningRowColName: String = s"${AutoCdcReservedNames.prefix}winning_row"
+  private[autocdc] val winningRowColName: String = s"${AutoCdcReservedNames.prefix}winning_row"
 
   /**
    * Keeps the event with the greatest sequencing value for each key, adds its CDC metadata,
