@@ -2224,20 +2224,8 @@ object RepartitionIdGenerator {
 }
 
 /**
- * Enumeration representing the origin of a plan-reuse Repartition node.
- */
-object RepartitionOrigin extends Enumeration {
-  type RepartitionOrigin = Value
-  val Unknown = Value
-  val Decorrelation = Value
-  val MultiDistinctAgg = Value
-  val ReuseSubplan = Value
-  val TopKUnionBranch = Value
-}
-
-/**
  * A trait for repartition operations that support plan reuse. Repartitions marked for plan reuse
- * carry a unique id (used to guarantee exchange reuse across references) and track their origin.
+ * carry a unique id, used to guarantee exchange reuse across references.
  */
 trait PlanReusableRepartition extends RepartitionOperation {
   /**
@@ -2245,11 +2233,6 @@ trait PlanReusableRepartition extends RepartitionOperation {
    * A value of 0 indicates this repartition is not used for plan reuse.
    */
   def repartitionId: Long
-
-  /**
-   * The origin/reason this repartition was created.
-   */
-  def repartitionOrigin: RepartitionOrigin.Value
 
   /**
    * Whether this repartition is used for plan reuse (CTE, decorrelation, etc.).
@@ -2286,8 +2269,7 @@ case class Repartition(
     shuffle: Boolean,
     child: LogicalPlan,
     localShuffle: Boolean = false,
-    id: Long = 0,
-    repartitionOrigin: RepartitionOrigin.Value = RepartitionOrigin.Unknown)
+    id: Long = 0)
   extends RepartitionOperation with PlanReusableRepartition {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
@@ -2373,8 +2355,7 @@ case class RepartitionByExpression(
     child: LogicalPlan,
     optNumPartitions: Option[Int],
     optAdvisoryPartitionSize: Option[Long] = None,
-    id: Long = 0,
-    repartitionOrigin: RepartitionOrigin.Value = RepartitionOrigin.Unknown)
+    id: Long = 0)
   extends RepartitionOperation with HasPartitionExpressions with PlanReusableRepartition {
 
   require(optNumPartitions.isEmpty || optAdvisoryPartitionSize.isEmpty)

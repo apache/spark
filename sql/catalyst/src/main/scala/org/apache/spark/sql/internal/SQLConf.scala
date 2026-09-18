@@ -6793,16 +6793,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val ASSIGN_NEW_EXPR_IDS_FOR_CTE_REUSE =
-    buildConf("spark.sql.optimizer.assignNewExprIdsForCTEReuse.enabled")
-      .internal()
-      .doc("When true, uses AssignNewExprIds instead of DeduplicateRelations " +
-        "when deduplicating CTE references in ReplaceCTERefWithRepartition. Only effective " +
-        "when ASSIGN_EXPR_IDS_REMAP_RUNTIME_FILTERS is also true.")
-      .version("4.2.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val USE_LOCAL_SHUFFLE_FOR_CTE_REUSE =
     buildConf("spark.sql.optimizer.useLocalShuffleForCTEReuse.enabled")
       .internal()
@@ -6810,15 +6800,6 @@ object SQLConf {
       .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
-
-  val ASSIGN_EXPR_IDS_REMAP_RUNTIME_FILTERS =
-    buildConf("spark.sql.optimizer.assignNewExprIds.remapRuntimeFilters.enabled")
-      .internal()
-      .doc("When true, AssignNewExprIds remaps runtime filter expressions to the new expression " +
-        "IDs, preventing incorrect reference resolution.")
-      .version("4.2.0")
-      .booleanConf
-      .createWithDefault(true)
 
   val FAIL_ON_CTE_REUSE_WITHOUT_AQE =
     buildConf("spark.sql.optimizer.failOnCTEReuseWithoutAQE.enabled")

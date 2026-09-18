@@ -51,15 +51,6 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     ReplaceRepartitionWithCTEReuse(ReplaceCTERefWithRepartition(plan))
   }
 
-  // Both flags on so the CTE-ref rules use AssignNewExprIds (which mints fresh per-reference
-  // exprIds -- the input the partitioning canonicalization fix must tolerate).
-  private def withAssignNewExprIdsEnabled(f: => Unit): Unit = {
-    withSQLConf(
-      "spark.sql.optimizer.assignNewExprIdsForCTEReuse.enabled" -> "true",
-      "spark.sql.optimizer.assignNewExprIds.remapRuntimeFilters.enabled" -> "true"
-    )(f)
-  }
-
   private def collectCTEReuseRelations(plan: LogicalPlan): Seq[CTEReuseRelation] = {
     plan.collectWithSubqueries { case r: CTEReuseRelation => r }
   }
@@ -329,51 +320,47 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
   // ---------------------------------------------------------------------------
 
   test("CTEReuseRelation canonicalization normalizes HashPartitioning exprIds") {
-    withAssignNewExprIdsEnabled {
-      // Two structurally-equal CTEReuseRelations built with independently minted exprIds (as
-      // per-reference deduplication produces). Their HashPartitioning keys differ only by raw
-      // exprId. `partitioning` is metadata, not a child, so canonicalization normalizes its exprIds
-      // against the `allAttributes` override (sharedSubplan.output); without it the canonical forms
-      // differ.
-      def reuse(): CTEReuseRelation = {
-        val leaf = LocalRelation(AttributeReference("a", IntegerType)())
-        CTEReuseRelation(cteId = 1L, partitioning = HashPartitioning(leaf.output, 5),
-          sharedSubplan = leaf)
-      }
-      val a = reuse()
-      val b = reuse()
-      assert(a.partitioning != b.partitioning,
-        "expected the two copies to carry different raw exprIds in their partitioning")
-      assert(a.canonicalized == b.canonicalized,
-        s"expected canonical forms to match:\n${a.canonicalized}\n${b.canonicalized}")
+    // Two structurally-equal CTEReuseRelations built with independently minted exprIds (as
+    // per-reference deduplication produces). Their HashPartitioning keys differ only by raw
+    // exprId. `partitioning` is metadata, not a child, so canonicalization normalizes its exprIds
+    // against the `allAttributes` override (sharedSubplan.output); without it the canonical forms
+    // differ.
+    def reuse(): CTEReuseRelation = {
+      val leaf = LocalRelation(AttributeReference("a", IntegerType)())
+      CTEReuseRelation(cteId = 1L, partitioning = HashPartitioning(leaf.output, 5),
+        sharedSubplan = leaf)
     }
+    val a = reuse()
+    val b = reuse()
+    assert(a.partitioning != b.partitioning,
+      "expected the two copies to carry different raw exprIds in their partitioning")
+    assert(a.canonicalized == b.canonicalized,
+      s"expected canonical forms to match:\n${a.canonicalized}\n${b.canonicalized}")
   }
 
   test("nested plan-reuse HashPartitioning repartitions do not trigger validation fallback") {
-    withAssignNewExprIdsEnabled {
-      // Two structurally-equal copies of a nested plan-reuse tree, built with independently minted
-      // exprIds. The inner repartition uses a HashPartitioning over the copy's own attribute; after
-      // conversion it becomes a nested CTEReuseRelation whose partitioning is metadata.
-      // Canonicalizing the outer cteId's sharedSubplan recurses into that inner one, so without
-      // partitioning-exprId normalization the two copies' canonical forms differ and
-      // validateCTEReuseRelations forces a fallback to ReplaceCTERefWithRepartition (no
-      // CTEReuseRelation).
-      def nestedCopy(): LogicalPlan = {
-        val leaf = LocalRelation(AttributeReference("a", IntegerType)())
-        val inner = RepartitionByExpression(leaf.output, leaf, Some(5), id = 2L)
-        RepartitionByExpression(Nil, inner, Some(5), id = 1L)
-      }
-      val plan = Union(Seq(nestedCopy(), nestedCopy()))
-
-      val result = runReuseRules(plan)
-
-      val ids = collectCTEReuseRelationsDeep(result).map(_.cteId).toSet
-      assert(ids == Set(1L, 2L),
-        s"Expected CTEReuseRelations for cteId 1 and 2 (no fallback), got $ids:" +
-          s"\n${result.treeString}")
-      assert(LogicalPlanIntegrity.validateCTEReuseRelations(result).isEmpty,
-        s"Expected CTEReuseRelation validation to pass:\n${result.treeString}")
+    // Two structurally-equal copies of a nested plan-reuse tree, built with independently minted
+    // exprIds. The inner repartition uses a HashPartitioning over the copy's own attribute; after
+    // conversion it becomes a nested CTEReuseRelation whose partitioning is metadata.
+    // Canonicalizing the outer cteId's sharedSubplan recurses into that inner one, so without
+    // partitioning-exprId normalization the two copies' canonical forms differ and
+    // validateCTEReuseRelations forces a fallback to ReplaceCTERefWithRepartition (no
+    // CTEReuseRelation).
+    def nestedCopy(): LogicalPlan = {
+      val leaf = LocalRelation(AttributeReference("a", IntegerType)())
+      val inner = RepartitionByExpression(leaf.output, leaf, Some(5), id = 2L)
+      RepartitionByExpression(Nil, inner, Some(5), id = 1L)
     }
+    val plan = Union(Seq(nestedCopy(), nestedCopy()))
+
+    val result = runReuseRules(plan)
+
+    val ids = collectCTEReuseRelationsDeep(result).map(_.cteId).toSet
+    assert(ids == Set(1L, 2L),
+      s"Expected CTEReuseRelations for cteId 1 and 2 (no fallback), got $ids:" +
+        s"\n${result.treeString}")
+    assert(LogicalPlanIntegrity.validateCTEReuseRelations(result).isEmpty,
+      s"Expected CTEReuseRelation validation to pass:\n${result.treeString}")
   }
 
   test("plan-reuse repartition on top of a CTE reference is resolved") {

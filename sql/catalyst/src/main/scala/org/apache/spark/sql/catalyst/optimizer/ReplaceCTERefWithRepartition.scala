@@ -120,15 +120,10 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] with JoinIdHelper 
   }
 
   private def deduplicatePlan(plan: LogicalPlan): LogicalPlan = {
-    if (conf.getConf(SQLConf.ASSIGN_NEW_EXPR_IDS_FOR_CTE_REUSE) &&
-        conf.getConf(SQLConf.ASSIGN_EXPR_IDS_REMAP_RUNTIME_FILTERS)) {
-      AssignNewExprIds(fallBackToDeduplicateRelation = true)(plan)
-    } else {
-      // CTEDef plan is duplicated when being inlined. Hence, re-assign new joinId(s) to the
-      // inlined CTERef to avoid conflicts.
-      val res = DeduplicateRelations(
-        Join(plan, plan, Inner, None, JoinHint(None, None))).children(1)
-      assignJoinId(res, reassign = true)
-    }
+    // CTEDef plan is duplicated when being inlined. Hence, re-assign new joinId(s) to the
+    // inlined CTERef to avoid conflicts.
+    val res = DeduplicateRelations(
+      Join(plan, plan, Inner, None, JoinHint(None, None))).children(1)
+    assignJoinId(res, reassign = true)
   }
 }

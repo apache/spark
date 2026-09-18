@@ -193,7 +193,7 @@ class PythonUDTFSuite extends SharedSparkSession {
       case RepartitionByExpression(
         _, Project(
           _, SubqueryAlias(
-            _, _: LocalRelation)), _, _, _, _) =>
+            _, _: LocalRelation)), _, _, _) =>
       case other =>
         failure(other)
     }
@@ -206,7 +206,7 @@ class PythonUDTFSuite extends SharedSparkSession {
       .collectFirst { case r: Repartition => r }.get match {
       case Repartition(
         1, true, SubqueryAlias(
-          _, _: LocalRelation), _, _, _) =>
+          _, _: LocalRelation), _, _) =>
       case other =>
         failure(other)
     }
