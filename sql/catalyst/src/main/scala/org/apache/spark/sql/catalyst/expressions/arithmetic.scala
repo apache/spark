@@ -816,11 +816,23 @@ trait DivModLike extends BinaryArithmetic {
            |} else {$divisionBody
            |}""".stripMargin
       }
-      ev.copy(code = code"""
-        ${eval2.code}
-        boolean ${ev.isNull} = false;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $guardedBody""")
+      if (nullable) {
+        ev.copy(code = code"""
+          ${eval2.code}
+          boolean ${ev.isNull} = false;
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          $guardedBody""")
+      } else {
+        // With non-null inputs and `failOnError`, divide-by-zero and overflow throw rather than
+        // producing null, so the result is non-nullable. Omit the dead `isNull` flag and report
+        // FalseLiteral (mirrors MakeDecimal/CheckOverflow).
+        ev.copy(
+          code = code"""
+            ${eval2.code}
+            $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+            $guardedBody""",
+          isNull = FalseLiteral)
+      }
     } else {
       val nullOnErrorCondition = if (failOnError || divisorIsNonZero) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError && !divisorIsNonZero) {
@@ -1242,7 +1254,7 @@ case class Pmod(
            |}
            |${ev.value} = ${ev.value}.toPrecision(
            |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContext);
-           |${ev.isNull} = ${ev.value} == null;
+           |${if (nullable) s"${ev.isNull} = ${ev.value} == null;" else ""}
            |""".stripMargin
 
       // The positive-modulo arithmetic is the same fixed algorithm for every primitive numeric
@@ -1274,11 +1286,22 @@ case class Pmod(
            |} else {$remainderBody
            |}""".stripMargin
       }
-      ev.copy(code = code"""
-        ${eval2.code}
-        boolean ${ev.isNull} = false;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $guardedBody""")
+      if (nullable) {
+        ev.copy(code = code"""
+          ${eval2.code}
+          boolean ${ev.isNull} = false;
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          $guardedBody""")
+      } else {
+        // See DivModLike: non-null inputs under `failOnError` make the result non-nullable, so omit
+        // the dead `isNull` flag and report FalseLiteral.
+        ev.copy(
+          code = code"""
+            ${eval2.code}
+            $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+            $guardedBody""",
+          isNull = FalseLiteral)
+      }
     } else {
       val nullOnErrorCondition = if (failOnError || divisorIsNonZero) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError && !divisorIsNonZero) {
