@@ -28,9 +28,7 @@ imports the concrete handler submodules so they register.
 when pyarrow is available; the Arrow eval types it serves cannot run without it.
 """
 
-try:
-    import pyarrow  # noqa: F401
-except ImportError:
-    pass
-else:
+from pyspark.testing.utils import have_pyarrow
+
+if have_pyarrow:
     from pyspark.eval_handlers import _arrow  # noqa: F401  # registers handlers on import
