@@ -1186,7 +1186,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>(value of spark.kubernetes.authenticate.driver.serviceAccountName)</code></td>
   <td>
     Service account that is used when running the executor pod.
-    If this parameter is not setup, the fallback logic will use the driver's service account.
+    If this parameter is not set or is empty, the fallback logic will use the driver's service account.
   </td>
   <td>3.1.0</td>
 </tr>
