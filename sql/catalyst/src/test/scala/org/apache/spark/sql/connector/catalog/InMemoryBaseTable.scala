@@ -64,7 +64,8 @@ abstract class InMemoryBaseTable(
     val numPartitions: Option[Int] = None,
     val advisoryPartitionSize: Option[Long] = None,
     val isDistributionStrictlyRequired: Boolean = true,
-    val numRowsPerSplit: Int = Int.MaxValue)
+    val numRowsPerSplit: Int = Int.MaxValue,
+    override val schemaAlignmentConfig: SchemaAlignmentConfig = SchemaAlignmentConfig.DEFAULT)
   extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns
     with SupportsSchemaEvolution {
 

@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, ColumnDefaultValue, Identifier, SupportsRowLevelOperations, TableCapability, TableCatalog, TableContext, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, ColumnDefaultValue, Identifier, SchemaAlignmentConfig, SupportsRowLevelOperations, TableCapability, TableCatalog, TableContext, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
@@ -48,6 +48,7 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
       .add("txt", "STRING")
     when(t.columns()).thenReturn(CatalogV2Util.structTypeToV2Columns(schema))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
+    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     t
   }
 
@@ -59,6 +60,7 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
       .add("i", "INT")
     when(t.columns()).thenReturn(CatalogV2Util.structTypeToV2Columns(schema))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
+    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     t
   }
 
@@ -73,6 +75,7 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
       .add("txt", "STRING")
     when(t.columns()).thenReturn(CatalogV2Util.structTypeToV2Columns(schema))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
+    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     t
   }
 
@@ -84,6 +87,7 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
       .add("txt", "STRING")
     when(t.columns()).thenReturn(CatalogV2Util.structTypeToV2Columns(schema))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
+    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     t
   }
 
@@ -96,6 +100,7 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
       .add("txt", "STRING")
     when(t.columns()).thenReturn(CatalogV2Util.structTypeToV2Columns(schema))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
+    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     t
   }
 
@@ -121,6 +126,7 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
         nullable = false)
     when(t.columns()).thenReturn(CatalogV2Util.structTypeToV2Columns(schema))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
+    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     t
   }
 
@@ -132,6 +138,7 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
       .add("txt", "STRING")
     when(t.columns()).thenReturn(CatalogV2Util.structTypeToV2Columns(schema))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
+    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     when(t.capabilities()).thenReturn(Collections.singleton(TableCapability.ACCEPT_ANY_SCHEMA))
     t
   }
@@ -143,6 +150,7 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
       Column.create("b", BooleanType, true, null, null),
       Column.create("i", IntegerType, true, null, iDefault, null)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
+    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     t
   }
 
