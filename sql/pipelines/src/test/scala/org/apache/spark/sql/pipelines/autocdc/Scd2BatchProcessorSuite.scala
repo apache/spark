@@ -2335,6 +2335,44 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  // =============== coalesceIgnoredNulls tests ===============
+
+  test("coalesceIgnoredNulls resets stale inherited values after a leading tombstone") {
+    val ignoreNullSelection =
+      ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value")))
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        ignoreNullSelection = Some(ignoreNullSelection)
+      ),
+      resolvedSequencingType = LongType
+    )
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+    val valueVersionMapKey = QuotingUtils.quoteNameParts(Seq("value"))
+    val unauthoredValueVersionMap = Map(valueVersionMapKey -> false)
+
+    // The tombstone is the first row in the affected suffix. The following upserts still carry a
+    // value inherited before that delete arrived, but their version maps record that they did not
+    // author it. The tombstone must reset both rows rather than letting the first upsert establish
+    // the stale value as the window's carry-in.
+    val df = targetTableOf(userSchema)(
+      Row(1, null, 20L, 20L, Row(20L, null)),
+      Row(1, "stale", 10L, null, Row(30L, unauthoredValueVersionMap)),
+      Row(1, "stale", 10L, null, Row(40L, unauthoredValueVersionMap))
+    )
+
+    checkAnswer(
+      df = processor.coalesceIgnoredNulls(df, ignoreNullSelection),
+      expectedAnswer = Seq(
+        Row(1, null, 20L, 20L, Row(20L, null)),
+        Row(1, null, 10L, null, Row(30L, unauthoredValueVersionMap)),
+        Row(1, null, 10L, null, Row(40L, unauthoredValueVersionMap))
+      )
+    )
+  }
+
   // =============== reconcileStartAndEndAt tests ===============
 
   test("reconcileStartAndEndAt: a fresh-key run head propagates its startAt to its " +
