@@ -92,25 +92,28 @@ object MathUtils {
   // Positive modulo (`pmod`): the remainder `a % n` adjusted to share the sign of `n`.
   // Unlike `floorMod`, this matches the `pmod` SQL function / `HashPartitioning` semantics.
   // Shared by `Pmod`'s eval and codegen paths so the two never diverge.
+  // For the integral overloads, a negative `r` lies in `(-|n|, 0)`, so `r + n` is already in
+  // `[0, n)` and needs no second `% n`. The float/double overloads keep it because `r + n` can
+  // round up to exactly `n`, which `% n` folds back to `0`.
 
   def pmod(a: Int, n: Int): Int = {
     val r = a % n
-    if (r < 0) (r + n) % n else r
+    if (r < 0) r + n else r
   }
 
   def pmod(a: Long, n: Long): Long = {
     val r = a % n
-    if (r < 0) (r + n) % n else r
+    if (r < 0) r + n else r
   }
 
   def pmod(a: Byte, n: Byte): Byte = {
     val r = a % n
-    if (r < 0) ((r + n) % n).toByte else r.toByte
+    if (r < 0) (r + n).toByte else r.toByte
   }
 
   def pmod(a: Short, n: Short): Short = {
     val r = a % n
-    if (r < 0) ((r + n) % n).toShort else r.toShort
+    if (r < 0) (r + n).toShort else r.toShort
   }
 
   def pmod(a: Float, n: Float): Float = {
