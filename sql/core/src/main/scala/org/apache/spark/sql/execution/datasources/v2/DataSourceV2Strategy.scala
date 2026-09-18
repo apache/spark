@@ -27,8 +27,8 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, DynamicPruning, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
-import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, DynamicPruning, Expression, InSet, IsNotNull, IsNull, Literal, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -52,6 +52,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
+import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils
@@ -1022,7 +1023,25 @@ private[sql] object DataSourceV2Strategy extends Logging {
     val literalized = expr.transform {
       case s: ExecScalarSubquery => s.toLiteral
     }
-    translateFilterV2(literalized)
+    // Type coercion of the compared sides may wrap the filtered column in a cast, e.g.
+    // `cast(part_col as bigint) = <scalar subquery>` when an INT partition column is compared
+    // with a BIGINT subquery. The optimizer can't unwrap it as the value is only known now, so
+    // unwrap it here with the same code the optimizer applies to a comparison with a literal.
+    val unwrapped = UnwrapCastInBinaryComparison.unwrapCastInExpression(literalized)
+    translateFilterV2(simplifyUnwrappedNull(unwrapped))
+  }
+
+  /**
+   * Rewrites the null-returning forms the cast unwrapping produces for a value out of the
+   * column's range, which have no V2 predicate of their own, into the ones they filter by:
+   * `and(isnull(col), null)` is null or false, so it keeps no row, and `or(isnotnull(col), null)`
+   * is null or true, so it keeps the rows where the column is not null. Only the whole filter is
+   * rewritten, as the two are not interchangeable with their counterparts under a `Not`.
+   */
+  private def simplifyUnwrappedNull(expr: Expression): Expression = expr match {
+    case And(IsNull(_), Literal(null, BooleanType)) => FalseLiteral
+    case Or(isNotNull: IsNotNull, Literal(null, BooleanType)) => isNotNull
+    case other => other
   }
 
   /**
