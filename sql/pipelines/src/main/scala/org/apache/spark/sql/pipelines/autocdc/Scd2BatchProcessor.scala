@@ -968,6 +968,162 @@ case class Scd2BatchProcessor(
   }
 
   /**
+   * Establishes version maps for upsert-representing rows that do not have one. Existing maps are
+   * preserved, and delete-encoded rows retain null maps because their user-data authorship is not
+   * meaningful.
+   */
+  private def initializeMissingVersionMaps(
+      rowsDf: DataFrame,
+      eligibleSchema: StructType,
+      ignoreNullSelection: ColumnSelection,
+      isUpsertRepresentingRow: Column,
+      resolver: Resolver): DataFrame = {
+    val metadataColumnName = AutoCdcReservedNames.cdcMetadataColName
+    val cdcMetadataCol = F.col(metadataColumnName)
+    val existingVersionMap = Scd2BatchProcessor.versionMapOf(cdcMetadataCol)
+    val versionMapToPersist = F.when(
+      isUpsertRepresentingRow && existingVersionMap.isNull,
+      Scd2VersionMap.buildVersionMap(eligibleSchema, ignoreNullSelection, resolver)
+    ).otherwise(existingVersionMap)
+
+    rowsDf.withColumn(
+      metadataColumnName,
+      cdcMetadataCol
+        .withField(Scd2BatchProcessor.versionMapFieldName, versionMapToPersist)
+        .as(metadataColumnName, rowsDf.schema(metadataColumnName).metadata))
+  }
+
+  /**
+   * Replaces unauthored leaf values with values inherited from the most recent authoring row
+   * for the same key, and materializes version map entries for leaves that would otherwise lose
+   * their unauthored signal after inheriting a non-null value.
+   *
+   * An existing non-null version map is the row's established authorship record. Its semantic
+   * contents are frozen across ignore-null selection changes: the active selection determines
+   * which unauthored leaves are coalesced in this reconciliation, but does not reinterpret the
+   * authorship of any leaf. Removing a leaf from the selection therefore stops coalescing it,
+   * while adding it begins consulting the authorship already recorded for that leaf.
+   *
+   * A null version map is the absence of an authorship record, rather than an established record
+   * that says every leaf was authored. When ignore-null is enabled, an upsert-representing row
+   * with a null map lazily establishes one from its stored values and the active selection before
+   * coalescing. Once established, it follows the same frozen-authorship rule. Schema evolution may
+   * later materialize an explicit unauthored entry, but does not change a leaf's authorship.
+   *
+   * Must run after decomposition cleanup, whose canonical row shapes expose the persisted
+   * interval gaps and delete boundaries that terminate inheritance, and before start/end
+   * reconciliation so inherited tracked-history values determine the final SCD2 runs.
+   */
+  private[autocdc] def coalesceIgnoredNulls(
+      decomposedDf: DataFrame,
+      ignoreNullSelection: ColumnSelection): DataFrame = {
+    val resolver = decomposedDf.sparkSession.sessionState.conf.resolver
+    val userDataColumnSchema = AutoCdcSchemaUtils.excludeColumns(
+      schema = decomposedDf.schema,
+      columnNamesToExclude = changeArgs.keys.map(_.name) ++
+        Scd2BatchProcessor.reservedFrameworkColNames,
+      resolver = resolver
+    )
+    val activeIgnoreNullLeafPaths =
+      Scd2VersionMap.resolveIgnoreNullLeafPaths(userDataColumnSchema, ignoreNullSelection, resolver)
+
+    val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)
+    val versionMapCol = Scd2BatchProcessor.versionMapOf(cdcMetadataCol)
+
+    val currentRow = Scd2IntervalColumns(
+      recordStartAt = Scd2BatchProcessor.recordStartAtOf(cdcMetadataCol),
+      startAt = F.col(Scd2BatchProcessor.startAtColName),
+      endAt = F.col(Scd2BatchProcessor.endAtColName)
+    )
+    val nextRow = currentRow.leadBy(1, orderChronologicallyPerKeyWindow)
+
+    val isUpsertRepresentingRow = RowClassifier.isUpsertRepresentingRow(currentRow)
+    val withInitializedVersionMaps = initializeMissingVersionMaps(
+      rowsDf = decomposedDf,
+      eligibleSchema = userDataColumnSchema,
+      ignoreNullSelection = ignoreNullSelection,
+      isUpsertRepresentingRow = isUpsertRepresentingRow,
+      resolver = resolver
+    )
+
+    // Strictly preceding rows only, as a row may never inherit from itself.
+    val precedingRowsInKeyWindow =
+      orderChronologicallyPerKeyWindow.rowsBetween(Window.unboundedPreceding, -1)
+
+    // Project row-level context used to compute the leaf-level inheritance expressions below.
+    val (withRowInheritanceContextDf, rowInheritanceContext) =
+      RowInheritanceContext.projectOn(
+        df = withInitializedVersionMaps,
+        rowEndsInheritanceChain = F.coalesce(
+          // Any row that fully closes or represents a delete event (closing a preceding upsert
+          // event) ends any running inheritance chain.
+          RowClassifier.isTombstone(currentRow) ||
+            RowClassifier.isDecompositionTail(currentRow) ||
+            RowClassifier.rowClosesStrictlyBeforeNextRowIsVisible(currentRow.endAt, nextRow),
+          F.lit(false)
+        ),
+        isUpsertRepresentingRow = isUpsertRepresentingRow,
+        isFirstRowInKeyWindow =
+          F.row_number().over(orderChronologicallyPerKeyWindow) === 1,
+      )
+
+    // Only leaves in the active ignore-null selection participate in reconciliation. The
+    // initialized version map determines whether each row authored its value; the selection
+    // determines whether that recorded authorship is relevant to this reconciliation.
+    val ignoreNullLeafInheritanceContexts =
+      activeIgnoreNullLeafPaths.zipWithIndex.map { case (path, index) =>
+        LeafInheritanceContext(
+          path = path,
+          index = index,
+          versionMap = versionMapCol,
+          rowInheritanceContext = rowInheritanceContext,
+          precedingRowsInKeyWindow = precedingRowsInKeyWindow
+        )
+      }
+    val ignoreNullContextsByTopLevelColumn =
+      ignoreNullLeafInheritanceContexts.groupBy(_.path.head)
+
+    // Evaluate all values available to inherit in one window pass.
+    val withValuesToInheritDf = withRowInheritanceContextDf.withColumns(
+      ignoreNullLeafInheritanceContexts.map { context =>
+        context.valueToInheritIfAnyColName -> context.valueToInheritIfAny
+      }.toMap)
+
+    // Compute updated version maps after materializing new entries due to schema evolution.
+    val schemaEvolutionUpdatedVersionMap =
+      Scd2BatchProcessor.updateVersionMapWithSchemaEvolution(
+        versionMapCol,
+        ignoreNullLeafInheritanceContexts)
+
+    // Build one expression per original column, replacing the CDC metadata and selected user-data
+    // columns while preserving the original column order. Expressions are resolved against
+    // columns in [[withValuesToInheritDf]].
+    val outputColumns = decomposedDf.columns.map {
+      case colName if colName == AutoCdcReservedNames.cdcMetadataColName =>
+        // Update the version map after materializing schema-evolution-attributed columns.
+        cdcMetadataCol
+          .withField(
+            Scd2BatchProcessor.versionMapFieldName,
+            schemaEvolutionUpdatedVersionMap
+          )
+          .as(colName, decomposedDf.schema(colName).metadata)
+      case colName
+          if ignoreNullContextsByTopLevelColumn.contains(colName) =>
+        // Rebuild only user-data columns containing an active ignore-null leaf.
+        val field = userDataColumnSchema(colName)
+        Scd2BatchProcessor.constructCoalescedIgnoreNullColumn(
+          Seq(colName), field.dataType, ignoreNullContextsByTopLevelColumn(colName)
+        ).as(colName, field.metadata)
+      case colName =>
+        // Pass through keys, framework columns, and user data outside the active selection.
+        F.col(QuotingUtils.quoteIdentifier(colName))
+    }
+
+    // Evaluate the replacements and drop the temporary inheritance columns.
+    withValuesToInheritDf.select(outputColumns.toImmutableArraySeq: _*)
+  }
+
+  /**
    * Convert surviving decomposition tails into tombstones.
    *
    * A decomposition tail that survives deletion cleanup is an unmatched delete boundary; setting
@@ -1529,6 +1685,62 @@ object Scd2BatchProcessor {
       .fieldNames
       .toImmutableArraySeq
 
+  /** Materializes explicit unauthored entries required by retroactive schema evolution. */
+  private def updateVersionMapWithSchemaEvolution(
+      versionMap: Column,
+      leafInheritanceContexts: Seq[LeafInheritanceContext]): Column = {
+    if (leafInheritanceContexts.isEmpty) {
+      return versionMap
+    }
+
+    val conditionalEntries = leafInheritanceContexts.map { context =>
+      F.when(
+        context.needsSchemaEvolutionEntry,
+        Scd2VersionMap.buildVersionMapEntry(context.path, authored = false))
+    }
+    val nonNullEntries = F.filter(
+      F.array(conditionalEntries: _*), (entry: Column) => entry.isNotNull)
+    val newEntries = F.map_from_entries(nonNullEntries)
+    F.when(
+      versionMap.isNotNull,
+      F.map_concat(versionMap, newEntries))
+  }
+
+  /**
+   * Rebuilds the column at `path` with coalesced leaf values. For struct types the function
+   * recurses into each field, reassembling the struct from its coalesced children. For leaf
+   * types it substitutes the inherited value when the leaf's `inherits` predicate holds.
+   *
+   * The supplied contexts must be nonempty and cover `path`. Struct fields without a context are
+   * passed through unchanged.
+   */
+  private def constructCoalescedIgnoreNullColumn(
+      path: Seq[String],
+      dataType: DataType,
+      contextsBeneath: Seq[LeafInheritanceContext]): Column = {
+    dataType match {
+      case struct: StructType =>
+        val contextsByChildName = contextsBeneath.groupBy(_.path(path.length))
+        val rebuilt = F.struct(
+          struct.fields.toImmutableArraySeq.map { field =>
+            val childPath = path :+ field.name
+            contextsByChildName
+              .get(field.name)
+              .map(constructCoalescedIgnoreNullColumn(childPath, field.dataType, _))
+              .getOrElse(F.col(QuotingUtils.quoteNameParts(childPath)))
+              .as(field.name)
+          }: _*
+        )
+        val anyInherits = contextsBeneath.map(_.inherits).reduce(_ || _)
+        F.when(anyInherits, rebuilt)
+          .otherwise(F.col(QuotingUtils.quoteNameParts(path)))
+      case _ =>
+        val context = contextsBeneath.head
+        F.when(context.inherits, context.valueToInherit)
+          .otherwise(F.col(QuotingUtils.quoteNameParts(path)))
+    }
+  }
+
   /**
    * Name of temporary column projected onto microbatch to compute the min sequencing value per
    * key within the microbatch.
@@ -1669,11 +1881,9 @@ object Scd2BatchProcessor {
         // decomposition tails, which are temporarily and synthetically constructed during
         // reconciliation, have a null record start at.
         StructField(recordStartAtFieldName, sequencingType, nullable = true),
-        // The version map representing null-authorship for the row. For persisted rows:
-        // If the version map is null, that row was ingested with ignore-null off, and all columns
-        // are considered explicitly authored (null or not). If the version map is non-null, the
-        // row was ingested with ignore-null on, and contents of the map comply with the contract
-        // defined in [[Scd2VersionMap]].
+        // The version map representing null-authorship for the row. A null map on an
+        // upsert-representing row means no per-column authorship record has been established yet;
+        // [[Scd2BatchProcessor.coalesceIgnoredNulls]] may establish one when ignore-null is active.
         //
         // Tombstones and decomposition tails also always hold null version maps because column
         // authorship is not applicable - they are delete markers.
@@ -1735,6 +1945,13 @@ private[autocdc] case class Scd2IntervalColumns(
       F.lead(recordStartAt, offset).over(window),
       F.lead(startAt, offset).over(window),
       F.lead(endAt, offset).over(window))
+
+  /**
+   * The earliest visible timestamp of this row. For a normal upsert row `startAt` is
+   * non-null and wins; for a decomposition tail both `recordStartAt` and `startAt` are null
+   * and `endAt` surfaces via [[effectiveRecordStartAt]].
+   */
+  def effectiveStartAt: Column = F.coalesce(startAt, effectiveRecordStartAt)
 }
 
 object RowClassifier {
@@ -1808,6 +2025,22 @@ object RowClassifier {
     endAt.isNotNull && endAt < nextEffectiveRecordStartAt
 
   /**
+   * Whether a row closes (`endAt`) strictly before the next row for the same key becomes
+   * visible, leaving a gap on the visible timeline that only a delete explains.
+   *
+   * Distinct from [[rowClosesStrictlyBeforeNextRow]], which compares against the next row's
+   * event sequence. Before reconciliation a target row standing for a collapsed no-op run
+   * holds the run's start in `startAt` and its last member's sequence in `recordStartAt`,
+   * while the members in between sit in the auxiliary table and need not be in the affected
+   * window. Comparing event sequences would read the interior of such a run as a gap.
+   */
+  private[autocdc] def rowClosesStrictlyBeforeNextRowIsVisible(
+      endAt: Column,
+      next: Scd2IntervalColumns
+  ): Column =
+    endAt.isNotNull && endAt < next.effectiveStartAt
+
+  /**
    * Whether `row` carries no new information beyond its immediate successor `next` and so
    * collapses into that successor's run instead of standing as its own visible interval. It is
    * the caller's responsibility to pass `row` and `next` as successive rows in chronological
@@ -1827,4 +2060,171 @@ object RowClassifier {
       isUpsertRepresentingRow(next) &&
       !rowClosesStrictlyBeforeNextRow(row.endAt, next.effectiveRecordStartAt) &&
       areTrackedColumnsEqual
+}
+
+/** Inheritance properties that apply to a row as a whole rather than to an individual leaf. */
+private[autocdc] case class RowInheritanceContext(
+    rowEndsInheritanceChain: Column,
+    isFirstRowInKeyWindow: Column,
+    isUpsertRepresentingRow: Column) {
+
+  /** Whether the affected window begins with an upsert-representing row. */
+  def isFirstUpsertRepresentingRow: Column =
+    isFirstRowInKeyWindow && isUpsertRepresentingRow
+}
+
+private[autocdc] object RowInheritanceContext {
+
+  /**
+   * Projects the supplied expressions as temporary DataFrame columns and returns references to
+   * them. Keeping row-level window expressions out of each leaf's candidate expression prevents
+   * Catalyst from producing separate copies for every leaf.
+   */
+  def projectOn(
+      df: DataFrame,
+      rowEndsInheritanceChain: Column,
+      isUpsertRepresentingRow: Column,
+      isFirstRowInKeyWindow: Column): (DataFrame, RowInheritanceContext) = {
+    val projectedDf = df.withColumns(Map(
+      rowEndsInheritanceChainColName -> rowEndsInheritanceChain,
+      isFirstRowInKeyWindowColName -> isFirstRowInKeyWindow,
+      isUpsertRepresentingRowColName -> isUpsertRepresentingRow
+    ))
+    val projectedContext = RowInheritanceContext(
+      rowEndsInheritanceChain = F.col(rowEndsInheritanceChainColName),
+      isFirstRowInKeyWindow = F.col(isFirstRowInKeyWindowColName),
+      isUpsertRepresentingRow = F.col(isUpsertRepresentingRowColName))
+    (projectedDf, projectedContext)
+  }
+
+  private val rowEndsInheritanceChainColName =
+    s"${AutoCdcReservedNames.prefix}row_ends_inheritance_chain"
+
+  private val isFirstRowInKeyWindowColName =
+    s"${AutoCdcReservedNames.prefix}is_first_row_in_key_window"
+
+  private val isUpsertRepresentingRowColName =
+    s"${AutoCdcReservedNames.prefix}is_upsert_representing_row"
+}
+
+/**
+ * Per-leaf expressions that [[Scd2BatchProcessor.coalesceIgnoredNulls]] evaluates for one
+ * leaf of the eligible user-data schema.
+ *
+ * [[valueToInheritIfAny]] is projected into [[valueToInheritIfAnyColName]] so that
+ * [[inherits]], [[valueToInherit]], and [[needsSchemaEvolutionEntry]] stay as plain expressions
+ * over an ordinary column.
+ *
+ * @param path the leaf's name parts within the row.
+ * @param index ordinal used to derive the temporary projected column name.
+ * @param valueToInheritIfAny latest value contributed by a strictly preceding row, wrapped to
+ *                            distinguish no contribution from an explicit null.
+ * @param inherits whether this row should take [[valueToInherit]] over its stored value.
+ * @param needsSchemaEvolutionEntry whether this row must gain an explicit unauthored
+ *                                  entry for the leaf to keep reading as unauthored
+ *                                  after it inherits.
+ */
+private[autocdc] case class LeafInheritanceContext(
+    path: Seq[String],
+    index: Int,
+    valueToInheritIfAny: Column,
+    inherits: Column,
+    needsSchemaEvolutionEntry: Column) {
+
+  val valueToInheritIfAnyColName: String =
+    LeafInheritanceContext.valueToInheritIfAnyColumnName(index)
+
+  /**
+   * Value extracted from the projected wrapper. It is null when the preceding contribution reset
+   * inheritance or no preceding contribution exists; [[inherits]] distinguishes those cases.
+   */
+  def valueToInherit: Column =
+    F.col(valueToInheritIfAnyColName)
+      .getField(LeafInheritanceContext.inheritanceValueFieldName)
+}
+
+private[autocdc] object LeafInheritanceContext {
+
+  /** Builds the per-leaf expressions used to coalesce unauthored nulls from preceding rows. */
+  def apply(
+      path: Seq[String],
+      index: Int,
+      versionMap: Column,
+      rowInheritanceContext: RowInheritanceContext,
+      precedingRowsInKeyWindow: WindowSpec): LeafInheritanceContext = {
+    val leafValueInRow = F.col(QuotingUtils.quoteNameParts(path))
+    val isLeafAuthoredByRow =
+      Scd2VersionMap.isAuthored(versionMap, leafValueInRow, path)
+
+    // Each row sees the candidate produced by the latest preceding row that updated the
+    // inheritance state. The current row can then emit one of three candidate updates for
+    // next rows: no update, a null update, or a non-null update. A nullable struct
+    // distinguishes no update from an update whose value is null.
+    //
+    // A chain end emits null so later rows cannot inherit across a delete boundary. An authored
+    // leaf emits its value. If the first row in the affected window is an upsert, it emits its
+    // stored value even when unauthored because it is the carry-in for omitted earlier history.
+    val rowResetsInheritanceChain = rowInheritanceContext.rowEndsInheritanceChain
+    val rowContributesAuthoredValue =
+      rowInheritanceContext.isUpsertRepresentingRow && isLeafAuthoredByRow
+
+    // When the first row is an upsert, it supplies the baseline inheritance value for every leaf.
+    // Even if it did not author a leaf itself, its stored value may have been coalesced from rows
+    // preceding the affected window.
+    val rowEstablishesCarryIn = rowInheritanceContext.isFirstUpsertRepresentingRow
+    val rowUpdatesInheritanceChain =
+      rowResetsInheritanceChain || rowContributesAuthoredValue || rowEstablishesCarryIn
+
+    // A row that does not update the inheritance chain produces a null outer column (hence
+    // "candidate"). Otherwise, the struct wraps either a null reset or a non-null value; its own
+    // nullability therefore encodes all three states.
+    val rowContributedInheritanceCandidate = F.when(
+      rowUpdatesInheritanceChain,
+      {
+        // If the row resets the inheritance chain, then it intentionally updates the inheritance
+        // chain with a null value. Otherwise it contributes its current leaf value as the new
+        // inheritance chain value.
+        val newInheritanceChainValue = F.when(!rowResetsInheritanceChain, leafValueInRow)
+        F.struct(newInheritanceChainValue.as(inheritanceValueFieldName))
+      }
+    )
+
+    val valueToInheritIfAnyColName = valueToInheritIfAnyColumnName(index)
+    val valueToInheritIfAnyColRef = F.col(valueToInheritIfAnyColName)
+    val precedingRowsContributeInheritableValue = valueToInheritIfAnyColRef.isNotNull
+
+    val valueToInherit =
+      valueToInheritIfAnyColRef.getField(inheritanceValueFieldName)
+    // Skip null over null: rebuilding a nested leaf could otherwise turn a null parent struct
+    // into a non-null struct containing nulls.
+    val wouldInheritNullOverNull = leafValueInRow.isNull && valueToInherit.isNull
+
+    val rowInheritsLeaf =
+      rowInheritanceContext.isUpsertRepresentingRow &&
+        !isLeafAuthoredByRow &&
+        precedingRowsContributeInheritableValue &&
+        !wouldInheritNullOverNull
+
+    LeafInheritanceContext(
+      path = path,
+      index = index,
+      valueToInheritIfAny = F.last(
+        // The value to inherit for any row in the window is the last non-null inheritance
+        // candidate proposed by a preceding row. Recall if a row contributes a null candidate
+        // (different from struct{null}) then it declares it has no value to contribute to the
+        // inheritance chain.
+        rowContributedInheritanceCandidate,
+        ignoreNulls = true
+      ).over(precedingRowsInKeyWindow),
+      inherits = rowInheritsLeaf,
+      needsSchemaEvolutionEntry = Scd2VersionMap.needsSchemaEvolutionEntry(
+        versionMap, leafValueInRow, path, valueToInherit
+      )
+    )
+  }
+
+  private val inheritanceValueFieldName: String = "value"
+
+  private def valueToInheritIfAnyColumnName(index: Int): String =
+    s"${AutoCdcReservedNames.prefix}value_to_inherit_if_any_$index"
 }
