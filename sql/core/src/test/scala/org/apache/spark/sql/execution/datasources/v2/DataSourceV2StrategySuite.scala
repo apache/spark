@@ -1102,6 +1102,37 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       runtimeFilter(Cast($"cint".int, StringType), Array[Any](UTF8String.fromString("1")))).isEmpty)
   }
 
+  test("SPARK-59317: translate scalar subquery filter on a cast column") {
+    // the value is converted to the column type, the same as `UnwrapCastInBinaryComparison`
+    // does for a comparison with a literal
+    attrInts.foreach { case (attr, name) =>
+      testTranslateScalarSubqueryFilter(EqualTo(Cast(attr, LongType), Literal(1L)),
+        Some(new Predicate("=", Array(FieldReference(name), LiteralValue(1, IntegerType)))))
+      testTranslateScalarSubqueryFilter(GreaterThan(Cast(attr, LongType), Literal(1L)),
+        Some(new Predicate(">", Array(FieldReference(name), LiteralValue(1, IntegerType)))))
+    }
+    // a value rounded by the conversion equals no column value
+    testTranslateScalarSubqueryFilter(
+      EqualTo(Cast($"cfloat".float, DoubleType), Literal(3.14d)), Some(new AlwaysFalse()))
+    // a value above the column range: no row can match, and every non-null row is below it
+    testTranslateScalarSubqueryFilter(
+      EqualTo(Cast($"cint".int, LongType), Literal(Int.MaxValue + 1L)), Some(new AlwaysFalse()))
+    testTranslateScalarSubqueryFilter(
+      LessThan(Cast($"cint".int, LongType), Literal(Int.MaxValue + 1L)),
+      Some(new Predicate("IS_NOT_NULL", Array(FieldReference("cint")))))
+    // the cast is not unwrapped when it is lossy, the filter is pushed as it was
+    val lossy = EqualTo(Cast($"clong".long, DoubleType), Literal(1.0d))
+    testTranslateScalarSubqueryFilter(lossy, DataSourceV2Strategy.translateFilterV2(lossy))
+  }
+
+  private def testTranslateScalarSubqueryFilter(
+      catalystFilter: Expression,
+      result: Option[Predicate]): Unit = {
+    assertResult(result) {
+      DataSourceV2Strategy.translateScalarSubqueryFilterV2(catalystFilter)
+    }
+  }
+
   private def runtimeFilter(child: Expression, values: Array[Any]): InSubqueryExec = {
     val plan = SubqueryExec("dpp", LocalTableScanExec(Nil, Nil, None))
     InSubqueryExec(child, plan, ExprId(0), isDynamicPruning = true, resultBroadcast = null,
