@@ -80,13 +80,13 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   private void checkPrefixLength(int prefixLength) {
     if (prefixLength < 0) {
       throw new ParquetDecodingException(
-        "Corrupted DELTA_BYTE_ARRAY page: negative prefix length: " + prefixLength);
+          "Corrupted DELTA_BYTE_ARRAY page: negative prefix length: " + prefixLength);
     }
     int previousLength = previous == null ? 0 : previous.remaining();
     if (prefixLength > previousLength) {
       throw new ParquetDecodingException(
-        "Corrupted DELTA_BYTE_ARRAY page: prefix length " + prefixLength
-          + " is larger than the previous value's length " + previousLength);
+          "Corrupted DELTA_BYTE_ARRAY page: prefix length " + prefixLength
+              + " is larger than the previous value's length " + previousLength);
     }
   }
 
