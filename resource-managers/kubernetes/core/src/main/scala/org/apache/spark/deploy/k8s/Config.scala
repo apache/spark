@@ -872,7 +872,9 @@ private[spark] object Config extends Logging {
   val KUBERNETES_ANNOTATE_EXIT_EXCEPTION =
     ConfigBuilder("spark.kubernetes.driver.annotateExitException")
       .doc("If set to true, Spark will store the exit exception failed applications in" +
-        s" the Kubernetes API server using the $EXIT_EXCEPTION_ANNOTATION annotation.")
+        s" the Kubernetes API server using the $EXIT_EXCEPTION_ANNOTATION annotation. Note that" +
+        " the annotation is visible to anyone who can get the driver pod. The parts of the exit" +
+        " exception matching `spark.redaction.string.regex` are redacted.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
