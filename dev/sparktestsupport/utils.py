@@ -105,15 +105,15 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ['root']
     >>> [x.name for x in determine_modules_to_test([modules.build])]
     ['root']
-    >>> [x.name for x in determine_modules_to_test([modules.core.source_module])]
-    ['root']
     >>> [x.name for x in determine_modules_to_test([modules.core])]
-    ['core']
-    >>> [x.name for x in determine_modules_to_test([modules.launcher.source_module])]
     ['root']
-    >>> sorted(x.name for x in determine_modules_to_test([modules.graphx.source_module]))
+    >>> [x.name for x in determine_modules_to_test([modules.examples_test])]
+    ['examples']
+    >>> [x.name for x in determine_modules_to_test([modules.launcher])]
+    ['root']
+    >>> sorted(x.name for x in determine_modules_to_test([modules.graphx]))
     ['examples', 'graphx']
-    >>> sorted([x.name for x in determine_modules_to_test([modules.sql.source_module])])
+    >>> sorted([x.name for x in determine_modules_to_test([modules.spark_sql])])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
      'mllib', 'pipelines', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect',
@@ -122,7 +122,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
      'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
-    ...     [modules.sparkr, modules.sql.source_module], deduplicated=False)])
+    ...     [modules.sparkr, modules.spark_sql], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
      'mllib', 'pipelines', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect',
@@ -131,7 +131,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
      'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
-    ...     [modules.sql.source_module, modules.core.source_module], deduplicated=False)])
+    ...     [modules.spark_sql, modules.core], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'catalyst', 'connect', 'core', 'credential-aws', 'docker-integration-tests',
      'examples', 'graphx',
