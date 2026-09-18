@@ -99,8 +99,8 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
     VarcharType,
-    _has_physical_type,
     _has_nulltype,
+    _has_physical_type,
     _infer_schema,
     _merge_type,
 )
