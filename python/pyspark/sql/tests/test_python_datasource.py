@@ -291,6 +291,19 @@ class BasePythonDataSourceTestsMixin:
         df = self.spark.read.format("test").load()
         assertDataFrameEqual(df, [Row(0, 1)])
 
+    def test_data_source_char_varchar_return_type_is_unsupported(self):
+        schema = StructType([StructField("value", ArrayType(CharType(2)))])
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            self.register_data_source(
+                read_func=lambda schema, partition: iter([(["a"],)]),
+                output=schema,
+            )
+            with self.assertRaisesRegex(
+                PythonException,
+                "CHAR/VARCHAR return types in Python DataSource",
+            ):
+                self.spark.read.format("test").load().collect()
+
     def test_data_source_read_output_named_row(self):
         self.register_data_source(
             read_func=lambda schema, partition: iter([Row(j=1, i=0), Row(i=1, j=2)])
@@ -2035,7 +2048,7 @@ class BasePythonDataSourceTestsMixin:
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
-    def test_data_source_char_varchar_return_type_is_unsupported(self):
+    def test_data_source_char_varchar_udt_return_type_is_unsupported(self):
         class CharStorageUDT(UserDefinedType):
             @classmethod
             def sqlType(cls):
@@ -2055,22 +2068,17 @@ class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
             def deserialize(self, datum):
                 return datum
 
-        schemas = [
-            StructType([StructField("value", ArrayType(CharType(2)))]),
-            StructType([StructField("value", CharStorageUDT())]),
-        ]
+        schema = StructType([StructField("value", CharStorageUDT())])
         with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
-            for schema in schemas:
-                with self.subTest(schema=schema):
-                    self.register_data_source(
-                        read_func=lambda schema, partition: iter([(["a"],)]),
-                        output=schema,
-                    )
-                    with self.assertRaisesRegex(
-                        PythonException,
-                        "CHAR/VARCHAR return types in Python DataSource",
-                    ):
-                        self.spark.read.format("test").load().collect()
+            self.register_data_source(
+                read_func=lambda schema, partition: iter([("a",)]),
+                output=schema,
+            )
+            with self.assertRaisesRegex(
+                PythonException,
+                "CHAR/VARCHAR return types in Python DataSource",
+            ):
+                self.spark.read.format("test").load().collect()
 
 
 class PythonDataSourceTestsWithSimpleWorker(PythonDataSourceTests):
