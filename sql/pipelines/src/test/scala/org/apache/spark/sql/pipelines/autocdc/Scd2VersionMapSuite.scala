@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils
@@ -75,6 +76,30 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       spark.sparkContext.parallelize(Seq(Row.fromSeq(values))), schema)
 
   private def encodedPath(path: String*): String = QuotingUtils.quoteNameParts(path)
+
+  private val operationSchema = new StructType()
+    .add("caseName", StringType, nullable = false)
+    .add("versionMap", Scd2VersionMap.mapType, nullable = true)
+    .add("currentValue", StringType, nullable = true)
+    .add("valueToInherit", StringType, nullable = true)
+
+  private case class VersionMapOperationInput(
+      caseName: String,
+      versionMap: Option[Map[String, Boolean]],
+      currentValue: Option[String],
+      valueToInherit: Option[String] = None) {
+
+    def toRow: Row = Row(
+      caseName,
+      versionMap.orNull,
+      currentValue.orNull,
+      valueToInherit.orNull)
+  }
+
+  private def operationRows(inputs: VersionMapOperationInput*) =
+    spark.createDataFrame(
+      spark.sparkContext.parallelize(inputs.map(_.toRow)),
+      operationSchema)
 
   // =========================================================================
   // mapType
@@ -408,5 +433,289 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
         encodedPath("b") -> true,
         encodedPath("c") -> true)))
     }
+  }
+
+  // =========================================================================
+  // Version map authorship operations
+  // =========================================================================
+
+  test("resolveIgnoreNullLeafPaths returns canonical leaves in schema order") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("Profile", new StructType()
+        .add("Display Name", StringType)
+        .add("Contact", new StructType().add("e.mail", StringType)))
+      .add("Events", ArrayType(new StructType().add("kind", StringType)))
+      .add("Lookup", MapType(StringType, new StructType().add("value", StringType)))
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val includeSelection = ColumnSelection.IncludeColumns(Seq(
+        UnqualifiedColumnName("lookup"),
+        UnqualifiedColumnName("profile"),
+        UnqualifiedColumnName("events")))
+      assert(Scd2VersionMap.resolveIgnoreNullLeafPaths(
+        schema, includeSelection, resolver) === Seq(
+        Seq("Profile", "Display Name"),
+        Seq("Profile", "Contact", "e.mail"),
+        Seq("Events"),
+        Seq("Lookup")))
+
+      val excludeSelection =
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("profile")))
+      assert(Scd2VersionMap.resolveIgnoreNullLeafPaths(
+        schema, excludeSelection, resolver) === Seq(
+        Seq("id"),
+        Seq("Events"),
+        Seq("Lookup")))
+    }
+  }
+
+  test("resolveIgnoreNullLeafPaths respects case sensitivity") {
+    val schema = new StructType()
+      .add("Profile", new StructType().add("Name", StringType))
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val exactSelection =
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("Profile")))
+      assert(Scd2VersionMap.resolveIgnoreNullLeafPaths(
+        schema, exactSelection, resolver) === Seq(Seq("Profile", "Name")))
+
+      val mismatchedSelection =
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("profile")))
+      intercept[AnalysisException] {
+        Scd2VersionMap.resolveIgnoreNullLeafPaths(schema, mismatchedSelection, resolver)
+      }
+    }
+  }
+
+  test("resolveIgnoreNullLeafPaths preserves raw special-character names") {
+    val schema = new StructType()
+      .add("wrapper.with.dot", new StructType()
+        .add("back`tick", StringType)
+        .add("space name", StringType))
+    val selection = ColumnSelection.IncludeColumns(Seq(
+      UnqualifiedColumnName(QuotingUtils.quoteIdentifier("wrapper.with.dot"))))
+
+    assert(Scd2VersionMap.resolveIgnoreNullLeafPaths(
+      schema, selection, resolver) === Seq(
+      Seq("wrapper.with.dot", "back`tick"),
+      Seq("wrapper.with.dot", "space name")))
+  }
+
+  test("entryValue distinguishes values from absent entries") {
+    val path = Seq("wrapper", "a.b")
+    val key = encodedPath(path: _*)
+    val df = operationRows(
+      VersionMapOperationInput("authored", Some(Map(key -> true)), None),
+      VersionMapOperationInput("unauthored", Some(Map(key -> false)), None),
+      VersionMapOperationInput("absent entry", Some(Map.empty), None),
+      VersionMapOperationInput("absent map", None, None))
+
+    checkAnswer(
+      df.select(
+        F.col("caseName"),
+        Scd2VersionMap.entryValue(F.col("versionMap"), path).as("entry")),
+      Seq(
+        Row("authored", true),
+        Row("unauthored", false),
+        Row("absent entry", null),
+        Row("absent map", null)))
+  }
+
+  test("entryValue requires the exact raw path spelling") {
+    val path = Seq("Wrapper", "a.b")
+    val df = operationRows(
+      VersionMapOperationInput(
+        "case-sensitive key",
+        Some(Map(encodedPath(path: _*) -> false)),
+        None))
+
+    checkAnswer(
+      df.select(
+        Scd2VersionMap.entryValue(F.col("versionMap"), path).as("exact"),
+        Scd2VersionMap.entryValue(
+          F.col("versionMap"), Seq("wrapper", "a.b")).as("differentCase")),
+      Row(false, null))
+  }
+
+  test("buildVersionMapEntry serializes paths and authorship") {
+    val path = Seq("outer.with.dot", "back`tick")
+    val result = spark.range(1).select(
+      Scd2VersionMap.buildVersionMapEntry(path, authored = true).as("authored"),
+      Scd2VersionMap.buildVersionMapEntry(path, authored = false).as("unauthored"))
+
+    checkAnswer(
+      result,
+      Row(
+        Row(encodedPath(path: _*), true),
+        Row(encodedPath(path: _*), false)))
+  }
+
+  test("buildVersionMapEntry round-trips through entryValue") {
+    val path = Seq("outer.with.dot", "back`tick")
+    val versionMap = F.map_from_entries(F.array(
+      Scd2VersionMap.buildVersionMapEntry(path, authored = false)))
+    val result = spark.range(1)
+      .select(versionMap.as("versionMap"))
+      .select(Scd2VersionMap.entryValue(F.col("versionMap"), path).as("entry"))
+
+    checkAnswer(result, Row(false))
+  }
+
+  test("validateAuthoredNullEntry accepts valid pairings") {
+    val schema = new StructType()
+      .add("caseName", StringType, nullable = false)
+      .add("authorshipEntry", BooleanType, nullable = true)
+      .add("currentValue", StringType, nullable = true)
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row("authored null", true, null),
+        Row("unauthored null", false, null),
+        Row("unauthored non-null", false, "value"),
+        Row("absent entry", null, "value"))),
+      schema)
+
+    checkAnswer(
+      df.select(
+        F.col("caseName"),
+        Scd2VersionMap.validateAuthoredNullEntry(
+          F.col("authorshipEntry"),
+          F.col("currentValue"),
+          Seq("value")).as("valid")),
+      Seq(
+        Row("authored null", true),
+        Row("unauthored null", true),
+        Row("unauthored non-null", true),
+        Row("absent entry", true)))
+  }
+
+  test("validateAuthoredNullEntry rejects a non-null authored null") {
+    val schema = new StructType()
+      .add("authorshipEntry", BooleanType, nullable = false)
+      .add("currentValue", StringType, nullable = false)
+    val df = singleRow(schema)(true, "value")
+
+    val wrapper = intercept[SparkException] {
+      df.select(Scd2VersionMap.validateAuthoredNullEntry(
+        F.col("authorshipEntry"),
+        F.col("currentValue"),
+        Seq("value"))).collect()
+    }
+    assert(wrapper.getCause.isInstanceOf[SparkRuntimeException],
+      s"Expected SparkRuntimeException cause, got ${wrapper.getCause}")
+    checkError(
+      exception = wrapper.getCause.asInstanceOf[SparkRuntimeException],
+      condition = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> ("Version map entry is true (authored null) " +
+          "but stored value is non-null for column `value`")))
+  }
+
+  test("isAuthored covers the version map contract truth table") {
+    val path = Seq("value")
+    val key = encodedPath(path: _*)
+    val df = operationRows(
+      VersionMapOperationInput("null map and null value", None, None),
+      VersionMapOperationInput("null map and non-null value", None, Some("value")),
+      VersionMapOperationInput("authored null", Some(Map(key -> true)), None),
+      VersionMapOperationInput("unauthored null", Some(Map(key -> false)), None),
+      VersionMapOperationInput("schema-evolved null", Some(Map.empty), None),
+      VersionMapOperationInput("authored non-null", Some(Map.empty), Some("value")),
+      VersionMapOperationInput(
+        "inherited non-null", Some(Map(key -> false)), Some("value")))
+
+    checkAnswer(
+      df.select(
+        F.col("caseName"),
+        Scd2VersionMap.isAuthored(
+          F.col("versionMap"),
+          F.col("currentValue"),
+          path).as("authored")),
+      Seq(
+        Row("null map and null value", true),
+        Row("null map and non-null value", true),
+        Row("authored null", true),
+        Row("unauthored null", false),
+        Row("schema-evolved null", false),
+        Row("authored non-null", true),
+        Row("inherited non-null", false)))
+  }
+
+  test("isAuthored validates authored-null entries") {
+    val path = Seq("value")
+    val df = operationRows(
+      VersionMapOperationInput(
+        "invalid authored null",
+        Some(Map(encodedPath(path: _*) -> true)),
+        Some("value")))
+
+    val wrapper = intercept[SparkException] {
+      df.select(Scd2VersionMap.isAuthored(
+        F.col("versionMap"),
+        F.col("currentValue"),
+        path)).collect()
+    }
+    assert(wrapper.getCause.isInstanceOf[SparkRuntimeException],
+      s"Expected SparkRuntimeException cause, got ${wrapper.getCause}")
+    assert(wrapper.getCause.asInstanceOf[SparkRuntimeException].getCondition == "INTERNAL_ERROR")
+  }
+
+  test("isAuthored interprets maps built from ignore-null selections") {
+    val schema = new StructType()
+      .add("included", StringType, nullable = true)
+      .add("excluded", StringType, nullable = true)
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(null, null),
+        Row("included value", "excluded value"))),
+      schema)
+    val selection =
+      ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("included")))
+    val withVersionMap =
+      df.withColumn("versionMap", Scd2VersionMap.buildVersionMap(schema, selection, resolver))
+
+    checkAnswer(
+      withVersionMap.select(
+        F.col("included"),
+        Scd2VersionMap.isAuthored(
+          F.col("versionMap"), F.col("included"), Seq("included")).as("includedAuthored"),
+        F.col("excluded"),
+        Scd2VersionMap.isAuthored(
+          F.col("versionMap"), F.col("excluded"), Seq("excluded")).as("excludedAuthored")),
+      Seq(
+        Row(null, false, null, true),
+        Row("included value", true, "excluded value", true)))
+  }
+
+  test("needsSchemaEvolutionEntry requires every condition") {
+    val path = Seq("value")
+    val key = encodedPath(path: _*)
+    val df = operationRows(
+      VersionMapOperationInput(
+        "schema evolution with value", Some(Map.empty), None, Some("previous")),
+      VersionMapOperationInput("ignore null off", None, None, Some("previous")),
+      VersionMapOperationInput(
+        "current value non-null", Some(Map.empty), Some("current"), Some("previous")),
+      VersionMapOperationInput(
+        "authored entry exists", Some(Map(key -> true)), None, Some("previous")),
+      VersionMapOperationInput(
+        "unauthored entry exists", Some(Map(key -> false)), None, Some("previous")),
+      VersionMapOperationInput("nothing to inherit", Some(Map.empty), None))
+
+    checkAnswer(
+      df.select(
+        F.col("caseName"),
+        Scd2VersionMap.needsSchemaEvolutionEntry(
+          F.col("versionMap"),
+          F.col("currentValue"),
+          path,
+          F.col("valueToInherit")).as("needsEntry")),
+      Seq(
+        Row("schema evolution with value", true),
+        Row("ignore null off", false),
+        Row("current value non-null", false),
+        Row("authored entry exists", false),
+        Row("unauthored entry exists", false),
+        Row("nothing to inherit", false)))
   }
 }

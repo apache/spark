@@ -118,7 +118,16 @@ private[pipelines] object Scd2VersionMap {
     }
   }
 
-  /** Resolves the active ignore-null selection to canonical leaf paths in schema order. */
+  /**
+   * Resolves an ignore-null selection against the top-level fields of `schema`, then flattens
+   * selected structs into leaf paths. Arrays and maps remain opaque leaves.
+   *
+   * @param schema Schema against which to resolve and canonicalize the selection.
+   * @param ignoreNullSelection Top-level columns selected for ignore-null handling.
+   * @param resolver Case-sensitivity resolver for column name matching.
+   * @return Raw, unquoted leaf-name parts in schema order, with spelling taken exactly from
+   *   `schema`.
+   */
   private[autocdc] def resolveIgnoreNullLeafPaths(
       schema: StructType,
       ignoreNullSelection: ColumnSelection,
@@ -132,7 +141,14 @@ private[pipelines] object Scd2VersionMap {
     AutoCdcSchemaUtils.flattenStructFieldPaths(ignoreNullColumns)
   }
 
-  /** The value for leaf `columnPath` in `versionMap`, or null when absent. */
+  /**
+   * Returns the authorship value for `columnPath`, or null if the map or entry is absent.
+   *
+   * @param versionMap Version map containing keys serialized with
+   *   [[QuotingUtils.quoteNameParts]].
+   * @param columnPath Raw, unquoted leaf-name parts. Their spelling must exactly match the path
+   *   used to construct the version-map key, including casing and special characters.
+   */
   private[autocdc] def entryValue(
       versionMap: Column,
       columnPath: Seq[String]): Column =
@@ -142,6 +158,12 @@ private[pipelines] object Scd2VersionMap {
    * Asserts that if the version map claims `columnPath` authored a null, then
    * `currentColumnValue` is indeed null. Authored nulls are never overwritten by coalescing,
    * so a `true` entry paired with a non-null stored value indicates data corruption or a bug.
+   *
+   * @param authorshipEntry Authorship value read from the version map, or null if absent.
+   * @param currentColumnValue Current stored value for the same leaf.
+   * @param columnPath Raw leaf-name parts used to identify the column in an error.
+   * @return A column that evaluates to true for a valid pairing and raises an internal error
+   *   otherwise.
    */
   private[autocdc] def validateAuthoredNullEntry(
       authorshipEntry: Column,
@@ -166,6 +188,11 @@ private[pipelines] object Scd2VersionMap {
   /**
    * Returns whether the [[currentColumnValue]] was authored by the upsert event that derived this
    * row, according to the [[versionMap]].
+   *
+   * @param versionMap Version map for the row, or null when the row has no authorship record.
+   * @param currentColumnValue Current stored value for the leaf.
+   * @param columnPath Raw leaf-name parts matching the key's canonical schema spelling.
+   * @return Whether the originating upsert authored the stored leaf value.
    */
   private[autocdc] def isAuthored(
       versionMap: Column,
@@ -204,12 +231,18 @@ private[pipelines] object Scd2VersionMap {
    *
    * This can only happen on retroactive schema evolution for an existing row, where the default
    * value on schema evolution is null.
+   *
+   * @param versionMap Version map for the row, or null when ignore-null authorship is not tracked.
+   * @param currentColumnValue Current stored value for the leaf.
+   * @param columnPath Raw leaf-name parts matching the key's canonical schema spelling.
+   * @param valueToInherit Value available from a preceding row, or null if none is available.
+   * @return Whether to materialize an explicit unauthored entry for this leaf.
    */
   private[autocdc] def needsSchemaEvolutionEntry(
       versionMap: Column,
       currentColumnValue: Column,
       columnPath: Seq[String],
-      candidateInheritedValue: Column): Column = {
+      valueToInherit: Column): Column = {
     val isIgnoreNullOn = versionMap.isNotNull
     val isRetroactiveSchemaEvolution =
       currentColumnValue.isNull && entryValue(versionMap, columnPath).isNull
@@ -218,12 +251,19 @@ private[pipelines] object Scd2VersionMap {
     // for the retroactively schema evolved column yet. It can remain in its current state (null
     // data column and absent from version map), and be reconsidered for materialization on the
     // next reconciliation.
-    val hasValueToInherit = candidateInheritedValue.isNotNull
+    val hasValueToInherit = valueToInherit.isNotNull
 
     isIgnoreNullOn && isRetroactiveSchemaEvolution && hasValueToInherit
   }
 
-  /** Builds a `(key, value)` entry struct for the version map. */
+  /**
+   * Builds a `(key, value)` entry that follows the version map's path-serialization contract.
+   *
+   * @param columnPath Raw, unquoted leaf-name parts to serialize with
+   *   [[QuotingUtils.quoteNameParts]].
+   * @param authored Authorship Boolean to store directly as the entry value.
+   * @return A non-null `(key: String, value: Boolean)` struct.
+   */
   private[autocdc] def buildVersionMapEntry(
       columnPath: Seq[String],
       authored: Boolean): Column =
