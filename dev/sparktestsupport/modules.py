@@ -749,8 +749,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.coercion.test_python_udf_return_type",
         "pyspark.sql.tests.df_golden.test_df_golden",
         "pyspark.sql.tests.df_golden.test_df_golden_framework",
-        "pyspark.eval_handlers.tests.test_base_eval_type_handlers",
         "pyspark.eval_handlers.tests.test_arrow_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_base_eval_type_handlers",
     ],
 )
 
