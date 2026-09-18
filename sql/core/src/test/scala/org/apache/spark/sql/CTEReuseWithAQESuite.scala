@@ -39,13 +39,10 @@ class CTEReuseWithAQESuite
 
   private val cteReuseConf =
     "spark.sql.optimizer.replaceCTERefWithCTEReuse.enabled"
-  private val localShuffleConf =
-    "spark.sql.optimizer.useLocalShuffleForCTEReuse.enabled"
 
   private def withCTEReuseEnabled(f: => Unit): Unit = {
     withSQLConf(
       cteReuseConf.key -> "true",
-      localShuffleConf.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true"
     )(f)
   }

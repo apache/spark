@@ -6793,14 +6793,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val USE_LOCAL_SHUFFLE_FOR_CTE_REUSE =
-    buildConf("spark.sql.optimizer.useLocalShuffleForCTEReuse.enabled")
-      .internal()
-      .doc("Uses Local shuffle instead of round robin for CTE reuse nodes.")
-      .version("4.2.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val FAIL_ON_CTE_REUSE_WITHOUT_AQE =
     buildConf("spark.sql.optimizer.failOnCTEReuseWithoutAQE.enabled")
       .internal()

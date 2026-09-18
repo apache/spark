@@ -32,12 +32,10 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
   import testImplicits._
 
   private val cteReuseConfKey = "spark.sql.optimizer.replaceCTERefWithCTEReuse.enabled"
-  private val localShuffleConfKey = "spark.sql.optimizer.useLocalShuffleForCTEReuse.enabled"
 
   private def withCTEReuseEnabled(f: => Unit): Unit = {
     withSQLConf(
       cteReuseConfKey -> "true",
-      localShuffleConfKey -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true"
     )(f)
   }
@@ -46,7 +44,6 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
   // batch, in order) with the flag on, so tests can drive it on a hand-built plan.
   private def runReuseRules(plan: LogicalPlan): LogicalPlan = withSQLConf(
       cteReuseConfKey -> "true",
-      localShuffleConfKey -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
     ReplaceRepartitionWithCTEReuse(ReplaceCTERefWithRepartition(plan))
   }
@@ -181,7 +178,6 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
   test("flag off falls back to ReplaceCTERefWithRepartition") {
     withSQLConf(
       cteReuseConfKey -> "false",
-      localShuffleConfKey -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true"
     ) {
       val df = sql(
