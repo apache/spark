@@ -149,8 +149,8 @@ class ConverterTests(unittest.TestCase):
                     [[ts.to_pydatetime(), None], [ts.to_pydatetime(), None], None],
                 )
 
-        # Nested arrays are boxed at every level. Build the outer array as convert_numpy does,
-        # a 1-D object array holding the inner ndarray: np.array([values], dtype=object) would
+        # Nested arrays are boxed at every level. Build the outer array as _convert_array_numpy
+        # does, a 1-D object array holding the inner ndarray: np.array([values], dtype=object) would
         # instead make a 2-D array whose datetime64[ns] elements numpy turns into plain ints.
         conv = _create_converter_from_pandas(ArrayType(ArrayType(TimestampNTZType())))
         outer = np.empty(1, dtype=object)

@@ -658,7 +658,7 @@ ctes
     ;
 
 namedQuery
-    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL integerValue)? AS? LEFT_PAREN query RIGHT_PAREN
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL integerValue)? AS? (NOT? MATERIALIZED)? LEFT_PAREN query RIGHT_PAREN
     ;
 
 tableProvider
@@ -1445,7 +1445,7 @@ shiftOperator
 datetimeUnit
     : YEAR | QUARTER | MONTH
     | WEEK | DAY | DAYOFYEAR
-    | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
+    | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND | NANOSECOND
     ;
 
 primaryExpression

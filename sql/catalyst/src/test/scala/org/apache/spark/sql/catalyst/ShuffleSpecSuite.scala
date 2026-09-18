@@ -27,6 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
 
 class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
+
   private val passThrough_a_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"a"), 10)
   private val passThrough_b_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"b"), 10)
   private val passThrough_c_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"c"), 10)
@@ -37,6 +38,53 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     override def resultType(): DataType = IntegerType
     override def name(): String = "bucket"
     override def canonicalName(): String = "test.bucket"
+  }
+
+  test("SPARK-59289: createShuffleSpec keeps a member that only satisfies after a projection") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val clustered = ClusteredDistribution(Seq(a))
+    // Grouped, but `a = 1` sits on two partitions, so projecting the keys onto [a] merges them and
+    // the member satisfies only once a `GroupPartitionsExec` has. Filtering the members on the
+    // strict `satisfies` would drop it and leave an empty collection, which its own `require`
+    // rejects.
+    val merging = KeyedPartitioning(
+      Seq(a, b), Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1)))
+    assert(merging.isGrouped, "test setup: the member is grouped on its own keys")
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      assert(!merging.satisfies(clustered), "test setup: it does not serve as it stands")
+      val collection = PartitioningCollection(Seq(merging, merging))
+      val spec = collection.createShuffleSpec(clustered)
+      assert(spec.asInstanceOf[ShuffleSpecCollection].specs.size == 2)
+      // Each member's spec describes the projected layout the node would emit, one partition per
+      // distinct `a`.
+      assert(spec.flatten.map(_.numPartitions) == Seq(2, 2))
+    }
+  }
+
+  test("SPARK-59289: createShuffleSpec drops a keyed member that is not grouped") {
+    val a = AttributeReference("a", IntegerType)()
+    val clustered = ClusteredDistribution(Seq(a))
+    // A node would group this one too, but the admission set here is what a finished plan is
+    // checked against by `ValidateRequirements`, so it stays what the strict question admitted
+    // before a projection was allowed to answer it.
+    val ungrouped = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
+    val grouped = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
+    assert(!ungrouped.isGrouped && grouped.isGrouped, "test setup")
+
+    assert(!PartitioningCollection.maySatisfyAfterProjection(ungrouped, clustered))
+    assert(PartitioningCollection.maySatisfyAfterProjection(grouped, clustered))
+
+    // And through the filter itself, which is the predicate's one caller. The keyed member goes and
+    // the hash member stays, so the collection keeps a spec and its `require` is not tripped. The
+    // pairing is asked of a mixed collection rather than of two keyed members, because
+    // `checkKeyedPartitioningInvariant` forces one `KeyLayout` on all keyed members and `isGrouped`
+    // is therefore uniform across them: a collection cannot hold one of each.
+    val mixed = PartitioningCollection(Seq(ungrouped, HashPartitioning(Seq(a), 3)))
+    val specs = mixed.createShuffleSpec(clustered).asInstanceOf[ShuffleSpecCollection].specs
+    assert(specs.size == 1, s"only the hash member survives the filter, got $specs")
+    assert(specs.head.isInstanceOf[HashShuffleSpec], s"and it is the hash one, got $specs")
   }
 
   protected def checkCompatible(
@@ -647,6 +695,29 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       // `createPartitioning` would index an empty position set.
       assert(spec.joinKeyPositions.isEmpty)
       assert(!spec.canCreatePartitioning)
+    }
+  }
+
+  test("createShuffleSpec: a marked covering projection yields a usable unprojected spec") {
+    val a = $"a".int
+    // Grouped but not sorted, which is what a one-side shuffle onto a union's key order leaves
+    // behind. Every partition expression covers a clustering key here, so the projection that is
+    // refused would only have re-sorted the keys.
+    val marked = KeyedPartitioning(Seq(a),
+      Seq(InternalRow(3), InternalRow(4), InternalRow(1), InternalRow(2)))
+      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+    assert(marked.isGrouped, "test setup: the keys are distinct, so the layout is grouped")
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      val spec = marked.createShuffleSpec(ClusteredDistribution(Seq(a)))
+        .asInstanceOf[KeyedShuffleSpec]
+      // The refusal leaves the child's own layout, and unlike the narrowing case above that spec
+      // is usable: a consumer is laid out on the keys in the order this side reports them. Sorting
+      // them would send the consumer's undeclared rows where this side does not hold them.
+      assert(spec.joinKeyPositions.isEmpty)
+      assert(spec.canCreatePartitioning)
+      assert(spec.partitioning.partitionKeys == marked.partitionKeys)
     }
   }
 

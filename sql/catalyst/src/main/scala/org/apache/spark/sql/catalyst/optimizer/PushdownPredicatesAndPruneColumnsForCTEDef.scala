@@ -133,7 +133,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
   private def pushdownPredicatesAndAttributes(
       plan: LogicalPlan,
       cteMap: CTEMap): LogicalPlan = plan.transformWithSubqueries {
-    case cteDef @ CTERelationDef(child, id, originalPlanWithPredicates, _, _, _) =>
+    case cteDef @ CTERelationDef(child, id, originalPlanWithPredicates, _, _, _, _) =>
       val (_, _, newPreds, newAttrSet) = cteMap(id)
       val preds = originalPlanWithPredicates.map(_._2).getOrElse(Seq.empty)
       if (!isTruePredicate(newPreds) &&
@@ -276,7 +276,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
 object CleanUpTempCTEInfo extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.transformWithPruning(_.containsPattern(CTE)) {
-      case cteDef @ CTERelationDef(_, _, Some(_), _, _, _) =>
+      case cteDef @ CTERelationDef(_, _, Some(_), _, _, _, _) =>
         cteDef.copy(originalPlanWithPredicates = None)
     }
 }

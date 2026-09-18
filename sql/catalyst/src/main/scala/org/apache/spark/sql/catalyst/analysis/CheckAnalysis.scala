@@ -339,6 +339,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     } finally {
       preemptedError.clear()
     }
+    // Check MATERIALIZED CTE relations on the original plan, as `inlinedPlan` has them inlined.
+    // This runs after `checkAnalysis0`, so that resolution errors are reported first.
+    MaterializedCTECheck(plan)
     plan.setAnalyzed()
   }
 

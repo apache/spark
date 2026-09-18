@@ -19,7 +19,18 @@ import array
 import datetime
 import decimal
 import functools
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
+import math
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Union,
+    overload,
+)
 
 import pyspark
 from pyspark.errors import PySparkNotImplementedError, PySparkRuntimeError, PySparkValueError
@@ -56,6 +67,8 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampLTZNanosType,
+    TimestampNTZNanosType,
     TimestampNTZType,
     TimestampType,
     TimeType,
@@ -75,9 +88,70 @@ if TYPE_CHECKING:
 
 class ArrowBatchTransformer:
     """
-    Pure functions that transform RecordBatch -> RecordBatch.
+    Pure functions that transform Arrow RecordBatches and Tables.
     They should have no side effects (no I/O, no writing to streams).
     """
+
+    @staticmethod
+    def resize_batches(
+        batches: Iterator["pa.RecordBatch"], max_bytes: int
+    ) -> Iterator["pa.RecordBatch"]:
+        """
+        Slice each RecordBatch down toward ``max_bytes``.
+
+        A batch estimated larger than ``max_bytes`` is split into
+        ``ceil(nbytes / max_bytes)`` slices, with the rows divided as evenly as
+        possible across them; a batch already within ``max_bytes`` (or empty) is
+        yielded unchanged. Slicing is zero-copy: each slice is a view over the
+        input batch's buffers, not a copy. This is a best-effort estimate: the
+        per-slice byte size is not measured, so a skewed, variable-width batch
+        can still exceed ``max_bytes``.
+
+        The examples below use ``max_bytes = 256 MB``.
+
+        Case 1 - larger than max_bytes, so it is split. A 700 MB batch of
+        1,000,000 rows -> ceil(700 / 256) = 3 slices; the rows do not divide
+        evenly, so they are balanced to 333,333 / 333,333 / 333,334:
+
+          in   +-----------------------------------+
+               |       700 MB, 1,000,000 rows      |
+               +-----------------------------------+
+          out  +-----------+-----------+-----------+
+               |  ~233 MB  |  ~233 MB  |  ~233 MB  |
+               |  333,333  |  333,333  |  333,334  |
+               +-----------+-----------+-----------+
+
+        Case 2 - within max_bytes, so it is passed through unchanged. An 80 MB
+        batch of 500,000 rows -> 1 batch, identical to the input:
+
+          in   +-- 80 MB, 500,000 rows --+
+               +-------------------------+
+          out  +-- 80 MB, 500,000 rows --+
+               +-------------------------+
+
+        Case 3 - empty (0 rows), so it is passed through unchanged:
+
+          in   +-- 0 rows --+
+               +------------+
+          out  +-- 0 rows --+
+               +------------+
+        """
+        for batch in batches:
+            num_rows = batch.num_rows
+            if num_rows == 0:
+                yield batch
+                continue
+
+            nbytes = batch.nbytes
+            if nbytes <= max_bytes:
+                yield batch
+                continue
+
+            num_slices = min(math.ceil(nbytes / max_bytes), num_rows)
+            for i in range(num_slices):
+                offset = i * num_rows // num_slices
+                length = (i + 1) * num_rows // num_slices - offset
+                yield batch.slice(offset, length)
 
     @staticmethod
     def flatten_struct(batch: "pa.RecordBatch", column_index: int = 0) -> "pa.RecordBatch":
@@ -245,64 +319,6 @@ class ArrowBatchTransformer:
             return pa.Table.from_arrays(coerced_arrays, names=output_names)
         return pa.RecordBatch.from_arrays(coerced_arrays, names=output_names)
 
-    @classmethod
-    def to_pandas(
-        cls,
-        batch: Union["pa.RecordBatch", "pa.Table"],
-        timezone: str,
-        schema: Optional["StructType"] = None,
-        struct_in_pandas: str = "dict",
-        ndarray_as_list: bool = False,
-        prefer_int_ext_dtype: bool = False,
-        df_for_struct: bool = False,
-    ) -> List[Union["pd.Series", "pd.DataFrame"]]:
-        """
-        Convert a RecordBatch or Table to a list of pandas Series.
-
-        Parameters
-        ----------
-        batch : pa.RecordBatch or pa.Table
-            The Arrow RecordBatch or Table to convert.
-        timezone : str
-            Timezone for timestamp conversion.
-        schema : StructType, optional
-            Spark schema for type conversion. If None, types are inferred from Arrow.
-        struct_in_pandas : str
-            How to represent struct in pandas ("dict", "row", etc.)
-        ndarray_as_list : bool
-            Whether to convert ndarray as list.
-        prefer_int_ext_dtype : bool, optional
-            Whether to convert integers to Pandas ExtensionDType.
-        df_for_struct : bool
-            If True, convert struct columns to DataFrame instead of Series.
-
-        Returns
-        -------
-        List[Union[pd.Series, pd.DataFrame]]
-            List of pandas Series (or DataFrame if df_for_struct=True), one for each column.
-        """
-        import pandas as pd
-
-        if batch.num_columns == 0:
-            return [pd.Series([pyspark._NoValue] * batch.num_rows)]
-
-        if schema is None:
-            schema = from_arrow_schema(batch.schema)
-
-        return [
-            ArrowArrayToPandasConversion.convert(
-                batch.column(i),
-                schema[i].dataType,
-                ser_name=schema[i].name,
-                timezone=timezone,
-                struct_in_pandas=struct_in_pandas,
-                ndarray_as_list=ndarray_as_list,
-                prefer_int_ext_dtype=prefer_int_ext_dtype,
-                df_for_struct=df_for_struct,
-            )
-            for i in range(batch.num_columns)
-        ]
-
 
 class PandasToArrowConversion:
     """
@@ -310,7 +326,7 @@ class PandasToArrowConversion:
     """
 
     @classmethod
-    def convert(
+    def from_pandas(
         cls,
         data: Union["pd.DataFrame", Sequence[Union["pd.Series", "pd.DataFrame"]]],
         schema: StructType,
@@ -322,7 +338,7 @@ class PandasToArrowConversion:
         assign_cols_by_name: bool = False,
         int_to_decimal_coercion_enabled: bool = False,
         ignore_unexpected_complex_type_values: bool = False,
-        is_legacy: bool = False,
+        use_legacy_error_handling: bool = False,
     ) -> "pa.RecordBatch":
         """
         Convert a pandas DataFrame or list of Series/DataFrames to an Arrow RecordBatch.
@@ -349,13 +365,11 @@ class PandasToArrowConversion:
             Whether to enable int to decimal coercion (default False)
         ignore_unexpected_complex_type_values : bool
             Whether to ignore unexpected complex type values in converter (default False)
-        is_legacy : bool
-            Whether to use the legacy pandas-to-Arrow conversion path. The legacy
-            path uses broader Arrow exception handling (ArrowException) to allow
-            more implicit type coercions (e.g., int->boolean, dict->struct via
-            ArrowTypeError). The non-legacy path only catches ArrowInvalid for
-            the cast fallback, so type mismatches like string->decimal raise
-            immediately. (default False)
+        use_legacy_error_handling : bool
+            Whether to use legacy error handling and error messages. Legacy handling
+            catches ArrowException (including ArrowTypeError) for the cast fallback.
+            The new error handling only catches ArrowInvalid for the fallback;
+            ArrowTypeError is raised without retrying the conversion. (default False)
 
         Returns
         -------
@@ -364,8 +378,7 @@ class PandasToArrowConversion:
         import pandas as pd
         import pyarrow as pa
 
-        from pyspark.errors import PySparkTypeError, PySparkValueError
-        from pyspark.sql.pandas.types import _create_converter_from_pandas, to_arrow_type
+        from pyspark.sql.pandas.types import to_arrow_type
 
         # Handle empty schema (0 columns)
         # Use dummy column + select([]) to preserve row count (PyArrow limitation workaround)
@@ -391,17 +404,11 @@ class PandasToArrowConversion:
         else:
             columns = list(data)
 
-        def convert_column(
-            col: Union["pd.Series", "pd.DataFrame"], field: StructField
-        ) -> "pa.Array":
-            """Convert a single column (Series or DataFrame) to an Arrow Array.
-
-            Uses field.name for error messages instead of series.name to avoid
-            copying the Series via rename() - a ~20% overhead on the hot path.
-            """
+        converted: List[Union["pa.Array", "pa.ChunkedArray"]] = []
+        for col, field in zip(columns, schema.fields):
             if isinstance(col, pd.DataFrame):
                 assert isinstance(field.dataType, StructType)
-                nested_batch = cls.convert(
+                nested_batch = cls.from_pandas(
                     col,
                     field.dataType,
                     timezone=timezone,
@@ -411,105 +418,161 @@ class PandasToArrowConversion:
                     assign_cols_by_name=assign_cols_by_name,
                     int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
                     ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
-                    is_legacy=is_legacy,
+                    use_legacy_error_handling=use_legacy_error_handling,
                 )
                 # Wrap the nested RecordBatch as a single StructArray column
-                return ArrowBatchTransformer.wrap_struct(nested_batch).column(0)
-
-            series = col
-            field_name = field.name
-            ret_type = field.dataType
-
-            if isinstance(series.dtype, pd.CategoricalDtype):
-                series = series.astype(series.dtype.categories.dtype)
-
-            arrow_type = to_arrow_type(
-                ret_type, timezone=timezone, prefers_large_types=prefers_large_types
-            )
-            series = _create_converter_from_pandas(
-                ret_type,
-                timezone=timezone,
-                error_on_duplicated_field_names=False,
-                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
-                ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
-            )(series)
-
-            mask = None if hasattr(series.array, "__arrow_array__") else series.isnull()
-
-            if is_legacy:
-                # Legacy pandas conversion path: broad ArrowException catch so
-                # that both ArrowInvalid AND ArrowTypeError (e.g. dict->struct)
-                # trigger the cast fallback.
-                try:
-                    try:
-                        return pa.Array.from_pandas(
-                            series, mask=mask, type=arrow_type, safe=safecheck
-                        )
-                    except pa.lib.ArrowException:  # broad: includes ArrowTypeError
-                        if arrow_cast:
-                            return pa.Array.from_pandas(series, mask=mask).cast(
-                                target_type=arrow_type, safe=safecheck
-                            )
-                        raise
-                except pa.lib.ArrowException as e:
-                    error_msg = (
-                        "Exception thrown when converting pandas.Series (%s) "
-                        "with name '%s' to Arrow Array (%s)."
-                        % (series.dtype, field_name, arrow_type)
-                    )
-                    if isinstance(e, TypeError):
-                        raise PySparkTypeError(error_msg) from e
-                    if safecheck:
-                        error_msg += (
-                            " It can be caused by overflows or other "
-                            "unsafe conversions warned by Arrow. Arrow safe "
-                            "type check can be disabled by using SQL config "
-                            "`spark.sql.execution.pandas."
-                            "convertToArrowArraySafely`."
-                        )
-                    raise PySparkValueError(error_msg) from e
+                converted.append(ArrowBatchTransformer.wrap_struct(nested_batch).column(0))
             else:
-                # Non-legacy path: only ArrowInvalid triggers the cast fallback.
-                # ArrowTypeError (e.g. string->decimal) must NOT be silently cast.
-                try:
-                    try:
-                        return pa.Array.from_pandas(
-                            series, mask=mask, type=arrow_type, safe=safecheck
-                        )
-                    except pa.lib.ArrowInvalid:  # narrow: skip ArrowTypeError
-                        if arrow_cast:
-                            return pa.Array.from_pandas(series, mask=mask).cast(
-                                target_type=arrow_type, safe=safecheck
-                            )
-                        raise
-                except TypeError as e:
-                    raise PySparkTypeError(
-                        f"Cannot convert the output value of the column "
-                        f"'{field_name}' with type '{series.dtype}' to the "
-                        f"specified return type of the column: '{arrow_type}'."
-                        f" Please check if the data types match and try again."
-                    ) from e
-                except ValueError as e:
-                    error_msg = (
-                        f"Failed to convert the value of the column "
-                        f"'{field_name}' with type '{series.dtype}' to Arrow "
-                        f"type '{arrow_type}'."
+                assert isinstance(col, pd.Series)
+                converted.append(
+                    cls._convert_column(
+                        col,
+                        field,
+                        timezone=timezone,
+                        safecheck=safecheck,
+                        arrow_cast=arrow_cast,
+                        prefers_large_types=prefers_large_types,
+                        int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+                        ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
+                        use_legacy_error_handling=use_legacy_error_handling,
                     )
-                    if safecheck:
-                        error_msg += (
-                            " It can be caused by overflows or other unsafe "
-                            "conversions warned by Arrow. Arrow safe type "
-                            "check can be disabled by using SQL config "
-                            "`spark.sql.execution.pandas."
-                            "convertToArrowArraySafely`."
-                        )
-                    raise PySparkValueError(error_msg) from e
+                )
 
-        converted = [convert_column(col, field) for col, field in zip(columns, schema.fields)]
         # pa.Array.from_pandas returns a pa.ChunkedArray for a chunked arrow-backed Series
         # (e.g. a pyarrow-backed extension dtype), which pa.RecordBatch.from_arrays rejects.
         arrays = [a.combine_chunks() if isinstance(a, pa.ChunkedArray) else a for a in converted]
         return pa.RecordBatch.from_arrays(arrays, schema.names)
+
+    @classmethod
+    def _convert_column(
+        cls,
+        series: "pd.Series",
+        field: StructField,
+        *,
+        timezone: Optional[str] = None,
+        safecheck: bool = True,
+        arrow_cast: bool = False,
+        prefers_large_types: bool = False,
+        int_to_decimal_coercion_enabled: bool = False,
+        ignore_unexpected_complex_type_values: bool = False,
+        use_legacy_error_handling: bool = False,
+    ) -> Union["pa.Array", "pa.ChunkedArray"]:
+        """Dispatch a pandas column to its conversion strategy."""
+        # Future NumPy and PyArrow strategies will be selected here; use legacy for now.
+        return cls._convert_column_legacy(
+            series,
+            field,
+            timezone=timezone,
+            safecheck=safecheck,
+            arrow_cast=arrow_cast,
+            prefers_large_types=prefers_large_types,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
+            use_legacy_error_handling=use_legacy_error_handling,
+        )
+
+    @classmethod
+    def _convert_column_legacy(
+        cls,
+        series: "pd.Series",
+        field: StructField,
+        *,
+        timezone: Optional[str] = None,
+        safecheck: bool = True,
+        arrow_cast: bool = False,
+        prefers_large_types: bool = False,
+        int_to_decimal_coercion_enabled: bool = False,
+        ignore_unexpected_complex_type_values: bool = False,
+        use_legacy_error_handling: bool = False,
+    ) -> Union["pa.Array", "pa.ChunkedArray"]:
+        """Convert a pandas column using the legacy conversion strategy."""
+        import pandas as pd
+        import pyarrow as pa
+
+        from pyspark.errors import PySparkTypeError, PySparkValueError
+        from pyspark.sql.pandas.types import _create_converter_from_pandas, to_arrow_type
+
+        field_name = field.name
+        ret_type = field.dataType
+
+        if isinstance(series.dtype, pd.CategoricalDtype):
+            series = series.astype(series.dtype.categories.dtype)
+
+        arrow_type = to_arrow_type(
+            ret_type, timezone=timezone, prefers_large_types=prefers_large_types
+        )
+        series = _create_converter_from_pandas(
+            ret_type,
+            timezone=timezone,
+            error_on_duplicated_field_names=False,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            ignore_unexpected_complex_type_values=ignore_unexpected_complex_type_values,
+        )(series)
+
+        mask = None if hasattr(series.array, "__arrow_array__") else series.isnull()
+
+        if use_legacy_error_handling:
+            # Legacy error handling: both ArrowInvalid and ArrowTypeError can
+            # trigger the cast fallback when arrow_cast is enabled.
+            try:
+                try:
+                    return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
+                except pa.lib.ArrowException:  # broad: includes ArrowTypeError
+                    if arrow_cast:
+                        return pa.Array.from_pandas(series, mask=mask).cast(
+                            target_type=arrow_type, safe=safecheck
+                        )
+                    raise
+            except pa.lib.ArrowException as e:
+                error_msg = (
+                    "Exception thrown when converting pandas.Series (%s) "
+                    "with name '%s' to Arrow Array (%s)." % (series.dtype, field_name, arrow_type)
+                )
+                if isinstance(e, TypeError):
+                    raise PySparkTypeError(error_msg) from e
+                if safecheck:
+                    error_msg += (
+                        " It can be caused by overflows or other "
+                        "unsafe conversions warned by Arrow. Arrow safe "
+                        "type check can be disabled by using SQL config "
+                        "`spark.sql.execution.pandas."
+                        "convertToArrowArraySafely`."
+                    )
+                raise PySparkValueError(error_msg) from e
+        else:
+            # Non-legacy path: only ArrowInvalid triggers the cast fallback.
+            # ArrowTypeError must NOT be silently cast.
+            try:
+                try:
+                    return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
+                except pa.lib.ArrowInvalid:  # narrow: skip ArrowTypeError
+                    if arrow_cast:
+                        return pa.Array.from_pandas(series, mask=mask).cast(
+                            target_type=arrow_type, safe=safecheck
+                        )
+                    raise
+            except TypeError as e:
+                raise PySparkTypeError(
+                    f"Cannot convert the output value of the column "
+                    f"'{field_name}' with type '{series.dtype}' to the "
+                    f"specified return type of the column: '{arrow_type}'."
+                    f" Please check if the data types match and try again."
+                ) from e
+            except ValueError as e:
+                error_msg = (
+                    f"Failed to convert the value of the column "
+                    f"'{field_name}' with type '{series.dtype}' to Arrow "
+                    f"type '{arrow_type}'."
+                )
+                if safecheck:
+                    error_msg += (
+                        " It can be caused by overflows or other unsafe "
+                        "conversions warned by Arrow. Arrow safe type "
+                        "check can be disabled by using SQL config "
+                        "`spark.sql.execution.pandas."
+                        "convertToArrowArraySafely`."
+                    )
+                raise PySparkValueError(error_msg) from e
 
 
 class LocalDataToArrowConversion:
@@ -541,13 +604,8 @@ class LocalDataToArrowConversion:
             return True
         elif isinstance(dataType, BinaryType):
             return True
-        elif isinstance(dataType, (TimestampType, TimestampNTZType)):
+        elif isinstance(dataType, (TimestampType, TimestampNTZType, AnyTimestampNanoType)):
             # Always truncate
-            return True
-        elif isinstance(dataType, AnyTimestampNanoType):
-            # Needs a converter so _create_converter is built (and eagerly rejects) for every
-            # direct caller -- Arrow UDF return values, Python data-source writes -- not only the
-            # LocalDataToArrowConversion.convert path.
             return True
         elif isinstance(dataType, DecimalType):
             # Convert Decimal('NaN') to None
@@ -601,18 +659,6 @@ class LocalDataToArrowConversion:
                 return None
             else:
                 return lambda value: value
-
-        if isinstance(dataType, AnyTimestampNanoType):
-            # SPARK-57462: the Arrow-based value path for the nanosecond timestamp types is a
-            # pending follow-up. Reject eagerly, when the converter is built, so building a
-            # DataFrame from Arrow / returning nanoseconds from an Arrow UDF fails deterministically
-            # rather than mis-encoding the value. Consistent with to_arrow_type.
-            from pyspark.errors import PySparkTypeError
-
-            raise PySparkTypeError(
-                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                messageParameters={"data_type": str(dataType)},
-            )
 
         if isinstance(dataType, NullType):
 
@@ -794,7 +840,7 @@ class LocalDataToArrowConversion:
 
             return convert_binary
 
-        elif isinstance(dataType, TimestampType):
+        elif isinstance(dataType, (TimestampType, TimestampLTZNanosType)):
 
             def convert_timestamp(value: Any) -> Any:
                 if value is None:
@@ -807,7 +853,7 @@ class LocalDataToArrowConversion:
 
             return convert_timestamp
 
-        elif isinstance(dataType, TimestampNTZType):
+        elif isinstance(dataType, (TimestampNTZType, TimestampNTZNanosType)):
 
             def convert_timestamp_ntz(value: Any) -> Any:
                 if value is None:
@@ -1193,13 +1239,8 @@ class ArrowTableToRowsConversion:
             return True
         elif isinstance(dataType, BinaryType):
             return True
-        elif isinstance(dataType, (TimestampType, TimestampNTZType)):
+        elif isinstance(dataType, (TimestampType, TimestampNTZType, AnyTimestampNanoType)):
             # Always remove the time zone info for now
-            return True
-        elif isinstance(dataType, AnyTimestampNanoType):
-            # Needs a converter so _create_converter is built (and eagerly rejects) for every
-            # direct caller -- Connect collect, batched Arrow UDF inputs, foreachPartition, and
-            # Python data-source reads -- not only the ArrowTableToRowsConversion.convert path.
             return True
         elif isinstance(dataType, UserDefinedType):
             return True
@@ -1235,19 +1276,6 @@ class ArrowTableToRowsConversion:
                 return None
             else:
                 return lambda value: value
-
-        if isinstance(dataType, AnyTimestampNanoType):
-            # SPARK-57462: the Arrow-based value path for the nanosecond timestamp types is a
-            # pending follow-up. Reject eagerly, when the converter is built (all callers build
-            # converters up front), so it is not data-dependent and cannot leak a raw
-            # Arrow-derived value (a nanosecond-precision, possibly timezone-aware
-            # pandas.Timestamp). Consistent with to_arrow_type, which already rejects these types.
-            from pyspark.errors import PySparkTypeError
-
-            raise PySparkTypeError(
-                errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
-                messageParameters={"data_type": str(dataType)},
-            )
 
         if isinstance(dataType, NullType):
             return lambda value: None
@@ -1362,24 +1390,33 @@ class ArrowTableToRowsConversion:
 
             return convert_binary
 
-        elif isinstance(dataType, TimestampType):
+        elif isinstance(dataType, (TimestampType, TimestampLTZNanosType)):
 
             def convert_timestamp(value: Any) -> Any:
                 if value is None:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
+                    # A timestamp[ns] value materializes as a pandas.Timestamp; collect()'s
+                    # datetime.datetime boundary is microsecond resolution (toPandas is the
+                    # lossless path), so drop any sub-microsecond digits to match classic collect().
+                    if hasattr(value, "to_pydatetime"):
+                        value = value.to_pydatetime(warn=False)
                     return value.astimezone().replace(tzinfo=None)
 
             return convert_timestamp
 
-        elif isinstance(dataType, TimestampNTZType):
+        elif isinstance(dataType, (TimestampNTZType, TimestampNTZNanosType)):
 
             def convert_timestamp_ntz(value: Any) -> Any:
                 if value is None:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
+                    # See convert_timestamp: reduce a nanosecond pandas.Timestamp to a microsecond
+                    # datetime.datetime so collect() matches the classic path.
+                    if hasattr(value, "to_pydatetime"):
+                        value = value.to_pydatetime(warn=False)
                     return value
 
             return convert_timestamp_ntz
@@ -1783,19 +1820,71 @@ class ArrowArrayConversion:
         )
 
 
-class ArrowArrayToPandasConversion:
+class ArrowToPandasConversion:
     """
-    Conversion utilities for converting PyArrow Arrays and ChunkedArrays to pandas.
-
-    This class provides methods to convert PyArrow columnar data structures to pandas
-    Series or DataFrames, with support for Spark-specific type handling and conversions.
-
-    The class is primarily used by PySpark's Arrow-based serializers for UDF execution,
-    where Arrow data needs to be converted to pandas for Python UDF processing.
+    Conversion utilities from Arrow batches and arrays to pandas for UDF execution.
     """
 
     @classmethod
-    def convert(
+    def to_pandas(
+        cls,
+        batch: Union["pa.RecordBatch", "pa.Table"],
+        timezone: str,
+        schema: Optional["StructType"] = None,
+        struct_in_pandas: str = "dict",
+        ndarray_as_list: bool = False,
+        prefer_int_ext_dtype: bool = False,
+        df_for_struct: bool = False,
+    ) -> List[Union["pd.Series", "pd.DataFrame"]]:
+        """
+        Convert a RecordBatch or Table to a list of pandas Series.
+
+        Parameters
+        ----------
+        batch : pa.RecordBatch or pa.Table
+            The Arrow RecordBatch or Table to convert.
+        timezone : str
+            Timezone for timestamp conversion.
+        schema : StructType, optional
+            Spark schema for type conversion. If None, types are inferred from Arrow.
+        struct_in_pandas : str
+            How to represent struct in pandas ("dict", "row", etc.)
+        ndarray_as_list : bool
+            Whether to convert ndarray as list.
+        prefer_int_ext_dtype : bool, optional
+            Whether to convert integers to Pandas ExtensionDType.
+        df_for_struct : bool
+            If True, convert struct columns to DataFrame instead of Series.
+
+        Returns
+        -------
+        List[Union[pd.Series, pd.DataFrame]]
+            List of pandas Series (or DataFrame if df_for_struct=True), one for each column.
+        """
+        import pandas as pd
+
+        if batch.num_columns == 0:
+            return [pd.Series([pyspark._NoValue] * batch.num_rows)]
+
+        if schema is None:
+            schema = from_arrow_schema(batch.schema)
+
+        return [
+            cls._convert_array(
+                batch.column(i),
+                schema[i].dataType,
+                ser_name=schema[i].name,
+                timezone=timezone,
+                struct_in_pandas=struct_in_pandas,
+                ndarray_as_list=ndarray_as_list,
+                prefer_int_ext_dtype=prefer_int_ext_dtype,
+                df_for_struct=df_for_struct,
+            )
+            for i in range(batch.num_columns)
+        ]
+
+    @classmethod
+    def _convert_array(
         cls,
         arr: Union["pa.Array", "pa.ChunkedArray"],
         spark_type: DataType,
@@ -1838,7 +1927,7 @@ class ArrowArrayToPandasConversion:
             returns a DataFrame with columns corresponding to struct fields.
         """
         if cls._prefer_convert_numpy(spark_type, df_for_struct):
-            return cls.convert_numpy(
+            return cls._convert_array_numpy(
                 arr,
                 spark_type,
                 ser_name=ser_name,
@@ -1849,7 +1938,7 @@ class ArrowArrayToPandasConversion:
                 df_for_struct=df_for_struct,
             )
 
-        return cls.convert_legacy(
+        return cls._convert_array_legacy(
             arr,
             spark_type,
             timezone=timezone,
@@ -1859,7 +1948,7 @@ class ArrowArrayToPandasConversion:
         )
 
     @classmethod
-    def convert_legacy(
+    def _convert_array_legacy(
         cls,
         arr: Union["pa.Array", "pa.ChunkedArray"],
         spark_type: DataType,
@@ -1872,8 +1961,7 @@ class ArrowArrayToPandasConversion:
         """
         Convert a PyArrow Array or ChunkedArray to a pandas Series or DataFrame.
 
-        This is the lower-level conversion method that requires explicit Spark type
-        specification. For a more convenient API, see :meth:`convert`.
+        See :meth:`_convert_array` for conversion with strategy selection.
 
         Parameters
         ----------
@@ -1920,7 +2008,7 @@ class ArrowArrayToPandasConversion:
             )
 
             series = [
-                cls.convert_legacy(
+                cls._convert_array_legacy(
                     field_arr,
                     spark_type=field.dataType,
                     timezone=timezone,
@@ -1966,7 +2054,7 @@ class ArrowArrayToPandasConversion:
         import numpy as np
 
         return [
-            ArrowArrayToPandasConversion._ndarray_to_list(x) if isinstance(x, np.ndarray) else x
+            ArrowToPandasConversion._ndarray_to_list(x) if isinstance(x, np.ndarray) else x
             for x in v
         ]
 
@@ -1981,7 +2069,7 @@ class ArrowArrayToPandasConversion:
         happen to be the same length (where ``np.asarray`` would otherwise yield a 2-D
         result for rectangular data and a 1-D array of lists for ragged data).
 
-        For leaf elements, ``np.asarray`` is used to match convert_legacy's
+        For leaf elements, ``np.asarray`` is used to match _convert_array_legacy's
         representation.
         """
         import numpy as np
@@ -2003,14 +2091,14 @@ class ArrowArrayToPandasConversion:
 
         Returns None if no conversion is needed (i.e., to_pandas() output is already correct).
 
-        ``ndarray_as_list`` mirrors :meth:`convert_numpy`: when True, nested arrays are
+        ``ndarray_as_list`` mirrors :meth:`_convert_array_numpy`: when True, nested arrays are
         emitted as Python lists; when False, as object ndarrays (see ``_wrap_elements``).
         """
         if isinstance(element_type, (TimestampType, TimestampNTZType)):
-            # to_pandas() gives datetime64 elements, but convert_legacy boxes array elements
+            # to_pandas() gives datetime64 elements, but _convert_array_legacy boxes array elements
             # into pd.Timestamp / pd.NaT, and a bare np.datetime64 has no datetime API (no
             # .year, and it is not pd.NaT). Box them so arrays keep the representation
-            # convert_legacy produces. A scalar timestamp column needs nothing: both paths
+            # _convert_array_legacy produces. A scalar timestamp column needs nothing: both paths
             # leave it a native datetime64[ns] Series.
             import pandas as pd
 
@@ -2059,7 +2147,7 @@ class ArrowArrayToPandasConversion:
 
             return convert_geometry
         elif isinstance(element_type, ArrayType):
-            inner_conv = ArrowArrayToPandasConversion._create_element_converter(
+            inner_conv = ArrowToPandasConversion._create_element_converter(
                 element_type.elementType, ndarray_as_list=ndarray_as_list
             )
             if inner_conv is None:
@@ -2078,7 +2166,7 @@ class ArrowArrayToPandasConversion:
                 def convert_array(v: Any) -> Any:
                     if v is None:
                         return None
-                    return ArrowArrayToPandasConversion._wrap_elements(
+                    return ArrowToPandasConversion._wrap_elements(
                         [inner_conv(e) for e in v], inner_is_array
                     )
 
@@ -2119,12 +2207,12 @@ class ArrowArrayToPandasConversion:
             # arrays recurse, otherwise E must be in supported_types. Element types not in
             # supported_types (StringType, DecimalType, the interval types) and MapType/
             # StructType stay on the legacy path, matching the scalar routing, until their
-            # parity with convert_legacy is confirmed and they are added to supported_types.
+            # parity with _convert_array_legacy is confirmed and they are added to supported_types.
             element_type = spark_type.elementType
             if isinstance(element_type, ArrayType):
                 return cls._prefer_convert_numpy(element_type, df_for_struct=False)
             if isinstance(element_type, UserDefinedType):
-                # SPARK-55462: convert_numpy's UDT branch hands udt.deserialize the raw
+                # SPARK-55462: _convert_array_numpy's UDT branch hands udt.deserialize the raw
                 # arr.to_pandas() value, which is a dict for a StructType sqlType (VectorUDT,
                 # MatrixUDT) where deserialize indexes positionally. Keep array<UDT> on the
                 # legacy path, which reshapes the sqlType first, until that is fixed.
@@ -2136,7 +2224,7 @@ class ArrowArrayToPandasConversion:
             return False
 
     @classmethod
-    def convert_numpy(
+    def _convert_array_numpy(
         cls,
         arr: Union["pa.Array", "pa.ChunkedArray"],
         spark_type: DataType,
@@ -2161,7 +2249,7 @@ class ArrowArrayToPandasConversion:
 
             return pd.concat(
                 [
-                    cls.convert_numpy(
+                    cls._convert_array_numpy(
                         field_arr,
                         spark_type=field.dataType,
                         ser_name=field.name,
@@ -2187,12 +2275,12 @@ class ArrowArrayToPandasConversion:
             arr = ArrowArrayConversion.preprocess_time(arr)
         except pa.lib.ArrowInvalid:
             # preprocess_time coerces timestamps to nanoseconds, which only span 1677-09-21 to
-            # 2262-04-11. convert_legacy represents an out-of-range element as a pd.Timestamp
+            # 2262-04-11. _convert_array_legacy represents an out-of-range element as a pd.Timestamp
             # object inside an object ndarray, so it handles such an array where the native
             # path cannot; fall back rather than fail a batch that converted before arrays
             # took this path. (A scalar timestamp column out of range fails on both paths, as
             # it already did.)
-            fallback = cls.convert_legacy(
+            fallback = cls._convert_array_legacy(
                 arr,
                 spark_type,
                 timezone=timezone,
