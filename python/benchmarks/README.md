@@ -84,3 +84,57 @@ class MyBenchmark:
 ```
 
 See [ASV documentation](https://asv.readthedocs.io/en/stable/writing_benchmarks.html) for more details.
+
+## In-process Python UDF benchmark
+
+`bench_inprocess_udf.InProcessUDFTimeBench` runs real Spark queries comparing
+in-process Arrow UDFs with pandas UDFs. It covers narrow/wide integer inputs,
+short string uppercase, and 1000-character string identity. Input construction,
+cache materialization and two warmup queries are outside timing. Each sample
+executes one query to a noop sink; normal runs request five samples.
+
+Use a Spark assembly built from the same checkout as the Python source. For example,
+`build/sbt -Phive package` builds Spark with Hive support. This benchmark requires
+the in-process UDF implementation in the JVM as well as Python; ASV's wheel build
+alone does not ensure that the Spark JARs match a selected commit. Start with
+`--python=same` and rebuild Spark whenever switching source versions.
+
+Activate a Python environment containing `asv`, `jep`, `pyarrow`, `pandas` and
+`cloudpickle`. JEP must be built for that Python installation and the selected JDK.
+Install these dependencies in a venv (for example, `python -m venv .venv` and
+`source .venv/bin/activate`). From the Spark checkout root, configure the driver
+before ASV launches any JVM:
+
+```bash
+export SPARK_HOME="$PWD"
+export PYSPARK_PYTHON="$(command -v python)"
+export PYSPARK_DRIVER_PYTHON="$PYSPARK_PYTHON"
+JEP_DIR="$(python -c 'import importlib.util; print(next(iter(importlib.util.find_spec("jep").submodule_search_locations)))')"
+JEP_JARS=("$JEP_DIR"/jep-*.jar)
+export PYTHONPATH="$(dirname "$JEP_DIR")${PYTHONPATH:+:$PYTHONPATH}"
+PY4J_ZIPS=("$SPARK_HOME"/python/lib/py4j-*-src.zip)
+export ASV_PYTHONPATH="$SPARK_HOME/python:${PY4J_ZIPS[0]}:$PYTHONPATH"
+export PYSPARK_SUBMIT_ARGS="--driver-memory 8g --driver-class-path ${JEP_JARS[0]} --driver-java-options \"-Djava.library.path=$JEP_DIR -XX:MaxDirectMemorySize=8g\" pyspark-shell"
+./python/asv run --python=same --launch-method=spawn --quick --dry-run --show-stderr \
+  -b 'bench_inprocess_udf.InProcessUDFTimeBench'
+```
+
+For recorded measurements, first commit the benchmark and build the matching
+Spark revision. Remove `--quick --dry-run` and add
+`--set-commit-hash "$(git rev-parse HEAD)" --record-samples` to label and save
+results from the existing environment. The quick run is a smoke check, not a
+performance result. An absent JEP package skips in-process cases;
+JEP loading errors fail the benchmark rather than silently falling back.
+
+Both modes use `local[1]`, one input partition, worker reuse, and a 128 MiB Arrow
+byte limit. Row limits are 10K for narrow integers, 1M for wide integers, and 100K
+for strings. Thus the long-string workload permits about 95 MiB of string payload
+per full batch instead of splitting it at the default 64 MiB limit. Budget for
+8 GiB heap, 8 GiB direct memory, and additional Python/native allocations.
+
+Report dependency versions and the Spark commit with results. The pandas baseline
+includes pandas/Arrow conversion costs, so the ratio is not an isolated measurement
+of IPC savings. ASV's process/setup lifecycle differs from the historical script;
+its results establish a new baseline. The original scripts under `python/integration`
+remain available for historical comparisons. No relative-speed pass/fail threshold
+is imposed by this benchmark.
