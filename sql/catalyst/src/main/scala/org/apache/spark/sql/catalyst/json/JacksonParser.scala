@@ -778,11 +778,12 @@ class JacksonParser(
       }
       throw badRecord(error, () => recordLiteral(record))
     }
-    def handleFailure[T](operation: => T): T = {
+    def handleFailure[T](recoverPartialResult: Boolean)(operation: => T): T = {
       try operation catch {
         case e: SparkUpgradeException => fail(e)
         case e: CharConversionException if options.encoding.isEmpty => fail(e)
-        case e: PartialResultException if options.parseMode != FailFastMode =>
+        case e: PartialResultException
+            if recoverPartialResult && options.parseMode != FailFastMode =>
           throw badRecord(e, () => recordLiteral(record)).copy(recoverable = true)
         case e: PartialResultException =>
           fail(e)
@@ -792,7 +793,7 @@ class JacksonParser(
       }
     }
 
-    handleFailure(jsonParser.nextToken()) match {
+    handleFailure(recoverPartialResult = false)(jsonParser.nextToken()) match {
       case null =>
         jsonParser.close()
         Iterator.empty
@@ -816,7 +817,7 @@ class JacksonParser(
 
           private def prepare(): Unit = {
             if (prepared || finished) return
-            handleFailure {
+            handleFailure(recoverPartialResult = true) {
               jsonParser.nextToken() match {
                 case END_ARRAY => finish()
                 case null =>
@@ -835,7 +836,7 @@ class JacksonParser(
           }
         }
       case _ =>
-        val rows = handleFailure(rootConverter(jsonParser))
+        val rows = handleFailure(recoverPartialResult = false)(rootConverter(jsonParser))
         if (rows == null) fail(QueryExecutionErrors.rootConverterReturnNullError())
         jsonParser.close()
         rows.iterator

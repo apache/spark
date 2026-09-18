@@ -395,7 +395,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       file: PartitionedFile,
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
-    def partitionedFileString(ignored: Any): UTF8String = {
+    lazy val fileLiteral: UTF8String = {
       Utils.tryWithResource {
         Utils.createResourceUninterruptiblyIfInTaskThread {
           CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
@@ -404,6 +404,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
         UTF8String.fromBytes(inputStream.readAllBytes())
       }
     }
+    def partitionedFileString(ignored: Any): UTF8String = fileLiteral
     val streamParser = parser.options.encoding
       .map(enc => CreateJacksonParser.inputStream(enc, _: JsonFactory, _: InputStream))
       .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))

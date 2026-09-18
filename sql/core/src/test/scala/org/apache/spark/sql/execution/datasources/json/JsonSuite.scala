@@ -1118,6 +1118,29 @@ abstract class JsonSuite
     assert(!rows.hasNext)
   }
 
+  test("non-array partial results close the parser") {
+    val schema = StructType(Seq(StructField("a", IntegerType)))
+    val options = new JSONOptions(Map("multiLine" -> "true"), SQLConf.get.sessionLocalTimeZone)
+    val parser = new JacksonParser(schema, options, allowArrayAsStructs = true)
+    var closed = false
+    val input = new ByteArrayInputStream("""{"a":"bad"}""".getBytes(StandardCharsets.UTF_8)) {
+      override def close(): Unit = {
+        closed = true
+        super.close()
+      }
+    }
+
+    val error = intercept[BadRecordException] {
+      parser.parseIterator[InputStream](
+        input,
+        CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream),
+        stream => UTF8String.fromBytes(stream.readAllBytes()))
+    }
+
+    assert(closed)
+    assert(!error.recoverable)
+  }
+
   gridTest("multiline top level JSON array keeps rows emitted before malformed input")(
       Seq("PERMISSIVE", "DROPMALFORMED", "FAILFAST")) { mode =>
     withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
@@ -1187,6 +1210,37 @@ abstract class JsonSuite
             // Cause is the underlying parse failure, not a re-wrapped BadRecordException.
             assert(!malformed.getCause.isInstanceOf[BadRecordException])
         }
+      }
+    }
+  }
+
+  test("multiline top level JSON array reuses the corrupt record literal") {
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      withTempPath { file =>
+        val document = """[{"a":"bad"},{"a":"also bad"},{"a":2}]"""
+        Files.write(file.toPath, document.getBytes(StandardCharsets.UTF_8))
+        val actualSchema = StructType(Seq(StructField("a", IntegerType)))
+        val schema = StructType(Seq(
+          actualSchema.head,
+          StructField("_corrupt_record", StringType)))
+        val options = new JSONOptions(
+          Map("multiLine" -> "true", "mode" -> "PERMISSIVE"),
+          SQLConf.get.sessionLocalTimeZone,
+          SQLConf.get.columnNameOfCorruptRecord)
+        val parser = new JacksonParser(actualSchema, options, allowArrayAsStructs = true)
+        val partitionedFile = PartitionedFile(
+          InternalRow.empty,
+          SparkPath.fromPathString(file.getCanonicalPath),
+          0,
+          file.length())
+        val rows = MultiLineJsonDataSource.readFile(
+          spark.sessionState.newHadoopConf(), partitionedFile, parser, schema)
+
+        assert(rows.next().getUTF8String(1).toString === document)
+        Files.delete(file.toPath)
+        assert(rows.next().getUTF8String(1).toString === document)
+        assert(rows.next().getInt(0) === 2)
+        assert(!rows.hasNext)
       }
     }
   }
