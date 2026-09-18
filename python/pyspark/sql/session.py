@@ -1229,6 +1229,16 @@ class SparkSession(SparkConversionMixin):
             ).reduce(_merge_type)
         return schema
 
+    @staticmethod
+    def _validate_char_varchar_udt_schema(schema: DataType) -> None:
+        if _has_char_varchar_in_udt(schema):
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={
+                    "feature": f"CHAR/VARCHAR inside createDataFrame UDT schema: {schema}"
+                },
+            )
+
     def _createFromRDD(
         self,
         rdd: "RDD[Any]",
@@ -1261,6 +1271,7 @@ class SparkSession(SparkConversionMixin):
                 },
             )
 
+        self._validate_char_varchar_udt_schema(struct)
         # convert python objects to sql data
         internal_rdd = tupled_rdd.map(struct.toInternal)
         return internal_rdd, struct
@@ -1304,6 +1315,7 @@ class SparkSession(SparkConversionMixin):
                 },
             )
 
+        self._validate_char_varchar_udt_schema(struct)
         # convert python objects to sql data
         internal_data = [struct.toInternal(row) for row in tupled_data]
         return self._sc.parallelize(internal_data), struct
@@ -1617,13 +1629,8 @@ class SparkSession(SparkConversionMixin):
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
             schema = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
-        if isinstance(schema, DataType) and _has_char_varchar_in_udt(schema):
-            raise PySparkNotImplementedError(
-                errorClass="NOT_IMPLEMENTED",
-                messageParameters={
-                    "feature": f"CHAR/VARCHAR inside createDataFrame UDT schema: {schema}"
-                },
-            )
+        if isinstance(schema, DataType):
+            self._validate_char_varchar_udt_schema(schema)
 
         try:
             import pandas as pd

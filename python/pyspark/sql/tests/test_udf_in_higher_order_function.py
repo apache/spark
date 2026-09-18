@@ -58,12 +58,43 @@ class UDFInHigherOrderFunctionTestsMixin:
         varchar_udf = udf(lambda _: "abcd", VarcharType(3))
 
         with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            result = df.select(sf.transform("values", lambda x: char_udf(x)).alias("r"))
+            self.assertEqual(result.schema["r"].dataType, ArrayType(CharType(3)))
             assertDataFrameEqual(
-                df.select(sf.transform("values", lambda x: char_udf(x)).alias("r")),
+                result,
                 [(["a  ", "a  "],)],
             )
             with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
                 df.select(sf.transform("values", lambda x: varchar_udf(x))).collect()
+
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "false",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            result = df.select(sf.transform("values", lambda x: char_udf(x)).alias("r"))
+            self.assertEqual(result.schema["r"].dataType, ArrayType(StringType()))
+            assertDataFrameEqual(result, [(["a  ", "a  "],)])
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                df.select(sf.transform("values", lambda x: varchar_udf(x))).collect()
+
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            char_result = df.select(sf.transform("values", lambda x: char_udf(x)).alias("r"))
+            self.assertEqual(char_result.schema["r"].dataType, ArrayType(StringType()))
+            assertDataFrameEqual(char_result, [(["a", "a"],)])
+            varchar_result = df.select(
+                sf.transform("values", lambda x: varchar_udf(x)).alias("r")
+            )
+            self.assertEqual(varchar_result.schema["r"].dataType, ArrayType(StringType()))
+            assertDataFrameEqual(varchar_result, [(["abcd", "abcd"],)])
 
     def test_transform_null_array_and_null_elements(self):
         # A null array must stay null, and a null *element* must reach the UDF as None.

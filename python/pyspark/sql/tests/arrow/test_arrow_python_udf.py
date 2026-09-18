@@ -307,6 +307,7 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
                     useArrow=True,
                 )("id").alias("s")
             )
+            self.assertEqual(result.schema["s"].dataType, schema)
             self.assertEqual(
                 result.first().s,
                 Row(c="ab  ", v="xyz", nested=["z "], m={"k ": "xy"}),
@@ -315,6 +316,7 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             pandas_result = self.spark.range(1).select(
                 pandas_udf(lambda values: values, CharType(4))(lit("ab")).alias("c")
             )
+            self.assertEqual(pandas_result.schema["c"].dataType, CharType(4))
             self.assertEqual(pandas_result.first().c, "ab  ")
 
             invalid = self.spark.range(1).select(
@@ -334,6 +336,10 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             result = self.spark.range(1).select(
                 udf(lambda _: "a", CharType(3), useArrow=True)("id").alias("c"),
                 udf(lambda _: "abcd", VarcharType(3), useArrow=True)("id").alias("v"),
+            )
+            self.assertEqual(
+                result.schema,
+                StructType().add("c", StringType()).add("v", StringType()),
             )
             self.assertEqual(result.first(), Row(c="a", v="abcd"))
 

@@ -3655,7 +3655,9 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         self.assertEqual(v1, v3)
         self.assertFalse(v1 is v3)
 
-    def test_has_type_does_not_descend_udt(self):
+    def test_type_helpers_udt_recursion(self):
+        # `_has_type` is logical and does not descend into UDT storage, while
+        # `_has_physical_type` descends into the UDT `sqlType`.
         udt = ExamplePointUDT()
         self.assertFalse(_has_type(udt, ArrayType))
         self.assertTrue(_has_physical_type(udt, ArrayType))

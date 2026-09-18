@@ -29,15 +29,12 @@ from pyspark.sql.column import Column
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import (
-    ArrayType,
     CharType,
     DataType,
-    MapType,
     StringType,
     StructType,
     VarcharType,
     _has_char_varchar_in_udt,
-    _has_physical_type,
     _has_type,
     _parse_datatype_string,
 )

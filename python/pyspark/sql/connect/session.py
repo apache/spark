@@ -776,6 +776,15 @@ class SparkSession:
                         errorClass="CANNOT_DETERMINE_TYPE", messageParameters={}
                     )
 
+            if _has_physical_type(_schema, (CharType, VarcharType)):
+                raise PySparkNotImplementedError(
+                    errorClass="NOT_IMPLEMENTED",
+                    messageParameters={
+                        "feature": "CHAR/VARCHAR in Spark Connect createDataFrame schema: "
+                        f"{_schema}"
+                    },
+                )
+
             from pyspark.sql.conversion import (
                 LocalDataToArrowConversion,
             )

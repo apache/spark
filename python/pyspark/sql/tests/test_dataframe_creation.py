@@ -364,6 +364,7 @@ class DataFrameCreationTests(
 
         with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
             df = self.spark.createDataFrame([("ab", ["xyz"])], schema)
+            self.assertEqual(df.schema, schema)
             self.assertEqual(df.first(), Row(c="ab  ", nested=["xyz"]))
 
             with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
@@ -377,6 +378,15 @@ class DataFrameCreationTests(
             }
         ):
             df = self.spark.createDataFrame([("ab", ["abcd"])], schema)
+            self.assertEqual(
+                df.schema,
+                StructType(
+                    [
+                        StructField("c", StringType()),
+                        StructField("nested", ArrayType(StringType())),
+                    ]
+                ),
+            )
             self.assertEqual(df.first(), Row(c="ab", nested=["abcd"]))
 
     def test_char_varchar_inside_udt_schema_is_unsupported(self):
@@ -399,12 +409,23 @@ class DataFrameCreationTests(
             def deserialize(self, datum):
                 return datum
 
+        class CharValue:
+            __UDT__ = CharStorageUDT()
+
+            def __init__(self, value):
+                self.value = value
+
         schema = StructType([StructField("value", CharStorageUDT())])
-        with self.assertRaisesRegex(
-            PySparkNotImplementedError,
-            "CHAR/VARCHAR inside createDataFrame UDT schema",
-        ):
-            self.spark.createDataFrame([("a",)], schema)
+        for data, declared_schema in [
+            ([("a",)], schema),
+            ([(CharValue("a"),)], None),
+        ]:
+            with self.subTest(schema=declared_schema):
+                with self.assertRaisesRegex(
+                    PySparkNotImplementedError,
+                    "CHAR/VARCHAR inside createDataFrame UDT schema",
+                ):
+                    self.spark.createDataFrame(data, declared_schema)
 
     def test_char_varchar_explicit_schema_captures_legacy_policy(self):
         schema = StructType(

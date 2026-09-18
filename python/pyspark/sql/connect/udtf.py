@@ -19,7 +19,7 @@ User-defined table function related classes and functions
 """
 
 import warnings
-from typing import TYPE_CHECKING, Any, List, Optional, Set, Type, Union
+from typing import TYPE_CHECKING, Any, List, Optional, Type, Union
 
 from pyspark.errors import PySparkAttributeError, PySparkRuntimeError, PySparkTypeError
 from pyspark.sql.connect.column import Column
@@ -171,7 +171,7 @@ class UserDefinedTableFunction:
         self._name = name or func.__name__
         self.evalType = evalType
         self.deterministic = deterministic
-        self._validated_return_type_session_ids: Set[str] = set()
+        self._validated_return_type_session_id: Optional[str] = None
 
     def _check_return_type(self, session: "SparkSession") -> None:
         if self.returnType is None:
@@ -184,11 +184,11 @@ class UserDefinedTableFunction:
             PythonEvalType.SQL_ARROW_UDTF,
         ):
             return
-        if session._session_id in self._validated_return_type_session_ids:
+        if session._session_id == self._validated_return_type_session_id:
             return
         return_type = session._parse_ddl(self.returnType.data_type_string)
         _check_udtf_return_type(return_type)
-        self._validated_return_type_session_ids.add(session._session_id)
+        self._validated_return_type_session_id = session._session_id
 
     def _build_common_inline_user_defined_table_function(
         self,

@@ -62,6 +62,7 @@ from pyspark.sql.types import (
     Row,
     StructField,
     StructType,
+    UserDefinedType,
     VariantVal,
 )
 from pyspark.testing import assertDataFrameEqual
@@ -291,17 +292,41 @@ class BasePythonDataSourceTestsMixin:
         assertDataFrameEqual(df, [Row(0, 1)])
 
     def test_data_source_char_varchar_return_type_is_unsupported(self):
-        schema = StructType([StructField("value", ArrayType(CharType(2)))])
-        self.register_data_source(
-            read_func=lambda schema, partition: iter([(["a"],)]),
-            output=schema,
-        )
+        class CharStorageUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return CharType(2)
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+            def serialize(self, obj):
+                return obj
+
+            def deserialize(self, datum):
+                return datum
+
+        schemas = [
+            StructType([StructField("value", ArrayType(CharType(2)))]),
+            StructType([StructField("value", CharStorageUDT())]),
+        ]
         with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
-            with self.assertRaisesRegex(
-                PythonException,
-                "CHAR/VARCHAR return types in Python DataSource",
-            ):
-                self.spark.read.format("test").load().collect()
+            for schema in schemas:
+                with self.subTest(schema=schema):
+                    self.register_data_source(
+                        read_func=lambda schema, partition: iter([(["a"],)]),
+                        output=schema,
+                    )
+                    with self.assertRaisesRegex(
+                        PythonException,
+                        "CHAR/VARCHAR return types in Python DataSource",
+                    ):
+                        self.spark.read.format("test").load().collect()
 
     def test_data_source_read_output_named_row(self):
         self.register_data_source(

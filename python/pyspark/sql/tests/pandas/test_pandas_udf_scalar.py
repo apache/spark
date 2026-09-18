@@ -88,14 +88,22 @@ if have_pyarrow:
     pandas_requirement_message or pyarrow_requirement_message,
 )
 class ScalarPandasUDFTestsMixin:
-    def test_char_varchar_scalar_iterator_results(self):
+    def test_char_varchar_scalar_results(self):
+        @pandas_udf(CharType(3))
+        def scalar_char_udf(series):
+            return pd.Series(["a"] * len(series))
+
         @pandas_udf(CharType(3), PandasUDFType.SCALAR_ITER)
-        def char_udf(iterator):
+        def iterator_char_udf(iterator):
             for series in iterator:
                 yield pd.Series(["a"] * len(series))
 
+        @pandas_udf(VarcharType(3))
+        def scalar_varchar_udf(series):
+            return pd.Series(["abcd"] * len(series))
+
         @pandas_udf(VarcharType(3), PandasUDFType.SCALAR_ITER)
-        def varchar_udf(iterator):
+        def iterator_varchar_udf(iterator):
             for series in iterator:
                 yield pd.Series(["abcd"] * len(series))
 
@@ -106,17 +114,40 @@ class ScalarPandasUDFTestsMixin:
                 "spark.sql.charVarchar.standardSemantics.enabled": "false",
             }
         ):
-            default_result = self.spark.range(1).select(char_udf("id").alias("c"))
-            self.assertEqual(default_result.schema["c"].dataType, StringType())
-            self.assertEqual(default_result.first().c, "a  ")
-            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
-                self.spark.range(1).select(varchar_udf("id")).collect()
+            for function in (scalar_char_udf, iterator_char_udf):
+                result = self.spark.range(1).select(function("id").alias("c"))
+                self.assertEqual(result.schema["c"].dataType, StringType())
+                self.assertEqual(result.first().c, "a  ")
+            for function in (scalar_varchar_udf, iterator_varchar_udf):
+                with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                    self.spark.range(1).select(function("id")).collect()
 
         with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
-            rows = self.spark.range(2).select(char_udf("id")).collect()
-            self.assertEqual([row[0] for row in rows], ["a  ", "a  "])
-            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
-                self.spark.range(1).select(varchar_udf("id")).collect()
+            for function in (scalar_char_udf, iterator_char_udf):
+                result = self.spark.range(2).select(function("id").alias("c"))
+                self.assertEqual(result.schema["c"].dataType, CharType(3))
+                self.assertEqual([row.c for row in result.collect()], ["a  ", "a  "])
+            for function in (scalar_varchar_udf, iterator_varchar_udf):
+                result = self.spark.range(1).select(function("id").alias("v"))
+                self.assertEqual(result.schema["v"].dataType, VarcharType(3))
+                with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                    result.collect()
+
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            for function in (scalar_char_udf, iterator_char_udf):
+                result = self.spark.range(1).select(function("id").alias("c"))
+                self.assertEqual(result.schema["c"].dataType, StringType())
+                self.assertEqual(result.first().c, "a")
+            for function in (scalar_varchar_udf, iterator_varchar_udf):
+                result = self.spark.range(1).select(function("id").alias("v"))
+                self.assertEqual(result.schema["v"].dataType, StringType())
+                self.assertEqual(result.first().v, "abcd")
 
     @property
     def nondeterministic_vectorized_udf(self):

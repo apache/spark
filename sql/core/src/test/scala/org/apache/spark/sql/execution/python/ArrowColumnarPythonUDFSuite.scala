@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.functions.{array, col, transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -219,6 +220,59 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         df.selectExpr(
           "id", "name", "value", "data",
           "transform(array(name), x -> arrow_hof_varchar_udf(x)) as udf_values").collect()
+      }
+      assert(exception.getMessage.contains("EXCEED_LIMIT_LENGTH"))
+    }
+  }
+
+  test("Arrow-backed source: nested checked output keeps unchecked sibling ordinal") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charUDF = TestTypedScalarPandasUDF(
+        name = "mixed_nested_char_udf", returnType = CharType(4))
+      val varcharUDF = TestTypedScalarPandasUDF(
+        name = "mixed_unchecked_varchar_udf", returnType = VarcharType(3))
+      registerTestUDF(charUDF, spark)
+      registerTestUDF(varcharUDF, spark)
+
+      val checkedNested =
+        transform(array(col("id")), value => charUDF(value)).as("checked_nested")
+      val unchecked = withSQLConf(
+          SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        varcharUDF(col("name")).as("unchecked")
+      }
+      val result = readArrowSource(numRows = 2).select(
+        col("id"),
+        col("name"),
+        col("value"),
+        col("data"),
+        checkedNested,
+        unchecked,
+        varcharUDF(col("id")).as("checked"))
+      val arrowExec = collectNodes[ArrowEvalPythonExec](result.queryExecution.executedPlan).head
+
+      assert(arrowExec.child.supportsColumnar)
+      assert(result.schema("checked_nested").dataType === ArrayType(CharType(4)))
+      assert(result.schema("unchecked").dataType === StringType)
+      assert(result.schema("checked").dataType === VarcharType(3))
+      assert(result.collect()
+        .map(row => (row.getSeq[String](4), row.getString(5), row.getString(6))).toSeq ===
+        Seq((Seq("0   "), "row_0", "0"), (Seq("1   "), "row_1", "1")))
+
+      val exception = intercept[SparkRuntimeException] {
+        readArrowSource(numRows = 1).select(
+          col("id"),
+          col("name"),
+          col("value"),
+          col("data"),
+          checkedNested,
+          unchecked,
+          varcharUDF(col("name")).as("checked")).collect()
       }
       assert(exception.getMessage.contains("EXCEED_LIMIT_LENGTH"))
     }

@@ -30,8 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, ArrayData, CharVarcharCodegenUtils, CharVarcharUtils, GenericArrayData, MapData, STUtils}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, ArrayBasedMapData, ArrayData, CharVarcharCodegenUtils, CharVarcharUtils, GenericArrayData, MapData, STUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String, VariantVal}
 
@@ -188,9 +187,7 @@ object EvaluatePython {
    * null if the type of obj is unexpected. Because Python doesn't enforce the type.
    */
   def makeFromJava(dataType: DataType): Any => Any = {
-    val applyCharVarcharChecks =
-      CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get)
-    makeFromJava(dataType, applyCharVarcharChecks)
+    makeFromJava(dataType, applyCharVarcharChecks = false)
   }
 
   private[sql] def makeFromJava(dataType: DataType, applyCharVarcharChecks: Boolean): Any => Any =
@@ -322,11 +319,18 @@ object EvaluatePython {
 
       (obj: Any) => nullSafeConvert(obj) {
         case javaMap: java.util.Map[_, _] =>
-          val builder = new ArrayBasedMapBuilder(keyType, valueType)
-          javaMap.asScala.foreach { case (key, value) =>
-            builder.put(keyFromJava(key), valueFromJava(value))
+          if (applyCharVarcharChecks && CharVarcharUtils.hasCharVarchar(keyType)) {
+            val builder = new ArrayBasedMapBuilder(keyType, valueType)
+            javaMap.asScala.foreach { case (key, value) =>
+              builder.put(keyFromJava(key), valueFromJava(value))
+            }
+            builder.build()
+          } else {
+            ArrayBasedMapData(
+              javaMap,
+              (key: Any) => keyFromJava(key),
+              (value: Any) => valueFromJava(value))
           }
-          builder.build()
       }
 
     case StructType(fields) =>
