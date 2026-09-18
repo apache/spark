@@ -135,7 +135,7 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal("0000111122223333"),
       Literal("GCM"),
       Literal("DEFAULT"),
-      Literal(Array.fill[Byte](12)(0)))
+      Unhex(Literal("000000000000000000000000")))
     assert(explicitIvExpression.deterministic)
     assert(explicitIvExpression.replacement.deterministic)
     assert(explicitIvExpression.replacement.foldable)
@@ -148,6 +148,15 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ecbExpression.deterministic)
     assert(ecbExpression.replacement.deterministic)
     assert(ecbExpression.replacement.foldable)
+
+    val nondeterministicKeyExpression = new AesEncrypt(
+      Literal("Spark"),
+      Uuid(Some(0)),
+      Literal("ECB"),
+      Literal("PKCS"))
+    assert(!nondeterministicKeyExpression.deterministic)
+    assert(!nondeterministicKeyExpression.replacement.deterministic)
+    assert(!nondeterministicKeyExpression.replacement.foldable)
   }
 
   test("Hmac") {
