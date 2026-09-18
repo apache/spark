@@ -57,6 +57,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
   test("derive pruning predicates from ANSI integral arithmetic comparisons") {
     val a = nonNullableRelation.output.head
     val add = Add(a, Literal(10), EvalMode.ANSI)
+    val litFirstAdd = Add(Literal(10), a, EvalMode.ANSI)
     val subtract = Subtract(a, Literal(10), EvalMode.ANSI)
     val addOverflow = a > Literal(Int.MaxValue - 10)
     val subtractOverflow = a < Literal(Int.MinValue + 10)
@@ -75,7 +76,8 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
         subtractOverflow && subtract < Literal(Int.MinValue)),
       (subtract > Literal(Int.MaxValue),
         subtractOverflow && subtract > Literal(Int.MaxValue)),
-      (Literal(100) < add, (a > Literal(90) || addOverflow) && Literal(100) < add))
+      (Literal(100) < add, (a > Literal(90) || addOverflow) && Literal(100) < add),
+      (litFirstAdd < Literal(100), (a < Literal(90) || addOverflow) && litFirstAdd < Literal(100)))
 
     cases.foreach { case (input, expected) =>
       checkCondition(nonNullableRelation, input, expected)
