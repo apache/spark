@@ -40,7 +40,7 @@ def from_protobuf(
     if binaryDescriptorSet is not None:
         binary_proto = binaryDescriptorSet
     elif descFilePath is not None:
-        binary_proto = _read_descriptor_set_file(descFilePath)
+        binary_proto = PyProtobufFunctions._read_descriptor_set_file(descFilePath)
 
     # TODO: simplify the code when _invoke_function() supports None as input.
     if binary_proto is not None:
@@ -79,7 +79,7 @@ def to_protobuf(
     if binaryDescriptorSet is not None:
         binary_proto = binaryDescriptorSet
     elif descFilePath is not None:
-        binary_proto = _read_descriptor_set_file(descFilePath)
+        binary_proto = PyProtobufFunctions._read_descriptor_set_file(descFilePath)
 
     # TODO: simplify the code when _invoke_function() supports None as input.
     if binary_proto is not None:
@@ -105,11 +105,6 @@ def to_protobuf(
 
 
 to_protobuf.__doc__ = PyProtobufFunctions.to_protobuf.__doc__
-
-
-def _read_descriptor_set_file(filePath: str) -> bytes:
-    with open(filePath, "rb") as f:
-        return f.read()
 
 
 def _test() -> None:
