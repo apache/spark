@@ -825,7 +825,7 @@ object DataSource extends Logging {
           val globResult = if (enableGlobbing) {
             SparkHadoopUtil.get.globPath(fs, globPath)
           } else {
-            qualifiedPaths
+            Seq(globPath)
           }
 
           if (checkEmptyGlobPath && globResult.isEmpty) {
