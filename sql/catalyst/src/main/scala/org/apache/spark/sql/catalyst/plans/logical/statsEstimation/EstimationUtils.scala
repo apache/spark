@@ -135,7 +135,7 @@ object EstimationUtils {
    */
   def toDouble(value: Any, dataType: DataType): Double = {
     dataType match {
-      case _: NumericType | DateType | TimestampType => value.toString.toDouble
+      case _: NumericType | DateType | TimestampType | _: TimeType => value.toString.toDouble
       case BooleanType => if (value.asInstanceOf[Boolean]) 1 else 0
     }
   }
@@ -144,7 +144,7 @@ object EstimationUtils {
     dataType match {
       case BooleanType => double.toInt == 1
       case DateType => double.toInt
-      case TimestampType => double.toLong
+      case TimestampType | _: TimeType => double.toLong
       case ByteType => double.toByte
       case ShortType => double.toShort
       case IntegerType => double.toInt
