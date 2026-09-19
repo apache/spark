@@ -37,6 +37,7 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
         CombineFilters,
         PushPredicateThroughNonJoin,
         PushDownLeftSemiAntiJoin,
+        PushDownLeftSemiAntiJoinThroughAggregate,
         PushLeftSemiLeftAntiThroughJoin,
         BooleanSimplification,
         CollapseProject) :: Nil
