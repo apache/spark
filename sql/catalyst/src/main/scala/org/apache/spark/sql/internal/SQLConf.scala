@@ -5903,6 +5903,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val INSERT_COLUMN_LIST_NESTED_FIELDS_RESOLVE_BY_POSITION =
+    buildConf("spark.sql.insertInto.columnList.nestedFieldsResolveByPosition.enabled")
+      .doc("When true, INSERT column lists resolve nested fields inside arrays and maps by " +
+        "position and preserve positional resolution when schema evolution changes nested " +
+        "struct arity.")
+      .internal()
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val INSERT_INTO_REPLACE_ON_BY_NAME_ENABLED =
     buildConf("spark.sql.insertIntoReplaceOnByName.enabled")
       .doc("Enable the SQL syntax INSERT INTO ... BY NAME REPLACE ON. " +
