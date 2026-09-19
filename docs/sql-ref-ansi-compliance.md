@@ -585,6 +585,7 @@ Below is a list of all the keywords in Spark SQL.
 |GRANT|reserved|non-reserved|reserved|
 |GROUP|reserved|non-reserved|reserved|
 |GROUPING|non-reserved|non-reserved|reserved|
+|GROUPS|non-reserved|non-reserved|reserved|
 |HANDLER|non-reserved|non-reserved|non-reserved|
 |HAVING|reserved|non-reserved|reserved|
 |HISTORY|non-reserved|non-reserved|non-reserved|
