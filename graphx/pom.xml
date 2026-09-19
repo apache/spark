@@ -64,11 +64,6 @@
       <artifactId>blas</artifactId>
     </dependency>
     <dependency>
-      <groupId>net.sourceforge.f2j</groupId>
-      <artifactId>arpack_combined_all</artifactId>
-      <version>0.1</version>
-    </dependency>
-    <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
       <scope>test</scope>
