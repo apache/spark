@@ -5292,7 +5292,7 @@ object functions {
    * @group math_funcs
    * @since 3.3.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a decimal, whatever the type of `e`.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5308,7 +5308,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when `e` is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5324,7 +5324,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when the column is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5343,7 +5343,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a decimal, whatever the type of `e`.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5359,7 +5359,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when `e` is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5537,7 +5537,7 @@ object functions {
    * @group math_funcs
    * @since 3.3.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a decimal, whatever the type of `e`.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5553,7 +5553,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when `e` is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
@@ -5569,7 +5569,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    * @return
-   *   Returns a column that evaluates to a long or decimal.
+   *   Returns a column that evaluates to a long, or a decimal when the column is a decimal.
    *
    * @note
    *   Affected by these public SQL configurations:
