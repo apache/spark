@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.connector
 
+import java.util.Locale
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, NoSuchViewException, TableAlreadyExistsException, ViewAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.{DelegatingTable, Identifier, Relation, RelationCatalog, Table, TableCatalog, TableChange, TableInfo, TableSummary, V1Table, View, ViewCatalog}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, NoSuchViewException, TableAlreadyExistsException, ViewAlreadyExistsException}
+import org.apache.spark.sql.connector.catalog.{DelegatingCatalogExtension, DelegatingTable, Identifier, Relation, RelationCatalog, Table, TableCatalog, TableChange, TableInfo, TableSummary, V1Table, V1View, View, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.metricview.serde.{Column, DimensionExpression, MetricView, MetricViewFactory, SQLSource}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -125,6 +130,214 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
 
   // ALTER VIEW behavior tests live in the per-catalog triplet
   // `sql.execution.command.{,v1/,v2/}.AlterViewAsSuite{,Base}`.
+
+  test("ViewCatalog installed as spark_catalog uses v2 view commands") {
+    val catalogManager = spark.sessionState.catalogManager
+    val viewName = s"$SESSION_CATALOG_NAME.default.session_v"
+    val ident = Identifier.of(Array("default"), "session_v")
+    val metricViewName = s"$SESSION_CATALOG_NAME.default.session_mv"
+    val metricIdent = Identifier.of(Array("default"), "session_mv")
+    val v1OnlyViewName = s"$SESSION_CATALOG_NAME.default.v1_only_v"
+
+    catalogManager.reset()
+    try {
+      sql(s"DROP VIEW IF EXISTS $v1OnlyViewName")
+      sql(s"CREATE VIEW $v1OnlyViewName AS SELECT 0 AS id")
+      withSQLConf(
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key ->
+          classOf[TestingRelationCatalog].getName) {
+        catalogManager.reset()
+        val catalog = catalogManager.catalog(SESSION_CATALOG_NAME)
+          .asInstanceOf[TestingRelationCatalog]
+        def storedView(identifier: Identifier): View = {
+          catalog.getStoredView(identifier.namespace(), identifier.name())
+        }
+        def normalizeSql(text: String): String = {
+          text.replace("`", "")
+            .trim
+            .stripSuffix(";")
+            .replaceAll("\\s+", " ")
+            .toLowerCase(Locale.ROOT)
+        }
+        try {
+          sql(s"CREATE VIEW $viewName TBLPROPERTIES ('k' = 'v1') AS SELECT 1 AS id")
+          assert(storedView(ident).properties().get("k") == "v1")
+          val listedViewNames = sql(s"SHOW VIEWS IN $SESSION_CATALOG_NAME.default")
+            .collect().map(_.getString(1)).toSet
+          assert(listedViewNames.contains(ident.name()))
+          assert(!listedViewNames.contains("v1_only_v"),
+            s"non-delegated V1 view leaked into SHOW VIEWS: $listedViewNames")
+
+          sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('k' = 'v2')")
+          assert(storedView(ident).properties().get("k") == "v2")
+
+          sql(s"ALTER VIEW $viewName AS SELECT 2 AS id")
+          assert(normalizeSql(storedView(ident).queryText()) == "select 2 as id")
+          val showCreate = normalizeSql(sql(s"SHOW CREATE TABLE $viewName").head().getString(0))
+          assert(showCreate.contains(s"create view $viewName"))
+
+          sql(s"DROP VIEW $viewName")
+          assert(!catalog.viewExists(ident))
+
+          val metricView = MetricView(
+            "0.1",
+            SQLSource("SELECT 1 AS id"),
+            where = None,
+            select = Seq(Column("id", DimensionExpression("id"), 0)))
+          val yaml = MetricViewFactory.toYAML(metricView)
+          sql(
+            s"""CREATE VIEW $metricViewName
+               |WITH METRICS
+               |LANGUAGE YAML
+               |AS
+               |$$$$
+               |$yaml
+               |$$$$""".stripMargin)
+          assert(storedView(metricIdent).properties().get(TableCatalog.PROP_TABLE_TYPE) ==
+            TableSummary.METRIC_VIEW_TABLE_TYPE)
+          sql(s"DROP VIEW $metricViewName")
+          assert(!catalog.viewExists(metricIdent))
+        } finally {
+          sql(s"DROP VIEW IF EXISTS $viewName")
+          sql(s"DROP VIEW IF EXISTS $metricViewName")
+        }
+      }
+    } finally {
+      catalogManager.reset()
+      sql(s"DROP VIEW IF EXISTS $v1OnlyViewName")
+      catalogManager.reset()
+    }
+  }
+
+  test("session ViewCatalog preserves delegated v1 and temporary views") {
+    val catalogManager = spark.sessionState.catalogManager
+    val delegatedView = s"$SESSION_CATALOG_NAME.default.delegated_v"
+    val customView = s"$SESSION_CATALOG_NAME.default.custom_v"
+    val tempView = "session_temp_v"
+    val globalTempView = "session_global_temp_v"
+    val customOnlyIdent = Identifier.of(Array("custom_only"), "custom_only_v")
+    val multiPartIdent = Identifier.of(Array("multi", "part"), "multi_part_v")
+    val globalCustomIdent = Identifier.of(Array("global_temp"), globalTempView)
+
+    catalogManager.reset()
+    try {
+      sql(s"DROP VIEW IF EXISTS $delegatedView")
+      sql(s"CREATE VIEW $delegatedView TBLPROPERTIES ('origin' = 'v1') AS SELECT 1 AS id")
+
+      withSQLConf(
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key ->
+          classOf[TestingDelegatingRelationCatalog].getName) {
+        catalogManager.reset()
+        val customCatalog = catalogManager.catalog(SESSION_CATALOG_NAME)
+          .asInstanceOf[TestingDelegatingRelationCatalog]
+        try {
+          sql(s"ALTER VIEW $delegatedView SET TBLPROPERTIES ('updated' = 'yes')")
+          val metadata = spark.sessionState.catalog.getTableMetadata(
+            TableIdentifier("delegated_v", Some("default")))
+          assert(metadata.properties.get("updated").contains("yes"))
+
+          val propertyKeys = sql(s"SHOW TBLPROPERTIES $delegatedView")
+            .collect().map(_.getString(0))
+          assert(!propertyKeys.exists(_.startsWith("view.")),
+            s"v1-internal properties leaked through v2 inspection: ${propertyKeys.mkString(", ")}")
+
+          sql(s"CREATE VIEW $customView AS SELECT 2 AS id")
+          customCatalog.createView(
+            customOnlyIdent,
+            new View.Builder()
+              .withSchema(new StructType().add("id", "int"))
+              .withQueryText("SELECT 4 AS id")
+              .build())
+          customCatalog.createView(
+            multiPartIdent,
+            new View.Builder()
+              .withSchema(new StructType().add("id", "int"))
+              .withQueryText("SELECT 6 AS id")
+              .build())
+          customCatalog.createView(
+            globalCustomIdent,
+            new View.Builder()
+              .withSchema(new StructType().add("id", "int"))
+              .withQueryText("SELECT 7 AS id")
+              .build())
+          sql(s"CREATE TEMP VIEW $tempView AS SELECT 3 AS id")
+          sql(s"CREATE GLOBAL TEMP VIEW $globalTempView AS SELECT 5 AS id")
+          val rows = sql(s"SHOW VIEWS IN $SESSION_CATALOG_NAME.default").collect()
+          assert(rows.exists(r => r.getString(0) == "default" &&
+            r.getString(1) == "delegated_v" && !r.getBoolean(2)),
+            s"delegated v1 view missing from SHOW VIEWS: ${rows.mkString(", ")}")
+          assert(rows.exists(r => r.getString(0) == "default" &&
+            r.getString(1) == "custom_v" && !r.getBoolean(2)),
+            s"custom v2 view missing from SHOW VIEWS: ${rows.mkString(", ")}")
+          assert(rows.exists(r => r.getString(1) == tempView && r.getBoolean(2)),
+            s"temporary view missing from SHOW VIEWS: ${rows.mkString(", ")}")
+
+          val filteredRows = sql(
+            s"SHOW VIEWS IN $SESSION_CATALOG_NAME.default LIKE 'delegated_v'").collect()
+          assert(filteredRows.map(_.getString(1)).toSet == Set("delegated_v"))
+
+          val customOnlyRows = sql(
+            s"SHOW VIEWS IN $SESSION_CATALOG_NAME.custom_only").collect()
+          assert(customOnlyRows.exists(_.getString(1) == customOnlyIdent.name()),
+            s"custom-only namespace was rejected by v1 fallback: ${customOnlyRows.mkString(", ")}")
+          assert(customOnlyRows.exists(r => r.getString(1) == tempView && r.getBoolean(2)),
+            s"temporary view missing from custom-only namespace: ${customOnlyRows.mkString(", ")}")
+
+          val multiPartRows = sql(
+            s"SHOW VIEWS IN $SESSION_CATALOG_NAME.multi.part").collect()
+          assert(multiPartRows.exists(_.getString(1) == multiPartIdent.name()),
+            s"custom view missing from multi-part namespace: ${multiPartRows.mkString(", ")}")
+          assert(multiPartRows.exists(r => r.getString(1) == tempView && r.getBoolean(2)),
+            s"temporary view missing from multi-part namespace: ${multiPartRows.mkString(", ")}")
+
+          val globalTempRows = sql(
+            s"SHOW VIEWS IN $SESSION_CATALOG_NAME.global_temp").collect()
+          val collidingRows = globalTempRows.filter(_.getString(1) == globalTempView)
+          assert(collidingRows.map(_.getBoolean(2)).toSet == Set(false, true),
+            s"persistent/global-temp collision was not preserved: ${globalTempRows.mkString(", ")}")
+
+          sql(s"DROP VIEW $delegatedView")
+          assert(!spark.sessionState.catalog.tableExists(
+            TableIdentifier("delegated_v", Some("default"))))
+        } finally {
+          sql(s"DROP VIEW IF EXISTS $customView")
+          sql(s"DROP VIEW IF EXISTS $tempView")
+          sql(s"DROP VIEW IF EXISTS global_temp.$globalTempView")
+          customCatalog.dropView(customOnlyIdent)
+          customCatalog.dropView(multiPartIdent)
+          customCatalog.dropView(globalCustomIdent)
+          catalogManager.reset()
+        }
+      }
+    } finally {
+      catalogManager.reset()
+      sql(s"DROP VIEW IF EXISTS $delegatedView")
+      catalogManager.reset()
+    }
+  }
+
+  test("session ViewCatalog does not inherit hidden V1 namespaces") {
+    val catalogManager = spark.sessionState.catalogManager
+    val v1OnlyNamespace = "v1_only"
+
+    catalogManager.reset()
+    try {
+      sql(s"DROP DATABASE IF EXISTS $v1OnlyNamespace CASCADE")
+      sql(s"CREATE DATABASE $v1OnlyNamespace")
+      withSQLConf(
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key ->
+          classOf[TestingFilteredNamespaceRelationCatalog].getName) {
+        catalogManager.reset()
+        intercept[NoSuchNamespaceException] {
+          sql(s"SHOW VIEWS IN $SESSION_CATALOG_NAME.$v1OnlyNamespace").collect()
+        }
+      }
+    } finally {
+      catalogManager.reset()
+      sql(s"DROP DATABASE IF EXISTS $v1OnlyNamespace CASCADE")
+      catalogManager.reset()
+    }
+  }
 
   // --- Pure ViewCatalog (no TableCatalog mixin) ---------------------------
 
@@ -566,6 +779,93 @@ class TestingRelationCatalog extends RelationCatalog {
     catalogName = name
   }
   override def name(): String = catalogName
+}
+
+/**
+ * A session-catalog extension that keeps new v2 views in its own store while delegating tables
+ * and pre-existing v1 views to the built-in session catalog.
+ */
+class TestingDelegatingRelationCatalog extends DelegatingCatalogExtension with RelationCatalog {
+  private val views =
+    new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), View]()
+  private val supportedNamespaces = Set(
+    Seq("default"), Seq("custom_only"), Seq("multi", "part"), Seq("global_temp"))
+
+  private def key(ident: Identifier): (Seq[String], String) = {
+    (ident.namespace().toSeq, ident.name())
+  }
+
+  private def delegatedTableExists(ident: Identifier): Boolean = {
+    try {
+      delegate.asInstanceOf[TableCatalog].tableExists(ident)
+    } catch {
+      case _: NoSuchNamespaceException => false
+    }
+  }
+
+  override def loadRelation(ident: Identifier): Relation = {
+    Option(views.get(key(ident))).getOrElse {
+      delegate.asInstanceOf[TableCatalog].loadTable(ident) match {
+        case v1: V1Table if v1.v1Table.isViewLike => new V1View(v1.v1Table)
+        case table => table
+      }
+    }
+  }
+
+  override def loadTable(ident: Identifier): Table = loadRelation(ident) match {
+    case table: Table => table
+    case _ => throw new NoSuchTableException(ident)
+  }
+
+  override def listViews(namespace: Array[String]): Array[Identifier] = {
+    val target = namespace.toSeq
+    if (!supportedNamespaces.contains(target)) {
+      throw new NoSuchNamespaceException(namespace)
+    }
+    val identifiers = new java.util.ArrayList[Identifier]()
+    views.forEach { (viewKey, _) =>
+      if (viewKey._1 == target) {
+        identifiers.add(Identifier.of(viewKey._1.toArray, viewKey._2))
+      }
+    }
+    identifiers.toArray(new Array[Identifier](0))
+  }
+
+  override def createView(ident: Identifier, info: View): View = {
+    if (delegatedTableExists(ident) || views.putIfAbsent(key(ident), info) != null) {
+      throw new ViewAlreadyExistsException(ident)
+    }
+    info
+  }
+
+  override def replaceView(ident: Identifier, info: View): View = {
+    if (!views.containsKey(key(ident))) {
+      throw new NoSuchViewException(ident)
+    }
+    views.put(key(ident), info)
+    info
+  }
+
+  override def dropView(ident: Identifier): Boolean = views.remove(key(ident)) != null
+
+  override def renameView(oldIdent: Identifier, newIdent: Identifier): Unit = {
+    val oldKey = key(oldIdent)
+    val newKey = key(newIdent)
+    val existing = views.get(oldKey)
+    if (existing == null) {
+      throw new NoSuchViewException(oldIdent)
+    }
+    if (delegatedTableExists(newIdent) || views.putIfAbsent(newKey, existing) != null) {
+      throw new ViewAlreadyExistsException(newIdent)
+    }
+    views.remove(oldKey)
+  }
+}
+
+class TestingFilteredNamespaceRelationCatalog extends TestingDelegatingRelationCatalog {
+  override def namespaceExists(namespace: Array[String]): Boolean = {
+    namespace.toSeq != Seq("v1_only") && super.namespaceExists(namespace)
+  }
 }
 
 /**
