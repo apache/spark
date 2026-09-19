@@ -90,9 +90,7 @@ class UDFInHigherOrderFunctionTestsMixin:
             char_result = df.select(sf.transform("values", lambda x: char_udf(x)).alias("r"))
             self.assertEqual(char_result.schema["r"].dataType, ArrayType(StringType()))
             assertDataFrameEqual(char_result, [(["a", "a"],)])
-            varchar_result = df.select(
-                sf.transform("values", lambda x: varchar_udf(x)).alias("r")
-            )
+            varchar_result = df.select(sf.transform("values", lambda x: varchar_udf(x)).alias("r"))
             self.assertEqual(varchar_result.schema["r"].dataType, ArrayType(StringType()))
             assertDataFrameEqual(varchar_result, [(["abcd", "abcd"],)])
 
