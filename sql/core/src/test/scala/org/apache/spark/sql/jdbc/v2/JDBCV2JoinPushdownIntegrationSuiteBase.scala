@@ -527,7 +527,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
          |JOIN $catalogAndNamespace.$casedJoinTableName1 c
          |  ON a.address = c.address
          |JOIN $catalogAndNamespace.$casedJoinTableName1 d
-         |  ON LOWER(a.address) = LOWER(d.address)
+         |  ON IF(a.id > 5, a.id - 1, a.id + 1) = d.id
          |WHERE a.amount >= 1000
          |""".stripMargin
 
