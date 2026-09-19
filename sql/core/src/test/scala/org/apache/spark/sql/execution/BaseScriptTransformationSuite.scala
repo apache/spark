@@ -284,7 +284,7 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
       // Row 2 is valid. Both rows are in the same partition.
       val input = Seq(
         """{"1":"a","01":"b"}""",
-        """{"2":"cd"}""").toDF("value")
+        """{"2":"cd"}""").toDF("value").coalesce(1)
       checkAnswer(
         input,
         (child: SparkPlan) => createScriptTransformationExec(

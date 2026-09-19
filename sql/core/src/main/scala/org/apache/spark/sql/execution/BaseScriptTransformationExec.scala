@@ -280,7 +280,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
           identity[Any] _
         } else {
           val restoreMapKeys = ScriptTransformationIOSchema.makeJsonMapKeyRestorer(
-            jsonType, physicalType, Some(conf.sessionLocalTimeZone))
+            physicalType, Some(conf.sessionLocalTimeZone))
           value: Any => restoreMapKeys(value)
         }
         val toScala = CatalystTypeConverters.createToScalaConverter(physicalType)
@@ -301,7 +301,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     }
   }
 
-  // Keep consistent with Hive `LazySimpleSerDe`, when there is a type case error, return null
+  // Match Hive `LazySimpleSerDe`: return null when a type cast fails.
   private val wrapperConvertException: (String => Any, Any => Any) => String => Any =
     (f: String => Any, converter: Any => Any) =>
       (data: String) => converter {
@@ -446,13 +446,13 @@ object ScriptTransformationIOSchema {
   /**
    * Build a per-call map-key restorer that converts parsed JSON string keys
    * back to the declared physical key type and validates the result through a
-   * fresh [[ArrayBasedMapBuilder]] on every invocation, so a failed or
-   * duplicate key cannot leave shared state dirty for the next row.
+   * fresh [[ArrayBasedMapBuilder]] on every invocation, so a failed key
+   * conversion or duplicate key cannot leave shared state dirty for the next row.
    */
   private[sql] def makeJsonMapKeyRestorer(
-      jsonType: DataType,
       targetType: DataType,
       timeZoneId: Option[String]): Any => Any = {
+    val jsonType = toJsonMapKeyType(targetType)
 
     def make(jt: DataType, tt: DataType): Any => Any = (jt, tt) match {
       case (ArrayType(jet, _), ArrayType(tet, _)) =>
