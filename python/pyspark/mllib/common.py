@@ -15,19 +15,19 @@
 # limitations under the License.
 #
 
-from typing import Any, Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from pyspark.mllib._typing import C, JavaObjectOrPickleDump
 
 import py4j.protocol
-from py4j.protocol import Py4JJavaError
-from py4j.java_gateway import JavaObject
 from py4j.java_collections import JavaArray, JavaList
+from py4j.java_gateway import JavaObject
+from py4j.protocol import Py4JJavaError
 
 import pyspark.core.context
 from pyspark import RDD, SparkContext
-from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
+from pyspark.serializers import AutoBatchedSerializer, CPickleSerializer
 from pyspark.sql import DataFrame, SparkSession
 
 # Hack for support float('inf') in Py4j

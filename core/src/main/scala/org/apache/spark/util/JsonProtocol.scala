@@ -965,7 +965,8 @@ private[spark] object JsonProtocol extends JsonUtils {
       case `blockUpdate` => blockUpdateFromJson(json)
       case `resourceProfileAdded` => resourceProfileAddedFromJson(json)
       case other =>
-        val otherClass = Utils.classForName(other)
+        // `other` comes from event log content so it may ref unsupported types.
+        val otherClass = Utils.classForName(other, initialize = false)
         if (classOf[SparkListenerEvent].isAssignableFrom(otherClass)) {
           mapper.readValue(json.toString, otherClass)
             .asInstanceOf[SparkListenerEvent]

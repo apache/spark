@@ -392,6 +392,36 @@ class Analyzer(
 
   def getRelationResolution: RelationResolution = relationResolution
 
+  private def toUnresolvedRelation(target: UnresolvedInsertTarget): UnresolvedRelation = {
+    val relation = withOrigin(target.origin) {
+      UnresolvedRelation(target.multipartIdentifier, target.options)
+        .requireWritePrivileges(target.writePrivileges)
+    }
+    relation.copyTagsFrom(target)
+    relation
+  }
+
+  /** Lowers a parsed INSERT enough for transaction detection to inspect its target. */
+  private[sql] def resolveUnresolvedInsert(insert: UnresolvedInsert): LogicalPlan = {
+    runWithSessionConf {
+      val identifierResolvedTarget = insert.table match {
+        case p: PlanWithUnresolvedIdentifier => execute(p)
+        case other => other
+      }
+      withOrigin(insert.origin) {
+        identifierResolvedTarget match {
+          case target: UnresolvedInsertTarget =>
+            insert.toInsertIntoStatement(toUnresolvedRelation(target))
+          case target if !target.fastEquals(insert.table) =>
+            val updated = insert.copy(table = target)
+            updated.copyTagsFrom(insert)
+            updated
+          case _ => insert
+        }
+      }
+    }
+  }
+
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     if (plan.analyzed) {
       plan
@@ -569,6 +599,7 @@ class Analyzer(
 
   override def batches: Seq[Batch] = earlyBatches ++ Seq(
     Batch("Resolution", fixedPoint,
+      ResolveUnresolvedInsert ::
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
       ResolveRelations ::
@@ -1348,6 +1379,15 @@ class Analyzer(
     }
   }
 
+  /** Lower a parsed INSERT as soon as its target identifier expression has been evaluated. */
+  object ResolveUnresolvedInsert extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(UNRESOLVED_INSERT), ruleId) {
+      case insert @ UnresolvedInsert(target: UnresolvedInsertTarget, _, _, _, _, _, _, _, _) =>
+        insert.toInsertIntoStatement(toUnresolvedRelation(target))
+    }
+  }
+
   /** Handle INSERT INTO for DSv2 */
   object ResolveInsertInto extends ResolveInsertionBase {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
@@ -1626,29 +1666,8 @@ class Analyzer(
     }
 
     def doApply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      // `InsertIntoStatement.table` and `V2WriteCommand.table` are non-child `LogicalPlan`
-      // slots (`child = query`), so the default `resolveOperatorsUp` + `mapExpressions`
-      // traversal never resolves expressions placed inside them. For a
-      // `PlanWithUnresolvedIdentifier`, `identifierExpr` (e.g. an `UnresolvedAttribute`
-      // referring to a SQL variable in `INSERT INTO IDENTIFIER(target_table) ...`) must
-      // be resolved here before `ResolveIdentifierClause` can materialize the relation.
-      // Mirror the structural recursion into the non-child `.table` slot that
-      // `BindParameters` and `ResolveIdentifierClause` already do for the same shape
-      // (SPARK-46625); unlike those rules, this one performs attribute resolution rather
-      // than parameter binding or placeholder materialization. Resolve against `p` (whose
-      // `children` are `Nil` on the INSERT / `OverwriteByExpression` path built by
-      // `buildWriteTableSlot`) so the IDENTIFIER expression cannot see query output
-      // columns -- only the last-resort variable resolution path fires. The
-      // `!identifierExpr.resolved` guard makes the case idempotent under bottom-up
-      // traversal.
-      case i: InsertIntoStatement
-          if i.table.isInstanceOf[PlanWithUnresolvedIdentifier] &&
-             !i.table.asInstanceOf[PlanWithUnresolvedIdentifier].identifierExpr.resolved =>
-        val p = i.table.asInstanceOf[PlanWithUnresolvedIdentifier]
-        val resolvedExpr = resolveExpressionByPlanChildren(
-          p.identifierExpr, p, includeLastResort = true)
-        i.copy(table = p.copy(identifierExpr = resolvedExpr))
-
+      // V2WriteCommand.table is a non-child LogicalPlan slot, so recurse explicitly when it
+      // contains an identifier expression that may refer to a SQL variable.
       case w: V2WriteCommand
           if w.table.isInstanceOf[PlanWithUnresolvedIdentifier] &&
              !w.table.asInstanceOf[PlanWithUnresolvedIdentifier].identifierExpr.resolved =>
@@ -2086,54 +2105,56 @@ class Analyzer(
      * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
      * should only apply to builtin functions, not to user-defined functions.
      *
-     * When the effective SQL PATH puts `system.session` before `system.builtin`, temp
-     * functions shadow builtins, so an unqualified name that matches a temp function
-     * should NOT be treated as builtin.
+     * Mirrors function resolution precedence, including SQL PATH shadowing for unqualified names
+     * and `spark.sql.legacy.persistentCatalogFirst` for two-part `builtin.name` references.
      */
-    private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
-      if (!FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)) {
-        return false
-      }
-      if (nameParts.size == 1 && functionResolution.isSessionBeforeBuiltinInPath) {
-        val v1Catalog = catalogManager.v1SessionCatalog
-        !v1Catalog.isTemporaryFunction(FunctionIdentifier(nameParts.head))
-      } else {
-        true
-      }
-    }
+    private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean =
+      functionResolution.functionNameResolvesToBuiltin(nameParts, expectedName)
 
     /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
-        case f0: UnresolvedFunction if !f0.isDistinct &&
-          matchesFunctionName(f0.nameParts, "count") &&
-          isCountStarExpansionAllowed(f0.arguments) =>
-          // Transform COUNT(*) into COUNT(1).
-          // We do not normalize the name to "count"; we keep the original name parts
-          // (e.g. builtin.count, system.builtin.count) so that resolution still sees
-          // the same qualification.
-          f0.copy(arguments = Seq(Literal(1)))
-        case f1: UnresolvedFunction if containsStar(f1.arguments) =>
-          // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
-          // be expanded while count(*) will be converted to count(1). They will produce different
-          // results and confuse users if there are any null values. For count(t1.*, t2.*), it is
-          // still allowed, since it's well-defined in spark.
-          if (!conf.allowStarWithSingleTableIdentifierInCount &&
-              matchesFunctionName(f1.nameParts, "count") &&
-              f1.arguments.length == 1) {
-            f1.arguments.foreach {
-              case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
-                throw QueryCompilationErrors
-                  .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
-              case _ => // do nothing
-            }
+        case f: UnresolvedFunction if containsStar(f.arguments) =>
+          // A routed SQL/JSON function (json_array(*)) forbids a direct star argument -- a bare `*`
+          // or a qualified `t.*` -- so reject it rather than expand below. A star nested in another
+          // expression (json_array(array(*))) is expanded bottom-up before we get here, so only a
+          // direct star reaches this guard.
+          if (functionResolution.resolvesToStarDisallowedSqlJsonFunction(f.nameParts)) {
+            throw QueryCompilationErrors.invalidStarUsageError(
+              s"expression `${f.prettyName}`", extractStar(f.arguments))
           }
-          f1.copy(arguments = f1.arguments.flatMap {
-            case s: Star => expand(s, child)
-            case o => o :: Nil
-          })
+          // The count owner probe can hit an external functionExists lookup on a persistent-first
+          // PATH, so compute it once (lazily, after the cheap star-shape check) and reuse it for
+          // the count(*) rewrite and the count(tbl.*) guard, as `FunctionResolverUtils` does.
+          lazy val resolvesToCountBuiltin = matchesFunctionName(f.nameParts, "count")
+          if (!f.isDistinct && isCountStarExpansionAllowed(f.arguments) && resolvesToCountBuiltin) {
+            // Transform COUNT(*) into COUNT(1).
+            // We do not normalize the name to "count"; we keep the original name parts
+            // (e.g. builtin.count, system.builtin.count) so that resolution still sees
+            // the same qualification.
+            f.copy(arguments = Seq(Literal(1)))
+          } else {
+            // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*)
+            // will be expanded while count(*) will be converted to count(1). They will produce
+            // different results and confuse users if there are any null values. For
+            // count(t1.*, t2.*), it is still allowed, since it's well-defined in spark.
+            if (!conf.allowStarWithSingleTableIdentifierInCount &&
+                resolvesToCountBuiltin &&
+                f.arguments.length == 1) {
+              f.arguments.foreach {
+                case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
+                  throw QueryCompilationErrors
+                    .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
+                case _ => // do nothing
+              }
+            }
+            f.copy(arguments = f.arguments.flatMap {
+              case s: Star => expand(s, child)
+              case o => o :: Nil
+            })
+          }
         case c: CreateNamedStruct if containsStar(c.valExprs) =>
           val newChildren = c.children.grouped(2).flatMap {
             case Seq(k, s : Star) => CreateStruct(expand(s, child)).children
@@ -4426,10 +4447,10 @@ class Analyzer(
               throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(a)
           }
           // Ensure at least one window function in SELECT or QUALIFY condition.
-          if (windowExpressionToAliasMap.size() == 0 && !hasWindowInPlan(child)) {
+          if (windowExpressionToAliasMap.isEmpty && !hasWindowInPlan(child)) {
             throw QueryCompilationErrors.qualifyRequiresWindowFunctionError()
           }
-          if (windowExpressionToAliasMap.size() > 0) {
+          if (!windowExpressionToAliasMap.isEmpty) {
             val projectList =
               windowExpressionToAliasMap.values().asScala.toSeq
             Filter(newCond, Project(newChild.output ++ projectList, newChild))

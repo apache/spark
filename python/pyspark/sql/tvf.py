@@ -362,7 +362,7 @@ class TableValuedFunction:
         |value1|value2|
         +------+------+
         """
-        from pyspark.sql.classic.column import _to_seq, _to_java_column
+        from pyspark.sql.classic.column import _to_java_column, _to_seq
 
         if len(fields) == 0:
             raise PySparkValueError(
@@ -507,7 +507,7 @@ class TableValuedFunction:
         |   3|NULL|
         +----+----+
         """
-        from pyspark.sql.classic.column import _to_seq, _to_java_column
+        from pyspark.sql.classic.column import _to_java_column, _to_seq
 
         sc = self._sparkSession.sparkContext
         return DataFrame(
@@ -724,9 +724,10 @@ class TableValuedFunction:
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
+
     import pyspark.sql.tvf
 
     os.chdir(os.environ["SPARK_HOME"])

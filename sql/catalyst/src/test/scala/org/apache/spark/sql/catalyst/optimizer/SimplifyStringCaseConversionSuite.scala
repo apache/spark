@@ -48,7 +48,7 @@ class SimplifyStringCaseConversionSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("simplify UPPER(LOWER(str))") {
+  test("SPARK-59043: do not simplify UPPER(LOWER(str)) to preserve Unicode semantics") {
     val originalQuery =
       testRelation
         .select(Upper(Lower($"a")) as "u")
@@ -56,20 +56,20 @@ class SimplifyStringCaseConversionSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select(Upper($"a") as "u")
+        .select(Upper(Lower($"a")) as "u")
         .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
-  test("simplify LOWER(UPPER(str))") {
+  test("SPARK-59043: do not simplify LOWER(UPPER(str)) to preserve Unicode semantics") {
     val originalQuery =
       testRelation
         .select(Lower(Upper($"a")) as "l")
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .select(Lower($"a") as "l")
+      .select(Lower(Upper($"a")) as "l")
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -86,5 +86,37 @@ class SimplifyStringCaseConversionSuite extends PlanTest {
       .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-59043: simplify deeply nested same-case expressions") {
+    val nestedUpper = testRelation.select(Upper(Upper(Upper($"a"))) as "u")
+    val optimizedUpper = Optimize.execute(nestedUpper.analyze)
+    val expectedUpper = testRelation.select(Upper($"a") as "u").analyze
+    comparePlans(optimizedUpper, expectedUpper)
+
+    val nestedLower = testRelation.select(Lower(Lower(Lower($"a"))) as "l")
+    val optimizedLower = Optimize.execute(nestedLower.analyze)
+    val expectedLower = testRelation.select(Lower($"a") as "l").analyze
+    comparePlans(optimizedLower, expectedLower)
+  }
+
+  test("SPARK-59043: mixed case expressions with multiple layers") {
+    // Upper(Lower(Upper(str))) is preserved as there are no adjacent same-case operations
+    val query1 = testRelation.select(Upper(Lower(Upper($"a"))) as "res")
+    val optimized1 = Optimize.execute(query1.analyze)
+    val expected1 = testRelation.select(Upper(Lower(Upper($"a"))) as "res").analyze
+    comparePlans(optimized1, expected1)
+
+    // Lower(Upper(Upper(str))) simplifies inner Upper(Upper) to Upper -> Lower(Upper(str))
+    val query2 = testRelation.select(Lower(Upper(Upper($"a"))) as "res")
+    val optimized2 = Optimize.execute(query2.analyze)
+    val expected2 = testRelation.select(Lower(Upper($"a")) as "res").analyze
+    comparePlans(optimized2, expected2)
+
+    // Upper(Lower(Lower(str))) simplifies inner Lower(Lower) to Lower -> Upper(Lower(str))
+    val query3 = testRelation.select(Upper(Lower(Lower($"a"))) as "res")
+    val optimized3 = Optimize.execute(query3.analyze)
+    val expected3 = testRelation.select(Upper(Lower($"a")) as "res").analyze
+    comparePlans(optimized3, expected3)
   }
 }

@@ -156,21 +156,6 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     }
   }
 
-  test("canPlanAsBroadcastHashJoin should respect size for single-column null-aware anti join") {
-    val leftKey = left.output.head
-    val rightKey = right.output.head
-    val condition = Or(EqualTo(leftKey, rightKey), IsNull(EqualTo(leftKey, rightKey)))
-    val nullAwareAntiJoin = Join(left, right, LeftAnti, Some(condition), JoinHint.NONE)
-    val largeRight = right.copy(rowCount = 20000000, size = Some(20000000))
-
-    withSQLConf(
-      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
-      assert(canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
-      assert(!canPlanAsBroadcastHashJoin(nullAwareAntiJoin.copy(right = largeRight), SQLConf.get))
-    }
-  }
-
   test("getBroadcastHashJoinBuildSide returns the hinted side") {
     val equiJoin = join.copy(condition = Some(EqualTo(left.output.head, right.output.head)))
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
@@ -210,17 +195,48 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     }
   }
 
-  test("getBroadcastHashJoinBuildSide builds from the right for a null-aware anti join") {
+  test("getBroadcastHashJoinBuildSide uses the null-aware anti join broadcast threshold") {
     val leftKey = left.output.head
     val rightKey = right.output.head
     val condition = Or(EqualTo(leftKey, rightKey), IsNull(EqualTo(leftKey, rightKey)))
     val nullAwareAntiJoin = Join(left, right, LeftAnti, Some(condition), JoinHint.NONE)
+    val largeRight = right.copy(rowCount = 20000000, size = Some(20000000))
+    val negativeSizeRight = right.copy(size = Some(-1))
+    val overLongMaxRight = right.copy(
+      rowCount = BigInt(Long.MaxValue) + 1,
+      size = Some(BigInt(Long.MaxValue) + 1))
 
     withSQLConf(
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       assert(getBroadcastHashJoinBuildSide(nullAwareAntiJoin, SQLConf.get) === Some(BuildRight))
+      assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoin.copy(right = largeRight), SQLConf.get) === Some(BuildRight))
+      assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoin.copy(right = overLongMaxRight), SQLConf.get) === Some(BuildRight))
+    }
+
+    withSQLConf(SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "-2") {
+      assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoin.copy(right = overLongMaxRight), SQLConf.get) === Some(BuildRight))
+    }
+
+    withSQLConf(SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      assert(getBroadcastHashJoinBuildSide(nullAwareAntiJoin, SQLConf.get).isEmpty)
+    }
+
+    withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "false",
+      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "-1") {
+      assert(getBroadcastHashJoinBuildSide(nullAwareAntiJoin, SQLConf.get).isEmpty)
+    }
+
+    withSQLConf(SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "10MB") {
+      assert(getBroadcastHashJoinBuildSide(nullAwareAntiJoin, SQLConf.get) === Some(BuildRight))
+      assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoin.copy(right = largeRight), SQLConf.get).isEmpty)
+      assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoin.copy(right = negativeSizeRight), SQLConf.get).isEmpty)
     }
   }
-
 }

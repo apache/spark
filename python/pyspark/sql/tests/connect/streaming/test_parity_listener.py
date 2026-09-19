@@ -19,9 +19,9 @@ import time
 
 import pyspark.cloudpickle
 from pyspark.errors import AnalysisException
-from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
-from pyspark.sql.streaming.listener import StreamingQueryListener
 from pyspark.sql.functions import count, lit
+from pyspark.sql.streaming.listener import StreamingQueryListener
+from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.utils import eventually
 

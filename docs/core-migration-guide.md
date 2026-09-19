@@ -22,6 +22,12 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.3 to 4.4
+
+- Since Spark 4.4, an executor pod template that names a service account in `serviceAccountName` keeps it: Spark applies `spark.kubernetes.authenticate.executor.serviceAccountName`, or `spark.kubernetes.authenticate.driver.serviceAccountName` as a fallback, only when the template names no account in either `serviceAccount` or `serviceAccountName`. Earlier versions decided by reading the deprecated `serviceAccount` field alone, so with either configuration set, a template that named the account in `serviceAccountName` had it overwritten; with neither set, the template's account was kept already. Spark logs a warning when `spark.kubernetes.authenticate.executor.serviceAccountName` named an account the template displaced.
+
+- Since Spark 4.4, an empty service account name in an executor pod template counts as naming no account, which is how Kubernetes itself defaults the two fields. A template whose deprecated `serviceAccount` field is present but empty, with `serviceAccountName` empty or absent, used to count as naming an account: the configured account was dropped and the executor pods ran as the namespace's default account. They now run as `spark.kubernetes.authenticate.executor.serviceAccountName` or, failing that, `spark.kubernetes.authenticate.driver.serviceAccountName`, which can widen what they are allowed to do, since the [RBAC](running-on-kubernetes.html#rbac) setup binds the driver's account to the `edit` role. To keep the executor pods on the namespace's default account, name it explicitly, either in the template's `serviceAccountName` or in `spark.kubernetes.authenticate.executor.serviceAccountName`; Kubernetes creates it as `default` in every namespace.
+
 ## Upgrading from Core 4.2 to 4.3
 
 - Since Spark 4.3, Spark compresses serialized RDD partitions by default. To restore the legacy behavior, you can set `spark.rdd.compress` to `false`.

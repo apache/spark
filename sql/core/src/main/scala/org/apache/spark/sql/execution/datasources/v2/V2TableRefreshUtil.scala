@@ -91,19 +91,24 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
         val stateOptions = CatalogV2Util.extractTableStateOptions(catalog, r.options)
         val currentTable = currentTables.getOrElseUpdate((catalog, ident, stateOptions), {
           val tableName = V2TableUtil.toQualifiedName(catalog, ident)
-          lookupCachedRelation(spark, catalog, ident, r.table, r.options) match {
+          lookupCachedRelation(spark, catalog, ident, r.table, stateOptions) match {
             case Some(cached) =>
               logDebug(s"Refreshing table metadata for $tableName using shared relation cache")
               cached.table
             case _ =>
               logDebug(s"Refreshing table metadata for $tableName using catalog")
-              CatalogV2Util.getTable(catalog, ident, options = r.options)
+              CatalogV2Util.getTableWithStateOptions(catalog, ident, stateOptions)
           }
         })
         validateTableIdentity(currentTable, r)
         validateDataColumns(currentTable, r, schemaValidationMode)
         validateMetadataColumns(currentTable, r, schemaValidationMode)
-        r.copy(table = currentTable)
+        val refreshed = r.copy(table = currentTable)
+        if (schemaValidationMode == ALLOW_NEW_FIELDS) {
+          AnalyzedSchemaProjection.rebindToAnalyzedSchema(refreshed)
+        } else {
+          refreshed
+        }
     }
   }
 
@@ -112,9 +117,9 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       catalog: TableCatalog,
       ident: Identifier,
       table: Table,
-      options: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
-    CatalogV2Util.lookupCachedRelation(
-      spark.sharedState.relationCache, catalog, ident, table, options, conf)
+      stateOptions: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
+    CatalogV2Util.lookupCachedRelationWithStateOptions(
+      spark.sharedState.relationCache, catalog, ident, table, stateOptions, conf)
   }
 
   // it is not safe to allow any schema changes in commands (e.g. CTAS, RTAS, MERGE)

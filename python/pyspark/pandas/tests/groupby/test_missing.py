@@ -19,11 +19,11 @@ import inspect
 
 import pyspark.pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.missing.groupby import (
     MissingPandasLikeDataFrameGroupBy,
     MissingPandasLikeSeriesGroupBy,
 )
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class MissingTestsMixin:

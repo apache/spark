@@ -1506,6 +1506,30 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
     }
   }
 
+  test("deeply nested Any-in-Any is rejected as malformed instead of overflowing the stack") {
+    checkWithFileAndClassName("ProtoWithAny") { case (name, descFilePathOpt) =>
+      // Each nested Any level is re-parsed by JsonFormat with a fresh protobuf recursion
+      // limit; without a cross-level budget a deeply nested record overflows the executor
+      // stack with StackOverflowError, which PERMISSIVE mode cannot recover from.
+      var nested = AnyProto.pack(SimpleMessage.newBuilder().setId(1).build())
+      (0 until 2000).foreach(_ => nested = AnyProto.pack(nested))
+      val deeplyNested = ProtoWithAny.newBuilder()
+        .setEventName("deeply-nested")
+        .setDetails(nested)
+        .build()
+        .toByteArray
+      val inputDF = Seq(deeplyNested).toDF("binary")
+
+      val options = Map(
+        ProtobufOptions.CONVERT_ANY_FIELDS_TO_JSON_CONFIG -> "true",
+        "mode" -> "PERMISSIVE")
+      val dfJson = inputDF.select(
+        from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("proto"))
+      // The record is treated as malformed (null in PERMISSIVE mode) and the task survives.
+      assert(dfJson.collect()(0).getStruct(0) == null)
+    }
+  }
+
   test("test explicitly set zero values - proto3") {
     // All fields explicitly zero. Message, map, repeated, and oneof fields
     // are left unset, as null is their zero value.
@@ -2047,11 +2071,10 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
             )
           }
         } else {
-          if (defaults == "false") {
-            checkAnswer(parsedExplicitZero, expectedEmpty)
-          } else {
-            checkAnswer(parsedExplicitZero, Seq((0)).toDF("int32_val"))
-          }
+          // When unwrapping, a present wrapper carries a value even if it is the inner scalar's
+          // default, so an explicit zero unwraps to 0 regardless of emit.default.values (which
+          // only governs bare proto3 scalars, not a wrapper message's presence).
+          checkAnswer(parsedExplicitZero, Seq((0)).toDF("int32_val"))
         }
 
         // For nonzero, we should get back the number or wrapped version regardless
@@ -2077,6 +2100,35 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
           )
         }
       }
+    }
+  }
+
+  test("well known wrappers with empty container elements unwrap to defaults") {
+    // A repeated/map field of unwrapped wrappers uses a non-null container
+    // (containsNull = false / valueContainsNull = false). A present-but-empty wrapper element
+    // must unwrap to the inner scalar's default, not null -- a null in a non-null container
+    // crashes downstream. Other container-wrapper tests only use non-empty elements, so this
+    // covers the empty-element case for both a repeated and a map field.
+    val message = spark.range(1).select(
+      lit(
+        WellKnownWrapperTypes.newBuilder()
+          .addInt32List(Int32Value.getDefaultInstance) // empty element -> 0
+          .addInt32List(Int32Value.of(7))
+          .putWktMap(1, StringValue.getDefaultInstance) // empty value -> ""
+          .build().toByteArray
+      ).as("raw_proto"))
+
+    val opt = Map("unwrap.primitive.wrapper.types" -> "true")
+    checkWithFileAndClassName("WellKnownWrapperTypes") { case (name, descFilePathOpt) =>
+      val parsed = message.select(
+        from_protobuf_wrapper($"raw_proto", name, descFilePathOpt, opt).as("proto"))
+
+      checkAnswer(
+        parsed.select("proto.int32_list"),
+        spark.range(1).select(typedLit(List(0, 7)).as("int32_list")))
+      checkAnswer(
+        parsed.select("proto.wkt_map"),
+        spark.range(1).select(typedLit(Map(1 -> "")).as("wkt_map")))
     }
   }
 

@@ -367,6 +367,7 @@ cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 if command -v git && command -v cpio && git rev-parse --git-dir 2>/dev/null; then
   git ls-files -z "$SPARK_HOME/python" | cpio -0pdm "$DISTDIR"
+  cp "$SPARK_HOME/python/lib/pyspark.zip" "$DISTDIR/python/lib"
 else
   cp -r "$SPARK_HOME/python" "$DISTDIR"
 fi

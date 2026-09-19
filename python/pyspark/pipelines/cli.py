@@ -22,22 +22,23 @@ Example usage:
     $ bin/spark-pipelines run --spec /path/to/pipeline.yaml
 """
 
-from contextlib import contextmanager
 import argparse
 import glob
 import importlib.util
 import os
-import yaml
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Generator, List, Mapping, Optional, Sequence
 
+import yaml
+
 from pyspark.errors import PySparkException, PySparkTypeError
-from pyspark.sql import SparkSession
+from pyspark.pipelines.add_pipeline_analysis_context import add_pipeline_analysis_context
 from pyspark.pipelines.block_session_mutations import block_session_mutations
 from pyspark.pipelines.graph_element_registry import (
-    graph_element_registration_context,
     GraphElementRegistry,
+    graph_element_registration_context,
 )
 from pyspark.pipelines.init_cli import init
 from pyspark.pipelines.logging_utils import log_with_curr_timestamp
@@ -46,11 +47,10 @@ from pyspark.pipelines.spark_connect_graph_element_registry import (
 )
 from pyspark.pipelines.spark_connect_pipeline import (
     create_dataflow_graph,
-    start_run,
     handle_pipeline_events,
+    start_run,
 )
-
-from pyspark.pipelines.add_pipeline_analysis_context import add_pipeline_analysis_context
+from pyspark.sql import SparkSession
 
 PIPELINE_SPEC_FILE_NAMES = ["spark-pipeline.yaml", "spark-pipeline.yml"]
 

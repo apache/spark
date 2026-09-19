@@ -369,12 +369,13 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
                 ("Running", "hold", "Are you sure you want to hold this application? All " +
                   "executors will be decommissioned after finishing their running tasks.")
               }
+              val label = action.capitalize
               <li>
                 <strong>Application:</strong>
                 {status}
-                <a href={s"$basePathUri/jobs/$action/"}
+                <a href={s"$basePathUri/jobs/$action/"} role="button"
                    data-confirm-message={confirm}
-                   class="confirm-link">{s"($action)"}</a>
+                   class="btn btn-sm btn-outline-secondary confirm-link">{label}</a>
                 {parent.lastHoldRequestStatus.getOrElse("")}
               </li>
             }
@@ -614,9 +615,9 @@ private[ui] class JobPagedTable(
     val killLink = if (killEnabled) {
       // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
       val killLinkUri = s"$basePath/jobs/job/kill/?id=${job.jobId}"
-      <a href={killLinkUri}
+      <a href={killLinkUri} role="button"
          data-kill-message={s"Are you sure you want to kill job ${job.jobId} ?"}
-         class="kill-link float-end">(kill)</a>
+         class="btn btn-sm btn-outline-danger kill-link float-end">Kill</a>
     } else {
       Seq.empty
     }

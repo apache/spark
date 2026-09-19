@@ -14,104 +14,104 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import uuid
-
+import functools
 import json
-import threading
 import os
 import sys
+import threading
+import urllib
+import uuid
 import warnings
 from collections.abc import Callable, Sized
-import functools
 from threading import RLock
 from types import TracebackType
 from typing import (
-    Optional,
+    TYPE_CHECKING,
     Any,
-    Iterator,
-    Union,
+    ClassVar,
     Dict,
+    Iterable,
+    Iterator,
     List,
+    Mapping,
+    Optional,
+    Set,
     Tuple,
     Type,
-    Set,
+    Union,
     cast,
     overload,
-    Iterable,
-    Mapping,
-    TYPE_CHECKING,
-    ClassVar,
 )
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 from pandas.api.types import is_datetime64_dtype, is_timedelta64_dtype
-import urllib
 
-from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.dataframe import DataFrame as ParentDataFrame
-from pyspark.sql.connect.logging import logger
-from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
-from pyspark.sql.connect.conf import RuntimeConf
-from pyspark.sql.connect.plan import (
-    SQL,
-    Range,
-    LocalRelation,
-    LogicalPlan,
-    ChunkedCachedLocalRelation,
-    CachedRelation,
-    CachedRemoteRelation,
-    SubqueryAlias,
-)
-from pyspark.sql.connect.functions import builtin as F
-from pyspark.sql.connect.profiler import ProfilerCollector
-from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.connect.streaming.readwriter import DataStreamReader
-from pyspark.sql.connect.streaming.query import StreamingQueryManager
-from pyspark.sql.pandas.conversion import create_arrow_table_from_pandas
-from pyspark.sql.pandas.types import (
-    to_arrow_schema,
-    _deduplicate_field_names,
-    from_arrow_schema,
-    from_arrow_type,
-    _check_arrow_table_timestamps_localize,
-)
-from pyspark.sql.profiler import Profile
-from pyspark.sql.session import classproperty, SparkSession as PySparkSession
-from pyspark.sql.types import (
-    _infer_schema,
-    _has_nulltype,
-    _merge_type,
-    Row,
-    DataType,
-    DayTimeIntervalType,
-    StructType,
-    AtomicType,
-    TimestampType,
-    MapType,
-    StringType,
-)
-from pyspark.sql.utils import to_str
 from pyspark.errors import (
     AnalysisException,
+    PySparkAssertionError,
     PySparkAttributeError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
-    PySparkValueError,
     PySparkTypeError,
-    PySparkAssertionError,
+    PySparkValueError,
 )
+from pyspark.sql.connect.client import DefaultChannelBuilder, SparkConnectClient
+from pyspark.sql.connect.conf import RuntimeConf
+from pyspark.sql.connect.dataframe import DataFrame
+from pyspark.sql.connect.functions import builtin as F
+from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.plan import (
+    SQL,
+    CachedRelation,
+    CachedRemoteRelation,
+    ChunkedCachedLocalRelation,
+    LocalRelation,
+    LogicalPlan,
+    Range,
+    SubqueryAlias,
+)
+from pyspark.sql.connect.profiler import ProfilerCollector
+from pyspark.sql.connect.readwriter import DataFrameReader
+from pyspark.sql.connect.streaming.query import StreamingQueryManager
+from pyspark.sql.connect.streaming.readwriter import DataStreamReader
+from pyspark.sql.dataframe import DataFrame as ParentDataFrame
+from pyspark.sql.pandas.conversion import create_arrow_table_from_pandas
+from pyspark.sql.pandas.types import (
+    _check_arrow_table_timestamps_localize,
+    _deduplicate_field_names,
+    from_arrow_schema,
+    from_arrow_type,
+    to_arrow_schema,
+)
+from pyspark.sql.profiler import Profile
+from pyspark.sql.session import SparkSession as PySparkSession
+from pyspark.sql.session import classproperty
+from pyspark.sql.types import (
+    AtomicType,
+    DataType,
+    DayTimeIntervalType,
+    MapType,
+    Row,
+    StringType,
+    StructType,
+    TimestampType,
+    _has_nulltype,
+    _infer_schema,
+    _merge_type,
+)
+from pyspark.sql.utils import to_str
 
 if TYPE_CHECKING:
     import pyspark.sql.connect.proto as pb2
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
+    from pyspark.sql.connect.datasource import DataSourceRegistration
+    from pyspark.sql.connect.shell.progress import ProgressHandler
+    from pyspark.sql.connect.tvf import TableValuedFunction
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
-    from pyspark.sql.connect.tvf import TableValuedFunction
-    from pyspark.sql.connect.shell.progress import ProgressHandler
-    from pyspark.sql.connect.datasource import DataSourceRegistration
 
 
 class SparkSession:
@@ -1232,7 +1232,7 @@ class SparkSession:
 
         Returns the authentication token that should be used to connect to this session.
         """
-        from pyspark import SparkContext, SparkConf
+        from pyspark import SparkConf, SparkContext
 
         session = PySparkSession._instantiatedSession
         if session is None or session._sc._jsc is None:
@@ -1406,11 +1406,12 @@ SparkSession.__doc__ = PySparkSession.__doc__
 
 
 def _test() -> None:
+    import doctest
     import os
     import sys
-    import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.session
+    from pyspark.sql import SparkSession as PySparkSession
 
     globs = pyspark.sql.connect.session.__dict__.copy()
     globs["spark"] = (

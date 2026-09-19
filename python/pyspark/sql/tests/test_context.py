@@ -25,7 +25,7 @@ import py4j
 
 from pyspark import SparkContext, SQLContext
 from pyspark.sql import Row, SparkSession
-from pyspark.sql.types import StructType, StringType, StructField
+from pyspark.sql.types import StringType, StructField, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

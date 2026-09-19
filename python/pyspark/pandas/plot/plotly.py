@@ -21,11 +21,11 @@ from typing import TYPE_CHECKING, Union
 import pandas as pd
 
 from pyspark.pandas.plot import (
-    HistogramPlotBase,
-    name_like_string,
-    PandasOnSparkPlotAccessor,
     BoxPlotBase,
+    HistogramPlotBase,
     KdePlotBase,
+    PandasOnSparkPlotAccessor,
+    name_like_string,
 )
 
 if TYPE_CHECKING:
@@ -50,9 +50,9 @@ def plot_pandas_on_spark(data: Union["ps.DataFrame", "ps.Series"], kind: str, **
 
 
 def plot_pie(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
+    import plotly.graph_objs as go
     from plotly import express
     from plotly.subplots import make_subplots
-    import plotly.graph_objs as go
 
     data = PandasOnSparkPlotAccessor.pandas_plot_data_map["pie"](data)
     subplots = kwargs.pop("subplots", False)
@@ -99,6 +99,7 @@ def plot_pie(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
 
 def plot_histogram(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     import plotly.graph_objs as go
+
     import pyspark.pandas as ps
 
     bins = kwargs.get("bins", 10)
@@ -147,6 +148,7 @@ def plot_histogram(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
 
 def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     import plotly.graph_objs as go
+
     import pyspark.pandas as ps
     from pyspark.sql.types import NumericType
 
@@ -241,6 +243,7 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
 
 def plot_kde(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     from plotly import express
+
     import pyspark.pandas as ps
 
     if isinstance(data, ps.DataFrame) and "color" not in kwargs:
