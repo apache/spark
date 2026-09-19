@@ -584,8 +584,15 @@ trait UnresolvedStarBase extends Star with Unevaluable {
       // keep any restrictions that may break column resolution for normal attributes.
       // See SPARK-42084 for more details.
       .map(_.markAsAllowAnyAccess())
-    val expandedAttributes = (hiddenOutput ++ parameters.childOperatorOutput)
-      .filter(matchedQualifier(_, target.get, parameters.resolver))
+    // Hidden output may also contain visible attributes to fix their position in the expansion,
+    // as the SQL pipe SET operator does to keep the original column order (SPARK-59146). Emit
+    // each such attribute once, at its hidden position, using the visible attribute itself.
+    val visibleById = parameters.childOperatorOutput.map(a => a.exprId -> a).toMap
+    val hiddenIds = hiddenOutput.map(_.exprId).toSet
+    val expandedAttributes =
+      (hiddenOutput.map(a => visibleById.getOrElse(a.exprId, a)) ++
+        parameters.childOperatorOutput.filterNot(a => hiddenIds.contains(a.exprId)))
+        .filter(matchedQualifier(_, target.get, parameters.resolver))
 
     if (expandedAttributes.nonEmpty) return expandedAttributes
 
@@ -640,11 +647,20 @@ trait UnresolvedStarBase extends Star with Unevaluable {
  *                     expressions removed by EXCEPT. If present, the length of this list must
  *                     be the same as the length of the EXCEPT list. This supports replacing
  *                     expressions instead of excluding them from the original SELECT list.
+ *
+ * @param retainExceptedColumnsAsHidden if true, the excluded attributes are kept as the hidden
+ *                                      output of the enclosing [[Project]], so that they remain
+ *                                      reachable through their table alias. The SQL pipe SET
+ *                                      operator sets this, since it documents that table aliases
+ *                                      keep referring to the original row values after an
+ *                                      assignment. It stays false for SELECT * EXCEPT, where the
+ *                                      excluded columns must not be reachable at all.
  */
 case class UnresolvedStarExceptOrReplace(
     target: Option[Seq[String]],
     excepts: Seq[Seq[String]],
-    replacements: Option[Seq[NamedExpression]])
+    replacements: Option[Seq[NamedExpression]],
+    retainExceptedColumnsAsHidden: Boolean = false)
   extends LeafExpression with UnresolvedStarBase {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR_EXCEPT_OR_REPLACE)
