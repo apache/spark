@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.unsafe.Platform
 
 /**
  * Performs an AS-OF join using sort-merge. Both sides are co-partitioned
@@ -235,6 +236,13 @@ private[joins] class SortMergeAsOfJoinScanner(
     rightPeek = rightToUnsafe(rightIter.next()).copy()
   }
 
+  // Reused, detached holder for the retained best match: the winning row's bytes are copied in
+  // place instead of allocating a fresh copy for every candidate. It owns its byte[], so it stays
+  // valid across rightGroupBuffer refills/spills (the same guarantee the previous rightRow.copy()
+  // gave).
+  private val bestMatchRow = new UnsafeRow(rightOutput.length)
+  private var bestMatchBuffer: Array[Byte] = _
+
   def close(): Unit = {
     spillSize += rightGroupBuffer.spillSize
     rightGroupBuffer.clear()
@@ -357,6 +365,18 @@ private[joins] class SortMergeAsOfJoinScanner(
     rightDone = true
   }
 
+  // Copies `row` into the reused best-match holder (see `bestMatchRow`) and returns it.
+  private def retainBestMatch(row: UnsafeRow): UnsafeRow = {
+    val numBytes = row.getSizeInBytes
+    if (bestMatchBuffer == null || bestMatchBuffer.length < numBytes) {
+      bestMatchBuffer = new Array[Byte](numBytes)
+    }
+    Platform.copyMemory(row.getBaseObject, row.getBaseOffset,
+      bestMatchBuffer, Platform.BYTE_ARRAY_OFFSET, numBytes)
+    bestMatchRow.pointTo(bestMatchBuffer, numBytes)
+    bestMatchRow
+  }
+
   /**
    * Find the best matching right row using forward-only scan.
    *
@@ -398,7 +418,7 @@ private[joins] class SortMergeAsOfJoinScanner(
         }
         if (residualSatisfied) {
           // Last match wins (closest right.t to left.t)
-          bestMatch = rightRow.copy()
+          bestMatch = retainBestMatch(rightRow)
         }
       } else if (bestMatch != null) {
         // as-of condition transitioned true -> false (monotone for Backward).
@@ -432,7 +452,7 @@ private[joins] class SortMergeAsOfJoinScanner(
           val distance = boundOrderExpr.eval(joinedRow)
           if (distance != null) {
             if (bestMatch == null || distanceOrdering.lt(distance, bestDistance)) {
-              bestMatch = rightRow.copy()
+              bestMatch = retainBestMatch(rightRow)
               bestDistance = distance
             } else {
               // Distance is increasing past the minimum. For Forward,
