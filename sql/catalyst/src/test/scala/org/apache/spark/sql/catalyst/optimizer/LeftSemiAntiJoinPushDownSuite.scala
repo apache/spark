@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
@@ -140,6 +141,48 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     comparePlans(optimized, originalQuery.analyze)
+  }
+
+  test("Aggregate: NAAJ pushdown follows the effective broadcast threshold") {
+    val aggregate = testRelation.groupBy($"b")($"b")
+    val equality = $"b" === $"d"
+    val originalQuery = aggregate.join(
+      testRelation1,
+      joinType = LeftAnti,
+      condition = Some(equality || IsNull(equality)))
+    val pushedDownQuery = testRelation
+      .join(
+        testRelation1,
+        joinType = LeftAnti,
+        condition = Some(equality || IsNull(equality)))
+      .groupBy($"b")($"b")
+    val largeRight = StatsTestPlan(
+      outputList = testRelation1.output,
+      rowCount = 20 * 1024 * 1024,
+      attributeStats = AttributeMap.empty,
+      size = Some(20 * 1024 * 1024))
+    val largeRightQuery = aggregate.join(
+      largeRight,
+      joinType = LeftAnti,
+      condition = Some(equality || IsNull(equality)))
+
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      comparePlans(Optimize.execute(originalQuery.analyze), pushedDownQuery.analyze)
+    }
+
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+    }
+
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      comparePlans(Optimize.execute(largeRightQuery.analyze), largeRightQuery.analyze)
+    }
   }
 
   test("Aggregate: LeftSemi join no pushdown") {

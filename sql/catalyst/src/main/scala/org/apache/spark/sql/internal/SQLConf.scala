@@ -7452,12 +7452,22 @@ object SQLConf {
         "single-column null-aware anti join for which Spark uses the broadcast hash join " +
         "optimization. This configuration takes effect only when " +
         "spark.sql.optimizeNullAwareAntiJoin is enabled. A negative value allows the " +
-        "optimization regardless of the estimated size, while zero disables it. If the " +
-        "estimated size exceeds a positive value, Spark falls back to regular join planning. " +
+        "optimization regardless of the estimated size. For a nonnegative value, the " +
+        "optimization is also allowed when regular join planning considers the right side " +
+        "broadcastable. " +
+        "For join selection, regular planning uses " +
+        "spark.sql.adaptive.autoBroadcastJoinThreshold for runtime statistics when it is set, " +
+        "and spark.sql.autoBroadcastJoinThreshold otherwise. The same eligibility decision " +
+        "controls whether a null-aware anti join can be pushed below an aggregate; this " +
+        "pushdown runs before adaptive execution and therefore uses estimated statistics and " +
+        "spark.sql.autoBroadcastJoinThreshold. Thus, zero disables the optimization only when " +
+        "automatic broadcasting is also disabled. When neither threshold admits the right " +
+        "side, Spark falls back to regular join planning. " +
         "The fallback may still broadcast the right side with a nested-loop representation " +
         "that uses more memory and runs in O(M * N) time. Join hints do not override this " +
-        "configuration when the broadcast hash optimization is selected. This configuration " +
-        "also controls whether a null-aware anti join can be pushed below an aggregate.")
+        "configuration when the broadcast hash optimization is selected. Set " +
+        "spark.sql.optimizeNullAwareAntiJoin to false to disable the optimization without " +
+        "changing automatic broadcast thresholds.")
       .version("4.2.1")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
