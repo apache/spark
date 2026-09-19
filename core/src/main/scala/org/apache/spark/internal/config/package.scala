@@ -3043,7 +3043,8 @@ package object config {
   private[spark] val JAR_IVY_SETTING_PATH =
     ConfigBuilder(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
       .doc("Path to an Ivy settings file to customize resolution of jars specified " +
-        "using spark.jars.packages instead of the built-in defaults, such as maven central. " +
+        "using spark.jars.packages or ivy:// URIs passed to SparkSession.addArtifact instead " +
+        "of the built-in defaults, such as maven central. " +
         "Additional repositories given by the command-line option --repositories " +
         "or spark.jars.repositories will also be included. " +
         "Useful for allowing Spark to resolve artifacts from behind a firewall " +
@@ -3052,6 +3053,28 @@ package object config {
       .version("2.2.0")
       .stringConf
       .createOptional
+
+  private[spark] val JAR_IVY_CONNECT_TIMEOUT =
+    ConfigBuilder("spark.jars.ivyConnectTimeout")
+      .doc("Connection timeout for Ivy repository requests made during runtime dependency " +
+        "resolution. This must be set before the SparkContext starts.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(
+        timeout => timeout > 0 && timeout <= Int.MaxValue,
+        s"Timeout must be positive and no greater than ${Int.MaxValue} milliseconds.")
+      .createWithDefaultString("30s")
+
+  private[spark] val JAR_IVY_READ_TIMEOUT =
+    ConfigBuilder("spark.jars.ivyReadTimeout")
+      .doc("Read timeout for Ivy repository requests made during runtime dependency resolution. " +
+        "This must be set before the SparkContext starts.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(
+        timeout => timeout > 0 && timeout <= Int.MaxValue,
+        s"Timeout must be positive and no greater than ${Int.MaxValue} milliseconds.")
+      .createWithDefaultString("5m")
 
   private[spark] val JAR_PACKAGES =
     ConfigBuilder("spark.jars.packages")
@@ -3080,7 +3103,8 @@ package object config {
   private[spark] val JAR_REPOSITORIES =
     ConfigBuilder("spark.jars.repositories")
       .doc("Comma-separated list of additional remote repositories to search " +
-        "for the maven coordinates given with --packages or spark.jars.packages.")
+        "for the maven coordinates given with --packages, spark.jars.packages, or ivy:// URIs " +
+        "passed to SparkSession.addArtifact.")
       .version("2.3.0")
       .stringConf
       .toSequence

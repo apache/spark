@@ -21,6 +21,7 @@ import java.io.{File, OutputStream, PrintStream}
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
+import java.util.concurrent.CancellationException
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -37,6 +38,7 @@ class MavenUtilsSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
     with BeforeAndAfterEach {
 
+  private val resolverTimeoutMs = 30 * 1000
   private var tempIvyPath: String = _
 
   private val noOpOutputStream = new OutputStream {
@@ -100,6 +102,21 @@ class MavenUtilsSuite
     }
   }
 
+  test("runtime resolver configures Ivy network timeouts") {
+    val settings = MavenUtils.buildIvySettings(None, Some(tempIvyPath))
+
+    MavenUtils.setResolverTimeouts(settings, connectTimeoutMs = 1234, readTimeoutMs = 5678)
+
+    val resolvers = settings.getDefaultResolver
+      .asInstanceOf[ChainResolver]
+      .getResolvers
+      .asScala
+      .collect { case resolver: AbstractResolver => resolver }
+    assert(resolvers.nonEmpty)
+    assert(resolvers.forall(_.getTimeoutConstraint.getConnectionTimeout == 1234))
+    assert(resolvers.forall(_.getTimeoutConstraint.getReadTimeout == 5678))
+  }
+
   test("add dependencies works correctly") {
     val md = MavenUtils.getModuleDescriptor
     val artifacts = MavenUtils.extractMavenCoordinates("com.databricks:spark-csv_2.12:0.1," +
@@ -142,6 +159,58 @@ class MavenUtilsSuite
         transitive = true,
         isTest = true)
       assert(jarPath.forall(_.indexOf(tempIvyPath) >= 0), "should use non-default ivy path")
+    }
+  }
+
+  test("runtime dependency resolver loads custom Ivy settings") {
+    val main = MavenCoordinate("my.runtime.lib", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val settings = Paths.get(tempIvyPath, "ivysettings.xml")
+      Files.writeString(
+        settings,
+        s"""<ivysettings>
+           |  <settings defaultResolver="runtime"/>
+           |  <resolvers>
+           |    <ibiblio name="runtime" m2compatible="true" root="$repo"/>
+           |  </resolvers>
+           |</ivysettings>""".stripMargin)
+      val resolver = new RuntimeDependencyResolver(
+        ivySettingsPath = Some(settings.toString),
+        configuredRepositories = Nil,
+        ivyPath = Some(tempIvyPath))
+
+      val resolved = resolver.resolve(
+        URI.create(s"ivy://${main.toString}"),
+        resolverTimeoutMs,
+        resolverTimeoutMs)
+
+      assert(resolved.exists(_.getFileName.toString.contains("my.runtime.lib_mylib-0.1")))
+      assert(resolved.forall(_.startsWith(Paths.get(tempIvyPath))))
+    }
+  }
+
+  test("runtime dependency resolver applies the repository policy") {
+    val resolver = new RuntimeDependencyResolver(None, Nil, Some(tempIvyPath))
+    val error = intercept[IllegalArgumentException] {
+      resolver.resolve(
+        URI.create("ivy://my.runtime.lib:mylib:0.1?repos=https://example.com/repository"),
+        resolverTimeoutMs,
+        resolverTimeoutMs,
+        RuntimeDependencyResolver.RejectRequestedRepositories)
+    }
+
+    assert(error.getMessage.contains("do not allow repositories"))
+  }
+
+  test("runtime dependency resolver honors cancellation before resolution") {
+    val resolver = new RuntimeDependencyResolver(None, Nil, Some(tempIvyPath))
+
+    intercept[CancellationException] {
+      resolver.resolve(
+        URI.create("ivy://my.runtime.lib:mylib:0.1"),
+        resolverTimeoutMs,
+        resolverTimeoutMs,
+        isCancelled = () => true)
     }
   }
 
