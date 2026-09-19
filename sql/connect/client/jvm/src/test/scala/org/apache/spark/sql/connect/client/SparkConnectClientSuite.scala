@@ -45,8 +45,11 @@ class SparkConnectClientSuite extends ConnectFunSuite {
   private var service: DummySparkConnectService = _
   private var server: Server = _
 
-  private def startDummyServer(port: Int, interceptors: Seq[ServerInterceptor] = Seq()): Unit = {
-    service = new DummySparkConnectService
+  private def startDummyServer(
+      port: Int,
+      interceptors: Seq[ServerInterceptor] = Seq(),
+      dummyService: DummySparkConnectService = new DummySparkConnectService): Unit = {
+    service = dummyService
     val serverBuilder = NettyServerBuilder
       .forPort(port)
       .addService(service)
@@ -76,6 +79,111 @@ class SparkConnectClientSuite extends ConnectFunSuite {
   test("SPARK-51391: Use 'user.name' by default") {
     client = SparkConnectClient.builder().build()
     assert(client.userId == System.getProperty("user.name"))
+  }
+
+  Seq(false, true).foreach { reattachable =>
+    test(s"client generates an operation ID for ExecutePlan requests ($reattachable)") {
+      val operationIdHeaders = mutable.Map.empty[String, Option[String]]
+      val interceptor = new ServerInterceptor {
+        override def interceptCall[ReqT, RespT](
+            call: ServerCall[ReqT, RespT],
+            headers: Metadata,
+            next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
+          val key = Metadata.Key.of(
+            SparkConnectClient.OPERATION_ID_HEADER,
+            Metadata.ASCII_STRING_MARSHALLER)
+          operationIdHeaders.synchronized {
+            operationIdHeaders(call.getMethodDescriptor.getBareMethodName) =
+              Option(headers.get(key))
+          }
+          next.startCall(call, headers)
+        }
+      }
+      val dummyService = if (reattachable) {
+        new DummySparkConnectService {
+          override def executePlan(
+              request: ExecutePlanRequest,
+              responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+            responseObserver.onNext(
+              ExecutePlanResponse
+                .newBuilder()
+                .setSessionId(request.getSessionId)
+                .setOperationId(request.getOperationId)
+                .setResponseId("initial-response")
+                .build())
+            responseObserver.onCompleted()
+          }
+
+          override def reattachExecute(
+              request: proto.ReattachExecuteRequest,
+              responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+            responseObserver.onNext(
+              ExecutePlanResponse
+                .newBuilder()
+                .setSessionId(request.getSessionId)
+                .setOperationId(request.getOperationId)
+                .setResponseId("result-complete")
+                .setResultComplete(proto.ExecutePlanResponse.ResultComplete.newBuilder().build())
+                .build())
+            responseObserver.onCompleted()
+          }
+        }
+      } else {
+        new DummySparkConnectService
+      }
+      startDummyServer(0, Seq(interceptor), dummyService)
+      val builder = SparkConnectClient
+        .builder()
+        .connectionString(s"sc://localhost:${server.getPort}")
+        .option(SparkConnectClient.OPERATION_ID_HEADER, "ignored")
+      if (reattachable) builder.enableReattachableExecute()
+      else builder.disableReattachableExecute()
+      client = builder.build()
+
+      val responses = client.execute(buildPlan("select 1")).toSeq
+      val operationId = responses.head.getOperationId
+
+      UUID.fromString(operationId)
+      assert(responses.forall(_.getOperationId == operationId))
+      assert(operationIdHeaders.synchronized {
+        operationIdHeaders("ExecutePlan").contains(operationId)
+      })
+      if (reattachable) {
+        assert(operationIdHeaders.synchronized {
+          operationIdHeaders("ReattachExecute").contains(operationId)
+        })
+        Eventually.eventually(timeout(5.seconds)) {
+          assert(operationIdHeaders.synchronized {
+            operationIdHeaders("ReleaseExecute").contains(operationId)
+          })
+        }
+      }
+    }
+  }
+
+  test("ExecutePlan exceptions expose the client-generated operation ID") {
+    val failingService = new DummySparkConnectService {
+      override def executePlan(
+          request: ExecutePlanRequest,
+          responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+        responseObserver.onError(Status.INTERNAL.withDescription("expected").asRuntimeException())
+      }
+    }
+    server = NettyServerBuilder.forPort(0).addService(failingService).build().start()
+    service = failingService
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .disableReattachableExecute()
+      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
+      .build()
+
+    val error = intercept[SparkException] {
+      client.execute(buildPlan("select 1")).foreach(_ => ())
+    }
+    val operationId = SparkConnectClient.getOperationId(error)
+    assert(operationId.isDefined)
+    UUID.fromString(operationId.get)
   }
 
   test("Placeholder test: Create SparkConnectClient") {
@@ -898,6 +1006,34 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     }
   }
 
+  test("transport errors preserve the original gRPC status exception as the cause") {
+    val failingService = new DummySparkConnectService {
+      override def analyzePlan(
+          request: AnalyzePlanRequest,
+          responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
+        responseObserver.onError(
+          Status.UNAVAILABLE.withDescription("injected failure").asRuntimeException())
+      }
+    }
+    server = NettyServerBuilder.forPort(0).addService(failingService).build().start()
+    service = failingService
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
+      .build()
+
+    val ex = intercept[SparkException] {
+      client.analyze(proto.AnalyzePlanRequest.newBuilder().setSessionId("abc123").build())
+    }
+    // The original StatusRuntimeException must survive as the cause so that callers
+    // can programmatically inspect the gRPC status code instead of parsing the message.
+    assert(ex.getCause.isInstanceOf[StatusRuntimeException])
+    assert(
+      ex.getCause.asInstanceOf[StatusRuntimeException].getStatus.getCode ==
+        Status.Code.UNAVAILABLE)
+  }
+
   test(
     "SPARK-58094: gRPC keepalive surfaces a bounded failure on a silently dropped " +
       "connection instead of hanging forever") {
@@ -963,9 +1099,8 @@ class SparkConnectClientSuite extends ConnectFunSuite {
         scala.concurrent.Await.result(resultPromise.future, FiniteDuration(15, TimeUnit.SECONDS))
       }
       // scalastyle:on awaitresult
-      // A keepalive-triggered UNAVAILABLE carries no wrapped cause (same as DEADLINE_EXCEEDED,
-      // see GrpcExceptionConverter.toThrowable), so the status code/description is only in the
-      // message.
+      // The status code/description of a keepalive-triggered UNAVAILABLE is part of the
+      // message (see GrpcExceptionConverter.toThrowable).
       assert(ex.getMessage.contains("UNAVAILABLE"))
       assert(ex.getMessage.contains("Keepalive failed"))
     } finally {

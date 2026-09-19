@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayDistinct, ArrayExcept, ArrayIntersect, ArraysOverlap, ArrayTransform, ArrayUnion, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, TransformValues, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayDistinct, ArrayExcept, ArrayIntersect, ArraysOverlap, ArrayTransform, ArrayUnion, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, Or, TransformValues, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -93,6 +93,12 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
             case (l, r) => EqualTo(l, r)
           } ++ condition
           j.copy(condition = Some(newConditions.reduce(And)))
+
+        // The specialized NAAJ is a hash join, but its OR condition is not an equi-join shape.
+        case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
+            if leftKeys.exists(needNormalize) =>
+          val equality = EqualTo(normalize(leftKeys.head), normalize(rightKeys.head))
+          j.copy(condition = Some(Or(equality, IsNull(equality))))
 
         // TODO: ideally Aggregate should also be handled here, but its grouping expressions are
         // mixed in its aggregate expressions. It's unreliable to change the grouping expressions

@@ -285,11 +285,18 @@ object DataType {
           TimestampType
         } else if (p < TimestampLTZNanosType.MIN_PRECISION ||
           p > TimestampLTZNanosType.MAX_PRECISION) {
-          // Reject out-of-range precisions before the feature-flag check so the error is always
-          // INVALID_TIMESTAMP_PRECISION, not FEATURE_NOT_ENABLED.
+          // Reject out-of-range precisions so the error is always INVALID_TIMESTAMP_PRECISION.
           throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_LTZ")
         } else {
-          DataTypeErrors.checkTimestampNanosTypesEnabled()
+          // The nanos preview flag is intentionally NOT enforced here (SPARK-57835). This JSON
+          // path is how a persisted schema is reconstructed from the catalog (e.g.
+          // HiveExternalCatalog.getTable -> DataType.fromJson), so gating it would make a table
+          // written with the flag on completely inaccessible once it is off -- DESCRIBE, SHOW
+          // CREATE TABLE, and even DROP would fail. Instead we mirror TIME (also flag-gated but
+          // reconstructed unconditionally): metadata reads succeed, and the flag is enforced at
+          // analysis/execution time via TypeUtils.failUnsupportedDataType when the data is
+          // actually read, written, or queried. The user-facing SQL parser path
+          // (DataTypeAstBuilder) stays gated, so DDL like TIMESTAMP_LTZ(9) still fails fast.
           TimestampLTZNanosType(p)
         }
       case TIMESTAMP_NTZ_NANOS_TYPE(precision) =>
@@ -305,11 +312,12 @@ object DataType {
           TimestampNTZType
         } else if (p < TimestampNTZNanosType.MIN_PRECISION ||
           p > TimestampNTZNanosType.MAX_PRECISION) {
-          // Reject out-of-range precisions before the feature-flag check so the error is always
-          // INVALID_TIMESTAMP_PRECISION, not FEATURE_NOT_ENABLED.
+          // Reject out-of-range precisions so the error is always INVALID_TIMESTAMP_PRECISION.
           throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_NTZ")
         } else {
-          DataTypeErrors.checkTimestampNanosTypesEnabled()
+          // Not flag-gated on purpose (SPARK-57835); see the TIMESTAMP_LTZ branch above for the
+          // rationale (catalog restoration must be able to reconstruct persisted nanos schemas
+          // regardless of the preview flag).
           TimestampNTZNanosType(p)
         }
       case "timestamp_ltz" => TimestampType

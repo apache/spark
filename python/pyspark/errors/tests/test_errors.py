@@ -118,11 +118,34 @@ class ErrorsTest(unittest.TestCase):
         error = PySparkRuntimeError(errorClass="APPLICATION_NAME_NOT_SET", messageParameters={})
         self.assertIsNone(error.getSqlState())
 
+        # Neither the sub-class nor the main class declares a sqlState.
         error = PySparkRuntimeError(
             errorClass="SESSION_MUTATION_IN_DECLARATIVE_PIPELINE.SET_RUNTIME_CONF",
             messageParameters={"method": "set"},
         )
         self.assertIsNone(error.getSqlState())
+
+        # A sub-class inherits the main class's sqlState.
+        error = PySparkRuntimeError(
+            errorClass="NEAREST_BY_JOIN.UNSUPPORTED_MODE",
+            messageParameters={"mode": "invalid", "supported": "nearest"},
+        )
+        self.assertEqual(error.getSqlState(), "42604")
+
+    def test_sqlstate_is_taken_from_the_main_class(self):
+        # The sqlState is looked up on the main class only, so a sub-class entry never
+        # takes precedence and an unknown sub-class name still resolves.
+        error_reader = ErrorClassesReader()
+        error_reader.error_info_map = {
+            "TEST_ERROR": {
+                "message": ["Error message."],
+                "sqlState": "42604",
+                "sub_class": {"SUBCLASS": {"message": ["Subclass message."], "sqlState": "08003"}},
+            },
+        }
+        self.assertEqual(error_reader.get_sqlstate("TEST_ERROR.SUBCLASS"), "42604")
+        self.assertEqual(error_reader.get_sqlstate("TEST_ERROR.NON_EXISTENT_SUB"), "42604")
+        self.assertIsNone(error_reader.get_sqlstate("NON_EXISTENT_ERROR.SUBCLASS"))
 
 
 if __name__ == "__main__":

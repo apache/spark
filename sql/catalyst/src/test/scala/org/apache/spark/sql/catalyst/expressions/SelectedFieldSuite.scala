@@ -524,6 +524,43 @@ class SelectedFieldSuite extends AnalysisTest {
           StructField("subfield4", IntegerType) :: Nil)) :: Nil), containsNull = false)))
   }
 
+  //  |-- col1: string (nullable = false)
+  //  |-- col2: struct (nullable = true) (metadata = {"outer":"meta"})
+  //  |    |-- field1: long (nullable = true) (metadata = {"inner":"meta"})
+  //  |    |-- field2: long (nullable = true)
+  private val outerMetadata = new MetadataBuilder().putString("outer", "meta").build()
+  private val innerMetadata = new MetadataBuilder().putString("inner", "meta").build()
+  private val structWithMetadata = StructType(ignoredField ::
+    StructField("col2", StructType(
+      StructField("field1", LongType, nullable = true, innerMetadata) ::
+      StructField("field2", LongType) :: Nil), nullable = true, outerMetadata) :: Nil)
+
+  testSelect(structWithMetadata, "col2.field1") {
+    StructField("col2", StructType(
+      StructField("field1", LongType, nullable = true, innerMetadata) :: Nil),
+      nullable = true, outerMetadata)
+  }
+
+  //  |-- col1: string (nullable = false)
+  //  |-- col2: struct (nullable = true)
+  //  |    |-- field3: array (nullable = false)
+  //  |    |    |-- element: struct (containsNull = true)
+  //  |    |    |    |-- subfield1: long (nullable = true) (metadata = {"elem":"meta"})
+  //  |    |    |    |-- subfield2: long (nullable = true)
+  private val elementMetadata = new MetadataBuilder().putString("elem", "meta").build()
+  private val arrayOfStructWithMetadata = StructType(ignoredField ::
+    StructField("col2", StructType(
+      StructField("field3", ArrayType(StructType(
+        StructField("subfield1", LongType, nullable = true, elementMetadata) ::
+        StructField("subfield2", LongType) :: Nil)), nullable = false) :: Nil)) :: Nil)
+
+  testSelect(arrayOfStructWithMetadata, "col2.field3.subfield1") {
+    StructField("col2", StructType(
+      StructField("field3", ArrayType(StructType(
+        StructField("subfield1", LongType, nullable = true, elementMetadata) :: Nil)),
+        nullable = false) :: Nil))
+  }
+
   def assertResult(expected: StructField)(actual: StructField)(selectExpr: String): Unit = {
     try {
       super.assertResult(expected)(actual)

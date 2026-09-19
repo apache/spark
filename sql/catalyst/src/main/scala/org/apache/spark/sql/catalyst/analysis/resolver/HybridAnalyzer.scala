@@ -64,7 +64,14 @@ class HybridAnalyzer(
   private val sampleRateGenerator = new Random()
 
   def apply(plan: LogicalPlan): LogicalPlan = {
+    // Restricted execution mode is enforced by `CheckAnalysis.checkRestrictedMode`, which runs
+    // only in the fixed-point analyzer. When it is enabled, always use the fixed-point analyzer so
+    // the gate cannot be bypassed by enabling the (internal, in-development) single-pass resolver,
+    // which does not run `checkAnalysis`. This routes to the same `resolveInFixedPoint` branch that
+    // runs by default when the single-pass resolver is disabled.
+    val restrictedMode = conf.restrictedModeEnabled
     val dualRun =
+      !restrictedMode &&
       conf.getConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER) &&
       !conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED) &&
       !conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY) &&
@@ -72,9 +79,10 @@ class HybridAnalyzer(
       checkDualRunSampleRate()
 
     withTrackedAnalyzerBridgeState(dualRun) {
-      if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED)) {
+      if (!restrictedMode && conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED)) {
         resolveInSinglePass(plan)
-      } else if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY)) {
+      } else if (!restrictedMode &&
+          conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY)) {
         resolveInSinglePassTentatively(plan)
       } else if (dualRun) {
         resolveInDualRun(plan)
@@ -354,7 +362,8 @@ object HybridAnalyzer {
     SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RELATION_BRIDGING_ENABLED.key,
     SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RUN_EXTENDED_RESOLUTION_CHECKS.key,
     SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_THROW_FROM_RESOLVER_GUARD.key,
-    SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED.key
+    SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED.key,
+    SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key
   )
 
   /**

@@ -33,12 +33,13 @@ import org.apache.orc.mapreduce._
 import org.apache.spark.TaskContext
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SessionStateHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -50,7 +51,11 @@ class OrcFileFormat
   extends FileFormat
   with DataSourceRegister
   with SessionStateHelper
+  with SupportsArchiveFormat
   with Serializable {
+
+  // ORC part-files are often extensionless, so read every archive entry.
+  override protected def archiveEntryFilter(name: String): Boolean = true
 
   override def shortName(): String = "orc"
 
@@ -114,6 +119,10 @@ class OrcFileFormat
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
+    val orcOptions = new OrcOptions(options, getSqlConf(sparkSession))
+    if (orcOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
+      return false
+    }
     true
   }
 
@@ -168,8 +177,10 @@ class OrcFileFormat
         SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
     val orcFilterPushDown = sqlConf.orcFilterPushDown
+    val archiveFormatEnabled = sqlConf.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
+    val fileSourceOptions = new FileSourceOptions(options)
 
-    (file: PartitionedFile) => {
+    def readSingleFile(file: PartitionedFile): Iterator[InternalRow] = {
       val conf = broadcastedConf.value.value
 
       val filePath = file.toPath
@@ -242,6 +253,18 @@ class OrcFileFormat
               unsafeProjection(joinedRow(deserializer.deserialize(value), file.partitionValues)))
           }
         }
+      }
+    }
+
+    (file: PartitionedFile) => {
+      if (archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
+        readLocalizedEntries(
+            file, broadcastedConf.value.value, "orc-archive",
+            fileSourceOptions.archivePathFilterPattern) { entryFile =>
+          readSingleFile(entryFile)
+        }
+      } else {
+        readSingleFile(file)
       }
     }
   }

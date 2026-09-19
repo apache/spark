@@ -255,10 +255,21 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(SQLConf.get.timestampType == TimestampNTZType)
 
+  // Infers driver TIMESTAMP columns that report a sub-microsecond fractional-second scale (7-9)
+  // as the nanosecond-capable timestamp types TIMESTAMP_NTZ(p) / TIMESTAMP_LTZ(p). When disabled
+  // (the default) such columns keep the historical microsecond mapping. Only takes effect when the
+  // `spark.sql.timestampNanosTypes.enabled` preview flag is on.
+  val preferTimestampNanos =
+    parameters
+      .get(JDBC_PREFER_TIMESTAMP_NANOS)
+      .map(_.toBoolean)
+      .getOrElse(false)
+
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
       s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
-        s" It should start with `/*+ ` and end with ` */`.")
+        s" It should start with `/*+ ` and end with ` */`," +
+        s" for example `/*+ INDEX(t1 id_idx) */`.")
       s"$value "
     }).getOrElse("")
 
@@ -366,5 +377,6 @@ object JDBCOptions {
   val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
   val JDBC_PREPARE_QUERY = newOption("prepareQuery")
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
+  val JDBC_PREFER_TIMESTAMP_NANOS = newOption("preferTimestampNanos")
   val JDBC_HINT_STRING = newOption("hint")
 }

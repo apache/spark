@@ -168,7 +168,9 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
     val startAt = Scd2BatchProcessor.startAtColName
     val endAt = Scd2BatchProcessor.endAtColName
     val recordStartAt = Scd2BatchProcessor.recordStartAtFieldName
-    s"$startAt BIGINT, $endAt BIGINT, $col STRUCT<$recordStartAt:BIGINT> NOT NULL"
+    val versionMap = Scd2BatchProcessor.versionMapFieldName
+    s"$startAt BIGINT, $endAt BIGINT, " +
+      s"$col STRUCT<$recordStartAt:BIGINT,$versionMap:MAP<STRING,BOOLEAN>> NOT NULL"
   }
 
   /**
@@ -208,7 +210,8 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
       sequencing: Column,
       columnSelection: Option[ColumnSelection] = None,
       deleteCondition: Option[Column] = None,
-      scdType: ScdType = ScdType.Type1
+      scdType: ScdType = ScdType.Type1,
+      trackHistorySelection: Option[ColumnSelection] = None
   ): AutoCdcFlow = AutoCdcFlow(
     identifier = fullyQualifiedIdentifier(name, Some(catalog), Some(namespace)),
     destinationIdentifier = fullyQualifiedIdentifier(target, Some(catalog), Some(namespace)),
@@ -223,7 +226,8 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
       sequencing = sequencing,
       columnSelection = columnSelection,
       deleteCondition = deleteCondition,
-      storedAsScdType = scdType
+      storedAsScdType = scdType,
+      trackHistorySelection = trackHistorySelection
     )
   )
 
@@ -241,7 +245,8 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
       sequencing: Column,
       columnSelection: Option[ColumnSelection] = None,
       deleteCondition: Option[Column] = None,
-      scdType: ScdType = ScdType.Type1): TestGraphRegistrationContext =
+      scdType: ScdType = ScdType.Type1,
+      trackHistorySelection: Option[ColumnSelection] = None): TestGraphRegistrationContext =
     new TestGraphRegistrationContext(spark) {
       registerTable(target, catalog = Some(catalog), database = Some(namespace))
       registerFlow(autoCdcFlow(
@@ -252,7 +257,8 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
         sequencing = sequencing,
         columnSelection = columnSelection,
         deleteCondition = deleteCondition,
-        scdType = scdType
+        scdType = scdType,
+        trackHistorySelection = trackHistorySelection
       ))
     }
 

@@ -148,7 +148,7 @@ case class JDBCScanBuilder(
       JDBCOptions.JDBC_QUERY_STRING
 
     filteredJDBCOptions == otherSideFilteredJDBCOptions
-  };
+  }
 
   /**
    * Helper method to calculate StructType based on the SupportsPushDownJoin.ColumnWithAlias and

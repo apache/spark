@@ -81,8 +81,14 @@ class ExecutePlanResponseReattachableIterator(
   // - this does it's own custom retry handling
   // - error conversion is wrapped around this in CustomSparkConnectBlockingStub,
   //   this needs raw GRPC errors for retries.
-  private val rawBlockingStub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
-  private val rawAsyncStub = proto.SparkConnectServiceGrpc.newStub(channel)
+  private val operationIdInterceptor = new SparkConnectClient.MetadataHeaderClientInterceptor(
+    Map(SparkConnectClient.OPERATION_ID_HEADER -> operationId))
+  private val rawBlockingStub =
+    proto.SparkConnectServiceGrpc
+      .newBlockingStub(channel)
+      .withInterceptors(operationIdInterceptor)
+  private val rawAsyncStub =
+    proto.SparkConnectServiceGrpc.newStub(channel).withInterceptors(operationIdInterceptor)
 
   private def stubWithDeadline(deadline: Option[FiniteDuration])
       : proto.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub =

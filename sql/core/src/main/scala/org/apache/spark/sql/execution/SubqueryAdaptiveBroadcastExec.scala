@@ -38,7 +38,11 @@ case class SubqueryAdaptiveBroadcastExec(
     onlyInBroadcast: Boolean,
     @transient buildPlan: LogicalPlan,
     buildKeys: Seq[Expression],
-    child: SparkPlan) extends BaseSubqueryExec with UnaryExecNode {
+    child: SparkPlan)(
+    @transient private[sql] val broadcastValueProjection: Option[BroadcastValueProjection] = None)
+  extends BaseSubqueryExec with UnaryExecNode {
+
+  override protected def otherCopyArgs: Seq[AnyRef] = Seq(broadcastValueProjection)
 
   protected override def doExecute(): RDD[InternalRow] = {
     throw QueryExecutionErrors.executeCodePathUnsupportedError("SubqueryAdaptiveBroadcastExec")
@@ -46,9 +50,9 @@ case class SubqueryAdaptiveBroadcastExec(
 
   protected override def doCanonicalize(): SparkPlan = {
     val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, child.output))
-    copy(name = "dpp", buildKeys = keys, child = child.canonicalized)
+    copy(name = "dpp", buildKeys = keys, child = child.canonicalized)(None)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SubqueryAdaptiveBroadcastExec =
-    copy(child = newChild)
+    copy(child = newChild)(broadcastValueProjection)
 }

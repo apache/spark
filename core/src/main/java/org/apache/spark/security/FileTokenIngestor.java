@@ -36,13 +36,13 @@ import org.apache.spark.internal.SparkLoggerFactory;
 /**
  * A {@link TokenIngestor} that reads an OIDC identity token from a file.
  * <p>
- * The file path is typically a Kubernetes projected service account token
+ * The file path typically points to a Kubernetes projected service account token
  * (e.g., {@code /var/run/secrets/tokens/spark-identity}) or a path configured via
  * {@code spark.security.oidc.identityToken.file}.
  * <p>
  * This implementation:
  * <ul>
- *   <li>Detects file rotation via mtime change (only re-parses when the file changes)</li>
+ *   <li>Detects file rotation by comparing file content (only re-parses when it changes)</li>
  *   <li>Parses JWT claims by Base64-decoding the payload segment directly, without
  *       signature verification, since the token is trusted from the local filesystem
  *       and works with both signed (RS256, ES256) and unsigned tokens</li>
@@ -50,7 +50,7 @@ import org.apache.spark.internal.SparkLoggerFactory;
  *       returns empty rather than throwing</li>
  * </ul>
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
 @Private
 public class FileTokenIngestor implements TokenIngestor {
@@ -60,11 +60,17 @@ public class FileTokenIngestor implements TokenIngestor {
 
   private final Path tokenPath;
 
-  // Cached state for rotation detection.
-  // Write order matters for thread-safety: cachedContext must be visible before
-  // lastMtime, so a concurrent reader never sees a new mtime with a stale context.
-  private volatile UserContext cachedContext = null;
-  private volatile long lastMtime = -1L;
+  private volatile CachedToken cachedToken;
+
+  private static final class CachedToken {
+    private final String content;
+    private final UserContext context;
+
+    private CachedToken(String content, UserContext context) {
+      this.content = content;
+      this.context = context;
+    }
+  }
 
   /**
    * Construct a new FileTokenIngestor.
@@ -83,24 +89,22 @@ public class FileTokenIngestor implements TokenIngestor {
         return Optional.empty();
       }
 
-      // File did not change since last successful parse
-      long currentMtime = Files.getLastModifiedTime(tokenPath).toMillis();
-      if (currentMtime == lastMtime && cachedContext != null) {
-        return Optional.of(cachedContext);
-      }
-
       String content = new String(Files.readAllBytes(tokenPath), StandardCharsets.UTF_8).trim();
       if (content.isEmpty()) {
         LOG.warn("Token file is empty: {}", MDC.of(LogKeys.PATH, tokenPath));
         return Optional.empty();
       }
 
+      CachedToken currentCache = cachedToken;
+      if (currentCache != null && content.equals(currentCache.content)) {
+        return Optional.of(currentCache.context);
+      }
+
       Optional<UserContext> userContext = parseJwt(content);
       if (userContext.isPresent()) {
         // If the new file has invalid content, return empty and do NOT
         // fall back to the previously cached context. The caller will retry on next poll.
-        cachedContext = userContext.get();
-        lastMtime = currentMtime;
+        cachedToken = new CachedToken(content, userContext.get());
       }
       return userContext;
     } catch (Exception e) {
@@ -114,8 +118,7 @@ public class FileTokenIngestor implements TokenIngestor {
   /**
    * Parse a JWT token string into a UserContext by Base64-decoding the payload segment.
    * This works with both signed (RS256, ES256) and unsigned (alg:none) tokens since
-   * we never verify the signature - the token is trusted from the local filesystem and
-   * will be re-verified downstream at the STS token exchange.
+   * we never verify the signature - the token is trusted from the local filesystem.
    */
   private Optional<UserContext> parseJwt(String token) {
     try {

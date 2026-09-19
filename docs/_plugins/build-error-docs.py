@@ -89,7 +89,7 @@ def generate_doc_rows(condition_name, condition_details):
             sub_condition_rows.append(
                 """
                 <tr id="{anchor}">
-                    <td></td>
+                    <td>{sql_state}</td>
                     <td class="error-sub-condition">
                         <span class="error-condition-name">
                             <code>
@@ -103,6 +103,9 @@ def generate_doc_rows(condition_name, condition_details):
                 """
                 .format(
                     anchor=anchor_name(condition_name, sub_condition_name),
+                    sql_state=(
+                        condition_details["subClass"][sub_condition_name].get("sqlState", "")
+                    ),
                     # See comment above for explanation of `<wbr />`.
                     sub_condition_name=sub_condition_name.replace("_", "<wbr />_"),
                     message=condition_details["subClass"][sub_condition_name]["message"],

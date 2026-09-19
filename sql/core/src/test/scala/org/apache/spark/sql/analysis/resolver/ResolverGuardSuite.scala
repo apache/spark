@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
 }
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ResolverGuardSuite extends ResolverGuardSuiteBase {
@@ -137,6 +138,17 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     checkResolverGuard("SELECT NAMED_STRUCT('a', 1)")
     checkResolverGuard("SELECT MAP_CONTAINS_KEY(MAP(1, 'a', 2, 'b'), 2)")
     checkResolverGuard("SELECT ARRAY_CONTAINS(ARRAY(1, 2, 3), 2);")
+  }
+
+  test("SQL JSON constructor and path functions") {
+    checkResolverGuard("""SELECT JSON_ARRAY(1, 'x', true)""")
+    checkResolverGuard("""SELECT JSON_ARRAY('[1]' FORMAT JSON)""")
+    checkResolverGuard("""SELECT JSON_VALUE('{"a":1}', '$.a')""")
+    checkResolverGuard("""SELECT JSON_VALUE('{"a":1}', '$.a' RETURNING INT)""")
+    checkResolverGuard("""SELECT JSON_QUERY('{"a":[1]}', '$.a')""")
+    checkResolverGuard("""SELECT JSON_QUERY('{"a":[1]}', '$.a' WITH ARRAY WRAPPER)""")
+    checkResolverGuard("""SELECT JSON_EXISTS('{"a":1}', '$.a')""")
+    checkResolverGuard("""SELECT JSON_EXISTS('{"a":1}', '$.a' TRUE ON ERROR)""")
   }
 
   test("Conditional expressions") {
@@ -452,6 +464,27 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
         "SELECT 1",
         unsupportedReason = Some("configuration: persistentCatalogFirst")
       )
+    }
+  }
+
+  gridTest("ASOF JOIN")(Seq(true, false)) { enabled =>
+    val asOfJoinQuery =
+      "SELECT t.symbol, q.bid_price FROM " +
+      "VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL') AS t(trade_time, symbol) " +
+      "ASOF JOIN VALUES (TIMESTAMP '2026-06-29 10:00:00', 'AAPL', 180.10) " +
+      "AS q(quote_time, symbol, bid_price) " +
+      "MATCH_CONDITION (t.trade_time >= q.quote_time) ON t.symbol = q.symbol"
+    val expectedReason = if (enabled) {
+      None
+    } else {
+      Some("class org.apache.spark.sql.catalyst.plans.logical.AsOfJoin operator resolution")
+    }
+    withSQLConf(
+      SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key ->
+      enabled.toString
+    ) {
+      checkResolverGuard(asOfJoinQuery, expectedReason)
     }
   }
 

@@ -17,37 +17,36 @@
 
 import warnings
 from typing import (
+    TYPE_CHECKING,
     Dict,
     List,
+    Optional,
     Sequence,
     Union,
-    TYPE_CHECKING,
-    Optional,
-    overload,
     cast,
+    overload,
 )
 
-from pyspark.util import PythonEvalType
-from pyspark.sql.group import GroupedData as PySparkGroupedData
-from pyspark.sql.pandas.group_ops import PandasCogroupedOps as PySparkPandasCogroupedOps
-from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
-from pyspark.sql.pandas.typehints import infer_group_arrow_eval_type_from_func
-from pyspark.sql.types import NumericType, StructType
-
 import pyspark.sql.connect.plan as plan
+from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 from pyspark.sql.column import Column
 from pyspark.sql.connect.functions import builtin as F
-from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
+from pyspark.sql.group import GroupedData as PySparkGroupedData
+from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
+from pyspark.sql.pandas.group_ops import PandasCogroupedOps as PySparkPandasCogroupedOps
+from pyspark.sql.pandas.typehints import infer_group_arrow_eval_type_from_func
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor
+from pyspark.sql.types import NumericType, StructType
+from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
-        LiteralType,
-        PandasGroupedMapFunction,
-        GroupedMapPandasUserDefinedFunction,
-        PandasCogroupedMapFunction,
         ArrowCogroupedMapFunction,
         ArrowGroupedMapFunction,
+        GroupedMapPandasUserDefinedFunction,
+        LiteralType,
+        PandasCogroupedMapFunction,
+        PandasGroupedMapFunction,
         PandasGroupedMapFunctionWithState,
     )
     from pyspark.sql.connect.dataframe import DataFrame
@@ -296,8 +295,8 @@ class GroupedData:
     def applyInPandas(
         self, func: "PandasGroupedMapFunction", schema: Union["StructType", str]
     ) -> "DataFrame":
-        from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.pandas.typehints import infer_group_pandas_eval_type_from_func
 
         # Try to infer the eval type from type hints
@@ -342,8 +341,8 @@ class GroupedData:
         outputMode: str,
         timeoutConf: str,
     ) -> "DataFrame":
-        from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.connect.udf import UserDefinedFunction
 
         _validate_vectorized_udf(func, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE)
         udf_obj = UserDefinedFunction(
@@ -387,8 +386,8 @@ class GroupedData:
         initialState: Optional["GroupedData"] = None,
         eventTimeColumnName: str = "",
     ) -> "DataFrame":
-        from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasUdfUtils,
         )
@@ -439,8 +438,8 @@ class GroupedData:
         initialState: Optional["GroupedData"] = None,
         eventTimeColumnName: str = "",
     ) -> "DataFrame":
-        from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasUdfUtils,
         )
@@ -485,8 +484,8 @@ class GroupedData:
     def applyInArrow(
         self, func: "ArrowGroupedMapFunction", schema: Union[StructType, str]
     ) -> "DataFrame":
-        from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.connect.udf import UserDefinedFunction
 
         try:
             # Try to infer the eval type from type hints
@@ -539,8 +538,8 @@ class PandasCogroupedOps:
     def applyInPandas(
         self, func: "PandasCogroupedMapFunction", schema: Union["StructType", str]
     ) -> "DataFrame":
-        from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.connect.udf import UserDefinedFunction
 
         _validate_vectorized_udf(func, PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF)
         if isinstance(schema, str):
@@ -570,8 +569,8 @@ class PandasCogroupedOps:
     def applyInArrow(
         self, func: "ArrowCogroupedMapFunction", schema: Union[StructType, str]
     ) -> "DataFrame":
-        from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.connect.udf import UserDefinedFunction
 
         _validate_vectorized_udf(func, PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF)
         if isinstance(schema, str):
@@ -603,11 +602,12 @@ PandasCogroupedOps.__doc__ = PySparkPandasCogroupedOps.__doc__
 
 
 def _test() -> None:
+    import doctest
     import os
     import sys
-    import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.group
+    from pyspark.sql import SparkSession as PySparkSession
     from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.connect.group.__dict__.copy()

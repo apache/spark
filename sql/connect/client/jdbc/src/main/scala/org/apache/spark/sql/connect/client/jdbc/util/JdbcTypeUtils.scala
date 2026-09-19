@@ -42,6 +42,8 @@ private[jdbc] object JdbcTypeUtils {
     case LongType => Types.BIGINT
     case FloatType => Types.FLOAT
     case DoubleType => Types.DOUBLE
+    case _: CharType => Types.CHAR
+    case _: VarcharType => Types.VARCHAR
     case StringType => Types.VARCHAR
     case _: DecimalType => Types.DECIMAL
     case DateType => Types.DATE
@@ -65,7 +67,7 @@ private[jdbc] object JdbcTypeUtils {
     case LongType => classOf[JLong].getName
     case FloatType => classOf[JFloat].getName
     case DoubleType => classOf[JDouble].getName
-    case StringType => classOf[String].getName
+    case _: StringType => classOf[String].getName
     case _: DecimalType => classOf[JBigDecimal].getName
     case DateType => classOf[Date].getName
     case TimestampType => classOf[Timestamp].getName
@@ -82,7 +84,7 @@ private[jdbc] object JdbcTypeUtils {
   def isSigned(field: StructField): Boolean = field.dataType match {
     case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
          _: DecimalType => true
-    case NullType | BooleanType | StringType | DateType | BinaryType | _: TimeType |
+    case NullType | BooleanType | _: StringType | DateType | BinaryType | _: TimeType |
          TimestampType | TimestampNTZType | _: ArrayType | _: MapType | _: StructType => false
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
@@ -97,6 +99,8 @@ private[jdbc] object JdbcTypeUtils {
     case LongType => 19
     case FloatType => 7
     case DoubleType => 15
+    case c: CharType => c.length
+    case v: VarcharType => v.length
     case StringType => Int.MaxValue
     case DecimalType.Fixed(p, _) => p
     case DateType => 10
@@ -120,7 +124,7 @@ private[jdbc] object JdbcTypeUtils {
     case DoubleType => 15
     case TimestampType => 6
     case TimestampNTZType => 6
-    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | StringType |
+    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | _: StringType |
          DateType | BinaryType | _: TimeType | _: ArrayType | _: MapType | _: StructType => 0
     case DecimalType.Fixed(_, s) => s
     case other =>
@@ -134,7 +138,7 @@ private[jdbc] object JdbcTypeUtils {
       getPrecision(field) + 1 // may have leading negative sign
     case FloatType => 14
     case DoubleType => 24
-    case StringType =>
+    case _: StringType =>
       getPrecision(field)
     case DateType => 10 // length of `YYYY-MM-DD`
     case TimestampType => 29 // length of `YYYY-MM-DD HH:MM:SS.SSSSSS`
@@ -166,6 +170,22 @@ private[jdbc] object JdbcTypeUtils {
   def getNumPrecRadix(field: StructField): Integer = field.dataType match {
     case _: NumericType => 10
     case _ => null
+  }
+
+  /**
+   * JDBC `CHAR_OCTET_LENGTH` is a byte capacity. Spark CHAR/VARCHAR lengths are in
+   * characters, so report `4 * n` (UTF-8 maximum bytes per character), saturating at
+   * `Int.MaxValue`. Unbounded STRING and non-character types keep 0 (not applicable).
+   */
+  def getCharOctetLength(field: StructField): Int = field.dataType match {
+    case c: CharType => maxUtf8OctetLength(c.length)
+    case v: VarcharType => maxUtf8OctetLength(v.length)
+    case _ => 0
+  }
+
+  private def maxUtf8OctetLength(numChars: Int): Int = {
+    val maxChars = Int.MaxValue / 4
+    if (numChars > maxChars) Int.MaxValue else numChars * 4
   }
 
   /**

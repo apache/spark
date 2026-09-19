@@ -24,6 +24,8 @@ import java.util.{Base64 => JBase64, HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.commons.codec.binary.{Base32 => CommonsBase32}
+
 import org.apache.spark.QueryContext
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.InternalRow
@@ -97,7 +99,8 @@ case class ConcatWs(children: Seq[Expression])
       Seq.fill(children.size - 1)(arrayOrStr)
   }
 
-  override def dataType: DataType = children.head.dataType
+  override def dataType: DataType =
+    children.head.dataType
 
   override def nullable: Boolean = children.head.nullable
   override def foldable: Boolean = children.forall(_.foldable)
@@ -280,6 +283,12 @@ case class ConcatWs(children: Seq[Expression])
     and `spark.sql.ansi.enabled` is set to false. If `spark.sql.ansi.enabled` is set to true,
     it throws ArrayIndexOutOfBoundsException for invalid indices.
   """,
+  arguments = """
+    Arguments:
+      * n - An integer expression giving the 1-based index of the input to return.
+      * input1, input2, ... - The input expressions to select from. They can be strings
+          or binary values.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1, 'scala', 'java');
@@ -445,7 +454,8 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 
   def convert(v: UTF8String): UTF8String
 
-  override def dataType: DataType = child.dataType
+  override def dataType: DataType =
+    child.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
@@ -962,6 +972,66 @@ case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with Im
 }
 
 /**
+ * A function that returns the Unicode normalization of a string.
+ */
+// scalastyle:off
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str[, form]) - Returns the Unicode normalization of `str` using the normalization `form`.
+      Valid forms are 'NFC' (default), 'NFD', 'NFKC', and 'NFKD', as defined by Unicode Standard
+      Annex #15: 'NFD'/'NFKD' apply canonical/compatibility decomposition; 'NFC'/'NFKC' apply the
+      same decomposition followed by canonical composition. The form name is case-insensitive.
+      Normalization is backed by Spark's bundled ICU4J library rather than the JVM's own Unicode
+      data, so results are stable across JVM vendors and versions.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression to normalize.
+      * form - a string expression giving the normalization form: 'NFC', 'NFD', 'NFKC', or 'NFKD'.
+          If omitted, 'NFC' is used.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('ﬁ', 'NFKC');
+       fi
+  """,
+  since = "4.4.0",
+  group = "string_funcs")
+// scalastyle:on
+case class Normalize(input: Expression, form: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes with BinaryLike[Expression] {
+  override def nullIntolerant: Boolean = true
+
+  override lazy val replacement: Expression =
+    StaticInvoke(
+      classOf[ExpressionImplUtils],
+      input.dataType,
+      "normalize",
+      Seq(input, form),
+      inputTypes)
+
+  def this(input: Expression) = this(input, Literal("NFC"))
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def nodeName: String = "normalize"
+
+  override def nullable: Boolean = true
+
+  override def left: Expression = input
+
+  override def right: Expression = form
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Normalize = {
+    copy(input = newLeft, form = newRight)
+  }
+
+}
+
+/**
  * Replace all occurrences with string.
  */
 // scalastyle:off line.size.limit
@@ -997,7 +1067,7 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 
   override def nullSafeEval(srcEval: Any, searchEval: Any, replaceEval: Any): Any = {
     CollationSupport.StringReplace.exec(srcEval.asInstanceOf[UTF8String],
-      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String], collationId);
+      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String], collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1005,7 +1075,8 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
       CollationSupport.StringReplace.genCode(src, search, replace, collationId))
   }
 
-  override def dataType: DataType = srcExpr.dataType
+  override def dataType: DataType =
+    srcExpr.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
@@ -1025,9 +1096,24 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 
 object Overlay {
 
+  // `pos - 1` and `pos + length` overflow for positions near the ends of the `int` range,
+  // which turns an empty slice into the whole input and duplicates it around the
+  // replacement. Compute them as `long` and saturate into the `int` range instead, which
+  // is how `substring` already treats out-of-range positions.
+  private def clamp(value: Long): Int =
+    math.max(Int.MinValue.toLong, math.min(Int.MaxValue.toLong, value)).toInt
+
+  // The tail of the result starts at `pos + length`. `substringSQL` derives its end offset from
+  // `start + Int.MaxValue`, which still reaches the end of the input for every position down to
+  // `Int.MinValue + 1` but falls one character short at `Int.MinValue` itself. Both denote the
+  // same tail, the whole input, so raise the floor by one rather than reading the input length,
+  // which would cost an O(n) scan on every call to spare the one extreme position.
+  private def clampTail(value: Long): Int =
+    math.max(Int.MinValue.toLong + 1, math.min(Int.MaxValue.toLong, value)).toInt
+
   def calculate(input: UTF8String, replace: UTF8String, pos: Int, len: Int): UTF8String = {
     val builder = new UTF8StringBuilder
-    builder.append(input.substringSQL(1, pos - 1))
+    builder.append(input.substringSQL(1, clamp(pos.toLong - 1)))
     builder.append(replace)
     // If you specify length, it must be a positive whole number or zero.
     // Otherwise it will be ignored.
@@ -1037,7 +1123,8 @@ object Overlay {
     } else {
       replace.numChars
     }
-    builder.append(input.substringSQL(pos + length, Int.MaxValue))
+    val tail = clampTail(pos.toLong + length)
+    builder.append(input.substringSQL(tail, Int.MaxValue))
     builder.build()
   }
 
@@ -1050,8 +1137,9 @@ object Overlay {
     } else {
       replace.length
     }
-    ByteArray.concat(ByteArray.subStringSQL(input, 1, pos - 1),
-      replace, ByteArray.subStringSQL(input, pos + length, Int.MaxValue))
+    val tail = clampTail(pos.toLong + length)
+    ByteArray.concat(ByteArray.subStringSQL(input, 1, clamp(pos.toLong - 1)),
+      replace, ByteArray.subStringSQL(input, tail, Int.MaxValue))
   }
 }
 
@@ -1099,7 +1187,8 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
     this(str, replace, pos, Literal.create(-1, IntegerType))
   }
 
-  override def dataType: DataType = input.dataType
+  override def dataType: DataType =
+    input.dataType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
     TypeCollection(
@@ -1249,6 +1338,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   @transient private var lastMatching: UTF8String = _
   @transient private var lastReplace: UTF8String = _
   @transient private var dict: JMap[String, String] = _
+  override def stateful: Boolean = true
 
   final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
 
@@ -1287,7 +1377,8 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     })
   }
 
-  override def dataType: DataType = srcExpr.dataType
+  override def dataType: DataType =
+    srcExpr.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
@@ -1367,7 +1458,8 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
   protected def direction: String
 
   override def children: Seq[Expression] = srcStr +: trimStr.toSeq
-  override def dataType: DataType = srcStr.dataType
+  override def dataType: DataType =
+    srcStr.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq.fill(children.size)(StringTypeWithCollation(supportsTrimCollation = true))
 
@@ -1924,7 +2016,8 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   override def nullIntolerant: Boolean = true
   final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
 
-  override def dataType: DataType = strExpr.dataType
+  override def dataType: DataType =
+    strExpr.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeNonCSAICollation(supportsTrimCollation = true),
@@ -1939,7 +2032,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
 
   override def nullSafeEval(str: Any, delim: Any, count: Any): Any = {
     CollationSupport.SubstringIndex.exec(str.asInstanceOf[UTF8String],
-      delim.asInstanceOf[UTF8String], count.asInstanceOf[Int], collationId);
+      delim.asInstanceOf[UTF8String], count.asInstanceOf[Int], collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2023,7 +2116,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
             0
           } else {
             CollationSupport.StringLocate.exec(l.asInstanceOf[UTF8String],
-              r.asInstanceOf[UTF8String], s.asInstanceOf[Int] - 1, collationId) + 1;
+              r.asInstanceOf[UTF8String], s.asInstanceOf[Int] - 1, collationId) + 1
           }
         }
       }
@@ -2137,7 +2230,8 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
   override def second: Expression = len
   override def third: Expression = pad
 
-  override def dataType: DataType = str.dataType
+  override def dataType: DataType =
+    str.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
@@ -2233,7 +2327,8 @@ case class StringRPad(
   override def second: Expression = len
   override def third: Expression = pad
 
-  override def dataType: DataType = str.dataType
+  override def dataType: DataType =
+    str.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
@@ -2289,7 +2384,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
   override def foldable: Boolean = children.forall(_.foldable)
   override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   override def nullable: Boolean = children(0).nullable
-  override def dataType: DataType = children(0).dataType
+  override def dataType: DataType =
+    children(0).dataType
 
   override def inputTypes: Seq[AbstractDataType] =
     StringTypeWithCollation(supportsTrimCollation = true) ::
@@ -2311,10 +2407,18 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
       null
     } else {
       val formatter = new java.util.Formatter(Locale.US)
-      val arglist = children.tail.map(_.eval(input).asInstanceOf[AnyRef])
+      val arglist = children.tail.map(child => toFormatterArg(child.eval(input)))
       UTF8String.fromString(
         formatter.format(pattern.asInstanceOf[UTF8String].toString, arglist: _*).toString)
     }
+  }
+
+  // java.util.Formatter dispatches on the runtime class of its argument and has no case for
+  // Catalyst's Decimal, so %f/%e/%g reject it. java.math.BigDecimal is accepted and stays exact.
+  // %a stays unsupported: Formatter accepts it only for float and double.
+  private def toFormatterArg(value: Any): AnyRef = value match {
+    case d: Decimal => d.toJavaBigDecimal
+    case other => other.asInstanceOf[AnyRef]
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2323,9 +2427,18 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val argListGen = children.tail.map(x => (x.dataType, x.genCode(ctx)))
     val argList = ctx.freshName("argLists")
     val numArgLists = argListGen.length
+    val decimalClass = classOf[Decimal].getName
     val argListCode = argListGen.zipWithIndex.map { case(v, index) =>
+      val argClass = CodeGenerator.javaClass(v._1)
       val value =
-        if (CodeGenerator.boxedType(v._1) != CodeGenerator.javaType(v._1)) {
+        if (argClass == classOf[Decimal]) {
+          // Keep in sync with toFormatterArg in the interpreted path above.
+          s"(${v._2.isNull}) ? null : ${v._2.value}.toJavaBigDecimal()"
+        } else if (argClass.isAssignableFrom(classOf[Decimal])) {
+          // Keep in sync with toFormatterArg in the interpreted path above.
+          s"(${v._2.isNull}) ? null : ((${v._2.value} instanceof $decimalClass) ? " +
+            s"(($decimalClass) ${v._2.value}).toJavaBigDecimal() : ${v._2.value})"
+        } else if (CodeGenerator.boxedType(v._1) != CodeGenerator.javaType(v._1)) {
           // Java primitives get boxed in order to allow null values.
           s"(${v._2.isNull}) ? (${CodeGenerator.boxedType(v._1)}) null : " +
             s"new ${CodeGenerator.boxedType(v._1)}(${v._2.value})"
@@ -2411,7 +2524,8 @@ case class InitCap(child: Expression)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
-  override def dataType: DataType = child.dataType
+  override def dataType: DataType =
+    child.dataType
 
   override def nullSafeEval(string: Any): Any = {
     CollationSupport.InitCap.exec(string.asInstanceOf[UTF8String], collationId, useICU)
@@ -2448,7 +2562,8 @@ case class StringRepeat(str: Expression, times: Expression)
   override def nullIntolerant: Boolean = true
   override def left: Expression = str
   override def right: Expression = times
-  override def dataType: DataType = str.dataType
+  override def dataType: DataType =
+    str.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
@@ -2560,7 +2675,8 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     this(str, pos, Literal(Integer.MAX_VALUE))
   }
 
-  override def dataType: DataType = str.dataType
+  override def dataType: DataType =
+    str.dataType
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
@@ -2624,12 +2740,16 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
+  // Type the literal branches after ImplicitTypeCasts promotes CHAR/VARCHAR to STRING.
+  // Substring then returns STRING, so the If branches match.
+  private lazy val resultType: DataType = str.dataType
+
   override lazy val replacement: Expression = If(
     IsNull(str),
-    Literal(null, str.dataType),
+    Literal(null, resultType),
     If(
       LessThanOrEqual(len, Literal(0)),
-      Literal(UTF8String.EMPTY_UTF8, str.dataType),
+      Literal(UTF8String.EMPTY_UTF8, resultType),
       new Substring(str, UnaryMinus(len, failOnError = false))
     )
   )
@@ -3349,6 +3469,110 @@ object UnBase64 {
   }
 }
 
+/**
+ * Converts the argument from binary to a base 32 string.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(bin) - Converts the argument from a binary `bin` to a base 32 string.",
+  arguments = """
+    Arguments:
+      * bin - The binary value to encode as a base 32 string.
+        An expression that evaluates to a binary.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('foobar');
+       MZXW6YTBOI======
+      > SELECT _FUNC_(x'666f6f626172');
+       MZXW6YTBOI======
+  """,
+  since = "4.3.0",
+  group = "string_funcs")
+case class Base32(child: Expression)
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[Base32],
+    dataType,
+    "encode",
+    Seq(child),
+    Seq(BinaryType),
+    returnNullable = false)
+
+  override def toString: String = s"$prettyName($child)"
+
+  override def prettyName: String = "to_base32"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+object Base32 {
+  private lazy val codec = new CommonsBase32()
+
+  def encode(input: Array[Byte]): UTF8String = {
+    UTF8String.fromBytes(codec.encode(input))
+  }
+}
+
+/**
+ * Converts the argument from a base 32 string to BINARY.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Converts the argument from a base 32 string `str` to a binary.",
+  arguments = """
+    Arguments:
+      * str - The base 32 string to decode to binary.
+        An expression that evaluates to a string.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('MZXW6YTBOI======');
+       foobar
+  """,
+  since = "4.3.0",
+  group = "string_funcs")
+case class UnBase32(child: Expression)
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes {
+
+  override def dataType: DataType = BinaryType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[UnBase32],
+    dataType,
+    "decode",
+    Seq(child),
+    inputTypes,
+    returnNullable = false)
+
+  override def toString: String = s"$prettyName($child)"
+
+  override def prettyName: String = "from_base32"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+object UnBase32 {
+  private lazy val codec = new CommonsBase32()
+
+  def decode(input: UTF8String): Array[Byte] = {
+    codec.decode(input.getBytes)
+  }
+}
+
 object Decode {
   def createExpr(params: Seq[Expression]): Expression = {
     params.length match {
@@ -3737,6 +3961,7 @@ case class FormatNumber(x: Expression, d: Expression)
   // as a decimal separator.
   @transient
   private lazy val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
+  override def stateful: Boolean = true
 
   override protected def nullSafeEval(xObject: Any, dObject: Any): Any = {
     right.dataType match {
@@ -3892,8 +4117,10 @@ case class Sentences(
   def this(str: Expression, language: Expression) = this(str, language, Literal(""))
 
   override def nullable: Boolean = true
-  override def dataType: DataType =
-    ArrayType(ArrayType(str.dataType, containsNull = false), containsNull = false)
+  override def dataType: DataType = {
+    val elementType = str.dataType
+    ArrayType(ArrayType(elementType, containsNull = false), containsNull = false)
+  }
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
@@ -3927,8 +4154,13 @@ case class Sentences(
  */
 case class StringSplitSQL(
     str: Expression,
-    delimiter: Expression) extends BinaryExpression {
-  override def dataType: DataType = ArrayType(str.dataType, containsNull = false)
+    delimiter: Expression) extends BinaryExpression with ExpectsInputTypes {
+  override def dataType: DataType =
+    ArrayType(str.dataType, containsNull = false)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true))
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
   override def left: Expression = str
   override def right: Expression = delimiter
@@ -4015,6 +4247,11 @@ case class SplitPart (
  */
 case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
   override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
+
+  // Not a transforming function: every non-empty value is returned unchanged, so this keeps the
+  // child's type rather than taking the plain-STRING result that String2StringExpression gives
+  // its transforming implementations.
+  override def dataType: DataType = child.dataType
 
   override def nullable: Boolean = true
 

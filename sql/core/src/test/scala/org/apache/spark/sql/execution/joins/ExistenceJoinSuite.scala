@@ -177,6 +177,43 @@ class ExistenceJoinSuite extends SharedSparkSession {
     }
   }
 
+  // Condition: a = c (equi-key) AND b < 3.0 (left-only) AND d < 4.0 (right-only)
+  private lazy val mixedResidualCondition = {
+    And(
+      And(
+        EqualTo(left.col("a").expr, right.col("c").expr),
+        LessThan(left.col("b").expr, Literal(3.0))),
+      LessThan(right.col("d").expr, Literal(4.0)))
+  }
+
+  // Condition: a = c (equi-key) AND d < 4.0 (right-only)
+  private lazy val rightOnlyResidualCondition = {
+    And(
+      EqualTo(left.col("a").expr, right.col("c").expr),
+      LessThan(right.col("d").expr, Literal(4.0)))
+  }
+
+  // Condition: a = c (equi-key) AND b < 3.0 (left-only): the residual conjunct references
+  // only the streamed side, so the split hoists it entirely and restCondition is None.
+  private lazy val leftOnlyResidualCondition = {
+    And(
+      EqualTo(left.col("a").expr, right.col("c").expr),
+      LessThan(left.col("b").expr, Literal(3.0)))
+  }
+
+  protected def testWithSplitStreamedSideCondOnAndOff(
+      testName: String)(f: String => Unit): Unit = {
+    Seq("false", "true").foreach { configValue =>
+      testWithWholeStageCodegenOnAndOff(
+        s"$testName (splitStreamedSideJoinCondition=$configValue)") { _ =>
+        withSQLConf(
+          SQLConf.SPLIT_STREAMED_SIDE_JOIN_CONDITION.key -> configValue) {
+          f(configValue)
+        }
+      }
+    }
+  }
+
   // Note: the input dataframes and expression must be evaluated lazily because
   // the SQLContext should be used only within a test to keep SQL tests stable
   private def testExistenceJoin(
@@ -196,16 +233,22 @@ class ExistenceJoinSuite extends SharedSparkSession {
     val existsAttr = AttributeReference("exists", BooleanType, false)()
     val leftSemiPlus = ExistenceJoin(existsAttr)
     def createLeftSemiPlusJoin(join: SparkPlan): SparkPlan = {
-      val output = join.output.dropRight(1)
-      val condition = if (joinType == LeftSemi) {
-        existsAttr
-      } else {
-        Not(existsAttr)
+      joinType match {
+        case LeftSemi =>
+          val output = join.output.dropRight(1)
+          ProjectExec(output, FilterExec(existsAttr, join))
+        case LeftAnti =>
+          val output = join.output.dropRight(1)
+          ProjectExec(output, FilterExec(Not(existsAttr), join))
+        case _ =>
+          // Only LeftSemi/LeftAnti can be expressed by filtering an ExistenceJoin result.
+          join
       }
-      ProjectExec(output, FilterExec(condition, join))
     }
 
-    testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin") { _ =>
+    val testSemiPlusWrapper = joinType == LeftSemi || joinType == LeftAnti
+
+    testWithSplitStreamedSideCondOnAndOff(s"$testName using ShuffledHashJoin") { _ =>
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
@@ -214,17 +257,19 @@ class ExistenceJoinSuite extends SharedSparkSession {
                 leftKeys, rightKeys, joinType, BuildRight, boundCondition, left, right)),
             expectedAnswer,
             sortAnswers = true)
-          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements.apply(
-              createLeftSemiPlusJoin(ShuffledHashJoinExec(
-                leftKeys, rightKeys, leftSemiPlus, BuildRight, boundCondition, left, right))),
-            expectedAnswer,
-            sortAnswers = true)
+          if (testSemiPlusWrapper) {
+            checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+              EnsureRequirements.apply(
+                createLeftSemiPlusJoin(ShuffledHashJoinExec(
+                  leftKeys, rightKeys, leftSemiPlus, BuildRight, boundCondition, left, right))),
+              expectedAnswer,
+              sortAnswers = true)
+          }
         }
       }
     }
 
-    testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastHashJoin") { _ =>
+    testWithSplitStreamedSideCondOnAndOff(s"$testName using BroadcastHashJoin") { _ =>
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
@@ -233,17 +278,19 @@ class ExistenceJoinSuite extends SharedSparkSession {
                 leftKeys, rightKeys, joinType, BuildRight, boundCondition, left, right)),
             expectedAnswer,
             sortAnswers = true)
-          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements.apply(
-              createLeftSemiPlusJoin(BroadcastHashJoinExec(
-                leftKeys, rightKeys, leftSemiPlus, BuildRight, boundCondition, left, right))),
-            expectedAnswer,
-            sortAnswers = true)
+          if (testSemiPlusWrapper) {
+            checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+              EnsureRequirements.apply(
+                createLeftSemiPlusJoin(BroadcastHashJoinExec(
+                  leftKeys, rightKeys, leftSemiPlus, BuildRight, boundCondition, left, right))),
+              expectedAnswer,
+              sortAnswers = true)
+          }
         }
       }
     }
 
-    testWithWholeStageCodegenOnAndOff(s"$testName using SortMergeJoin") { _ =>
+    testWithSplitStreamedSideCondOnAndOff(s"$testName using SortMergeJoin") { _ =>
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
@@ -251,45 +298,56 @@ class ExistenceJoinSuite extends SharedSparkSession {
               SortMergeJoinExec(leftKeys, rightKeys, joinType, boundCondition, left, right)),
             expectedAnswer,
             sortAnswers = true)
-          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements.apply(
-              createLeftSemiPlusJoin(SortMergeJoinExec(
-                leftKeys, rightKeys, leftSemiPlus, boundCondition, left, right))),
-            expectedAnswer,
-            sortAnswers = true)
+          if (testSemiPlusWrapper) {
+            checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+              EnsureRequirements.apply(
+                createLeftSemiPlusJoin(SortMergeJoinExec(
+                  leftKeys, rightKeys, leftSemiPlus, boundCondition, left, right))),
+              expectedAnswer,
+              sortAnswers = true)
+          }
         }
       }
     }
 
-    test(s"$testName using BroadcastNestedLoopJoin build left") {
-      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          EnsureRequirements.apply(
-            BroadcastNestedLoopJoinExec(left, right, BuildLeft, joinType, condition)),
-          expectedAnswer,
-          sortAnswers = true)
-        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          EnsureRequirements.apply(
-            createLeftSemiPlusJoin(BroadcastNestedLoopJoinExec(
-              left, right, BuildLeft, leftSemiPlus, condition))),
-          expectedAnswer,
-          sortAnswers = true)
+    Seq("false", "true").foreach { configValue =>
+      test(s"$testName using BroadcastNestedLoopJoin build left" +
+        s" (splitStreamedSideJoinCondition=$configValue)") {
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+          SQLConf.SPLIT_STREAMED_SIDE_JOIN_CONDITION.key -> configValue) {
+          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+            EnsureRequirements.apply(
+              BroadcastNestedLoopJoinExec(left, right, BuildLeft, joinType, condition)),
+            expectedAnswer,
+            sortAnswers = true)
+          if (testSemiPlusWrapper) {
+            checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+              EnsureRequirements.apply(
+                createLeftSemiPlusJoin(BroadcastNestedLoopJoinExec(
+                  left, right, BuildLeft, leftSemiPlus, condition))),
+              expectedAnswer,
+              sortAnswers = true)
+          }
+        }
       }
     }
 
-    testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastNestedLoopJoin build right") { _ =>
+    testWithSplitStreamedSideCondOnAndOff(
+      s"$testName using BroadcastNestedLoopJoin build right") { _ =>
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           EnsureRequirements.apply(
             BroadcastNestedLoopJoinExec(left, right, BuildRight, joinType, condition)),
           expectedAnswer,
           sortAnswers = true)
-        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          EnsureRequirements.apply(
-            createLeftSemiPlusJoin(BroadcastNestedLoopJoinExec(
-              left, right, BuildRight, leftSemiPlus, condition))),
-          expectedAnswer,
-          sortAnswers = true)
+        if (testSemiPlusWrapper) {
+          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+            EnsureRequirements.apply(
+              createLeftSemiPlusJoin(BroadcastNestedLoopJoinExec(
+                left, right, BuildRight, leftSemiPlus, condition))),
+            expectedAnswer,
+            sortAnswers = true)
+        }
       }
     }
   }
@@ -401,4 +459,242 @@ class ExistenceJoinSuite extends SharedSparkSession {
     Some(And(EqualTo(left.col("a").expr, rightUniqueKey.col("c").expr),
       LessThan(left.col("b").expr, rightUniqueKey.col("d").expr))),
     Seq(Row(1, 2.0), Row(1, 2.0), Row(3, 3.0), Row(null, null), Row(null, 5.0), Row(6, null)))
+
+  // ---- Tests for streamed-side-only residual predicate hoisting ----
+
+  // LeftAnti: rows where b >= 3.0 OR no right match with d < 4.0
+  // (1, 2.0): no c=1 match -> emitted
+  // (2, 1.0): match exists -> dropped
+  // (3, 3.0): b=3.0 >= 3.0 -> emitted
+  // (null, null): null key -> emitted
+  // (null, 5.0): b=5.0 >= 3.0 -> emitted
+  // (6, null): b=null -> emitted
+  testExistenceJoin(
+    "test mixed residual condition for left anti join",
+    LeftAnti,
+    left,
+    right,
+    Some(mixedResidualCondition),
+    Seq(Row(1, 2.0), Row(1, 2.0), Row(3, 3.0), Row(null, null), Row(null, 5.0), Row(6, null)))
+
+  // LeftOuter: rows where b < 3.0 and right match with d < 4.0 get matched; others emitted as
+  // null-padded. Equi-matches: (2,1.0)-(2,3.0), (3,3.0)-(3,2.0), (6,null)-(6,null).
+  // For (2,1.0): b<3.0 true, right d=3.0<4.0 true -> matched output (2,1.0,2,3.0).
+  //   Both sides contain two rows with the matching key, so the Cartesian product emits 4 rows.
+  // For (3,3.0): b<3.0 false -> emitted as (3,3.0,null,null)
+  // For (6,null): b<3.0 null -> emitted as (6,null,null,null)
+  // For (1,2.0): no equi-match -> emitted as (1,2.0,null,null)
+  // Null keys are emitted as null-padded.
+  testExistenceJoin(
+    "test mixed residual condition for left outer join",
+    LeftOuter,
+    left,
+    right,
+    Some(mixedResidualCondition),
+    Seq(
+      Row(1, 2.0, null, null),
+      Row(1, 2.0, null, null),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(3, 3.0, null, null),
+      Row(null, null, null, null),
+      Row(null, 5.0, null, null),
+      Row(6, null, null, null)))
+
+  // ExistenceJoin with the same mixed residual condition: exists=true only for (2,1.0).
+  testExistenceJoin(
+    "test mixed residual condition for existence join",
+    ExistenceJoin(AttributeReference("exists", BooleanType, false)()),
+    left,
+    right,
+    Some(mixedResidualCondition),
+    Seq(
+      Row(1, 2.0, false),
+      Row(1, 2.0, false),
+      Row(2, 1.0, true),
+      Row(2, 1.0, true),
+      Row(3, 3.0, false),
+      Row(null, null, false),
+      Row(null, 5.0, false),
+      Row(6, null, false)))
+
+  // Inner join is outside the split whitelist: nothing is hoisted and the results must be
+  // identical with the split config on and off.
+  testExistenceJoin(
+    "test mixed residual condition for inner join",
+    Inner,
+    left,
+    right,
+    Some(mixedResidualCondition),
+    Seq(
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0)))
+
+  // Right-only residual: nothing is hoistable (the only residual conjunct references the
+  // non-streamed side), so d < 4.0 must stay in the join condition and the results must be
+  // identical with the split config on and off. Compared to the mixed condition above, the
+  // b < 3.0 conjunct is gone, so (3, 3.0) now matches.
+
+  // LeftAnti: (2, 1.0) and (3, 3.0) match -> dropped; (6, null) has a key match but d is
+  // null -> no qualifying match -> emitted.
+  testExistenceJoin(
+    "test right-only residual condition for left anti join",
+    LeftAnti,
+    left,
+    right,
+    Some(rightOnlyResidualCondition),
+    Seq(Row(1, 2.0), Row(1, 2.0), Row(null, null), Row(null, 5.0), Row(6, null)))
+
+  // LeftOuter: (2, 1.0) matches both right (2, 3.0) rows (2 left rows -> 4 output rows);
+  // (3, 3.0) matches (3, 2.0); everything else is emitted null-padded, including (6, null)
+  // whose key match has d = null.
+  testExistenceJoin(
+    "test right-only residual condition for left outer join",
+    LeftOuter,
+    left,
+    right,
+    Some(rightOnlyResidualCondition),
+    Seq(
+      Row(1, 2.0, null, null),
+      Row(1, 2.0, null, null),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(3, 3.0, 3, 2.0),
+      Row(null, null, null, null),
+      Row(null, 5.0, null, null),
+      Row(6, null, null, null)))
+
+  // ExistenceJoin with the same right-only residual condition: exists=true for (2, 1.0) and
+  // (3, 3.0).
+  testExistenceJoin(
+    "test right-only residual condition for existence join",
+    ExistenceJoin(AttributeReference("exists", BooleanType, false)()),
+    left,
+    right,
+    Some(rightOnlyResidualCondition),
+    Seq(
+      Row(1, 2.0, false),
+      Row(1, 2.0, false),
+      Row(2, 1.0, true),
+      Row(2, 1.0, true),
+      Row(3, 3.0, true),
+      Row(null, null, false),
+      Row(null, 5.0, false),
+      Row(6, null, false)))
+
+  // Left-only residual: the only residual conjunct references the streamed side, so the
+  // split hoists it entirely and restCondition is None. These cases cover the fully-hoisted
+  // shape (SortMergeJoinExec codegen's conditionForCodegen = None branch and the
+  // interpreted always-true rest walk). The expected answers happen to match the
+  // mixed-condition ones above because d < 4.0 is true for every equi-match in the
+  // fixtures; the point of these cases is the restCondition = None code shape.
+
+  // LeftAnti: (2, 1.0) matches -> dropped; (3, 3.0) fails the hoisted b < 3.0; (6, null)
+  // evaluates it to null; null keys never match.
+  testExistenceJoin(
+    "test left-only residual condition for left anti join",
+    LeftAnti,
+    left,
+    right,
+    Some(leftOnlyResidualCondition),
+    Seq(Row(1, 2.0), Row(1, 2.0), Row(3, 3.0), Row(null, null), Row(null, 5.0), Row(6, null)))
+
+  // LeftOuter: (2, 1.0) matches both right (2, 3.0) rows (2 left rows -> 4 output rows);
+  // everything else is emitted null-padded, including (3, 3.0) which fails the hoisted
+  // b < 3.0 and (6, null) for which it is null.
+  testExistenceJoin(
+    "test left-only residual condition for left outer join",
+    LeftOuter,
+    left,
+    right,
+    Some(leftOnlyResidualCondition),
+    Seq(
+      Row(1, 2.0, null, null),
+      Row(1, 2.0, null, null),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(3, 3.0, null, null),
+      Row(null, null, null, null),
+      Row(null, 5.0, null, null),
+      Row(6, null, null, null)))
+
+  // ExistenceJoin with the same left-only residual condition: exists=true only for (2, 1.0).
+  testExistenceJoin(
+    "test left-only residual condition for existence join",
+    ExistenceJoin(AttributeReference("exists", BooleanType, false)()),
+    left,
+    right,
+    Some(leftOnlyResidualCondition),
+    Seq(
+      Row(1, 2.0, false),
+      Row(1, 2.0, false),
+      Row(2, 1.0, true),
+      Row(2, 1.0, true),
+      Row(3, 3.0, false),
+      Row(null, null, false),
+      Row(null, 5.0, false),
+      Row(6, null, false)))
+
+  // Inner join is outside the split whitelist: with a fully streamed-side-only residual,
+  // nothing may be hoisted and the results must be identical with the split config on and
+  // off.
+  testExistenceJoin(
+    "test left-only residual condition for inner join",
+    Inner,
+    left,
+    right,
+    Some(leftOnlyResidualCondition),
+    Seq(
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0)))
+
+  // RightOuter streams the right side, so here d < 4.0 is the streamed-side-only conjunct
+  // and IS hoistable (the mirror of the left-streamed cases above). The hash joins use
+  // BuildLeft so that the right side is the streamed one; right rows with no qualifying
+  // left match are emitted null-padded.
+  testWithSplitStreamedSideCondOnAndOff(
+      "test right-only residual condition for right outer join") { _ =>
+    val join = Join(left.logicalPlan, right.logicalPlan,
+      Inner, Some(rightOnlyResidualCondition), JoinHint.NONE)
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+          val expected = Seq(
+            Row(2, 1.0, 2, 3.0),
+            Row(2, 1.0, 2, 3.0),
+            Row(2, 1.0, 2, 3.0),
+            Row(2, 1.0, 2, 3.0),
+            Row(3, 3.0, 3, 2.0),
+            Row(null, null, 4, 1.0),
+            Row(null, null, null, null),
+            Row(null, null, null, 5.0),
+            Row(null, null, 6, null))
+          checkAnswer2(left, right, (l: SparkPlan, r: SparkPlan) =>
+            EnsureRequirements.apply(
+              SortMergeJoinExec(leftKeys, rightKeys, RightOuter, boundCondition, l, r)),
+            expected, sortAnswers = true)
+          checkAnswer2(left, right, (l: SparkPlan, r: SparkPlan) =>
+            EnsureRequirements.apply(
+              BroadcastHashJoinExec(
+                leftKeys, rightKeys, RightOuter, BuildLeft, boundCondition, l, r)),
+            expected, sortAnswers = true)
+          checkAnswer2(left, right, (l: SparkPlan, r: SparkPlan) =>
+            EnsureRequirements.apply(
+              ShuffledHashJoinExec(
+                leftKeys, rightKeys, RightOuter, BuildLeft, boundCondition, l, r)),
+            expected, sortAnswers = true)
+        }
+    }
+  }
+
 }

@@ -404,7 +404,7 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
           if (UnsafeRowUtils.isBinaryStable(st)) {
             sketch.asInstanceOf[ItemsSketch[String]].update(orig.toString)
           } else {
-            val cKey = CollationFactory.getCollationKey(orig, st.collationId).toString
+            val cKey = CollationFactory.getCollationKeyBytes(orig, st.collationId)
             sketch.asInstanceOf[ItemsSketch[CollatedString]]
               .update(new CollatedString(cKey, orig.toString))
           }
@@ -797,6 +797,15 @@ object CombineInternal {
   usage = """
     _FUNC_(state, maxItemsTracked) - Combines multiple sketches into a single sketch.
       `maxItemsTracked` An optional positive INTEGER literal with upper limit of 1000000. If maxItemsTracked is specified, it will be set for the combined sketch. If maxItemsTracked is not specified, the input sketches must have the same maxItemsTracked value, otherwise an error will be thrown. The output sketch will use the same value from the input sketches.
+  """,
+  arguments = """
+    Arguments:
+      * state - The sketch state to combine, as produced by approx_top_k_accumulate.
+          An expression that evaluates to the sketch state struct.
+      * maxItemsTracked - Optional. The maximum number of items to track in the combined
+          sketch, with an upper limit of 1000000. An expression that evaluates to an integer.
+          Must be a constant. If not specified, the input sketches must share the same
+          maxItemsTracked value, which is used for the output sketch.
   """,
   examples = """
     Examples:

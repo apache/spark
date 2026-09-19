@@ -43,12 +43,12 @@ import org.apache.spark.sql.types.LongType
  */
 class AutoCdcScd1AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSession {
 
+  import testImplicits._
+
   private def targetIdentifier = fullyQualifiedIdentifier("target")
 
   /** Source change feed with data columns `(id, name, version)`. */
   private def sourceDf = {
-    val session = spark
-    import session.implicits._
     val stream = MemoryStream[(Int, String, Long)]
     stream.addData((1, "alice", 1L))
     stream.toDF().toDF("id", "name", "version")
@@ -75,7 +75,9 @@ class AutoCdcScd1AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSe
         deleteCondition = None,
         storedAsScdType = ScdType.Type1)))
     val graph = ctx.resolveToDataflowGraph()
-    graph.auxiliaryTableSpecs(targetIdentifier).asInstanceOf[AutoCdcAuxiliaryTableSpec]
+    val inferredSchemas = graph.inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)
+    graph.auxiliaryTableSpecs(inferredSchemas)(targetIdentifier)
+      .asInstanceOf[AutoCdcAuxiliaryTableSpec]
   }
 
   test("SCD1 aux schema is exactly the key columns plus the CDC metadata column") {
@@ -106,7 +108,7 @@ class AutoCdcScd1AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSe
     assert(spec.properties(AutoCdcAuxiliaryTable.scdTypePropertyKey) == ScdType.Type1.label)
     assert(spec.expectedKeyFields.map(_.name) == Seq("id"))
     assert(
-      AutoCdcAuxiliaryTable.parseKeyColumnNames(
+      AutoCdcAuxiliaryTable.parseColumnNames(
         spec.properties(AutoCdcAuxiliaryTable.keyColumnNamesProperty)).contains(Seq("id")))
     assert(spec.identifier == AutoCdcAuxiliaryTable.identifier(targetIdentifier))
     assert(spec.targetTableIdentifier == targetIdentifier)
@@ -116,7 +118,7 @@ class AutoCdcScd1AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSe
     val spec = scd1AuxSpec(keys = Seq("id", "name"))
     assert(spec.expectedKeyFields.map(_.name) == Seq("id", "name"))
     assert(
-      AutoCdcAuxiliaryTable.parseKeyColumnNames(
+      AutoCdcAuxiliaryTable.parseColumnNames(
         spec.properties(AutoCdcAuxiliaryTable.keyColumnNamesProperty)).contains(Seq("id", "name")))
     // The aux schema is the two keys followed by the metadata column, and nothing else.
     assert(

@@ -77,4 +77,44 @@ public class JsonExpressionUtils {
       return null;
     }
   }
+
+  private static final UTF8String JSON_TYPE_OBJECT = UTF8String.fromString("object");
+  private static final UTF8String JSON_TYPE_ARRAY = UTF8String.fromString("array");
+  private static final UTF8String JSON_TYPE_STRING = UTF8String.fromString("string");
+  private static final UTF8String JSON_TYPE_NUMBER = UTF8String.fromString("number");
+  private static final UTF8String JSON_TYPE_BOOLEAN = UTF8String.fromString("boolean");
+  private static final UTF8String JSON_TYPE_NULL = UTF8String.fromString("null");
+
+  public static UTF8String jsonTypeof(UTF8String json) {
+    try (JsonParser jsonParser =
+        CreateJacksonParser.utf8String(SharedFactory.jsonFactory(), json)) {
+      JsonToken token = jsonParser.nextToken();
+      if (token == null) {
+        return null;
+      }
+      UTF8String type = switch (token) {
+        case START_OBJECT -> JSON_TYPE_OBJECT;
+        case START_ARRAY -> JSON_TYPE_ARRAY;
+        case VALUE_STRING -> JSON_TYPE_STRING;
+        case VALUE_NUMBER_INT, VALUE_NUMBER_FLOAT -> JSON_TYPE_NUMBER;
+        case VALUE_TRUE, VALUE_FALSE -> JSON_TYPE_BOOLEAN;
+        case VALUE_NULL -> JSON_TYPE_NULL;
+        default -> null;
+      };
+      if (type == null) {
+        return null;
+      }
+      // Consume the value so malformed input surfaces as a parse error and returns null,
+      // matching json_object_keys and json_array_length.
+      jsonParser.skipChildren();
+      // Reject trailing content after the first value, e.g. `123 true`, so only a single
+      // well-formed JSON value is accepted.
+      if (jsonParser.nextToken() != null) {
+        return null;
+      }
+      return type;
+    } catch (IOException e) {
+      return null;
+    }
+  }
 }

@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -64,7 +64,7 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
     require(get(outputCol).isDefined, "Output col must be defined first.")
     require($(inputCols).length > 0, "Input cols must have non-zero length.")
     require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
-    StructType(schema.fields :+ StructField($(outputCol), new VectorUDT, false))
+    StructType(schema.fields :+ StructField($(outputCol), SQLDataTypes.VectorType, false))
   }
 
   @Since("2.0.0")

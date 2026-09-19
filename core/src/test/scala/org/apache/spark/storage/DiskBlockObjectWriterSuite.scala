@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.{DeserializationStream, JavaSerializer, SerializationStream, Serializer, SerializerInstance, SerializerManager}
 import org.apache.spark.util.Utils
@@ -213,6 +213,18 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite {
     assert(writeMetrics.recordsWritten == 0)
     assert(bs.isClosed)
     assert(objOut.isClosed)
+  }
+
+  test("write(b: Int) is not supported") {
+    val (writer, _, _) = createWriter()
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        writer.write(1)
+      },
+      condition = "UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "className" -> "org.apache.spark.storage.DiskBlockObjectWriter",
+        "methodName" -> "write"))
   }
 }
 

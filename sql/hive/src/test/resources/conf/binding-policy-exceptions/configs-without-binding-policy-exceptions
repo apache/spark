@@ -453,7 +453,6 @@ spark.sql.ansi.enabled
 spark.sql.ansi.enforceReservedKeywords
 spark.sql.ansi.relationPrecedence
 spark.sql.artifact.cacheStorageLevel
-spark.sql.artifact.copyFromLocalToFs.allowDestLocal
 spark.sql.artifact.isolation.alwaysApplyClassloader
 spark.sql.artifact.isolation.enabled
 spark.sql.assumeAnsiFalseIfNotPersisted.enabled

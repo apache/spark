@@ -20,10 +20,11 @@ package org.apache.spark.sql.pipelines.graph
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 /**
  * Tests for `GraphValidations.validateUserSpecifiedSchemas`, which requires a table's
@@ -100,10 +101,14 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
 
   /** The full inferred AUTO CDC output schema (data columns plus the reserved metadata column). */
   private def autoCdcInferredSchema(flowName: String): StructType =
-    autoCdcGraph(flowName, declaredSchema = None).inferredSchema(targetIdentifier)
+    autoCdcGraph(flowName, declaredSchema = None)
+      .inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)(targetIdentifier)
+
+  private def validateGraph(graph: DataflowGraph): DataflowGraph =
+    graph.validate(spark.sessionState.conf.caseSensitiveAnalysis)
 
   private def assertSchemaIncompatible(graph: DataflowGraph): Unit = {
-    val ex = intercept[AnalysisException](graph.validate())
+    val ex = intercept[AnalysisException](validateGraph(graph))
     assert(ex.getCondition == "USER_SPECIFIED_AND_INFERRED_SCHEMA_NOT_COMPATIBLE")
     assert(ex.getMessage.contains(targetIdentifier.unquotedString))
   }
@@ -111,7 +116,7 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
   // Plain flows: the inferred schema is exactly the source's data columns.
 
   test("compatible user-specified schema is accepted for an implicit plain flow") {
-    plainGraph(flowName = "target", declaredSchema = Some(dataSchema)).validate()
+    validateGraph(plainGraph(flowName = "target", declaredSchema = Some(dataSchema)))
   }
 
   test("incompatible user-specified schema is rejected for an implicit plain flow") {
@@ -120,12 +125,59 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
   }
 
   test("compatible user-specified schema is accepted for a named plain flow") {
-    plainGraph(flowName = "plain_flow", declaredSchema = Some(dataSchema)).validate()
+    validateGraph(plainGraph(flowName = "plain_flow", declaredSchema = Some(dataSchema)))
   }
 
   test("incompatible user-specified schema is rejected for a named plain flow") {
     assertSchemaIncompatible(plainGraph(flowName = "plain_flow", declaredSchema = Some(
       dataSchemaMissingColumn)))
+  }
+
+  test("user-specified schema validation uses pipeline case sensitivity, not session default") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val ctx = new TestGraphRegistrationContext(
+        spark,
+        Map(SQLConf.CASE_SENSITIVE.key -> "true")) {
+        val session = spark
+        import session.implicits._
+
+        registerView("src", query = dfFlowFunc(Seq((1, "alice")).toDF("id", "value")))
+        registerTable(
+          "target",
+          specifiedSchema = Some(
+            new StructType().add("id", IntegerType).add("value", StringType)))
+        registerFlow(
+          destinationName = "target",
+          name = "case_sensitive_flow",
+          query = sqlFlowFunc(spark, "SELECT id, value AS Value FROM src"))
+      }
+
+      assertSchemaIncompatible(ctx.resolveToDataflowGraph())
+    }
+  }
+
+  test("user-specified schema validation uses case sensitivity inherited from upstream view") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val ctx = new TestGraphRegistrationContext(spark) {
+        val session = spark
+        import session.implicits._
+
+        registerPersistedView(
+          "src",
+          query = dfFlowFunc(Seq((1, "alice")).toDF("id", "value")),
+          sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"))
+        registerTable(
+          "target",
+          specifiedSchema = Some(
+            new StructType().add("id", IntegerType).add("value", StringType)))
+        registerFlow(
+          destinationName = "target",
+          name = "case_sensitive_flow",
+          query = sqlFlowFunc(spark, "SELECT id, value AS Value FROM src"))
+      }
+
+      assertSchemaIncompatible(ctx.resolveToDataflowGraph())
+    }
   }
 
   // AUTO CDC flows: the inferred schema appends a reserved metadata column to the data columns.
@@ -144,12 +196,14 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
     // Schema includes the appended metadata column, matching the inferred schema exactly.
     autoCdcGraph(
       flowName = "target",
-      declaredSchema = Some(autoCdcInferredSchema("target"))).validate()
+      declaredSchema = Some(autoCdcInferredSchema("target"))).validate(
+        spark.sessionState.conf.caseSensitiveAnalysis)
   }
 
   test("full user-specified schema is accepted for a named AUTO CDC flow") {
     autoCdcGraph(
       flowName = "auto_cdc_flow",
-      declaredSchema = Some(autoCdcInferredSchema("auto_cdc_flow"))).validate()
+      declaredSchema = Some(autoCdcInferredSchema("auto_cdc_flow"))).validate(
+        spark.sessionState.conf.caseSensitiveAnalysis)
   }
 }

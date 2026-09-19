@@ -22,6 +22,9 @@ import org.apache.spark.{sql, SparkFunSuite}
 /**
  * Overrides [[spark]] to provide a [[SparkSession classic.SparkSession]]
  */
-trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
+trait SparkSessionBinder
+  extends sql.SparkSessionBinder
+  with SparkSessionProvider { self: SparkFunSuite =>
+
   override protected def spark: SparkSession = super.spark.asInstanceOf[SparkSession]
 }

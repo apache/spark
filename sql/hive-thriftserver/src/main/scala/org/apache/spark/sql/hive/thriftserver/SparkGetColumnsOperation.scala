@@ -126,16 +126,18 @@ private[hive] class SparkGetColumnsOperation(
   }
 
   /**
-   * For boolean, numeric and datetime types, it returns the default size of its catalyst type
+   * For boolean, numeric and datetime types, this method returns the input type's default size.
+   * For CHAR(n) and VARCHAR(n), it returns the declared character length n.
    * For struct type, when its elements are fixed-size, the summation of all element sizes will be
    * returned.
-   * For array, map, string, and binaries, the column size is variable, return null as unknown.
+   * For array, map, unbounded string, and binaries, the column size is variable; return null.
    */
   private def getColumnSize(typ: DataType): Option[Int] = typ match {
     case dt @ (BooleanType | _: NumericType | DateType | TimestampType | TimestampNTZType |
                CalendarIntervalType | NullType | _: AnsiIntervalType) =>
       Some(dt.defaultSize)
     case c: CharType => Some(c.length)
+    case v: VarcharType => Some(v.length)
     case StructType(fields) =>
       val sizeArr = fields.map(f => getColumnSize(f.dataType))
       if (sizeArr.contains(None)) {
@@ -144,6 +146,22 @@ private[hive] class SparkGetColumnsOperation(
         Some(sizeArr.map(_.get).sum)
       }
     case other => None
+  }
+
+  /**
+   * JDBC CHAR_OCTET_LENGTH is a byte capacity. Spark CHAR/VARCHAR lengths are in
+   * characters, so report 4 * n (UTF-8 maximum bytes per character), saturating at
+   * Int.MaxValue. Unbounded STRING and non-character types stay null (not applicable).
+   */
+  private def getCharOctetLength(typ: DataType): Option[Int] = typ match {
+    case c: CharType => Some(maxUtf8OctetLength(c.length))
+    case v: VarcharType => Some(maxUtf8OctetLength(v.length))
+    case _ => None
+  }
+
+  private def maxUtf8OctetLength(numChars: Int): Int = {
+    val maxChars = Int.MaxValue / 4
+    if (numChars > maxChars) Int.MaxValue else numChars * 4
   }
 
   /**
@@ -222,7 +240,7 @@ private[hive] class SparkGetColumnsOperation(
           null, // COLUMN_DEF
           null, // SQL_DATA_TYPE
           null, // SQL_DATETIME_SUB
-          null, // CHAR_OCTET_LENGTH
+          getCharOctetLength(column.dataType).map(_.asInstanceOf[AnyRef]).orNull,
           ordinal.asInstanceOf[AnyRef], // ORDINAL_POSITION, 1-based
           (if (column.nullable) "YES" else "NO"), // IS_NULLABLE
           null, // SCOPE_CATALOG

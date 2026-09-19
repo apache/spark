@@ -220,11 +220,8 @@ class RandomForestRegressionModel private[ml] (
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees
 
-  // Note: We may add support for weights (based on tree performance) later on.
-  private lazy val _treeWeights: Array[Double] = Array.fill[Double](_trees.length)(1.0)
-
   @Since("1.4.0")
-  override def treeWeights: Array[Double] = _treeWeights
+  override def treeWeights: Array[Double] = Array.fill[Double](_trees.length)(1.0)
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
@@ -238,27 +235,31 @@ class RandomForestRegressionModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    var predictionColNames = Seq.empty[String]
-    var predictionColumns = Seq.empty[Column]
+    if ($(predictionCol).nonEmpty || $(leafCol).nonEmpty) {
+      var predColNames = Seq.empty[String]
+      var predCols = Seq.empty[Column]
+      val bcRootNodes = dataset.sparkSession.sparkContext.broadcast(_trees.map(_.rootNode))
 
-    val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
+      if ($(predictionCol).nonEmpty) {
+        val predUDF = udf { features: Vector =>
+          val rootNodes = bcRootNodes.value
+          TreeEnsembleModel.predictRaw(features, rootNodes) / rootNodes.length
+        }
+        predColNames :+= $(predictionCol)
+        predCols :+= predUDF(col($(featuresCol)))
+          .as($(predictionCol), outputSchema($(predictionCol)).metadata)
+      }
 
-    if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => bcastModel.value.predict(features) }
-      predictionColNames :+= $(predictionCol)
-      predictionColumns :+= predictUDF(col($(featuresCol)))
-        .as($(predictionCol), outputSchema($(predictionCol)).metadata)
-    }
+      if ($(leafCol).nonEmpty) {
+        val leafUDF = udf { features: Vector =>
+          TreeEnsembleModel.predictLeaf(features, bcRootNodes.value)
+        }
+        predColNames :+= $(leafCol)
+        predCols :+= leafUDF(col($(featuresCol)))
+          .as($(leafCol), outputSchema($(leafCol)).metadata)
+      }
 
-    if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => bcastModel.value.predictLeaf(features) }
-      predictionColNames :+= $(leafCol)
-      predictionColumns :+= leafUDF(col($(featuresCol)))
-        .as($(leafCol), outputSchema($(leafCol)).metadata)
-    }
-
-    if (predictionColNames.nonEmpty) {
-      dataset.withColumns(predictionColNames, predictionColumns)
+      dataset.withColumns(predColNames, predCols)
     } else {
       this.logWarning(log"${MDC(LogKeys.UUID, uid)}: RandomForestRegressionModel.transform() " +
         log"does nothing because no output columns were set.")
@@ -266,12 +267,8 @@ class RandomForestRegressionModel private[ml] (
     }
   }
 
-  override def predict(features: Vector): Double = {
-    // TODO: When we add a generic Bagging class, handle transform there.  SPARK-7128
-    // Predict average of tree predictions.
-    // Ignore the weights since all are 1.0 for now.
-    _trees.map(_.rootNode.predictImpl(features).prediction).sum / getNumTrees
-  }
+  override def predict(features: Vector): Double =
+    TreeEnsembleModel.predictRaw(features, _trees) / getNumTrees
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestRegressionModel = {

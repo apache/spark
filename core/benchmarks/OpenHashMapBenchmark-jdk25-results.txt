@@ -1,0 +1,26 @@
+================================================================================================
+OpenHashMap vs java.util.HashMap
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+Insert 1000000 distinct String keys:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+OpenHashMap                                         326            345          19          3.1         326.3       1.0X
+java.util.HashMap                                    50             96          67         19.8          50.5       6.5X
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+Aggregate 5000000 ops on 1000000 String keys:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------
+OpenHashMap changeValue                                1103           1208         148          4.5         220.6       1.0X
+java.util.HashMap merge                                1273           1286          19          3.9         254.5       0.9X
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+Look up 1000000 String keys in random order:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+OpenHashMap                                            120            136          15          8.3         120.0       1.0X
+java.util.HashMap                                       58             64           3         17.1          58.4       2.1X
+
+

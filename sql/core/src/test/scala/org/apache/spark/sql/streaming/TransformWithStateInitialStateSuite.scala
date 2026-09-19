@@ -756,6 +756,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
   }
 }
 
+@SlowSQLTest
 class TransformWithStateInitialStateSuiteCheckpointV2
   extends TransformWithStateInitialStateSuite {
   override def beforeAll(): Unit = {

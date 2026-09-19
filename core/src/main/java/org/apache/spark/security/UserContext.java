@@ -31,7 +31,7 @@ import org.apache.spark.annotation.DeveloperApi;
  * <b>not</b> {@link java.io.Serializable} and must never be transmitted to executors.
  * The {@code rawToken} field is always redacted in {@link #toString()}.
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
 @DeveloperApi
 public final class UserContext {

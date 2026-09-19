@@ -1282,6 +1282,8 @@ case class Hex(child: Expression)
     Seq(TypeCollection(LongType, BinaryType, StringTypeWithCollation(supportsTrimCollation = true)))
 
   override def dataType: DataType = child.dataType match {
+    // After ImplicitTypeCasts, a CHAR/VARCHAR input is STRING. Keep collation from the
+    // promoted child rather than DefaultStringProducingExpression's UTF8_BINARY StringType.
     case st: StringType => st
     case _ => super.dataType
   }
@@ -1971,6 +1973,51 @@ case class BRound(
     newLeft: Expression, newRight: Expression): BRound = copy(child = newLeft, scale = newRight)
 }
 
+/**
+ * Truncate an expression toward zero to `scale` decimal places.
+ * A negative `scale` truncates digits to the left of the decimal point.
+ * truncate(1234.5678, 2) = 1234.56, truncate(-1234.5678, 2) = -1234.56.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr[, scale]) - Returns `expr` truncated toward zero to `scale` decimal places. `scale` defaults to 0. A negative `scale` truncates digits to the left of the decimal point.",
+  arguments = """
+    Arguments:
+      * expr - The expression to truncate. An expression that evaluates to a numeric.
+      * scale - The number of decimal places to keep. It must be a constant integer expression and defaults to 0. A negative value truncates digits to the left of the decimal point.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1234.5678, 2);
+       1234.56
+      > SELECT _FUNC_(1234.5678, -2);
+       1200
+      > SELECT _FUNC_(-1234.5678, 2);
+       -1234.56
+  """,
+  since = "4.4.0",
+  group = "math_funcs")
+// scalastyle:on line.size.limit
+case class Truncate(
+    child: Expression,
+    scale: Expression,
+    // Kept for symmetry with Round/BRound, which do need it. Truncation toward zero can never
+    // increase magnitude, so the ANSI overflow checks inherited from RoundBase never trigger.
+    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  // Also inherits RoundBase's one-digit decimal precision widening, needed for rounding modes
+  // that can carry (e.g. ceil(9.9, 0) = 10) but never exercised here since truncation cannot.
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.DOWN, "ROUND_DOWN") {
+  def this(child: Expression) = this(child, Literal(0), SQLConf.get.ansiEnabled)
+
+  def this(child: Expression, scale: Expression) = this(child, scale, SQLConf.get.ansiEnabled)
+
+  override def flatArguments: Iterator[Any] = Iterator(child, scale)
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Truncate =
+    copy(child = newLeft, scale = newRight)
+}
+
 object WidthBucket {
   /** Shared by interpreted eval and generated Java code; must stay public for codegen. */
   def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
@@ -2043,11 +2090,11 @@ object WidthBucket {
   arguments = """
     Arguments:
       * value - The value to assign to a bucket.
-        An expression that evaluates to a double or interval.
+        An expression that evaluates to a double, interval, or time.
       * min_value - The minimum value of the histogram range.
-        An expression that evaluates to a double or interval.
+        An expression that evaluates to a double, interval, or time.
       * max_value - The maximum value of the histogram range.
-        An expression that evaluates to a double or interval.
+        An expression that evaluates to a double, interval, or time.
       * num_bucket - The number of equiwidth buckets in the histogram.
         An expression that evaluates to a long.
   """,
@@ -2069,6 +2116,8 @@ object WidthBucket {
        1
       > SELECT _FUNC_(INTERVAL '1' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10);
        2
+      > SELECT _FUNC_(TIME'12:00:00', TIME'09:00:00', TIME'17:00:00', 8);
+       4
   """,
   since = "3.1.0",
   group = "math_funcs")
@@ -2081,9 +2130,9 @@ case class WidthBucket(
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
-    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
-    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType, AnyTimeType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType, AnyTimeType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType, AnyTimeType),
     LongType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -2093,6 +2142,8 @@ case class WidthBucket(
           case (_: YearMonthIntervalType, _: YearMonthIntervalType, _: YearMonthIntervalType) =>
             TypeCheckSuccess
           case (_: DayTimeIntervalType, _: DayTimeIntervalType, _: DayTimeIntervalType) =>
+            TypeCheckSuccess
+          case (_: TimeType, _: TimeType, _: TimeType) =>
             TypeCheckSuccess
           case _ =>
             val types = Seq(value.dataType, minValue.dataType, maxValue.dataType)

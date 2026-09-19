@@ -2,58 +2,69 @@
 Expand: varying number of COUNT(DISTINCT)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Mac OS X 26.5.2
+Apple M3 Pro
 2 distinct aggregates:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-with sum - baseline (ratio 3)                      3150           3221          71          3.3         300.4       1.0X
-with sum - optimized (ratio 3)                     3095           3136          33          3.4         295.2       1.0X
-pure distinct - baseline (ratio 2)                 2038           2064          26          5.1         194.4       1.5X
-pure distinct - optimized (ratio 2)                 675            711          31         15.5          64.3       4.7X
+with sum - baseline (ratio 3)                      2518           2821         425          4.2         240.1       1.0X
+with sum - optimized (ratio 3)                     2363           2429          52          4.4         225.4       1.1X
+pure distinct - baseline (ratio 2)                 1382           1471         149          7.6         131.8       1.8X
+pure distinct - optimized (ratio 2)                 400            409          11         26.2          38.2       6.3X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Mac OS X 26.5.2
+Apple M3 Pro
 4 distinct aggregates:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-with sum - baseline (ratio 5)                      6006           6042          30          1.7         572.8       1.0X
-with sum - optimized (ratio 5)                     5981           6030          33          1.8         570.4       1.0X
-pure distinct - baseline (ratio 4)                 4540           4602          49          2.3         432.9       1.3X
-pure distinct - optimized (ratio 4)                 767            800          22         13.7          73.2       7.8X
+with sum - baseline (ratio 5)                      4569           4650          60          2.3         435.8       1.0X
+with sum - optimized (ratio 5)                     4584           4644          41          2.3         437.2       1.0X
+pure distinct - baseline (ratio 4)                 3393           3471          64          3.1         323.6       1.3X
+pure distinct - optimized (ratio 4)                 471            510          44         22.3          44.9       9.7X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Mac OS X 26.5.2
+Apple M3 Pro
 6 distinct aggregates:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-with sum - baseline (ratio 7)                      9223           9268          50          1.1         879.6       1.0X
-with sum - optimized (ratio 7)                     9253           9346         122          1.1         882.4       1.0X
-pure distinct - baseline (ratio 6)                 7420           7484          45          1.4         707.6       1.2X
-pure distinct - optimized (ratio 6)                 918            969          38         11.4          87.6      10.0X
+with sum - baseline (ratio 7)                      6311           6527         288          1.7         601.8       1.0X
+with sum - optimized (ratio 7)                     5659           5853         206          1.9         539.7       1.1X
+pure distinct - baseline (ratio 6)                 5145           5184          28          2.0         490.6       1.2X
+pure distinct - optimized (ratio 6)                 506            518          10         20.7          48.2      12.5X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Mac OS X 26.5.2
+Apple M3 Pro
 8 distinct aggregates:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-with sum - baseline (ratio 9)                     13382          13516          91          0.8        1276.2       1.0X
-with sum - optimized (ratio 9)                    13465          13538         108          0.8        1284.1       1.0X
-pure distinct - baseline (ratio 8)                11329          11434         110          0.9        1080.4       1.2X
-pure distinct - optimized (ratio 8)                1869           1920          37          5.6         178.3       7.2X
+with sum - baseline (ratio 9)                      8226           8286          36          1.3         784.5       1.0X
+with sum - optimized (ratio 9)                     8218           8272          46          1.3         783.8       1.0X
+pure distinct - baseline (ratio 8)                 7086           7134          40          1.5         675.8       1.2X
+pure distinct - optimized (ratio 8)                 955            976          12         11.0          91.1       8.6X
 
 
 ================================================================================================
 Expand: varying data characteristics (pure distinct)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Mac OS X 26.5.2
+Apple M3 Pro
 6 pure distinct aggs with varying data:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1K groups, moderate card - baseline                7437           7471          24          1.4         709.3       1.0X
-1K groups, moderate card - optimized                898            922          18         11.7          85.7       8.3X
-100K groups, moderate card - baseline             15063          15226         135          0.7        1436.5       0.5X
-100K groups, moderate card - optimized             4454           4561          95          2.4         424.8       1.7X
-1K groups, low card (5 vals) - baseline            7293           7342          40          1.4         695.5       1.0X
-1K groups, low card (5 vals) - optimized            762            783          21         13.8          72.6       9.8X
-no grouping key - baseline                         4888           4948          39          2.1         466.1       1.5X
-no grouping key - optimized                         377            379           2         27.8          35.9      19.7X
+1K groups, moderate card - baseline                5175           5218          37          2.0         493.6       1.0X
+1K groups, moderate card - optimized                497            507          10         21.1          47.4      10.4X
+100K groups, moderate card - baseline              9323           9420         130          1.1         889.1       0.6X
+100K groups, moderate card - optimized             1993           2069         139          5.3         190.1       2.6X
+1K groups, low card (5 vals) - baseline            5277           5315          23          2.0         503.2       1.0X
+1K groups, low card (5 vals) - optimized            466            474           8         22.5          44.5      11.1X
+no grouping key - baseline                         3577           3610          23          2.9         341.1       1.4X
+no grouping key - optimized                         218            221           5         48.2          20.8      23.8X
 
+================================================================================================
+Expand: subexpression elimination across branches
+================================================================================================
 
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Mac OS X 26.5.2
+Apple M3 Pro
+9 conditional COUNT(DISTINCT) + 9 conditional SUM sharing one subexpression:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+rewrite off, CSE off (10x amplify, 18 evals/row)                                     84450          84850         382          0.1       16107.6       1.0X
+rewrite on, CSE off (2x amplify, 18 evals/row)                                       41354          41544         312          0.1        7887.7       2.0X
+rewrite on, CSE on (2x amplify, 1 eval/row)                                          10712          10843         120          0.5        2043.2       7.9X
+rewrite off, CSE on (10x amplify, 1 eval/row)                                        53281          54021         722          0.1       10162.6       1.6X

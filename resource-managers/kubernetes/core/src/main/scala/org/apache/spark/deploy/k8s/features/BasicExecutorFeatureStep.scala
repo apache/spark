@@ -36,7 +36,6 @@ import org.apache.spark.util.Utils
 
 private[spark] class BasicExecutorFeatureStep(
     kubernetesConf: KubernetesExecutorConf,
-    secMgr: SecurityManager,
     resourceProfile: ResourceProfile)
   extends KubernetesFeatureConfigStep with Logging {
 
@@ -53,7 +52,8 @@ private[spark] class BasicExecutorFeatureStep(
 
   private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
-  private val driverAddress = if (kubernetesConf.get(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP)) {
+  private val driverAddress = if (kubernetesConf.get(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP) &&
+      !Utils.isAnyLocalAddress(kubernetesConf.get(DRIVER_BIND_ADDRESS))) {
     kubernetesConf.get(DRIVER_BIND_ADDRESS)
   } else {
     kubernetesConf.get(DRIVER_HOST_ADDRESS)
@@ -136,7 +136,7 @@ private[spark] class BasicExecutorFeatureStep(
       buildExecutorResourcesQuantities(execResources.customResources.values.toSet)
 
     val executorEnv: Seq[EnvVar] = {
-      val sparkAuthSecret = Option(secMgr.getSecretKey()).map {
+      val sparkAuthSecret = kubernetesConf.authSecret.map {
         case authSecret: String if kubernetesConf.get(AUTH_SECRET_FILE_EXECUTOR).isEmpty =>
           Seq(SecurityManager.ENV_AUTH_SECRET -> authSecret)
         case _ => Nil

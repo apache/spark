@@ -184,11 +184,30 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
       schema = corruptSchema)
   }
 
+  if (supportsMidAdvanceFailure) {
+    test("JSON: multiLine inference keeps entries read before a mid-advance failure " +
+        "(ignoreCorruptFiles)") {
+      // Entry 0 is read, then advancing to a later entry throws (not at open). A whole-archive drop
+      // would lose entry 0's `extra`; aborting the traversal would lose the sibling file's `later`.
+      val opts = Map("multiLine" -> "true")
+      withArchiveFile() { archive =>
+        writeArchiveFailingAfterFirstEntry(archive,
+          entryName(0) -> jsonBytes("{\n  \"id\": 1,\n  \"name\": \"Alice\",\n  \"extra\": 9\n}"))
+        Files.write(new File(archive.getParentFile, s"later.$fileExtension").toPath,
+          jsonBytes("{\n  \"id\": 2,\n  \"name\": \"Bob\",\n  \"later\": 7\n}"))
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+          val schema = inferredSchema(Seq(archive.getParentFile.getCanonicalPath), opts)
+          assert(schema.fieldNames.toSet == Set("id", "name", "extra", "later"),
+            "expected `extra` (pre-failure entry) and `later` (sibling file) in the inferred " +
+              s"schema after the mid-advance skip, got $schema")
+        }
+      }
+    }
+  }
+
   test("JSON: the DSv2 path refuses to infer a schema for an archive (UNABLE_TO_INFER_SCHEMA)") {
-    // Archive scanning is wired into the v1 file source only, so the DSv2 reader cannot read
-    // archives. On the v2 path inference must keep returning None for an archive input -- raising
-    // UNABLE_TO_INFER_SCHEMA -- rather than inferring a schema the v2 scan would then mis-read as
-    // raw archive bytes. Forcing json off the v1 source list routes the read through JsonTable.
+    // Forcing json off the v1 source list routes the archive read through the DSv2 JsonTable, which
+    // cannot read archives and must fail with UNABLE_TO_INFER_SCHEMA, not parse raw bytes.
     withArchiveFile() { archive =>
       writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {

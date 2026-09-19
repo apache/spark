@@ -19,24 +19,22 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashSet
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, NaturalAndUsingJoinResolution}
+import org.apache.spark.sql.catalyst.analysis.NaturalAndUsingJoinResolution
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, ExprId, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.{JoinType, NaturalJoin, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.types.BooleanType
 
 /**
  * Resolves [[Join]] operator by resolving its left and right children and its join condition. If
  * the unresolved join is [[NaturalJoin]] or [[UsingJoin]], the resulting operator will be
  * [[Project]], otherwise it will be [[Join]].
  */
-class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
-    extends TreeNodeResolver[Join, LogicalPlan] {
-  private val scopes = resolver.getNameScopes
-  private val expressionIdAssigner = expressionResolver.getExpressionIdAssigner
-  private val cteRegistry = resolver.getCteRegistry
-  private val operatorResolutionContextStack = resolver.getOperatorResolutionContextStack
+class JoinResolver(
+    override val resolver: Resolver,
+    override val expressionResolver: ExpressionResolver)
+    extends TreeNodeResolver[Join, LogicalPlan]
+    with JoinLikeResolver {
 
   /**
    * Resolves [[Join]] operator:
@@ -52,12 +50,12 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
    */
   override def resolve(unresolvedJoin: Join): LogicalPlan = {
     val (resolvedLeftOperator: LogicalPlan, leftNameScope: NameScope) = resolveJoinChild(
-      unresolvedJoin = unresolvedJoin,
+      unresolvedOperator = unresolvedJoin,
       child = unresolvedJoin.left
     )
 
     val (resolvedRightOperator: LogicalPlan, rightNameScope: NameScope) = resolveJoinChild(
-      unresolvedJoin = unresolvedJoin,
+      unresolvedOperator = unresolvedJoin,
       child = unresolvedJoin.right
     )
 
@@ -80,26 +78,6 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
       leftNameScope = leftNameScope,
       rightNameScope = rightNameScope
     )
-  }
-
-  private def resolveJoinChild(
-      unresolvedJoin: Join,
-      child: LogicalPlan): (LogicalPlan, NameScope) = {
-    expressionIdAssigner.pushMapping()
-    scopes.pushScope()
-    cteRegistry.pushScopeForMultiChildOperator(
-      unresolvedOperator = unresolvedJoin,
-      unresolvedChild = child
-    )
-
-    try {
-      val resolvedChild = resolver.resolve(child)
-      (resolvedChild, scopes.current)
-    } finally {
-      cteRegistry.popScope()
-      scopes.popScope()
-      expressionIdAssigner.popMapping(collectChildMapping = true)
-    }
   }
 
   /**
@@ -374,53 +352,5 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
       leftNameScope.output.map(_.name),
       rightNameScope.output.map(_.name)
     )
-  }
-
-  /**
-   * Resolves join condition by __all__ attributes from child scopes. We need to overwrite current
-   * scope first to prepare for [[resolveExpressionTreeInOperator]]. [[Join]] will actually produce
-   * different output than the one we are setting here, so additional overwrite with correct values
-   * will be needed. Two overwrites are necessary because condition is resolved from original
-   * children outputs, whereas output of [[Join]] will either not contain all attributes or their
-   * nullabilities will be different.
-   */
-  private def resolveJoinCondition(
-      unresolvedJoin: Join,
-      unresolvedCondition: Option[Expression],
-      leftNameScope: NameScope,
-      rightNameScope: NameScope) = {
-    scopes.overwriteCurrent(
-      output = Some(leftNameScope.output ++ rightNameScope.output),
-      hiddenOutput = Some(leftNameScope.hiddenOutput ++ rightNameScope.hiddenOutput)
-    )
-
-    val resolvedCondition = unresolvedCondition.map { condition =>
-      expressionResolver.resolveExpressionTreeInOperator(
-        condition,
-        unresolvedJoin
-      )
-    }
-
-    validateJoinConditionDataType(resolvedCondition, unresolvedJoin)
-
-    resolvedCondition
-  }
-
-  private def validateJoinConditionDataType(
-      condition: Option[Expression],
-      unresolvedJoin: Join): Unit = {
-    condition match {
-      case Some(condition) =>
-        if (condition.dataType != BooleanType) {
-          unresolvedJoin.failAnalysis(
-            errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
-            messageParameters = Map(
-              "joinCondition" -> toSQLExpr(condition),
-              "conditionType" -> toSQLType(condition.dataType)
-            )
-          )
-        }
-      case None =>
-    }
   }
 }

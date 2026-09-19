@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -574,8 +574,12 @@ object UnsupportedOperationChecker extends Logging {
         case u: Union if u.children.map(_.isStreaming).distinct.size == 2 =>
           throwError("Union between streaming and batch DataFrames/Datasets is not supported")
 
-        case Except(left, right, _) if right.isStreaming =>
+        case Except(_, right, _) if right.isStreaming =>
           throwError("Except on a streaming DataFrame/Dataset on the right is not supported")
+
+        case Except(left, _, _) if left.isStreaming &&
+            !SQLConf.get.getConf(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME) =>
+          throwError("Except on a streaming DataFrame/Dataset on the left is not supported")
 
         case Intersect(left, right, _) if left.isStreaming || right.isStreaming =>
           throwError("Intersect of streaming DataFrames/Datasets is not supported")
@@ -637,7 +641,8 @@ object UnsupportedOperationChecker extends Logging {
 
       subPlan.expressions.foreach { e =>
         if (e.collectLeaves().exists {
-          case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp) => true
+          case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp |
+              _: LocalTimestampNanos) => true
           case _ => false
         }) {
           throwError(s"Continuous processing does not support current time operations.")
@@ -655,6 +660,19 @@ object UnsupportedOperationChecker extends Logging {
   def checkAdditionalRealTimeModeConstraints(plan: LogicalPlan, outputMode: OutputMode): Unit = {
     if (outputMode != InternalOutputModes.Update) {
       throwRealTimeError("OUTPUT_MODE_NOT_SUPPORTED", Map("outputMode" -> outputMode.toString))
+    }
+
+    plan.foreachUp {
+      case u: Union =>
+        // Block stateful operators before union
+        u.foreachUp {
+          case statefulOp @ (_: Aggregate | _: TransformWithState |
+               _: TransformWithStateInPySpark | _: Deduplicate |
+               _: DeduplicateWithinWatermark) if statefulOp.isStateful =>
+            throwRealTimeError("STATEFUL_OPERATORS_BEFORE_UNION_NOT_SUPPORTED", Map.empty)
+          case _ =>
+        }
+      case _ =>
     }
   }
 

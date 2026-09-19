@@ -599,9 +599,9 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
         plan.children.foreach(child => checkCyclicViewReference(child, path, viewIdent))
     }
 
-    // Detect cyclic references from subqueries.
+    // Detect cyclic references from subqueries nested in expressions.
     plan.expressions.foreach { expr =>
-      expr match {
+      expr.foreach {
         case s: SubqueryExpression =>
           checkCyclicViewReference(s.plan, path, viewIdent)
         case _ => // Do nothing.

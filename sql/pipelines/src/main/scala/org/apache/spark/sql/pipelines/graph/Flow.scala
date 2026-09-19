@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => F, AnalysisException, Column}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.pipelines.autocdc.{
   AutoCdcReservedNames,
@@ -33,6 +34,7 @@ import org.apache.spark.sql.pipelines.autocdc.{
   Scd2BatchProcessor,
   ScdType
 }
+import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
@@ -250,10 +252,19 @@ class AppendOnceFlow(
  */
 class AutoCdcMergeFlow(
     val flow: AutoCdcFlow,
-    val funcResult: FlowFunctionResult
+    val funcResult: FlowFunctionResult,
+    sessionCaseSensitive: Boolean
 ) extends ResolvedFlow {
+  private[graph] val effectiveResolver: Resolver = SchemaInferenceUtils.resolverFor(
+    SchemaInferenceUtils.effectiveCaseSensitivity(
+      tableIdentifier = destinationIdentifier,
+      flows = Seq(this),
+      sessionCaseSensitive = sessionCaseSensitive))
+
   requireReservedPrefixAbsentInSourceColumns()
   requireReservedFrameworkColumnsAbsentInSourceColumns()
+  requireKeysAbsentInIgnoreNullSelection()
+  requireReservedPrefixAbsentInIgnoreNullSelection()
 
   def changeArgs: ChangeArgs = flow.changeArgs
 
@@ -263,20 +274,50 @@ class AutoCdcMergeFlow(
       schemaName = "changeDataFeed",
       schema = df.schema,
       columnSelection = changeArgs.columnSelection,
-      resolver = spark.sessionState.conf.resolver
+      resolver = effectiveResolver
     )
     // AutoCDC flows require all key columns to be present in the user-selected source schema,
     // so that they survive into the target table where SCD reconciliation needs them.
     requireKeysPresentInSelectedSchema(selectedSchema)
-    // SCD2 flows may specify history-tracking columns; validate they resolve to eligible columns
-    // of the selected schema at construction time, rather than failing mid-stream on first batch.
-    requireTrackHistoryColumnsResolvableInSelectedSchema(selectedSchema)
+    requireIgnoreNullColumnsInSelectedSchema(selectedSchema)
     selectedSchema
   }
 
   /** The DataType of the sequencing expression, derived once from the source change feed. */
   private[graph] val sequencingType: DataType =
     df.select(changeArgs.sequencing).schema.head.dataType
+
+  /**
+   * SCD2 only: the effective set of history-tracking column names for this flow, resolved from the
+   * [[userSelectedSchema]] (the user-selected source columns), not from the persisted/evolved
+   * target schema. This is the single source of truth for the tracked set:
+   *
+   *  - Resolving against [[userSelectedSchema]] means the tracked set follows the flow's own
+   *    selection. In particular, under default or `* EXCEPT` tracking, dropping a column from the
+   *    source (or from the `COLUMNS` selection) removes it from the tracked set -- rather than the
+   *    column lingering as tracked because it still exists in the (sticky) target schema.
+   *  - It is recorded on the auxiliary table and drift-checked across runs: a change to this set
+   *    reinterprets which transitions open a new SCD2 record, which cannot be applied to
+   *    already-reconciled history, so any change requires a full refresh (see
+   *    [[AutoCdcAuxiliaryTable.validateNoTrackHistoryDrift]]). Because the set is
+   *    selection-derived, adding or dropping a source column under default / `* EXCEPT` tracking
+   *    is such a change; this is an intended divergence from SCD1, where non-key schema evolution
+   *    needs no full refresh.
+   *
+   * Computing it here (rather than in the aux-table spec builder from the target schema) also
+   * validates the selection at construction time: an unresolvable or ineligible explicit
+   * `TRACK HISTORY ON` selection throws `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA` here, before the
+   * first microbatch, rather than failing deep inside the SCD2 batch processor. `None` for SCD1.
+   */
+  private[graph] val trackHistoryColumnNames: Option[Seq[String]] =
+    changeArgs.storedAsScdType match {
+      case ScdType.Type2 =>
+        Some(Scd2BatchProcessor.computeTrackedHistoryColumns(
+          schema = userSelectedSchema,
+          changeArgs = changeArgs,
+          resolver = effectiveResolver))
+      case ScdType.Type1 => None
+    }
 
   /**
    * Returns the augmented output schema of this flow, which can differ from the schema of the
@@ -364,6 +405,7 @@ class AutoCdcMergeFlow(
           F.lit(null).cast(sequencingType).as(Scd2BatchProcessor.endAtColName)
         val emptyCdcMetadataCol: Column = Scd2BatchProcessor.constructCdcMetadataCol(
           recordStartAt = F.lit(null),
+          versionMap = F.lit(null),
           sequencingType = sequencingType
         ).as(AutoCdcReservedNames.cdcMetadataColName)
 
@@ -371,29 +413,23 @@ class AutoCdcMergeFlow(
     }
   }
 
-  /**
-   * Validate that the resolved source dataframe for the AutoCDC flow does not contain any column
-   * names that use the reserved Spark AutoCDC prefix.
-   */
-  private def requireReservedPrefixAbsentInSourceColumns(): Unit = {
-    val resolver = spark.sessionState.conf.resolver
+  /** Whether `name` starts with [[AutoCdcReservedNames.prefix]], honoring case sensitivity. */
+  private def nameHasReservedPrefix(name: String): Boolean = {
     val reservedPrefix = AutoCdcReservedNames.prefix
+    name.length >= reservedPrefix.length &&
+      effectiveResolver(name.substring(0, reservedPrefix.length), reservedPrefix)
+  }
 
-    def nameContainsReservedPrefix(name: String): Boolean = {
-      name.length >= reservedPrefix.length && resolver(
-        name.substring(0, reservedPrefix.length),
-        reservedPrefix
-      )
-    }
-
-    df.schema.fieldNames.find(nameContainsReservedPrefix).foreach { conflictingColumnName =>
+  /** Rejects any source column whose name uses the reserved AutoCDC prefix. */
+  private def requireReservedPrefixAbsentInSourceColumns(): Unit = {
+    df.schema.fieldNames.find(nameHasReservedPrefix).foreach { conflictingColumnName =>
       throw new AnalysisException(
         errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT",
         messageParameters = Map(
-          "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
+          "caseSensitivity" -> CaseSensitivityLabels.of(effectiveResolver),
           "columnName" -> conflictingColumnName,
           "schemaName" -> "changeDataFeed",
-          "reservedColumnNamePrefix" -> reservedPrefix
+          "reservedColumnNamePrefix" -> AutoCdcReservedNames.prefix
         )
       )
     }
@@ -408,7 +444,7 @@ class AutoCdcMergeFlow(
    * during preprocessing. No-op for SCD1, which has no such columns.
    */
   private def requireReservedFrameworkColumnsAbsentInSourceColumns(): Unit = {
-    val resolver = spark.sessionState.conf.resolver
+    val resolver = effectiveResolver
     val reservedPrefix = AutoCdcReservedNames.prefix
 
     // Only the non-prefixed reserved names need checking here; prefixed ones are already rejected
@@ -440,7 +476,7 @@ class AutoCdcMergeFlow(
    * Validate all keys specified in changeArgs are actually present in the user-selected schema.
    */
   private def requireKeysPresentInSelectedSchema(selectedSchema: StructType): Unit = {
-    val resolver = spark.sessionState.conf.resolver
+    val resolver = effectiveResolver
 
     changeArgs.keys
       .find(key => !selectedSchema.fieldNames.exists(name => resolver(name, key.name)))
@@ -456,24 +492,65 @@ class AutoCdcMergeFlow(
   }
 
   /**
-   * Validate that this flow's [[ChangeArgs.trackHistorySelection]] (SCD2 `TRACK HISTORY ON ...`)
-   * resolves against the user-selected source schema at construction time. Without this, an
-   * unresolvable or ineligible (key/framework) tracking column would only surface when the first
-   * microbatch runs reconciliation, deep inside the SCD2 batch processor.
-   *
-   * Delegates to [[Scd2BatchProcessor.computeTrackedHistoryColumns]] -- the same resolution used at
-   * runtime -- so the two can never diverge; it throws `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA` on an
-   * unresolvable selection. `trackHistorySelection` is `None` for SCD1 (enforced by [[ChangeArgs]])
-   * and for SCD2 flows that do not restrict tracking, in which case resolution is a no-op.
+   * Rejects any explicitly named ignore-null column that is also a key column.
+   * Implicitly selected columns (e.g. an exclude list) are eligible by construction.
    */
-  private def requireTrackHistoryColumnsResolvableInSelectedSchema(
-      selectedSchema: StructType): Unit = {
-    if (changeArgs.trackHistorySelection.isDefined) {
-      Scd2BatchProcessor.computeTrackedHistoryColumns(
-        schema = selectedSchema,
-        changeArgs = changeArgs,
-        resolver = spark.sessionState.conf.resolver
-      )
+  private def requireKeysAbsentInIgnoreNullSelection(): Unit = {
+    val resolver = effectiveResolver
+    ColumnSelection.namedColumns(changeArgs.ignoreNullSelection).foreach { column =>
+      if (changeArgs.keys.exists(key => resolver(key.name, column.name))) {
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_IGNORE_NULL_SELECTION_CONTAINS_KEY_COLUMN",
+          messageParameters = Map(
+            "flowName" -> identifier.unquotedString,
+            "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
+            "columnName" -> column.name,
+            "keyColumnNames" -> changeArgs.keys.map(_.name).mkString(", ")
+          )
+        )
+      }
     }
   }
+
+  /**
+   * Rejects any explicitly named ignore-null column whose name uses the reserved prefix.
+   * Implicitly selected columns (e.g. an exclude list) are eligible by construction.
+   */
+  private def requireReservedPrefixAbsentInIgnoreNullSelection(): Unit = {
+    ColumnSelection.namedColumns(changeArgs.ignoreNullSelection)
+      .find(col => nameHasReservedPrefix(col.name))
+      .foreach { column =>
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_IGNORE_NULL_CANNOT_SELECT_RESERVED_COLUMN",
+          messageParameters = Map(
+            "flowName" -> identifier.unquotedString,
+            "caseSensitivity" -> CaseSensitivityLabels.of(effectiveResolver),
+            "columnName" -> column.name,
+            "reservedColumnNamePrefix" -> AutoCdcReservedNames.prefix
+          )
+        )
+      }
+  }
+
+  /**
+   * Validate every column named by [[ChangeArgs.ignoreNullSelection]] is present in the
+   * user-selected schema.
+   */
+  private def requireIgnoreNullColumnsInSelectedSchema(
+      selectedSchema: StructType): Unit = {
+    val resolver = effectiveResolver
+    ColumnSelection.namedColumns(changeArgs.ignoreNullSelection)
+      .find(col => !selectedSchema.fieldNames.exists(resolver(_, col.name)))
+      .foreach { missing =>
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_IGNORE_NULL_COLUMN_NOT_IN_OUTPUT_COLUMNS",
+          messageParameters = Map(
+            "flowName" -> identifier.unquotedString,
+            "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
+            "columnName" -> missing.name
+          )
+        )
+      }
+  }
+
 }

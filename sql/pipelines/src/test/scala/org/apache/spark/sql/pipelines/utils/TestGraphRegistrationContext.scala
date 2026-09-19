@@ -305,7 +305,8 @@ class TestGraphRegistrationContext(
       query: FlowFunction,
       once: Boolean = false,
       catalog: Option[String] = None,
-      database: Option[String] = None
+      database: Option[String] = None,
+      sqlConf: Map[String, String] = Map.empty
   ): Unit = {
     val rawFlowIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark)
     val rawDestinationIdentifier =
@@ -345,7 +346,7 @@ class TestGraphRegistrationContext(
           currentCatalog = catalog.orElse(Some(defaultCatalog)),
           currentDatabase = database.orElse(Some(defaultDatabase))
         ),
-        sqlConf = Map.empty,
+        sqlConf = sqlConf,
         once = once,
         origin = QueryOrigin(
           objectName = Option(flowIdentifier.unquotedString),
@@ -407,7 +408,8 @@ class TestGraphRegistrationContext(
    * Generates a dataflow graph from this pipeline definition and resolves it.
    * @return
    */
-  def resolveToDataflowGraph(): DataflowGraph = toDataflowGraph.resolve()
+  def resolveToDataflowGraph(): DataflowGraph =
+    toDataflowGraph.resolve(spark.sessionState.conf.caseSensitiveAnalysis)
 }
 
 object TestGraphRegistrationContext {

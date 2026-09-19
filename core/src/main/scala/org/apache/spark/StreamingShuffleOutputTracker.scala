@@ -28,6 +28,23 @@ import org.apache.spark.internal.config.SHUFFLE_MAPOUTPUT_DISPATCHER_NUM_THREADS
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.ThreadUtils
 
+/**
+ * The driver-side registry for a shuffle's output. A regular shuffle is served by the
+ * `MapOutputTrackerMaster`, a pipelined (streaming) shuffle by the
+ * `StreamingShuffleOutputTrackerMaster` -- split by dependency type, with no overlap. This is the
+ * small common surface the DAGScheduler and ContextCleaner drive polymorphically, so they select
+ * the right tracker by shuffle-dependency type (see `DAGScheduler.outputTrackerMaster`) rather than
+ * special-casing pipelined shuffles at each call site.
+ */
+private[spark] trait ShuffleOutputTrackerMaster {
+  /** Register a shuffle so its outputs can be tracked. `jobId` is used by the streaming tracker. */
+  def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int, jobId: Int): Unit
+  /** Whether the given shuffle is registered with this tracker. */
+  def containsShuffle(shuffleId: Int): Boolean
+  /** Unregister a shuffle and release its tracked state. */
+  def unregisterShuffle(shuffleId: Int): Unit
+}
+
 private[spark] sealed trait StreamingShuffleTaskLocationTrackerMessage
 
 private[spark] case class UpdateStreamingShuffleTaskLocation(
@@ -196,7 +213,7 @@ private[spark] abstract class StreamingShuffleOutputTracker(conf: SparkConf) ext
 private[spark] case class StreamingShuffleInfo(numMaps: Int, numReduces: Int, jobId: Int)
 
 private[spark] class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
-  extends StreamingShuffleOutputTracker(conf) {
+  extends StreamingShuffleOutputTracker(conf) with ShuffleOutputTrackerMaster {
 
   // map that stores task location information organized in the following fashion
   // shuffle id -> {mapId -> location}
@@ -220,7 +237,7 @@ private[spark] class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
     pool
   }
 
-  def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int, jobId: Int): Unit = {
+  override def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int, jobId: Int): Unit = {
     logInfo(log"Registering shuffleId ${MDC(LogKeys.SHUFFLE_ID, shuffleId)} with ${
       MDC(LogKeys.NUM_MAPPERS, numMaps)} mappers and ${
       MDC(LogKeys.NUM_REDUCERS, numReduces)} reducers")
@@ -229,6 +246,8 @@ private[spark] class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
       throw new IllegalArgumentException(s"Shuffle ID $shuffleId registered twice")
     }
   }
+
+  override def containsShuffle(shuffleId: Int): Boolean = shuffleInfos.containsKey(shuffleId)
 
   // for testing purposes
   private[spark] def getShuffleInfo(shuffleId: Int): Option[StreamingShuffleInfo] = {

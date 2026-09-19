@@ -22,6 +22,8 @@ import java.util.IllegalFormatException
 import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
@@ -279,6 +281,14 @@ class QueryCompilationErrorsSuite
       condition = "UNSUPPORTED_FEATURE.TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS",
       parameters = Map("num" -> "24"),
       sqlState = "0A000")
+  }
+
+  test("SPARK-58945: invalid UDF class error reports clazz") {
+    checkError(
+      exception = QueryCompilationErrors.invalidUDFClassError("example.InvalidFunction")
+        .asInstanceOf[InvalidUDFClassException],
+      condition = "_LEGACY_ERROR_TEMP_2450",
+      parameters = Map("clazz" -> "example.InvalidFunction"))
   }
 
   test("GROUPING_COLUMN_MISMATCH: not found the grouping column") {
@@ -1131,6 +1141,22 @@ class QueryCompilationErrorsSuite
       },
       condition = "RESERVED_DATABASE_NAME",
       parameters = Map("database" -> s"`$globalTempDB`")
+    )
+  }
+
+  test("SPARK-58349: TABLE_LOCATION_URI_NOT_SPECIFIED: table does not specify locationUri") {
+    val identifier = TableIdentifier("t", Some("db"))
+    val table = CatalogTable(
+      identifier = identifier,
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType())
+    checkError(
+      exception = intercept[AnalysisException] {
+        table.location
+      },
+      condition = "TABLE_LOCATION_URI_NOT_SPECIFIED",
+      parameters = Map("identifier" -> identifier.toString)
     )
   }
 }

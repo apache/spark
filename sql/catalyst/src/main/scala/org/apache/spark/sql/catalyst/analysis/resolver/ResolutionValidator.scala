@@ -101,6 +101,8 @@ class ResolutionValidator {
         validateSort(sort)
       case join: Join =>
         validateJoin(join)
+      case asOfJoin: AsOfJoin =>
+        validateAsOfJoin(asOfJoin)
       case repartition: Repartition =>
         validateRepartition(repartition)
       case repartitionByExpression: RepartitionByExpression =>
@@ -347,6 +349,36 @@ class ResolutionValidator {
     }
 
     handleOperatorOutput(join)
+  }
+
+  private def validateAsOfJoin(asOfJoin: AsOfJoin): Unit = {
+    // The inner scope keeps the per-child output overwrites done by `handleOperatorOutput` out
+    // of the outer scope, which holds the combined join output the join expressions resolve
+    // against.
+    attributeScopeStack.pushScope()
+    try {
+      attributeScopeStack.pushScope()
+      try {
+        validate(asOfJoin.left)
+        validate(asOfJoin.right)
+        assert(asOfJoin.left.outputSet.intersect(asOfJoin.right.outputSet).isEmpty)
+      } finally {
+        attributeScopeStack.popScope()
+      }
+
+      attributeScopeStack.overwriteCurrent(asOfJoin.left.output ++ asOfJoin.right.output)
+
+      expressionResolutionValidator.validate(asOfJoin.asOfCondition)
+      expressionResolutionValidator.validate(asOfJoin.orderExpression)
+      asOfJoin.condition.foreach(expressionResolutionValidator.validate)
+      asOfJoin.toleranceAssertion.foreach(expressionResolutionValidator.validate)
+      asOfJoin.leftSortExprs.foreach(expressionResolutionValidator.validate)
+      asOfJoin.rightSortExprs.foreach(expressionResolutionValidator.validate)
+    } finally {
+      attributeScopeStack.popScope()
+    }
+
+    handleOperatorOutput(asOfJoin)
   }
 
   private def validateSupervisingCommand(supervisingCommand: SupervisingCommand): Unit = {}

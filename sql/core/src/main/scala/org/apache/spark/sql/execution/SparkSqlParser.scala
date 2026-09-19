@@ -123,6 +123,13 @@ class SparkSqlParser extends AbstractSqlParser {
   override def splitStatements(sqlText: String): SqlStatementSplitResult =
     SqlStatementSplitter.split(sqlText, SparkSqlParser.substituteVariablesForValidation)
 
+  /** Split statements while retaining their positions in the original SQL text. */
+  private[sql] def splitStatementsWithPositions(
+      sqlText: String): PositionedSqlStatementSplitResult =
+    SqlStatementSplitter.splitWithPositions(
+      sqlText,
+      SparkSqlParser.substituteVariablesForValidation)
+
   /**
    * Internal parse method that handles both parameter substitution and regular parsing.
    *
@@ -686,7 +693,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   override def visitFailSetRole(ctx: FailSetRoleContext): LogicalPlan = withOrigin(ctx) {
-    invalidStatement("SET ROLE", ctx);
+    invalidStatement("SET ROLE", ctx)
   }
 
   /**

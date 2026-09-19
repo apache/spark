@@ -14,29 +14,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from inspect import Signature
-from typing import Any, Callable, Dict, Optional, Union, TYPE_CHECKING, get_type_hints
-from inspect import getfullargspec, signature
+from inspect import Signature, getfullargspec, signature
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Union, get_type_hints
 
-from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.errors import PySparkNotImplementedError, PySparkValueError
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (
-        PandasScalarUDFType,
-        PandasScalarIterUDFType,
-        PandasGroupedAggUDFType,
-        PandasGroupedAggIterUDFType,
-        ArrowScalarUDFType,
-        ArrowScalarIterUDFType,
-        ArrowGroupedAggUDFType,
         ArrowGroupedAggIterUDFType,
+        ArrowGroupedAggUDFType,
+        ArrowGroupedMapFunction,
         ArrowGroupedMapIterUDFType,
         ArrowGroupedMapUDFType,
-        ArrowGroupedMapFunction,
+        ArrowScalarIterUDFType,
+        ArrowScalarUDFType,
+        PandasGroupedAggIterUDFType,
+        PandasGroupedAggUDFType,
         PandasGroupedMapFunction,
-        PandasGroupedMapUDFType,
         PandasGroupedMapIterUDFType,
+        PandasGroupedMapUDFType,
+        PandasScalarIterUDFType,
+        PandasScalarUDFType,
     )
 
 

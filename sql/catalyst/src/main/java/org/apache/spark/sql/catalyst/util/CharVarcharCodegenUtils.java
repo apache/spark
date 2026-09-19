@@ -54,6 +54,30 @@ public class CharVarcharCodegenUtils {
     }
   }
 
+  /**
+   * Applies the SQL explicit-cast rules for a character string source and CHAR target.
+   *
+   * Unlike store assignment, an explicit character-to-character cast truncates non-space
+   * characters instead of raising a right-truncation exception.
+   */
+  public static UTF8String charTypeCast(UTF8String inputStr, int limit) {
+    int numChars = inputStr.numChars();
+    if (numChars == limit) {
+      return inputStr;
+    } else if (numChars < limit) {
+      return inputStr.rpad(limit, SPACE);
+    } else {
+      return inputStr.substring(0, limit);
+    }
+  }
+
+  /**
+   * Applies the SQL explicit-cast rules for a character string source and VARCHAR target.
+   */
+  public static UTF8String varcharTypeCast(UTF8String inputStr, int limit) {
+    return inputStr.numChars() > limit ? inputStr.substring(0, limit) : inputStr;
+  }
+
   public static UTF8String readSidePadding(UTF8String inputStr, int limit) {
     int numChars = inputStr.numChars();
     if (numChars == limit) {
@@ -63,5 +87,28 @@ public class CharVarcharCodegenUtils {
     } else {
       return inputStr;
     }
+  }
+
+  /**
+   * Read-side CHAR check under standard semantics: pad to limit, or trim trailing
+   * spaces then error if still longer than limit.
+   *
+   * Standard semantics require a read to observe the same value a write would have
+   * produced, so this is deliberately the write-side check rather than
+   * {@link #readSidePadding}, which tolerates over-long values. Keep the two sides
+   * identical: a fix to one is a fix to both.
+   */
+  public static UTF8String charTypeReadSideCheck(UTF8String inputStr, int limit) {
+    return charTypeWriteSideCheck(inputStr, limit);
+  }
+
+  /**
+   * Read-side VARCHAR check under standard semantics: allow up to limit characters,
+   * or trim trailing spaces then error if still longer than limit.
+   *
+   * Identical to the write-side check by design; see {@link #varcharTypeWriteSideCheck}.
+   */
+  public static UTF8String varcharTypeReadSideCheck(UTF8String inputStr, int limit) {
+    return varcharTypeWriteSideCheck(inputStr, limit);
   }
 }

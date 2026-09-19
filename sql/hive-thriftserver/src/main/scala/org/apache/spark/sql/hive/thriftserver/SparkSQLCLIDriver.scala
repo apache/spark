@@ -72,7 +72,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
   def installSignalHandler(): Unit = {
     HiveInterruptUtils.add(() => {
       if (SparkSQLEnv.sparkContext != null) {
-        SparkSQLEnv.sparkContext.cancelAllJobs()
+        SparkSQLEnv.sparkContext.cancelAllJobs(
+          "because the user interrupted the Spark SQL CLI with Ctrl+C")
       }
     })
   }

@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import test.org.apache.spark.sql.connector._
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   LessThan => CatalystLessThan, Literal => CatalystLiteral, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter => LogicalFilter, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
-import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -42,6 +42,7 @@ import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
 import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{
@@ -53,7 +54,7 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
+import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsPushDownCatalystFilters}
 import org.apache.spark.sql.sources.{BaseRelation, Filter, GreaterThan, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -502,6 +503,17 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         )
       }
     }
+  }
+
+  test("SPARK-58352: WRITING_JOB_FAILED when batch write commit and abort both fail") {
+    val cls = classOf[CommitAndAbortFailingDataSource]
+    checkError(
+      exception = intercept[SparkException] {
+        spark.range(1).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+          .write.format(cls.getName).mode("append").save()
+      },
+      condition = "WRITING_JOB_FAILED",
+      parameters = Map.empty[String, String])
   }
 
   test("simple counter in writer with onDataWriterCommit") {
@@ -1368,8 +1380,11 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         "column i should be pruned from the scan output")
       assert(!scan.scan.asInstanceOf[SupportsReportStatistics].reflectsFullyPushedDownFilters(),
         "fake connector should request Spark post-pushdown adjustments")
-      assert(scan.pushedFilters.isEmpty,
-        "pushedFilters should drop filters whose references were pruned")
+      // SPARK-40259 made pushedFilters the complete set: it keeps a fully-pushed filter even when
+      // the filter's column is pruned from the scan output (the adjustment below uses a separate,
+      // pruned-output-remapped set, so it still does not re-add i > 3).
+      assert(scan.pushedFilters.exists(hasIGt3),
+        "pushedFilters keeps i > 3 even though column i was pruned (complete-set semantics)")
 
       val optimizedPlan = q.queryExecution.optimizedPlan
       assert(!optimizedPlan.collect { case f: LogicalFilter => f }.exists(f =>
@@ -1509,33 +1524,34 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       "pushedFilters should not contain the unsupported filter on column j")
   }
 
-  test("pushedFilters are remapped by ProjectionOverSchema after nested schema pruning") {
+  test("pushedFilters keep the relation-level struct type after nested schema pruning") {
     val df = spark.read.format(classOf[NestedSchemaDataSourceV2].getName).load()
     // NestedSchemaScanBuilder pushes GreaterThan on "s.a".
-    // Selecting only s.a triggers nested schema pruning: s goes from struct<a,b> to struct<a>.
+    // Selecting only s.a triggers nested schema pruning: the scan output narrows s to struct<a>,
+    // but pushedFilters records the fully-pushed filter against the relation's pre-pruning schema,
+    // so its struct column keeps the full type struct<a, b>.
     val q = df.select($"s.a").filter($"s.a" > 3)
     checkAnswer(q, (4 until 10).map(i => Row(i)))
 
     val scanRelation = getScanRelation(q)
     assert(scanRelation.pushedFilters.nonEmpty,
       "pushedFilters should be non-empty")
-    // Find the struct attribute referenced by the pushed filter.
-    // Before remapping it would have type struct<a,b>; after remapping, struct<a>.
     val structAttrs = scanRelation.pushedFilters
       .flatMap(_.collect { case a: AttributeReference if a.name == "s" => a })
     assert(structAttrs.nonEmpty, "pushed filter should reference struct column s")
-    val prunedStructType = structAttrs.head.dataType.asInstanceOf[StructType]
-    assert(prunedStructType.fieldNames.toSeq == Seq("a"),
-      s"struct column in pushed filter should be pruned to struct<a> but was $prunedStructType")
+    val structType = structAttrs.head.dataType.asInstanceOf[StructType]
+    assert(structType.fieldNames.toSeq == Seq("a", "b"),
+      s"struct column in pushed filter should keep type struct<a, b> but was $structType")
   }
 
-  test("pushedFilters drops filters referencing pruned nested struct fields") {
+  test("pushedFilters keep filters referencing pruned nested struct fields") {
     // Disable constraint propagation so IsNotNull(s.a) is not added as a post-scan
     // filter (it would keep field a alive in the struct).
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       val df = spark.read.format(classOf[NestedSchemaDataSourceV2].getName).load()
-      // Filter on s.a but select only s.b. Column pruning narrows s to struct<b>,
-      // so the pushed filter on s.a can't be remapped and should be dropped.
+      // Filter on s.a but select only s.b. Column pruning narrows the scan output's s to struct<b>,
+      // but pushedFilters keeps the fully-pushed filter on s.a (against the relation schema) so a
+      // later scan merge can re-enforce it.
       val q = df.filter($"s.a" > 3).select($"s.b")
       checkAnswer(q, (4 until 10).map(i => Row(-i)))
 
@@ -1544,8 +1560,8 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         filter.collect { case a: AttributeReference if a.name == "s" => a }
           .flatMap(_.dataType.asInstanceOf[StructType].fieldNames)
       }
-      assert(!referencedStructFields.contains("a"),
-        "pushedFilters should not reference pruned nested field a")
+      assert(referencedStructFields.contains("a"),
+        "pushedFilters should keep the filter referencing nested field a")
     }
   }
 
@@ -1572,6 +1588,32 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       "Two instances should not be equal before canonicalization")
     assert(scanRelation1.canonicalized == scanRelation2.canonicalized,
       "Canonicalized instances with equivalent pushedFilters should be equal")
+  }
+
+  test("scan canonicalization distinguishes different pushedFilters") {
+    // Negative counterpart to the test above: two scans of the same relation whose pushedFilters
+    // differ must NOT canonicalize equal. This inequality is what lets MergeSubplans tell the two
+    // scans apart; if they compared equal it could treat them as identical and apply one side's
+    // filter to both -- a wrong-answer bug.
+    val table = new SimpleDataSourceV2().getTable(CaseInsensitiveStringMap.empty())
+
+    val relation1 = DataSourceV2Relation.create(
+      table, None, None, CaseInsensitiveStringMap.empty())
+    val relation2 = DataSourceV2Relation.create(
+      table, None, None, CaseInsensitiveStringMap.empty())
+    val scan1 = relation1.table.asReadable.newScanBuilder(relation1.options).build()
+    val scan2 = relation2.table.asReadable.newScanBuilder(relation2.options).build()
+
+    val filter1 = CatalystGreaterThan(relation1.output.head, CatalystLiteral(3))
+    val filter2 = CatalystGreaterThan(relation2.output.head, CatalystLiteral(5))
+
+    val scanRelation1 = DataSourceV2ScanRelation(relation1, scan1, relation1.output,
+      pushedFilters = Seq(filter1))
+    val scanRelation2 = DataSourceV2ScanRelation(relation2, scan2, relation2.output,
+      pushedFilters = Seq(filter2))
+
+    assert(scanRelation1.canonicalized != scanRelation2.canonicalized,
+      "Canonicalized instances with different pushedFilters must not be equal")
   }
 
   test("pushedFilters excludes non-deterministic filters") {
@@ -1637,21 +1679,66 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       "non-deterministic filter should be retained as a post-scan Filter")
   }
 
-  test("pushedFilters drops filters referencing pruned columns") {
+  test("pushedFilters keep filters referencing pruned columns") {
     // Disable constraint propagation so IsNotNull(i) is not added (it would keep
     // column i in the scan output). This simulates a connector that pushes IsNotNull.
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
-      // i > 3 is fully pushed; selecting only j causes column pruning to drop i.
+      // i > 3 is fully pushed; selecting only j causes column pruning to drop i from the scan
+      // output, but pushedFilters keeps the fully-pushed filter on i (against the relation schema)
+      // so a later scan merge can re-enforce it.
       val q = df.filter($"i" > 3).select($"j")
       checkAnswer(q, (4 until 10).map(i => Row(-i)))
 
       val scanRelation = getScanRelation(q)
       assert(!scanRelation.output.exists(_.name == "i"),
         "column i should be pruned from scan output")
-      assert(scanRelation.pushedFilters.isEmpty,
-        "pushedFilters should drop filters referencing pruned columns")
+      val referencedCols = scanRelation.pushedFilters.flatMap(_.references.map(_.name)).toSet
+      assert(referencedCols.contains("i"),
+        "pushedFilters should keep the filter referencing the pruned column i")
     }
+  }
+
+  test("SPARK-57225: DSv2 source without batch write capability throws clear error") {
+    val cls = classOf[ReadOnlyV2DataSource].getName
+    val df = spark.range(1).toDF("i")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.format(cls).mode("append").save()
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map(
+        "tableName" -> "`read_only_v2_test`",
+        "operation" -> "batch write"
+      )
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.format(cls).save()
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map(
+        "tableName" -> "`read_only_v2_test`",
+        "operation" -> "batch write"
+      )
+    )
+  }
+
+  test("SPARK-57225: DSv2 source with V1_BATCH_WRITE still falls back to V1 path") {
+    val cls = classOf[V1BatchWriteV2DataSource].getName
+    val df = spark.range(1).toDF("i")
+    // V1_BATCH_WRITE sources should fall through to saveToV1SourceCommand, which calls
+    // DataSource.planForWriting. Since our test source doesn't implement
+    // CreatableRelationProvider or FileFormat, planForWriting hits the case _ branch
+    // and throws INTERNAL_ERROR with "does not allow create table as select".
+    // This proves V1_BATCH_WRITE reached the V1 write path.
+    val ex = intercept[SparkException] {
+      df.write.format(cls).mode("append").save()
+    }
+    assert(ex.getCondition == "INTERNAL_ERROR",
+      "V1_BATCH_WRITE source should reach DataSource.planForWriting (V1 path)")
+    assert(ex.getMessage.contains("does not allow create table as select"))
   }
 
 }
@@ -2431,6 +2518,56 @@ object SpecificReaderFactory extends PartitionReaderFactory {
 
 class SchemaReadAttemptException(m: String) extends RuntimeException(m)
 
+/**
+ * A writable data source whose batch write both fails to commit and then fails to abort. This
+ * drives the exact branch in `WriteToDataSourceV2Exec` that raises `WRITING_JOB_FAILED`: the
+ * write's `commit` throws, and the follow-up `abort` also throws, so the original failure is
+ * wrapped rather than re-thrown. The per-task `DataWriter` succeeds so the failure is driver-side
+ * and deterministic (no dependence on task scheduling).
+ */
+class CommitAndAbortFailingDataSource extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable
+    with SupportsWrite {
+
+    override def capabilities(): java.util.Set[TableCapability] =
+      java.util.EnumSet.of(TableCapability.BATCH_READ, TableCapability.BATCH_WRITE,
+        TableCapability.TRUNCATE)
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+      new SimpleScanBuilder {
+        override def planInputPartitions(): Array[InputPartition] = Array.empty
+      }
+
+    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = new WriteBuilder {
+      override def build(): Write = new Write {
+        override def toBatch: BatchWrite = new BatchWrite {
+          override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory =
+            CommitAndAbortFailingDataSource.WriterFactory
+
+          override def commit(messages: Array[WriterCommitMessage]): Unit =
+            throw new RuntimeException("commit failed")
+
+          override def abort(messages: Array[WriterCommitMessage]): Unit =
+            throw new RuntimeException("abort failed")
+        }
+      }
+    }
+  }
+}
+
+object CommitAndAbortFailingDataSource {
+  object WriterFactory extends DataWriterFactory {
+    override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] =
+      new DataWriter[InternalRow] {
+        override def write(record: InternalRow): Unit = {}
+        override def commit(): WriterCommitMessage = null
+        override def abort(): Unit = {}
+        override def close(): Unit = {}
+      }
+  }
+}
+
 class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
@@ -2511,4 +2648,42 @@ class InvalidDataSource extends TestingV2Source {
   throw new IllegalArgumentException("test error")
 
   override def getTable(options: CaseInsensitiveStringMap): Table = null
+}
+
+/**
+ * A read-only DSv2 data source that only declares BATCH_READ capability.
+ * Used to test that write attempts produce a clear error instead of falling through to V1.
+ */
+class ReadOnlyV2DataSource extends SimpleTableProvider {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new ReadOnlyV2Table
+  }
+}
+
+class ReadOnlyV2Table extends Table with SupportsRead {
+  override def name(): String = "read_only_v2_test"
+  override def schema(): StructType = new StructType().add("i", "long")
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(TableCapability.BATCH_READ)
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    throw new UnsupportedOperationException("scan not needed for write tests")
+}
+
+/**
+ * A DSv2 data source that declares V1_BATCH_WRITE, simulating the JDBC pattern.
+ * Used to verify that V1 fallback is preserved for sources that opt into it.
+ */
+class V1BatchWriteV2DataSource extends SimpleTableProvider {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new V1BatchWriteV2Table
+  }
+}
+
+class V1BatchWriteV2Table extends Table with SupportsRead {
+  override def name(): String = "v1_batch_write_test"
+  override def schema(): StructType = new StructType().add("i", "long")
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(TableCapability.BATCH_READ, TableCapability.V1_BATCH_WRITE)
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    throw new UnsupportedOperationException("scan not needed for write tests")
 }

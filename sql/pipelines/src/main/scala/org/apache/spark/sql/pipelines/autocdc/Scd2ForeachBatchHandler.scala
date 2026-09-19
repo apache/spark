@@ -68,30 +68,43 @@ case class Scd2ForeachBatchHandler(
       batchId = batchId
     ).validateMicrobatch()
 
-    val preprocessedBatchDf = batchProcessor.preprocessMicrobatch(batchDf)
+    val targetTableDf = batchDf.sparkSession.read.table(targetTableIdentifier.quotedString)
+    val auxTableDf = batchDf.sparkSession.read.table(auxiliaryTableIdentifier.quotedString)
+
+    val preprocessedBatchDf = batchProcessor.preprocessMicrobatch(
+      microbatchDf = batchDf,
+      targetTableDf = targetTableDf
+    )
 
     val perKeyMinimumSequenceInMicrobatchDf = batchProcessor.computeMinimumSequencePerKey(
       preprocessedBatchDf
     )
 
-    val auxTableDf = batchDf.sparkSession.read.table(auxiliaryTableIdentifier.quotedString)
-    val affectedRowsFromAuxiliaryTable = batchProcessor.findAffectedRowsFromAuxiliaryTable(
+    val perKeyAffectedSequenceCutoffDf = batchProcessor.computePerKeyAffectedSequenceCutoff(
       rawAuxiliaryTableDf = auxTableDf,
+      targetTableDf = targetTableDf,
       perKeyMinimumSequenceInMicrobatchDf = perKeyMinimumSequenceInMicrobatchDf,
       batchId = batchId
     )
 
-    val targetTableDf = batchDf.sparkSession.read.table(targetTableIdentifier.quotedString)
-    val affectedRowsFromTargetTable = batchProcessor.findAffectedRowsFromTargetTable(
-      targetTableDf = targetTableDf,
-      perKeyMinimumSequenceInMicrobatchDf = perKeyMinimumSequenceInMicrobatchDf
+    val affectedRowsFromAuxiliaryTable = batchProcessor.findAffectedRowsFromAuxiliaryTable(
+      rawAuxiliaryTableDf = auxTableDf,
+      perKeyAffectedSequenceCutoffDf = perKeyAffectedSequenceCutoffDf,
+      batchId = batchId
     )
 
-    // All three share the canonical schema; findAffectedRowsFromAuxiliaryTable drops the aux-only
+    val affectedRowsFromTargetTable = batchProcessor.findAffectedRowsFromTargetTable(
+      targetTableDf = targetTableDf,
+      perKeyAffectedSequenceCutoffDf = perKeyAffectedSequenceCutoffDf
+    )
+
+    // Preprocessing has already aligned the microbatch to the target schema. Keep
+    // allowMissingColumns here as a safeguard for nested differences between persisted target and
+    // auxiliary rows; findAffectedRowsFromAuxiliaryTable also drops the aux-only
     // deletedByBatchId column.
     val microbatchAndAffectedRows = preprocessedBatchDf
-      .unionByName(affectedRowsFromAuxiliaryTable)
-      .unionByName(affectedRowsFromTargetTable)
+      .unionByName(affectedRowsFromAuxiliaryTable, allowMissingColumns = true)
+      .unionByName(affectedRowsFromTargetTable, allowMissingColumns = true)
 
     val decomposedDf = microbatchAndAffectedRows
       .transform(batchProcessor.decomposeOutOfOrderRows)

@@ -253,8 +253,8 @@ and third block is for another argument. As an example, please refer `DataFrame.
 These blocks should be consistently separated in PySpark doctests, and more doctests should be added if the coverage of the doctests or the number of examples to show is not enough.
 
 
-Contributing Error and Exception
---------------------------------
+Contributing Errors and Exceptions
+----------------------------------
 
 .. currentmodule:: pyspark.errors
 

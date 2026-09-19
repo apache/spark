@@ -108,9 +108,8 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
             FiniteDuration(15, TimeUnit.SECONDS))
         }
         // scalastyle:on awaitresult
-        // A keepalive-triggered UNAVAILABLE carries no wrapped cause (same as
-        // DEADLINE_EXCEEDED, see GrpcExceptionConverter.toThrowable), so the status
-        // code/description is only in the message.
+        // The status code/description of a keepalive-triggered UNAVAILABLE is part of the
+        // message (see GrpcExceptionConverter.toThrowable).
         assert(ex.getMessage.contains("UNAVAILABLE"))
         assert(ex.getMessage.contains("Keepalive failed"))
       } finally {

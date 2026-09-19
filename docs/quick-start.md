@@ -51,13 +51,13 @@ Or if PySpark is installed with pip in your current environment:
 
     pyspark
 
-Spark's primary abstracted is called a **Dataset**. A Dataset is a structured set of information. You can create datasets from Hadoop InputFormats (such as HDFS
+Spark's primary abstraction is called a **Dataset**. A Dataset is a structured set of information. You can create datasets from Hadoop InputFormats (such as HDFS
 files) or by transforming other Datasets. 
 
 Datasets behave differently in some languages. Because Python allows for dynamic typing, Datasets in Python are all `Dataset[Row]` on an implementation level.
 This leads to another key Spark concept: a `DataFrame`, or a Dataset with named columns. If you're familiar with DataFrames from pandas or R, you'll be familiar with how DataFrames work in Spark. In other languages, like Java, the difference between a Dataset and DataFrame is larger, but for now let's proceed with Python. 
 
-Let's make a new DataFrame using the `README.md` file in the Spark souce directory via the command line:
+Let's make a new DataFrame using the `README.md` file in the Spark source directory via the command line:
 
 {% highlight python %}
 >>> textFile = spark.read.text("README.md")
@@ -92,10 +92,10 @@ You can also chain together transformations and actions:
 
     ./bin/spark-shell
 
-Spark's primary abstracted is called a **Dataset**. A Dataset is a structured set of information. You can create datasets from Hadoop InputFormats (such as HDFS
+Spark's primary abstraction is called a **Dataset**. A Dataset is a structured set of information. You can create datasets from Hadoop InputFormats (such as HDFS
 files) or by transforming other Datasets.  
 
-Let's make a new DataFrame using the `README.md` file in the Spark souce directory via the command line:
+Let's make a new DataFrame using the `README.md` file in the Spark source directory via the command line:
 
 {% highlight scala %}
 scala> val textFile = spark.read.textFile("README.md")

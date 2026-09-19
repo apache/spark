@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.File
 import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.concurrent
 import scala.collection.mutable
@@ -47,7 +48,7 @@ import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
 import org.apache.spark.shuffle.{BlockingShuffleManager, PipelinedShuffleManager}
 import org.apache.spark.shuffle.{ShuffleBlockResolver, ShuffleManager}
-import org.apache.spark.shuffle.streaming.{MultiShuffleManager, StreamingShuffleManager}
+import org.apache.spark.shuffle.streaming.MultiShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, UDFDispatcherManager, WorkerDispatcher}
@@ -268,6 +269,19 @@ class SparkEnv (
 
   private[spark] var executorBackend: Option[ExecutorBackend] = None
 
+  /**
+   * Versioned credential store for OIDC-based user credentials on both driver and executors.
+   * Updated via `UpdateUserCredentials` RPC and `TaskDescription` credential delivery.
+   * Read by connector-specific credential providers (e.g., SparkOidcAwsCredentialsProvider).
+   * Contains serialized `UserCredentials` (no raw identity token).
+   *
+   * The version field is a monotonically increasing counter assigned by `UserCredentialManager`
+   * on each credential renewal. It is used to guard against stale credentials from delayed
+   * `TaskDescription` delivery overwriting fresher credentials delivered via RPC broadcast.
+   */
+  private[spark] val userCredentials: AtomicReference[VersionedCredentials] =
+    new AtomicReference[VersionedCredentials]()
+
   private[spark] def stop(): Unit = {
 
     if (!isStopped) {
@@ -450,12 +464,14 @@ class SparkEnv (
       return
     }
 
-    // The tracker is needed when the pipelined manager (spark.shuffle.manager.incremental) is a
-    // StreamingShuffleManager -- which is the default. Inspect the already-instantiated manager
-    // rather than re-reading the config; this runs at the end of initializeShuffleManager, so the
+    // The tracker is a transport directory of writer task locations; it is needed only by a
+    // pipelined manager that discovers writers over RPC. The manager declares this via
+    // usesStreamingShuffleOutputTracker (the RPC streaming manager returns true, the default;
+    // an in-process transport returns false). Inspect the already-instantiated manager rather
+    // than re-reading the config; this runs at the end of initializeShuffleManager, so the
     // manager is non-null here.
     val incrementalIsStreaming =
-      _pipelinedShuffleManager.isInstanceOf[StreamingShuffleManager]
+      _pipelinedShuffleManager.usesStreamingShuffleOutputTracker
     // It is also needed when a MultiShuffleManager is the blocking manager (spark.shuffle.manager):
     // it internally routes some shuffles to streaming. A bare StreamingShuffleManager cannot be the
     // blocking manager -- it is pipelined and rejected from that slot in initializeShuffleManager.
@@ -498,7 +514,10 @@ class SparkEnv (
     } else {
       conf.clone.set(MEMORY_OFFHEAP_ENABLED, false).set(MEMORY_OFFHEAP_SIZE, 0L)
     }
-    _memoryManager = UnifiedMemoryManager(memoryManagerConf, numUsableCores)
+    _memoryManager = UnifiedMemoryManager(
+      memoryManagerConf,
+      numUsableCores,
+      isDriver = SparkContext.isDriver(executorId))
   }
 }
 
@@ -823,5 +842,35 @@ object SparkEnv extends Logging {
       "System Properties" -> otherProperties,
       "Classpath Entries" -> classPaths,
       "Metrics Properties" -> metricsProperties.toSeq.sorted)
+  }
+}
+
+/**
+ * Container for versioned OIDC user credentials.
+ *
+ * @param version Monotonically increasing counter assigned by `UserCredentialManager` on each
+ *                credential renewal. Used to prevent stale credentials from overwriting fresher
+ *                ones on executors.
+ * @param bytes   Serialized `UserCredentials` payload (no raw identity token).
+ */
+private[spark] case class VersionedCredentials(version: Long, bytes: Array[Byte])
+
+private[spark] object VersionedCredentials {
+  /**
+   * Atomically update a credential store only if the given version is strictly newer
+   * than what is currently stored. This prevents stale credentials (e.g., from a delayed
+   * `TaskDescription`) from overwriting fresher credentials delivered via RPC broadcast.
+   *
+   * Uses `AtomicReference.updateAndGet` to ensure the check-and-set is atomic even
+   * when called concurrently from multiple task threads and the RPC dispatcher thread.
+   */
+  def updateIfNewer(
+      store: AtomicReference[VersionedCredentials],
+      version: Long,
+      bytes: Array[Byte]): Unit = {
+    val newValue = VersionedCredentials(version, bytes)
+    store.updateAndGet { current =>
+      if (current == null || version > current.version) newValue else current
+    }
   }
 }

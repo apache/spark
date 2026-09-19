@@ -946,17 +946,24 @@ private[spark] object Utils
    */
   private[spark] def normalizeIpIfNeeded(host: String): String = {
     // Is this a v6 address. We ask users to add [] around v6 addresses as strs but
-    // there not always there. If it's just 0-9 and : and [] we treat it as a v6 address.
+    // they're not always there. If it's just hexadecimal digits, :, and [] we treat it as a
+    // v6 address.
     // This means some invalid addresses are treated as v6 addresses, but since they are
     // not valid hostnames it doesn't matter.
     // See https://www.rfc-editor.org/rfc/rfc1123#page-13 for context around valid hostnames.
-    val addressRe = """^\[{0,1}([0-9:]+?:[0-9]*)\]{0,1}$""".r
+    val addressRe = """^\[{0,1}([0-9a-fA-F:]+?:[0-9a-fA-F]*)\]{0,1}$""".r
     host match {
       case addressRe(unbracketed) =>
         addBracketsIfNeeded(InetAddresses.toAddrString(InetAddresses.forString(unbracketed)))
       case _ =>
         host
     }
+  }
+
+  /** Returns whether a literal IPv4 or IPv6 address binds to every local interface. */
+  private[spark] def isAnyLocalAddress(host: String): Boolean = {
+    val address = host.stripPrefix("[").stripSuffix("]")
+    InetAddresses.isInetAddress(address) && InetAddresses.forString(address).isAnyLocalAddress
   }
 
   /**

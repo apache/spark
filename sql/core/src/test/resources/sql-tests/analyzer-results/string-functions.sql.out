@@ -2167,3 +2167,38 @@ select instr(null, null, cast(null as int), cast(null as int))
 -- !query analysis
 Project [instr(cast(null as string), cast(null as string), cast(null as int), cast(null as int)) AS instr(NULL, NULL, CAST(NULL AS INT), CAST(NULL AS INT))#x]
 +- OneRowRelation
+
+
+-- !query
+select normalize('hello')
+-- !query analysis
+Project [normalize(hello, NFC) AS normalize(hello, NFC)#x]
++- OneRowRelation
+
+
+-- !query
+select normalize('hello', 'NFD')
+-- !query analysis
+Project [normalize(hello, NFD) AS normalize(hello, NFD)#x]
++- OneRowRelation
+
+
+-- !query
+select normalize('ﬁ', 'NFKC')
+-- !query analysis
+Project [normalize(ﬁ, NFKC) AS normalize(ﬁ, NFKC)#x]
++- OneRowRelation
+
+
+-- !query
+select normalize(null, 'NFC')
+-- !query analysis
+Project [normalize(cast(null as string), NFC) AS normalize(NULL, NFC)#x]
++- OneRowRelation
+
+
+-- !query
+select normalize('hello', 'not_a_form')
+-- !query analysis
+Project [normalize(hello, not_a_form) AS normalize(hello, not_a_form)#x]
++- OneRowRelation

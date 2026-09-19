@@ -28,7 +28,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper {
 
-  val allSupportedRoundModes = Seq(ROUND_HALF_UP, ROUND_HALF_EVEN, ROUND_CEILING, ROUND_FLOOR)
+  val allSupportedRoundModes =
+    Seq(ROUND_HALF_UP, ROUND_HALF_EVEN, ROUND_CEILING, ROUND_FLOOR, ROUND_DOWN)
 
   /** Check that a Decimal has the given string representation, precision and scale */
   private def checkDecimal(d: Decimal, string: String, precision: Int, scale: Int): Unit = {

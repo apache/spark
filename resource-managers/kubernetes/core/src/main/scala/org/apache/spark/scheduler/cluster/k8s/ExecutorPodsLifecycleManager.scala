@@ -228,8 +228,10 @@ private[spark] class ExecutorPodsLifecycleManager(
           .inNamespace(namespace)
           .withName(updatedPod.getMetadata.getName)
 
-        if (podToDelete.get() != null &&
-            podToDelete.get.getMetadata.getDeletionTimestamp == null) {
+        // Fetch once: the pod can be removed between two `get` calls, making the second
+        // return null and NPE while dereferencing its metadata.
+        val fetchedPod = podToDelete.get()
+        if (fetchedPod != null && fetchedPod.getMetadata.getDeletionTimestamp == null) {
           podToDelete.delete()
         }
       } else if (!inactivatedPods.contains(execId) && !isPodInactive(updatedPod)) {
