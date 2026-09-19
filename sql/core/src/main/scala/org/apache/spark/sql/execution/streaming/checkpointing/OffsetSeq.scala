@@ -233,6 +233,26 @@ object OffsetSeqMetadata extends Logging {
     rebindSQLConfsSessionToOffsetLog.map { case (k, v) => (v, k) }.toMap
 
   /**
+   * Builds the configuration map persisted in offset metadata.
+   *
+   * Re-bound session configurations are written using their legacy offset-log
+   * keys for checkpoint compatibility.
+   */
+  private[checkpointing] def confsForOffsetLog(
+      sessionConf: RuntimeConfig): Map[String, String] = {
+    val relevantConfs = relevantSQLConfs.map { conf =>
+      conf.key -> sessionConf.get(conf.key)
+    }.toMap
+
+    val reboundConfs = rebindSQLConfsSessionToOffsetLog.map {
+      case (confInSession, confInOffsetLog) =>
+        confInOffsetLog.key -> sessionConf.get(confInSession.key)
+    }.toMap
+
+    relevantConfs ++ reboundConfs
+  }
+
+  /**
    * Default values of relevant configurations that are used for backward compatibility.
    * As new configurations are added to the metadata, existing checkpoints may not have those
    * confs. The values in this list ensures that the confs without recovered values are
@@ -283,12 +303,7 @@ object OffsetSeqMetadata extends Logging {
       batchWatermarkMs: Long,
       batchTimestampMs: Long,
       sessionConf: RuntimeConfig): OffsetSeqMetadata = {
-    val confs = relevantSQLConfs.map { conf => conf.key -> sessionConf.get(conf.key) }.toMap
-    val confsFromRebind = rebindSQLConfsSessionToOffsetLog.map {
-      case (confInSession, confInOffsetLog) =>
-        confInOffsetLog.key -> sessionConf.get(confInSession.key)
-    }.toMap
-    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, confs++ confsFromRebind)
+    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, confsForOffsetLog(sessionConf))
   }
 
   /** Set the SparkSession configuration with the values in the metadata */
@@ -455,9 +470,6 @@ object OffsetSeqMetadataV2 {
       batchWatermarkMs: Long,
       batchTimestampMs: Long,
       sessionConf: RuntimeConfig): OffsetSeqMetadataV2 = {
-    val confs = OffsetSeqMetadata.relevantSQLConfs.map {
-      conf => conf.key -> sessionConf.get(conf.key)
-    }.toMap
-    OffsetSeqMetadataV2(batchWatermarkMs, batchTimestampMs, confs)
+    OffsetSeqMetadataV2(batchWatermarkMs, batchTimestampMs, OffsetSeqMetadata.confsForOffsetLog(sessionConf))
   }
 }
