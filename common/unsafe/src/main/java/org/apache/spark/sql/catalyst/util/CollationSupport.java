@@ -30,6 +30,12 @@ import java.util.regex.Pattern;
  */
 public final class CollationSupport {
 
+  private static final UTF8String DEFAULT_TRIM_STRING = UTF8String.fromString(" ");
+
+  private static boolean useCollationAwareDefaultTrim(final int collationId) {
+    return CollationFactory.isCaseInsensitive(collationId);
+  }
+
   /**
    * Collation-aware string expressions.
    */
@@ -506,6 +512,11 @@ public final class CollationSupport {
     public static UTF8String exec(final UTF8String srcString) {
       return execBinary(srcString);
     }
+    public static UTF8String exec(final UTF8String srcString, final int collationId) {
+      return useCollationAwareDefaultTrim(collationId) ?
+        execICU(srcString, collationId) :
+        execBinary(srcString);
+    }
     public static UTF8String exec(
         final UTF8String srcString,
         final UTF8String trimString,
@@ -526,6 +537,13 @@ public final class CollationSupport {
     }
     public static String genCode(final String srcString) {
       return String.format("CollationSupport.StringTrim.execBinary(%s)", srcString);
+    }
+    public static String genCode(final String srcString, final int collationId) {
+      if (useCollationAwareDefaultTrim(collationId)) {
+        return String.format(
+          "CollationSupport.StringTrim.execICU(%s, %d)", srcString, collationId);
+      }
+      return genCode(srcString);
     }
     public static String genCode(
         final String srcString,
@@ -555,6 +573,11 @@ public final class CollationSupport {
     }
     public static UTF8String execICU(
         final UTF8String srcString,
+        final int collationId) {
+      return execICU(srcString, DEFAULT_TRIM_STRING, collationId);
+    }
+    public static UTF8String execICU(
+        final UTF8String srcString,
         final UTF8String trimString,
         final int collationId) {
       return CollationAwareUTF8String.trim(srcString, trimString, collationId);
@@ -570,6 +593,11 @@ public final class CollationSupport {
   public static class StringTrimLeft {
     public static UTF8String exec(final UTF8String srcString) {
       return execBinary(srcString);
+    }
+    public static UTF8String exec(final UTF8String srcString, final int collationId) {
+      return useCollationAwareDefaultTrim(collationId) ?
+        execICU(srcString, collationId) :
+        execBinary(srcString);
     }
     public static UTF8String exec(
       final UTF8String srcString,
@@ -588,6 +616,13 @@ public final class CollationSupport {
     }
     public static String genCode(final String srcString) {
       return String.format("CollationSupport.StringTrimLeft.execBinary(%s)", srcString);
+    }
+    public static String genCode(final String srcString, final int collationId) {
+      if (useCollationAwareDefaultTrim(collationId)) {
+        return String.format(
+          "CollationSupport.StringTrimLeft.execICU(%s, %d)", srcString, collationId);
+      }
+      return genCode(srcString);
     }
     public static String genCode(
         final String srcString,
@@ -615,6 +650,11 @@ public final class CollationSupport {
     }
     public static UTF8String execICU(
         final UTF8String srcString,
+        final int collationId) {
+      return execICU(srcString, DEFAULT_TRIM_STRING, collationId);
+    }
+    public static UTF8String execICU(
+        final UTF8String srcString,
         final UTF8String trimString,
         final int collationId) {
       return CollationAwareUTF8String.trimLeft(srcString, trimString, collationId);
@@ -624,6 +664,11 @@ public final class CollationSupport {
   public static class StringTrimRight {
     public static UTF8String exec(final UTF8String srcString) {
       return execBinary(srcString);
+    }
+    public static UTF8String exec(final UTF8String srcString, final int collationId) {
+      return useCollationAwareDefaultTrim(collationId) ?
+        execICU(srcString, collationId) :
+        execBinary(srcString);
     }
     public static UTF8String exec(
         final UTF8String srcString,
@@ -645,6 +690,13 @@ public final class CollationSupport {
     }
     public static String genCode(final String srcString) {
       return String.format("CollationSupport.StringTrimRight.execBinary(%s)", srcString);
+    }
+    public static String genCode(final String srcString, final int collationId) {
+      if (useCollationAwareDefaultTrim(collationId)) {
+        return String.format(
+          "CollationSupport.StringTrimRight.execICU(%s, %d)", srcString, collationId);
+      }
+      return genCode(srcString);
     }
     public static String genCode(
         final String srcString,
@@ -670,6 +722,11 @@ public final class CollationSupport {
         final UTF8String trimString,
         final int collationId) {
       return CollationAwareUTF8String.lowercaseTrimRight(srcString, trimString, collationId);
+    }
+    public static UTF8String execICU(
+        final UTF8String srcString,
+        final int collationId) {
+      return execICU(srcString, DEFAULT_TRIM_STRING, collationId);
     }
     public static UTF8String execICU(
         final UTF8String srcString,
