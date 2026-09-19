@@ -278,7 +278,11 @@ class StreamingQueryListenerBus:
         self._sqm = sqm
         self._listener_bus: List[StreamingQueryListener] = []
         self._execution_thread: Optional[Thread] = None
-        self._lock = Lock()
+        # Protects _listener_bus and _execution_thread shared by API callers and the event thread.
+        self._listeners_state_lock = Lock()
+        # Serialize listener lifecycle changes while allowing the event thread to acquire
+        # _listeners_state_lock and drain pending events when the last listener is removed.
+        self._lifecycle_lock = Lock()
 
     def close(self) -> None:
         for listener in self._listener_bus:
@@ -290,7 +294,7 @@ class StreamingQueryListenerBus:
         the first listener, request the server to create the server side listener
         and start a thread to handle query events.
         """
-        with self._lock:
+        with self._lifecycle_lock, self._listeners_state_lock:
             self._listener_bus.append(listener)
 
             if len(self._listener_bus) == 1:
@@ -321,28 +325,39 @@ class StreamingQueryListenerBus:
         will return after processing remaining listener events. This function blocks until
         all events are processed.
         """
-        with self._lock:
-            if listener not in self._listener_bus:
-                return
-
-            if len(self._listener_bus) == 1:
-                cmd = pb2.StreamingQueryListenerBusCommand()
-                cmd.remove_listener_bus_listener = True
-                exec_cmd = pb2.Command()
-                exec_cmd.streaming_query_listener_bus_command.CopyFrom(cmd)
-                try:
-                    self._sqm._session.client.execute_command(exec_cmd)
-                except Exception as e:
-                    warnings.warn(
-                        f"Failed to remove the listener because of exception: {e}\n"
-                        f"The listener is not removed, please remove it again."
-                    )
+        with self._lifecycle_lock:
+            with self._listeners_state_lock:
+                if listener not in self._listener_bus:
                     return
-                if self._execution_thread is not None:
-                    self._execution_thread.join()
-                    self._execution_thread = None
 
-            self._listener_bus.remove(listener)
+                is_last_listener = len(self._listener_bus) == 1
+                execution_thread = None
+                if is_last_listener:
+                    cmd = pb2.StreamingQueryListenerBusCommand()
+                    cmd.remove_listener_bus_listener = True
+                    exec_cmd = pb2.Command()
+                    exec_cmd.streaming_query_listener_bus_command.CopyFrom(cmd)
+                    try:
+                        self._sqm._session.client.execute_command(exec_cmd)
+                    except Exception as e:
+                        warnings.warn(
+                            f"Failed to remove the listener because of exception: {e}\n"
+                            f"The listener is not removed, please remove it again."
+                        )
+                        return
+                    execution_thread = self._execution_thread
+                else:
+                    self._listener_bus.remove(listener)
+
+            if is_last_listener:
+                if execution_thread is not None:
+                    execution_thread.join()
+                with self._listeners_state_lock:
+                    if self._execution_thread is execution_thread:
+                        self._execution_thread = None
+                    # The event thread may have cleared the listener bus after an exception.
+                    if listener in self._listener_bus:
+                        self._listener_bus.remove(listener)
 
     @staticmethod
     def _iter_listener_events(
@@ -400,7 +415,7 @@ class StreamingQueryListenerBus:
                 "StreamingQueryListenerBus Handler thread received exception, all client side "
                 f"listeners are removed and handler thread is terminated. The error is: {e}"
             )
-            with self._lock:
+            with self._listeners_state_lock:
                 self._execution_thread = None
                 self._listener_bus.clear()
             return
@@ -431,7 +446,7 @@ class StreamingQueryListenerBus:
         Post listener events to all active listeners, note that if one listener throws,
         it should not affect other listeners.
         """
-        with self._lock:
+        with self._listeners_state_lock:
             for listener in self._listener_bus:
                 try:
                     if isinstance(event, QueryStartedEvent):
