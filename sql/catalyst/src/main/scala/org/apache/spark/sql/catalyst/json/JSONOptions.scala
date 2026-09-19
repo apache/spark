@@ -182,6 +182,11 @@ class JSONOptions(
   val encoding: Option[String] = parameters.get(ENCODING)
     .orElse(parameters.get(CHARSET)).map(checkedEncoding)
 
+  // Charset-decoding flags for CreateJacksonParser's per-record decoder, resolved once here (per
+  // reader) rather than via SQLConf.get on every record. See CreateJacksonParser.getStreamDecoder.
+  val legacyJavaCharsets: Boolean = SQLConf.get.legacyJavaCharsets
+  val legacyCodingErrorAction: Boolean = SQLConf.get.legacyCodingErrorAction
+
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
     lineSep.getBytes(encoding.getOrElse(StandardCharsets.UTF_8.name()))
   }
