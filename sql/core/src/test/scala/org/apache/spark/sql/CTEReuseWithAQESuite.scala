@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-
-
 import org.apache.spark.sql.catalyst.plans.logical.CTEReuseRelation
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec

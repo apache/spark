@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-
-
 import org.apache.spark.sql.execution.{BaseSubqueryExec, ReusedSubqueryExec}
 import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
