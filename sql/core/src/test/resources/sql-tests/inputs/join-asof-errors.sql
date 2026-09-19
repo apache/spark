@@ -129,3 +129,23 @@ SELECT * FROM trades t ASOF JOIN quotes q
 SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (q.quote_time >= q.quote_time - INTERVAL 1 HOUR)
   ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-024: literal constant operand (right) references no join input
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= TIMESTAMP '2026-06-29 10:00:00')
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-025: literal constant operand (left) references no join input
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:00' >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-026: query-foldable constant operand (current_timestamp) references no join input
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (current_timestamp() >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-3-027: both operands are constants that reference no join input
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:01' >= TIMESTAMP '2026-06-29 10:00:00')
+  ON t.symbol = q.symbol;
