@@ -75,7 +75,7 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
   private def withCteRefs(cteBody: LogicalPlan, refCount: Int): WithCTE = {
     val cteDef = CTERelationDef(cteBody)
     val refs = (0 until refCount).map { _ =>
-      CTERelationRef(cteDef.id, _resolved = true, cteBody.output, _isStreaming = false)
+      CTERelationRef(cteDef.id, _resolved = true, cteBody.output, isStreaming = false)
     }
     // Chain the refs under Unions so they are all real children of the WithCTE body.
     val body = refs.reduce[LogicalPlan]((l, r) => Union(Seq(l, r)))
@@ -287,16 +287,16 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     val innerBody = rel
     val innerDef = CTERelationDef(innerBody)
     val innerRef1 =
-      CTERelationRef(innerDef.id, _resolved = true, innerBody.output, _isStreaming = false)
+      CTERelationRef(innerDef.id, _resolved = true, innerBody.output, isStreaming = false)
     val innerRef2 =
-      CTERelationRef(innerDef.id, _resolved = true, innerBody.output, _isStreaming = false)
+      CTERelationRef(innerDef.id, _resolved = true, innerBody.output, isStreaming = false)
     val outerBody = WithCTE(Union(Seq(innerRef1, innerRef2)), Seq(innerDef))
 
     val outerDef = CTERelationDef(outerBody)
     val outerRef1 =
-      CTERelationRef(outerDef.id, _resolved = true, outerBody.output, _isStreaming = false)
+      CTERelationRef(outerDef.id, _resolved = true, outerBody.output, isStreaming = false)
     val outerRef2 =
-      CTERelationRef(outerDef.id, _resolved = true, outerBody.output, _isStreaming = false)
+      CTERelationRef(outerDef.id, _resolved = true, outerBody.output, isStreaming = false)
     val plan = WithCTE(Union(Seq(outerRef1, outerRef2)), Seq(outerDef))
 
     val result = runReuseRules(plan)
@@ -363,8 +363,8 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     // leaving it unresolved. The rule must resolve the CTERelationRef regardless of ordering.
     val cteBody = rel
     val cteDef = CTERelationDef(cteBody)
-    val ref1 = CTERelationRef(cteDef.id, _resolved = true, cteBody.output, _isStreaming = false)
-    val ref2 = CTERelationRef(cteDef.id, _resolved = true, cteBody.output, _isStreaming = false)
+    val ref1 = CTERelationRef(cteDef.id, _resolved = true, cteBody.output, isStreaming = false)
+    val ref2 = CTERelationRef(cteDef.id, _resolved = true, cteBody.output, isStreaming = false)
     // A plan-reuse repartition sits directly above one of the refs.
     val body = Union(Seq(planReuseRepartition(ref1, id = 99L), ref2))
     val plan = WithCTE(body, Seq(cteDef))
