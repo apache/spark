@@ -27,6 +27,7 @@ from pyspark import worker
 from pyspark.serializers import (
     CPickleSerializer,
     UTF8Deserializer,
+    read_int,
     read_long,
     write_int,
 )
@@ -75,6 +76,9 @@ def main(infile: IO, outfile: IO) -> None:
         func = worker.read_command(pickle_ser, infile)
         write_int(0, outfile)
         outfile.flush()
+
+        for _ in range(read_int(infile)):
+            spark_connect_session.addTag(utf8_deserializer.loads(infile))
 
         while True:
             df_ref_id = utf8_deserializer.loads(infile)
