@@ -55,25 +55,24 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
   private val logBatches = SQLConf.get.planChangeBatches.map(Utils.stringToSeq)
 
   def logRule(ruleName: String, oldPlan: TreeType, newPlan: TreeType): Unit = {
-    if (!newPlan.fastEquals(oldPlan)) {
-      if (logRules.isEmpty || logRules.get.contains(ruleName)) {
-        def message(): MessageWithContext = {
-          val oldPlanStringWithOutput = oldPlan.treeString(verbose = false,
-            printOutputColumns = true)
-          val newPlanStringWithOutput = newPlan.treeString(verbose = false,
-            printOutputColumns = true)
-          // scalastyle:off line.size.limit
+    withLogLevel(logLevel) {
+      if ((logRules.isEmpty || logRules.get.contains(ruleName)) &&
+          !newPlan.fastEquals(oldPlan)) {
+        val oldPlanStringWithOutput = oldPlan.treeString(verbose = false,
+          printOutputColumns = true)
+        val newPlanStringWithOutput = newPlan.treeString(verbose = false,
+          printOutputColumns = true)
+        // scalastyle:off line.size.limit
+        logBasedOnLevel(logLevel) {
           log"""
-             |=== Applying Rule ${MDC(RULE_NAME, ruleName)} ===
-             |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
-             |
-             |Output Information:
-             |${MDC(QUERY_PLAN, sideBySide(oldPlanStringWithOutput, newPlanStringWithOutput).mkString("\n"))}
-           """.stripMargin
-           // scalastyle:on line.size.limit
+            |=== Applying Rule ${MDC(RULE_NAME, ruleName)} ===
+            |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
+            |
+            |Output Information:
+            |${MDC(QUERY_PLAN, sideBySide(oldPlanStringWithOutput, newPlanStringWithOutput).mkString("\n"))}
+          """.stripMargin
         }
-
-        logBasedOnLevel(logLevel)(message())
+        // scalastyle:on line.size.limit
       }
     }
   }
