@@ -169,8 +169,8 @@ jobs:
             docs=false
             java25=false
           fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
-          build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,network-common,network-shuffle,sketch,variant,launcher"`
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,config,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,config,network-common,network-shuffle,sketch,variant,launcher"`
           precondition="
             {
               \"build\": \"$build\",
@@ -289,7 +289,7 @@ jobs:
         # Note that the modules below are from sparktestsupport/modules.py.
         modules:
           - >-
-            core, unsafe, kvstore, utils, utils-java,
+            core, unsafe, kvstore, utils, utils-java, config,
             network-common, network-shuffle, sketch, variant, launcher
           - >-
             api, catalyst, hive-thriftserver
@@ -341,7 +341,7 @@ jobs:
           # Skip the core/utils group when a PR doesn't touch those modules (e.g. SQL-only or
           # PySpark-only changes). The precondition is opt-out: omitted means run (so periodic
           # full-build workflows that set only "build": "true" keep running this entry).
-          - modules: ${{ fromJson(needs.precondition.outputs.required).build-core-utils == 'false' && 'core, unsafe, kvstore, utils, utils-java, network-common, network-shuffle, sketch, variant, launcher' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).build-core-utils == 'false' && 'core, unsafe, kvstore, utils, utils-java, config, network-common, network-shuffle, sketch, variant, launcher' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
