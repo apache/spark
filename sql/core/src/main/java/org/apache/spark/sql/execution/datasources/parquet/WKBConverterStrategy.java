@@ -23,7 +23,17 @@ import org.apache.spark.sql.catalyst.util.STUtils;
  * Interface for converting a WKB byte array into a physical geometry or geography value.
  */
 interface WKBConverterStrategy {
-  byte[] convert(byte[] wkb, int srid);
+  /**
+   * Converts the WKB bytes in the sub-range {@code [offset, offset + length)} of {@code wkb}
+   * into a physical geometry/geography value. Accepting an offset/length lets callers reuse a
+   * larger backing buffer without materializing an exact-size copy.
+   */
+  byte[] convert(byte[] wkb, int offset, int length, int srid);
+
+  /** Convenience overload that converts the entire {@code wkb} array. */
+  default byte[] convert(byte[] wkb, int srid) {
+    return convert(wkb, 0, wkb.length, srid);
+  }
 }
 
 /**
@@ -33,8 +43,8 @@ enum WKBToGeometryConverter implements WKBConverterStrategy {
   INSTANCE;
 
   @Override
-  public byte[] convert(byte[] wkb, int srid) {
-    return STUtils.stGeomFromWKB(wkb, srid).getBytes();
+  public byte[] convert(byte[] wkb, int offset, int length, int srid) {
+    return STUtils.stGeomFromWKB(wkb, offset, length, srid).getBytes();
   }
 }
 
@@ -45,7 +55,7 @@ enum WKBToGeographyConverter implements WKBConverterStrategy {
   INSTANCE;
 
   @Override
-  public byte[] convert(byte[] wkb, int srid) {
-    return STUtils.stGeogFromWKB(wkb, srid).getBytes();
+  public byte[] convert(byte[] wkb, int offset, int length, int srid) {
+    return STUtils.stGeogFromWKB(wkb, offset, length, srid).getBytes();
   }
 }
