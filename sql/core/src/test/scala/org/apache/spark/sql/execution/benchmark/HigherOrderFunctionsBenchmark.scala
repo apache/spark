@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.Column
+import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -40,34 +40,36 @@ object HigherOrderFunctionsBenchmark extends SqlBasedBenchmark {
   private val M = 10
 
   private val df = spark.range(N).select(array(col("id"), col("id"), col("id")).alias("arr"))
+  private val arraySortDF = spark.range(N).select(sequence(lit(32), lit(1), lit(-1)).alias("arr"))
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Higher order functions") {
-      def benchFunction(name: String, col: Column) = {
+      def benchFunction(name: String, input: DataFrame, col: Column) = {
         var benchmark = new Benchmark(name, N, output = output)
         benchmark.addCase("codegen", M) { _ =>
           withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key ->
               CodegenObjectFactoryMode.CODEGEN_ONLY.toString()) {
-            df.select(col).noop()
+            input.select(col).noop()
           }
         }
 
         benchmark.addCase("interpreted", M) { _ =>
           withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key ->
               CodegenObjectFactoryMode.NO_CODEGEN.toString()) {
-            df.select(col).noop()
+            input.select(col).noop()
           }
         }
         benchmark.run()
       }
 
-      benchFunction("transform", transform(col("arr"), x => x + 1))
-      benchFunction("filter", filter(col("arr"), x => x > 1))
-      benchFunction("forall - fast", forall(col("arr"), x => x < 0))
-      benchFunction("forall - slow", forall(col("arr"), x => x >= 0))
-      benchFunction("exists - fast", exists(col("arr"), x => x >= 0))
-      benchFunction("exists - slow", exists(col("arr"), x => x < 0))
-      benchFunction("aggregate", aggregate(col("arr"), lit(0L), (acc, x) => acc + x))
+      benchFunction("transform", df, transform(col("arr"), x => x + 1))
+      benchFunction("filter", df, filter(col("arr"), x => x > 1))
+      benchFunction("forall - fast", df, forall(col("arr"), x => x < 0))
+      benchFunction("forall - slow", df, forall(col("arr"), x => x >= 0))
+      benchFunction("exists - fast", df, exists(col("arr"), x => x >= 0))
+      benchFunction("exists - slow", df, exists(col("arr"), x => x < 0))
+      benchFunction("aggregate", df, aggregate(col("arr"), lit(0L), (acc, x) => acc + x))
+      benchFunction("array_sort", arraySortDF, array_sort(col("arr")))
     }
   }
 }
