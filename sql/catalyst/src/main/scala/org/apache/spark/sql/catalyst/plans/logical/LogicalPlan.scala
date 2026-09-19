@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE_REUSE, LOGICAL_QUERY_STAGE, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -573,9 +573,40 @@ object LogicalPlanIntegrity {
       .orElse(LogicalPlanIntegrity.validateNoDanglingReferences(currentPlan))
       .orElse(LogicalPlanIntegrity.validateAggregateExpressions(currentPlan))
       .orElse(LogicalPlanIntegrity.validateNullability(currentPlan))
+      .orElse(LogicalPlanIntegrity.validateCTEReuseRelations(currentPlan))
       .map(err => s"${err}\nPrevious schema:${previousPlan.output.mkString(", ")}" +
         s"\nPrevious plan: ${previousPlan.treeString}")
     validation
+  }
+
+  /**
+   * Validates that CTEReuseRelation nodes are correctly formed.
+   * join must also reside within the same shared subplan. A subplan whose runtime
+   * filter references an external join would fail when materialized independently.
+   *
+   * Returns an error message if the check fails, or None if it succeeds.
+   */
+  def validateCTEReuseRelations(plan: LogicalPlan): Option[String] = {
+    if (!plan.containsPattern(CTE_REUSE)) {
+      None
+    } else {
+      val cteReuses = plan.collectWithSubqueries {
+        case r: CTEReuseRelation => r
+      }
+      if (cteReuses.isEmpty) {
+        None
+      } else {
+        // Check: same cteId must have same canonicalized sharedSubplan.
+        val grouped = cteReuses.groupBy(_.cteId)
+        grouped.collectFirst {
+          case (id, group) if group.map(_.sharedSubplan.canonicalized).distinct.size > 1 =>
+            val canonicals = group.map(_.sharedSubplan.canonicalized).distinct
+            s"CTEReuseRelation nodes with cteId=$id have " +
+              s"${canonicals.size} distinct canonical forms, expected 1.\n" +
+              s"Full plan:\n${plan.treeString}"
+        }
+      }
+    }
   }
 }
 

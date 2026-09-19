@@ -6869,6 +6869,30 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val REPLACE_CTE_REF_WITH_CTE_REUSE =
+    buildConf("spark.sql.optimizer.replaceCTERefWithCTEReuse.enabled")
+      .internal()
+      .doc("When true, replaces CTE references and repartitions with CTEReuse nodes " +
+        "instead of plain Repartition nodes. CTEReuse enables guaranteed exchange reuse " +
+        "in AQE by sharing a single inner AdaptiveSparkPlanExec across all references.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val FAIL_ON_CTE_REUSE_WITHOUT_AQE =
+    buildConf("spark.sql.optimizer.failOnCTEReuseWithoutAQE.enabled")
+      .internal()
+      .doc("When true, throw an error if guaranteed CTE/subplan shuffle reuse fails with AQE " +
+        "off, i.e. two or more shuffles tagged with the same cteId survive after " +
+        "ReuseExchangeAndSubquery (they were not deduplicated into a ReusedExchangeExec). " +
+        "When false, only log the plan, error, and cteIds. Enabled by default in tests to " +
+        "catch reuse regressions.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_TIME_PARSER_POLICY = buildConf(SqlApiConfHelper.LEGACY_TIME_PARSER_POLICY_KEY)
     .internal()
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +

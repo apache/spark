@@ -312,6 +312,78 @@ case class TableCacheQueryStageExec(
   override def getRuntimeStatistics: Statistics = inMemoryTableScan.runtimeStatistics
 }
 
+/**
+ * A query stage that wraps the shared inner [[AdaptiveSparkPlanExec]] materializing a reused CTE.
+ *
+ * All references to one CTE share a single inner AQE (keyed by cteId in
+ * [[AdaptiveExecutionContext.cteAQERegistry]]); each reference gets its own stage whose `output`
+ * remaps the inner AQE's (primary reference's) attribute ids into this reference's id space,
+ * mirroring [[org.apache.spark.sql.execution.exchange.ReusedExchangeExec]]. Execution and stats
+ * delegate to the inner AQE's post-iteration `executedPlan` so that going through the inner AQE's
+ * own `execute()` (which would re-run iteration and wrap a result stage) is avoided.
+ */
+case class CTEReuseQueryStageExec(
+    override val id: Int,
+    innerAQE: AdaptiveSparkPlanExec,
+    override val output: Seq[Attribute]) extends QueryStageExec {
+
+  override val plan: SparkPlan = innerAQE
+
+  override def doCanonicalize(): SparkPlan = innerAQE.canonicalized
+
+  override protected def doMaterialize(): Future[Any] = innerAQE.materialize()
+
+  private[sql] lazy val updateAttr: Expression => Expression = {
+    val originalAttrToNewAttr = AttributeMap(innerAQE.output.zip(output))
+    e => e.transform {
+      case attr: Attribute => originalAttrToNewAttr.getOrElse(attr, attr)
+    }
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = innerAQE.executedPlan.execute()
+
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
+    innerAQE.executedPlan.executeColumnar()
+
+  override def supportsColumnar: Boolean = innerAQE.executedPlan.supportsColumnar
+
+  override def outputPartitioning: Partitioning = innerAQE.inputPlan.outputPartitioning match {
+    case e: Expression => updateAttr(e).asInstanceOf[Partitioning]
+    case other => other
+  }
+
+  override def outputOrdering: Seq[SortOrder] =
+    innerAQE.inputPlan.outputOrdering.map(updateAttr(_).asInstanceOf[SortOrder])
+
+  override def getRuntimeStatistics: Statistics = innerShuffleStage.getRuntimeStatistics
+
+  override def computeStats(): Option[Statistics] = super.computeStats().map { stats =>
+    val remapped = AttributeMap(stats.attributeStats.toSeq.map { case (a, s) =>
+      updateAttr(a).asInstanceOf[Attribute] -> s
+    })
+    stats.copy(attributeStats = remapped)
+  }
+
+  private def innerShuffleStage: ShuffleQueryStageExec = {
+    assert(isMaterialized, "innerShuffleStage requires the CTE inner AQE to be materialized")
+    innerAQE.executedPlan match {
+      case s: ShuffleQueryStageExec => s
+      case r: AQEShuffleReadExec =>
+        r.child match {
+          case s: ShuffleQueryStageExec => s
+          case other =>
+            throw SparkException.internalError(
+              "Expected ShuffleQueryStageExec under AQEShuffleReadExec in CTE inner AQE, " +
+                s"but got ${other.getClass.getSimpleName}")
+        }
+      case other =>
+        throw SparkException.internalError(
+          "Expected ShuffleQueryStageExec at the root of CTE inner AQE, " +
+            s"but got ${other.getClass.getSimpleName}")
+    }
+  }
+}
+
 case class ResultQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,

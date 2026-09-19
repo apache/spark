@@ -1936,7 +1936,7 @@ class Analyzer(
       // table `t` even if there is a Project node between the table scan node and Sort node.
       // We also need to propagate the missing attributes from the descendant node to the current
       // node, and project them way at the end via an extra Project.
-      case r @ RepartitionByExpression(partitionExprs, child, _, _)
+      case r @ RepartitionByExpression(partitionExprs, child, _, _, _)
         if !r.resolved || r.missingInput.nonEmpty =>
         val resolvedBasic = partitionExprs.map(resolveExpressionByPlanChildren(_, r))
         val (newPartitionExprs, newChild) = resolveExprsAndAddMissingAttrs(resolvedBasic, child)
