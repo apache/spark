@@ -39,7 +39,7 @@ import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
+import org.apache.spark.{SparkArithmeticException, SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -3045,6 +3045,36 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
 @ExtendedSQLTest
 class ParquetV2FilterSuite extends ParquetFilterSuite {
   import testImplicits.ColumnConstructorExt
+  import testImplicits.toRichColumn
+
+  test("push down derived predicate for ANSI integral arithmetic") {
+    withParquetDataFrame((1 to 4).map(Tuple1(_))) { df =>
+      val predicate = Add(df("_1").expr, Literal(10), EvalMode.ANSI) > Literal(100)
+      checkFilterPredicate(
+        df,
+        predicate,
+        classOf[Operators.Or],
+        checkAnswer(_, _: Seq[Row]),
+        Seq.empty)
+    }
+  }
+
+  test("derived predicate preserves ANSI integral overflow") {
+    withParquetDataFrame(Seq(Tuple1(Int.MaxValue))) { df =>
+      val predicate = Add(df("_1").expr, Literal(10), EvalMode.ANSI) > Literal(100)
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          df.filter(Column(predicate)).collect()
+        },
+        condition = "ARITHMETIC_OVERFLOW",
+        parameters = Map(
+          "message" -> "overflow",
+          "alternative" -> " Use 'try_add' to tolerate overflow and return NULL instead.",
+          "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
+        sqlState = "22003",
+        context = ExpectedContext("", -1, -1))
+    }
+  }
 
   // TODO: enable Parquet V2 write path after file source V2 writers are workable.
   override protected def sparkConf: SparkConf =
