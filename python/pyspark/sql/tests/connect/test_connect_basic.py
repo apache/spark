@@ -640,6 +640,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 self.check_error(
                     exception=ctx.exception,
                     errorClass="UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+                    messageParameters={},
                 )
 
     def test_to(self):
