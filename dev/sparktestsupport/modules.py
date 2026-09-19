@@ -205,6 +205,17 @@ tags = Module(
     ],
 )
 
+libbid = Module(
+    name="libbid",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/libbid/",
+    ],
+    sbt_test_goals=[
+        "libbid/test",
+    ],
+)
+
 utils_java = Module(
     name="utils-java",
     dependencies=[tags],
