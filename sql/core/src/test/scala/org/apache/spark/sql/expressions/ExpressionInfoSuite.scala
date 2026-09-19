@@ -292,6 +292,8 @@ class ExpressionInfoSuite extends SharedSparkSession {
       val clonedSpark = spark.cloneSession()
       // Coalescing partitions can change result order, so disable it.
       clonedSpark.conf.set(SQLConf.COALESCE_PARTITIONS_ENABLED.key, false)
+      // parse_sql examples require the experimental feature flag.
+      clonedSpark.conf.set(SQLConf.PARSE_SQL_ENABLED.key, true)
       val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
       val className = info.getClassName
       if (!ignoreSet.contains(className)) {

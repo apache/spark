@@ -272,7 +272,7 @@ class InMemoryRowLevelOperationTable private (
    * scan mixes in [[CatalystRuntimeFilteringScan]] so group filtering goes through the Catalyst
    * path.
    */
-  private def newRowLevelScanBuilder(
+  protected def newRowLevelScanBuilder(
       options: CaseInsensitiveStringMap)(
       onBuild: BatchScanBaseClass => Unit): ScanBuilder = {
     new InMemoryScanBuilder(schema, options) {
@@ -310,9 +310,7 @@ class InMemoryRowLevelOperationTable private (
     with CatalystRuntimeFilteringScan {
 
     override def filterAttributes(): Array[NamedReference] = {
-      val scanFields = readSchema.fields.map(_.name).toSet
-      partitioning.flatMap(_.references())
-        .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
+      identityPartitionAttributes
     }
   }
 }

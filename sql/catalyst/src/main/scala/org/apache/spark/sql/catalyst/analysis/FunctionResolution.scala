@@ -77,22 +77,6 @@ class FunctionResolution(
       nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)
 
   /**
-   * True iff `system.session` is searched before `system.builtin` in the effective SQL PATH.
-   *
-   * Drives the `count(*) -> count(1)` rewrite (which must skip transformation when a temp
-   * `count` shadows the builtin) and the `SessionCatalog` security check that blocks creating
-   * a temp function with a builtin's name. Reads the live PATH via `CatalogManager` and
-   * applies the same kinds extraction that drives `SessionCatalog`'s fast-path provider, so
-   * the predicate stays in sync with the lookup loop's actual order. Uses the consolidated
-   * snapshot helper (SPARK-56939) so the (catalog, namespace, path) triple is observed
-   * atomically.
-   */
-  def isSessionBeforeBuiltinInPath: Boolean = {
-    catalogManager.sessionFunctionKindsForUnqualifiedResolution().headOption
-      .contains(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp)
-  }
-
-  /**
    * Produces the ordered list of candidate names for resolution. Expansion happens in two cases:
    *
    * 1. Single-part names: expanded via [[CatalogManager.sqlResolutionPathEntries]] (same list as
@@ -405,6 +389,110 @@ class FunctionResolution(
   }
 
   /**
+   * Returns whether an unqualified function name reaches `system.builtin` before any temp or
+   * persistent function in the effective SQL PATH. When a temp or persistent function shadows the
+   * builtin, special-syntax handling that only applies to Spark's builtins must not fire, since the
+   * name no longer refers to the builtin -- e.g. rejecting a direct star (bare `*` or qualified
+   * `t.*`) in a routed SQL/JSON function or the `count(tbl.*)` guard. Parser-built `count(*)` is
+   * normalized to `count(1)` in `AstBuilder` so it skips this probe, but a DataFrame `count("*")`
+   * keeps its star and does reach the probe during analyzer normalization.
+   *
+   * Precondition: `functionName` must already be known to be a stock built-in name (as
+   * `functionNameResolvesToBuiltin` ensures by checking `FunctionRegistry.functionSet` first). This
+   * returns true as soon as the PATH reaches `system.builtin`, without verifying that
+   * `system.builtin` actually defines a function of this name, so calling it for a non-builtin name
+   * would wrongly report builtin ownership.
+   */
+  def unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(functionName: String): Boolean = {
+    // Walk the PATH in order and stop at the first entry that owns the name. The default order puts
+    // system.builtin first, so the common case returns on the first entry with no catalog lookup;
+    // only a custom PATH that lists a persistent catalog ahead of system.builtin reaches the probe
+    // below (one lookup per such preceding entry, recomputed on each call -- not cached).
+    sqlResolutionPathEntriesForAnalysis.foreach { pathEntry =>
+      val candidate = pathEntry :+ functionName
+      FunctionResolution.sessionNamespaceKind(candidate) match {
+        case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin) =>
+          return true
+        case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp) =>
+          // A visible temp scalar function shadows the builtin; a visible temp *table* function
+          // makes scalar resolution terminal at this PATH entry (NOT_A_SCALAR_FUNCTION). Either way
+          // the name never reaches system.builtin, mirroring `resolveFunctionCandidate`.
+          val ident = FunctionIdentifier(functionName)
+          if (v1SessionCatalog.isTemporaryScalarFunctionVisible(ident) ||
+              v1SessionCatalog.isTemporaryTableFunctionVisible(ident)) {
+            return false
+          }
+        case None =>
+          if (persistentFunctionExists(candidate)) {
+            return false
+          }
+      }
+    }
+    false
+  }
+
+  /**
+   * Returns true when a function reference resolves to the system built-in with the requested name.
+   * This mirrors [[resolveFunction]] for special parser/analyzer rewrites that must run only for
+   * Spark's built-ins. In particular, two-part `builtin.name` is not always a system built-in:
+   * with `spark.sql.legacy.persistentCatalogFirst=true`, an existing persistent
+   * `current_catalog.builtin.name` takes precedence.
+   */
+  def functionNameResolvesToBuiltin(nameParts: Seq[String], expectedName: String): Boolean = {
+    if (!FunctionRegistry.functionSet.contains(
+          FunctionRegistry.builtinFunctionIdentifier(expectedName)) ||
+        !FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)) {
+      return false
+    }
+    nameParts.length match {
+      case 1 =>
+        unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(nameParts.head)
+      case 2 =>
+        conf.prioritizeSystemCatalog || !persistentFunctionExists(nameParts)
+      case 3 =>
+        true
+      case _ =>
+        false
+    }
+  }
+
+  // All routed SQL/JSON functions (JSON_ARRAY, JSON_VALUE, JSON_QUERY, JSON_EXISTS) forbid a direct
+  // star argument (a bare `*` or a qualified `t.*`). Derived from the single registry list so a
+  // newly routed function is covered without editing this file too.
+  private val starDisallowedSqlJsonFunctions = FunctionRegistry.routedSqlJsonFunctionNames
+
+  /**
+   * True if `nameParts` resolves to Spark's stock built-in routed SQL/JSON function that forbids a
+   * direct star. The `isStockBuiltinFunction` check excludes an `injectFunction` replacement of
+   * the name, whose expanded star is passed through rather than rejected.
+   */
+  def resolvesToStarDisallowedSqlJsonFunction(nameParts: Seq[String]): Boolean =
+    starDisallowedSqlJsonFunctions.exists { name =>
+      functionNameResolvesToBuiltin(nameParts, name) &&
+        v1SessionCatalog.isStockBuiltinFunction(name)
+    }
+
+  private def persistentFunctionExists(nameParts: Seq[String]): Boolean = {
+    try {
+      // Expand through the view's frozen catalog/namespace exactly as `resolveFunctionCandidate`
+      // does, so the shadow probe queries the same catalog the real resolver would inside a view.
+      relationResolution.expandIdentifier(nameParts) match {
+        case CatalogAndIdentifier(catalog, ident) =>
+          catalog.asFunctionCatalog.functionExists(ident)
+        case _ =>
+          false
+      }
+    } catch {
+      case _: NoSuchFunctionException
+         | _: NoSuchNamespaceException
+         | _: CatalogNotFoundException =>
+        false
+      case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
+        false
+    }
+  }
+
+  /**
    * Determines the type/location of a function (builtin, temporary, persistent, etc.).
    * This is used by the LookupFunctions analyzer rule for early validation and optimization.
    *
@@ -530,8 +618,12 @@ class FunctionResolution(
         }
       // We get an aggregate function, we need to wrap it in an AggregateExpression.
       case agg: AggregateFunction =>
-        // Note: PythonUDAF does not support these advanced clauses.
-        if (agg.isInstanceOf[PythonUDAF]) checkUnsupportedAggregateClause(agg, unresolvedFunc)
+        // Note: neither PythonUDAF nor the incremental PythonAggregate support these advanced
+        // clauses (DISTINCT / FILTER / ORDER BY / IGNORE NULLS). They have dedicated physical
+        // operators that do not honor them, so reject rather than silently drop the clause.
+        if (agg.isInstanceOf[PythonUDAF] || agg.isInstanceOf[PythonAggregate]) {
+          checkUnsupportedAggregateClause(agg, unresolvedFunc)
+        }
         // After parse, the functions not set the ordering within group yet.
         val newAgg = agg match {
           case owg: SupportsOrderingWithinGroup

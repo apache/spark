@@ -23,7 +23,7 @@ import java.time.Duration
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{Dataset, Row, SaveMode}
-import org.apache.spark.sql.catalyst.expressions.{And, Cast, CodegenObjectFactoryMode, Expression, IsNotNull}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, With}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -34,6 +34,12 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType}
+
+// Nested-struct fixtures for the SPARK-51356 test below. They are top-level so the Dataset
+// encoders resolve without an outer scope.
+case class Spark51356Inner(d: Int)
+case class Spark51356Mid(c: Spark51356Inner = null)
+case class Spark51356Outer(b: Spark51356Mid = null)
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
 class WholeStageCodegenSuite extends SharedSparkSession
@@ -1328,6 +1334,116 @@ class WholeStageCodegenSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-51356: FilterExec emits IsNotNull on a nested field before its otherPred") {
+    // `IsNotNull(b.c)` is null-intolerant and references only `b`, so it is classified as a
+    // notNullPred -- but its child is a complex expression, so it never matches an otherPred's
+    // bare attribute reference. It used to be deferred to the trailing leftover block, i.e.
+    // emitted *after* the UDF that dereferences `b.c`, and `ScalaUDF` hands a null argument to
+    // its deserializer rather than short-circuiting, so `newInstance(Spark51356Inner)` threw.
+    // The interpreted path evaluates the conjunction in order and was unaffected.
+    val data = Seq(
+      Spark51356Outer(null),
+      Spark51356Outer(Spark51356Mid(null)), // the row that used to trigger the failure
+      Spark51356Outer(Spark51356Mid(Spark51356Inner(0))),
+      Spark51356Outer(Spark51356Mid(Spark51356Inner(1))))
+    val isDZero = udf((c: Spark51356Inner) => c.d == 0)
+    def newDf(): Dataset[Spark51356Mid] = {
+      // `map(identity)` keeps the input from being folded into a LocalRelation, so the filter
+      // really goes through whole-stage codegen.
+      val mids = spark.createDataset(data).map(identity)
+        .where(col("b").isNotNull).select(col("b").as[Spark51356Mid])
+      mids.filter(col("c").isNotNull).filter(not(isDZero(col("c"))))
+    }
+
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      val df = newDf()
+      val plan = df.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "Filter should be in whole-stage codegen")
+      // Guard against optimizer drift: the regression only exists when a single FilterExec
+      // carries an `IsNotNull` over a complex child together with a non-IsNotNull conjunct
+      // that consumes the same expression.
+      def conjuncts(e: Expression): Seq[Expression] = e match {
+        case And(l, r) => conjuncts(l) ++ conjuncts(r)
+        case other => Seq(other)
+      }
+      val matchingFilter = plan.collect {
+        case f: FilterExec =>
+          val cs = conjuncts(f.condition)
+          val nestedIsNotNulls = cs.collect {
+            case IsNotNull(child) if !child.isInstanceOf[Attribute] => child
+          }
+          nestedIsNotNulls.exists { child =>
+            cs.exists {
+              case _: IsNotNull => false
+              case other => other.exists(_.semanticEquals(child))
+            }
+          }
+      }.exists(identity)
+      assert(matchingFilter,
+        "expected a FilterExec carrying IsNotNull(<complex>) plus a non-IsNotNull conjunct " +
+          "over the same expression")
+      checkAnswer(df.toDF(), Row(Row(1)))
+    }
+    // Cross-check the codegen path against the interpreted path.
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val df = newDf()
+      assert(!df.queryExecution.executedPlan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "the cross-check must be planned without whole-stage codegen")
+      checkAnswer(df.toDF(), Row(Row(1)))
+    }
+  }
+
+  test("SPARK-51356: FilterExec CSE emits IsNotNull on a nested field before its otherPred") {
+    // Same defect as above, on the CSE branch of `FilterExec.doConsume`, which inlines its own
+    // copy of the interleaving. Two otherPreds share the non-cheap `f(c)`, so the branch is
+    // taken (a bare `b.c` is cheap and would fall back to `generatePredicateCode`). The
+    // guarding `IsNotNull(b.c)` has to be emitted ahead of the shared CSE precompute, not after
+    // the predicates that consume it.
+    val data = Seq(
+      Spark51356Outer(null),
+      Spark51356Outer(Spark51356Mid(null)), // the row that used to trigger the failure
+      Spark51356Outer(Spark51356Mid(Spark51356Inner(0))),
+      Spark51356Outer(Spark51356Mid(Spark51356Inner(1))))
+    val dOf = udf((c: Spark51356Inner) => c.d)
+    val mids = spark.createDataset(data).map(identity)
+      .where(col("b").isNotNull).select(col("b").as[Spark51356Mid])
+    val df = mids
+      .filter(col("c").isNotNull)
+      .filter(dOf(col("c")) > 0)
+      .filter(dOf(col("c")) < 100)
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      val plan = df.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "Filter should be in whole-stage codegen")
+      checkAnswer(df.toDF(), Row(Row(1)))
+    }
+  }
+
+  test("SPARK-51356: FilterExec CSE guards an IsNotNull whose child is itself a subexpression") {
+    // A dynamic-gap `session_window` guards the session struct with an IsNotNull over the same
+    // cast the struct is built from, so the guarded expression is itself the common
+    // subexpression. The check must not reference the CSE state, which is emitted later.
+    val df = spark.sql(
+      """
+        |SELECT a, count(*) AS cnt
+        |FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'),
+        |            ('A2', '2021-01-01 00:01:00') AS tab(a, b)
+        |GROUP BY a, session_window(b, CASE WHEN a = 'A1' THEN '5 minutes' ELSE '1 minute' END)
+      """.stripMargin)
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      checkAnswer(df, Seq(Row("A1", 2), Row("A2", 1)))
+    }
+  }
+
   test("SPARK-56032: FilterExec CSE handles shared otherPred refs with guard") {
     // Filter shape: kind = 'numeric' AND cast(s as int) > 0 AND cast(s as int) < 100.
     // Exercises invariant (b) on a shape where two cast otherPreds share a ref: the
@@ -1616,5 +1732,71 @@ class WholeStageCodegenSuite extends SharedSparkSession
       "switch/case bodies should stay inline with a large methodSplitThreshold")
     assert(sinhPattern.findAllIn(inlineCode).length == 1,
       "sinh(v) should be evaluated only once per input row without function splitting")
+  }
+
+  test("SPARK-59295: a nested With in a branch is emitted once per scope under whole-stage") {
+    // A whole-stage `Project` passes its input as local variables, which is where
+    // `CommonExprSlots.fill` could not put a definition in a method before. Both `nullif`s survive
+    // the rewrite inside the branch and each reads its definition twice, so pasting the bodies
+    // would leave the innermost one 4 times over. The project list mentions `a` and `b` more than
+    // once, which is what has `ProjectExec` evaluate them before generating this expression -- the
+    // case below covers the other one.
+    val marker = 1234567
+    val df = spark.range(0, 10, 1, 1).selectExpr("cast(id as int) as a", "cast(id as int) + 1 as b")
+    val query = df.selectExpr(
+      s"CASE WHEN a < 0 THEN NULL ELSE nullif(nullif(a + b + $marker, b), a) END AS r")
+    assert(query.queryExecution.executedPlan.exists(_.expressions.exists(_.exists {
+      case _: With => true
+      case _ => false
+    })), "the rewrite left no With to generate")
+    // Pin the threshold: below the innermost body's length that body would go into a method of its
+    // own and the count would be 1, for a reason unrelated to nesting.
+    val source = withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024") {
+      genCode(query).map(_.body).mkString("\n")
+    }
+    val emitted = marker.toString.r.findAllMatchIn(source).size
+    assert(emitted == 2, s"the innermost definition was emitted $emitted times")
+    // One method for the outer definition, called at both of its references. The name carries the
+    // operator's fresh-name prefix, as in `project_computeCommonExpr_0`.
+    val declared = "private void \\w*computeCommonExpr_[0-9]+\\(".r.findAllMatchIn(source).size
+    assert(declared == 1, source)
+    // Runs it too, so the generated source above is known to compile.
+    checkAnswer(query, (0 until 10).map(i => Row(2 * i + marker + 1)))
+  }
+
+  test("SPARK-59295: a definition reading an input variable the operator has not evaluated") {
+    // Such a variable's code is written against the scope of the operator producing the row and
+    // names a local of it -- here the column batch's row index, and after an exchange the input
+    // adapter's row -- so it cannot go into a method along with the body that reads it. `b` is read
+    // once and only inside a definition, which is what leaves it unevaluated: `ProjectExec`
+    // evaluates an attribute up front only where the project list mentions it more than once.
+    val marker = 1234567
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 10).selectExpr("cast(id as int) as a", "cast(id as int) + 1 as b")
+        .write.mode(SaveMode.Overwrite).parquet(path)
+      val query = spark.read.parquet(path).selectExpr(
+        s"CASE WHEN a < 0 THEN NULL ELSE nullif(nullif(a + $marker, b), a) END AS r")
+      assert(query.queryExecution.executedPlan.exists(_.expressions.exists(_.exists {
+        case _: With => true
+        case _ => false
+      })), "the rewrite left no With to generate")
+      // Pin the threshold for the two assertions below: under the inner definition's length that
+      // body would go into a method of its own, whatever this case is about.
+      val code = withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024") {
+        genCode(query)
+      }
+      // Compiling it is the check: before this was refused, the method named the row index of the
+      // column batch and janino rejected it, which drops the whole stage.
+      code.foreach(CodeGenerator.compile)
+      val source = code.map(_.body).mkString("\n")
+      assert(!source.contains("computeCommonExpr"),
+        "the definition reads an unevaluated variable, so it cannot go in a method")
+      // Which leaves the inner definition pasted at its two references inside the outer one, itself
+      // pasted at two: 4, against the 2 the case above gets from a method.
+      val emitted = marker.toString.r.findAllMatchIn(source).size
+      assert(emitted == 4, s"the innermost definition was emitted $emitted times")
+      checkAnswer(query, (0 until 10).map(i => Row(i + marker)))
+    }
   }
 }

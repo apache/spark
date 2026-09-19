@@ -24,9 +24,9 @@ from typing import IO, TYPE_CHECKING, Iterable, Iterator, List, Tuple
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.serializers import (
     Serializer,
+    UTF8Deserializer,
     read_int,
     write_int,
-    UTF8Deserializer,
 )
 
 if TYPE_CHECKING:
@@ -40,49 +40,6 @@ class SpecialLengths:
     END_OF_STREAM = -4
     NULL = -5
     START_ARROW_STREAM = -6
-
-
-class ArrowCollectSerializer(Serializer):
-    """
-    Deserialize a stream of batches followed by batch order information. Used in
-    PandasConversionMixin._collect_as_arrow() after invoking Dataset.collectAsArrowToPython()
-    in the JVM.
-    """
-
-    def __init__(self):
-        self.serializer = ArrowStreamSerializer()
-
-    def dump_stream(self, iterator, stream):
-        return self.serializer.dump_stream(iterator, stream)
-
-    def load_stream(self, stream):
-        """
-        Load a stream of un-ordered Arrow RecordBatches, where the last iteration yields
-        a list of indices that can be used to put the RecordBatches in the correct order.
-        """
-        # load the batches
-        for batch in self.serializer.load_stream(stream):
-            yield batch
-
-        # load the batch order indices or propagate any error that occurred in the JVM
-        num = read_int(stream)
-        if num == -1:
-            error_msg = UTF8Deserializer().loads(stream)
-            raise PySparkRuntimeError(
-                errorClass="ERROR_OCCURRED_WHILE_CALLING",
-                messageParameters={
-                    "func_name": "ArrowCollectSerializer.load_stream",
-                    "error_msg": error_msg,
-                },
-            )
-        batch_order = []
-        for i in range(num):
-            index = read_int(stream)
-            batch_order.append(index)
-        yield batch_order
-
-    def __repr__(self):
-        return "ArrowCollectSerializer(%s)" % self.serializer
 
 
 class ArrowStreamSerializer(Serializer):
@@ -147,6 +104,44 @@ class ArrowStreamSerializer(Serializer):
 
     def __repr__(self) -> str:
         return "ArrowStreamSerializer(write_start_stream=%s)" % self._write_start_stream
+
+
+class ArrowCollectSerializer(ArrowStreamSerializer):
+    """
+    Extends :class:`ArrowStreamSerializer` to load Arrow RecordBatches that the JVM
+    sends out of order, followed by the indices giving their correct order, and yields
+    the batches already reordered. Used in PandasConversionMixin._collect_as_arrow()
+    after invoking Dataset.collectAsArrowToPython() in the JVM.
+    """
+
+    def load_stream(self, stream: IO[bytes]) -> Iterator["pa.RecordBatch"]:
+        """Load the out-of-order batches, then yield them in the correct order."""
+        batches = list(super().load_stream(stream))
+
+        # Load the batch order indices, or propagate any error that occurred in the JVM.
+        num = read_int(stream)
+        if num == -1:
+            error_msg = UTF8Deserializer().loads(stream)
+            raise PySparkRuntimeError(
+                errorClass="ERROR_OCCURRED_WHILE_CALLING",
+                messageParameters={
+                    "func_name": "ArrowCollectSerializer.load_stream",
+                    "error_msg": error_msg,
+                },
+            )
+        # Yield the batches in order, dropping our reference to each as it goes so
+        # that, when selfDestruct is enabled, the caller's reallocated copy is the
+        # only remaining reference and the original batch can be freed immediately
+        # rather than staying pinned here until the stream is fully consumed. The
+        # indices are a permutation, so each batch is yielded exactly once.
+        for _ in range(num):
+            i = read_int(stream)
+            batch = batches[i]
+            batches[i] = None
+            yield batch
+
+    def __repr__(self) -> str:
+        return "ArrowCollectSerializer()"
 
 
 class ArrowStreamGroupSerializer(ArrowStreamSerializer):

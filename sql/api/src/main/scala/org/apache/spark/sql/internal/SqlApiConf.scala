@@ -42,6 +42,14 @@ private[sql] trait SqlApiConf {
   def allowNegativeScaleOfDecimalEnabled: Boolean
   def charVarcharAsString: Boolean
   def preserveCharVarcharTypeInfo: Boolean
+  def charVarcharStandardSemantics: Boolean
+
+  /**
+   * True when CHAR/VARCHAR may appear as first-class types in schemas and plans (either the
+   * legacy preserve path or SQL standard semantics).
+   */
+  def charVarcharFirstClassTypes: Boolean =
+    preserveCharVarcharTypeInfo || charVarcharStandardSemantics
   def datetimeJava8ApiEnabled: Boolean
   def sessionLocalTimeZone: String
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value
@@ -104,6 +112,7 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def allowNegativeScaleOfDecimalEnabled: Boolean = false
   override def charVarcharAsString: Boolean = false
   override def preserveCharVarcharTypeInfo: Boolean = false
+  override def charVarcharStandardSemantics: Boolean = false
   override def datetimeJava8ApiEnabled: Boolean = false
   override def sessionLocalTimeZone: String = TimeZone.getDefault.getID
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED

@@ -23,6 +23,7 @@ from pyspark.sql.utils import get_active_spark_context
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
     from pyspark.sql._typing import ColumnOrName
 
 

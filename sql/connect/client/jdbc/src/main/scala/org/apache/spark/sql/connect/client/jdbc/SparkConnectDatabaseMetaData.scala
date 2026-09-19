@@ -540,7 +540,7 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
             if (field.nullable) columnNullable else columnNoNulls, // NULLABLE
             field.getComment().orNull, // REMARKS
             field.getCurrentDefaultValue().orNull, // COLUMN_DEF
-            0, // CHAR_OCTET_LENGTH
+            JdbcTypeUtils.getCharOctetLength(field), // CHAR_OCTET_LENGTH
             i + 1, // ORDINAL_POSITION
             if (field.nullable) "YES" else "NO", // IS_NULLABLE
             "", // IS_AUTOINCREMENT
@@ -683,7 +683,7 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
         "SQL_DATA_TYPE",
         "SQL_DATETIME_SUB",
         "NUM_PREC_RADIX")
-      .orderBy("DATA_TYPE")
+      .orderBy("DATA_TYPE", "TYPE_NAME")
     new SparkConnectResultSet(df.collectResult())
   }
 
@@ -944,7 +944,8 @@ object SparkConnectDatabaseMetaData {
       numPrecRadix)
 
   // Static JDBC type metadata for the Spark SQL atomic types, mirroring the
-  // JdbcTypeUtils type-code/precision mapping. Only STRING is case-sensitive.
+  // JdbcTypeUtils type-code/precision mapping. CHAR, VARCHAR, and STRING are
+  // case-sensitive.
   // TIMESTAMP_NTZ is omitted because it maps to the same JDBC type code
   // (Types.TIMESTAMP) as TIMESTAMP, so the TIMESTAMP row already covers it.
   // TIME is omitted for now because its maximum PRECISION/scale representation
@@ -958,6 +959,8 @@ object SparkConnectDatabaseMetaData {
     typeRow("FLOAT", Types.FLOAT, 7, null, null, false, 0, 0, 10),
     typeRow("DOUBLE", Types.DOUBLE, 15, null, null, false, 0, 0, 10),
     typeRow("DECIMAL", Types.DECIMAL, 38, null, "precision,scale", false, 0, 38, 10),
+    typeRow("CHAR", Types.CHAR, Int.MaxValue, "'", "length", true, 0, 0, null),
+    typeRow("VARCHAR", Types.VARCHAR, Int.MaxValue, "'", "length", true, 0, 0, null),
     typeRow("STRING", Types.VARCHAR, Int.MaxValue, "'", null, true, 0, 0, null),
     typeRow("BINARY", Types.VARBINARY, Int.MaxValue, "X'", null, false, 0, 0, null,
       literalSuffix = "'"),

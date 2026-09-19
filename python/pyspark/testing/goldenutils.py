@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 
-from typing import Any, Callable, List, Optional
 import inspect
 import os
 import time
+from typing import Any, Callable, List, Optional, Union
 
 try:
     import numpy as np
@@ -316,10 +316,16 @@ class GoldenFileTestMixin:
         """
         Render one PyArrow scalar for a golden cell via PyArrow's own ``str(scalar)``.
 
-        A temporal value can be valid in Arrow yet outside Python's ``datetime`` range
-        (e.g. a date32 past year 9999), where ``str`` builds a Python datetime and
-        raises ``OverflowError``.  Record ``temporal overflow`` for those instead of
-        failing.  A non-temporal ``OverflowError`` is unexpected, so it propagates.
+        Some values that Arrow stores are unrenderable via ``str``:
+        - a temporal value past Python's ``datetime`` range (e.g. date32 past year 9999)
+          raises ``OverflowError`` -> the marker ``temporal overflow``;
+        - an unsafe ``binary``->``string`` cast relabels bytes without UTF-8 validation,
+          so non-UTF-8 bytes raise ``UnicodeDecodeError`` -> the raw bytes, so the golden
+          still tracks what Arrow stored for them;
+        - a nanosecond ``time64`` holding INT64_MIN collides with pandas' NaT sentinel and
+          raises ``ValueError`` -> the marker ``NaT collision``.
+        An unexpected error (non-temporal overflow, non-string decode error, or a
+        ValueError from any other value) propagates.
         """
         try:
             return str(scalar).replace("\x00", "\\0")
@@ -330,14 +336,31 @@ class GoldenFileTestMixin:
             if pa.types.is_temporal(scalar.type):
                 return "temporal overflow"
             raise
+        except UnicodeDecodeError:
+            # An unsafe binary->string cast relabels bytes as a string without UTF-8
+            # validation, so str() cannot decode non-UTF-8 bytes; render the raw bytes
+            # so the golden still tracks what Arrow stored for them.  A UnicodeDecodeError
+            # on a non-string type is unexpected, so re-raise.
+            if pa.types.is_string(scalar.type) or pa.types.is_large_string(scalar.type):
+                return repr(scalar.as_buffer().to_pybytes())
+            raise
+        except ValueError:
+            # A nanosecond time64 renders through pandas (Python's ``time`` is microsecond
+            # resolution), and pandas reads INT64_MIN as its NaT sentinel, so it refuses
+            # that one value.  Any other ValueError is unexpected, so re-raise.
+            if pa.types.is_time(scalar.type) and scalar.value == pd.NaT.value:
+                return "NaT collision"
+            raise
 
     @classmethod
-    def repr_arrow_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_arrow_value(
+        cls, value: Union["pa.Array", "pa.ChunkedArray"], max_len: int = 32
+    ) -> str:
         """
         Format a PyArrow Array/ChunkedArray for golden file.
 
         Each element is rendered by ``_scalar_str`` (PyArrow's scalar formatting, with
-        an out-of-range temporal fallback).
+        fallbacks for values that are valid in Arrow but unrenderable via ``str``).
 
         Parameters
         ----------
@@ -359,7 +382,23 @@ class GoldenFileTestMixin:
         return f"{v_str}@{cls.repr_type(value.type)}"
 
     @classmethod
-    def repr_arrow_table_value(cls, value: Any, max_len: int = 32) -> str:
+    def _repr_arrow_columns(
+        cls, value: Union["pa.Table", "pa.RecordBatch"], max_len: int
+    ) -> "tuple[str, str]":
+        """Render a Table/RecordBatch as a "{name: [scalars], ...}" body and schema string."""
+        columns = []
+        for name, column in zip(value.schema.names, value.columns):
+            # Escape NULL bytes so the value can be safely stored in CSV files.
+            elements = [cls._scalar_str(scalar) for scalar in column]
+            columns.append(f"{name}: [" + ", ".join(elements) + "]")
+        v_str = "{" + ", ".join(columns) + "}"
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        schema = ", ".join(f"{f.name}: {cls.repr_type(f.type)}" for f in value.schema)
+        return v_str, schema
+
+    @classmethod
+    def repr_arrow_table_value(cls, value: "pa.Table", max_len: int = 32) -> str:
         """
         Format a PyArrow Table for golden file.
 
@@ -371,19 +410,48 @@ class GoldenFileTestMixin:
         str
             "{col: [val1, val2, None], ...}@Table[name: type, ...]"
         """
-        columns = []
-        for name, column in zip(value.column_names, value.columns):
-            # Escape NULL bytes so the value can be safely stored in CSV files.
-            elements = [cls._scalar_str(scalar) for scalar in column]
-            columns.append(f"{name}: [" + ", ".join(elements) + "]")
-        v_str = "{" + ", ".join(columns) + "}"
-        if max_len > 0:
-            v_str = v_str[:max_len]
-        schema = ", ".join(f"{f.name}: {cls.repr_type(f.type)}" for f in value.schema)
+        v_str, schema = cls._repr_arrow_columns(value, max_len)
         return f"{v_str}@Table[{schema}]"
 
     @classmethod
-    def repr_pandas_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_arrow_record_batch_value(cls, value: "pa.RecordBatch", max_len: int = 32) -> str:
+        """
+        Format a PyArrow RecordBatch for golden file.
+
+        Same shape as ``repr_arrow_table_value`` (a RecordBatch is a single batch of
+        columns), keyed by column name, plus the Arrow schema.
+
+        Returns
+        -------
+        str
+            "{col: [val1, val2, None], ...}@RecordBatch[name: type, ...]"
+        """
+        v_str, schema = cls._repr_arrow_columns(value, max_len)
+        return f"{v_str}@RecordBatch[{schema}]"
+
+    @classmethod
+    def repr_arrow_schema_value(cls, value: "pa.Schema", max_len: int = 32) -> str:
+        """
+        Format a PyArrow Schema for golden file.
+
+        Renders each field as "name: type nullable=...".  A Schema carries no data, so
+        nullability is included (unlike the Table/RecordBatch schema string): Spark reads
+        ``field.nullable`` to build its StructType, so a change there silently alters the
+        inferred Spark schema.
+
+        Returns
+        -------
+        str
+            "[name: type nullable=True, ...]@Schema"
+        """
+        fields = [f"{f.name}: {cls.repr_type(f.type)} nullable={f.nullable}" for f in value]
+        v_str = "[" + ", ".join(fields) + "]"
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        return f"{v_str}@Schema"
+
+    @classmethod
+    def repr_pandas_value(cls, value: "pd.DataFrame", max_len: int = 32) -> str:
         """
         Format a pandas DataFrame for golden file.
 
@@ -412,7 +480,7 @@ class GoldenFileTestMixin:
         return f"{v_str}@Dataframe[{simple_schema}]"
 
     @classmethod
-    def repr_numpy_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_numpy_value(cls, value: "np.ndarray", max_len: int = 32) -> str:
         """
         Format a numpy ndarray for golden file.
 
@@ -456,6 +524,8 @@ class GoldenFileTestMixin:
 
         - PyArrow Array/ChunkedArray -> repr_arrow_value
         - PyArrow Table -> repr_arrow_table_value
+        - PyArrow RecordBatch -> repr_arrow_record_batch_value
+        - PyArrow Schema -> repr_arrow_schema_value
         - pandas DataFrame -> repr_pandas_value
         - numpy ndarray -> repr_numpy_value
         - Everything else -> repr_python_value
@@ -476,6 +546,10 @@ class GoldenFileTestMixin:
             return cls.repr_arrow_value(value, max_len)
         if have_pyarrow and isinstance(value, pa.Table):
             return cls.repr_arrow_table_value(value, max_len)
+        if have_pyarrow and isinstance(value, pa.RecordBatch):
+            return cls.repr_arrow_record_batch_value(value, max_len)
+        if have_pyarrow and isinstance(value, pa.Schema):
+            return cls.repr_arrow_schema_value(value, max_len)
 
         if have_pandas and isinstance(value, pd.DataFrame):
             return cls.repr_pandas_value(value, max_len)
@@ -487,7 +561,7 @@ class GoldenFileTestMixin:
         return cls.repr_python_value(value, max_len)
 
     @classmethod
-    def repr_pandas_series_value(cls, value: Any, max_len: int = 32) -> str:
+    def repr_pandas_series_value(cls, value: "pd.Series", max_len: int = 32) -> str:
         """
         Format a pandas Series for golden file.
 

@@ -66,8 +66,13 @@ class UnivocityGenerator(
     case TimeFormatter.defaultPattern => TimeFormatter.getFractionFormatter()
     case customPattern => TimeFormatter(customPattern, isParsing = false)
   }
-  private val nullAsQuotedEmptyString =
-    SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV)
+  // The `treatNullAsEmptyString` write option, when set, overrides the session-level
+  // `spark.sql.legacy.nullValueWrittenAsQuotedEmptyStringCsv` config. This lets a single write
+  // choose whether a null is written as an empty string (a quoted empty string `""` with the
+  // default `emptyValue`) or as a bare, unquoted empty token, without changing the session
+  // default.
+  private val nullAsQuotedEmptyString = options.treatNullAsEmptyString.getOrElse(
+    SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV))
 
   private val binaryFormatter = ToStringBase.getBinaryFormatter
 

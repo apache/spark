@@ -66,12 +66,22 @@ case class BatchScanExec(
     case other: BatchScanExec =>
       this.batch != null && this.batch == other.batch &&
           this.runtimeFilters == other.runtimeFilters &&
-          this.keyGroupedPartitioning == other.keyGroupedPartitioning
+          this.prunedKeyGroupedPartitioning == other.prunedKeyGroupedPartitioning
     case _ =>
       false
   }
 
-  override def hashCode(): Int = Objects.hash(batch, runtimeFilters, keyGroupedPartitioning)
+  override def hashCode(): Int = Objects.hash(batch, runtimeFilters, prunedKeyGroupedPartitioning)
+
+  /**
+   * The reported partitioning keys restricted to those still present in `output`. A key may
+   * reference a column pruned out of the scan, which is kept as long as any key survives (see
+   * V2ScanPartitioningAndOrdering). Such a dangling key carries no information, since the physical
+   * outputPartitioning projects it away, so `doCanonicalize`, `equals` and `hashCode` all use
+   * this view to stay consistent about ignoring it.
+   */
+  @transient lazy val prunedKeyGroupedPartitioning: Option[Seq[Expression]] =
+    keyGroupedPartitioning.map(_.filter(_.references.subsetOf(outputSet)))
 
   @transient override lazy val inputPartitions: Seq[InputPartition] =
     batch.planInputPartitions().toImmutableArraySeq
@@ -83,7 +93,7 @@ case class BatchScanExec(
       runtimeFilters,
       table,
       output,
-      outputPartitioning,
+      reportedKeyedPartitioning,
       inputPartitions)
 
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
@@ -106,8 +116,8 @@ case class BatchScanExec(
       runtimeFilters = QueryPlan.normalizePredicates(
         runtimeFilters.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral)),
         output),
-      keyGroupedPartitioning = keyGroupedPartitioning.map(_.map(
-        QueryPlan.normalizeExpressions(_, output))))
+      keyGroupedPartitioning = prunedKeyGroupedPartitioning.map(
+        _.map(QueryPlan.normalizeExpressions(_, output))))
   }
 
   override def simpleString(maxFields: Int): String = {

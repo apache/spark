@@ -157,22 +157,30 @@ private[spark] object SparkCoreErrors {
 
   def checkpointDirectoryHasNotBeenSetInSparkContextError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3016", messageParameters = Map.empty, cause = null
+      errorClass = "CHECKPOINT_DIRECTORY_NOT_SET",
+      messageParameters = Map.empty,
+      cause = null
     )
   }
 
-  def invalidCheckpointFileError(path: Path): Throwable = {
+  def invalidCheckpointDirectoryError(
+      partitionFilePath: Path,
+      expectedFileName: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3017",
-      messageParameters = Map("path" -> s"$path"),
+      errorClass = "INVALID_CHECKPOINT_DIRECTORY",
+      messageParameters = Map(
+        "path" -> s"${partitionFilePath.getParent}",
+        "expectedFileName" -> expectedFileName,
+        "fileName" -> partitionFilePath.getName
+      ),
       cause = null
     )
   }
 
   def failToCreateCheckpointPathError(checkpointDirPath: Path): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3018",
-      messageParameters = Map("checkpointDirPath" -> s"$checkpointDirPath"),
+      errorClass = "FAILED_CREATE_CHECKPOINT_DIRECTORY",
+      messageParameters = Map("path" -> s"$checkpointDirPath"),
       cause = null
     )
   }
@@ -183,7 +191,7 @@ private[spark] object SparkCoreErrors {
       newRDDId: Int,
       newRDDLength: Int): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3019",
+      errorClass = "CHECKPOINT_RDD_PARTITION_COUNT_MISMATCH",
       messageParameters = Map(
         "originalRDDId" -> s"$originalRDDId",
         "originalRDDLength" -> s"$originalRDDLength",
@@ -200,9 +208,8 @@ private[spark] object SparkCoreErrors {
   }
 
   def mustSpecifyCheckpointDirError(): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3020", messageParameters = Map.empty, cause = null
-    )
+    SparkException.internalError(
+      "SparkContext.checkpointDir is unset when creating ReliableRDDCheckpointData.")
   }
 
   def askStandaloneSchedulerToShutDownExecutorsError(e: Exception): Throwable = {
@@ -316,8 +323,8 @@ private[spark] object SparkCoreErrors {
 
   def unableToRegisterWithExternalShuffleServerError(e: Throwable): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3033",
-      messageParameters = Map("message" -> e.getMessage),
+      errorClass = "UNABLE_TO_REGISTER_WITH_EXTERNAL_SHUFFLE_SERVICE",
+      messageParameters = Map("message" -> Option(e.getMessage).getOrElse(e.toString)),
       cause = e
     )
   }
@@ -326,35 +333,32 @@ private[spark] object SparkCoreErrors {
     SparkException.internalError("Error occurred while waiting for async. reregistration.", e)
   }
 
-  def unexpectedShuffleBlockWithUnsupportedResolverError(
+  def shuffleBlockMigrationNotSupportedError(
+      blockId: BlockId,
       shuffleBlockResolver: ShuffleBlockResolver,
-      blockId: BlockId): Throwable = {
+      e: Throwable): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3035",
+      errorClass = "SHUFFLE_BLOCK_MIGRATION_NOT_SUPPORTED",
       messageParameters = Map(
         "blockId" -> s"$blockId",
-        "shuffleBlockResolver" -> s"$shuffleBlockResolver"
+        "resolverClass" -> shuffleBlockResolver.getClass.getName
       ),
-      cause = null
+      cause = e
     )
   }
 
   def failToStoreBlockOnBlockManagerError(
       blockManagerId: BlockManagerId,
       blockId: BlockId): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3036",
-      messageParameters = Map(
-        "blockId" -> s"$blockId",
-        "blockManagerId" -> s"$blockManagerId"
-      ),
-      cause = null
-    )
+    SparkException.internalError(
+      s"Failed to store block $blockId on $blockManagerId. This mostly happens when there is " +
+        "not enough storage memory for the block and its storage level has no disk fallback.",
+      category = "STORAGE")
   }
 
-  def readLockedBlockNotFoundError(blockId: BlockId): Throwable = {
+  def localBlockDataNotFoundError(blockId: BlockId): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3037",
+      errorClass = "LOCAL_BLOCK_DATA_NOT_FOUND",
       messageParameters = Map(
         "blockId" -> s"$blockId"
       ),

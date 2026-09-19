@@ -27,6 +27,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.Utils
 
 class EmbeddedArraySplitterSuite extends SparkFunSuite {
@@ -388,6 +389,7 @@ class ExplodeEmbeddedArrayJsonV1Suite extends ExplodeEmbeddedArrayJsonSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "json")
 }
 
+@ExtendedSQLTest
 class ExplodeEmbeddedArrayJsonV2Suite extends ExplodeEmbeddedArrayJsonSuite {
   override protected def sparkConf: SparkConf =
     super

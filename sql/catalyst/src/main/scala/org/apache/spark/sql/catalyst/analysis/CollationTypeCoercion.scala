@@ -25,7 +25,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Proj
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, IndeterminateStringType, MapType, NullType, StringType, StructType}
+import org.apache.spark.sql.types.{
+  ArrayType, DataType, IndeterminateStringType, MapType, NullType, StringHelper,
+  StringType, StructType
+}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -107,6 +110,13 @@ object CollationTypeCoercion extends SQLConfHelper {
 
   /**
    * Changes the data type of the expression to the given `newType`.
+   *
+   * Never retarget an existing Cast (`cast.copy(dataType = ...)`). Explicit CAST
+   * truncation / overflow (ISO 6.13) and CHAR padding must stay on the inner node;
+   * LCT is an outer Cast. Uncollated TypeCoercion already nests.
+   *
+   * Literals: `copy(dataType)` is enough when only collation changes. When a string
+   * constraint changes (CHAR(2) to CHAR(4)), wrap in Cast so padding is re-applied.
    */
   private def changeType(expr: Expression, newType: DataType): Expression = {
     mergeTypes(expr.dataType, newType) match {
@@ -114,8 +124,11 @@ object CollationTypeCoercion extends SQLConfHelper {
         assert(!newDataType.existsRecursively(_.isInstanceOf[StringTypeWithContext]))
 
         expr match {
+          case lit: Literal if stringConstraintChanged(lit.dataType, newDataType) =>
+            Cast(lit, newDataType, timeZoneId = Some(conf.sessionLocalTimeZone))
           case lit: Literal => lit.copy(dataType = newDataType)
-          case cast: Cast => cast.copy(dataType = newDataType)
+          case cast: Cast =>
+            Cast(cast, newDataType, timeZoneId = Some(conf.sessionLocalTimeZone))
           case subquery: SubqueryExpression =>
             changeTypeInSubquery(subquery, newType)
 
@@ -124,6 +137,24 @@ object CollationTypeCoercion extends SQLConfHelper {
 
       case _ =>
         expr
+    }
+  }
+
+  /**
+   * True when CHAR/VARCHAR length (or nested length) differs between `from` and `to`.
+   * Collation-only differences are not a constraint change.
+   */
+  private def stringConstraintChanged(from: DataType, to: DataType): Boolean = {
+    (from, to) match {
+      case (f: StringType, t: StringType) => f.constraint != t.constraint
+      case (ArrayType(fe, _), ArrayType(te, _)) => stringConstraintChanged(fe, te)
+      case (MapType(fk, fv, _), MapType(tk, tv, _)) =>
+        stringConstraintChanged(fk, tk) || stringConstraintChanged(fv, tv)
+      case (fs: StructType, ts: StructType) if fs.length == ts.length =>
+        fs.fields.indices.exists { i =>
+          stringConstraintChanged(fs.fields(i).dataType, ts.fields(i).dataType)
+        }
+      case _ => false
     }
   }
 
@@ -414,7 +445,23 @@ object CollationTypeCoercion extends SQLConfHelper {
     }
   }
 
-  /** Determines the winning StringTypeWithContext based on the strength of the collation. */
+  /**
+   * Resolves collation strength independently of CHAR/VARCHAR length.
+   *
+   * This rule always runs. First-class CHAR/VARCHAR appear whenever
+   * `charVarcharFirstClassTypes` is true (`standardSemantics` or
+   * `preserveCharVarcharTypeInfo`), not only under `standardSemantics`.
+   *
+   * Same collation, including mixed strength: take the string-family LCT `max(n, m)`
+   * (pads, never truncates) and attach the stronger strength. Example:
+   * `coalesce(CAST('a' AS CHAR(2) COLLATE UTF8_LCASE),
+   * CAST(1 AS CHAR(4) COLLATE UTF8_LCASE))` is CHAR(4) COLLATE UTF8_LCASE
+   * (Implicit CHAR(2) from a string CAST vs Default CHAR(4) from a non-string CAST).
+   *
+   * Different collations at equal strength: mismatch (error if Explicit, else
+   * indeterminate). Different collations at unequal strength: the stronger operand
+   * wins in full, including its length (SQL collation precedence).
+   */
   private def getWinningStringType(
       left: StringTypeWithContext,
       right: StringTypeWithContext): StringTypeWithContext = {
@@ -427,14 +474,13 @@ object CollationTypeCoercion extends SQLConfHelper {
       }
     }
 
-    (left.strength.priority, right.strength.priority) match {
-      case (leftPriority, rightPriority) if leftPriority == rightPriority =>
-        if (left.sameType(right)) left
-        else handleMismatch()
+    val winner =
+      if (left.strength.priority <= right.strength.priority) left else right
 
-      case (leftPriority, rightPriority) =>
-        if (leftPriority < rightPriority) left
-        else right
+    StringHelper.tightestCommonString(left.stringType, right.stringType) match {
+      case Some(lct) => StringTypeWithContext(lct, winner.strength)
+      case None if left.strength.priority == right.strength.priority => handleMismatch()
+      case None => winner
     }
   }
 

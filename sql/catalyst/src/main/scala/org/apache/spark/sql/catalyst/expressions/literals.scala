@@ -171,7 +171,7 @@ object Literal {
       case _: DayTimeIntervalType if v.isInstanceOf[Duration] =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _: ObjectType => Literal(v, dataType)
-      case _: CharType | _: VarcharType if SQLConf.get.preserveCharVarcharTypeInfo =>
+      case _: CharType | _: VarcharType if SQLConf.get.charVarcharFirstClassTypes =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _ if requiresSchemaAwareNanosConversion(dataType, v) =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)

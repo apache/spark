@@ -1282,6 +1282,8 @@ case class Hex(child: Expression)
     Seq(TypeCollection(LongType, BinaryType, StringTypeWithCollation(supportsTrimCollation = true)))
 
   override def dataType: DataType = child.dataType match {
+    // After ImplicitTypeCasts, a CHAR/VARCHAR input is STRING. Keep collation from the
+    // promoted child rather than DefaultStringProducingExpression's UTF8_BINARY StringType.
     case st: StringType => st
     case _ => super.dataType
   }
@@ -2088,11 +2090,11 @@ object WidthBucket {
   arguments = """
     Arguments:
       * value - The value to assign to a bucket.
-        An expression that evaluates to a double or interval.
+        An expression that evaluates to a double, interval, or time.
       * min_value - The minimum value of the histogram range.
-        An expression that evaluates to a double or interval.
+        An expression that evaluates to a double, interval, or time.
       * max_value - The maximum value of the histogram range.
-        An expression that evaluates to a double or interval.
+        An expression that evaluates to a double, interval, or time.
       * num_bucket - The number of equiwidth buckets in the histogram.
         An expression that evaluates to a long.
   """,
@@ -2114,6 +2116,8 @@ object WidthBucket {
        1
       > SELECT _FUNC_(INTERVAL '1' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10);
        2
+      > SELECT _FUNC_(TIME'12:00:00', TIME'09:00:00', TIME'17:00:00', 8);
+       4
   """,
   since = "3.1.0",
   group = "math_funcs")
@@ -2126,9 +2130,9 @@ case class WidthBucket(
   override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
-    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
-    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType, AnyTimeType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType, AnyTimeType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType, AnyTimeType),
     LongType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -2138,6 +2142,8 @@ case class WidthBucket(
           case (_: YearMonthIntervalType, _: YearMonthIntervalType, _: YearMonthIntervalType) =>
             TypeCheckSuccess
           case (_: DayTimeIntervalType, _: DayTimeIntervalType, _: DayTimeIntervalType) =>
+            TypeCheckSuccess
+          case (_: TimeType, _: TimeType, _: TimeType) =>
             TypeCheckSuccess
           case _ =>
             val types = Seq(value.dataType, minValue.dataType, maxValue.dataType)

@@ -79,6 +79,27 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58779: SQL table function argument referencing a CTE") {
+    withUserDefinedFunction("my_tvf" -> false) {
+      sql(
+        """
+          |CREATE FUNCTION my_tvf(a INT, b INT)
+          |RETURNS TABLE(x INT)
+          |RETURN SELECT a + b AS x
+          |""".stripMargin)
+      // The table function is called with scalar-subquery arguments that reference a CTE.
+      // ResolveSQLTableFunctions runs checkAnalysis (which runs InlineCTE) on the resolved
+      // function plan, which contains a CTERelationRef whose CTERelationDef lives in the outer
+      // WithCTE scope. Previously the unguarded cteMap(ref.cteId) lookup threw
+      // NoSuchElementException.
+      checkAnswer(sql(
+        """
+          |WITH cte AS (SELECT 1 AS c1, 2 AS c2)
+          |SELECT * FROM my_tvf((SELECT c1 FROM cte), (SELECT c2 FROM cte))
+          |""".stripMargin), Row(3))
+    }
+  }
+
   test("SQL scalar function with default value") {
     withUserDefinedFunction("bar" -> false) {
       sql(
