@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
@@ -44,6 +44,8 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
   assert(Utils.isTesting, s"${IS_TESTING.key} is not set to true")
 
   protected def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression]
+
+  protected def implicitTypeCastsRule: TypeCoercionRule
 
   protected def dateTimeOperationsRule: TypeCoercionRule
 
@@ -216,6 +218,47 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
+  }
+
+  test("time_bucket implicitly casts date and string timestamp arguments") {
+    val bucketSize = Literal(Duration.ofMinutes(15))
+    val date = Literal(0, DateType)
+    val string = Literal("2024-01-01 00:00:00")
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = TimeBucket(bucketSize = bucketSize, ts = date, originTs = string),
+      transformed = TimeBucket(
+        bucketSize = bucketSize,
+        ts = Cast(date, TimestampType),
+        originTs = Cast(string, TimestampType)))
+  }
+
+  test("time_bucket implicitly casts time arguments to timestamp") {
+    val bucketSize = Literal(Duration.ofMinutes(15))
+    val time = Literal(LocalTime.of(10, 23, 0))
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = TimeBucket(bucketSize = bucketSize, ts = time, originTs = time),
+      transformed = TimeBucket(
+        bucketSize = bucketSize,
+        ts = Cast(time, TimestampType),
+        originTs = Cast(time, TimestampType)))
+  }
+
+  test("time_bucket does not implicitly cast string bucket size") {
+    val bucketSize = Literal("0 00:15:00")
+    val timestamp = Literal(Timestamp.valueOf("2024-01-01 00:00:00"))
+    val timeBucket = TimeBucket(
+      bucketSize = bucketSize,
+      ts = timestamp,
+      originTs = timestamp)
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = timeBucket,
+      transformed = timeBucket)
   }
 
   test("SPARK-56152: implicit type cast - TimeType") {
@@ -599,6 +642,9 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
   // scalastyle:on line.size.limit
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] =
     TypeCoercion.implicitCast(e, expectedType)
+
+  override protected def implicitTypeCastsRule: TypeCoercionRule =
+    TypeCoercion.ImplicitTypeCasts
 
   override def dateTimeOperationsRule: TypeCoercionRule = TypeCoercion.DateTimeOperations
 
