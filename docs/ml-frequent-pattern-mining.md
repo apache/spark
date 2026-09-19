@@ -22,7 +22,7 @@ license: |
 Mining frequent items, itemsets, subsequences, or other substructures is usually among the
 first steps to analyze a large-scale dataset, which has been an active research topic in
 data mining for years.
-We refer users to Wikipedia's [association rule learning](http://en.wikipedia.org/wiki/Association_rule_learning)
+We refer users to Wikipedia's [association rule learning](https://en.wikipedia.org/wiki/Association_rule_learning)
 for more information.
 
 **Table of Contents**
@@ -36,7 +36,7 @@ The FP-growth algorithm is described in the paper
 [Han et al., Mining frequent patterns without candidate generation](https://doi.org/10.1145/335191.335372),
 where "FP" stands for frequent pattern.
 Given a dataset of transactions, the first step of FP-growth is to calculate item frequencies and identify frequent items.
-Different from [Apriori-like](http://en.wikipedia.org/wiki/Apriori_algorithm) algorithms designed for the same purpose,
+Different from [Apriori-like](https://en.wikipedia.org/wiki/Apriori_algorithm) algorithms designed for the same purpose,
 the second step of FP-growth uses a suffix tree (FP-tree) structure to encode transactions without generating candidate sets
 explicitly, which are usually expensive to generate.
 After the second step, the frequent itemsets can be extracted from the FP-tree.
