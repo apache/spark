@@ -52,6 +52,30 @@ object FunctionType {
   case object TableOnly extends FunctionType
   /** Function does not exist anywhere. */
   case object NotFound extends FunctionType
+  /**
+   * No candidate holds the function and at least one catalog denied the lookup with
+   * `FORBIDDEN_OPERATION` (SPARK-57759). The denial is reported instead of "not found".
+   */
+  case class Forbidden(error: AnalysisException) extends FunctionType
+}
+
+/**
+ * Outcome of trying one candidate name from the resolution path (SPARK-57759). A candidate that
+ * the catalog denies with `FORBIDDEN_OPERATION` is distinct from one that simply does not hold
+ * the routine: the search continues in both cases, but a denial is remembered so it can be
+ * reported instead of `UNRESOLVED_ROUTINE` when no candidate resolves.
+ */
+private[analysis] sealed trait CandidateResult[+T]
+
+private[analysis] object CandidateResult {
+  case class Resolved[T](value: T) extends CandidateResult[T]
+  case object Missing extends CandidateResult[Nothing]
+  case class Forbidden(error: AnalysisException) extends CandidateResult[Nothing]
+
+  def of[T](value: Option[T]): CandidateResult[T] = value match {
+    case Some(v) => Resolved(v)
+    case None => Missing
+  }
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{
@@ -142,9 +166,13 @@ class FunctionResolution(
     }
   }
 
+  /** True for the error a catalog raises when it denies access rather than reporting a miss. */
+  private def isForbiddenOperation(e: AnalysisException): Boolean =
+    e.getCondition == "FORBIDDEN_OPERATION"
+
   private def resolveFunctionCandidate(
       nameParts: Seq[String],
-      unresolvedFunc: UnresolvedFunction): Option[Expression] = {
+      unresolvedFunc: UnresolvedFunction): CandidateResult[Expression] = {
     // NOTE: the `system.builtin.<name>` case here is the same registry lookup the built-in
     // fast-path in `resolveFunction` performs directly (both go through
     // `identifierFromSystemNameParts` / `builtinFunctionIdentifier` ->
@@ -152,7 +180,7 @@ class FunctionResolution(
     // scalar resolution has to touch both. `resolveTableFunctionCandidate` / `resolveTableFunction`
     // mirror this for table functions.
     if (isSystemCatalogQualified(nameParts)) {
-      v1SessionCatalog.identifierFromSystemNameParts(nameParts).flatMap { ident =>
+      val resolved = v1SessionCatalog.identifierFromSystemNameParts(nameParts).flatMap { ident =>
         val expr = v1SessionCatalog.resolveScalarFunctionByIdentifier(
           ident, unresolvedFunc.arguments)
         if (expr.isEmpty) {
@@ -163,12 +191,13 @@ class FunctionResolution(
         }
         expr.map(e => validateFunction(e, unresolvedFunc.arguments.length, unresolvedFunc))
       }
+      CandidateResult.of(resolved)
     } else {
       try {
         val CatalogAndIdentifier(catalog, ident) =
           relationResolution.expandIdentifier(nameParts)
         val loaded = catalog.asFunctionCatalog.loadFunction(ident)
-        Some(loaded match {
+        CandidateResult.Resolved(loaded match {
           case v1Func: V1Function =>
             val func = v1Func.invoke(unresolvedFunc.arguments)
             validateFunction(func, unresolvedFunc.arguments.length, unresolvedFunc)
@@ -179,9 +208,9 @@ class FunctionResolution(
         case _: NoSuchFunctionException |
              _: NoSuchNamespaceException |
              _: CatalogNotFoundException =>
-          None
-        case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
-          None
+          CandidateResult.Missing
+        case e: AnalysisException if isForbiddenOperation(e) =>
+          CandidateResult.Forbidden(e)
         case e: AnalysisException =>
           throw e
       }
@@ -224,37 +253,44 @@ class FunctionResolution(
       }
 
       val candidates = resolutionCandidates(unresolvedFunc.nameParts)
+      // A candidate the catalog denied (SPARK-57759) does not stop the search -- a later path
+      // entry may legitimately hold the name -- but the first denial is reported instead of
+      // UNRESOLVED_ROUTINE if the search ends without a match.
+      var denial: Option[AnalysisException] = None
       for (nameParts <- candidates) {
         resolveFunctionCandidate(nameParts, unresolvedFunc) match {
-          case Some(expr) => return expr
-          case None =>
+          case CandidateResult.Resolved(expr) => return expr
+          case CandidateResult.Forbidden(e) => if (denial.isEmpty) denial = Some(e)
+          case CandidateResult.Missing =>
         }
       }
-      throw QueryCompilationErrors.unresolvedRoutineError(
-        unresolvedFunc.nameParts,
-        sqlResolutionPathEntriesForAnalysis.map(toSQLId),
-        unresolvedFunc.origin)
+      throw denial.getOrElse(
+        QueryCompilationErrors.unresolvedRoutineError(
+          unresolvedFunc.nameParts,
+          sqlResolutionPathEntriesForAnalysis.map(toSQLId),
+          unresolvedFunc.origin))
     }
   }
 
   private def resolveTableFunctionCandidate(
       nameParts: Seq[String],
-      arguments: Seq[Expression]): Option[LogicalPlan] = {
+      arguments: Seq[Expression]): CandidateResult[LogicalPlan] = {
     if (isSystemCatalogQualified(nameParts)) {
-      v1SessionCatalog.identifierFromSystemNameParts(nameParts).flatMap { ident =>
+      val resolved = v1SessionCatalog.identifierFromSystemNameParts(nameParts).flatMap { ident =>
         val resolvedPlan = v1SessionCatalog.resolveTableFunctionByIdentifier(ident, arguments)
-        if (resolvedPlan.isDefined) return resolvedPlan
+        if (resolvedPlan.isDefined) return CandidateResult.of(resolvedPlan)
         if (v1SessionCatalog.lookupFunctionInfoByIdentifier(
             ident, tableFunction = false).isDefined) {
           throw QueryCompilationErrors.notATableFunctionError(ident.funcName)
         }
         None
       }
+      CandidateResult.of(resolved)
     } else {
       val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(nameParts)
       try {
         if (CatalogV2Util.isSessionCatalog(catalog)) {
-          Some(v1SessionCatalog.resolvePersistentTableFunction(
+          CandidateResult.Resolved(v1SessionCatalog.resolvePersistentTableFunction(
             ident.asFunctionIdentifier, arguments))
         } else {
           throw QueryCompilationErrors.missingCatalogTableValuedFunctionsAbilityError(catalog)
@@ -262,10 +298,12 @@ class FunctionResolution(
       } catch {
         case _: NoSuchFunctionException | _: NoSuchNamespaceException |
              _: CatalogNotFoundException =>
-          tryRethrowNotTableFunction(catalog, ident)
-          None
-        case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
-          None
+          tryRethrowNotTableFunction(catalog, ident) match {
+            case Some(e) => CandidateResult.Forbidden(e)
+            case None => CandidateResult.Missing
+          }
+        case e: AnalysisException if isForbiddenOperation(e) =>
+          CandidateResult.Forbidden(e)
         case e: AnalysisException =>
           throw e
       }
@@ -274,9 +312,12 @@ class FunctionResolution(
 
   /**
    * On table-function lookup failure, throw a clearer error if the name exists
-   * as a non-table function.
+   * as a non-table function. Returns the catalog's `FORBIDDEN_OPERATION` denial, if any, so the
+   * caller can report it once the candidate search ends without a match (SPARK-57759).
    */
-  private def tryRethrowNotTableFunction(catalog: CatalogPlugin, ident: Identifier): Unit = {
+  private def tryRethrowNotTableFunction(
+      catalog: CatalogPlugin,
+      ident: Identifier): Option[AnalysisException] = {
     try {
       if (CatalogV2Util.isSessionCatalog(catalog)) {
         if (v1SessionCatalog.isPersistentFunction(ident.asFunctionIdentifier)) {
@@ -285,12 +326,13 @@ class FunctionResolution(
       } else if (catalog.asFunctionCatalog.functionExists(ident)) {
         throw QueryCompilationErrors.notATableFunctionError(ident.name())
       }
+      None
     } catch {
       case _: NoSuchFunctionException | _: NoSuchNamespaceException |
            _: CatalogNotFoundException =>
-        ()
-      case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
-        ()
+        None
+      case e: AnalysisException if isForbiddenOperation(e) =>
+        Some(e)
     }
   }
 
@@ -308,12 +350,17 @@ class FunctionResolution(
     }
 
     val candidates = resolutionCandidates(nameParts)
+    // See `resolveFunction`: a denial does not stop the search, but it is reported rather than
+    // letting the caller turn an empty result into a "routine does not exist" error.
+    var denial: Option[AnalysisException] = None
     for (nameParts <- candidates) {
       resolveTableFunctionCandidate(nameParts, arguments) match {
-        case Some(plan) => return Some(plan)
-        case None =>
+        case CandidateResult.Resolved(plan) => return Some(plan)
+        case CandidateResult.Forbidden(e) => if (denial.isEmpty) denial = Some(e)
+        case CandidateResult.Missing =>
       }
     }
+    denial.foreach(e => throw e)
     None
   }
 
@@ -532,6 +579,9 @@ class FunctionResolution(
               ns.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
           }
       }
+      // A catalog that denies the lookup (SPARK-57759) does not end the search, but its error is
+      // reported instead of "not found" if no other candidate holds the function.
+      var denial: Option[AnalysisException] = None
       for (candidate <- persistentCandidates) {
         try {
           candidate match {
@@ -542,15 +592,16 @@ class FunctionResolution(
             case _ =>
           }
         } catch {
-          // Only treat explicit "not found" / "forbidden" signals as a miss. Any other failure
-          // (e.g. permission denied, transient catalog error) propagates.
+          // Only treat explicit "not found" signals as a miss. Any other failure
+          // (e.g. a transient catalog error) propagates.
           case _: NoSuchFunctionException
              | _: NoSuchNamespaceException
              | _: CatalogNotFoundException =>
-          case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
+          case e: AnalysisException if isForbiddenOperation(e) =>
+            if (denial.isEmpty) denial = Some(e)
         }
       }
-      return FunctionType.NotFound
+      return denial.map(FunctionType.Forbidden(_)).getOrElse(FunctionType.NotFound)
     }
 
     val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(nameParts)
@@ -817,6 +868,9 @@ class FunctionResolution(
   def resolveProcedure(unresolved: UnresolvedProcedure): LogicalPlan = {
     val candidates = resolutionCandidates(unresolved.nameParts)
     val skipCandidateFailures = unresolved.nameParts.length == 1
+    // A catalog that denies the lookup (SPARK-57759) is remembered so the denial, not
+    // UNRESOLVED_ROUTINE, is reported when the search ends without a match.
+    var denial: Option[AnalysisException] = None
     for (multipart <- candidates) {
       val expandedOpt =
         try {
@@ -836,6 +890,8 @@ class FunctionResolution(
                 // unqualified names searched through PATH, treat candidate failures as misses and
                 // continue to the next entry (matching table/function PATH iteration semantics).
                 // Explicitly catalog-qualified names still preserve existing error behavior.
+                case e: AnalysisException if skipCandidateFailures && isForbiddenOperation(e) =>
+                  if (denial.isEmpty) denial = Some(e)
                 case _: AnalysisException if skipCandidateFailures =>
                 case _: SparkThrowable if skipCandidateFailures =>
                 case NonFatal(_) if skipCandidateFailures =>
@@ -860,10 +916,11 @@ class FunctionResolution(
         }
       }
     }
-    throw QueryCompilationErrors.unresolvedRoutineError(
-      unresolved.nameParts,
-      sqlResolutionPathEntriesForAnalysis.map(toSQLId),
-      unresolved.origin)
+    throw denial.getOrElse(
+      QueryCompilationErrors.unresolvedRoutineError(
+        unresolved.nameParts,
+        sqlResolutionPathEntriesForAnalysis.map(toSQLId),
+        unresolved.origin))
   }
 }
 
