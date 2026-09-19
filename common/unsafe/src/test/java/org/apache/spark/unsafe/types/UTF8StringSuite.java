@@ -17,8 +17,11 @@
 
 package org.apache.spark.unsafe.types;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -1547,5 +1550,32 @@ public class UTF8StringSuite {
       sb.appendCodePoint(i);
       assert(usb.build().equals(UTF8String.fromString(sb.toString())));
     }
+  }
+
+  @Test
+  public void hashCodeIsCachedAndStable() throws Exception {
+    // Repeated calls return the same value (the cache must not change it).
+    UTF8String s = fromString("hashcode-cache-test");
+    int h = s.hashCode();
+    assertEquals(h, s.hashCode());
+    assertEquals(h, s.hashCode());
+    // Equal strings built differently agree (consistency with equals).
+    assertEquals(h, fromBytes("hashcode-cache-test".getBytes(StandardCharsets.UTF_8)).hashCode());
+
+    // A Java-serialization round-trip (which re-points the fields via readExternal) yields the
+    // same hash, even when the source's hash was already cached.
+    UTF8String before = fromString("round-trip");
+    before.hashCode();
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    try (ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+      oos.writeObject(before);
+    }
+    ByteArrayInputStream bis = new ByteArrayInputStream(bos.toByteArray());
+    UTF8String after;
+    try (ObjectInputStream ois = new ObjectInputStream(bis)) {
+      after = (UTF8String) ois.readObject();
+    }
+    assertEquals(before, after);
+    assertEquals(before.hashCode(), after.hashCode());
   }
 }
