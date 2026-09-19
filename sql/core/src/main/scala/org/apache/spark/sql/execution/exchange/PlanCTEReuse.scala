@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.exchange
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{QUERY_ID, QUERY_PLAN}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan

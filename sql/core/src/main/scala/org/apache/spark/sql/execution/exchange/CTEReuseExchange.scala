@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.exchange
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
@@ -71,13 +70,6 @@ case class CTEReuseExchange(
   override def outputPartitioning: Partitioning = subplan.outputPartitioning
 
   override def outputOrdering: Seq[SortOrder] = subplan.outputOrdering
-
-  // Propagate the subplan's stats. This node is always replaced by a
-  // [[CTEReuseQueryStageExec]] (AQE on) or unwrapped (AQE off) in the preparation
-  // batch before execution, but a stats read may happen while it is still in place
-  // as a leaf node -- expose the subplan's estimate rather than a default so callers
-  // see meaningful stats.
-  override def computeStats(): Statistics = subplan.stats
 
   // Reaching any execute path is a planner bug -- the node must always be consumed.
   override def doExecute(): RDD[InternalRow] =
