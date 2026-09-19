@@ -37,32 +37,33 @@ case class FlowSystemMetadata(
 ) extends SystemMetadata with Logging {
 
   /**
-   * Returns the checkpoint root directory for a given flow
-   * which is storage/_checkpoints/flow_destination_table/flow_name.
-   * @return the checkpoint root directory for `flow`
+   * @return the checkpoint root directory for this flow
+   *         (of the form storage/_checkpoints/flow_destination_table/flow_name)
+   * @throws IllegalArgumentException when the flow's destination is neither a table nor a sink
    */
-  def flowCheckpointsDirOpt(): Option[Path] = {
-    Option(if (graph.table.contains(flow.destinationIdentifier) ||
-      graph.sink.contains(flow.destinationIdentifier)) {
-      val checkpointRoot = new Path(context.storageRoot, "_checkpoints")
-      // Different tables in the pipeline can have flows with the same name, so we include
-      // the table's fully qualified identifier in the path to avoid collisions.
-      val flowTableId = tableIdentifierToPathString(flow.destinationIdentifier)
-      val flowName = flow.identifier.table
-      val checkpointDir = new Path(
-        new Path(checkpointRoot, flowTableId),
-        flowName
-      )
-      logInfo(
-        log"Flow ${MDC(LogKeys.FLOW_NAME, flowName)} using checkpoint " +
-          log"directory: ${MDC(LogKeys.CHECKPOINT_PATH, checkpointDir)}"
-      )
-      checkpointDir
-    } else {
+  def flowCheckpointsDir(): Path = {
+    def isTableOrSink(destination: TableIdentifier): Boolean = {
+      graph.table.contains(destination) || graph.sink.contains(destination)
+    }
+    if (!isTableOrSink(flow.destinationIdentifier)) {
       throw new IllegalArgumentException(
         s"Flow ${flow.identifier} does not have a valid destination for checkpoints."
       )
-    })
+    }
+    val checkpointRoot = new Path(context.storageRoot, "_checkpoints")
+    // Different tables in the pipeline can have flows with the same name, so we include
+    // the table's fully qualified identifier in the path to avoid collisions.
+    val flowTableId = tableIdentifierToPathString(flow.destinationIdentifier)
+    val flowName = flow.identifier.table
+    val checkpointDir = new Path(
+      new Path(checkpointRoot, flowTableId),
+      flowName
+    )
+    logInfo(
+      log"Flow ${MDC(LogKeys.FLOW_NAME, flowName)} using checkpoint " +
+        log"directory: ${MDC(LogKeys.CHECKPOINT_PATH, checkpointDir)}"
+    )
+    checkpointDir
   }
 
   /**
@@ -74,18 +75,8 @@ case class FlowSystemMetadata(
 
   /** Returns the location for the most recent checkpoint of a given flow. */
   def latestCheckpointLocation: String = {
-    val checkpointsDir = flowCheckpointsDirOpt().get
+    val checkpointsDir = flowCheckpointsDir()
     SystemMetadata.getLatestCheckpointDir(checkpointsDir)
-  }
-
-  /**
-   * Same as [[latestCheckpointLocation]] but returns None if the flow checkpoints directory
-   * does not exist.
-   */
-  def latestCheckpointLocationOpt(): Option[String] = {
-    flowCheckpointsDirOpt().map { flowCheckpointsDir =>
-      SystemMetadata.getLatestCheckpointDir(flowCheckpointsDir)
-    }
   }
 }
 
