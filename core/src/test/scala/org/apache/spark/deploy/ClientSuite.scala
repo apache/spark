@@ -17,10 +17,19 @@
 
 package org.apache.spark.deploy
 
+import scala.concurrent.Promise
+import scala.concurrent.duration._
+
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.DeployMessages.RequestSubmitDriver
+import org.apache.spark.deploy.master.Master
+import org.apache.spark.deploy.rest.RestSubmissionClient
+import org.apache.spark.internal.config.STANDALONE_SUBMIT_FILTER_ENVIRONMENT
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
+import org.apache.spark.util.ThreadUtils
 
 class ClientSuite extends SparkFunSuite with Matchers {
   test("correctly validates driver jar URL's") {
@@ -47,5 +56,44 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
     // Invalid syntax.
     ClientArguments.isValidJarUrl("hdfs:") should be (false)
+  }
+
+  /**
+   * Launches a driver through a [[ClientEndpoint]] wired to a fake master and returns the
+   * [[Command]] carried by the [[RequestSubmitDriver]] message the client sends.
+   */
+  private def submittedCommand(conf: SparkConf): Command = {
+    val env = RpcEnv.create("ClientSuite", "localhost", 0, conf, new SecurityManager(conf))
+    try {
+      val submitted = Promise[RequestSubmitDriver]()
+      val master = env.setupEndpoint(Master.ENDPOINT_NAME, new RpcEndpoint {
+        override val rpcEnv: RpcEnv = env
+        // Record the submission without replying, so the client neither polls the driver
+        // status nor exits the JVM.
+        override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+          case request: RequestSubmitDriver => submitted.success(request)
+        }
+      })
+      val args = new ClientArguments(
+        Array("launch", "spark://localhost:7077", "file:///path/to/app.jar", "MainClass"))
+      env.setupEndpoint("client", new ClientEndpoint(env, args, Seq(master), conf))
+      ThreadUtils.awaitResult(submitted.future, 10.seconds).driverDescription.command
+    } finally {
+      env.shutdown()
+      env.awaitTermination()
+    }
+  }
+
+  test("SPARK-59404: forward only Spark-related environment variables to the driver") {
+    // The submitting process always has non-Spark variables such as PATH, so forwarding
+    // sys.env unfiltered would fail the assertion below.
+    assert(sys.env.keys.exists(!_.startsWith("SPARK_")))
+    val command = submittedCommand(new SparkConf())
+    command.environment should be (RestSubmissionClient.filterSystemEnvironment(sys.env))
+  }
+
+  test("SPARK-59404: forward the full environment when filtering is disabled") {
+    val conf = new SparkConf().set(STANDALONE_SUBMIT_FILTER_ENVIRONMENT, false)
+    submittedCommand(conf).environment should be (sys.env)
   }
 }

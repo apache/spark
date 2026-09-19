@@ -30,6 +30,8 @@ license: |
 
 ## Upgrading from Core 4.2 to 4.3
 
+- Since Spark 4.3, standalone deployments now only forward SPARK_* environment variables by default. If you need to forward additional environment variables set `spark.standalone.submit.filterEnvironment` to `true`.
+
 - Since Spark 4.3, Spark compresses serialized RDD partitions by default. To restore the legacy behavior, you can set `spark.rdd.compress` to `false`.
 
 - Since Spark 4.3, Spark executor pods connect to the driver via the driver pod IP directly instead of the driver's Kubernetes Service. To restore the legacy behavior, you can set `spark.kubernetes.executor.useDriverPodIP` to `false`.

@@ -3050,6 +3050,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.standalone.submit.filterEnvironment</code></td>
+  <td><code>true</code></td>
+  <td>
+  In standalone cluster mode, controls whether the client forwards only Spark-related environment
+  variables to the driver (e.g. SPARK_* excluding SPARK_ENV_LOADED, SPARK_HOME, and SPARK_CONF_DIR), matching the REST submission client. If set to <code>false</code>,
+  the full environment of the submitting process is forwarded to the driver. This does not impact REST submissions unless they fall back.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.excludeOnFailure.enabled</code></td>
   <td>
     false
