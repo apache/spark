@@ -1,0 +1,2 @@
+-- timestamp_ntz literals and constructors with the default timestamp type as TIMESTAMP_NTZ
+--IMPORT timestamp-ntz.sql
