@@ -169,7 +169,7 @@ jobs:
             docs=false
             java25=false
           fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,graphframes,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
           build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,network-common,network-shuffle,sketch,variant,launcher"`
           precondition="
             {
@@ -294,7 +294,7 @@ jobs:
           - >-
             api, catalyst, hive-thriftserver
           - >-
-            mllib-local, mllib, graphx, profiler, pipelines, repl, examples
+            mllib-local, mllib, graphx, graphframes, profiler, pipelines, repl, examples
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
             credential-aws, kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect, avro
@@ -633,6 +633,8 @@ jobs:
           - >-
             pyspark-connect
           - >-
+            pyspark-graphframes,pyspark-graphframes-connect
+          - >-
             pyspark-connect-old-client
           - >-
             pyspark-install
@@ -649,6 +651,7 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-mllib, pyspark-ml, pyspark-ml-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-connect' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-graphframes,pyspark-graphframes-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-connect-old-client != 'true' &&  'pyspark-connect-old-client'}}
           # pyspark-install is very slow so we only run it when it's changed or explicity requested
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-install != 'true' && 'pyspark-install' }}
