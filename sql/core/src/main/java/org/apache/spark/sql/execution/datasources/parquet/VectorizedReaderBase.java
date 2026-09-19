@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import org.apache.parquet.column.values.ValuesReader;
+import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
@@ -26,6 +27,21 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
  * of methods that are not supported by concrete implementations
  */
 public class VectorizedReaderBase extends ValuesReader implements VectorizedValuesReader {
+
+  /**
+   * Validates a value length decoded from a page. Parquet stores value lengths in the page
+   * itself, so they are file-supplied and unverified. A negative length (whether crafted or
+   * corrupt) must be rejected before it reaches a stream slice/skip or the column vector, where
+   * it would otherwise read stale bytes, rewind the stream, or move {@code elementsAppended}
+   * backwards silently. Spark's own writers never emit one, so this only guards reads of
+   * third-party or corrupted files.
+   */
+  static int checkLength(int length) {
+    if (length < 0) {
+      throw new ParquetDecodingException("Encountered negative length: " + length);
+    }
+    return length;
+  }
 
   /**
    * Encodes an unsigned long as a minimal big-endian two's-complement byte array
