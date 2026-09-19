@@ -26,7 +26,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.EXIT_EXCEPTION_ANNOTATION
 import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory.ClientType
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.STRING_REDACTION_PATTERN
+import org.apache.spark.internal.config.{STRING_REDACTION_PATTERN, SUBMIT_DEPLOY_MODE}
 import org.apache.spark.util.{SparkStringUtils, Utils}
 
 /**
@@ -59,19 +59,24 @@ private[spark] class SparkKubernetesDiagnosticsSetter(clientProvider: Kubernetes
   }
 
   override def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit = {
-    val diagnostics = SparkStringUtils.abbreviate(
-      Utils.redact(conf.get(STRING_REDACTION_PATTERN), StringUtils.stringifyException(throwable)),
-      KUBERNETES_EXIT_EXCEPTION_MESSAGE_LIMIT_BYTES)
-    Utils.tryWithResource(clientProvider.create(conf)) { client =>
-      conf.get(KUBERNETES_DRIVER_POD_NAME).foreach { podName =>
-        client.pods()
-          .inNamespace(conf.get(KUBERNETES_NAMESPACE))
-          .withName(podName)
-          .edit((p: Pod) => new PodBuilder(p)
-            .editOrNewMetadata()
-            .addToAnnotations(EXIT_EXCEPTION_ANNOTATION, diagnostics)
-            .endMetadata()
-            .build());
+    // In cluster deploy mode, this runs in the submission client, not in the driver pod.
+    // Skip it so that a submission failure (e.g. pod creation conflict) does not overwrite
+    // the annotation of an existing driver pod with the same name.
+    if (conf.get(SUBMIT_DEPLOY_MODE) != "cluster") {
+      val diagnostics = SparkStringUtils.abbreviate(
+        Utils.redact(conf.get(STRING_REDACTION_PATTERN), StringUtils.stringifyException(throwable)),
+        KUBERNETES_EXIT_EXCEPTION_MESSAGE_LIMIT_BYTES)
+      Utils.tryWithResource(clientProvider.create(conf)) { client =>
+        conf.get(KUBERNETES_DRIVER_POD_NAME).foreach { podName =>
+          client.pods()
+            .inNamespace(conf.get(KUBERNETES_NAMESPACE))
+            .withName(podName)
+            .edit((p: Pod) => new PodBuilder(p)
+              .editOrNewMetadata()
+              .addToAnnotations(EXIT_EXCEPTION_ANNOTATION, diagnostics)
+              .endMetadata()
+              .build());
+        }
       }
     }
   }
