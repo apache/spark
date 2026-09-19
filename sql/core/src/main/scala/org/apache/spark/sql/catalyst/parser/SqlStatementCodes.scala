@@ -146,8 +146,7 @@ object SqlStatementCodes {
     case _: SetCatalogAndNamespace | _: SetNamespaceCommand => SetSchema
     case _: SetCatalogCommand => SetCatalog
     case _: TruncateTable => TruncateTable
-    case _: CreateFunction | _: CreateFunctionCommand |
-         _: CreateUserDefinedFunction | _: CreateUserDefinedFunctionCommand =>
+    case _: CreateFunction | _: CreateFunctionCommand | _: CreateUserDefinedFunctionCommand =>
       CreateRoutine
     case _: DropFunction | _: DropFunctionCommand => DropRoutine
     case _: UnresolvedExecuteImmediate => ExecuteImmediate
