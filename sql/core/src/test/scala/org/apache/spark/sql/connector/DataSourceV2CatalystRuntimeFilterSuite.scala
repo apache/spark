@@ -529,7 +529,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
-  test("two predicates on filter attributes -> pushed together in a single filter() call") {
+  test("two predicates on filter attributes -> handed over in a single call") {
     val tbl = s"$catalogName.tbl_two_predicates"
     val dim1 = s"$catalogName.dim_two_predicates1"
     val dim2 = s"$catalogName.dim_two_predicates2"
@@ -553,7 +553,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       assertPushedCatalystPredicatesEqual(
         df, EqualTo(p1, Literal(3)), EqualTo(p2, Literal(30)))
       assert(getCatalystScan(df).filterCallCount === 1,
-        "expected both predicates pushed in a single filter() call")
+        "expected both predicates in a single planInputPartitionsWithRuntimeFilters call")
     }
   }
 
@@ -619,7 +619,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
-  test("no runtime filter -> filter() is never called") {
+  test("no runtime filter -> the scan is never asked to re-plan") {
     val tbl = s"$catalogName.tbl5"
     withTable(tbl) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
@@ -797,7 +797,8 @@ private class BothRuntimeFilteringInterfacesScan
 
   override def filter(predicates: Array[Predicate]): Unit = {}
 
-  override def filter(expressions: Array[Expression]): Unit = {}
+  override def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 /** A scan declaring a filter attribute that its read schema does not contain. */
@@ -807,7 +808,8 @@ private class MissingFilterAttributeScan extends SupportsRuntimeCatalystFilterin
 
   override def filterAttributes(): Array[NamedReference] = Array(FieldReference("missing"))
 
-  override def filter(expressions: Array[Expression]): Unit = {}
+  override def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 /** A scan declaring a fully pushed filter attribute that its relation output does not contain. */
@@ -820,7 +822,8 @@ private class MissingFullyPushedFilterAttributeScan extends SupportsRuntimeCatal
   override def fullyPushedFilterAttributes(): Array[NamedReference] =
     Array(FieldReference("missing"))
 
-  override def filter(expressions: Array[Expression]): Unit = {}
+  override def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 /** A scan declaring a root struct fully pushed without declaring it filterable. */
@@ -835,7 +838,8 @@ private class FullyPushedRootAttributeScan extends SupportsRuntimeCatalystFilter
   override def fullyPushedFilterAttributes(): Array[NamedReference] =
     Array(FieldReference("s"))
 
-  override def filter(expressions: Array[Expression]): Unit = {}
+  override def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 /** A scan declaring a nested runtime-filter attribute beneath an integer column. */
@@ -846,7 +850,8 @@ private class NestedFilterAttributeScan extends SupportsRuntimeCatalystFiltering
   override def filterAttributes(): Array[NamedReference] =
     Array(FieldReference(Seq("part", "nested")))
 
-  override def filter(expressions: Array[Expression]): Unit = {}
+  override def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition] = Array.empty
 }
 
 private case class KeyedInputPartition(key: Int) extends InputPartition with HasPartitionKey {
@@ -862,21 +867,17 @@ private class PartitioningBreakingScan(
     afterFilter: Seq[InputPartition])
   extends Scan with Batch with SupportsRuntimeCatalystFiltering {
 
-  private var filtered = false
-
   override def readSchema(): StructType = new StructType().add("part", IntegerType)
 
   override def toBatch: Batch = this
 
-  override def planInputPartitions(): Array[InputPartition] =
-    if (filtered) afterFilter.toArray else initialPartitions.toArray
+  override def planInputPartitions(): Array[InputPartition] = initialPartitions.toArray
 
   override def createReaderFactory(): PartitionReaderFactory =
     throw new UnsupportedOperationException()
 
   override def filterAttributes(): Array[NamedReference] = Array(FieldReference("part"))
 
-  override def filter(expressions: Array[Expression]): Unit = {
-    filtered = true
-  }
+  override def planInputPartitionsWithRuntimeFilters(
+      expressions: Array[Expression]): Array[InputPartition] = afterFilter.toArray
 }

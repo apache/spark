@@ -172,9 +172,10 @@ object PushDownUtils extends Logging {
    * `FilterExec` above the scan, so pushing a non-deterministic one would evaluate it twice with
    * different results.
    *
-   * A scan implementing [[SupportsRuntimeCatalystFiltering]] takes a separate path: all
-   * runtime filters are pushed as Catalyst expressions in a single call, with no translation to
-   * connector predicates and no `filterAttributes` gating. The two paths are mutually exclusive.
+   * A scan implementing [[SupportsRuntimeCatalystFiltering]] does not go through this method: it
+   * receives the runtime filters as Catalyst expressions when Spark re-plans its input partitions
+   * (see [[replanWithRuntimeFilters]] and [[catalystRuntimeFilters]]). The two paths are mutually
+   * exclusive, and a scan implementing both interfaces is rejected here.
    *
    * @return true if any filters were pushed to the data source
    */
@@ -230,36 +231,48 @@ object PushDownUtils extends Logging {
 
         translatedFiltersPushed || partPredicatesPushed
 
-      case catalystScan: SupportsRuntimeCatalystFiltering if pushableFilters.nonEmpty =>
-        // A runtime filter is normally evaluated twice: the source prunes with it, and the
-        // FilterExec above the scan applies it again. The two have to agree, so this screen
-        // pushes only predicates the source can be trusted to evaluate in Spark's place.
-        //
-        // But pushing a non-deterministic one would let the source prune on its own coin flip and
-        // Spark flip again for the rows that survive, so we handle that specially.
-        //
-        // Not pushing a filter is safe only while its FilterExec still evaluates it. A fully
-        // pushed filter has none, so the source is its only evaluator. That is why
-        // DataSourceV2Strategy deletes a FilterExec at planning time only for a filter we push
-        // below, and we use the same method (isPushablePartitionFilter) to determine if we
-        // should push it.
-        //
-        // A DPP filter degrades to TrueLiteral once its subquery is pruned away, so it matches
-        // every row. The V2 path above drops these implicitly, since translateRuntimeFilterV2
-        // returns None; here we push Catalyst expressions directly, so we remove them explicitly.
-        val catalystFilters = pushableFilters
-          .flatMap(unwrapRuntimeFilterExpression)
-          .filterNot(_ == Literal.TrueLiteral)
-        if (catalystFilters.nonEmpty) {
-          catalystScan.filter(catalystFilters.toArray)
-          true
-        } else {
-          false
-        }
-
       case _ =>
         false
     }
+  }
+
+  /**
+   * Screens runtime filters for a [[SupportsRuntimeCatalystFiltering]] scan and unwraps them to the
+   * Catalyst predicates the scan should plan with. No translation to connector predicates happens
+   * here: what a scan can apply is the scan's own business.
+   *
+   * Only filters over attributes the scan declared filterable are kept. `DataSourceV2Strategy`
+   * routes a dynamic pruning filter without checking that declaration, and the key of a filter
+   * inserted over one union branch is pushed positionally into the others, so a scan can be handed
+   * a filter over a column it never declared. Dropping it costs pruning and not correctness: its
+   * rows are filtered anyway, by the join a DPP filter was derived from, and by the rewrite
+   * re-applying its own condition for a row-level operation's group filter. For a filter derived
+   * from a scalar subquery this drops nothing: the strategy already required its references to be a
+   * subset of the same declaration.
+   *
+   * The determinism screen is the other half. A scalar subquery filter is evaluated twice, by the
+   * source and by the FilterExec above the scan, so pushing a non-deterministic one would let the
+   * two disagree. `DataSourceV2Strategy` deletes that FilterExec only for a filter this method
+   * keeps, which is why both sites decide with `isPushablePartitionFilter`.
+   *
+   * A DPP filter degrades to TrueLiteral once its subquery is pruned away, so it matches every row.
+   * The V2 path drops these implicitly, since translateRuntimeFilterV2 returns None; here the
+   * expressions reach the scan directly, so we remove them explicitly.
+   */
+  private def catalystRuntimeFilters(
+      scan: SupportsRuntimeCatalystFiltering,
+      runtimeFilters: Seq[Expression],
+      output: Seq[AttributeReference]): Seq[Expression] = {
+    val filterAttrs = V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
+      scan.filterAttributes(),
+      output,
+      "filterAttributes()",
+      scan.getClass.getName)
+    runtimeFilters
+      .filter(f => f.references.subsetOf(filterAttrs))
+      .filter(isPushablePartitionFilter(_, includeSubquery = true))
+      .flatMap(unwrapRuntimeFilterExpression)
+      .filterNot(_ == Literal.TrueLiteral)
   }
 
   /**
@@ -268,10 +281,14 @@ object PushDownUtils extends Logging {
    * partitioning and pads with `None` to preserve key alignment with the pre-filter partition set.
    *
    * Notes:
-   *  - `filter` is mutating, and Spark may call this more than once for the same `scan` instance
-   *    (see [[pushRuntimeFilters]]); successive calls are additive.
-   *  - With a [[KeyedPartitioning]], every split from `planInputPartitions()` used on this path
-   *    must implement [[HasPartitionKey]].
+   *  - A [[SupportsRuntimeV2Filtering]] scan is filtered through the mutating `filter`, and Spark
+   *    may call this more than once for the same `scan` instance (see [[pushRuntimeFilters]]);
+   *    successive calls are additive. A [[SupportsRuntimeCatalystFiltering]] scan instead re-plans
+   *    its input partitions from the given expressions, so nothing accumulates on the scan.
+   *  - With a [[KeyedPartitioning]], every split used on this path must implement
+   *    [[HasPartitionKey]]: they come from `planInputPartitions()` on the
+   *    [[SupportsRuntimeV2Filtering]] path, and from `planInputPartitionsWithRuntimeFilters` on the
+   *    Catalyst one.
    *
    * @param scan                the V2 scan to push filters into
    * @param runtimeFilters      runtime filters to translate and push
@@ -283,8 +300,10 @@ object PushDownUtils extends Logging {
    *                            a projected partitioning must not be passed here: it would read each
    *                            key row at the wrong positions and types
    * @param originalPartitions  unfiltered partitions, consulted only when no runtime filters fire
-   * @return one entry per original input partition: `Some(part)` for surviving partitions and
-   *         `None` for partition keys whose splits were entirely pruned (SPJ alignment)
+   * @return the partitions to read. Under a [[KeyedPartitioning]] there is one entry per original
+   *         input partition: `Some(part)` for a survivor and `None` where a key's splits were
+   *         entirely pruned, which is what preserves SPJ key alignment. Otherwise the entries are
+   *         the partitions the scan re-planned, and their number need not match the original's.
    */
   def replanWithRuntimeFilters(
       scan: Scan,
@@ -293,11 +312,23 @@ object PushDownUtils extends Logging {
       output: Seq[AttributeReference],
       keyedPartitioning: Option[KeyedPartitioning],
       originalPartitions: => Seq[InputPartition]): Seq[Option[InputPartition]] = {
-    val filtered = pushRuntimeFilters(scan, runtimeFilters, table, output)
+    val (filtered, newPartitions) = scan match {
+      // A scan implementing both runtime-filtering interfaces falls through to pushRuntimeFilters,
+      // which rejects it.
+      case catalystScan: SupportsRuntimeCatalystFiltering
+          if runtimeFilters.nonEmpty && !catalystScan.isInstanceOf[SupportsRuntimeV2Filtering] =>
+        val catalystFilters = catalystRuntimeFilters(catalystScan, runtimeFilters, output)
+        if (catalystFilters.nonEmpty) {
+          (true, catalystScan.planInputPartitionsWithRuntimeFilters(catalystFilters.toArray))
+        } else {
+          (false, Array.empty[InputPartition])
+        }
+      case _ =>
+        val pushed = pushRuntimeFilters(scan, runtimeFilters, table, output)
+        // call toBatch again to get filtered partitions
+        (pushed, if (pushed) scan.toBatch.planInputPartitions() else Array.empty[InputPartition])
+    }
     if (filtered) {
-      // call toBatch again to get filtered partitions
-      val newPartitions = scan.toBatch.planInputPartitions()
-
       keyedPartitioning match {
         case Some(k) =>
           if (newPartitions.exists(!_.isInstanceOf[HasPartitionKey])) {
