@@ -27,7 +27,9 @@ from google.rpc import error_details_pb2
 from grpc_status import rpc_status
 
 from pyspark.errors import PySparkRuntimeError
-from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.logging import getLogger
+
+logger = getLogger(__name__)
 
 """
 This module contains retry system. The system is designed to be
