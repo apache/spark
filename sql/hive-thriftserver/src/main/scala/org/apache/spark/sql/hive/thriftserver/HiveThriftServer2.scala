@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.hadoop.hive.common.ServerUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hive.service.auth.HiveAuthFactory.AuthTypes
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.HiveServer2
 
@@ -105,6 +106,34 @@ object HiveThriftServer2 extends Logging {
     }
   }
 
+  // Sessions are impersonated for metastore calls, but queries run as the service identity
+  // (SPARK-5159), so storage ACLs are checked against the wrong principal. Refuse rather than
+  // look like we enforce something we do not. Auth types that never establish a user identity
+  // have nothing to impersonate, so they are exempt.
+  private[thriftserver] def failIfIneffectiveDoAs(
+      hiveConf: HiveConf,
+      allowIneffectiveDoAs: Boolean): Unit = {
+    val authType = hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
+    val unverifiedAuthTypes = Seq(AuthTypes.NONE, AuthTypes.NOSASL).map(_.getAuthName)
+    // Constant on the left: authType is null when explicitly set empty, and this must not NPE.
+    val authVerifiesUser = !unverifiedAuthTypes.exists(_.equalsIgnoreCase(authType))
+    if (authVerifiesUser && hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
+        !allowIneffectiveDoAs) {
+      throw new IllegalArgumentException(
+        s"${ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname} is set to true, but the Spark Thrift " +
+        "Server impersonates the connecting user only for Hive metastore calls: queries and " +
+        "the storage access they perform still run as the server's own service identity, so " +
+        "storage permissions are checked against the service principal rather than the " +
+        "connecting user (SPARK-5159). That can expose data the connecting user is not " +
+        s"authorized to read. To start anyway, set " +
+        s"${StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key}=true; it is a static " +
+        "conf, so it must be set before the SparkSession is created. Setting " +
+        s"${ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname} to false also starts the server, but " +
+        "note that it stops impersonating metastore calls too, so it is not a no-op (and " +
+        "unsetting it does not help -- Hive's own default is true).")
+    }
+  }
+
   def main(args: Array[String]): Unit = {
     // If the arguments contains "-h" or "--help", print out the usage and exit.
     if (args.contains("-h") || args.contains("--help")) {
@@ -154,6 +183,8 @@ private[hive] class HiveThriftServer2(sparkSession: SparkSession)
   private val started = new AtomicBoolean(false)
 
   override def init(hiveConf: HiveConf): Unit = {
+    HiveThriftServer2.failIfIneffectiveDoAs(
+      hiveConf, sparkSession.conf.get(StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS))
     val sparkSqlCliService = new SparkSQLCLIService(this, sparkSession)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
