@@ -457,6 +457,7 @@ Users can mount the following types of Kubernetes [volumes](https://kubernetes.i
 * [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir): an initially empty volume created when a pod is assigned to a node.
 * [nfs](https://kubernetes.io/docs/concepts/storage/volumes/#nfs): mounts an existing NFS(Network File System) into a pod.
 * [persistentVolumeClaim](https://kubernetes.io/docs/concepts/storage/volumes/#persistentvolumeclaim): mounts a `PersistentVolume` into a pod.
+* [csi](https://kubernetes.io/docs/concepts/storage/volumes/#csi): mounts a Container Storage Interface (CSI) ephemeral inline volume into a pod.
 
 **NB:** Please see the [Security](#security) section of this document for security issues related to volume mounts.
 
@@ -468,7 +469,7 @@ To mount a volume of any of the types above into the driver pod, use the followi
 --conf spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.subPath=<mount subPath>
 ```
 
-Specifically, `VolumeType` can be one of the following values: `hostPath`, `emptyDir`, `nfs` and `persistentVolumeClaim`. `VolumeName` is the name you want to use for the volume under the `volumes` field in the pod specification.
+Specifically, `VolumeType` can be one of the following values: `hostPath`, `emptyDir`, `nfs`, `persistentVolumeClaim` and `csi`. `VolumeName` is the name you want to use for the volume under the `volumes` field in the pod specification.
 
 Each supported type of volumes may have some specific configuration options, which can be specified using configuration properties of the following form:
 
@@ -487,6 +488,15 @@ And, the claim name of a `persistentVolumeClaim` with volume name `checkpointpvc
 
 ```
 spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.options.claimName=check-point-pvc-claim
+```
+
+And, a `csi` volume with volume name `data` can be specified using the following properties. `options.driver` is required; `options.fsType`, `options.nodePublishSecretName` (the name of a `Secret` in the pod's namespace) and any `options.volumeAttributes.*` are optional:
+
+```
+spark.kubernetes.driver.volumes.csi.data.options.driver=file.csi.azure.com
+spark.kubernetes.driver.volumes.csi.data.options.fsType=ext4
+spark.kubernetes.driver.volumes.csi.data.options.nodePublishSecretName=azure-secret
+spark.kubernetes.driver.volumes.csi.data.options.volumeAttributes.shareName=<share-name>
 ```
 
 The configuration properties for mounting volumes into the executor pods use prefix `spark.kubernetes.executor.` instead of `spark.kubernetes.driver.`.
