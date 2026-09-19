@@ -411,6 +411,7 @@ Below is a list of all the keywords in Spark SQL.
 
 |Keyword|Spark SQL<br/>ANSI Mode|Spark SQL<br/>NonANSI Mode|SQL-2016|
 |--|----------------------|-------------------------|--------|
+|ABSENT|non-reserved|non-reserved|non-reserved|
 |ADD|non-reserved|non-reserved|non-reserved|
 |AFTER|non-reserved|non-reserved|non-reserved|
 |AGGREGATE|non-reserved|non-reserved|non-reserved|
@@ -619,6 +620,7 @@ Below is a list of all the keywords in Spark SQL.
 |ITERATE|non-reserved|non-reserved|non-reserved|
 |JOIN|reserved|strict-non-reserved|reserved|
 |JSON|non-reserved|non-reserved|non-reserved|
+|JSON_ARRAY|non-reserved|non-reserved|reserved|
 |JSON_EXISTS|non-reserved|non-reserved|reserved|
 |JSON_QUERY|non-reserved|non-reserved|reserved|
 |JSON_TABLE|non-reserved|non-reserved|reserved|

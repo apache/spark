@@ -63,12 +63,9 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  * Extends `NamedRelation` so it can occupy a `NamedRelation`-typed slot (e.g.
  * `OverwriteByExpression.table`) directly at parse time, instead of wrapping the whole command.
  *
- * The parser always places this node inside the command's identifier slot (a child slot for
- * DELETE/UPDATE/MERGE/CTAS/RTAS, or a non-child slot for `InsertIntoStatement.table` and
- * `OverwriteByExpression.table` -- handled via explicit cases in `ResolveIdentifierClause` and
- * `BindParameters`). It is never the substitution root of a `WITH ... <command>` subtree, so
- * `CTEInChildren` semantics are not needed: any surrounding `WithCTE` produced by
- * `CTESubstitution` targets the inner command directly.
+ * Depending on the command shape, the parser uses this node either as the plan root or within the
+ * command's identifier slot. For INSERT, the slot is a child of `UnresolvedInsert` until the
+ * identifier expression has been evaluated.
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
@@ -122,6 +119,19 @@ case class ExpressionWithUnresolvedIdentifier(
     copy(identifierExpr = newChildren.head, otherExprs = newChildren.drop(1))
   }
 }
+
+/**
+ * Holds the raw table identifier and lookup context for an unresolved INSERT target.
+ *
+ * This is deliberately not a [[NamedRelation]]: while it is a child of
+ * [[org.apache.spark.sql.catalyst.plans.logical.UnresolvedInsert]], it must not be interpreted as
+ * a readable relation or substituted with a same-named CTE. It is converted to an
+ * [[UnresolvedRelation]] when the enclosing INSERT is lowered to `InsertIntoStatement`.
+ */
+case class UnresolvedInsertTarget(
+    multipartIdentifier: Seq[String],
+    options: CaseInsensitiveStringMap,
+    writePrivileges: Set[TableWritePrivilege]) extends UnresolvedLeafNode
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
@@ -637,6 +647,8 @@ case class UnresolvedStarExceptOrReplace(
     replacements: Option[Seq[NamedExpression]])
   extends LeafExpression with UnresolvedStarBase {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR_EXCEPT_OR_REPLACE)
+
   /**
    * We expand the * EXCEPT by the following three steps:
    * 1. use the original .expandStar() to get top-level column list or struct expansion
@@ -786,6 +798,8 @@ case class UnresolvedStarWithColumns(
      explicitMetadata: Option[Seq[Metadata]] = None)
   extends UnresolvedStarBase {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR_WITH_COLUMNS)
+
   override def target: Option[Seq[String]] = None
   override def children: Seq[Expression] = exprs
 
@@ -847,6 +861,8 @@ case class UnresolvedStarWithColumnsRenames(
     newNames: Seq[String])
   extends LeafExpression with UnresolvedStarBase {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR_WITH_COLUMNS_RENAMES)
+
   override def target: Option[Seq[String]] = None
 
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = {
@@ -883,7 +899,10 @@ case class UnresolvedStarWithColumnsRenames(
  *              is a list of identifiers that is the path of the expansion.
  */
 case class UnresolvedStar(target: Option[Seq[String]])
-  extends LeafExpression with UnresolvedStarBase
+  extends LeafExpression with UnresolvedStarBase {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR)
+}
 
 /**
  * Represents all of the input attributes to a given relational operator, for example in
@@ -894,6 +913,9 @@ case class UnresolvedStar(target: Option[Seq[String]])
  */
 case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSensitive: Boolean)
   extends LeafExpression with Star with Unevaluable {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_REGEX)
+
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = {
     val pattern = if (caseSensitive) regexPattern else s"(?i)$regexPattern"
     table match {
@@ -954,6 +976,7 @@ case class MultiAlias(child: Expression, names: Seq[String])
  */
 case class ResolvedStar(expressions: Seq[NamedExpression])
   extends LeafExpression with Star with Unevaluable {
+  final override val nodePatterns: Seq[TreePattern] = Seq(RESOLVED_STAR)
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = expressions
   override def toString: String = expressions.mkString("ResolvedStar(", ", ", ")")

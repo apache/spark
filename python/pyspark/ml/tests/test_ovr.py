@@ -19,13 +19,13 @@ import tempfile
 
 import numpy as np
 
-from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import (
     LinearSVC,
     LinearSVCModel,
     OneVsRest,
     OneVsRestModel,
 )
+from pyspark.ml.linalg import Vectors
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

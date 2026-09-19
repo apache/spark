@@ -44,6 +44,11 @@ private[spark] class ApplicationInfo(
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
 
+  // Hold state reported by the driver. Transient, because it belongs to the running driver and
+  // not to the recovered application: a new Master learns it again when the driver re-registers.
+  @transient var holdSupported: Boolean = _
+  @transient var held: Boolean = _
+
   @transient private var executorsPerResourceProfileId: mutable.HashMap[Int, mutable.Set[Int]] = _
   @transient private var targetNumExecutorsPerResourceProfileId: mutable.HashMap[Int, Int] = _
   @transient private var rpIdToResourceProfile: mutable.HashMap[Int, ResourceProfile] = _
@@ -63,6 +68,8 @@ private[spark] class ApplicationInfo(
     executors = new mutable.HashMap[Int, ExecutorDesc]
     coresGranted = 0
     endTime = -1L
+    holdSupported = false
+    held = false
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
     removedExecutors = new ArrayBuffer[ExecutorDesc]
@@ -195,6 +202,40 @@ private[spark] class ApplicationInfo(
    */
   private[deploy] def getExecutorLimit: Int = {
     targetNumExecutorsPerResourceProfileId.values.sum
+  }
+
+  /**
+   * Whether the application is held right now, per the last report from its running driver. An
+   * application that did not report the hold as supported is not considered held -- its driver
+   * UI offers no control to change it -- and neither is a finished application, whose driver is
+   * gone, so the last reported hold is stale.
+   */
+  private[deploy] def isHeld: Boolean = held && holdSupported && !isFinished
+
+  /**
+   * The number of executors that have not exited yet while the application is held. They are
+   * still draining their running tasks; the hold is complete once this reaches zero. Counting
+   * `executors` relies on `DECOMMISSIONED` not being a finished `ExecutorState`: the Master
+   * keeps a decommissioning executor in the map until it actually exits, which is what makes
+   * this count agree with the driver's own `draining` from its `/holdstatus` endpoint.
+   */
+  private[deploy] def numDrainingExecutors: Int = if (isHeld) executors.size else 0
+
+  /**
+   * The application state, annotated with the hold reported by its driver, for example
+   * `RUNNING (held, draining 2 executors)`.
+   */
+  private[deploy] def stateText: String = {
+    if (!isHeld) {
+      state.toString
+    } else {
+      val draining = numDrainingExecutors
+      if (draining == 0) {
+        s"$state (held)"
+      } else {
+        s"$state (held, draining $draining executor${if (draining > 1) "s" else ""})"
+      }
+    }
   }
 
   def duration: Long = {

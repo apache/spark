@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
+import scala.reflect.ClassTag
 
 import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
 import org.apache.spark.internal.LogKeys
@@ -951,12 +952,23 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     (left, right) match {
       case (SinglePartition, SinglePartition) => true
       case (l: HashPartitioningLike, r: HashPartitioningLike) => l == r
-      // For `KeyedPartitioning`, only the partition expressions must match (both sides'
-      // expressions have already been remapped to this union's output attributes by
-      // `prepareOutputPartitioning`). The partition keys are intentionally not compared here:
-      // children typically carry different key sets, and `outputPartitioning` merges them.
+      // For `KeyedPartitioning`, the partition expressions must match (both sides' expressions
+      // have already been remapped to this union's output attributes by
+      // `prepareOutputPartitioning`), and so must the types their keys were built with. The
+      // partition keys themselves are intentionally not compared: children typically carry
+      // different key sets, and `outputPartitioning` merges them. Their types cannot be merged the
+      // same way, since one type list has to stand for every row of the concatenation, and a
+      // wrapper compares its types before its values, so keys of two types would never be found
+      // equal to one another.
+      //
+      // No query is known to reach the type clause: a child whose type had to be widened gets a
+      // `Cast` alias, and `AliasAwareOutputExpression` drops the keyed partitioning before the
+      // union sees it, while nested nullability and struct field names are erased out of
+      // `keyDataTypes` already. It is kept because the cost of being wrong here is a union that
+      // claims one key space over rows of two.
       case (l: KeyedPartitioning, r: KeyedPartitioning) =>
         l.expressions.length == r.expressions.length &&
+          l.keyDataTypes == r.keyDataTypes &&
           l.expressions.zip(r.expressions).forall { case (le, re) => le.semanticEquals(re) }
       // Note: two `RangePartitioning`s with even same ordering and number of partitions
       // are not equal, because they might have different partition bounds.
@@ -983,17 +995,17 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     if (partitionings.forall(_.isInstanceOf[KeyedPartitioning])) {
       val kps = partitionings.map(_.asInstanceOf[KeyedPartitioning])
       val headKp = kps.head
-      // The `KeyedPartitioning`s must agree on the partition expressions to merge.
-      val compatible = kps.forall(comparePartitioning(_, headKp))
+      // To merge, the `KeyedPartitioning`s must agree on the partition expressions and no leg
+      // may carry the marker: the merged set declares the other legs' keys, so an out-of-set row
+      // can sit in the wrong partition for the merged claim (rule (1) of the
+      // `KeyedPartitioning.mayContainUnknownPartitionKeys` doc). Unlike a join, a union keeps
+      // every leg's rows: an unmarked leg does not excuse a marked one.
+      val compatible = kps.forall(kp =>
+        !kp.mayContainUnknownPartitionKeys && comparePartitioning(kp, headKp))
       if (compatible) {
-        val mergedKeys = kps.flatMap(_.partitionKeys)
-        val mergedExpressions = headKp.expressions
-        val isGrouped = mergedKeys.distinct.size == mergedKeys.size
-        val isNarrowed = kps.exists(_.isNarrowed)
-        return KeyedPartitioning(mergedExpressions, mergedKeys, isGrouped, isNarrowed)
-      } else {
-        return super.outputPartitioning
+        return KeyedPartitioning.concat(kps)
       }
+      return super.outputPartitioning
     }
 
     // Case B: treat each child's partitioning as a set of candidate partitionings (a
@@ -1011,7 +1023,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     // Intersect across all children, anchored on the first child's set. Every surviving member
     // is shared by all children, so their `numPartitions` agree; a `PartitioningCollection`
     // built from a subset of one child's members therefore keeps its uniform-numPartitions
-    // invariant, and the co-located `doExecute` arm's invariant holds.
+    // invariant, and the co-located arm in `unionRDDs` keeps its invariant.
     val head = candidateSets.head
     val intersection = head.filter { c =>
       candidateSets.tail.forall(_.exists(comparePartitioning(c, _)))
@@ -1024,8 +1036,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   }
 
   // True when the codegen path applies: `outputPartitioning` is `UnknownPartitioning`,
-  // and `unionedInputRDD` matches the semantics of `sparkContext.union(...)` in `doExecute`.
-  // A `KeyedPartitioning` union also uses `sparkContext.union(...)` in `doExecute`, but
+  // and `unionedInputRDD` matches the semantics of `sparkContext.union(...)` in `unionRDDs`.
+  // A `KeyedPartitioning` union also uses `sparkContext.union(...)` in `unionRDDs`, but
   // codegen is disabled for it (`supportCodegenFailureReason` reports "partitioning-aware"):
   // the per-partition key descriptor is consumed by a downstream `GroupPartitionsExec`, and
   // keeping these unions out of whole-stage codegen matches the `HashPartitioning` union case.
@@ -1234,8 +1246,14 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   // decides which output columns to materialize.
   override def usedInputs: AttributeSet = AttributeSet.empty
 
-  protected override def doExecute(): RDD[InternalRow] = {
-    outputPartitioning match {
+  // Shared by `doExecute` and `doExecuteColumnar` so the two cannot report one partitioning and
+  // build another. `outputPartitioning` is read once, before the children execute: a child's
+  // partitioning can sharpen once it has run, as `InMemoryTableScanExec` does over a
+  // not-yet-materialized AQE cached plan.
+  private def unionRDDs[T: ClassTag](executeChild: SparkPlan => RDD[T]): RDD[T] = {
+    val partitioning = outputPartitioning
+    val rdds = children.map(executeChild)
+    partitioning match {
       case _: UnknownPartitioning | _: KeyedPartitioning =>
         // An `UnknownPartitioning` union simply concatenates its children. A
         // `KeyedPartitioning` union does the same: its merged partition keys describe the
@@ -1243,24 +1261,23 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
         // `GroupPartitionsExec` regroups partitions that share a key. This differs from an
         // index-co-locatable partitioning (e.g. `HashPartitioning`), where a partitioning-aware
         // union RDD interleaves same-index partitions across children.
-        sparkContext.union(children.map(_.execute()))
+        sparkContext.union(rdds)
       case _ =>
         // This union has a known, index-co-locatable partitioning, i.e., its children have the
         // same partitioning in semantics so this union can choose not to change the partitioning
         // by using a custom partitioning aware union RDD.
-        val nonEmptyRdds = children.map(_.execute()).filter(!_.partitions.isEmpty)
         new SQLPartitioningAwareUnionRDD(
-          sparkContext, nonEmptyRdds, outputPartitioning.numPartitions)
+          sparkContext, rdds.filter(!_.partitions.isEmpty), partitioning.numPartitions)
     }
   }
+
+  protected override def doExecute(): RDD[InternalRow] = unionRDDs(_.execute())
 
   override def supportsColumnar: Boolean = children.forall(_.supportsColumnar)
 
   override def supportsRowBased: Boolean = children.forall(_.supportsRowBased)
 
-  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    sparkContext.union(children.map(_.executeColumnar()))
-  }
+  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = unionRDDs(_.executeColumnar())
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): UnionExec =
     copy(children = newChildren)

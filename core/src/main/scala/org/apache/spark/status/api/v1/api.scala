@@ -66,6 +66,11 @@ case class ApplicationAttemptInfo private[spark](
 
 }
 
+class ApplicationHoldStatus private[spark](
+    val supported: Boolean,
+    val held: Boolean,
+    val draining: Int)
+
 class ResourceProfileInfo private[spark](
     val id: Int,
     val executorResources: Map[String, ExecutorResourceRequest],

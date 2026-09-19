@@ -33,8 +33,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.{truncatedString, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
-import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
@@ -60,6 +60,8 @@ case class HashAggregateExec(
   extends AggregateCodegenSupport {
 
   require(Aggregate.supportsHashAggregate(aggregateBufferAttributes, groupingExpressions))
+  require(!isStreaming ||
+    groupingExpressions.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType)))
 
   override def allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
@@ -373,7 +375,7 @@ case class HashAggregateExec(
           var findNextGroup = false
           while (!findNextGroup && sortedIter.next()) {
             val key = sortedIter.getKey
-            if (currentKey.equals(key)) {
+            if (hashMap.keysEqual(currentKey, key)) {
               mergeProjection(joinedRow(currentRow, sortedIter.getValue))
             } else {
               // We find a new group.
@@ -504,6 +506,7 @@ case class HashAggregateExec(
    */
   private def checkIfFastHashMapSupported(): Boolean = {
     val isSupported =
+      groupingExpressions.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType)) &&
       (groupingKeySchema ++ bufferSchema).forall(f => CodeGenerator.isPrimitiveType(f.dataType) ||
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType] ||
         f.dataType.isInstanceOf[CalendarIntervalType])
@@ -908,7 +911,6 @@ case class HashAggregateExec(
     val fastRowKeys = ctx.generateExpressions(
       bindReferences[Expression](groupingExpressions, child.output))
     val unsafeRowKeys = unsafeRowKeyCode.value
-    val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
     val fastRowBuffer = ctx.freshName("fastAggBuffer")
 
@@ -967,28 +969,32 @@ case class HashAggregateExec(
       // per regular-map row (see below); emitting it in more than one runtime branch is unsafe
       // because the projection's subexpression/writer state assigned in one branch would be read
       // stale from another (e.g. the adaptive pass-through path would reuse the last probed key).
+      val (computeKeyHash, lookupBuffer) =
+        if (UnsafeRowUtils.isBinaryStable(groupingKeySchema)) {
+          val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
+          (s"int $unsafeRowKeyHash = ${unsafeRowKeyCode.value}.hashCode();",
+            s"$hashMapTerm.getAggregationBufferFromUnsafeRow(" +
+              s"$unsafeRowKeys, $unsafeRowKeyHash)")
+        } else {
+          ("", s"$hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys)")
+        }
       val probeRegularMap =
         s"""
-           |int $unsafeRowKeyHash = ${unsafeRowKeyCode.value}.hashCode();
+           |$computeKeyHash
            |if ($checkFallbackForBytesToBytesMap) {
            |  // try to get the buffer from hash map
-           |  $unsafeRowBuffer =
-           |    $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, $unsafeRowKeyHash);
+           |  $unsafeRowBuffer = $lookupBuffer;
            |}
          """.stripMargin
 
       val spillMap =
         s"""
-           |if ($sorterTerm == null) {
-           |  $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
-           |} else {
-           |  $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
-           |}
+           |$sorterTerm = org.apache.spark.sql.execution.aggregate.HashAggregateExec
+           |  .spillHashMapToSorter($hashMapTerm, $sorterTerm);
            |$resetCounter
            |// the hash map had been spilled, so it should have enough memory now,
            |// try to allocate buffer again.
-           |$unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
-           |  $unsafeRowKeys, $unsafeRowKeyHash);
+           |$unsafeRowBuffer = $lookupBuffer;
            |if ($unsafeRowBuffer == null) {
            |  // failed to allocate the first page
            |  throw QueryExecutionErrors.aggregateOutOfMemoryError();
@@ -1353,4 +1359,27 @@ case class HashAggregateExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): HashAggregateExec =
     copy(child = newChild)
+}
+
+object HashAggregateExec {
+  /**
+   * Spills the in-memory hash map to disk and returns the sorter holding the spilled data. Called
+   * by the generated code of [[HashAggregateExec]] (through the static forwarder) when a buffer
+   * cannot be allocated from the hash map: the first spill destructs the map into a new sorter, and
+   * later spills merge into the existing one. Returning the sorter lets the generated code keep it
+   * in a single mutable field.
+   *
+   * Extracting this type-independent spill machinery into a shared helper keeps it compiled once
+   * per JVM instead of being re-emitted into every HashAggregateExec stage's generated code.
+   */
+  def spillHashMapToSorter(
+      hashMap: UnsafeFixedWidthAggregationMap,
+      sorter: UnsafeKVExternalSorter): UnsafeKVExternalSorter = {
+    if (sorter == null) {
+      hashMap.destructAndCreateExternalSorter()
+    } else {
+      sorter.merge(hashMap.destructAndCreateExternalSorter())
+      sorter
+    }
+  }
 }

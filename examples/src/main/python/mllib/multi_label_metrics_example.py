@@ -16,9 +16,9 @@
 #
 
 # $example on$
-from pyspark.mllib.evaluation import MultilabelMetrics
 # $example off$
 from pyspark import SparkContext
+from pyspark.mllib.evaluation import MultilabelMetrics
 
 if __name__ == "__main__":
     sc = SparkContext(appName="MultiLabelMetricsExample")

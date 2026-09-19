@@ -144,18 +144,17 @@ public final class Variant {
   // It is only legal to call it when `getType()` is `Type.OBJECT`.
   public Variant getFieldByKey(String key) {
     return handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
-      // Use linear search for a short list. Switch to binary search when the length reaches
-      // `BINARY_SEARCH_THRESHOLD`.
-      final int BINARY_SEARCH_THRESHOLD = 32;
-      if (size < BINARY_SEARCH_THRESHOLD) {
-        for (int i = 0; i < size; ++i) {
-          int id = readUnsigned(value, idStart + idSize * i, idSize);
-          if (key.equals(getMetadataKey(metadata, id))) {
-            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
-            return new Variant(value, metadata, dataStart + offset);
-          }
+      byte[] keyBytes = encodeKey(key);
+      int numAttempts = 1;
+      // UTF-8 and UTF-16 order can differ only for keys with a code unit at or above U+D800.
+      for (int i = 0; i < key.length(); ++i) {
+        if (key.charAt(i) >= Character.MIN_SURROGATE) {
+          numAttempts = 2;
+          break;
         }
-      } else {
+      }
+      // Search the spec's UTF-8 order first, then the UTF-16 order written by older Spark versions.
+      for (int attempt = 0; attempt < numAttempts; ++attempt) {
         int low = 0;
         int high = size - 1;
         while (low <= high) {
@@ -164,7 +163,10 @@ public final class Variant {
           // overflows int.
           int mid = (low + high) >>> 1;
           int id = readUnsigned(value, idStart + idSize * mid, idSize);
-          int cmp = getMetadataKey(metadata, id).compareTo(key);
+          String midKey = getMetadataKey(metadata, id);
+          int cmp = attempt == 0
+              ? compareKeys(encodeKey(midKey), keyBytes)
+              : midKey.compareTo(key);
           if (cmp < 0) {
             low = mid + 1;
           } else if (cmp > 0) {

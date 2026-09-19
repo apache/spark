@@ -222,6 +222,8 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
         model2: DecisionTreeRegressionModel): Unit = {
       TreeTests.checkEqual(model, model2)
       assert(model.numFeatures === model2.numFeatures)
+      val features = Vectors.dense(0.0, 0.0)
+      assert(model.predictLeaf(features) === model2.predictLeaf(features))
     }
 
     val dt = new DecisionTreeRegressor()
@@ -270,7 +272,8 @@ private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
       data: RDD[LabeledPoint],
       dt: DecisionTreeRegressor,
       categoricalFeatures: Map[Int, Int]): Unit = {
-    val numFeatures = data.first().features.size
+    val vec = data.first().features
+    val numFeatures = vec.size
     val oldStrategy = dt.getOldStrategy(categoricalFeatures)
     val oldTree = OldDecisionTree.train(data.map(OldLabeledPoint.fromML), oldStrategy)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
@@ -279,6 +282,7 @@ private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
     val oldTreeAsNew = DecisionTreeRegressionModel.fromOld(
       oldTree, newTree.parent.asInstanceOf[DecisionTreeRegressor], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
+    assert(oldTreeAsNew.predictLeaf(vec) === newTree.predictLeaf(vec))
     assert(newTree.numFeatures === numFeatures)
   }
 }
