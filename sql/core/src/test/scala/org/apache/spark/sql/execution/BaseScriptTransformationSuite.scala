@@ -276,6 +276,27 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
+  test("SPARK-59277: colliding map key followed by valid row without SerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val mapType = MapType(IntegerType, CharType(4))
+      // Row 1 has duplicate converted keys (1 and 01 both cast to 1).
+      // Row 2 is valid. Both rows are in the same partition.
+      val input = Seq(
+        """{"1":"a","01":"b"}""",
+        """{"2":"cd"}""").toDF("value")
+      checkAnswer(
+        input,
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(AttributeReference("value", mapType)()),
+          child = child,
+          ioschema = defaultIOSchema),
+        Seq(Row(null), Row(Map(2 -> "cd  "))))
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
   test("script transformation should not swallow errors from upstream operators (no serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 
