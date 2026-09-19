@@ -1885,6 +1885,21 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.parquet.storageFilterPushdown.enabled")
+      .doc("If true, allows the vectorized Parquet reader to evaluate runtime storage filters " +
+        "(e.g. bloom filters from join runtime filtering) at the scan level using late " +
+        "materialization: read key columns first, evaluate the filter per row, then read data " +
+        "columns restricted to surviving rows. This is a planning-time decision only: when " +
+        "false, no storage filter is attached to a scan in the first place and the filter is " +
+        "applied as an ordinary post-scan filter instead. Note that the surviving key values of " +
+        "a whole row group are buffered before the first batch of that row group is produced, " +
+        "so a task holds up to one extra copy of the key columns for one row group.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val PARQUET_FILTER_PUSHDOWN_DATE_ENABLED = buildConf("spark.sql.parquet.filterPushdown.date")
     .doc("If true, enables Parquet filter push-down optimization for Date. " +
       s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
@@ -9089,6 +9104,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
+
+  def parquetStorageFilterPushdownEnabled: Boolean =
+    getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED)
 
   def parquetFilterPushDownDate: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DATE_ENABLED)
 
