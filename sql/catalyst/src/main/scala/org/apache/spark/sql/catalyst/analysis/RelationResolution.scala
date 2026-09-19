@@ -344,7 +344,10 @@ class RelationResolution(
                 writePrivileges == null && !u.isStreaming
               cached <- lookupSharedRelationCache(catalog, ident, t, tableKey.stateOptions)
             } yield {
-              val updatedRelation = cached.copy(options = finalOptions)
+              // A shared cache entry may have been analyzed under another session's CHAR/VARCHAR
+              // policy. Rebind it in this analysis instead of inheriting that session's scan mode.
+              val updatedRelation =
+                cached.copy(options = finalOptions, charVarcharScanMode = None)
               updatedRelation.copyTagsFrom(cached)
               val nameParts = ident.toQualifiedNameParts(catalog)
               val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)

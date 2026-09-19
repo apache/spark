@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReferen
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics, StreamSourceAwareLogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharScanMode, CharVarcharUtils}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.sources.BaseRelation
 
@@ -41,7 +41,10 @@ case class LogicalRelation(
     output: Seq[AttributeReference],
     catalogTable: Option[CatalogTable],
     override val isStreaming: Boolean,
-    @transient stream: Option[SparkDataStream])
+    @transient stream: Option[SparkDataStream],
+    // Bound at analysis so sameResult / cache reuse distinguish preserve-only vs standard
+    // CHAR/VARCHAR scans. None means the relation was not analyzed under first-class types.
+    charVarcharScanMode: Option[CharVarcharScanMode])
   extends LeafNode
   with StreamSourceAwareLogicalPlan
   with MultiInstanceRelation
@@ -75,6 +78,16 @@ case class LogicalRelation(
   override def refresh(): Unit = relation match {
     case fs: HadoopFsRelation => fs.location.refresh()
     case _ =>  // Do nothing.
+  }
+
+  def hasCharVarchar: Boolean = output.exists { attr =>
+    CharVarcharUtils.hasCharVarchar(attr.dataType) ||
+      CharVarcharUtils.getRawType(attr.metadata).exists(CharVarcharUtils.hasCharVarchar)
+  }
+
+  def sameResultWithUnboundCharVarcharScanMode(other: LogicalRelation): Boolean = {
+    copy(output = other.output, charVarcharScanMode = None)
+      .sameResult(other.copy(charVarcharScanMode = None))
   }
 
   override def simpleString(maxFields: Int): String = {
@@ -116,14 +129,14 @@ object LogicalRelation {
     // The v1 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
-    LogicalRelation(relation, toAttributes(schema), None, isStreaming, None)
+    LogicalRelation(relation, toAttributes(schema), None, isStreaming, None, None)
   }
 
   def apply(relation: BaseRelation, table: CatalogTable): LogicalRelation = {
     // The v1 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
-    LogicalRelation(relation, toAttributes(schema), Some(table), false, None)
+    LogicalRelation(relation, toAttributes(schema), Some(table), false, None, None)
   }
 }
 

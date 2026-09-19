@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.catalyst.util.{sideBySide, CharVarcharScanMode}
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -57,6 +58,15 @@ case class CachedData(
        |logicalPlan=$plan
        |InMemoryRelation=$cachedRepresentation)
        |""".stripMargin
+}
+
+private[sql] case class TableCacheDescriptor(
+    plan: LogicalPlan,
+    storageLevel: StorageLevel) {
+  def charVarcharScanMode: Option[CharVarcharScanMode] =
+    plan.collectFirst {
+      case r: DataSourceV2Relation => r.charVarcharScanMode
+    }.flatten
 }
 
 /**
@@ -258,14 +268,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       case LogicalRelationWithTable(_, Some(catalogTable)) =>
         isSameName(name, catalogTable.identifier.nameParts, resolver)
 
-      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec) =>
+      case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec, _) =>
         val nameInCache = v2Ident.toQualifiedNameParts(catalog)
         isSameName(name, nameInCache, resolver) && (includeTimeTravel || timeTravelSpec.isEmpty)
 
       case v: View =>
         isSameName(name, v.desc.identifier.nameParts, resolver)
 
-      case HiveTableRelation(catalogTable, _, _, _, _) =>
+      case HiveTableRelation(catalogTable, _, _, _, _, _) =>
         isSameName(name, catalogTable.identifier.nameParts, resolver)
 
       case _ => false
@@ -349,6 +359,61 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
+   * Re-caches every entry whose plan contains a [[LogicalRelation]] for `relation`.
+   * Unlike [[recacheByPlan]], this ignores CHAR/VARCHAR scan-mode identity so a V1 write
+   * invalidates preserve-only, standard, and unbound cache entries for that BaseRelation.
+   */
+  def recacheByV1Relation(spark: SparkSession, relation: BaseRelation): Unit = {
+    recacheByCondition(spark, cd => cd.plan.exists {
+      case logical: LogicalRelation => logical.relation == relation
+      case _ => false
+    })
+  }
+
+  /**
+   * Re-caches every entry whose plan contains the given catalog-less [[DataSourceV2Relation]].
+   * The scan mode is ignored only for this mutation-specific match so an unbound write target
+   * invalidates preserve-native and standard cache entries without weakening normal cache identity.
+   */
+  def recacheByV2Relation(spark: SparkSession, relation: DataSourceV2Relation): Unit = {
+    recacheByCondition(spark, cd => cd.plan.exists {
+      case cached: DataSourceV2Relation =>
+        cached.sameResultWithUnboundCharVarcharScanMode(relation)
+      case _ => false
+    })
+  }
+
+  /**
+   * Describes direct named cache entries for a V2 table. Matching the cache's table name excludes
+   * dependent query caches while retaining the padding project of a standard-semantics scan.
+   * Scan mode is ignored for the relation match.
+   */
+  def lookupCacheDescriptorsByV2Relation(
+      relation: DataSourceV2Relation,
+      directNamedCacheOnly: Boolean = false): Seq[TableCacheDescriptor] = {
+    val directCacheName = for {
+      catalog <- relation.catalog
+      ident <- relation.identifier
+    } yield ident.toQualifiedNameParts(catalog).quoted
+    cachedData.flatMap { cd =>
+      val isDirectCache = !directNamedCacheOnly ||
+        cd.cachedRepresentation.cacheBuilder.tableName == directCacheName
+      val hasRelation = cd.plan.exists {
+        case cached: DataSourceV2Relation =>
+          cached.sameResultWithUnboundCharVarcharScanMode(relation)
+        case _ => false
+      }
+      if (isDirectCache && hasRelation) {
+        Some(TableCacheDescriptor(
+          cd.plan,
+          cd.cachedRepresentation.cacheBuilder.storageLevel))
+      } else {
+        None
+      }
+    }
+  }
+
+  /**
    * Re-caches all cache entries that reference the given table name.
    */
   def recacheTableOrView(
@@ -422,7 +487,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
           val table = CatalogV2Util.getTable(catalog, ident, options = r.options)
           if (r.table.id == table.id) {
-            Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), r.options))
+            Some(DataSourceV2Relation
+              .create(table, Some(catalog), Some(ident), r.options)
+              .copy(charVarcharScanMode = r.charVarcharScanMode))
           } else {
             None
           }

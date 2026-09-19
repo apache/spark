@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
@@ -46,7 +47,8 @@ case class OrcScan(
     pushedAggregate: Option[Aggregation] = None,
     pushedFilters: Array[Filter],
     partitionFilters: Seq[Expression] = Seq.empty,
-    dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
+    dataFilters: Seq[Expression] = Seq.empty,
+    charVarcharScanMode: Option[CharVarcharScanMode] = None) extends FileScan {
   override def isSplitable(path: Path): Boolean = {
     // If aggregate is pushed down, only the file footer will be read once,
     // so file should not be split across multiple tasks.
@@ -75,7 +77,7 @@ case class OrcScan(
     // We should use `readPartitionSchema` as the partition schema here.
     OrcPartitionReaderFactory(conf, broadcastedConf,
       dataSchema, readDataSchema, readPartitionSchema, pushedFilters, pushedAggregate,
-      new OrcOptions(options.asScala.toMap, conf), memoryMode)
+      new OrcOptions(options.asScala.toMap, conf), memoryMode, charVarcharScanMode)
   }
 
   override def equals(obj: Any): Boolean = obj match {
@@ -86,7 +88,8 @@ case class OrcScan(
         pushedAggregate.isEmpty && o.pushedAggregate.isEmpty
       }
       super.equals(o) && dataSchema == o.dataSchema && options == o.options &&
-        equivalentFilters(pushedFilters, o.pushedFilters) && pushedDownAggEqual
+        equivalentFilters(pushedFilters, o.pushedFilters) && pushedDownAggEqual &&
+        charVarcharScanMode == o.charVarcharScanMode
     case _ => false
   }
 

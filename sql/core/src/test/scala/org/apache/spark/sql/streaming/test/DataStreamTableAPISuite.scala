@@ -22,16 +22,18 @@ import java.util
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema, InMemoryTableSessionCatalog}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableInfo, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MemoryStreamScanBuilder, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
@@ -39,6 +41,7 @@ import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.sources.FakeScanBuilder
 import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.storage.StorageLevel.{DISK_ONLY, MEMORY_ONLY}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
@@ -494,6 +497,96 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
             .findAllMatchIn(explainWithExtended).size >= 3)
         } finally {
           sq.stop()
+        }
+      }
+    }
+  }
+
+  test("micro-batch V2 write recaches all bound CHAR/VARCHAR scan modes") {
+    val t = "testcat.ns.cached_cv"
+    val preserveConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
+    val standardConf = Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
+    val cacheManager = spark.sharedState.cacheManager
+
+    spark.sql("CREATE NAMESPACE testcat.ns")
+    withTable(t) {
+      withTempDir { dir =>
+        withSQLConf(preserveConf: _*) {
+          sql(s"CREATE TABLE $t (col1 varchar(4), col2 integer) USING foo")
+          sql(s"INSERT INTO $t VALUES ('a', 1)")
+        }
+
+        def scanMode(read: DataFrame): Option[CharVarcharScanMode] = {
+          read.queryExecution.analyzed.collectFirst {
+            case relation: DataSourceV2Relation => relation.charVarcharScanMode
+          }.flatten
+        }
+
+        val preserveRead = withSQLConf(preserveConf: _*) {
+          val read = spark.table(t).persist(MEMORY_ONLY)
+          checkAnswer(read, Row("a", 1))
+          read
+        }
+        val standardRead = withSQLConf(standardConf: _*) {
+          val read = spark.table(t).persist(DISK_ONLY)
+          checkAnswer(read, Row("a", 1))
+          read
+        }
+        assert(scanMode(preserveRead).contains(CharVarcharScanMode.PreserveNative))
+        assert(scanMode(standardRead).contains(CharVarcharScanMode.SparkStandard))
+
+        val stream = MemoryStream[Int]
+        val sq = stream.toDF().select(lit("b"), $"value").writeStream
+          .option("checkpointLocation", dir.getCanonicalPath)
+          .toTable(t)
+        try {
+          stream.addData(2)
+          sq.processAllAvailable()
+          withSQLConf(preserveConf: _*) {
+            checkAnswer(spark.table(t), Seq(Row("a", 1), Row("b", 2)))
+          }
+          withSQLConf(standardConf: _*) {
+            checkAnswer(spark.table(t), Seq(Row("a", 1), Row("b", 2)))
+          }
+          val currentRelation = spark.table(t).queryExecution.analyzed.collectFirst {
+            case relation: DataSourceV2Relation => relation
+          }.get
+          val descriptors = cacheManager.lookupCacheDescriptorsByV2Relation(currentRelation)
+          assert(descriptors.map(d => d.charVarcharScanMode -> d.storageLevel).toSet === Set(
+            Some(CharVarcharScanMode.PreserveNative) -> MEMORY_ONLY,
+            Some(CharVarcharScanMode.SparkStandard) -> DISK_ONLY))
+        } finally {
+          sq.stop()
+          preserveRead.unpersist()
+          standardRead.unpersist()
+        }
+      }
+    }
+  }
+
+  test("micro-batch V2 write keeps a non-CHAR table cached") {
+    val t = "testcat.ns.cached_int"
+    spark.sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns")
+    withTable(t) {
+      withTempDir { dir =>
+        sql(s"CREATE TABLE $t (value int) USING foo")
+        sql(s"INSERT INTO $t VALUES (1)")
+        sql(s"CACHE TABLE $t")
+        assert(spark.catalog.isCached(t))
+
+        val stream = MemoryStream[Int]
+        val query = stream.toDF().writeStream
+          .option("checkpointLocation", dir.getCanonicalPath)
+          .toTable(t)
+        try {
+          stream.addData(2)
+          query.processAllAvailable()
+          assert(spark.catalog.isCached(t))
+          checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1), Row(2)))
+        } finally {
+          query.stop()
         }
       }
     }

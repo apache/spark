@@ -60,6 +60,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.storage.StorageLevel.{DISK_ONLY, MEMORY_ONLY}
 import org.apache.spark.util.ArrayImplicits._
 
 class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper {
@@ -501,6 +502,51 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
             "createMode" -> "\"ErrorIfExists\""
           )
         )
+      }
+    }
+  }
+
+  test("SPARK-58814: catalog-less V2 writes recache both CHAR/VARCHAR scan modes") {
+    val format = classOf[CharVarcharWritableDataSource].getName
+    val preserveConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
+    val standardConf = Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
+
+    withTempPath { file =>
+      val path = file.getCanonicalPath
+      def readData: DataFrame = spark.read.format(format).option("path", path).load()
+      def appendData(c: String, v: String): Unit = {
+        Seq((c, v)).toDF("c", "v").write
+          .format(format).option("path", path).mode("append").save()
+      }
+
+      appendData("a", "x")
+      val preserveRead = withSQLConf(preserveConf: _*) {
+        val read = readData.persist(MEMORY_ONLY)
+        checkAnswer(read, Row("a", "x"))
+        read
+      }
+      val standardRead = withSQLConf(standardConf: _*) {
+        val read = readData.persist(DISK_ONLY)
+        checkAnswer(read, Row("a", "x"))
+        read
+      }
+      try {
+        appendData("b", "y")
+        withSQLConf(preserveConf: _*) {
+          checkAnswer(readData, Seq(Row("a", "x"), Row("b", "y")))
+          assert(spark.sharedState.cacheManager.lookupCachedData(preserveRead).get
+            .cachedRepresentation.cacheBuilder.storageLevel === MEMORY_ONLY)
+        }
+        withSQLConf(standardConf: _*) {
+          checkAnswer(readData, Seq(Row("a", "x"), Row("b", "y")))
+          assert(spark.sharedState.cacheManager.lookupCachedData(standardRead).get
+            .cachedRepresentation.cacheBuilder.storageLevel === DISK_ONLY)
+        }
+      } finally {
+        preserveRead.unpersist()
+        standardRead.unpersist()
       }
     }
   }
