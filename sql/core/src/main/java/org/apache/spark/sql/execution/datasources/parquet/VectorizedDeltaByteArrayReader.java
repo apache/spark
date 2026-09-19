@@ -22,6 +22,7 @@ import static org.apache.spark.sql.types.DataTypes.IntegerType;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.column.values.RequiresPreviousReader;
 import org.apache.parquet.column.values.ValuesReader;
+import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
@@ -71,6 +72,24 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
     return Binary.fromConstantByteArray(binaryValVector.getBinary(0));
   }
 
+  private void validateLengths(int prefixLength, int suffixLength) {
+    if (prefixLength < 0) {
+      throw new ParquetDecodingException("Invalid negative prefix length: " + prefixLength);
+    }
+    int previousLen = previous == null ? 0 : previous.remaining();
+    if (prefixLength > previousLen) {
+      throw new ParquetDecodingException("Prefix length " + prefixLength +
+          " exceeds previous value length " + previousLen);
+    }
+    if (suffixLength < 0) {
+      throw new ParquetDecodingException("Invalid negative suffix length: " + suffixLength);
+    }
+    if ((long) prefixLength + suffixLength > Integer.MAX_VALUE) {
+      throw new ParquetDecodingException("Integer overflow in value length: " +
+          prefixLength + " + " + suffixLength);
+    }
+  }
+
   private void readValues(int total, WritableColumnVector c, int rowId) {
     for (int i = 0; i < total; i++) {
       // NOTE: due to PARQUET-246, it is important that we
@@ -80,8 +99,9 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       // because of PARQUET-246.
       int prefixLength = prefixLengthVector.getInt(currentRow);
       ByteBuffer suffix = suffixReader.getBytes(currentRow);
-      byte[] suffixArray = suffix.array();
       int suffixLength = suffix.limit() - suffix.position();
+      validateLengths(prefixLength, suffixLength);
+      byte[] suffixArray = suffix.array();
       int length = prefixLength + suffixLength;
 
       // We have to do this to materialize the output
@@ -122,6 +142,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       int prefixLength = prefixLengthVector.getInt(currentRow);
       ByteBuffer suffix = suffixReader.getBytes(currentRow);
       int suffixLength = suffix.limit() - suffix.position();
+      validateLengths(prefixLength, suffixLength);
       int length = prefixLength + suffixLength;
 
       byte[] wkb = new byte[length];
@@ -166,8 +187,9 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
     for (int i = 0; i < total; i++) {
       int prefixLength = prefixLengthVector.getInt(currentRow);
       ByteBuffer suffix = suffixReader.getBytes(currentRow);
-      byte[] suffixArray = suffix.array();
       int suffixLength = suffix.limit() - suffix.position();
+      validateLengths(prefixLength, suffixLength);
+      byte[] suffixArray = suffix.array();
       int length = prefixLength + suffixLength;
 
       WritableColumnVector arrayData = c1.arrayData();
