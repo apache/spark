@@ -222,7 +222,7 @@ class UserDefinedFunction:
         # Extract Python UDF details if transpilation is enabled.
         self.transpiled: list = []
         self._transpiled_param_names: list[str] = []
-        # Per-option input-type categories ("numeric"/"string" per public param),
+        # Per-option input-type categories (numeric kinds/string per public param),
         # parallel to ``self.transpiled``; the JVM picks the option matching the
         # actual column types or falls back to interpreted Python.
         self._transpiled_input_categories: list = []
