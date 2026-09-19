@@ -669,6 +669,19 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
+  val CASE_WHEN_LOOKUP_ENABLED =
+    buildConf("spark.sql.optimizer.caseWhenLookup.enabled")
+      .internal()
+      .doc("When true, a CASE WHEN whose branches are all `key = literal THEN constant` on a " +
+        "single binary-collation string key is compiled to a constant, driver-built key->value " +
+        "hash probe (O(1) per row and constant generated-code size) instead of the O(N) " +
+        "if/else-if chain. Applies only to string keys, where a hash probe beats repeated string " +
+        "comparisons; integral/temporal keys keep the chain. Set to false to always use the chain.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   private val VALID_LOG_LEVELS: Array[String] = Level.values.map(_.toString)
 
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
@@ -8771,6 +8784,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
+
+  def caseWhenLookupEnabled: Boolean = getConf(CASE_WHEN_LOOKUP_ENABLED)
 
   def planChangeLogLevel: Level = getConf(PLAN_CHANGE_LOG_LEVEL)
 
