@@ -41,7 +41,7 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, DuplicateMapKeyUtils, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -259,14 +259,16 @@ class StaxXmlParser(
         throw BadRecordException(xmlLiteral, () => Array.empty,
           wrappedCharException)
       case PartialResultException(row, cause) =>
-        throw BadRecordException(
-          record = xmlLiteral,
-          partialResults = () => Array(row),
-          cause)
+        DuplicateMapKeyUtils.cause(cause) match {
+          case Some(e) => throw e
+          case None =>
+            throw BadRecordException(record = xmlLiteral, partialResults = () => Array(row), cause)
+        }
       case PartialResultArrayException(rows, cause) =>
         throw BadRecordException(record = xmlLiteral, partialResults = () => rows, cause)
       case e: Throwable =>
         SparkErrorUtils.getRootCause(e) match {
+          case DuplicateMapKeyUtils(duplicate) => throw duplicate
           case _: FileNotFoundException if options.ignoreMissingFiles =>
             logWarning("Skipped missing file", e)
             parser.close()
@@ -310,56 +312,55 @@ class StaxXmlParser(
         startElementName: String,
         attributes: Array[Attribute]): Any = dt match {
       case st: StructType => convertObject(parser, st)
-      case MapType(StringType, vt, _) => convertMap(parser, vt, attributes)
+      case MapType(kt: StringType, vt, _) => convertMap(parser, kt, vt, attributes)
       case ArrayType(st, _) => convertField(parser, st, startElementName)
       case VariantType =>
         StaxXmlParser.convertVariant(parser, attributes, options)
-      case _: StringType =>
+      case dt: StringType =>
         convertTo(
           StaxXmlParserUtils.currentStructureAsString(
             parser, startElementName, options),
-          StringType)
+          dt)
     }
 
     (parser.peek, dataType) match {
       case (_: StartElement, dt: DataType) =>
         convertComplicatedType(dt, startElementName, attributes)
-      case (_: EndElement, _: StringType) =>
+      case (_: EndElement, dt: StringType) =>
         StaxXmlParserUtils.skipNextEndElement(parser, startElementName, options)
         // Empty. It's null if "" is the null value
         if (options.nullValue == "") {
           null
         } else {
-          UTF8String.fromString("")
+          CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(""), dt)
         }
       case (_: EndElement, _: DataType) =>
         StaxXmlParserUtils.skipNextEndElement(parser, startElementName, options)
         null
       case (c: Characters, ArrayType(st, _)) =>
-        // For `ArrayType`, it needs to return the type of element. The values are merged later.
+        // Consume the element before conversion so a length check cannot leave the
+        // parser on the original text or an unmatched end tag.
         parser.next
-        val value = convertTo(c.getData, st)
         StaxXmlParserUtils.skipNextEndElement(parser, startElementName, options)
-        value
+        convertTo(c.getData, st)
       case (_: Characters, st: StructType) =>
         convertObject(parser, st)
       case (_: Characters, VariantType) =>
         StaxXmlParser.convertVariant(parser, Array.empty, options)
-      case (_: Characters, _: StringType) =>
+      case (_: Characters, dt: StringType) =>
         convertTo(
           StaxXmlParserUtils.currentStructureAsString(
             parser, startElementName, options),
-          StringType)
+          dt)
       case (c: Characters, _: DataType) if c.isWhiteSpace =>
         // When `Characters` is found, we need to look further to decide
         // if this is really data or space between other elements.
         parser.next
         convertField(parser, dataType, startElementName, attributes)
       case (c: Characters, dt: DataType) =>
-        val value = convertTo(c.getData, dt)
         parser.next
         StaxXmlParserUtils.skipNextEndElement(parser, startElementName, options)
-        value
+        convertTo(c.getData, dt)
       case (e: XMLEvent, dt: DataType) =>
         throw new SparkIllegalArgumentException(
           errorClass = "_LEGACY_ERROR_TEMP_3240",
@@ -374,31 +375,68 @@ class StaxXmlParser(
    */
   private def convertMap(
       parser: XMLEventReader,
+      keyType: DataType,
       valueType: DataType,
       attributes: Array[Attribute]): MapData = {
-    val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
+    val kvPairs = ArrayBuffer.empty[(UTF8String, UTF8String, Option[Any])]
+    var badMapException: Option[Throwable] = None
+    def mapKey(raw: String): UTF8String = {
+      CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(raw), keyType)
+    }
+    def appendPair(rawKey: String, value: Option[Any]): Unit = {
+      try {
+        kvPairs += ((UTF8String.fromString(rawKey), mapKey(rawKey), value))
+      } catch {
+        case NonFatal(e) => badMapException = badMapException.orElse(Some(e))
+      }
+    }
     attributes.foreach { attr =>
-      kvPairs += (UTF8String.fromString(options.attributePrefix + attr.getName.getLocalPart)
-        -> convertTo(attr.getValue, valueType))
+      val value = try {
+        Some(convertTo(attr.getValue, valueType))
+      } catch {
+        case e: SparkUpgradeException => throw e
+        case NonFatal(e) =>
+          badMapException = badMapException.orElse(Some(e))
+          None
+      }
+      appendPair(options.attributePrefix + attr.getName.getLocalPart, value)
     }
     var shouldStop = false
     while (!shouldStop) {
       parser.nextEvent match {
         case e: StartElement =>
-          val key = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          kvPairs +=
-          (UTF8String.fromString(key) -> convertField(parser, valueType, key))
+          val rawKey = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
+          val value = try {
+            Some(convertField(parser, valueType, rawKey))
+          } catch {
+            case e: SparkUpgradeException => throw e
+            case DuplicateMapKeyUtils(e) => throw e
+            case NonFatal(e) =>
+              badMapException = badMapException.orElse(Some(e))
+              None
+          }
+          appendPair(rawKey, value)
         case c: Characters if !c.isWhiteSpace =>
           // Create a value tag field for it
-          kvPairs +=
           // TODO: We don't support an array value tags in map yet.
-          (UTF8String.fromString(options.valueTag) -> convertTo(c.getData, valueType))
+          val value = try {
+            Some(convertTo(c.getData, valueType))
+          } catch {
+            case e: SparkUpgradeException => throw e
+            case NonFatal(e) =>
+              badMapException = badMapException.orElse(Some(e))
+              None
+          }
+          appendPair(options.valueTag, value)
         case _: EndElement | _: EndDocument =>
           shouldStop = true
         case _ => // do nothing
       }
     }
-    ArrayBasedMapData(kvPairs.toMap)
+    val mapData = DuplicateMapKeyUtils.buildParsedMap(
+      kvPairs.toSeq, keyType, valueType, collapseOrdinaryStringKeys = true)
+    badMapException.foreach(throw _)
+    mapData
   }
 
   /**
@@ -519,12 +557,12 @@ class StaxXmlParser(
               if (hasWildcard) {
                 // Special case: there's an 'any' wildcard element that matches anything else
                 // as a string (or array of strings, to parse multiple ones)
-                val newValue = convertField(parser, StringType, field)
                 val anyIndex = schema.fieldIndex(wildcardColName)
                 schema(wildcardColName).dataType match {
-                  case StringType =>
-                    row(anyIndex) = newValue
-                  case ArrayType(StringType, _) =>
+                  case dt: StringType =>
+                    row(anyIndex) = convertField(parser, dt, field)
+                  case ArrayType(et: StringType, _) =>
+                    val newValue = convertField(parser, et, field)
                     val values = Option(row(anyIndex))
                       .map(_.asInstanceOf[ArrayBuffer[String]])
                       .getOrElse(ArrayBuffer.empty[String])
@@ -536,6 +574,7 @@ class StaxXmlParser(
           }
         } catch {
           case e: SparkUpgradeException => throw e
+          case DuplicateMapKeyUtils(e) => throw e
           case NonFatal(e) =>
             // TODO: we don't support partial results now
             badRecordException = badRecordException.orElse(Some(e))
@@ -606,7 +645,8 @@ class StaxXmlParser(
           timestampNTZFormatter.parseWithoutTimeZoneNanos(datum, t.precision, false)
         case _: DateType => parseXmlDate(datum, options)
         case _: TimeType => timeFormatter.parse(datum)
-        case _: StringType => UTF8String.fromString(datum)
+        case dt: StringType =>
+          CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(datum), dt)
         case _: BinaryType => binaryParser(UTF8String.fromString(datum))
         case _ => throw new SparkIllegalArgumentException(
           errorClass = "_LEGACY_ERROR_TEMP_3244",
@@ -650,7 +690,7 @@ class StaxXmlParser(
         case LongType => signSafeToLong(value)
         case DoubleType => signSafeToDouble(value)
         case BooleanType => castTo(value, BooleanType)
-        case StringType => castTo(value, StringType)
+        case dt: StringType => castTo(value, dt)
         case BinaryType => castTo(value, BinaryType)
         case DateType => castTo(value, DateType)
         case TimestampType => castTo(value, TimestampType)

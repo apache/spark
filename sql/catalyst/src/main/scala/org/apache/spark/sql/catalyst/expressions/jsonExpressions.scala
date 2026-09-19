@@ -1816,7 +1816,8 @@ case class JsonToStructs(
   with TimeZoneAwareExpression
   with CodegenFallback
   with ExpectsInputTypes
-  with QueryErrorsBase {
+  with QueryErrorsBase
+  with SupportTrimmedCharInput {
 
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
@@ -1878,6 +1879,8 @@ case class JsonToStructs(
   override def stateful: Boolean = true
 
   override def nullSafeEval(json: Any): Any = evaluator.evaluate(json.asInstanceOf[UTF8String])
+
+  override def eval(input: InternalRow): Any = evalStringInput(input)
 
   override def inputTypes: Seq[AbstractDataType] =
     StringTypeWithCollation(supportsTrimCollation = true) :: Nil
@@ -2019,7 +2022,8 @@ case class SchemaOfJson(
   extends UnaryExpression
   with RuntimeReplaceable
   with DefaultStringProducingExpression
-  with QueryErrorsBase {
+  with QueryErrorsBase
+  with SupportTrimmedCharInput {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -2041,7 +2045,7 @@ case class SchemaOfJson(
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "json"))
-    } else if (child.dataType != StringType) {
+    } else if (!child.dataType.isInstanceOf[StringType]) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
@@ -2061,8 +2065,8 @@ case class SchemaOfJson(
     Literal.create(evaluator, ObjectType(classOf[SchemaOfJsonEvaluator])),
     "evaluate",
     dataType,
-    Seq(child),
-    Seq(child.dataType),
+    Seq(stringInput),
+    Seq(stringInput.dataType),
     returnNullable = false)
 
   override def prettyName: String = "schema_of_json"
