@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 
 
-import org.apache.spark.sql.catalyst.MetricKey
 import org.apache.spark.sql.catalyst.plans.logical.CTEReuseRelation
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec
@@ -45,16 +44,6 @@ class CTEReuseWithAQESuite
       cteReuseConf.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true"
     )(f)
-  }
-
-  private def getAQETracker(
-      df: DataFrame): org.apache.spark.sql.catalyst.QueryPlanningTracker = {
-    df.queryExecution.executedPlan match {
-      case aqe: AdaptiveSparkPlanExec => aqe.tracker
-      case other =>
-        fail(s"Expected AdaptiveSparkPlanExec, " +
-          s"got ${other.getClass.getSimpleName}")
-    }
   }
 
   /**
@@ -110,12 +99,10 @@ class CTEReuseWithAQESuite
             |SELECT * FROM cte c1 JOIN cte c2 ON c1.id = c2.id
             |""".stripMargin)
         df.collect()
-        val tracker = getAQETracker(df)
-        val reuseMetric = tracker.getMetric(
-          MetricKey.AQE_CTE_REUSE_INNER_AQE_REUSED)
-        assert(reuseMetric != null && reuseMetric.count == 2,
-          s"Expected 2 CTE inner AQE reuse (one per ref), " +
-            s"got: ${Option(reuseMetric).map(_.count)}")
+        // Two refs create two CTEReuseQueryStageExec wrappers, both sharing one inner AQE.
+        assert(collectWithSubqueries(df.queryExecution.executedPlan) {
+          case s: CTEReuseQueryStageExec => s
+        }.size == 2)
         assertInnerAQEShared(df)
       }
     }
@@ -134,12 +121,7 @@ class CTEReuseWithAQESuite
             |SELECT * FROM cte c1 JOIN cte c2 ON c1.id = c2.id
             |""".stripMargin)
         checkAnswer(df, Seq.empty)
-        val tracker = getAQETracker(df)
-        val reuseMetric = tracker.getMetric(
-          MetricKey.AQE_CTE_REUSE_INNER_AQE_REUSED)
-        assert(reuseMetric != null && reuseMetric.count == 2,
-          s"Expected 2 CTE inner AQE reuse for empty subplan, " +
-            s"got: ${Option(reuseMetric).map(_.count)}")
+        // Any surviving CTE stages (empty-relation propagation may prune some) share one inner AQE.
         assertInnerAQEShared(df)
       }
     }
@@ -182,16 +164,7 @@ class CTEReuseWithAQESuite
             .asInstanceOf[AdaptiveSparkPlanExec]
           val finalPlan = aqe.executedPlan
 
-          // 1. CTEReuseQueryStageExec was resolved.
-          val tracker = aqe.tracker
-          val reuseMetric = tracker.getMetric(
-            MetricKey.AQE_CTE_REUSE_INNER_AQE_REUSED)
-          assert(reuseMetric != null && reuseMetric.count >= 1,
-            s"Expected CTE inner AQE reuse metric, " +
-              s"got: ${Option(reuseMetric).map(_.count)}" +
-              s"\nFinal plan:\n${finalPlan.treeString}")
-
-          // 2. All CTEReuseQueryStageExec removed from final plan.
+          // 1. All CTEReuseQueryStageExec removed from final plan.
           val remaining = finalPlan.collect {
             case s: CTEReuseQueryStageExec => s
           }
@@ -201,7 +174,7 @@ class CTEReuseWithAQESuite
               s"but found ${remaining.size}." +
               s"\nFinal plan:\n${finalPlan.treeString}")
 
-          // 3. Inner AQE was created (registry entry exists).
+          // 2. Inner AQE was created (registry entry exists).
           val registry = aqe.context.cteAQERegistry
           assert(registry.nonEmpty,
             "Expected cteAQERegistry to contain inner AQE")

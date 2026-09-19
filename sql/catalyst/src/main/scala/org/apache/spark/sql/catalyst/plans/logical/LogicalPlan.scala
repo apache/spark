@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE_REUSE, LOGICAL_QUERY_STAGE, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -587,7 +587,7 @@ object LogicalPlanIntegrity {
    * Returns an error message if the check fails, or None if it succeeds.
    */
   def validateCTEReuseRelations(plan: LogicalPlan): Option[String] = {
-    if (!plan.containsPattern(TreePattern.CTE_REUSE)) {
+    if (!plan.containsPattern(CTE_REUSE)) {
       None
     } else {
       val cteReuses = plan.collectWithSubqueries {

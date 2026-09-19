@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
  * Note that this rule should be called at the very end of the optimization phase to best guarantee
  * that CTE repartition shuffles are reused.
  */
-object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] with JoinIdHelper {
+object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case _: Subquery => plan
@@ -120,10 +120,9 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] with JoinIdHelper 
   }
 
   private def deduplicatePlan(plan: LogicalPlan): LogicalPlan = {
-    // CTEDef plan is duplicated when being inlined. Hence, re-assign new joinId(s) to the
-    // inlined CTERef to avoid conflicts.
-    val res = DeduplicateRelations(
+    // The CTE definition plan is duplicated when inlined into each reference. Re-assign fresh
+    // exprIds to the duplicated copy (via DeduplicateRelations) to avoid attribute conflicts.
+    DeduplicateRelations(
       Join(plan, plan, Inner, None, JoinHint(None, None))).children(1)
-    assignJoinId(res, reassign = true)
   }
 }

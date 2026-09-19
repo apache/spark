@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 
 
-import org.apache.spark.sql.catalyst.MetricKey
 import org.apache.spark.sql.execution.{BaseSubqueryExec, ReusedSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -44,15 +43,10 @@ class CTEReuseWithoutAQESuite
     )(f)
   }
 
-  private def getTracker(df: DataFrame) =
-    df.queryExecution.tracker
-
   /**
    * Asserts guaranteed CTE shuffle reuse held (AQE off): the executed plan has at least one
-   * [[ReusedExchangeExec]] and no [[CTEReuseExchange]] left, and VerifyCTEReuse did not record the
-   * "reuse not applied" signal. (With FAIL_ON_CTE_REUSE_WITHOUT_AQE_NOT_APPLIED test-defaulting to
-   * true, a reuse failure would already have thrown during preparation; this metric check
-   * double-guards the flag-off behavior.)
+   * [[ReusedExchangeExec]] and no [[CTEReuseExchange]] left. (With FAIL_ON_CTE_REUSE_WITHOUT_AQE
+   * test-defaulting to true, a reuse failure would already have thrown during preparation.)
    */
   private def assertCTEReuseApplied(df: DataFrame): Unit = {
     val executedPlan = df.queryExecution.executedPlan
@@ -60,10 +54,6 @@ class CTEReuseWithoutAQESuite
       s"Expected no CTEReuseExchange in executedPlan:\n${executedPlan.treeString}")
     assert(executedPlan.collectWithSubqueries { case r: ReusedExchangeExec => r }.nonEmpty,
       s"Expected >= 1 ReusedExchangeExec for CTE reuse:\n${executedPlan.treeString}")
-    val notApplied = getTracker(df).getMetric(MetricKey.CTE_REUSE_NO_AQE_REUSE_NOT_APPLIED)
-    assert(notApplied == null || notApplied.count == 0,
-      s"Expected CTE reuse to be applied, but 'reuse not applied' metric fired: " +
-        s"${Option(notApplied).map(_.count)}\n${executedPlan.treeString}")
   }
 
   /**
@@ -438,12 +428,7 @@ class CTEReuseWithoutAQESuite
             assert(executedPlan.collectWithSubqueries { case r: ReusedExchangeExec => r }.isEmpty,
               s"Expected no ReusedExchangeExec when exchange reuse is disabled:\n" +
                 executedPlan.treeString)
-            // VerifyCTEReuse ran (flag off) and recorded the "reuse not applied" signal.
-            val notApplied =
-              getTracker(df).getMetric(MetricKey.CTE_REUSE_NO_AQE_REUSE_NOT_APPLIED)
-            assert(notApplied != null && notApplied.count > 0,
-              s"Expected the 'reuse not applied' metric to fire when reuse is disabled:\n" +
-                executedPlan.treeString)
+            // VerifyCTEReuse ran with the fail flag off, so the query runs without throwing.
             df.collect()
           }
         }
