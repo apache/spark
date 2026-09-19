@@ -402,6 +402,35 @@ class SparkEnv (
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
   }
 
+  private[spark] def pythonWorkerLogSentinelCount(
+      pythonExec: String,
+      workerModule: String,
+      daemonModule: String,
+      envVars: Map[String, String],
+      workerId: String): Long = {
+    synchronized {
+      val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
+      pythonWorkers.get(key)
+    }.map(_.logSentinelCount(workerId)).getOrElse(0L)
+  }
+
+  private[spark] def awaitPythonWorkerLogsFlushed(
+      pythonExec: String,
+      workerModule: String,
+      daemonModule: String,
+      envVars: Map[String, String],
+      workerId: String,
+      baseline: Long,
+      timeoutMs: Long): Boolean = {
+    // Look up the factory under the lock, but wait outside it so a slow flush never blocks
+    // concurrent createPythonWorker / releasePythonWorker calls.
+    val factory = synchronized {
+      val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
+      pythonWorkers.get(key)
+    }
+    factory.map(_.awaitLogsFlushed(workerId, baseline, timeoutMs)).getOrElse(true)
+  }
+
   private[spark] def initializeShuffleManager(): Unit = {
     Preconditions.checkState(null == _blockingShuffleManager,
       "Shuffle manager already initialized to %s", _blockingShuffleManager)

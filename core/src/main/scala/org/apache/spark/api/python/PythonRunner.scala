@@ -336,6 +336,17 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   // Python accumulator is always set in production except in tests. See SPARK-27893
   private val maybeAccumulator: Option[PythonAccumulator] = Option(accumulator)
 
+  // Timeout (ms) for waiting on this task's Python worker log blocks to be captured and saved
+  // at end of stream. 0 disables the wait. See PYTHON_WORKER_LOGGING_FLUSH_TIMEOUT.
+  private val workerLoggingFlushTimeoutMs: Long = conf.get(PYTHON_WORKER_LOGGING_FLUSH_TIMEOUT)
+
+  // Per-task state for the worker-log flush barrier, set in compute() right after the worker is
+  // created and read in ReaderIterator.handleEndOfDataSection(). Only populated when Python
+  // worker logging is enabled for this task (PYSPARK_SPARK_SESSION_UUID is set) and the flush
+  // timeout is positive; otherwise the barrier is skipped.
+  private var workerLogWorkerId: Option[String] = None
+  private var workerLogFlushBaseline: Long = 0L
+
   // Expose a ServerSocketChannel to support method calls via socket from Python side.
   // Only relevant for tasks that are a part of barrier stage, refer
   // `BarrierTaskContext` for details.
@@ -423,6 +434,22 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
     // sure there is only one winner that is going to release or close the worker.
     val releasedOrClosed = new AtomicBoolean(false)
+
+    // When Python worker logging is enabled, snapshot the worker's end-of-logs sentinel count
+    // before the task runs so ReaderIterator.handleEndOfDataSection() can wait for this task's
+    // log blocks to be saved (see awaitWorkerLogsFlushed). The worker (identified by its PID)
+    // emits one sentinel at task end; waiting for the count to advance past this baseline makes
+    // the logs observable via `python_worker_logs()` in a following query.
+    if (workerLoggingFlushTimeoutMs > 0 && envVars.containsKey("PYSPARK_SPARK_SESSION_UUID")) {
+      workerLogWorkerId = handle match {
+        case Some(h: LocalPythonWorkerHandle) => Some(h.pid.toString)
+        case _ => None
+      }
+      workerLogFlushBaseline = workerLogWorkerId.map { workerId =>
+        env.pythonWorkerLogSentinelCount(
+          pythonExec, workerModule, daemonModule, envVars.asScala.toMap, workerId)
+      }.getOrElse(0L)
+    }
 
     // Start a thread to feed the process input from our parent's iterator
     val writer = newWriter(env, worker, inputIterator, partitionIndex, context)
@@ -914,7 +941,28 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
         }
       }
+      awaitWorkerLogsFlushed()
       eos = true
+    }
+
+    /**
+     * When Python worker logging is enabled, block until this task's worker log blocks have been
+     * captured from the worker's stdout and saved, so a subsequent `python_worker_logs()` query
+     * observes them. Worker logs are captured on a separate channel from the task result, so
+     * without this the following query can race the async capture. No-op when logging is
+     * disabled for this task; on timeout the task still completes and a warning is logged.
+     */
+    private def awaitWorkerLogsFlushed(): Unit = {
+      workerLogWorkerId.foreach { workerId =>
+        val flushed = env.awaitPythonWorkerLogsFlushed(
+          pythonExec, workerModule, daemonModule, envVars.asScala.toMap, workerId,
+          workerLogFlushBaseline, workerLoggingFlushTimeoutMs)
+        if (!flushed) {
+          logWarning(log"Timed out after ${MDC(LogKeys.TIME, workerLoggingFlushTimeoutMs)} ms " +
+            log"waiting for Python worker ${MDC(LogKeys.PYTHON_WORKER_ID, workerId)} logs to be " +
+            log"flushed; a following python_worker_logs() query may return incomplete results.")
+        }
+      }
     }
 
     protected val handleException: PartialFunction[Throwable, OUT] = {
