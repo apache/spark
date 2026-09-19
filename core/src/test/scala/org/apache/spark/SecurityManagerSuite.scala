@@ -403,6 +403,28 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(keyFromEnv === new SecurityManager(conf2).getSecretKey())
   }
 
+  test("SPARK-25078: standalone cluster mode accepts secret from env var") {
+    // spark-submit strips SPARK_AUTH_SECRET_CONF from the SparkConf before sending the
+    // driver-launch request to the master; the master then hands the secret to the driver
+    // process via ENV_AUTH_SECRET. initializeAuth() must recognise that source.
+    val keyFromEnv = "secret-from-env"
+    val conf = new SparkConfWithEnv(Map(SecurityManager.ENV_AUTH_SECRET -> keyFromEnv))
+      .setMaster("spark://localhost:7077")
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+    val mgr = new SecurityManager(conf)
+    mgr.initializeAuth()
+    assert(keyFromEnv === mgr.getSecretKey())
+  }
+
+  test("SPARK-25078: standalone cluster mode still fails when no secret is provided") {
+    val conf = new SparkConf()
+      .setMaster("spark://localhost:7077")
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+    intercept[IllegalArgumentException] {
+      new SecurityManager(conf).initializeAuth()
+    }
+  }
+
   test("use executor-specific secret file configuration.") {
     withSecretFile("driver-secret") { secretFileFromDriver =>
       withSecretFile("executor-secret") { secretFileFromExecutor =>
