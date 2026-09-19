@@ -345,13 +345,13 @@ private[spark] class ApplicationMaster(
 
   /**
    * Set the default final application status for client mode to UNDEFINED to handle
-   * if YARN HA restarts the application so that it properly retries. Set the final
-   * status to SUCCEEDED in cluster mode to handle if the user calls System.exit
-   * from the application code.
+   * if YARN HA restarts the application so that it properly retries. SPARK-38270
+   * changed the default for cluster mode to FAILED to prevent the shutdown hook from
+   * reporting SUCCEEDED when the application exits with a non-zero exit code.
    */
   final def getDefaultFinalStatus(): FinalApplicationStatus = {
     if (isClusterMode) {
-      FinalApplicationStatus.FAILED
+      FinalApplicationStatus.SUCCEEDED
     } else {
       FinalApplicationStatus.UNDEFINED
     }
