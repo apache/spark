@@ -22,7 +22,18 @@ import time, so handlers must be defined in this package rather than by user cod
 Each eval type handled here is an ``EvalTypeHandler`` subclass (in ``_base``) that
 declares its ``eval_type`` and self-registers at class definition, which
 ``read_udfs`` looks up via ``get_eval_type_handler``. Importing this package
-imports the concrete handler submodules (``_arrow``) so they register.
+imports the concrete handler submodules so they register.
+
+``_arrow`` requires pyarrow and imports it at module top, so it is only imported
+when pyarrow is available; the Arrow eval types it serves cannot run without it.
 """
 
-from pyspark.eval_handlers import _arrow  # noqa: F401  # registers handlers on import
+try:
+    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+    require_minimum_pyarrow_version()
+except Exception:
+    # pyarrow is missing or too old; the Arrow eval types _arrow serves cannot run anyway.
+    pass
+else:
+    from pyspark.eval_handlers import _arrow  # noqa: F401  # registers handlers on import
