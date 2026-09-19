@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamedRelation, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -39,6 +39,7 @@ import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundF
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
@@ -327,6 +328,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.BIN_BY",
       messageParameters = Map.empty)
+  }
+
+  def restrictedModeFeatureError(feature: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SQL_RESTRICTED_MODE",
+      messageParameters = Map(
+        "feature" -> feature,
+        "config" -> toSQLConf(StaticSQLConf.RESTRICTED_MODE_ENABLED.key)))
   }
 
   def binByRequiresTopLevelColumnError(reference: Expression): Throwable = {
@@ -3688,6 +3697,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "dataType" -> column.dataType.catalogString))
   }
 
+  def invalidJdbcPartitionBoundError(
+      optionName: String,
+      value: String,
+      dataType: DataType): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_JDBC_PARTITION_BOUND",
+      messageParameters = Map(
+        "option" -> toDSOption(optionName),
+        "value" -> toSQLConfVal(value),
+        "dataType" -> toSQLType(dataType)))
+  }
+
   def tableOrViewAlreadyExistsError(name: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1288",
@@ -4518,6 +4539,27 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "docroot" -> SPARK_DOC_ROOT))
   }
 
+  def materializedCTEWithOuterReferenceError(reference: NamedExpression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_WITH_OUTER_REFERENCE",
+      messageParameters = Map("colName" -> toSQLId(reference.name)),
+      origin = reference.origin)
+  }
+
+  def materializedCTEAlwaysInlinedError(cteName: String, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_ALWAYS_INLINED",
+      messageParameters = Map("cteName" -> toSQLId(cteName)),
+      origin = origin)
+  }
+
+  def materializedCTEInCorrelatedSubqueryError(cteName: String, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.MATERIALIZED_CTE_IN_CORRELATED_SUBQUERY",
+      messageParameters = Map("cteName" -> toSQLId(cteName)),
+      origin = origin)
+  }
+
   def ambiguousLateralColumnAliasError(name: String, numOfMatches: Int): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
@@ -4749,7 +4791,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def invalidUDFClassError(invalidClass: String): Throwable = {
     new InvalidUDFClassException(
       errorClass = "_LEGACY_ERROR_TEMP_2450",
-      messageParameters = Map("invalidClass" -> invalidClass))
+      messageParameters = Map("clazz" -> invalidClass))
   }
 
   def cannotInstantiateHiveFunctionError(clazz: String, e: Throwable): Throwable = {

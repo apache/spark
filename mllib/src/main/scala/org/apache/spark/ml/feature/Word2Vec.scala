@@ -305,15 +305,15 @@ class Word2VecModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    val bcModel = dataset.sparkSession.sparkContext.broadcast(this.wordVectors)
+    val bcWordVectors = dataset.sparkSession.sparkContext.broadcast(
+      (wordVectors.wordIndex, wordVectors.wordVectors))
     val size = $(vectorSize)
     val emptyVec = Vectors.sparse(size, Array.emptyIntArray, Array.emptyDoubleArray)
     val transformer = udf { sentence: Seq[String] =>
       if (sentence.isEmpty) {
         emptyVec
       } else {
-        val wordIndices = bcModel.value.wordIndex
-        val wordVectors = bcModel.value.wordVectors
+        val (wordIndices, wordVectors) = bcWordVectors.value
         val array = Array.ofDim[Double](size)
         var count = 0
         sentence.foreach { word =>

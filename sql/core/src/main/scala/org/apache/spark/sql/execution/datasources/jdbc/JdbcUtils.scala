@@ -193,6 +193,19 @@ object JdbcUtils extends Logging with SQLConfHelper {
     if (isTimestampNTZ) TimestampNTZNanosType(precision) else TimestampLTZNanosType(precision)
   }
 
+  // When nanosecond timestamps are requested (and the preview feature is enabled), a driver
+  // TIMESTAMP that reports a sub-microsecond fractional-second scale (7-9) is mapped to the
+  // nanosecond-capable type. Otherwise the historical microsecond mapping is preserved.
+  def resolveTimestampType(
+      isTimestampNTZ: Boolean, scale: Int, preferTimestampNanos: Boolean): DataType = {
+    if (preferTimestampNanos &&
+      scale >= TimestampNTZNanosType.MIN_PRECISION &&
+      scale <= TimestampNTZNanosType.MAX_PRECISION &&
+      conf.timestampNanosTypesEnabled) {
+      getTimestampNanosType(isTimestampNTZ, scale)
+    } else getTimestampType(isTimestampNTZ)
+  }
+
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
    * the JdbcDialect class corresponding to your database driver returns null.
@@ -213,7 +226,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.BIT => BooleanType // @see JdbcDialect for quirks
     case java.sql.Types.BLOB => BinaryType
     case java.sql.Types.BOOLEAN => BooleanType
-    case java.sql.Types.CHAR if conf.charVarcharAsString => StringType
+    case java.sql.Types.CHAR
+        if conf.charVarcharAsString && !conf.charVarcharFirstClassTypes => StringType
     case java.sql.Types.CHAR => CharType(precision)
     case java.sql.Types.CLOB => StringType
     case java.sql.Types.DATE => DateType
@@ -250,18 +264,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
         TimeType(timePrecision)
       } else getTimestampType(isTimestampNTZ)
     case java.sql.Types.TIMESTAMP =>
-      // When nanosecond timestamps are requested (and the preview feature is enabled), a driver
-      // TIMESTAMP that reports a sub-microsecond fractional-second scale (7-9) is mapped to the
-      // nanosecond-capable type. Otherwise the historical microsecond mapping is preserved.
-      if (preferTimestampNanos &&
-        scale >= TimestampNTZNanosType.MIN_PRECISION &&
-        scale <= TimestampNTZNanosType.MAX_PRECISION &&
-        conf.timestampNanosTypesEnabled) {
-        getTimestampNanosType(isTimestampNTZ, scale)
-      } else getTimestampType(isTimestampNTZ)
+      resolveTimestampType(isTimestampNTZ, scale, preferTimestampNanos)
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
-    case java.sql.Types.VARCHAR if conf.charVarcharAsString => StringType
+    case java.sql.Types.VARCHAR
+        if conf.charVarcharAsString && !conf.charVarcharFirstClassTypes => StringType
     case java.sql.Types.VARCHAR => VarcharType(precision)
     case java.sql.Types.NULL => NullType
     case _ =>
@@ -469,8 +476,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case LongType => JDBCValueGetter.LongGetter
     case ShortType => JDBCValueGetter.ShortGetter
     case ByteType => JDBCValueGetter.ByteGetter
-    case StringType if metadata.contains("rowid") => JDBCValueGetter.RowIdGetter
-    case StringType => JDBCValueGetter.StringGetter
+    case _: StringType if metadata.contains("rowid") => JDBCValueGetter.RowIdGetter
+    case _: StringType => JDBCValueGetter.StringGetter
     case TimestampType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeGetter
     case TimestampType => JDBCValueGetter.TimestampGetter(dialect)
@@ -530,7 +537,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setBoolean(pos + 1, row.getBoolean(pos))
 
-    case StringType =>
+    case _: StringType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setString(pos + 1, row.getString(pos))
 

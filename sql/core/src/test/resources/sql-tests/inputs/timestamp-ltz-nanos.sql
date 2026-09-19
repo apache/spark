@@ -211,6 +211,18 @@ SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - CAST(NULL AS timestam
 SELECT convert_timezone('Europe/Brussels', 'Europe/Moscow',
     '2022-03-27 03:00:00.123456789 UTC' :: timestamp_ltz(9));
 
+-- SPARK-59300: from_utc_timestamp / to_utc_timestamp over nanosecond-precision TIMESTAMP_LTZ. A
+-- zone shift moves only the whole-microsecond instant, so the sub-microsecond remainder is carried
+-- through unchanged and the result keeps the source's exact LTZ precision. LTZ values render in
+-- the session time zone (America/Los_Angeles).
+SELECT from_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', 'Asia/Kolkata');
+SELECT to_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', 'Asia/Kolkata');
+SELECT typeof(
+    to_utc_timestamp('2015-07-24 00:00:00.1234567 UTC' :: timestamp_ltz(7), 'Asia/Kolkata'));
+-- NULL nanosecond timestamp and NULL zone both propagate.
+SELECT from_utc_timestamp(CAST(NULL AS timestamp_ltz(9)), 'Asia/Kolkata');
+SELECT to_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', CAST(NULL AS STRING));
+
 -- SPARK-57103: MAX / MIN over nanosecond-precision TIMESTAMP_LTZ. The aggregate preserves the
 -- nanosecond type and orders by the sub-microsecond remainder; NULLs are ignored. Values are
 -- rendered in the session time zone (America/Los_Angeles).

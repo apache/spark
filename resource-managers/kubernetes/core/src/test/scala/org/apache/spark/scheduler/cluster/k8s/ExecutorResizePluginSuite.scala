@@ -24,6 +24,7 @@ import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.metrics.v1beta1.{ContainerMetrics, PodMetrics}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.{MetricAPIGroupDSL, PodMetricOperation}
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.scalatest.BeforeAndAfter
@@ -77,12 +78,23 @@ class ExecutorResizePluginSuite
     when(topOperations.pods()).thenReturn(podMetricOperations)
   }
 
-  private def createPlugin(): ExecutorResizeDriverPlugin = {
+  private def createPlugin(maxMemory: Long = Long.MaxValue): ExecutorResizeDriverPlugin = {
     val plugin = new ExecutorResizeDriverPlugin()
     val scField = plugin.getClass.getDeclaredField("sparkContext")
     scField.setAccessible(true)
     scField.set(plugin, sparkContext)
+    val maxField = plugin.getClass.getDeclaredField("maxMemory")
+    maxField.setAccessible(true)
+    maxField.setLong(plugin, maxMemory)
     plugin
+  }
+
+  private def verifyPatchedMemory(podResource: SINGLE_POD, expected: Long): Unit = {
+    val captor = ArgumentCaptor.forClass(classOf[Pod])
+    verify(podResource, times(1)).patch(any(), captor.capture())
+    val resources = captor.getValue.getSpec.getContainers.get(0).getResources
+    assert(Quantity.getAmountInBytes(resources.getLimits.get("memory")).longValue() === expected)
+    assert(Quantity.getAmountInBytes(resources.getRequests.get("memory")).longValue() === expected)
   }
 
   private def createPodWithMemoryLimit(
@@ -177,7 +189,8 @@ class ExecutorResizePluginSuite
 
     plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
 
-    verify(podResource, times(1)).patch(any(), any(classOf[Pod]))
+    // 1GB * (1 + 0.1) = 1.1GB
+    verifyPatchedMemory(podResource, 1100000000L)
   }
 
   test("Memory usage exactly at threshold should not trigger resize") {
@@ -286,6 +299,57 @@ class ExecutorResizePluginSuite
     plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
 
     verify(podResource, times(1)).patch(any(), any(classOf[Pod]))
+  }
+
+  test("SPARK-59303: Resize is clamped to resizeMaxMemory") {
+    val plugin = createPlugin(maxMemory = 1050000000L) // 1.05GB cap
+    val pod = createPodWithMemoryLimit(1, "1000000000") // 1GB limit
+    val metrics = createPodMetrics("spark-executor-1", "950000000") // 95% usage
+
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    when(podMetricOperations.metrics(namespace, "spark-executor-1")).thenReturn(metrics)
+
+    val podResource = mock(classOf[SINGLE_POD])
+    when(podsWithNamespace.withName("spark-executor-1")).thenReturn(podResource)
+    when(podResource.subresource(anyString())).thenReturn(podResource)
+
+    plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
+
+    // 1GB * (1 + 0.1) = 1.1GB exceeds the cap, so the new limit is clamped to 1.05GB
+    verifyPatchedMemory(podResource, 1050000000L)
+  }
+
+  test("SPARK-59303: Resize is skipped and logged once when limit already at resizeMaxMemory") {
+    val plugin = createPlugin(maxMemory = 1000000000L) // 1GB cap
+    val pod = createPodWithMemoryLimit(1, "1000000000") // 1GB limit
+    val metrics = createPodMetrics("spark-executor-1", "950000000") // 95% usage
+
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    when(podMetricOperations.metrics(namespace, "spark-executor-1")).thenReturn(metrics)
+
+    val podResource = mock(classOf[SINGLE_POD])
+    when(podsWithNamespace.withName("spark-executor-1")).thenReturn(podResource)
+
+    def countSkipLogs(rounds: Int): Int = {
+      val logAppender = new LogAppender
+      withLogAppender(logAppender) {
+        (1 to rounds).foreach { _ =>
+          plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1, kubernetesClient))
+        }
+      }
+      logAppender.loggingEvents
+        .count(_.getMessage.getFormattedMessage.contains("already reached the maximum"))
+    }
+
+    // Logged only once across repeated rounds.
+    assert(countSkipLogs(2) === 1)
+    verify(podResource, never()).patch(any(), any(classOf[Pod]))
+
+    // Once the executor disappears, its capped state is forgotten and logged again on return.
+    when(podList.getItems).thenReturn(Collections.emptyList())
+    assert(countSkipLogs(1) === 0)
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    assert(countSkipLogs(2) === 1)
   }
 
   Seq("statefulset", "deployment").foreach { allocator =>

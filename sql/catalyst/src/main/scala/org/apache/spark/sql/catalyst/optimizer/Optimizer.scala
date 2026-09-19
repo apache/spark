@@ -111,6 +111,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeJoinCondition,
         LimitPushDown,
         LimitPushDownThroughWindow,
+        RewriteSizeOfArrayStruct,
         ColumnPruning,
         GenerateOptimization,
         // Operator combine

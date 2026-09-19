@@ -41,11 +41,12 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
         os.environ[var_name] = str(default_value)
         return default_value
 
-    def _get_env_variables_distributed(self) -> Tuple[Any, Any, Any]:
+    def _get_env_variables_distributed(self) -> Tuple[Any, Any, Any, Any]:
         master_addr = self._get_env_var("MASTER_ADDR", "127.0.0.1")
         master_port = self._get_env_var("MASTER_PORT", 2000)
         rank = self._get_env_var("RANK", 0)
-        return master_addr, master_port, rank
+        rdzv_id = self._get_env_var("PYSPARK_TORCH_DISTRIBUTOR_RDZV_ID", "test-rdzv-id")
+        return master_addr, master_port, rank, rdzv_id
 
     def test_get_torchrun_args_local(self) -> None:
         number_of_processes = 5
@@ -60,12 +61,12 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
 
     def test_get_torchrun_args_distributed(self) -> None:
         number_of_processes = 5
-        master_addr, master_port, rank = self._get_env_variables_distributed()
+        master_addr, master_port, rank, rdzv_id = self._get_env_variables_distributed()
         expected_torchrun_args_distributed = [
             f"--nnodes={number_of_processes}",
             f"--node_rank={rank}",
             f"--rdzv_endpoint={master_addr}:{master_port}",
-            "--rdzv_id=0",
+            f"--rdzv_id={rdzv_id}",
         ]
         torchrun_args_distributed, process_per_node = DeepspeedTorchDistributor._get_torchrun_args(
             False, number_of_processes
@@ -131,12 +132,13 @@ class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
             distributed_master_address,
             distributed_master_port,
             distributed_rank,
+            distributed_rdzv_id,
         ) = self._get_env_variables_distributed()
         distributed_torchrun_args = [
             f"--nnodes={num_procs}",
             f"--node_rank={distributed_rank}",
             f"--rdzv_endpoint={distributed_master_address}:{distributed_master_port}",
-            "--rdzv_id=0",
+            f"--rdzv_id={distributed_rdzv_id}",
         ]
         with self.subTest(msg="Distributed training command verification with no extra args"):
             distributed_cmd_no_args_expected = [
