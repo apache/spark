@@ -466,15 +466,25 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     checkCompatibleHiveReturnType(ArrayType(StringType), ArrayType(VarcharType(7)))
     checkCompatibleHiveReturnType(CharType(5), CharType(5))
     checkCompatibleHiveReturnType(VarcharType(3), VarcharType(3))
+    checkCompatibleHiveReturnType(
+      MapType(StringType, VarcharType(3)),
+      MapType(CharType(5), StringType))
+    checkCompatibleHiveReturnType(
+      StructType.fromDDL("c STRING, v VARCHAR(3)"),
+      StructType.fromDDL("c CHAR(5), v STRING"))
 
     Seq[(DataType, DataType)](
       VarcharType(3) -> CharType(5),
       CharType(4) -> CharType(5),
       VarcharType(4) -> VarcharType(5),
-      IntegerType -> CharType(5)).foreach { case (runtimeType, expectedType) =>
-      intercept[SparkException] {
-        checkCompatibleHiveReturnType(runtimeType, expectedType)
-      }
+      IntegerType -> CharType(5),
+      MapType(CharType(4), StringType) -> MapType(CharType(5), StringType),
+      StructType.fromDDL("c STRING") -> StructType.fromDDL("c STRING, v STRING"),
+      StructType.fromDDL("c CHAR(4)") -> StructType.fromDDL("c CHAR(5)")).foreach {
+      case (runtimeType, expectedType) =>
+        intercept[SparkException] {
+          checkCompatibleHiveReturnType(runtimeType, expectedType)
+        }
     }
   }
 
@@ -521,7 +531,8 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
 
   test("SPARK-59277: Hive object inspectors reject unsupported CHAR/VARCHAR lengths") {
     withFirstClassCharVarchar(enabled = true) {
-      Seq[DataType](CharType(0), CharType(256), VarcharType(65536)).foreach { dataType =>
+      Seq[DataType](
+        CharType(0), CharType(256), VarcharType(0), VarcharType(65536)).foreach { dataType =>
         val expectedParams = Map("typeName" -> s"\"${dataType.sql}\"")
         checkError(
           exception = intercept[AnalysisException](toInspector(dataType)),

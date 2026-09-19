@@ -114,7 +114,7 @@ class HiveSimpleUDFEvaluator(
 private[hive] object HiveGenericUDFEvaluator extends HiveInspectors {
 
   /**
-   * Driver-side Hive initialize for `SELECT hive_udf(...)`. Returns the Catalyst type
+   * Driver-side Hive initialization for `SELECT hive_udf(...)`. Returns the Catalyst type
    * (for example CHAR(5) from a CHAR inspector). `HiveGenericUDF.apply` stores it.
    */
   def inferReturnType(

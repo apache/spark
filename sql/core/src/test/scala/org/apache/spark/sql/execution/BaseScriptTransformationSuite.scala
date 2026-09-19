@@ -246,6 +246,36 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
+  test("SPARK-59277: TRANSFORM validates restored JSON map keys without SerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val mapType = MapType(IntegerType, CharType(4))
+      Seq(
+        ("""{"1":"ab"}""", mapType, Row(Map(1 -> "ab  "))),
+        ("""{"not-an-int":"ab"}""", mapType, Row(null)),
+        ("""{"1":"a","01":"b"}""", mapType, Row(null)),
+        (
+          """[{"not-an-int":"ab"}]""",
+          ArrayType(mapType),
+          Row(null)),
+        (
+          """{"m":{"1":"a","01":"b"}}""",
+          StructType(Seq(StructField("m", mapType))),
+          Row(null))).foreach { case (json, dataType, expected) =>
+        val input = Seq(json).toDF("value")
+        checkAnswer(
+          input,
+          (child: SparkPlan) => createScriptTransformationExec(
+            script = "cat",
+            output = Seq(AttributeReference("value", dataType)()),
+            child = child,
+            ioschema = defaultIOSchema),
+          Seq(expected))
+      }
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
   test("script transformation should not swallow errors from upstream operators (no serde)") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 

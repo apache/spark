@@ -32,14 +32,24 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{
+  ArrayTransform,
   Attribute,
   AttributeSet,
   BoundReference,
   Cast,
+  CreateNamedStruct,
   Expression,
   GenericInternalRow,
+  GetStructField,
+  If,
+  IsNull,
   JsonToStructs,
+  LambdaFunction,
   Literal,
+  MapFromArrays,
+  MapKeys,
+  MapValues,
+  NamedLambdaVariable,
   StructsToJson,
   UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
@@ -50,6 +60,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 trait BaseScriptTransformationExec extends UnaryExecNode {
   def script: String
@@ -212,7 +223,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
     attr.dataType match {
       case _: CharType | _: VarcharType =>
-        // First-class CHAR/VARCHAR must not use Hive LazySimpleSerde's null-on-error path.
+        // First-class CHAR/VARCHAR must not use Hive LazySimpleSerDe's null-on-error path.
         (data: String) =>
           if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
             null
@@ -272,11 +283,11 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         val parsedToPhysical = if (jsonType.sameType(physicalType)) {
           identity[Any] _
         } else {
-          val cast = Cast(
+          val restoreMapKeys = ScriptTransformationIOSchema.restoreJsonMapKeys(
             BoundReference(0, jsonType, nullable = true),
             physicalType,
             Some(conf.sessionLocalTimeZone))
-          value: Any => cast.eval(InternalRow(value))
+          value: Any => restoreMapKeys.eval(InternalRow(value))
         }
         val toScala = CatalystTypeConverters.createToScalaConverter(physicalType)
         val parser = wrapperConvertException(
@@ -436,6 +447,64 @@ object ScriptTransformationIOSchema {
     case StructType(fields) =>
       StructType(fields.map(f => f.copy(dataType = toJsonMapKeyType(f.dataType))))
     case other => other
+  }
+
+  private[sql] def restoreJsonMapKeys(
+      expression: Expression,
+      targetType: DataType,
+      timeZoneId: Option[String]): Expression = {
+    def restore(
+        expression: Expression,
+        jsonType: DataType,
+        targetType: DataType): Expression = (jsonType, targetType) match {
+      case (ArrayType(jsonElementType, containsNull), ArrayType(targetElementType, _)) =>
+        val element = NamedLambdaVariable("element", jsonElementType, containsNull)
+        val restoredElement = restore(element, jsonElementType, targetElementType)
+        if (restoredElement.fastEquals(element)) {
+          expression
+        } else {
+          ArrayTransform(expression, LambdaFunction(restoredElement, Seq(element)))
+        }
+      case (
+          MapType(jsonKeyType, jsonValueType, valueContainsNull),
+          MapType(targetKeyType, targetValueType, _)) =>
+        val keys = MapKeys(expression)
+        val key = NamedLambdaVariable("key", jsonKeyType, nullable = false)
+        val restoredKey = if (jsonKeyType.sameType(targetKeyType)) {
+          key
+        } else {
+          Cast(key, targetKeyType, timeZoneId)
+        }
+        val restoredKeys = ArrayTransform(keys, LambdaFunction(restoredKey, Seq(key)))
+
+        val values = MapValues(expression)
+        val value = NamedLambdaVariable("value", jsonValueType, valueContainsNull)
+        val restoredValue = restore(value, jsonValueType, targetValueType)
+        val restoredValues = if (restoredValue.fastEquals(value)) {
+          values
+        } else {
+          ArrayTransform(values, LambdaFunction(restoredValue, Seq(value)))
+        }
+        MapFromArrays(restoredKeys, restoredValues)
+      case (jsonStruct: StructType, targetStruct: StructType) =>
+        val fields = targetStruct.fields.zipWithIndex.flatMap { case (field, index) =>
+          Seq(
+            Literal(field.name),
+            restore(
+              GetStructField(expression, index, Some(field.name)),
+              jsonStruct(index).dataType,
+              field.dataType))
+        }
+        val restoredStruct = CreateNamedStruct(fields.toImmutableArraySeq)
+        if (expression.nullable) {
+          If(IsNull(expression), Literal(null, restoredStruct.dataType), restoredStruct)
+        } else {
+          restoredStruct
+        }
+      case _ => expression
+    }
+
+    restore(expression, expression.dataType, targetType)
   }
 
   val defaultFormat = Map(
