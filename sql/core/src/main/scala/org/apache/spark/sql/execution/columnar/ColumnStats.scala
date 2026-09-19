@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, UnsafeArrayData, UnsafeMapData, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String}
 
@@ -221,8 +222,13 @@ private[columnar] final class FloatColumnStats extends ColumnStats {
   }
 
   def gatherValueStats(value: Float): Unit = {
-    if (value > upper) upper = value
-    if (value < lower) lower = value
+    if (count == nullCount) {
+      upper = value
+      lower = value
+    } else {
+      if (SQLOrderingUtil.compareFloats(value, upper) > 0) upper = value
+      if (SQLOrderingUtil.compareFloats(value, lower) < 0) lower = value
+    }
     sizeInBytes += FLOAT.defaultSize
     count += 1
   }
@@ -245,8 +251,13 @@ private[columnar] final class DoubleColumnStats extends ColumnStats {
   }
 
   def gatherValueStats(value: Double): Unit = {
-    if (value > upper) upper = value
-    if (value < lower) lower = value
+    if (count == nullCount) {
+      upper = value
+      lower = value
+    } else {
+      if (SQLOrderingUtil.compareDoubles(value, upper) > 0) upper = value
+      if (SQLOrderingUtil.compareDoubles(value, lower) < 0) lower = value
+    }
     sizeInBytes += DOUBLE.defaultSize
     count += 1
   }
