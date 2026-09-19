@@ -16,12 +16,34 @@
  */
 package org.apache.spark.util
 
-import java.util.Arrays
+import java.util.{Arrays, HashSet}
 
 import scala.collection.immutable
 import scala.reflect.ClassTag
 
 private[spark] trait SparkCollectionUtils {
+  /**
+   * Creates a [[java.util.HashSet]] pre-sized to hold the given number of elements without
+   * triggering a resize.
+   *
+   * A `HashSet` is backed by a `HashMap` whose bucket table is reallocated and every element
+   * rehashed once the entry count exceeds the table capacity multiplied by the default load
+   * factor of `0.75`. When the final element count is known in advance, allocating the table
+   * at the required size up front avoids those intermediate reallocations and rehashes that a
+   * set grown from the default capacity would incur. The initial capacity is derived as
+   * `expectedSize / 0.75 + 1` so that all `expectedSize` elements are accommodated below the
+   * resize threshold.
+   *
+   * @param expectedSize the number of elements the returned set is expected to hold; must be
+   *                     non-negative
+   * @tparam T the element type of the returned set
+   * @return an empty `HashSet` with capacity sufficient to hold `expectedSize` elements
+   *         without resizing
+   */
+  def newHashSetWithExpectedSize[T](expectedSize: Int): HashSet[T] = {
+    new HashSet[T]((expectedSize / 0.75f + 1.0f).toInt)
+  }
+
   /**
    * Same function as `keys.zipWithIndex.toMap`, but has perf gain.
    */
