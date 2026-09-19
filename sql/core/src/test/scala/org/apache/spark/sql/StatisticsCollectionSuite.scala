@@ -723,16 +723,43 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         // EstimationUtils.toDouble/fromDouble. .executedPlan forces the lazily-cached
         // LogicalPlan.stats this predicate shape needs, the same way the join-based
         // "Simple queries must be working, if CBO is turned on" test above does.
+        // The NTZ column `n` covers range/equality/IN-list too: evaluateBinary/evaluateInSet
+        // widen a shared type-dispatch match that (incidentally, pre-existing) never had a
+        // TimestampNTZType case either, and only equality on `n` would leave that gap untested.
         sql(
           """
             |SELECT t1.k1 FROM nanos_cbo_t1 t1
             |JOIN nanos_cbo_t2 t2 ON t1.k1 = t2.k
             |WHERE t1.k1 > TIMESTAMP_LTZ'2022-01-01 00:00:00.123456789'
+            |  AND t1.n > TIMESTAMP_NTZ'2022-01-01 00:00:00.123456789'
             |  AND t1.n = TIMESTAMP_NTZ'2022-01-03 00:00:00.987654321'
+            |  AND t1.n IN (TIMESTAMP_NTZ'2022-01-01 00:00:00.123456789',
+            |               TIMESTAMP_NTZ'2022-01-03 00:00:00.987654321')
             |  AND t1.k1 IN (TIMESTAMP_LTZ'2022-01-01 00:00:00.123456789',
             |                TIMESTAMP_LTZ'2022-01-03 00:00:00.987654321')
             |  AND t1.k2 > t1.k1
           """.stripMargin).queryExecution.executedPlan
+      }
+    }
+  }
+
+  test("SPARK-57812: UNION propagates min/max stats for nanosecond timestamp columns") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("nanos_union_t1", "nanos_union_t2") {
+        sql("CREATE TABLE nanos_union_t1(k TIMESTAMP_LTZ(9)) USING parquet")
+        sql("CREATE TABLE nanos_union_t2(k TIMESTAMP_LTZ(9)) USING parquet")
+        sql("INSERT INTO nanos_union_t1 VALUES (TIMESTAMP_LTZ'2022-01-01 00:00:00.123456789')")
+        sql("INSERT INTO nanos_union_t2 VALUES (TIMESTAMP_LTZ'2022-01-03 00:00:00.987654321')")
+        sql("ANALYZE TABLE nanos_union_t1 COMPUTE STATISTICS FOR COLUMNS k")
+        sql("ANALYZE TABLE nanos_union_t2 COMPUTE STATISTICS FOR COLUMNS k")
+
+        // Without TimestampLTZNanosType in UnionEstimation.isTypeSupported, min/max here would
+        // silently come back None instead of the actual overlapping range -- not a crash, but
+        // bad enough estimation input to e.g. make a downstream join look empty.
+        val stats = sql("SELECT k FROM nanos_union_t1 UNION ALL SELECT k FROM nanos_union_t2")
+          .queryExecution.optimizedPlan.stats
+        assert(stats.attributeStats.nonEmpty)
+        assert(stats.attributeStats.values.forall(cs => cs.min.isDefined && cs.max.isDefined))
       }
     }
   }
