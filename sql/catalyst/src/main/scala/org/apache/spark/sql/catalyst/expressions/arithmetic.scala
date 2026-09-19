@@ -682,7 +682,11 @@ trait DivModLike extends BinaryArithmetic {
   // Whether we should check overflow or not in ANSI mode.
   protected def checkDivideOverflow: Boolean = false
 
-  override def nullable: Boolean = true
+  // The result is null only when an input is, unless a divide/remainder-by-zero (or, for decimals,
+  // a precision overflow) can produce a null without failing. Under ANSI (`failOnError`) those
+  // conditions throw instead of returning null, so the result is null iff a child is. Non-ANSI /
+  // TRY stay conservatively nullable (zero -> null; decimal overflow -> null).
+  override def nullable: Boolean = left.nullable || right.nullable || !failOnError
 
   private lazy val isZero: Any => Boolean = right.dataType match {
     case _: DecimalType => x => x.asInstanceOf[Decimal].isZero
@@ -812,11 +816,23 @@ trait DivModLike extends BinaryArithmetic {
            |} else {$divisionBody
            |}""".stripMargin
       }
-      ev.copy(code = code"""
-        ${eval2.code}
-        boolean ${ev.isNull} = false;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $guardedBody""")
+      if (nullable) {
+        ev.copy(code = code"""
+          ${eval2.code}
+          boolean ${ev.isNull} = false;
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          $guardedBody""")
+      } else {
+        // With non-null inputs and `failOnError`, divide-by-zero and overflow throw rather than
+        // producing null, so the result is non-nullable. Omit the dead `isNull` flag and report
+        // FalseLiteral (mirrors MakeDecimal/CheckOverflow).
+        ev.copy(
+          code = code"""
+            ${eval2.code}
+            $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+            $guardedBody""",
+          isNull = FalseLiteral)
+      }
     } else {
       val nullOnErrorCondition = if (failOnError || divisorIsNonZero) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError && !divisorIsNonZero) {
@@ -1152,7 +1168,9 @@ case class Pmod(
 
   override def inputType: AbstractDataType = NumericType
 
-  override def nullable: Boolean = true
+  // See DivModLike.nullable: pmod-by-zero (and decimal precision overflow) throw under ANSI rather
+  // than returning null, so the result is null iff a child is; non-ANSI stays nullable.
+  override def nullable: Boolean = left.nullable || right.nullable || !failOnError
 
   override def decimalMethod: String = "remainder"
 
@@ -1236,7 +1254,7 @@ case class Pmod(
            |}
            |${ev.value} = ${ev.value}.toPrecision(
            |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContext);
-           |${ev.isNull} = ${ev.value} == null;
+           |${if (nullable) s"${ev.isNull} = ${ev.value} == null;" else ""}
            |""".stripMargin
 
       // The positive-modulo arithmetic is the same fixed algorithm for every primitive numeric
@@ -1268,11 +1286,22 @@ case class Pmod(
            |} else {$remainderBody
            |}""".stripMargin
       }
-      ev.copy(code = code"""
-        ${eval2.code}
-        boolean ${ev.isNull} = false;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $guardedBody""")
+      if (nullable) {
+        ev.copy(code = code"""
+          ${eval2.code}
+          boolean ${ev.isNull} = false;
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          $guardedBody""")
+      } else {
+        // See DivModLike: non-null inputs under `failOnError` make the result non-nullable, so omit
+        // the dead `isNull` flag and report FalseLiteral.
+        ev.copy(
+          code = code"""
+            ${eval2.code}
+            $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+            $guardedBody""",
+          isNull = FalseLiteral)
+      }
     } else {
       val nullOnErrorCondition = if (failOnError || divisorIsNonZero) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError && !divisorIsNonZero) {
