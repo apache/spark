@@ -289,6 +289,23 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     }
   }
 
+  test("SPARK-59535: treeAggregateToRDD returns a single-partition RDD") {
+    def seqOp: (Long, Int) => Long = (c: Long, x: Int) => c + x
+    def combOp: (Long, Long) => Long = (c1: Long, c2: Long) => c1 + c2
+
+    val result = sc.makeRDD(-1000 until 1000, 10)
+      .treeAggregateToRDD(0L, seqOp, combOp, depth = 2)
+    assert(result.getNumPartitions === 1)
+    assert(result.map { sum =>
+      assert(TaskContext.get() != null)
+      sum * 2
+    }.collect().toSeq === Seq(-2000L))
+
+    val emptyResult = sc.emptyRDD[Int].treeAggregateToRDD(0L, seqOp, combOp, depth = 2)
+    assert(emptyResult.getNumPartitions === 1)
+    assert(emptyResult.collect().toSeq === Seq(0L))
+  }
+
   test("treeReduce") {
     val rdd = sc.makeRDD(-1000 until 1000, 10)
     for (depth <- 1 until 10) {
