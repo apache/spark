@@ -16,48 +16,49 @@
 #
 
 import glob
+import io
 import os
 import pydoc
 import shutil
 import tempfile
-import warnings
 import unittest
-import io
+import warnings
 from contextlib import redirect_stdout
 
-from pyspark.sql import Row, functions, DataFrame
-from pyspark.sql.functions import (
-    col,
-    lit,
-    count,
-    struct,
-    date_format,
-    to_date,
-    array,
-    explode,
-)
-from pyspark.sql.types import (
-    StringType,
-    IntegerType,
-    LongType,
-    StructType,
-    StructField,
-)
-from pyspark.storagelevel import StorageLevel
 from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkTypeError,
     PySparkValueError,
+    QueryContextType,
 )
+from pyspark.sql import DataFrame, Row, functions
+from pyspark.sql.functions import (
+    array,
+    col,
+    count,
+    date_format,
+    explode,
+    lit,
+    struct,
+    to_date,
+)
+from pyspark.sql.types import (
+    IntegerType,
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+)
+from pyspark.storagelevel import StorageLevel
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
     SPARK_HOME,
+    ReusedSQLTestCase,
 )
 from pyspark.testing.utils import (
-    have_pyarrow,
     have_pandas,
+    have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
@@ -424,6 +425,40 @@ class DataFrameTestsMixin:
         # Type check
         self.assertRaises(TypeError, self.df.withColumns, ["key"])
         self.assertRaises(Exception, self.df.withColumns)
+
+    def test_with_columns_with_dependencies(self):
+        df = self.spark.range(3).withColumns(
+            {
+                "a": col("id") + 1,
+                "b": col("a") + 1,
+                "c": col("a") + col("b"),
+                "d": col("a") + col("b") + col("c"),
+            }
+        )
+
+        assertDataFrameEqual(
+            df,
+            [
+                Row(id=0, a=1, b=2, c=3, d=6),
+                Row(id=1, a=2, b=3, c=5, d=10),
+                Row(id=2, a=3, b=4, c=7, d=14),
+            ],
+        )
+
+        with self.assertRaises(AnalysisException) as pe:
+            self.spark.range(1).withColumns(
+                {
+                    "a": col("b") - 1,
+                    "b": col("id") + 1,
+                }
+            ).collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            messageParameters={"objectName": "`b`", "proposal": "`id`"},
+            query_context_type=QueryContextType.DataFrame,
+            fragment="col",
+        )
 
     def test_generic_hints(self):
         df1 = self.spark.range(10e10).toDF("id")

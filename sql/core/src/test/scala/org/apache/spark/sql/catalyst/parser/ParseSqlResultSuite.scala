@@ -29,8 +29,16 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class ParseSqlResultSuite extends SparkFunSuite {
 
-  private def obj(sql: String): JObject =
-    parse(ParseSqlResult.fromSql(sql)).asInstanceOf[JObject]
+  private def objs(sql: String): List[JObject] =
+    parse(ParseSqlResult.fromSql(sql)) match {
+      case JArray(values) => values.map(_.asInstanceOf[JObject])
+      case other => fail(s"expected JSON array, got: $other")
+    }
+
+  private def obj(sql: String): JObject = objs(sql) match {
+    case value :: Nil => value
+    case other => fail(s"expected one statement, got ${other.size}: $other")
+  }
 
   private def tableRefs(sql: String, field: String): Set[Seq[String]] =
     obj(sql) \ field match {
@@ -65,6 +73,77 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(SqlStatementCodes.Explain.statementCode === -23)
     assert(SqlStatementCodes.Set.statementCode === -24)
     assert(SqlStatementCodes.CreateMetricViewStmt.statementCode === -37)
+  }
+
+  test("batches return one statement object per statement with source spans") {
+    Seq("select 1; select 2", "select 1; select 2;").foreach { sql =>
+      val statements = objs(sql)
+      assert(statements.size === 2)
+      assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(11)))
+      assert(statements.map(_ \ "length") === Seq(JInt(8), JInt(8)))
+      assert(statements.map(_ \ "parse_success") === Seq(JBool(true), JBool(true)))
+      assert(statements.map(_ \ "statement_identifier") ===
+        Seq(JString("SELECT"), JString("SELECT")))
+    }
+
+    val statements = objs("  SELECT 1 ;\n SELECT 2;  ")
+    assert(statements.map(_ \ "start") === Seq(JInt(3), JInt(15)))
+    assert(statements.map(_ \ "length") === Seq(JInt(8), JInt(8)))
+
+    val sqlWithDroppedComment = "SELECT 1; /* SELECT 2 */; SELECT 2"
+    val commentStatements = objs(sqlWithDroppedComment)
+    assert(commentStatements.map(_ \ "start") ===
+      Seq(JInt(1), JInt(sqlWithDroppedComment.lastIndexOf("SELECT 2") + 1)))
+
+    val emoji = new String(Character.toChars(0x1F600))
+    val unicodeSql = s"SELECT '$emoji$emoji'; SELECT 2;"
+    val unicodeStatements = objs(unicodeSql)
+    val spans = unicodeStatements.map { statement =>
+      val JInt(start) = statement \ "start"
+      val JInt(length) = statement \ "length"
+      (start.toInt, length.toInt)
+    }
+    assert(spans === Seq((1, 13), (16, 8)))
+    assert(spans.map { case (start, length) =>
+      unicodeSql.substring(start - 1, start - 1 + length)
+    } === Seq(s"SELECT '$emoji$emoji'", "SELECT 2"))
+
+    val nbsp = 0xA0.toChar
+    val nbspSql = s"${nbsp}SELECT 1$nbsp;"
+    val nbspStmt = objs(nbspSql).head
+    val JInt(nbspStart) = nbspStmt \ "start"
+    val JInt(nbspLength) = nbspStmt \ "length"
+    assert((nbspStart.toInt, nbspLength.toInt) === (2, 8))
+    assert(nbspSql.substring(nbspStart.toInt - 1, nbspStart.toInt - 1 + nbspLength.toInt) ===
+      "SELECT 1")
+  }
+
+  test("batch errors are isolated and preserve statement order") {
+    val statements = objs("SELECT 1; SELEC 2; SELECT 3")
+    assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(11), JInt(20)))
+    assert(statements.map(_ \ "length") === Seq(JInt(8), JInt(7), JInt(8)))
+    assert(statements.map(_ \ "parse_success") ===
+      Seq(JBool(true), JBool(false), JBool(true)))
+    assert(statements(1) \ "error" \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
+  }
+
+  test("SQL scripts remain one statement in a batch") {
+    val statements = objs("BEGIN SELECT 1; SELECT 2; END; SELECT 3")
+    assert(statements.size === 2)
+    assert(statements.map(_ \ "start") === Seq(JInt(1), JInt(32)))
+    assert(statements.map(_ \ "length") === Seq(JInt(29), JInt(8)))
+    assert(statements.map(_ \ "statement_identifier") ===
+      Seq(JString("BEGIN END"), JString("SELECT")))
+  }
+
+  test("empty and closed-comment-only batches contain no statements") {
+    Seq("", "  ", ";;", "-- comment", "/* closed */").foreach { sql =>
+      assert(objs(sql).isEmpty, sql)
+    }
+
+    val unclosed = objs("/* unclosed")
+    assert(unclosed.size === 1)
+    assert(unclosed.head \ "parse_success" === JBool(false))
   }
 
   test("TABLE and VALUES classify as SELECT") {
@@ -117,6 +196,16 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(sourceTableRefs("DROP TABLE t").isEmpty)
   }
 
+  test("dynamic INSERT targets retain query metadata") {
+    val sql = "INSERT INTO IDENTIFIER(lower('T')) SELECT a AS result FROM src"
+    val insert = obj(sql)
+    assert(insert \ "statement_identifier" === JString("INSERT"))
+    assert(insert \ "statement_code" === JInt(50))
+    assert(sourceTableRefs(sql) === Set(Seq("src")))
+    assert(insert \ "select_list" === JArray(List(
+      JObject("name" -> JArray(List(JString("result")))))))
+  }
+
   test("CTE aliases only shadow references within their own scope") {
     // The inner CTE named real_t must not hide the outer real table real_t.
     assert(sourceTableRefs(
@@ -127,6 +216,20 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(sourceTableRefs(
       "WITH a AS (SELECT * FROM b), b AS (SELECT 1 AS x) SELECT * FROM a") ===
       Set(Seq("b")))
+
+    val insert = "WITH t AS (SELECT * FROM src) INSERT INTO t SELECT * FROM t"
+    assert(targetTableRefs(insert) === Set(Seq("t")))
+    assert(sourceTableRefs(insert) === Set(Seq("src")))
+
+    val otherDml = Seq(
+      "WITH t AS (SELECT * FROM src) DELETE FROM t WHERE a = 1",
+      "WITH t AS (SELECT * FROM src) UPDATE t SET a = 1",
+      "WITH t AS (SELECT * FROM src) " +
+        "MERGE INTO t USING t AS s ON t.a = s.a WHEN MATCHED THEN DELETE")
+    otherDml.foreach { sql =>
+      assert(targetTableRefs(sql).isEmpty, sql)
+      assert(sourceTableRefs(sql) === Set(Seq("src")), sql)
+    }
   }
 
   test("positional markers inside BEGIN END are counted once") {

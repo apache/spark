@@ -17,12 +17,12 @@
 
 import unittest
 
+from pyspark.ml.linalg import Vectors
 from pyspark.ml.torch.distributor import (
     TorchDistributor,
     _get_spark_partition_data_loader,
 )
 from pyspark.sql import SparkSession
-from pyspark.ml.linalg import Vectors
 
 
 # @unittest.skipIf(not have_torch, torch_requirement_message)

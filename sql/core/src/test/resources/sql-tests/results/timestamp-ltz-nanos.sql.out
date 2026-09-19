@@ -836,6 +836,47 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT from_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', 'Asia/Kolkata')
+-- !query schema
+struct<from_utc_timestamp(TIMESTAMP_LTZ '2015-07-23 17:00:00.123456789', Asia/Kolkata):timestamp_ltz(9)>
+-- !query output
+2015-07-23 22:30:00.123456789
+
+
+-- !query
+SELECT to_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', 'Asia/Kolkata')
+-- !query schema
+struct<to_utc_timestamp(TIMESTAMP_LTZ '2015-07-23 17:00:00.123456789', Asia/Kolkata):timestamp_ltz(9)>
+-- !query output
+2015-07-23 11:30:00.123456789
+
+
+-- !query
+SELECT typeof(
+    to_utc_timestamp('2015-07-24 00:00:00.1234567 UTC' :: timestamp_ltz(7), 'Asia/Kolkata'))
+-- !query schema
+struct<typeof(to_utc_timestamp(CAST(2015-07-24 00:00:00.1234567 UTC AS TIMESTAMP_LTZ(7)), Asia/Kolkata)):string>
+-- !query output
+timestamp_ltz(7)
+
+
+-- !query
+SELECT from_utc_timestamp(CAST(NULL AS timestamp_ltz(9)), 'Asia/Kolkata')
+-- !query schema
+struct<from_utc_timestamp(CAST(NULL AS TIMESTAMP_LTZ(9)), Asia/Kolkata):timestamp_ltz(9)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT to_utc_timestamp(TIMESTAMP_LTZ '2015-07-24 00:00:00.123456789 UTC', CAST(NULL AS STRING))
+-- !query schema
+struct<to_utc_timestamp(TIMESTAMP_LTZ '2015-07-23 17:00:00.123456789', CAST(NULL AS STRING)):timestamp_ltz(9)>
+-- !query output
+NULL
+
+
+-- !query
 SELECT max(c), min(c) FROM VALUES
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
@@ -1749,3 +1790,60 @@ SELECT element_at(map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
 struct<element_at(map(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', a, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999', b), TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001'):string>
 -- !query output
 a
+
+
+-- !query
+SELECT timestampadd(SECOND, 5, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC')
+-- !query schema
+struct<timestampadd(SECOND, 5, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000123'):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:05.000000123
+
+
+-- !query
+SELECT timestampadd(MICROSECOND, 2, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC')
+-- !query schema
+struct<timestampadd(MICROSECOND, 2, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000123'):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000002123
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 300, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC')
+-- !query schema
+struct<timestampadd(NANOSECOND, 300, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000123'):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000423
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100 UTC')
+-- !query schema
+struct<timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000100'):timestamp_ltz(9)>
+-- !query output
+2019-12-31 15:59:59.9999998
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000200 UTC')
+-- !query schema
+struct<timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000200'):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.0000011
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`TIMESTAMPADD`",
+    "invalidValue" : "'NANOSECOND'",
+    "parameter" : "`unit`"
+  }
+}

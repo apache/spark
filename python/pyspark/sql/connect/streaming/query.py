@@ -17,29 +17,33 @@
 import json
 import sys
 import warnings
-from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional, Union, Iterator
-from threading import Thread, Lock
+from threading import Lock, Thread
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Union, cast
 
-from pyspark.errors import StreamingQueryException, PySparkValueError
 import pyspark.sql.connect.proto as pb2
+from pyspark.errors import PySparkValueError, StreamingQueryException
+from pyspark.errors.exceptions.connect import (
+    StreamingQueryException as CapturedStreamingQueryException,
+)
 from pyspark.sql.connect import proto
+from pyspark.sql.metrics import ObservedMetrics, PlanMetrics
 from pyspark.sql.streaming import StreamingQueryListener
 from pyspark.sql.streaming.listener import (
-    QueryStartedEvent,
-    QueryProgressEvent,
     QueryIdleEvent,
+    QueryProgressEvent,
+    QueryStartedEvent,
     QueryTerminatedEvent,
     StreamingQueryProgress,
 )
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
-    StreamingQueryManager as PySparkStreamingQueryManager,
 )
-from pyspark.errors.exceptions.connect import (
-    StreamingQueryException as CapturedStreamingQueryException,
+from pyspark.sql.streaming.query import (
+    StreamingQueryManager as PySparkStreamingQueryManager,
 )
 
 if TYPE_CHECKING:
+    from pyspark.sql.connect.client.core import _ExecutePlanResponseItem
     from pyspark.sql.connect.session import SparkSession
 
 
@@ -340,7 +344,30 @@ class StreamingQueryListenerBus:
 
             self._listener_bus.remove(listener)
 
-    def _register_server_side_listener(self) -> Iterator[Dict[str, Any]]:
+    @staticmethod
+    def _iter_listener_events(
+        results: Iterator["_ExecutePlanResponseItem"],
+    ) -> Iterator[pb2.StreamingQueryListenerEventsResult]:
+        for result in results:
+            if isinstance(result, (PlanMetrics, ObservedMetrics)):
+                continue
+            if (
+                not isinstance(result, dict)
+                or "streaming_query_listener_events_result" not in result
+            ):
+                raise PySparkValueError(
+                    errorClass="UNKNOWN_RESPONSE",
+                    messageParameters={"response": str(result)},
+                )
+            response = result["streaming_query_listener_events_result"]
+            if not isinstance(response, pb2.StreamingQueryListenerEventsResult):
+                raise PySparkValueError(
+                    errorClass="UNKNOWN_RESPONSE",
+                    messageParameters={"response": str(result)},
+                )
+            yield response
+
+    def _register_server_side_listener(self) -> Iterator["_ExecutePlanResponseItem"]:
         """
         Send add listener request to the server, after received confirmation from the server,
         start a new thread to handle these events.
@@ -351,27 +378,19 @@ class StreamingQueryListenerBus:
         exec_cmd.streaming_query_listener_bus_command.CopyFrom(cmd)
         result_iter = self._sqm._session.client.execute_command_as_iterator(exec_cmd)
         # Main thread should block until received listener_added_success message
-        for result in result_iter:
-            response = cast(
-                pb2.StreamingQueryListenerEventsResult,
-                result["streaming_query_listener_events_result"],
-            )
+        for response in self._iter_listener_events(result_iter):
             if response.HasField("listener_bus_listener_added"):
                 break
         return result_iter
 
-    def _query_event_handler(self, iter: Iterator[Dict[str, Any]]) -> None:
+    def _query_event_handler(self, iter: Iterator["_ExecutePlanResponseItem"]) -> None:
         """
         Handler function passed to the new thread, if there is any error while receiving
         listener events, it means the connection is unstable. In this case, remove all listeners
         and tell the user to add back the listeners.
         """
         try:
-            for result in iter:
-                response = cast(
-                    pb2.StreamingQueryListenerEventsResult,
-                    result["streaming_query_listener_events_result"],
-                )
+            for response in self._iter_listener_events(iter):
                 for event in response.events:
                     deserialized_event = self.deserialize(event)
                     self.post_to_all(deserialized_event)
@@ -432,8 +451,9 @@ class StreamingQueryListenerBus:
 def _test() -> None:
     import doctest
     import os
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.streaming.query
+    from pyspark.sql import SparkSession as PySparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

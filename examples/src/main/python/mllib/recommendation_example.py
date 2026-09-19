@@ -22,6 +22,7 @@ from pyspark import SparkContext
 
 # $example on$
 from pyspark.mllib.recommendation import ALS, MatrixFactorizationModel, Rating
+
 # $example off$
 
 if __name__ == "__main__":

@@ -152,7 +152,8 @@ class ObjectAggregationIterator(
   // spills are merged together for sort-based aggregation.
   private def processInputs(): Unit = {
     // In-memory map to store aggregation buffer for hash-based aggregation.
-    val hashMap = new ObjectAggregationMap()
+    val groupingSchema = DataTypeUtils.fromAttributes(groupingExpressions.map(_.toAttribute))
+    val hashMap = ObjectAggregationMap.create(groupingSchema)
 
     // If in-memory map is unable to stores all aggregation buffer, fallback to sort-based
     // aggregation backed by sorted physical storage.

@@ -1167,6 +1167,34 @@ abstract class ParquetPartitionDiscoverySuite
     }
   }
 
+  test("SPARK-59273: read CHAR/VARCHAR partition values") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("CHAR(3)" -> "a  ", "VARCHAR(3)" -> "a").foreach { case (dataType, expected) =>
+        withTempPath { path =>
+          Seq((1, "a")).toDF("id", "part")
+            .write.partitionBy("part").parquet(path.getCanonicalPath)
+          val readback = spark.read
+            .schema(s"id INT, part $dataType")
+            .parquet(path.getCanonicalPath)
+
+          checkAnswer(readback, Row(1, expected))
+        }
+      }
+      withTempPath { path =>
+        Seq((1, "abcdef")).toDF("id", "part")
+          .write.partitionBy("part").parquet(path.getCanonicalPath)
+        val readback = spark.read
+          .schema("id INT, part VARCHAR(3)")
+          .parquet(path.getCanonicalPath)
+
+        checkError(
+          exception = intercept[SparkRuntimeException](readback.collect()),
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "3"))
+      }
+    }
+  }
+
   test("SPARK-40212: SparkSQL castPartValue does not properly handle byte, short, float") {
     withTempDir { dir =>
       val data = Seq[(Int, Byte, Short, Float)](

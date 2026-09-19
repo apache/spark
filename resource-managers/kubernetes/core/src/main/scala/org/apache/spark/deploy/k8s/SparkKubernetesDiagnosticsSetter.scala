@@ -26,6 +26,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.EXIT_EXCEPTION_ANNOTATION
 import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory.ClientType
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.STRING_REDACTION_PATTERN
 import org.apache.spark.util.{SparkStringUtils, Utils}
 
 /**
@@ -59,7 +60,8 @@ private[spark] class SparkKubernetesDiagnosticsSetter(clientProvider: Kubernetes
   }
 
   override def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit = {
-    val diagnostics = SparkStringUtils.abbreviate(Utils.stringifyException(throwable),
+    val diagnostics = SparkStringUtils.abbreviate(
+      Utils.redact(conf.get(STRING_REDACTION_PATTERN), Utils.stringifyException(throwable)),
       KUBERNETES_EXIT_EXCEPTION_MESSAGE_LIMIT_BYTES)
     Utils.tryWithResource(clientProvider.create(conf)) { client =>
       conf.get(KUBERNETES_DRIVER_POD_NAME).foreach { podName =>

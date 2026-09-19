@@ -25,8 +25,8 @@ from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.utils import (
     have_jinja2,
-    jinja2_requirement_message,
     have_tabulate,
+    jinja2_requirement_message,
     tabulate_requirement_message,
 )
 

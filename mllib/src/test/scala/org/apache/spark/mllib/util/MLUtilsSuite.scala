@@ -23,13 +23,15 @@ import java.nio.file.Files
 import scala.io.Source
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.{MatrixUDT => MLMatrixUDT, VectorUDT => MLVectorUDT}
+import org.apache.spark.mllib.linalg.{DenseVector, Matrices, MatrixUDT => OldMatrixUDT,
+  SparseVector, Vector, Vectors, VectorUDT => OldVectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StructField, StructType}
 import org.apache.spark.util.Utils
 
 class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -307,6 +309,30 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("convert nullable vector columns") {
+    val oldVector = Vectors.sparse(2, Array(1), Array(1.0))
+    val oldSchema = StructType(Seq(
+      StructField("id", IntegerType, nullable = false),
+      StructField("x", new OldVectorUDT, nullable = true)))
+    val oldDF = spark.createDataFrame(
+      sc.parallelize(Seq(Row(0, oldVector), Row(1, null))),
+      oldSchema)
+    val toML = convertVectorColumnsToML(oldDF)
+    assert(toML.schema("x").dataType === new MLVectorUDT)
+    assert(toML.collect().toSeq === Seq(Row(0, oldVector.asML), Row(1, null)))
+
+    val mlVector = oldVector.asML
+    val mlSchema = StructType(Seq(
+      StructField("id", IntegerType, nullable = false),
+      StructField("x", new MLVectorUDT, nullable = true)))
+    val mlDF = spark.createDataFrame(
+      sc.parallelize(Seq(Row(0, mlVector), Row(1, null))),
+      mlSchema)
+    val fromML = convertVectorColumnsFromML(mlDF)
+    assert(fromML.schema("x").dataType === new OldVectorUDT)
+    assert(fromML.collect().toSeq === Seq(Row(0, oldVector), Row(1, null)))
+  }
+
   test("convertMatrixColumnsToML") {
     val x = Matrices.sparse(3, 2, Array(0, 2, 3), Array(0, 2, 1), Array(0.0, -1.2, 0.0))
     val metadata = new MetadataBuilder().putLong("numFeatures", 2L).build()
@@ -355,6 +381,31 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     intercept[IllegalArgumentException] {
       convertMatrixColumnsFromML(df, "p._2")
     }
+  }
+
+  test("convert nullable matrix columns") {
+    val oldMatrix = Matrices.sparse(
+      3, 2, Array(0, 2, 3), Array(0, 2, 1), Array(0.0, -1.2, 0.0))
+    val oldSchema = StructType(Seq(
+      StructField("id", IntegerType, nullable = false),
+      StructField("x", new OldMatrixUDT, nullable = true)))
+    val oldDF = spark.createDataFrame(
+      sc.parallelize(Seq(Row(0, oldMatrix), Row(1, null))),
+      oldSchema)
+    val toML = convertMatrixColumnsToML(oldDF)
+    assert(toML.schema("x").dataType === new MLMatrixUDT)
+    assert(toML.collect().toSeq === Seq(Row(0, oldMatrix.asML), Row(1, null)))
+
+    val mlMatrix = oldMatrix.asML
+    val mlSchema = StructType(Seq(
+      StructField("id", IntegerType, nullable = false),
+      StructField("x", new MLMatrixUDT, nullable = true)))
+    val mlDF = spark.createDataFrame(
+      sc.parallelize(Seq(Row(0, mlMatrix), Row(1, null))),
+      mlSchema)
+    val fromML = convertMatrixColumnsFromML(mlDF)
+    assert(fromML.schema("x").dataType === new OldMatrixUDT)
+    assert(fromML.collect().toSeq === Seq(Row(0, oldMatrix), Row(1, null)))
   }
 
   test("kFold with fold column") {

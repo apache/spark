@@ -319,6 +319,10 @@ class SeriesStatMixin:
         self.assert_eq(pser.rank(method="min"), psser.rank(method="min").sort_index())
         self.assert_eq(pser.rank(method="max"), psser.rank(method="max").sort_index())
         self.assert_eq(pser.rank(method="first"), psser.rank(method="first").sort_index())
+        self.assert_eq(
+            pser.rank(method="first", ascending=False),
+            psser.rank(method="first", ascending=False).sort_index(),
+        )
         self.assert_eq(pser.rank(method="dense"), psser.rank(method="dense").sort_index())
 
         non_numeric_pser = pd.Series(["a", "c", "b", "d"], name="x", index=[10, 11, 12, 13])

@@ -15,11 +15,10 @@
 # limitations under the License.
 #
 
-from typing import Optional, Dict
-
-from pyspark.resource import ExecutorResourceRequest, TaskResourceRequest
+from typing import Dict, Optional
 
 import pyspark.sql.connect.proto as pb2
+from pyspark.resource import ExecutorResourceRequest, TaskResourceRequest
 
 
 class ResourceProfile:

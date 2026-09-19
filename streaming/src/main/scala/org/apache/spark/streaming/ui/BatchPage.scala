@@ -270,19 +270,6 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     }
   }
 
-  private def generateOutputOperationStatusForUI(failure: String): String = {
-    if (failure.startsWith("org.apache.spark.SparkException")) {
-      "Failed due to Spark job error\n" + failure
-    } else {
-      var nextLineIndex = failure.indexOf("\n")
-      if (nextLineIndex < 0) {
-        nextLineIndex = failure.length
-      }
-      val firstLine = failure.substring(0, nextLineIndex)
-      s"Failed due to error: $firstLine\n$failure"
-    }
-  }
-
   /**
    * Generate the job table for the batch.
    */
