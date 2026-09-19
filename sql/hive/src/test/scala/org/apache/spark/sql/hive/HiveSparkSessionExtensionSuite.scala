@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, UnresolvedHint}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
@@ -91,6 +92,48 @@ class HiveSparkSessionExtensionSuite extends SparkFunSuite {
   }
 
   test("SPARK-59081: hint rule sees UnresolvedRelation for path SQL before ResolveSQLOnFile") {
+    checkPathSqlHintSeesUnresolvedRelation(singlePass = false)
+  }
+
+  test("SPARK-59574: hint rule sees path SQL UnresolvedRelation with single-pass resolver") {
+    checkPathSqlHintSeesUnresolvedRelation(singlePass = true)
+  }
+
+  /**
+   * The observing rule above cannot tell the two dual-run halves apart, because the fixed-point
+   * half sets the flag on its own. A rule that rewrites the relation makes the single-pass half
+   * observable: without it, only the fixed-point half redirects and the dual-run plan comparison
+   * fails.
+   */
+  test("SPARK-59574: hint rule rewrites path relations in dual-run") {
+    case class RedirectPathRelation(spark: SqlSession) extends Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+        case r: UnresolvedRelation
+            if r.multipartIdentifier.size == 2 &&
+              r.multipartIdentifier.head.equalsIgnoreCase("parquet") &&
+              !r.multipartIdentifier.last.endsWith("-redirected") =>
+          r.copy(multipartIdentifier =
+            Seq(r.multipartIdentifier.head, r.multipartIdentifier.last + "-redirected"))
+      }
+    }
+
+    withHiveSession(Seq(_.injectHintResolutionRule(RedirectPathRelation))) { session =>
+      val dir = Utils.createTempDir()
+      try {
+        val path = new java.io.File(dir, "data").getCanonicalPath
+        session.range(1).write.parquet(path)
+        session.range(3).write.parquet(path + "-redirected")
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "false")
+        session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "true")
+
+        assert(session.sql(s"SELECT count(*) FROM parquet.`$path`").head().getLong(0) === 3)
+      } finally {
+        Utils.deleteRecursively(dir)
+      }
+    }
+  }
+
+  private def checkPathSqlHintSeesUnresolvedRelation(singlePass: Boolean): Unit = {
     var hintSawUnresolved = false
     var resolutionSawUnresolved = false
 
@@ -124,10 +167,12 @@ class HiveSparkSessionExtensionSuite extends SparkFunSuite {
       try {
         val path = new java.io.File(dir, "data").getCanonicalPath
         session.range(1).write.parquet(path)
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+        session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
         val df = session.sql(s"SELECT * FROM parquet.`$path`")
         df.queryExecution.analyzed
         assert(hintSawUnresolved,
-          "injectHintResolutionRule must run before ResolveSQLOnFile")
+          "injectHintResolutionRule must run before ResolveSQLOnFile / the metadata pre-pass")
         assert(!resolutionSawUnresolved,
           "injectResolutionRule is after ResolveSQLOnFile and must not see the path relation")
       } finally {
