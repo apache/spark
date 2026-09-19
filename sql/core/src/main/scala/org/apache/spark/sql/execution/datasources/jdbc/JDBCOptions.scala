@@ -304,6 +304,9 @@ class JdbcOptionsInWrite(
       s"Option '$JDBC_QUERY_STRING' is not applicable while writing.")
 
   val table = parameters(JDBC_TABLE_NAME)
+
+  val connectionRetryAttempts = parameters.get(JDBC_CONNECTION_RETRY_ATTEMPTS).map(_.toInt).getOrElse(0)
+  val connectionRetryDelayMs = parameters.get(JDBC_CONNECTION_RETRY_DELAY_MS).map(_.toLong).getOrElse(1000L)
 }
 
 object JDBCOptions {
@@ -379,4 +382,6 @@ object JDBCOptions {
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
   val JDBC_PREFER_TIMESTAMP_NANOS = newOption("preferTimestampNanos")
   val JDBC_HINT_STRING = newOption("hint")
+  val JDBC_CONNECTION_RETRY_ATTEMPTS = newOption("connectionRetryAttempts")
+  val JDBC_CONNECTION_RETRY_DELAY_MS = newOption("connectionRetryDelayMs")
 }

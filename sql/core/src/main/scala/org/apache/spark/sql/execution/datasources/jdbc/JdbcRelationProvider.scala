@@ -57,7 +57,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val options = new JdbcOptionsInWrite(parameters)
     val isCaseSensitive = sqlContext.sparkSession.sessionState.conf.caseSensitiveAnalysis
     val dialect = JdbcDialects.get(options.url)
-    val conn = dialect.createConnectionFactory(options)(-1)
+    val conn = JdbcUtils.createConnectionFactory(dialect, options)(-1)
     try {
       val tableExists = JdbcUtils.tableExists(conn, options)
       if (tableExists) {
