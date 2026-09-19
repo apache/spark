@@ -456,7 +456,8 @@ case class AdaptiveSparkPlanExec(
       finalPlanUpdate
       // Dereference the result so it can be GCed. After this resultStage.isMaterialized will return
       // false, which is expected. If we want to collect result again, we should invoke
-      // `withFinalPlanUpdate` and pass another result handler and we will create a new result stage.
+      // `withFinalPlanUpdate` and pass another result handler and we will create a new
+      // result stage.
       currentPhysicalPlan.asInstanceOf[ResultQueryStageExec].resultOption.getAndUpdate(_ => None)
         .get.asInstanceOf[T]
     }

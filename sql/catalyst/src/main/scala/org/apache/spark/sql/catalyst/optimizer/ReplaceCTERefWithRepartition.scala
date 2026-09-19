@@ -78,6 +78,7 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
                   inlined
                 } else {
                   RepartitionByExpression(Seq.empty, inlined, None)
+                    .addRepartitionId(reassign = true)
                 }
             }
           } else {
@@ -87,6 +88,7 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
               inlined
             } else {
               RepartitionByExpression(Seq.empty, inlined, None)
+                .addRepartitionId(reassign = true)
             }
           }
         cteMap.put(cteDef.id, withRepartition)

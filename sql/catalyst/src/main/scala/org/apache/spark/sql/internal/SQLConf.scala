@@ -6876,6 +6876,7 @@ object SQLConf {
         "instead of plain Repartition nodes. CTEReuse enables guaranteed exchange reuse " +
         "in AQE by sharing a single inner AdaptiveSparkPlanExec across all references.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -6888,6 +6889,7 @@ object SQLConf {
         "When false, only log the plan, error, and cteIds. Enabled by default in tests to " +
         "catch reuse regressions.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 

@@ -93,9 +93,11 @@ case class InsertAdaptiveSparkPlan(
             plan
           case CTEAdaptiveNotSupportedException(_) =>
             // `PlanCTEReuse` could not wrap a `CTEReuseExchange`'s subplan in an inner AQE. Back
-            // the whole query off AQE; the non-AQE path (`UnwrapCTEReuseExchange`) handles CTE reuse.
+            // the whole query off AQE; the non-AQE path (`UnwrapCTEReuseExchange`) handles the
+            // CTE reuse.
             logWarning(log"${MDC(CONFIG, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)} is enabled " +
-              log"but a CTE reuse subplan could not be planned adaptively; falling back to non-AQE.")
+              log"but a CTE reuse subplan could not be planned adaptively; " +
+              log"falling back to non-AQE.")
             plan
         }
       } else {

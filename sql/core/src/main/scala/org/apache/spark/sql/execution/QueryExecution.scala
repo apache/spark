@@ -859,8 +859,8 @@ object QueryExecution {
       (if (subquery) {
         Nil
       } else {
-        // VerifyCTEReuse runs only on the main query (not per-subquery) after ReuseExchangeAndSubquery,
-        // to verify that guaranteed CTE shuffle reuse held (AQE off).
+        // VerifyCTEReuse runs only on the main query (not per-subquery) after
+        // ReuseExchangeAndSubquery, to verify guaranteed CTE shuffle reuse held (AQE off).
         Seq(ReuseExchangeAndSubquery, VerifyCTEReuse(failOnReuseFailure = false))
       }) ++
       // Opt-in (SPARK-57399): runs last so it observes the final reuse decision (a reused

@@ -2269,7 +2269,8 @@ abstract class RepartitionOperation extends UnaryNode {
 
 /**
  * Generator for unique Repartition IDs within a query, used to correlate the references of a
- * plan-reuse repartition so they can be materialized once and shared (see [[PlanReusableRepartition]]).
+ * plan-reuse repartition so they can be materialized once and shared (see
+ * [[PlanReusableRepartition]]).
  */
 object RepartitionIdGenerator {
   private val curId = new java.util.concurrent.atomic.AtomicLong(1)
@@ -2404,6 +2405,11 @@ case class RepartitionByExpression(
   override def repartitionId: Long = id
 
   override def withRepartitionId(newId: Long): RepartitionByExpression = this.copy(id = newId)
+
+  // The plan-reuse `id` is an internal correlation field (consumed by
+  // ReplaceRepartitionWithCTEReuse); never render it, so plan output stays deterministic and
+  // stable across runs and unaffected by the new field (EXPLAIN, plan comparisons, golden files).
+  override def stringArgs: Iterator[Any] = super.stringArgs.toArray.dropRight(1).iterator
 
   override protected def withNewChildInternal(newChild: LogicalPlan): RepartitionByExpression =
     copy(child = newChild)
