@@ -265,7 +265,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
    * `CASE WHEN c THEN nullif(1, 1) END` folding as it did before this rule learned to leave one
    * behind.
    */
-  private def inlineDefsThatGainNothing(w: With): Expression = {
+  private[optimizer] def inlineDefsThatGainNothing(w: With): Expression = {
     val multiplyReferenced = multiplyReferencedIds(w.child, w.defs)
     val (toInline, toKeep) = w.defs.partition { d =>
       canSubstitute(d.child, d.id, multiplyReferenced)
@@ -303,6 +303,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         val defs = w.defs.map(rewriteWithExprAndInputPlans(
           _, inputPlans, commonExprsPerChild, isNestedWith = true))
         val refToExpr = mutable.HashMap.empty[CommonExpressionId, Expression]
+        // The definitions no child plan can hold, which stay in a `With` and memoize per entry.
+        val keptDefs = mutable.ArrayBuffer.empty[CommonExpressionDef]
         val multiplyReferenced = multiplyReferencedIds(child, defs)
 
         defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id), index) =>
@@ -318,15 +320,12 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               c => child.references.subsetOf(c.outputSet)
             )
             if (childPlanIndex == -1) {
-              // When we cannot rewrite the common expressions, force to inline them so that the
-              // query can still run. This can happen if the join condition contains `With` and
-              // the common expression references columns from both join sides.
-              // TODO: things can go wrong if the common expression is nondeterministic. We
-              //       don't fix it for now to match the old buggy behavior when certain
-              //       `RuntimeReplaceable` did not use the `With` expression.
-              // TODO: we should calculate the ref count and also inline the common expression
-              //       if it's ref count is 1.
-              refToExpr(id) = child
+              // No child plan holds every column the definition reads, which is what a join
+              // condition referencing both sides gives. There is nowhere to pre-evaluate it, so it
+              // stays where it is and memoizes per entry, as a `With` in a conditional branch does.
+              // Inlining it here, which is what this did before `With` could be evaluated, handed
+              // each reference its own evaluation.
+              keptDefs += CommonExpressionDef(child, id)
             } else {
               val commonExprs = commonExprsPerChild(childPlanIndex)
               val existingCommonExpr = commonExprs.find(_._2 == id.id)
@@ -345,6 +344,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
                 val fakeProj = Project(Seq(alias), inputPlans(childPlanIndex))
                 if (PlanHelper.specialExpressionsInUnsupportedOperator(fakeProj).nonEmpty) {
                   // We have to inline the common expression if it cannot be put in a Project.
+                  // Keeping the `With` is not an option here the way it is above: such a definition
+                  // holds an aggregate, window or generator expression, which the planner expects
+                  // to find in the operator's own expressions rather than inside a `With`.
                   refToExpr(id) = child
                 } else {
                   commonExprs.append((alias, id.id))
@@ -355,7 +357,20 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           }
         }
 
-        child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+        // Keeping this `With` would keep a nested one out of reach: this rule defers a nested
+        // `With` to the next pass, and the next pass meets this one again and defers it again. So a
+        // nested definition that only reads one side would never be hoisted, while inlining here
+        // lets the next pass hoist it -- which is what happened before this rule kept anything.
+        val nested = (child +: defs).exists(_.exists {
+          case _: With => true
+          case _ => false
+        })
+        if (nested) {
+          keptDefs.foreach(d => refToExpr(d.id) = d.child)
+          keptDefs.clear()
+        }
+
+        val newChild = child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
           // `child` may contain nested With and we only replace `CommonExpressionRef` that
           // references common expressions in the current `With`.
           case ref: CommonExpressionRef if refToExpr.contains(ref.id) =>
@@ -365,6 +380,8 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
             }
             refToExpr(ref.id)
         }
+        // `copy` rather than `withNewChildren`, which requires the child count to be unchanged.
+        if (keptDefs.isEmpty) newChild else w.copy(child = newChild, defs = keptDefs.toSeq)
 
       case c: ConditionalExpression =>
         val newAlwaysEvaluatedInputs = c.alwaysEvaluatedInputs.map(
@@ -383,6 +400,31 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         rewriteWithExprAndInputPlans(
           _, inputPlans, commonExprsPerChild, isNestedWith)
       )
+    }
+  }
+}
+
+/**
+ * Removes a `With` that [[RewriteWithExpression]] kept once there is nothing left to memoize: a
+ * definition read at most once, or one that became cheap. That rule runs in its own batch before
+ * the simplification rules, and a `With` it keeps stays in the plan, so a later `NullPropagation`
+ * or `SimplifyConditionals` can drop references it counted without anything asking the question
+ * again. `ON nullif(l.id = r.id, NULL)` is where it shows: the definition starts out read twice,
+ * simplification leaves one read of it, and the equality stays wrapped where
+ * `ExtractEquiJoinKeys` cannot see it -- so a hash join becomes a nested loop join.
+ *
+ * Listed with the simplification rules, in the same fixed-point batch and after them, so whatever
+ * the `With` was hiding is available to the rest of that batch and not only to the planner.
+ */
+object InlineWithDefinitionsThatGainNothing extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      // One walk of each operator's expressions, bottom-up so an inner `With` is asked before the
+      // outer one that may inline it. `transformAllExpressionsWithPruning` would say this in one
+      // call, but `QueryPlan` offers only the top-down variant.
+      case p => p.transformExpressionsUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+        case w: With => RewriteWithExpression.inlineDefsThatGainNothing(w)
+      }
     }
   }
 }

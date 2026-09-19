@@ -160,6 +160,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyExtractValueOps,
         OptimizeCsvJsonExprs,
         CombineConcats,
+        InlineWithDefinitionsThatGainNothing,
         PushdownPredicatesAndPruneColumnsForCTEDef) ++
         extendedOperatorOptimizationRules
 
@@ -1940,7 +1941,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     _.containsAnyPattern(FILTER, JOIN)) {
     case filter @ Filter(condition, child) =>
       val newFilters = filter.constraints --
-        (child.constraints ++ splitConjunctivePredicates(condition))
+        (child.constraints ++ asConstraints(splitConjunctivePredicates(condition)))
       if (newFilters.nonEmpty) {
         Filter(And(newFilters.reduce(And), condition), child)
       } else {
@@ -1978,7 +1979,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       right: LogicalPlan,
       conditionOpt: Option[Expression]): ExpressionSet = {
     val baseConstraints = left.constraints.union(right.constraints)
-      .union(ExpressionSet(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil)))
+      .union(asConstraints(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil)))
     baseConstraints
       .union(inferAdditionalConstraints(baseConstraints))
       .union(inferConstraintsFromLiteralBindings(baseConstraints))

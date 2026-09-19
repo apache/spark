@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreePattern.WITH_EXPRESSION
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.isBinaryStable
 
 
@@ -32,10 +33,11 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    */
   lazy val constraints: ExpressionSet = {
     if (conf.constraintPropagationEnabled) {
-      validConstraints
-        .union(inferAdditionalConstraints(validConstraints))
-        .union(inferConstraintsFromLiteralBindings(validConstraints))
-        .union(constructIsNotNullConstraints(validConstraints, output))
+      val base = asConstraints(validConstraints.toSeq)
+      base
+        .union(inferAdditionalConstraints(base))
+        .union(inferConstraintsFromLiteralBindings(base))
+        .union(constructIsNotNullConstraints(base, output))
         .filter { c =>
           c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
         }
@@ -180,6 +182,65 @@ trait ConstraintHelper {
       // Thus, we can infer `IsNotNull(constraint)`, and also push IsNotNull through the child
       // null intolerant expressions.
       case _ => scanNullIntolerantAttribute(constraint).map(IsNotNull(_))
+    }
+
+  /**
+   * The form `predicates` take as constraints. `RewriteWithExpression` leaves a `With` where it
+   * cannot pre-evaluate the definition, in a join condition or a conditional branch, and everything
+   * downstream reads constraints as plain, individually true predicates: `IsNotNull` inference
+   * walks them, one is substituted into another, and `InferFiltersFromConstraints` plants them as
+   * filters to be pushed down and translated for a data source. A `With` is opaque to the first and
+   * the last, and a conjunction hidden inside one is never matched against the conjuncts an
+   * operator already carries. So a `With` is read as the expression it stands for, where no single
+   * constraint is left holding two copies of a definition.
+   */
+  protected def asConstraints(predicates: Seq[Expression]): ExpressionSet =
+    ExpressionSet(predicates.flatMap(splitConjunctsReadingWiths))
+
+  /**
+   * `predicate`'s top-level conjuncts, seeing through a `With` that is one of them. Splitting the
+   * conjunction it hides is what keeps a definition from being duplicated within a conjunct:
+   * `BETWEEN` builds `ref >= lower AND ref <= upper`, so the split leaves each conjunct holding a
+   * single reference. Two conjuncts then each hold one copy, which is what the condition itself
+   * held before `RewriteWithExpression` learned to keep the `With`.
+   */
+  private def splitConjunctsReadingWiths(predicate: Expression): Seq[Expression] = predicate match {
+    case And(left, right) =>
+      splitConjunctsReadingWiths(left) ++ splitConjunctsReadingWiths(right)
+    case w: With if splitConjuncts(w.child).forall(readsEachDefinitionOnce(w, _)) =>
+      splitConjunctsReadingWiths(With.inlineDefinitions(w))
+    case other => Seq(readFreeWiths(other))
+  }
+
+  /** `condition`'s top-level conjuncts. This is `PredicateHelper.splitConjunctivePredicates`, kept
+   * local rather than mixed in: `ConstraintHelper` is inherited by every `LogicalPlan`, so taking
+   * the whole of `PredicateHelper` for one method would add a dozen members to all of them.
+   */
+  private def splitConjuncts(condition: Expression): Seq[Expression] = condition match {
+    case And(left, right) => splitConjuncts(left) ++ splitConjuncts(right)
+    case other => other :: Nil
+  }
+
+  /**
+   * Whether `e` reads each of `w`'s definitions at most once, so that reading `w` as the expression
+   * it stands for puts no second copy of a definition in one constraint. A constraint can be
+   * planted as a filter, where a second copy is work the memoized form did not do; where the copies
+   * would be real the `With` stays, one constraint, opaque as it was to this code before.
+   */
+  private def readsEachDefinitionOnce(w: With, e: Expression): Boolean = {
+    val ids = w.defs.map(_.id).toSet
+    val reads = e.collect { case ref: CommonExpressionRef if ids.contains(ref.id) => ref.id }
+    reads.distinct.length == reads.length
+  }
+
+  /**
+   * `e` with every `With` below the top of a constraint read as the expression it stands for, where
+   * that duplicates nothing. `RewriteWithExpression` inlines a `With` this cheap itself, but a plan
+   * is asked for its constraints while the rules that would do so are still running.
+   */
+  private def readFreeWiths(e: Expression): Expression =
+    e.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      case w: With if readsEachDefinitionOnce(w, w.child) => With.inlineDefinitions(w)
     }
 
   @tailrec
