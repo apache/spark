@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.TableSpec
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, TableCatalog, TableInfo}
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 case class CreateTableExec(
@@ -34,7 +34,9 @@ case class CreateTableExec(
     columns: Array[Column],
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
-    ignoreIfExists: Boolean) extends LeafV2CommandExec {
+    ignoreIfExists: Boolean,
+    writeDistributionMode: String,
+    writeOrdering: Seq[V2SortOrder]) extends LeafV2CommandExec {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   val tableProperties = CatalogV2Util.convertTableProperties(tableSpec)
@@ -47,6 +49,8 @@ case class CreateTableExec(
           .withPartitions(partitioning.toArray)
           .withProperties(tableProperties.asJava)
           .withConstraints(tableSpec.constraints.toArray)
+          .withWriteDistributionMode(writeDistributionMode)
+          .withWriteOrdering(writeOrdering.toArray)
           .build()
         catalog.createTable(identifier, tableInfo)
       } catch {
