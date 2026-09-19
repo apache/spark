@@ -16,6 +16,8 @@
 #
 import os
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from pyspark.sql.functions import lit, udtf
 from pyspark.sql.tests.test_udtf import (
@@ -24,6 +26,7 @@ from pyspark.sql.tests.test_udtf import (
     UDTFArrowTestsMixin,
 )
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
+from pyspark.util import PythonEvalType
 
 if should_test_connect:
     from pyspark.errors.exceptions.connect import (
@@ -48,6 +51,46 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
 
     def test_struct_output_type_casting_row(self):
         self.check_struct_output_type_casting_row(PickleException)
+
+    def test_return_type_validation_rpc_is_arrow_only_and_cached(self):
+        from pyspark.sql.connect.udtf import UserDefinedTableFunction
+
+        class TestUDTF:
+            def eval(self):
+                yield (1,)
+
+        regular = UserDefinedTableFunction(
+            TestUDTF, "value INT", evalType=PythonEvalType.SQL_TABLE_UDF
+        )
+        arrow = UserDefinedTableFunction(
+            TestUDTF, "value INT", evalType=PythonEvalType.SQL_ARROW_TABLE_UDF
+        )
+
+        with patch.object(self.spark, "_parse_ddl", wraps=self.spark._parse_ddl) as parse_ddl:
+            regular()
+            regular()
+            self.assertEqual(parse_ddl.call_count, 0)
+            arrow()
+            arrow()
+            self.assertEqual(parse_ddl.call_count, 1)
+
+            other_session = SimpleNamespace(
+                _session_id="other-session",
+                _parse_ddl=self.spark._parse_ddl,
+            )
+            arrow._check_return_type(other_session)
+            self.assertEqual(arrow._validated_return_type_session_id, "other-session")
+            arrow._check_return_type(self.spark)
+            self.assertEqual(parse_ddl.call_count, 3)
+
+    def test_row_udtf_char_varchar_ddl_is_unsupported(self):
+        @udtf(returnType="value CHAR(3)", useArrow=False)
+        class CharUDTF:
+            def eval(self):
+                yield ("a",)
+
+        with self.assertRaisesRegex(Exception, "Python UDTFs do not support CHAR/VARCHAR"):
+            CharUDTF().collect()
 
     def test_udtf_with_invalid_return_type(self):
         @udtf(returnType="int")

@@ -32,6 +32,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     ByteType,
+    CharType,
     DecimalType,
     DoubleType,
     FloatType,
@@ -43,6 +44,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    VarcharType,
     YearMonthIntervalType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -58,6 +60,70 @@ from pyspark.util import PythonEvalType, is_remote_only
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ScalarArrowUDFTestsMixin:
+    def test_char_varchar_scalar_results(self):
+        import pyarrow as pa
+
+        @arrow_udf(CharType(3), ArrowUDFType.SCALAR)
+        def scalar_char(values):
+            return pa.array(["a"] * len(values))
+
+        @arrow_udf(CharType(3), ArrowUDFType.SCALAR_ITER)
+        def iterator_char(batches):
+            for values in batches:
+                yield pa.array(["a"] * len(values))
+
+        @arrow_udf(VarcharType(3), ArrowUDFType.SCALAR)
+        def scalar_varchar(values):
+            return pa.array(["abcd"] * len(values))
+
+        @arrow_udf(VarcharType(3), ArrowUDFType.SCALAR_ITER)
+        def iterator_varchar(batches):
+            for values in batches:
+                yield pa.array(["abcd"] * len(values))
+
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "false",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            for function in (scalar_char, iterator_char):
+                result = self.spark.range(1).select(function("id").alias("c"))
+                self.assertEqual(result.schema["c"].dataType, StringType())
+                self.assertEqual(result.first().c, "a  ")
+            for function in (scalar_varchar, iterator_varchar):
+                with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                    self.spark.range(1).select(function("id")).collect()
+
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            for function in (scalar_char, iterator_char):
+                result = self.spark.range(2).select(function("id").alias("c"))
+                self.assertEqual(result.schema["c"].dataType, CharType(3))
+                rows = result.collect()
+                self.assertEqual([row[0] for row in rows], ["a  ", "a  "])
+            for function in (scalar_varchar, iterator_varchar):
+                result = self.spark.range(1).select(function("id").alias("v"))
+                self.assertEqual(result.schema["v"].dataType, VarcharType(3))
+                with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                    result.collect()
+
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            for function in (scalar_char, iterator_char):
+                result = self.spark.range(1).select(function("id").alias("c"))
+                self.assertEqual(result.schema["c"].dataType, StringType())
+                self.assertEqual(result.first().c, "a")
+            for function in (scalar_varchar, iterator_varchar):
+                result = self.spark.range(1).select(function("id").alias("v"))
+                self.assertEqual(result.schema["v"].dataType, StringType())
+                self.assertEqual(result.first().v, "abcd")
+
     @property
     def nondeterministic_arrow_udf(self):
         import numpy as np

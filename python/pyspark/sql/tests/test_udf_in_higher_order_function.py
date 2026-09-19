@@ -20,7 +20,7 @@ import unittest
 from pyspark.errors import AnalysisException
 from pyspark.sql import functions as sf
 from pyspark.sql.functions import udf
-from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StringType
+from pyspark.sql.types import ArrayType, CharType, DoubleType, IntegerType, StringType, VarcharType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     assertDataFrameEqual,
@@ -51,6 +51,48 @@ class UDFInHigherOrderFunctionTestsMixin:
             df.select(sf.transform("values", lambda x: plus_one(x)).alias("r")),
             df.select(sf.transform("values", lambda x: x + 1).alias("r")),
         )
+
+    def test_transform_char_varchar_results(self):
+        df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
+        char_udf = udf(lambda _: "a", CharType(3))
+        varchar_udf = udf(lambda _: "abcd", VarcharType(3))
+
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            result = df.select(sf.transform("values", lambda x: char_udf(x)).alias("r"))
+            self.assertEqual(result.schema["r"].dataType, ArrayType(CharType(3)))
+            assertDataFrameEqual(
+                result,
+                [(["a  ", "a  "],)],
+            )
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                df.select(sf.transform("values", lambda x: varchar_udf(x))).collect()
+
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "false",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            result = df.select(sf.transform("values", lambda x: char_udf(x)).alias("r"))
+            self.assertEqual(result.schema["r"].dataType, ArrayType(StringType()))
+            assertDataFrameEqual(result, [(["a  ", "a  "],)])
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                df.select(sf.transform("values", lambda x: varchar_udf(x))).collect()
+
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            char_result = df.select(sf.transform("values", lambda x: char_udf(x)).alias("r"))
+            self.assertEqual(char_result.schema["r"].dataType, ArrayType(StringType()))
+            assertDataFrameEqual(char_result, [(["a", "a"],)])
+            varchar_result = df.select(sf.transform("values", lambda x: varchar_udf(x)).alias("r"))
+            self.assertEqual(varchar_result.schema["r"].dataType, ArrayType(StringType()))
+            assertDataFrameEqual(varchar_result, [(["abcd", "abcd"],)])
 
     def test_transform_null_array_and_null_elements(self):
         # A null array must stay null, and a null *element* must reach the UDF as None.

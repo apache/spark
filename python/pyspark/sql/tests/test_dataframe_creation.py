@@ -22,11 +22,14 @@ from decimal import Decimal
 
 import pyspark.sql.functions as F
 from pyspark.errors import (
+    PySparkNotImplementedError,
     PySparkTypeError,
     PySparkValueError,
 )
 from pyspark.sql import Row
 from pyspark.sql.types import (
+    ArrayType,
+    CharType,
     DateType,
     DecimalType,
     IntegerType,
@@ -36,6 +39,8 @@ from pyspark.sql.types import (
     TimestampNTZType,
     TimestampType,
     TimeType,
+    UserDefinedType,
+    VarcharType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -330,7 +335,116 @@ class DataFrameCreationTests(
     DataFrameCreationTestsMixin,
     ReusedSQLTestCase,
 ):
-    pass
+    def test_char_varchar_explicit_schema(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("nested", ArrayType(VarcharType(3))),
+            ]
+        )
+
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "false",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            default_df = self.spark.createDataFrame([("ab", ["xyz"])], schema)
+            self.assertEqual(
+                default_df.schema,
+                StructType(
+                    [
+                        StructField("c", StringType()),
+                        StructField("nested", ArrayType(StringType())),
+                    ]
+                ),
+            )
+            self.assertEqual(default_df.first(), Row(c="ab  ", nested=["xyz"]))
+
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            df = self.spark.createDataFrame([("ab", ["xyz"])], schema)
+            self.assertEqual(df.schema, schema)
+            self.assertEqual(df.first(), Row(c="ab  ", nested=["xyz"]))
+
+            with self.assertRaisesRegex(Exception, "EXCEED_LIMIT_LENGTH"):
+                self.spark.createDataFrame([("ab", ["abcd"])], schema).collect()
+
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            df = self.spark.createDataFrame([("ab", ["abcd"])], schema)
+            self.assertEqual(
+                df.schema,
+                StructType(
+                    [
+                        StructField("c", StringType()),
+                        StructField("nested", ArrayType(StringType())),
+                    ]
+                ),
+            )
+            self.assertEqual(df.first(), Row(c="ab", nested=["abcd"]))
+
+    def test_char_varchar_inside_udt_schema_is_unsupported(self):
+        class CharStorageUDT(UserDefinedType):
+            @classmethod
+            def sqlType(cls):
+                return CharType(3)
+
+            @classmethod
+            def module(cls):
+                return __name__
+
+            @classmethod
+            def scalaUDT(cls):
+                return ""
+
+            def serialize(self, obj):
+                return obj
+
+            def deserialize(self, datum):
+                return datum
+
+        class CharValue:
+            __UDT__ = CharStorageUDT()
+
+            def __init__(self, value):
+                self.value = value
+
+        schema = StructType([StructField("value", CharStorageUDT())])
+        for data, declared_schema in [
+            ([("a",)], schema),
+            ([(CharValue("a"),)], None),
+        ]:
+            with self.subTest(schema=declared_schema):
+                with self.assertRaisesRegex(
+                    PySparkNotImplementedError,
+                    "CHAR/VARCHAR inside createDataFrame UDT schema",
+                ):
+                    self.spark.createDataFrame(data, declared_schema)
+
+    def test_char_varchar_explicit_schema_captures_legacy_policy(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("nested", ArrayType(VarcharType(3))),
+            ]
+        )
+        with self.sql_conf(
+            {
+                "spark.sql.legacy.charVarcharAsString": "true",
+                "spark.sql.preserveCharVarcharTypeInfo": "false",
+                "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            }
+        ):
+            df = self.spark.createDataFrame([("ab", ["abcd"])], schema)
+
+        with self.sql_conf({"spark.sql.charVarchar.standardSemantics.enabled": "true"}):
+            self.assertEqual(df.first(), Row(c="ab", nested=["abcd"]))
 
 
 if __name__ == "__main__":

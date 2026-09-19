@@ -18,11 +18,68 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.util.STUtils
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.util.{MapData, STUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.BinaryView
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String}
 
-class EvaluatePythonSuite extends SparkFunSuite {
+class EvaluatePythonSuite extends SparkFunSuite with SQLConfHelper {
+
+  test("SPARK-59275: makeFromJava explicitly enforces CHAR/VARCHAR results") {
+    val charResult = EvaluatePython.makeFromJava(CharType(4), applyCharVarcharChecks = true)("ab")
+    assert(charResult === UTF8String.fromString("ab  "))
+
+    val varcharResult =
+      EvaluatePython.makeFromJava(VarcharType(4), applyCharVarcharChecks = true)("abcd ")
+    assert(varcharResult === UTF8String.fromString("abcd"))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        EvaluatePython.makeFromJava(VarcharType(4), applyCharVarcharChecks = true)("abcde")
+      },
+      condition = "EXCEED_LIMIT_LENGTH",
+      parameters = Map("limit" -> "4"))
+
+    val uncheckedResult = EvaluatePython.makeFromJava(CharType(4))("ab")
+    assert(uncheckedResult === UTF8String.fromString("ab"))
+  }
+
+  test("SPARK-59275: makeFromJava deduplicates normalized CHAR map keys") {
+    val input = new java.util.LinkedHashMap[String, Integer]()
+    input.put("a", 1)
+    input.put("a ", 2)
+    val convert = EvaluatePython.makeFromJava(
+      MapType(CharType(2), IntegerType),
+      applyCharVarcharChecks = true)
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        convert(input)
+      },
+      condition = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "a ",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
+
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "LAST_WIN") {
+      val result = convert(input).asInstanceOf[MapData]
+      assert(result.numElements() === 1)
+      assert(result.keyArray().getUTF8String(0) === UTF8String.fromString("a "))
+      assert(result.valueArray().getInt(0) === 2)
+    }
+  }
+
+  test("SPARK-59275: makeFromJava preserves binary map keys without CHAR/VARCHAR checks") {
+    val input = new java.util.LinkedHashMap[Array[Byte], Integer]()
+    input.put(Array[Byte](1), 1)
+    input.put(Array[Byte](1), 2)
+
+    val result = EvaluatePython.makeFromJava(
+      MapType(BinaryType, IntegerType),
+      applyCharVarcharChecks = true)(input).asInstanceOf[MapData]
+    assert(result.numElements() === 2)
+  }
 
   // POINT(1 2) in WKB, little-endian.
   private val pointWkb: Array[Byte] = "010100000000000000000031400000000000001C40"

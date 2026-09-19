@@ -3042,7 +3042,7 @@ def _has_nulltype(dt: DataType) -> bool:
 
 
 def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
-    """Return whether there are specified types"""
+    """Return whether `dt` logically contains any of `dts`. Does not descend UDTs."""
     if isinstance(dt, dts):
         return True
     elif isinstance(dt, StructType):
@@ -3051,8 +3051,22 @@ def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
         return _has_type(dt.elementType, dts)
     elif isinstance(dt, MapType):
         return _has_type(dt.keyType, dts) or _has_type(dt.valueType, dts)
+    else:
+        return False
+
+
+def _has_physical_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
+    """Return whether `dt` contains any of `dts`, including UDT storage types."""
+    if isinstance(dt, dts):
+        return True
     elif isinstance(dt, UserDefinedType):
-        return _has_type(dt.sqlType(), dts)
+        return _has_physical_type(dt.sqlType(), dts)
+    elif isinstance(dt, StructType):
+        return any(_has_physical_type(f.dataType, dts) for f in dt.fields)
+    elif isinstance(dt, ArrayType):
+        return _has_physical_type(dt.elementType, dts)
+    elif isinstance(dt, MapType):
+        return _has_physical_type(dt.keyType, dts) or _has_physical_type(dt.valueType, dts)
     else:
         return False
 
@@ -3088,6 +3102,20 @@ def _first_timestamp_nanos_map_key_type(dt: DataType) -> Optional["DataType"]:
         return _first_timestamp_nanos_map_key_type(dt.sqlType())
     else:
         return None
+
+
+def _has_char_varchar_in_udt(dt: DataType) -> bool:
+    """Return whether `dt` contains a UDT whose storage type contains CHAR/VARCHAR."""
+    if isinstance(dt, UserDefinedType):
+        return _has_physical_type(dt.sqlType(), (CharType, VarcharType))
+    elif isinstance(dt, StructType):
+        return any(_has_char_varchar_in_udt(f.dataType) for f in dt.fields)
+    elif isinstance(dt, ArrayType):
+        return _has_char_varchar_in_udt(dt.elementType)
+    elif isinstance(dt, MapType):
+        return _has_char_varchar_in_udt(dt.keyType) or _has_char_varchar_in_udt(dt.valueType)
+    else:
+        return False
 
 
 @overload
