@@ -16,10 +16,12 @@
 #
 
 from pyspark import SparkContext
+
 # $example on$
 from pyspark.mllib.feature import StandardScaler
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.util import MLUtils
+
 # $example off$
 
 if __name__ == "__main__":

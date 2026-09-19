@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one or more
+  ~ contributor license agreements.  See the NOTICE file distributed with
+  ~ this work for additional information regarding copyright ownership.
+  ~ The ASF licenses this file to You under the Apache License, Version 2.0
+  ~ (the "License"); you may not use this file except in compliance with
+  ~ the License.  You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.spark</groupId>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>5.0.0-SNAPSHOT</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>spark-credential-aws-integration-tests_2.13</artifactId>
+  <properties>
+    <sbt.project.name>credential-aws-integration-tests</sbt.project.name>
+
+    <!-- Integration Test Configuration Properties -->
+    <!-- Kubernetes cluster settings (reuse kubernetes-integration-tests conventions) -->
+    <spark.kubernetes.test.deployMode>minikube</spark.kubernetes.test.deployMode>
+    <spark.kubernetes.test.imageRepo>docker.io/kubespark</spark.kubernetes.test.imageRepo>
+    <spark.kubernetes.test.imageTag>N/A</spark.kubernetes.test.imageTag>
+    <spark.kubernetes.test.namespace></spark.kubernetes.test.namespace>
+    <spark.kubernetes.test.serviceAccountName></spark.kubernetes.test.serviceAccountName>
+
+    <!-- OIDC E2E specific settings -->
+    <!-- moto server endpoint (http://host-gateway:5000 when running inside Minikube) -->
+    <spark.oidc.test.stsEndpoint>http://localhost:5000</spark.oidc.test.stsEndpoint>
+    <!-- S3 endpoint exposed by moto -->
+    <spark.oidc.test.s3Endpoint>http://localhost:5000</spark.oidc.test.s3Endpoint>
+    <!-- S3 endpoint used by the test process on the host (loopback), which may differ
+         from the pod-facing endpoint above when running on Minikube -->
+    <spark.oidc.test.s3ClientEndpoint>http://127.0.0.1:5000</spark.oidc.test.s3ClientEndpoint>
+    <!-- IAM role ARN to assume (moto accepts any well-formed ARN) -->
+    <spark.oidc.test.roleArn>arn:aws:iam::123456789012:role/oidc-e2e-test-role</spark.oidc.test.roleArn>
+    <!-- Path to the Projected SA token file inside the driver pod -->
+    <spark.oidc.test.tokenFile>/var/run/secrets/kubernetes.io/serviceaccount/token</spark.oidc.test.tokenFile>
+    <!-- S3 bucket name to create/use in moto -->
+    <spark.oidc.test.s3Bucket>oidc-e2e-test-bucket</spark.oidc.test.s3Bucket>
+    <!-- Spark image (must include credential-aws jar); defaults to the standard test image -->
+    <spark.oidc.test.sparkImage></spark.oidc.test.sparkImage>
+
+    <test.exclude.tags></test.exclude.tags>
+    <test.include.tags></test.include.tags>
+  </properties>
+  <packaging>jar</packaging>
+  <name>Spark OIDC AWS Credential Propagation Integration Tests</name>
+  <description>
+    End-to-end integration tests for OIDC credential propagation with the AWS reference
+    provider (AwsStsCredentialProvider / SparkOidcAwsCredentialsProvider) running on
+    Minikube with moto as the S3 + STS backend.
+  </description>
+  <url>https://spark.apache.org/</url>
+
+  <dependencies>
+    <!-- Spark core (provided; supplied by the cluster) -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- Spark core test-jar: SparkFunSuite and test utilities -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- Spark Kubernetes support: provides the fabric8 kubernetes-client HTTP client
+         implementation (resolved at runtime via ServiceLoader). Required even though
+         no classes are imported directly: without it the client aborts at runtime with
+         NoClassDefFoundError for the HTTP client factory. -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-kubernetes_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- credential-aws module under test -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-credential-aws_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- AWS SDK v2 (for pre-creating S3 buckets / verifying results via moto) -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>bundle</artifactId>
+      <version>${aws.java.sdk.v2.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- Kubernetes client (fabric8) for pod/namespace management -->
+    <dependency>
+      <groupId>io.fabric8</groupId>
+      <artifactId>kubernetes-client</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>io.vertx</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!-- spark-tags (required even if unused, to avoid test-exclusion errors) -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- ScalaTest -->
+    <dependency>
+      <groupId>org.scalatest</groupId>
+      <artifactId>scalatest_${scala.binary.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
+    <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+
+    <plugins>
+      <!-- Skip unit-test phase; tests run in integration-test phase only -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <skipTests>true</skipTests>
+        </configuration>
+      </plugin>
+
+      <!-- Run ScalaTest in the integration-test phase -->
+      <plugin>
+        <groupId>org.scalatest</groupId>
+        <artifactId>scalatest-maven-plugin</artifactId>
+        <version>${scalatest-maven-plugin.version}</version>
+        <configuration>
+          <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
+          <junitxml>.</junitxml>
+          <filereports>SparkTestSuite.txt</filereports>
+          <argLine>-ea -Xmx2g</argLine>
+          <stderr/>
+          <systemProperties>
+            <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
+            <java.awt.headless>true</java.awt.headless>
+            <!-- Spark home used by the test to locate bin/spark-submit. Inherited from
+                 the parent pom (${session.executionRootDirectory}); mirrors the
+                 -Dspark.test.home that SparkBuild sets for the sbt test run, so the
+                 test resolves spark-submit identically under both Maven and sbt. -->
+            <spark.test.home>${spark.test.home}</spark.test.home>
+            <!-- Kubernetes cluster -->
+            <spark.kubernetes.test.deployMode>${spark.kubernetes.test.deployMode}</spark.kubernetes.test.deployMode>
+            <spark.kubernetes.test.namespace>${spark.kubernetes.test.namespace}</spark.kubernetes.test.namespace>
+            <spark.kubernetes.test.serviceAccountName>${spark.kubernetes.test.serviceAccountName}</spark.kubernetes.test.serviceAccountName>
+            <spark.kubernetes.test.imageRepo>${spark.kubernetes.test.imageRepo}</spark.kubernetes.test.imageRepo>
+            <spark.kubernetes.test.imageTag>${spark.kubernetes.test.imageTag}</spark.kubernetes.test.imageTag>
+            <!-- OIDC E2E -->
+            <spark.oidc.test.stsEndpoint>${spark.oidc.test.stsEndpoint}</spark.oidc.test.stsEndpoint>
+            <spark.oidc.test.s3Endpoint>${spark.oidc.test.s3Endpoint}</spark.oidc.test.s3Endpoint>
+            <spark.oidc.test.s3ClientEndpoint>${spark.oidc.test.s3ClientEndpoint}</spark.oidc.test.s3ClientEndpoint>
+            <spark.oidc.test.roleArn>${spark.oidc.test.roleArn}</spark.oidc.test.roleArn>
+            <spark.oidc.test.tokenFile>${spark.oidc.test.tokenFile}</spark.oidc.test.tokenFile>
+            <spark.oidc.test.s3Bucket>${spark.oidc.test.s3Bucket}</spark.oidc.test.s3Bucket>
+            <spark.oidc.test.sparkImage>${spark.oidc.test.sparkImage}</spark.oidc.test.sparkImage>
+          </systemProperties>
+          <tagsToExclude>${test.exclude.tags}</tagsToExclude>
+          <tagsToInclude>${test.include.tags}</tagsToInclude>
+        </configuration>
+        <executions>
+          <execution>
+            <id>test</id>
+            <phase>none</phase>
+            <goals>
+              <goal>test</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>integration-test</id>
+            <phase>integration-test</phase>
+            <goals>
+              <goal>test</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

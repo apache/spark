@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-import json
 import importlib.resources
+import json
 
 # Note: Though we call them "error classes" here, the proper name is "error conditions",
 #   hence why the name of the JSON file is different.

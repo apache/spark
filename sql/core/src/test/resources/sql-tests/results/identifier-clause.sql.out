@@ -64,6 +64,14 @@ struct<c1:int>
 
 
 -- !query
+SELECT IDENTIFIER(concat('a', 'b')) FROM VALUES(1) AS T(ab)
+-- !query schema
+struct<ab:int>
+-- !query output
+1
+
+
+-- !query
 CREATE SCHEMA IF NOT EXISTS s
 -- !query schema
 struct<>
@@ -177,6 +185,14 @@ struct<c1:int>
 
 
 -- !query
+SELECT * FROM IDENTIFIER(concat('t', 'ab'))
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
 USE SCHEMA default
 -- !query schema
 struct<>
@@ -209,6 +225,14 @@ struct<coalesce(NULL, 1):int>
 
 
 -- !query
+SELECT IDENTIFIER(concat('COAL', 'ESCE'))(NULL, 1)
+-- !query schema
+struct<coalesce(NULL, 1):int>
+-- !query output
+1
+
+
+-- !query
 SELECT IDENTIFIER('abs')(c1) FROM VALUES(-1) AS T(c1)
 -- !query schema
 struct<abs(c1):int>
@@ -222,6 +246,547 @@ SELECT * FROM IDENTIFIER('ra' || 'nge')(0, 1)
 struct<id:bigint>
 -- !query output
 0
+
+
+-- !query
+VALUES(IDENTIFIER(abs(1)))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "dataType" : "int",
+    "expr" : "abs(1)",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 24,
+    "fragment" : "abs(1)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(nullif('a', 'a'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "nullif('a', 'a')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 41,
+    "fragment" : "nullif('a', 'a')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(max('c1')) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "max('c1')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "max('c1')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(array_join(transform(array('c', '1'), element -> element), ''))
+FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "array_join(transform(array('c', '1'), lambdafunction(namedlambdavariable(), namedlambdavariable())), '')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 80,
+    "fragment" : "array_join(transform(array('c', '1'), element -> element), '')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(rand()) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "rand()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 24,
+    "fragment" : "rand()"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(row_number() OVER ()) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WINDOW_FUNCTION_FRAME_NOT_ORDERED",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "wf_expr" : "row_number()",
+    "wf_name" : "row_number"
+  }
+}
+
+
+-- !query
+SELECT IDENTIFIER(row_number() OVER (ORDER BY 'x')) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "row_number() OVER (ORDER BY 'x' ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 50,
+    "fragment" : "row_number() OVER (ORDER BY 'x')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER(explode(array('c1'))) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "explode(array('c1'))",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 38,
+    "fragment" : "explode(array('c1'))"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(max('identifier_function_table'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "max('identifier_function_table')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 57,
+    "fragment" : "max('identifier_function_table')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(row_number() OVER (ORDER BY 'x'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "row_number() OVER (ORDER BY 'x' ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 57,
+    "fragment" : "row_number() OVER (ORDER BY 'x')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(
+  array_join(transform(array('identifier', '_function_table'), element -> element), '')
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "array_join(transform(array('identifier', '_function_table'), lambdafunction(namedlambdavariable(), namedlambdavariable())), '')",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 113,
+    "fragment" : "array_join(transform(array('identifier', '_function_table'), element -> element), '')"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_name()
+RETURNS STRING
+RETURN 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER(identifier_name()) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "identifier_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 35,
+    "fragment" : "identifier_name()"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_name()
+RETURNS STRING
+RETURN 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER(persistent_identifier_name()) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "spark_catalog.default.persistent_identifier_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 46,
+    "fragment" : "persistent_identifier_name()"
+  } ]
+}
+
+
+-- !query
+DROP FUNCTION persistent_identifier_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_function(value INT)
+RETURNS INT
+RETURN value + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER(concat('persistent_identifier_', 'function'))(1)
+-- !query schema
+struct<spark_catalog.default.persistent_identifier_function(1):int>
+-- !query output
+2
+
+
+-- !query
+DROP FUNCTION persistent_identifier_function
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_base_name()
+RETURNS STRING
+RETURN 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_nested_name()
+RETURNS STRING
+RETURN persistent_identifier_base_name()
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER(persistent_identifier_nested_name()) FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "spark_catalog.default.persistent_identifier_nested_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 53,
+    "fragment" : "persistent_identifier_nested_name()"
+  } ]
+}
+
+
+-- !query
+DROP FUNCTION persistent_identifier_nested_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION persistent_identifier_base_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_relation_name()
+RETURNS STRING
+RETURN 'identifier_function_table'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE identifier_function_table(c1 INT) USING csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM IDENTIFIER(identifier_relation_name())
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "identifier_relation_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 51,
+    "fragment" : "identifier_relation_name()"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_relation_count()
+RETURNS BIGINT
+RETURN SELECT count(*) FROM IDENTIFIER(concat('identifier_function_', 'table'))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT identifier_relation_count()
+-- !query schema
+struct<identifier_relation_count():bigint>
+-- !query output
+0
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_relation_count
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION persistent_identifier_relation_name()
+RETURNS STRING
+RETURN 'identifier_function_table'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM IDENTIFIER(persistent_identifier_relation_name())
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "spark_catalog.default.persistent_identifier_relation_name()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 62,
+    "fragment" : "persistent_identifier_relation_name()"
+  } ]
+}
+
+
+-- !query
+DROP FUNCTION persistent_identifier_relation_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE identifier_function_table
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_relation_name
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
@@ -855,6 +1420,14 @@ struct<>
 
 
 -- !query
+CREATE TABLE identifier_name_source(name STRING) USING csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT * FROM IDENTIFIER((SELECT 't'))
 -- !query schema
 struct<>
@@ -873,6 +1446,54 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 26,
     "stopIndex" : 37,
     "fragment" : "(SELECT 't')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER((SELECT max(name) FROM identifier_name_source))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 71,
+    "fragment" : "(SELECT max(name) FROM identifier_name_source)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM IDENTIFIER(
+  (SELECT 'x' FROM (SELECT 1) WHERE explode(array(1)) = 1)
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 84,
+    "fragment" : "(SELECT 'x' FROM (SELECT 1) WHERE explode(array(1)) = 1)"
   } ]
 }
 
@@ -967,6 +1588,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "fragment" : "SELECT 'col1'"
   } ]
 }
+
+
+-- !query
+DROP TABLE identifier_name_source
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query

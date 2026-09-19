@@ -22,9 +22,9 @@ import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedInsertTarget}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{AutoCdcInto, CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateStreamingTableAutoCdc, CreateView, InsertIntoStatement, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AutoCdcInto, CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateStreamingTableAutoCdc, CreateView, LogicalPlan, UnresolvedInsert}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.command.{CreateViewCommand, SetCatalogCommand, SetCommand, SetNamespaceCommand}
@@ -589,31 +589,8 @@ class SqlGraphRegistrationContext(
         .identifier
 
       cf.flowOperation match {
-        case i: InsertIntoStatement =>
-          validateInsertIntoFlow(i, queryOrigin)
-          val flowTargetDatasetName = i.table match {
-            case u: UnresolvedRelation =>
-              IdentifierHelper.toTableIdentifier(u.multipartIdentifier)
-            case _ =>
-              throw SqlGraphElementRegistrationException(
-                msg = "Unable to resolve target dataset name for INSERT INTO flow",
-                queryOrigin = queryOrigin
-              )
-          }
-          graphRegistrationContext.registerFlow(
-            UntypedFlow(
-              identifier = flowIdentifier,
-              destinationIdentifier = qualifyDestinationIdentifier(flowTargetDatasetName),
-              func = FlowAnalysis.createFlowFunctionFromLogicalPlan(i.query),
-              sqlConf = context.getSqlConf,
-              once = false,
-              queryContext = QueryContext(
-                currentCatalog = context.getCurrentCatalogOpt,
-                currentDatabase = context.getCurrentDatabaseOpt
-              ),
-              origin = queryOrigin
-            )
-          )
+        case i: UnresolvedInsert =>
+          handleInsert(i, flowIdentifier, queryOrigin)
         case a: AutoCdcInto =>
           val flowTargetDatasetName = IdentifierHelper.toTableIdentifier(a.targetTable)
           graphRegistrationContext.registerFlow(
@@ -648,6 +625,36 @@ class SqlGraphRegistrationContext(
       }
     }
 
+    private def handleInsert(
+        insert: UnresolvedInsert,
+        flowIdentifier: TableIdentifier,
+        queryOrigin: QueryOrigin): Unit = {
+      validateInsertIntoFlow(insert, queryOrigin)
+      val flowTargetDatasetName = insert.table match {
+        case u: UnresolvedInsertTarget =>
+          IdentifierHelper.toTableIdentifier(u.multipartIdentifier)
+        case _ =>
+          throw SqlGraphElementRegistrationException(
+            msg = "Unable to resolve target dataset name for INSERT INTO flow",
+            queryOrigin = queryOrigin
+          )
+      }
+      graphRegistrationContext.registerFlow(
+        UntypedFlow(
+          identifier = flowIdentifier,
+          destinationIdentifier = qualifyDestinationIdentifier(flowTargetDatasetName),
+          func = FlowAnalysis.createFlowFunctionFromLogicalPlan(insert.query),
+          sqlConf = context.getSqlConf,
+          once = false,
+          queryContext = QueryContext(
+            currentCatalog = context.getCurrentCatalogOpt,
+            currentDatabase = context.getCurrentDatabaseOpt
+          ),
+          origin = queryOrigin
+        )
+      )
+    }
+
     /** Qualifies a raw flow target dataset identifier against the current catalog/database. */
     private def qualifyDestinationIdentifier(
         flowTargetDatasetIdentifier: TableIdentifier): TableIdentifier =
@@ -660,34 +667,34 @@ class SqlGraphRegistrationContext(
         .identifier
 
     private def validateInsertIntoFlow(
-        insertIntoStatement: InsertIntoStatement,
+        insert: UnresolvedInsert,
         queryOrigin: QueryOrigin
     ): Unit = {
-      if (insertIntoStatement.partitionSpec.nonEmpty) {
+      if (insert.partitionSpec.nonEmpty) {
         throw SqlGraphElementRegistrationException(
           msg = "Partition spec may not be specified for flow target.",
           queryOrigin = queryOrigin
         )
       }
-      if (insertIntoStatement.userSpecifiedCols.nonEmpty) {
+      if (insert.userSpecifiedCols.nonEmpty) {
         throw SqlGraphElementRegistrationException(
           msg = "Column schema may not be specified for flow target.",
           queryOrigin = queryOrigin
         )
       }
-      if (insertIntoStatement.overwrite) {
+      if (insert.overwrite) {
         throw SqlGraphElementRegistrationException(
           msg = "INSERT OVERWRITE flows not supported.",
           queryOrigin = queryOrigin
         )
       }
-      if (insertIntoStatement.ifPartitionNotExists) {
+      if (insert.ifPartitionNotExists) {
         throw SqlGraphElementRegistrationException(
           msg = "IF NOT EXISTS not supported for flows.",
           queryOrigin = queryOrigin
         )
       }
-      if (!insertIntoStatement.byName) {
+      if (!insert.byName) {
         throw SqlGraphElementRegistrationException(
           msg = "Only INSERT INTO by name flows supported.",
           queryOrigin = queryOrigin

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import Any, TypeVar, Callable, List, Tuple, Union, Iterator, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Tuple, TypeVar, Union
 
 import pandas as pd
 

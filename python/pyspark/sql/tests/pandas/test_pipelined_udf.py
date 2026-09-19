@@ -31,8 +31,8 @@ from pyspark.sql.types import (
     DoubleType,
     LongType,
     StringType,
-    StructType,
     StructField,
+    StructType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (

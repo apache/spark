@@ -21,13 +21,17 @@ from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, 
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
 
-from pyspark.sql import functions as F, Column as PySparkColumn, Window
-from pyspark.sql.types import DataType
 from pyspark import pandas as ps
 from pyspark.pandas._typing import Label, Name, Scalar
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes.base import Index
+from pyspark.pandas.internal import (
+    NATURAL_ORDER_COLUMN_NAME,
+    SPARK_INDEX_NAME_FORMAT,
+    InternalField,
+    InternalFrame,
+)
 from pyspark.pandas.missing.indexes import MissingPandasLikeMultiIndex
 from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.utils import (
@@ -35,16 +39,14 @@ from pyspark.pandas.utils import (
     is_name_like_tuple,
     name_like_string,
     scol_for,
-    verify_temp_column_name,
     validate_index_loc,
+    verify_temp_column_name,
     xor,
 )
-from pyspark.pandas.internal import (
-    InternalField,
-    InternalFrame,
-    NATURAL_ORDER_COLUMN_NAME,
-    SPARK_INDEX_NAME_FORMAT,
-)
+from pyspark.sql import Column as PySparkColumn
+from pyspark.sql import Window
+from pyspark.sql import functions as F
+from pyspark.sql.types import DataType
 
 
 class MultiIndex(Index):
@@ -1261,12 +1263,14 @@ class MultiIndex(Index):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
+
     import numpy
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.indexes.multi
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

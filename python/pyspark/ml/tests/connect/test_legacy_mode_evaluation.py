@@ -14,21 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 import tempfile
+import unittest
 
 import numpy as np
 
-from pyspark.util import is_remote_only
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.utils import have_torcheval, torcheval_requirement_message
+from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import have_torcheval, torcheval_requirement_message
+from pyspark.util import is_remote_only
 
 if should_test_connect:
     from pyspark.ml.connect.evaluation import (
-        RegressionEvaluator,
         BinaryClassificationEvaluator,
         MulticlassClassificationEvaluator,
+        RegressionEvaluator,
     )
 
 

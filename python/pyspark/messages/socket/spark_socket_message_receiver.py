@@ -17,11 +17,11 @@
 
 from typing import BinaryIO
 
-from pyspark.serializers import read_int, SpecialLengths
-from pyspark.messages.zero_copy_byte_stream import ZeroCopyByteStream
 from pyspark.messages.spark_message_receiver import (
     SparkMessageReceiver,
 )
+from pyspark.messages.zero_copy_byte_stream import ZeroCopyByteStream
+from pyspark.serializers import SpecialLengths, read_int
 
 
 def _assert_message_id(message_id: int, expected: int) -> None:

@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ValidateRequirements}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -82,15 +82,6 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     }
   }
 
-  private def canSplitLeftSide(joinType: JoinType) = {
-    joinType == Inner || joinType == Cross || joinType == LeftSemi ||
-      joinType == LeftAnti || joinType == LeftOuter
-  }
-
-  private def canSplitRightSide(joinType: JoinType) = {
-    joinType == Inner || joinType == Cross || joinType == RightOuter
-  }
-
   private def getSizeInfo(medianSize: Long, sizes: Array[Long]): String = {
     s"median size: $medianSize, max size: ${sizes.max}, min size: ${sizes.min}, avg size: " +
       sizes.sum / sizes.length
@@ -112,8 +103,9 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       left: ShuffleQueryStageExec,
       right: ShuffleQueryStageExec,
       joinType: JoinType): Option[(SparkPlan, SparkPlan)] = {
-    val canSplitLeft = canSplitLeftSide(joinType)
-    val canSplitRight = canSplitRightSide(joinType)
+    // Splitting a side replicates the other side's partition to every split.
+    val canSplitLeft = ShuffledJoin.canDuplicateRightSide(joinType)
+    val canSplitRight = ShuffledJoin.canDuplicateLeftSide(joinType)
     if (!canSplitLeft && !canSplitRight) return None
 
     val leftSizes = left.mapStats.get.bytesByPartitionId

@@ -25,13 +25,13 @@ from pyspark.serializers import (
     write_int,
     write_with_length,
 )
-from pyspark.sql.datasource import DataSource, CaseInsensitiveDict
-from pyspark.sql.types import _parse_datatype_json_string, StructType
+from pyspark.sql.datasource import CaseInsensitiveDict, DataSource
+from pyspark.sql.types import StructType, _parse_datatype_json_string
 from pyspark.sql.worker.utils import worker_run
 from pyspark.worker_util import (
     get_sock_file_to_executor,
-    read_command,
     pickleSer,
+    read_command,
     utf8_deserializer,
 )
 

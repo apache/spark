@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from contextlib import contextmanager
 import os
 import textwrap
-from typing import Any, BinaryIO, Callable, Iterator
 import unittest
+from contextlib import contextmanager
+from typing import Any, BinaryIO, Callable, Iterator
 
 from pyspark import cloudpickle
 from pyspark.ml.dl_util import FunctionPickler

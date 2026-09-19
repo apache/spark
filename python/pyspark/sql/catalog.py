@@ -17,17 +17,16 @@
 
 import sys
 import warnings
-from typing import Any, Callable, Dict, NamedTuple, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional
 
 from pyspark.errors import PySparkTypeError
-from pyspark.storagelevel import StorageLevel
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import StructType
+from pyspark.storagelevel import StorageLevel
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import UserDefinedFunctionLike
-    from pyspark.sql._typing import DataTypeOrString
+    from pyspark.sql._typing import DataTypeOrString, UserDefinedFunctionLike
 
 
 class CatalogMetadata(NamedTuple):
@@ -1570,10 +1569,11 @@ class Catalog:
 
 
 def _test() -> None:
-    import os
     import doctest
-    from pyspark.sql import SparkSession
+    import os
+
     import pyspark.sql.catalog
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

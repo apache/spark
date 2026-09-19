@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
@@ -226,7 +226,19 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       serializeStream.close()
     })
 
-    if (!fs.rename(tempOutputPath, finalOutputPath)) {
+    // On HDFS, renaming onto an existing destination reports failure by returning false, which
+    // is handled below. Some FileSystem implementations instead raise FileAlreadyExistsException
+    // (e.g. S3A since HADOOP-16721, ABFS); treat it the same way, as it means another attempt of
+    // this task has already committed the final output (SPARK-58750).
+    val renamed = try {
+      fs.rename(tempOutputPath, finalOutputPath)
+    } catch {
+      case e: FileAlreadyExistsException =>
+        logDebug(log"Rename from ${MDC(TEMP_OUTPUT_PATH, tempOutputPath)} to" +
+          log" ${MDC(FINAL_OUTPUT_PATH, finalOutputPath)} failed", e)
+        false
+    }
+    if (!renamed) {
       if (!fs.exists(finalOutputPath)) {
         logInfo(log"Deleting tempOutputPath ${MDC(TEMP_OUTPUT_PATH, tempOutputPath)}")
         fs.delete(tempOutputPath, false)

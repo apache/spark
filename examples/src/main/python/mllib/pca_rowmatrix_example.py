@@ -16,9 +16,11 @@
 #
 
 from pyspark import SparkContext
+
 # $example on$
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.linalg.distributed import RowMatrix
+
 # $example off$
 
 if __name__ == "__main__":
