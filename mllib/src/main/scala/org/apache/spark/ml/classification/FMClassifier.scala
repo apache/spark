@@ -32,6 +32,7 @@ import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -291,22 +292,71 @@ class FMClassificationModel private[classification] (
       probability, predictionColName, $(labelCol), weightColName)
   }
 
+  override protected def predictRawColumn(features: Column): Column = {
+    val localIntercept = intercept
+    val localLinear = linear
+    val localFactors = factors
+    udf((features: Vector) =>
+      FMClassificationModel.predictRaw(features, localIntercept, localLinear, localFactors)
+    ).apply(features)
+  }
+
+  override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
+    udf((rawPrediction: Vector) =>
+      FMClassificationModel.raw2probability(rawPrediction)
+    ).apply(rawPrediction)
+  }
+
+  override protected def predictProbabilityColumn(features: Column): Column = {
+    val localIntercept = intercept
+    val localLinear = linear
+    val localFactors = factors
+    udf((features: Vector) => {
+      val rawPrediction =
+        FMClassificationModel.predictRaw(features, localIntercept, localLinear, localFactors)
+      FMClassificationModel.raw2probabilityInPlace(rawPrediction)
+    }).apply(features)
+  }
+
+  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      udf((rawPrediction: Vector) => {
+        val probability = FMClassificationModel.raw2probability(rawPrediction)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(rawPrediction)
+    } else {
+      udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
+    }
+  }
+
+  override protected def predictionColumn(features: Column): Column = {
+    val localIntercept = intercept
+    val localLinear = linear
+    val localFactors = factors
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      udf((features: Vector) => {
+        val rawPrediction =
+          FMClassificationModel.predictRaw(features, localIntercept, localLinear, localFactors)
+        val probability = FMClassificationModel.raw2probabilityInPlace(rawPrediction)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(features)
+    } else {
+      udf((features: Vector) =>
+        FMClassificationModel.predictRaw(
+          features, localIntercept, localLinear, localFactors).argmax.toDouble
+      ).apply(features)
+    }
+  }
+
   @Since("3.0.0")
   override def predictRaw(features: Vector): Vector = {
-    val rawPrediction = getRawPrediction(features, intercept, linear, factors)
-    Vectors.dense(Array(-rawPrediction, rawPrediction))
+    FMClassificationModel.predictRaw(features, intercept, linear, factors)
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
-    rawPrediction match {
-      case dv: DenseVector =>
-        dv.values(1) = 1.0 / (1.0 + math.exp(-dv.values(1)))
-        dv.values(0) = 1.0 - dv.values(1)
-        dv
-      case sv: SparseVector =>
-        throw new RuntimeException("Unexpected error in FMClassificationModel:" +
-          " raw2probabilityInPlace encountered SparseVector")
-    }
+    FMClassificationModel.raw2probabilityInPlace(rawPrediction)
   }
 
   @Since("3.0.0")
@@ -374,6 +424,31 @@ class FMClassificationModel private[classification] (
 
 @Since("3.0.0")
 object FMClassificationModel extends MLReadable[FMClassificationModel] {
+  private def predictRaw(
+      features: Vector,
+      intercept: Double,
+      linear: Vector,
+      factors: Matrix): Vector = {
+    val rawPrediction = getRawPrediction(features, intercept, linear, factors)
+    Vectors.dense(Array(-rawPrediction, rawPrediction))
+  }
+
+  private def raw2probability(rawPrediction: Vector): Vector = {
+    raw2probabilityInPlace(rawPrediction.copy)
+  }
+
+  private def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    rawPrediction match {
+      case dv: DenseVector =>
+        dv.values(1) = 1.0 / (1.0 + math.exp(-dv.values(1)))
+        dv.values(0) = 1.0 - dv.values(1)
+        dv
+      case _: SparseVector =>
+        throw new RuntimeException("Unexpected error in FMClassificationModel:" +
+          " raw2probabilityInPlace encountered SparseVector")
+    }
+  }
+
   private[ml] case class Data(
     intercept: Double,
     linear: Vector,
