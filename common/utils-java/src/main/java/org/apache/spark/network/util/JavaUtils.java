@@ -751,8 +751,40 @@ public class JavaUtils {
     .anyMatch(prefix -> osName.regionMatches(true, 0, prefix, 0, prefix.length()));
 
   /**
-   * Throws IllegalArgumentException with the given message if the check is false.
-   * Keep this clone of CommandBuilderUtils.checkArgument synced with the original.
+   * Throws an {@link IllegalArgumentException} with a formatted message if {@code check} is
+   * {@code false}.
+   *
+   * <p>The failure message is produced with {@link String#format(String, Object...)}: {@code msg}
+   * is the format string and every runtime value must be supplied through {@code args} using a
+   * conversion such as {@code %s}. <b>Do not concatenate values into {@code msg}.</b> Passing an
+   * already-interpolated message, for example
+   * <pre>{@code checkArgument(cond, "bad key: " + key)}</pre>
+   * is a mistake for two reasons:
+   * <ul>
+   *   <li><b>It can mask the real failure.</b> If the interpolated value happens to contain a
+   *       {@code %} (a percent-encoded token, a Windows path such as {@code %TEMP%}, a SQL
+   *       {@code LIKE} pattern, a formatted number like {@code "50%"}, and so on) then, on the
+   *       failure path, {@link String#format(String, Object...)} tries to interpret it as a
+   *       conversion and throws an {@link java.util.IllegalFormatException} (for instance
+   *       {@link java.util.UnknownFormatConversionException} or
+   *       {@link java.util.MissingFormatArgumentException}). That formatting error is thrown in
+   *       place of the intended argument-validation error and carries a message about the format
+   *       string rather than the condition that actually failed, so the true cause is lost.</li>
+   *   <li><b>It does needless work on the success path.</b> The message is built eagerly on every
+   *       call, including the common case where {@code check} is {@code true} and the string is
+   *       immediately discarded.</li>
+   * </ul>
+   * Instead, pass the values as trailing arguments, as in
+   * {@code checkArgument(cond, "bad key: %s", key)}, so the message is format-safe (arbitrary
+   * characters in {@code key} are inserted literally) and is built only when the check fails.
+   *
+   * <p>Keep this clone of {@code CommandBuilderUtils.checkArgument} synced with the original.
+   *
+   * @param check the condition that must hold; an exception is thrown when it is {@code false}
+   * @param msg   a {@link String#format(String, Object...)} format string for the failure message;
+   *              do not interpolate runtime values into it, pass them through {@code args}
+   * @param args  the arguments referenced by the format specifiers in {@code msg}
+   * @throws IllegalArgumentException if {@code check} is {@code false}
    */
   public static void checkArgument(boolean check, String msg, Object... args) {
     if (!check) {
@@ -761,8 +793,20 @@ public class JavaUtils {
   }
 
   /**
-   * Throws IllegalStateException with the given message if the check is false.
-   * Keep this clone of CommandBuilderUtils.checkState synced with the original.
+   * Throws an {@link IllegalStateException} with a formatted message if {@code check} is
+   * {@code false}.
+   *
+   * <p>{@code msg} is a {@link String#format(String, Object...)} format string; the same
+   * format-argument contract and caveats described on {@link #checkArgument(boolean, String,
+   * Object...)} apply here.
+   *
+   * <p>Keep this clone of {@code CommandBuilderUtils.checkState} synced with the original.
+   *
+   * @param check the condition that must hold; an exception is thrown when it is {@code false}
+   * @param msg   a {@link String#format(String, Object...)} format string for the failure message;
+   *              do not interpolate runtime values into it, pass them through {@code args}
+   * @param args  the arguments referenced by the format specifiers in {@code msg}
+   * @throws IllegalStateException if {@code check} is {@code false}
    */
   public static void checkState(boolean check, String msg, Object... args) {
     if (!check) {
