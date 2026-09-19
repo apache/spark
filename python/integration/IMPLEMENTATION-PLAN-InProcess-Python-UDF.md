@@ -54,7 +54,10 @@ Most of this phase is already implemented. Two known gaps remain.
 - [x] Unit tests for config validation: verify that `InProcessPythonChecks` throws a clear `IllegalArgumentException` when `spark.executor.cores != spark.task.cpus`, and passes when they are equal. Done in Phase 1 — `InProcessPythonUDFSuite.scala` contains `"InProcessPythonChecks rejects multi-task executor config"` and `"InProcessPythonChecks passes when cores == task.cpus"` tests.
 - [x] Integration tests across all Arrow types: correctness and null-handling tests for each type group (numeric primitives, string/binary, temporal, nested). Done in Phase 1 — `test_inprocess_udf.py` covers `StringType`, `BinaryType`, `TimestampType`, `DateType`, `ArrayType`, `StructType` with null-handling assertions.
 - [x] Performance regression benchmark suite: formalize `benchmark_inprocess_udf.py` as a CI benchmark with noop sink (Scenarios A, B, D, E). Alert if in-process UDF time exceeds 1.2× baseline on any scenario. `_print_results` now returns a list of failure strings when `inprocess_udf median > 1.2 × pandas_udf median`; `main()` accumulates failures and exits non-zero if any are found, printing a clear `PERFORMANCE REGRESSION DETECTED` summary.
-- [x] CI pipeline integration: add the integration test suite to Spark's GitHub Actions / Jenkins CI so in-process UDF tests run on every PR that touches the relevant paths. Added `.github/workflows/inprocess-python-udf.yml` — triggers on push/PR to `python/pyspark/inprocess/**`, `sql/core/…/InProcess*.scala`, and the integration test scripts; builds the Spark assembly with Maven (cached), installs jep into a Python venv, then runs `run_inprocess_udf_tests.sh`.
+- [x] CI pipeline integration: register the integration and runtime contract suites in
+  `pyspark-sql` and run them with `python/run-tests`. The existing default Python 3.12
+  CI image installs JEP and cffi and requires integration tests with `INPROCESS_TESTS=1`.
+  No dedicated workflow or test launcher is needed.
 
 ---
 

@@ -101,7 +101,7 @@ the in-process UDF implementation in the JVM as well as Python; ASV's wheel buil
 alone does not ensure that the Spark JARs match a selected commit. Start with
 `--python=same` and rebuild Spark whenever switching source versions.
 
-Activate a Python environment containing `asv`, `jep`, `pyarrow`, `pandas` and
+Activate a Python environment containing `asv`, `jep>=4.3.1`, `pyarrow`, `pandas` and
 `cloudpickle`. JEP must be built for that Python installation and the selected JDK.
 Install these dependencies in a venv (for example, `python -m venv .venv` and
 `source .venv/bin/activate`). From the Spark checkout root, configure the driver

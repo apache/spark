@@ -594,55 +594,51 @@ the workaround. This can be revisited as the ecosystem matures.
 
 ### Prerequisites
 
-**1. Build the Spark SQL JAR** (required after any Scala change):
+Build Spark with Hive support after JVM source changes:
 
 ```bash
-# From the repo root
-build/sbt "sql/package"
-cp sql/core/target/scala-2.13/spark-sql_2.13-*.jar \
-   assembly/target/scala-2.13/jars/
+build/sbt -Phive package
 ```
 
-**2. Create a dedicated virtual environment** with jep, PyArrow, and cloudpickle:
+Use a Python environment with JEP, PyArrow, pandas, cffi, and the standard PySpark
+test dependencies. A venv is optional; its location is not fixed. For example:
 
 ```bash
-python3 -m venv python/.venv-inprocess
-python/.venv-inprocess/bin/pip install "jep>=4.2" pyarrow cloudpickle pytest
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install "jep==4.3.1" pyarrow pandas cffi unittest-xml-reporting
 ```
 
-jep bundles its own JAR (`jep-*.jar`) and native library (`libjep.dylib` / `libjep.so`)
-inside the venv's site-packages — no separate installation needed.
+JEP requires a JDK (`JAVA_HOME`) and Python development headers to build its JNI
+library. Its JAR and native library are installed inside the Python environment.
+Use JEP 4.3.1 or later: older releases can treat `py4j` as a Java package and
+shadow the Python package when PySpark is imported inside the interpreter.
 
 ### Running the tests
 
-A convenience script at [python/integration/run_inprocess_udf_tests.sh](../python/integration/run_inprocess_udf_tests.sh)
-handles all environment setup automatically:
+The suites are registered in `pyspark-sql` and use the standard test runner:
 
 ```bash
-# Stop on first failure (default):
-bash python/integration/run_inprocess_udf_tests.sh
-
-# Run all tests to see the full results:
-bash python/integration/run_inprocess_udf_tests.sh --no-x
+INPROCESS_TESTS=1 python/run-tests --python-executables="$(command -v python)" \
+  --testnames pyspark.sql.tests.test_inprocess_udf,pyspark.sql.tests.test_inprocess_runtime
 ```
 
-Expected output: **25 passed in ~7s**.
+The integration suite discovers JEP in the selected Python environment and sets
+`spark.driver.extraClassPath`, `spark.driver.extraLibraryPath`, and the embedded
+Python search path before starting the JVM. No custom test launcher or
+`PYSPARK_SUBMIT_ARGS` is needed. Both suites use the normal PySpark XML reporter.
 
-### What the script does
+### CI and optional dependencies
 
-| Step | What | Why |
-|---|---|---|
-| `INPROCESS_TESTS=1` | Enables the test class | Tests are skipped unless this is set |
-| `PYTHONPATH=venv/site-packages:...` | Puts venv first | Embedded jep interpreter needs to `import jep` and `import pyspark.inprocess` |
-| `--driver-class-path jep-*.jar` | Adds jep JAR to JVM classpath | `jep.SharedInterpreter` must be loadable by the JVM |
-| `-Djava.library.path=<jep dir>` | Locates `libjep` native library | JVM `System.loadLibrary("jep")` looks here |
+The existing default Python 3.12 CI image installs JEP and cffi. Both suites run
+in the existing `pyspark-sql` job; there is no separate in-process UDF workflow.
+The image sets `INPROCESS_TESTS=1`, so missing dependencies or JEP loading failures
+fail the integration suite rather than skipping it.
 
-### Skipping conditions
-
-All tests are skipped automatically if any of the following are missing:
-- `INPROCESS_TESTS=1` environment variable
-- `pyarrow` importable in the active Python interpreter
-- `cloudpickle` importable in the active Python interpreter
+Without this variable, the integration suite runs when JEP and PyArrow are found;
+otherwise it skips. `INPROCESS_TESTS=0` explicitly disables the integration suite.
+The runtime contract suite does not require JEP or a JVM and runs wherever PyArrow
+and cffi are available, independent of `INPROCESS_TESTS`.
 
 ---
 
@@ -650,7 +646,7 @@ All tests are skipped automatically if any of the following are missing:
 
 | Dependency | Version | Role |
 |---|---|---|
-| [jep](https://github.com/ninia/jep) | 4.x | Embed CPython in JVM via JNI |
+| [jep](https://github.com/ninia/jep) | 4.3.1+ | Embed CPython in JVM via JNI |
 | [PyArrow](https://arrow.apache.org/docs/python/) | 12+ | Zero-copy Arrow buffer wrapping via `foreign_buffer` |
 | [cloudpickle](https://github.com/cloudpipe/cloudpickle) | 2.x | Serialize Python UDF closure (already a PySpark dep) |
 | Apache Arrow Java | (Spark-bundled) | `ArrowColumnVector`, `ArrowBuf` buffer address extraction |

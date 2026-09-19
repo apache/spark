@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     openjdk-17-jdk-headless \
     python3.12 \
+    python3.12-dev \
     python3.12-venv \
     pkg-config \
     tzdata \
@@ -66,3 +67,10 @@ RUN python3.12 -m pip install -U pip
 RUN python3.12 -m pip install --group ml_torch --index-url https://download.pytorch.org/whl/cpu && \
     python3.12 -m pip install --group ci_classic_standard --group ci_connect_standard && \
     python3.12 -m pip cache purge
+
+# Exercise in-process UDFs in the existing pyspark-sql job. JEP needs Python
+# headers and a JDK when building its JNI library; no separate test job is needed.
+RUN JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")" \
+    python3.12 -m pip install --no-cache-dir "jep==4.3.1" cffi
+# Missing or broken JEP must fail this CI image's tests instead of skipping them.
+ENV INPROCESS_TESTS=1

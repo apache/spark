@@ -19,13 +19,11 @@
 """Arrow CDI contract tests that do not need a Spark JVM or JEP."""
 
 import unittest
+from importlib.util import find_spec
 
-import pyarrow as pa
-from pyarrow.cffi import ffi
+from pyspark.testing.utils import have_pyarrow
 
 from pyspark import cloudpickle
-from pyspark.inprocess.runtime import _inprocess_invoke, _load_udf
-from pyspark.inprocess.udf import inprocess_udf
 from pyspark.sql.types import (
     ArrayType,
     DecimalType,
@@ -38,6 +36,16 @@ from pyspark.sql.types import (
 )
 
 
+_have_arrow_cdi = have_pyarrow and find_spec("cffi") is not None
+if _have_arrow_cdi:
+    import pyarrow as pa
+    from pyarrow.cffi import ffi
+
+    from pyspark.inprocess.runtime import _inprocess_invoke, _load_udf
+    from pyspark.inprocess.udf import inprocess_udf
+
+
+@unittest.skipUnless(_have_arrow_cdi, "Arrow CDI tests require PyArrow and cffi")
 class InProcessRuntimeTests(unittest.TestCase):
     def tearDown(self):
         _load_udf.cache_clear()
@@ -142,4 +150,6 @@ class InProcessRuntimeTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    from pyspark.testing import main
+
+    main()

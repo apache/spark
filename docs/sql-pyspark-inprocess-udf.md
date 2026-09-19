@@ -75,7 +75,7 @@ for both input and output buffer transfer. Row-to-Arrow conversion still copies 
 ### 1. Install dependencies
 
 ```bash
-pip install "jep>=4.2" pyarrow cloudpickle
+pip install "jep>=4.3.1" pyarrow cloudpickle
 ```
 
 ### 2. Register the plugin
@@ -223,7 +223,7 @@ site-packages are already on `sys.path`, so no extra configuration is needed.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install "jep>=4.2" pyarrow cloudpickle pyspark
+.venv/bin/pip install "jep>=4.3.1" pyarrow cloudpickle pyspark
 source .venv/bin/activate
 ```
 
@@ -244,7 +244,7 @@ venv on a machine that matches the executor OS and Python version:
 
 ```bash
 python3 -m venv myvenv
-myvenv/bin/pip install "jep>=4.2" pyarrow cloudpickle my-custom-lib
+myvenv/bin/pip install "jep>=4.3.1" pyarrow cloudpickle my-custom-lib
 zip -r myvenv.zip myvenv/
 ```
 
@@ -294,7 +294,7 @@ Pre-installing jep into the executor image is the simplest approach — no `--ar
 ```dockerfile
 FROM apache/spark:latest
 USER root
-RUN pip install "jep>=4.2" pyarrow cloudpickle my-custom-lib
+RUN pip install "jep>=4.3.1" pyarrow cloudpickle my-custom-lib
 # Expose jep native library to the JVM at startup
 ENV JAVA_TOOL_OPTIONS="-Djava.library.path=$(python3 -c 'import jep, os; print(os.path.dirname(jep.__file__))')"
 USER spark

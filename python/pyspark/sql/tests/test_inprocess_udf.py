@@ -15,27 +15,12 @@
 # limitations under the License.
 #
 
-"""
-End-to-end integration tests for in-process Python UDFs.
+"""End-to-end tests for in-process Python UDFs.
 
-These tests exercise the full decorator-to-execution path:
-    @inprocess_udf  →  InProcessUDFWrapper.__call__
-                    →  sc._jvm.InProcessPythonUDFBuilder.build
-                    →  InProcessPythonUDF (Catalyst expression)
-                    →  ExtractInProcessPythonUDFs (optimizer rule)
-                    →  InProcessArrowEvalExec (physical plan)
-                    →  InProcessPythonRuntime.invoke (jep call)
-                    →  _inprocess_invoke  →  pa.foreign_buffer  →  UDF
-                    →  array_to_result  →  ArrowColumnVector
-
-Requirements:
-    - jep >= 4.2 on the JVM classpath (``spark.driver.extraClassPath``)
-    - Python cloudpickle + pyarrow installed
-    - Spark executor configured for single-task-per-executor:
-        spark.executor.cores == spark.task.cpus  (enforced by InProcessPythonChecks)
-
-Skip: all tests are skipped when jep is not importable or when the
-      INPROCESS_TESTS environment variable is not set to "1".
+Run with python/run-tests like other SQL tests. JEP paths are discovered from the
+selected Python environment before the Spark JVM starts. Set INPROCESS_TESTS=1
+to require the suite (missing dependencies then fail), or 0 to disable it.
+Otherwise, the suite runs when JEP and PyArrow are available.
 """
 
 import contextlib
@@ -43,40 +28,21 @@ import os
 import shutil
 import tempfile
 import unittest
+from importlib.util import find_spec
+from pathlib import Path
+from unittest.mock import patch
 
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-def _have_pyarrow() -> bool:
-    try:
-        import pyarrow  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
-
-
-def _have_cloudpickle() -> bool:
-    try:
-        from pyspark import cloudpickle  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
-
-
-_run_inprocess = (
-    os.environ.get("INPROCESS_TESTS", "0") == "1" and _have_pyarrow() and _have_cloudpickle()
-)
-
-_skip_reason = (
-    "Skipping in-process UDF tests: requires INPROCESS_TESTS=1 "
-    "and pyarrow + cloudpickle installed, "
-    "and jep JAR on the Spark executor classpath"
+_jep_spec = find_spec("jep")
+_test_mode = os.environ.get("INPROCESS_TESTS")
+_run_inprocess = _test_mode == "1" or (
+    _test_mode != "0" and _jep_spec is not None and find_spec("pyarrow") is not None
 )
 
 
-@unittest.skipUnless(_run_inprocess, _skip_reason)
+@unittest.skipUnless(_run_inprocess, "In-process UDF tests require JEP and PyArrow")
 class InProcessUDFTests(ReusedSQLTestCase):
     """
     End-to-end tests for @inprocess_udf that require jep + CPython + PyArrow.
@@ -94,17 +60,32 @@ class InProcessUDFTests(ReusedSQLTestCase):
         return (
             super()
             .conf()
+            .set("spark.driver.extraClassPath", str(cls.jep_jar))
+            .set("spark.driver.extraLibraryPath", str(cls.jep_dir))
             .set("spark.inprocess.python.sitePackages", cls.site_packages)
             .set("spark.plugins", "org.apache.spark.sql.execution.python.InProcessPythonPlugin")
         )
 
     @classmethod
     def setUpClass(cls):
+        if _jep_spec is None:
+            raise RuntimeError("INPROCESS_TESTS=1 requires JEP in the selected Python environment")
+        # Do not import jep: it can only be imported by an embedded interpreter.
+        cls.jep_dir = Path(_jep_spec.origin).parent
+        jars = list(cls.jep_dir.glob("jep-*.jar"))
+        if len(jars) != 1:
+            raise RuntimeError(f"Expected one JEP JAR in {cls.jep_dir}, found {len(jars)}")
+        cls.jep_jar = jars[0]
         cls.site_packages = tempfile.mkdtemp()
         with open(os.path.join(cls.site_packages, "_inprocess_test_helper.py"), "w") as f:
             f.write("MAGIC = 99\n")
         try:
-            super().setUpClass()
+            # Embedded CPython needs the selected environment before JEP initializes.
+            python_path = os.pathsep.join(
+                [str(cls.jep_dir.parent), os.environ.get("PYTHONPATH", "")]
+            )
+            with patch.dict(os.environ, {"PYTHONPATH": python_path}):
+                super().setUpClass()
         except Exception:
             shutil.rmtree(cls.site_packages)
             raise
@@ -756,4 +737,6 @@ class InProcessUDFTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    from pyspark.testing import main
+
+    main()
