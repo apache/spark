@@ -71,6 +71,7 @@ object DataTypeTestUtils {
 
   val timeTypes: Seq[TimeType] = Seq(
     TimeType(TimeType.MIN_PRECISION),
+    TimeType(3),
     TimeType(TimeType.MAX_PRECISION))
 
   val timestampNanosTypes: Seq[DatetimeType] = Seq(

@@ -61,6 +61,15 @@ object CatalystTypeConverters {
     }
   }
 
+  private def throwInvalidExternalValue(value: Any, dataType: String): Nothing = {
+    throw new SparkIllegalArgumentException(
+      errorClass = "INVALID_EXTERNAL_VALUE",
+      messageParameters = scala.collection.immutable.Map(
+        "other" -> value.toString,
+        "otherClass" -> value.getClass.getCanonicalName,
+        "dataType" -> dataType))
+  }
+
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
     TypeUtils.failUnsupportedDataType(dataType, SQLConf.get)
     TypeOps(dataType)
@@ -84,7 +93,6 @@ object CatalystTypeConverters {
         new GeometryConverter(g)
       case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
       case DateType => DateConverter
-      case _: TimeType => TimeConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
       case TimestampNTZType => TimestampNTZConverter
@@ -297,12 +305,7 @@ object CatalystTypeConverters {
           idx += 1
         }
         new GenericInternalRow(ar)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_EXTERNAL_VALUE",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> structType.catalogString))
+      case other => throwInvalidExternalValue(other, structType.catalogString)
     }
 
     override def toScala(row: InternalRow): Row = {
@@ -356,12 +359,7 @@ object CatalystTypeConverters {
       case utf8: UTF8String => utf8
       case chr: Char => UTF8String.fromString(chr.toString)
       case ac: Array[Char] => UTF8String.fromString(String.valueOf(ac))
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_EXTERNAL_VALUE",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> StringType.sql))
+      case other => throwInvalidExternalValue(other, StringType.sql)
     }
     override def toScala(catalystValue: UTF8String): String =
       if (catalystValue == null) null else catalystValue.toString
@@ -382,12 +380,7 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): BinaryView = scalaValue match {
       case g: org.apache.spark.sql.types.Geometry if SQLConf.get.geospatialEnabled =>
         STUtils.serializeGeomFromWKB(g, dataType)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_EXTERNAL_VALUE",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> StringType.sql))
+      case other => throwInvalidExternalValue(other, StringType.sql)
     }
     override def toScala(catalystValue: BinaryView): org.apache.spark.sql.types.Geometry = {
       assertGeospatialEnabled()
@@ -407,12 +400,7 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): BinaryView = scalaValue match {
       case g: org.apache.spark.sql.types.Geography if SQLConf.get.geospatialEnabled =>
         STUtils.serializeGeogFromWKB(g, dataType)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_EXTERNAL_VALUE",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> StringType.sql))
+      case other => throwInvalidExternalValue(other, StringType.sql)
     }
     override def toScala(catalystValue: BinaryView): org.apache.spark.sql.types.Geography = {
       assertGeospatialEnabled()
@@ -431,12 +419,7 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): Int = scalaValue match {
       case d: Date => DateTimeUtils.fromJavaDate(d)
       case l: LocalDate => DateTimeUtils.localDateToDays(l)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_EXTERNAL_VALUE",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> DateType.sql))
+      case other => throwInvalidExternalValue(other, DateType.sql)
     }
     override def toScala(catalystValue: Any): Date =
       if (catalystValue == null) null else DateTimeUtils.toJavaDate(catalystValue.asInstanceOf[Int])
@@ -471,12 +454,7 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): Long = scalaValue match {
       case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
       case i: Instant => DateTimeUtils.instantToMicros(i)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_EXTERNAL_VALUE",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> TimestampType.sql))
+      case other => throwInvalidExternalValue(other, TimestampType.sql)
     }
     override def toScala(catalystValue: Any): Timestamp =
       if (catalystValue == null) null
@@ -499,12 +477,7 @@ object CatalystTypeConverters {
     extends CatalystTypeConverter[Any, LocalDateTime, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue match {
       case l: LocalDateTime => DateTimeUtils.localDateTimeToMicros(l)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_EXTERNAL_VALUE",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> TimestampNTZType.sql))
+      case other => throwInvalidExternalValue(other, TimestampNTZType.sql)
     }
 
     override def toScala(catalystValue: Any): LocalDateTime =
@@ -526,12 +499,7 @@ object CatalystTypeConverters {
         case d: JavaBigDecimal => Decimal(d)
         case d: JavaBigInteger => Decimal(d)
         case d: Decimal => d
-        case other => throw new SparkIllegalArgumentException(
-          errorClass = "INVALID_EXTERNAL_VALUE",
-          messageParameters = scala.collection.immutable.Map(
-            "other" -> other.toString,
-            "otherClass" -> other.getClass.getCanonicalName,
-            "dataType" -> dataType.catalogString))
+        case other => throwInvalidExternalValue(other, dataType.catalogString)
       }
       decimal.toPrecision(dataType.precision, dataType.scale, Decimal.ROUND_HALF_UP, nullOnOverflow)
     }

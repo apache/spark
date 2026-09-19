@@ -1,0 +1,294 @@
+================================================================================================
+Cast
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+micros -> string:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros -> string wholestage off                    2854           2881          37          3.5         285.4       1.0X
+micros -> string wholestage on                     2867           2963          54          3.5         286.7       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+nanos(9) -> string:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+nanos(9) -> string wholestage off                  6044           6049           7          1.7         604.4       1.0X
+nanos(9) -> string wholestage on                   5893           5947          31          1.7         589.3       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+nanos(7) -> string:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+nanos(7) -> string wholestage off                  5863           5863           0          1.7         586.3       1.0X
+nanos(7) -> string wholestage on                   5912           5918           6          1.7         591.2       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+micros -> nanos(9):                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros -> nanos(9) wholestage off                   717            719           2         13.9          71.7       1.0X
+micros -> nanos(9) wholestage on                    741            746           4         13.5          74.1       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+nanos(9) -> micros:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+nanos(9) -> micros wholestage off                  1716           1721           7          5.8         171.6       1.0X
+nanos(9) -> micros wholestage on                   1772           1776           4          5.6         177.2       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+nanos(9) -> nanos(7):                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+nanos(9) -> nanos(7) wholestage off                1811           1815           5          5.5         181.1       1.0X
+nanos(9) -> nanos(7) wholestage on                 1723           1729           5          5.8         172.3       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+micros -> date:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros -> date wholestage off                      1106           1110           7          9.0         110.6       1.0X
+micros -> date wholestage on                       1088           1093           6          9.2         108.8       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+nanos(9) -> date:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+nanos(9) -> date wholestage off                    2059           2061           2          4.9         205.9       1.0X
+nanos(9) -> date wholestage on                     2043           2049           7          4.9         204.3       1.0X
+
+
+================================================================================================
+Parse from string
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+string(6 digits) -> micros:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+string(6 digits) -> micros wholestage off            262            262           0          3.8         261.9       1.0X
+string(6 digits) -> micros wholestage on             266            271           6          3.8         265.7       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+string(9 digits) -> nanos(9):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+string(9 digits) -> nanos(9) wholestage off            316            316           0          3.2         315.6       1.0X
+string(9 digits) -> nanos(9) wholestage on             305            309           5          3.3         304.8       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+string(7 digits) -> nanos(7):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+string(7 digits) -> nanos(7) wholestage off            286            289           4          3.5         285.9       1.0X
+string(7 digits) -> nanos(7) wholestage on             277            279           1          3.6         276.7       1.0X
+
+
+================================================================================================
+Hashing
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+murmur3 hash(micros):                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+murmur3 hash(micros) wholestage off                 700            712          18         14.3          70.0       1.0X
+murmur3 hash(micros) wholestage on                  721            727           7         13.9          72.1       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+murmur3 hash(nanos(9)):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+murmur3 hash(nanos(9)) wholestage off              1767           1777          15          5.7         176.7       1.0X
+murmur3 hash(nanos(9)) wholestage on               1810           1815           4          5.5         181.0       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+xxhash64(micros):                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+xxhash64(micros) wholestage off                     684            685           1         14.6          68.4       1.0X
+xxhash64(micros) wholestage on                      710            718           7         14.1          71.0       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+xxhash64(nanos(9)):                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+xxhash64(nanos(9)) wholestage off                  1776           1777           2          5.6         177.6       1.0X
+xxhash64(nanos(9)) wholestage on                   1764           1770           6          5.7         176.4       1.0X
+
+
+================================================================================================
+Sort (global ORDER BY)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+order by micros:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+order by micros wholestage off                     1551           1556           8          6.4         155.1       1.0X
+order by micros wholestage on                      1578           1600          27          6.3         157.8       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+order by nanos(9):                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+order by nanos(9) wholestage off                   2622           2623           1          3.8         262.2       1.0X
+order by nanos(9) wholestage on                    2631           2639           6          3.8         263.1       1.0X
+
+
+================================================================================================
+Group-by aggregation (~1M distinct keys)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+group by micros key:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+group by micros key wholestage off                 1347           1401          77          7.4         134.7       1.0X
+group by micros key wholestage on                   941            994          47         10.6          94.1       1.4X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+group by nanos(9) key:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+group by nanos(9) key wholestage off               2844           2882          54          3.5         284.4       1.0X
+group by nanos(9) key wholestage on                2307           2363          48          4.3         230.7       1.2X
+
+
+================================================================================================
+MIN/MAX aggregation
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+min/max micros:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+min/max micros wholestage off                       795            797           1         12.6          79.5       1.0X
+min/max micros wholestage on                        518            522           3         19.3          51.8       1.5X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+min/max nanos(9):                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+min/max nanos(9) wholestage off                    2202           2219          24          4.5         220.2       1.0X
+min/max nanos(9) wholestage on                     1589           1593           5          6.3         158.9       1.4X
+
+
+================================================================================================
+Datetime functions
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+hour(micros):                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+hour(micros) wholestage off                         653            655           4         15.3          65.3       1.0X
+hour(micros) wholestage on                          603            604           1         16.6          60.3       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+hour(nanos(9)):                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+hour(nanos(9)) wholestage off                      1564           1566           3          6.4         156.4       1.0X
+hour(nanos(9)) wholestage on                       1521           1528           5          6.6         152.1       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+second(micros):                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+second(micros) wholestage off                       656            659           4         15.2          65.6       1.0X
+second(micros) wholestage on                        606            607           1         16.5          60.6       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+second(nanos(9)):                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+second(nanos(9)) wholestage off                    1548           1548           1          6.5         154.8       1.0X
+second(nanos(9)) wholestage on                     1504           1509           3          6.6         150.4       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+extract(SECOND, micros):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+extract(SECOND, micros) wholestage off              719            720           2         13.9          71.9       1.0X
+extract(SECOND, micros) wholestage on               672            679           7         14.9          67.2       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+extract(SECOND, nanos(9)):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+extract(SECOND, nanos(9)) wholestage off           1646           1649           4          6.1         164.6       1.0X
+extract(SECOND, nanos(9)) wholestage on            1877           1883           4          5.3         187.7       0.9X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+unix_micros(micros):                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+unix_micros(micros) wholestage off                  288            289           1         34.7          28.8       1.0X
+unix_micros(micros) wholestage on                   244            247           3         41.0          24.4       1.2X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+unix_nanos(nanos(9)):                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+unix_nanos(nanos(9)) wholestage off                2092           2154          88          4.8         209.2       1.0X
+unix_nanos(nanos(9)) wholestage on                 2107           2116           6          4.7         210.7       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+micros + interval 1 hour:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros + interval 1 hour wholestage off            1635           1636           0          6.1         163.5       1.0X
+micros + interval 1 hour wholestage on             1498           1505          10          6.7         149.8       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+nanos(9) + interval 1 hour:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+nanos(9) + interval 1 hour wholestage off           2691           2692           2          3.7         269.1       1.0X
+nanos(9) + interval 1 hour wholestage on            2602           2611           6          3.8         260.2       1.0X
+
+
+================================================================================================
+Parquet write/read
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+Save to Parquet:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros (TIMESTAMP_NTZ)                             2044           2044           0          4.9         204.4       1.0X
+nanos(9) (TIMESTAMP_NTZ(9))                        3307           3307           0          3.0         330.7       0.6X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+Load from Parquet:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros, vectorized on                               536            543          11         18.7          53.6       1.0X
+micros, vectorized off                             1535           1549          20          6.5         153.5       0.3X
+nanos(9), vectorized on (row-based)                 550            553           3         18.2          55.0       1.0X
+nanos(9), vectorized off (row-based)               1605           1628          20          6.2         160.5       0.3X
+
+
+================================================================================================
+ORC write/read
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+Save to ORC:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros (TIMESTAMP_NTZ)                             1340           1340           0          7.5         134.0       1.0X
+nanos(9) (TIMESTAMP_NTZ(9))                        5010           5010           0          2.0         501.0       0.3X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+Load from ORC:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros, vectorized on                               330            334           3         30.3          33.0       1.0X
+micros, vectorized off                              944            946           1         10.6          94.4       0.3X
+nanos(9), vectorized on                            1408           1410           3          7.1         140.8       0.2X
+nanos(9), vectorized off                           2271           2272           1          4.4         227.1       0.1X
+
+

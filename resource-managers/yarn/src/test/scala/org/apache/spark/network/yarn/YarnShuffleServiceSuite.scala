@@ -76,8 +76,20 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
   private var recoveryLocalDir: File = _
   protected var tempDir: File = _
+  // The NM local dir set as yarn.nodemanager.local-dirs. ExternalShuffleBlockResolver only
+  // accepts executor localDirs that canonicalize to a path contained under this root and that
+  // contain the registering appId as a path segment (see validateLocalDirs). Tests build such
+  // paths via appLocalDir below.
+  protected var nmLocalDir: File = _
 
   protected def shuffleDBBackend(): DBBackend
+
+  // Build an executor/merge local dir under the NM local dir (nmLocalDir) scoped to the given
+  // application, mirroring the real YARN layout <nm-local-dir>/usercache/<user>/appcache/<appId>.
+  // This satisfies the local-dir validation done at the RPC boundary (LocalDirValidator): the path
+  // is contained under the configured NM local dir and contains the appId as a path segment.
+  protected def appLocalDir(appId: String, suffix: String): String =
+    new File(nmLocalDir, s"usercache/u/appcache/$appId/$suffix").getAbsolutePath
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -91,6 +103,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     yarnConfig.setInt(SHUFFLE_SERVICE_PORT.key, 0)
     yarnConfig.setBoolean(YarnShuffleService.STOP_ON_FAILURE_KEY, true)
     val localDir = Utils.createTempDir()
+    nmLocalDir = localDir
     yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, localDir.getAbsolutePath)
     yarnConfig.set("spark.shuffle.push.server.mergedShuffleFileManagerImpl",
       "org.apache.spark.network.shuffle.RemoteBlockPushResolver")
@@ -203,15 +216,19 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     secretsFile should not be (null)
     val mergeMgrFile = s1.mergeManagerFile
     mergeMgrFile should not be (null)
-    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, SORT_MANAGER)
-    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, SORT_MANAGER)
+    val shuffleInfo1 =
+      new ExecutorShuffleInfo(
+        Array(appLocalDir(app1Id.toString, "foo/foo"),
+          appLocalDir(app1Id.toString, "bar/bar")), 3, SORT_MANAGER)
+    val shuffleInfo2 =
+      new ExecutorShuffleInfo(Array(appLocalDir(app2Id.toString, "bippy/bippy")), 5, SORT_MANAGER)
     val mergedShuffleInfo3 =
       new ExecutorShuffleInfo(
-        Array(new File(tempDir, "foo/foo").getAbsolutePath,
-          new File(tempDir, "bar/bar").getAbsolutePath), 3,
+        Array(appLocalDir(app3Id.toString, "foo/foo"),
+          appLocalDir(app3Id.toString, "bar/bar")), 3,
         SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
     val mergedShuffleInfo4 =
-      new ExecutorShuffleInfo(Array(new File(tempDir, "bippy/bippy").getAbsolutePath),
+      new ExecutorShuffleInfo(Array(appLocalDir(app4Id.toString, "bippy/bippy")),
         5, SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
 
     val blockHandler = s1.blockHandler
@@ -237,9 +254,9 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     mergeManager.registerExecutor(app3Id.toString, mergedShuffleInfo3)
     mergeManager.registerExecutor(app4Id.toString, mergedShuffleInfo4)
 
-    val localDirs3 = Array(new File(tempDir, "foo/merge_manager_1").getAbsolutePath,
-      new File(tempDir, "bar/merge_manager_1").getAbsolutePath)
-    val localDirs4 = Array(new File(tempDir, "bippy/merge_manager_1").getAbsolutePath)
+    val localDirs3 = Array(appLocalDir(app3Id.toString, "foo/merge_manager_1"),
+      appLocalDir(app3Id.toString, "bar/merge_manager_1"))
+    val localDirs4 = Array(appLocalDir(app4Id.toString, "bippy/merge_manager_1"))
     val appPathsInfo3 = new AppPathsInfo(localDirs3, 3)
     val appPathsInfo4 = new AppPathsInfo(localDirs4, 5)
 
@@ -354,15 +371,19 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     val execStateFile = s1.registeredExecutorFile
     execStateFile should not be (null)
-    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, SORT_MANAGER)
-    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, SORT_MANAGER)
+    val shuffleInfo1 =
+      new ExecutorShuffleInfo(
+        Array(appLocalDir(app1Id.toString, "foo/foo"),
+          appLocalDir(app1Id.toString, "bar/bar")), 3, SORT_MANAGER)
+    val shuffleInfo2 =
+      new ExecutorShuffleInfo(Array(appLocalDir(app2Id.toString, "bippy/bippy")), 5, SORT_MANAGER)
     val mergedShuffleInfo3 =
       new ExecutorShuffleInfo(
-        Array(new File(tempDir, "foo/foo").getAbsolutePath,
-          new File(tempDir, "bar/bar").getAbsolutePath),
+        Array(appLocalDir(app3Id.toString, "foo/foo"),
+          appLocalDir(app3Id.toString, "bar/bar")),
       3, SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
     val mergedShuffleInfo4 =
-      new ExecutorShuffleInfo(Array(new File(tempDir, "bippy/bippy").getAbsolutePath),
+      new ExecutorShuffleInfo(Array(appLocalDir(app4Id.toString, "bippy/bippy")),
         5, SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
 
     val blockHandler = s1.blockHandler
@@ -407,7 +428,10 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s1.initializeApplication(app1Data)
 
     val execStateFile = s1.registeredExecutorFile
-    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, SORT_MANAGER)
+    val shuffleInfo1 =
+      new ExecutorShuffleInfo(
+        Array(appLocalDir(app1Id.toString, "foo/foo"),
+          appLocalDir(app1Id.toString, "bar/bar")), 3, SORT_MANAGER)
 
     val blockHandler = s1.blockHandler
     val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
@@ -437,7 +461,8 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val app2Id = ApplicationId.newInstance(0, 2)
     val app2Data = makeAppInfo("user", app2Id)
     s2.initializeApplication(app2Data)
-    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, SORT_MANAGER)
+    val shuffleInfo2 =
+      new ExecutorShuffleInfo(Array(appLocalDir(app2Id.toString, "bippy/bippy")), 5, SORT_MANAGER)
     resolver2.registerExecutor(app2Id.toString, "exec-2", shuffleInfo2)
     ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver2) should be (Some(shuffleInfo2))
     s2.stop()
@@ -490,8 +515,12 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     execStateFile should not be (null)
     val secretsFile = s1.secretsFile
     secretsFile should not be (null)
-    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, SORT_MANAGER)
-    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, SORT_MANAGER)
+    val shuffleInfo1 =
+      new ExecutorShuffleInfo(
+        Array(appLocalDir(app1Id.toString, "foo/foo"),
+          appLocalDir(app1Id.toString, "bar/bar")), 3, SORT_MANAGER)
+    val shuffleInfo2 =
+      new ExecutorShuffleInfo(Array(appLocalDir(app2Id.toString, "bippy/bippy")), 5, SORT_MANAGER)
 
     val blockHandler = s1.blockHandler
     val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
@@ -1148,11 +1177,11 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
 
     val execShuffleInfo1 =
       new ExecutorShuffleInfo(
-        Array(new File(tempDir, "foo/foo").getAbsolutePath,
-          new File(tempDir, "bar/bar").getAbsolutePath), 3,
+        Array(appLocalDir(app1Id.toString, "foo/foo"),
+          appLocalDir(app1Id.toString, "bar/bar")), 3,
         SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
     val execShuffleInfo2 =
-      new ExecutorShuffleInfo(Array(new File(tempDir, "bippy/bippy").getAbsolutePath),
+      new ExecutorShuffleInfo(Array(appLocalDir(app2Id.toString, "bippy/bippy")),
         3, SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
 
     val blockHandler = s1.blockHandler
@@ -1167,9 +1196,9 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val mergeManager = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
     mergeManager.registerExecutor(app1Id.toString, execShuffleInfo1)
     mergeManager.registerExecutor(app2Id.toString, execShuffleInfo2)
-    val localDirsApp1 = Array(new File(tempDir, "foo/merge_manager_1").getAbsolutePath,
-      new File(tempDir, "bar/merge_manager_1").getAbsolutePath)
-    val localDirsApp2 = Array(new File(tempDir, "bippy/merge_manager_1").getAbsolutePath)
+    val localDirsApp1 = Array(appLocalDir(app1Id.toString, "foo/merge_manager_1"),
+      appLocalDir(app1Id.toString, "bar/merge_manager_1"))
+    val localDirsApp2 = Array(appLocalDir(app2Id.toString, "bippy/merge_manager_1"))
     val appPathsInfo1 = new AppPathsInfo(localDirsApp1, 3)
     val appPathsInfo2 = new AppPathsInfo(localDirsApp2, 3)
 
@@ -1238,8 +1267,8 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s1.initializeApplication(app1Data)
     val execShuffleInfo1 =
       new ExecutorShuffleInfo(
-        Array(new File(tempDir, "foo/foo").getAbsolutePath,
-          new File(tempDir, "bar/bar").getAbsolutePath), 3, SORT_MANAGER)
+        Array(appLocalDir(app1Id.toString, "foo/foo"),
+          appLocalDir(app1Id.toString, "bar/bar")), 3, SORT_MANAGER)
     val blockHandler = s1.blockHandler
     val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
     blockResolver.registerExecutor(app1Id.toString, "exec-1", execShuffleInfo1)

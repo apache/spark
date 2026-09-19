@@ -38,12 +38,12 @@ import java.util.Arrays;
 import java.util.regex.Pattern;
 
 /**
- * Custom Receiver that receives data over a socket. Received bytes is interpreted as
+ * Custom Receiver that receives data over a socket. Received bytes are interpreted as
  * text and \n delimited lines are considered as records. They are then counted and printed.
  *
- * Usage: JavaCustomReceiver <master> <hostname> <port>
- *   <master> is the Spark master URL. In local mode, <master> should be 'local[n]' with n > 1.
- *   <hostname> and <port> of the TCP server that Spark Streaming would connect to receive data.
+ * Usage: JavaCustomReceiver <hostname> <port>
+ *   <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive
+ *   data.
  *
  * To run this on your local machine, you need to first run a Netcat server
  *    `$ nc -lk 9999`
@@ -99,7 +99,7 @@ public class JavaCustomReceiver extends Receiver<String> {
   @Override
   public void onStop() {
     // There is nothing much to do as the thread calling receive()
-    // is designed to stop by itself isStopped() returns false
+    // is designed to stop by itself when isStopped() returns true
   }
 
   /** Create a socket connection and receive data until receiver is stopped */

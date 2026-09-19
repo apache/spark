@@ -110,10 +110,15 @@ abstract class HybridQueue[T, Q <: Queue[T]](
       case _: SparkOutOfMemoryError =>
         null
     }
-    val buffer = if (page != null) {
-      createInMemoryQueue(page)
-    } else {
+    val exactFitPartialPage = page != null &&
+      required < memManager.pageSizeBytes() && page.size() == required
+    val buffer = if (page == null || exactFitPartialPage) {
+      if (page != null) {
+        freePage(page)
+      }
       createDiskQueue()
+    } else {
+      createInMemoryQueue(page)
     }
 
     synchronized {

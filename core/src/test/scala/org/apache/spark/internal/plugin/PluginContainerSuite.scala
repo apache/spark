@@ -34,6 +34,7 @@ import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 import org.apache.spark._
 import org.apache.spark.TestUtils._
 import org.apache.spark.api.plugin._
+import org.apache.spark.deploy.{DriverTimeoutPlugin, RedirectConsolePlugin}
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.MemoryMode
@@ -130,6 +131,20 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(conf)
     // Just check plugin is loaded. The plugin code below checks whether a single copy was loaded.
     assert(TestSparkPlugin.driverPlugin != null)
+  }
+
+  test("SPARK-59412: short class names of built-in plugins") {
+    val conf = new SparkConf()
+      .set(DEFAULT_PLUGINS_LIST, "RedirectConsolePlugin")
+      .set(PLUGINS.key, "DriverTimeoutPlugin,org.apache.spark.deploy.DriverTimeoutPlugin," +
+        s"drivertimeoutplugin,${classOf[TestSparkPlugin].getName()}")
+
+    assert(conf.get(PLUGINS) === Seq(
+      classOf[RedirectConsolePlugin].getName(),
+      classOf[DriverTimeoutPlugin].getName(),
+      classOf[DriverTimeoutPlugin].getName(),
+      "drivertimeoutplugin",
+      classOf[TestSparkPlugin].getName()))
   }
 
   test("SPARK-33088: executor tasks trigger plugin calls") {
@@ -244,8 +259,9 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       sc = new SparkContext(conf)
       val memoryManager = sc.env.memoryManager
 
-      assert(memoryManager.tungstenMemoryMode == MemoryMode.OFF_HEAP)
-      assert(memoryManager.maxOffHeapStorageMemory == MemoryOverridePlugin.offHeapMemory)
+      // SPARK-57867: The driver does not reserve off-heap memory in non-local mode
+      assert(memoryManager.tungstenMemoryMode == MemoryMode.ON_HEAP)
+      assert(memoryManager.maxOffHeapStorageMemory == 0)
 
       val defaultResourceProfile = sc.resourceProfileManager.defaultResourceProfile
       assert(512L ==
@@ -259,8 +275,12 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
 
       // Check executor memory is also updated
-      val execInfo = sc.statusTracker.getExecutorInfos.head
-      assert(execInfo.totalOffHeapStorageMemory() == MemoryOverridePlugin.offHeapMemory)
+      eventually(timeout(10.seconds), interval(100.milliseconds)) {
+        val execs = sc.statusStore.executorList(true).filter(_.id != SparkContext.DRIVER_IDENTIFIER)
+        assert(execs.nonEmpty)
+        assert(execs.forall(_.memoryMetrics.exists(
+          _.totalOffHeapStorageMemory == MemoryOverridePlugin.offHeapMemory)))
+      }
     } finally {
       if (sc != null) {
         sc.stop()
@@ -285,6 +305,7 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
           case _: TestSparkPluginEvent =>
             // Count down upon receiving the event sent from the plugin during shutdown.
             countDownLatch.countDown()
+          case _ =>
         }
       }
     })
@@ -313,7 +334,7 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensures the shuffle manager specified in configuration was
     // overridden by the Spark plugin.
-    assert(sc.env.shuffleManager.isInstanceOf[SetShuffleManagerPlugin.MyShuffleManager])
+    assert(sc.env.blockingShuffleManager.isInstanceOf[SetShuffleManagerPlugin.MyShuffleManager])
   }
 }
 

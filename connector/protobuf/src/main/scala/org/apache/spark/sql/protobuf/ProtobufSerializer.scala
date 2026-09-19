@@ -112,7 +112,7 @@ private[sql] class ProtobufSerializer(
         (getter, ordinal) => getter.getFloat(ordinal)
       case (DoubleType, DOUBLE) =>
         (getter, ordinal) => getter.getDouble(ordinal)
-      case (StringType, ENUM) =>
+      case (_: StringType, ENUM) =>
         val enumSymbols: Set[String] =
           fieldDescriptor.getEnumType.getValues.asScala.map(e => e.toString).toSet
         (getter, ordinal) =>
@@ -138,7 +138,7 @@ private[sql] class ProtobufSerializer(
               enumValues.mkString(", "))
           }
           fieldDescriptor.getEnumType.findValueByNumber(data)
-      case (StringType, STRING) =>
+      case (_: StringType, STRING) =>
         (getter, ordinal) => {
           String.valueOf(getter.getUTF8String(ordinal))
         }
@@ -148,6 +148,11 @@ private[sql] class ProtobufSerializer(
 
       case (DateType, INT) =>
         (getter, ordinal) => getter.getInt(ordinal)
+
+      case (_: TimeType, LONG) =>
+        // TimeType is stored internally as nanoseconds-since-midnight; write it
+        // directly into the int64 field as nanos-of-day.
+        (getter, ordinal) => getter.getLong(ordinal)
 
       case (TimestampType, MESSAGE) =>
         (getter, ordinal) =>
@@ -210,7 +215,7 @@ private[sql] class ProtobufSerializer(
         (getter, ordinal) =>
           UInt64Value.of(getter.getLong(ordinal))
 
-      case (StringType, MESSAGE)
+      case (_: StringType, MESSAGE)
         if fieldDescriptor.getMessageType.getFullName == StringValue.getDescriptor.getFullName =>
         (getter, ordinal) =>
           StringValue.of(getter.getUTF8String(ordinal).toString)

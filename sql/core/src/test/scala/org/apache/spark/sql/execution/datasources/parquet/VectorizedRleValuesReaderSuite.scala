@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.nio.ByteBuffer
 import java.util.PrimitiveIterator
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.parquet.bytes.ByteBufferInputStream
 
 import org.apache.spark.SparkFunSuite
@@ -127,6 +129,61 @@ class VectorizedRleValuesReaderSuite extends SparkFunSuite {
     val page1 = Array.tabulate(128)(i => i & 1)
     val page2 = Array.fill(64)(1) ++ Array.tabulate(64)(i => i & 1)
     runAndAssertMultiPage(Seq(page1, page2), maxDef = 1, batchSize = 64)
+  }
+
+  test("PACKED: multi-buffer stream with packed run crossing buffer boundary") {
+    // Exercises the MultiBufferInputStream.slice() path where the packed bytes span a buffer
+    // boundary, causing slice() to return a freshly-allocated contiguous buffer with
+    // position() == 0 (the base-0 pos branch in readNextGroup).
+    val n = 256
+    val defLevels = Array.tabulate(n)(i => i & 1)
+    val bitWidth = 1
+    val encoded = encodeRle(defLevels, bitWidth)
+
+    // Split the encoded bytes into small chunks (e.g. 3 bytes each) so the packed data
+    // is guaranteed to span at least one buffer boundary within MultiBufferInputStream.
+    val chunkSize = 3
+    val buffers = encoded.grouped(chunkSize).map { chunk =>
+      ByteBuffer.wrap(chunk)
+    }.toList.asJava
+
+    val nonNullCount = defLevels.count(_ == 1)
+    val plainBytes = plainIntBytes(nonNullCount)(valueAt)
+
+    val reader = new VectorizedRleValuesReader(bitWidth, false)
+    reader.initFromPage(n, ByteBufferInputStream.wrap(buffers))
+    val valueReader = new VectorizedPlainValuesReader
+    valueReader.initFromPage(
+      nonNullCount, ByteBufferInputStream.wrap(ByteBuffer.wrap(plainBytes)))
+    val state = ParquetTestAccess.newState(intColumnDescriptor(1), false)
+    ParquetTestAccess.resetForNewPage(state, n, 0L)
+
+    val batchSize = 64
+    var produced = 0
+    var expectedValueIdx = 0
+    while (produced < n) {
+      val toRead = math.min(batchSize, n - produced)
+      val values = new OnHeapColumnVector(toRead, IntegerType)
+      ParquetTestAccess.resetForNewBatch(state, toRead)
+      ParquetTestAccess.readBatch(reader, state, values, null, valueReader, integerUpdater)
+
+      var i = 0
+      while (i < toRead) {
+        val absPos = produced + i
+        if (defLevels(absPos) == 1) {
+          assert(!values.isNullAt(i), s"pos $absPos should be non-null")
+          val expected = valueAt(expectedValueIdx)
+          assert(
+            values.getInt(i) == expected,
+            s"pos $absPos value mismatch: got ${values.getInt(i)}, expected $expected")
+          expectedValueIdx += 1
+        } else {
+          assert(values.isNullAt(i), s"pos $absPos should be null")
+        }
+        i += 1
+      }
+      produced += toRead
+    }
   }
 }
 

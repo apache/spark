@@ -15,23 +15,20 @@
 -- This can be generalized to include more tests for more columns, but it covers the main cases
 -- when there is more than one column.
 
---ONLY_IF spark
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
 
-CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
+CREATE TEMPORARY VIEW m(a, b) AS VALUES
   (null, null),
   (null, 1.0),
   (2, 3.0),
-  (4, 5.0)
-  AS m(a, b);
+  (4, 5.0);
 
-CREATE TEMPORARY VIEW s AS SELECT * FROM VALUES
+CREATE TEMPORARY VIEW s(c, d) AS VALUES
   (null, null),
   (0, 1.0),
   (2, 3.0),
-  (4, null)
-  AS s(c, d);
+  (4, null);
 
   -- Case 1
   -- (subquery is empty -> row is returned)

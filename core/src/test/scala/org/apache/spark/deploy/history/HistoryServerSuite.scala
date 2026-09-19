@@ -140,6 +140,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     "limit app list json" -> "applications?limit=3",
     "one app json" -> "applications/local-1422981780767",
     "one app multi-attempt json" -> "applications/local-1426533911241",
+    "one app with non-zero exit code json" -> "applications/local-1430917381536",
     "job list json" -> "applications/local-1422981780767/jobs",
     "job list from multi-attempt app json(1)" -> "applications/local-1426533911241/1/jobs",
     "job list from multi-attempt app json(2)" -> "applications/local-1426533911241/2/jobs",
@@ -345,6 +346,12 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
       "got \"foo\""))
 
     getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
+  }
+
+  test("SPARK-59010: hold status is not available through the history server") {
+    val holdStatus = getContentAndCode("applications/local-1422981780767/holdstatus")
+    holdStatus._1 should be (HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+    holdStatus._3 should be (Some("Hold status not available through the history server."))
   }
 
   test("automatically retrieve uiRoot from request through Knox") {

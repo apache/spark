@@ -28,15 +28,12 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row, SaveMode}
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -701,22 +698,45 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
       === java.sql.Timestamp.valueOf("2020-02-02 04:13:14.56789"))
   }
 
-  test("SPARK-57166: nanosecond timestamp types are not supported in JDBC write") {
+  test("SPARK-57460: JDBC nanosecond timestamp write round-trip") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-      Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9)).foreach { nanosType =>
-        // The nanos literal is built directly from its internal value to avoid relying on
-        // cast/parser support.
-        val nanosLiteral = Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
-        val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
-        checkErrorMatchPVals(
-          exception = intercept[AnalysisException] {
-            df.write.jdbc(url, "TEST.NANOSTYPES", new Properties())
-          },
-          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-          parameters = Map(
-            "columnName" -> "`ts`",
-            "columnType" -> java.util.regex.Pattern.quote(s""""${nanosType.sql}""""),
-            "format" -> ".*"))
+      Seq(7, 8, 9).foreach { precision =>
+        // TIMESTAMP_NTZ(p): write a LocalDateTime, read it back as a nanos NTZ column.
+        val ntzTable = "TEST.NANOS_NTZ"
+        val ldt = java.time.LocalDateTime.of(2020, 2, 2, 4, 13, 14, 123456789)
+        val ntzSchema = new StructType().add("t", TimestampNTZNanosType(precision))
+        val ntzDf = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(ldt))), ntzSchema)
+        ntzDf.write.mode(SaveMode.Overwrite).jdbc(url, ntzTable, new Properties())
+        val ntzReadBack = spark.read
+          .option("preferTimestampNanos", "true")
+          .option("preferTimestampNTZ", "true")
+          .jdbc(url, ntzTable, new Properties())
+        assert(ntzReadBack.schema.fields(0).dataType === TimestampNTZNanosType(precision))
+        val expectedNtz = precision match {
+          case 7 => java.time.LocalDateTime.of(2020, 2, 2, 4, 13, 14, 123456700)
+          case 8 => java.time.LocalDateTime.of(2020, 2, 2, 4, 13, 14, 123456780)
+          case 9 => ldt
+        }
+        assert(ntzReadBack.collect()(0).getAs[java.time.LocalDateTime](0) === expectedNtz)
+
+        // TIMESTAMP_LTZ(p): write an Instant, read it back as a nanos LTZ column.
+        val ltzTable = "TEST.NANOS_LTZ"
+        val instant = java.time.Instant.parse("2020-02-02T12:13:14.123456789Z")
+        val ltzSchema = new StructType().add("t", TimestampLTZNanosType(precision))
+        val ltzDf = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(instant))), ltzSchema)
+        ltzDf.write.mode(SaveMode.Overwrite).jdbc(url, ltzTable, new Properties())
+        val ltzReadBack = spark.read
+          .option("preferTimestampNanos", "true")
+          .jdbc(url, ltzTable, new Properties())
+        assert(ltzReadBack.schema.fields(0).dataType === TimestampLTZNanosType(precision))
+        val expectedLtz = precision match {
+          case 7 => java.time.Instant.parse("2020-02-02T12:13:14.123456700Z")
+          case 8 => java.time.Instant.parse("2020-02-02T12:13:14.123456780Z")
+          case 9 => instant
+        }
+        assert(ltzReadBack.collect()(0).getAs[java.time.Instant](0) === expectedLtz)
       }
     }
   }

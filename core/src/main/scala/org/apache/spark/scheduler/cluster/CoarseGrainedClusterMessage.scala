@@ -35,6 +35,7 @@ private[spark] object CoarseGrainedClusterMessages {
       sparkProperties: Seq[(String, String)],
       ioEncryptionKey: Option[Array[Byte]],
       hadoopDelegationCreds: Option[Array[Byte]],
+      userCredentials: Option[(Long, Array[Byte])],
       resourceProfile: ResourceProfile,
       logLevel: Option[String])
     extends CoarseGrainedClusterMessage
@@ -60,6 +61,9 @@ private[spark] object CoarseGrainedClusterMessages {
   case class UpdateDelegationTokens(tokens: Array[Byte])
     extends CoarseGrainedClusterMessage
 
+  case class UpdateUserCredentials(version: Long, credentials: Array[Byte])
+    extends CoarseGrainedClusterMessage
+
   // Executors to driver
   case class RegisterExecutor(
       executorId: String,
@@ -79,7 +83,7 @@ private[spark] object CoarseGrainedClusterMessages {
       taskId: Long,
       state: TaskState,
       data: SerializableBuffer,
-      taskCpus: Int,
+      taskCpus: BigDecimal,
       resources: Map[String, Map[String, Long]] = Map.empty)
     extends CoarseGrainedClusterMessage
 
@@ -90,7 +94,7 @@ private[spark] object CoarseGrainedClusterMessages {
         taskId: Long,
         state: TaskState,
         data: ByteBuffer,
-        taskCpus: Int,
+        taskCpus: BigDecimal,
         resources: Map[String, Map[String, Long]]): StatusUpdate = {
       StatusUpdate(executorId, taskId, state, new SerializableBuffer(data), taskCpus, resources)
     }

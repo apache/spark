@@ -21,10 +21,9 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
-import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.util.Utils
 
 /**
  * Binds [[ArchiveReadSuiteBase]]'s file-format hooks to CSV. The header-mode-specific tests live in
@@ -44,113 +43,21 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
 
   override protected def readSchema: String = "id INT, name STRING"
 
-  override protected def encodeFile(
-      df: DataFrame,
-      writeOptions: Map[String, String]): Array[Byte] = {
-    val dir = Utils.createTempDir(namePrefix = "archive-test-encode")
-    try {
-      df.coalesce(1).write.format("csv")
-        .options(Map("header" -> header.toString) ++ writeOptions)
-        .mode("overwrite").save(dir.getCanonicalPath)
-      val parts = dir.listFiles().filter { f =>
-        f.isFile && !f.getName.startsWith("_") && !f.getName.startsWith(".") &&
-          !f.getName.endsWith(".crc")
-      }
-      assert(parts.length == 1,
-        s"expected exactly one data file, got: ${parts.map(_.getName).toList}")
-      Files.readAllBytes(parts.head.toPath)
-    } finally Utils.deleteRecursively(dir)
-  }
+  // CSV infers its schema from row content (supportsSchemaInference defaults true); inference is
+  // triggered by the `inferSchema` option. CSV is positional/header-keyed and cannot represent
+  // nested types, so it opts out of the schema-merge and complex-type tests.
+  override protected def inferenceOptions: Map[String, String] = Map("inferSchema" -> "true")
+
+  override protected def supportsComplexTypes: Boolean = false
+
+  override protected def supportsSchemaMerge: Boolean = false
 
   /** Raw CSV bytes, for tests that need precise control over the row layout. */
   protected def csvBytes(s: String): Array[Byte] = s.getBytes(StandardCharsets.UTF_8)
 
-  test("CSV: archive infers the same schema as a directory of the same files") {
-    val entries = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol")))
-      .zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) }
-    withArchiveFile() { archive =>
-      writeArchive(archive, entries)
-      val archiveSchema = spark.read.options(readOptions).option("inferSchema", "true")
-        .format(format).load(archive.getCanonicalPath).schema
-      withTempDir { dir =>
-        entries.foreach { case (n, b) => Files.write(new File(dir, n).toPath, b) }
-        val dirSchema = spark.read.options(readOptions).option("inferSchema", "true")
-          .format(format).load(dir.getCanonicalPath).schema
-        assert(archiveSchema == dirSchema,
-          s"inference parity broken; archive=$archiveSchema dir=$dirSchema")
-      }
-    }
-  }
-
-  test("CSV: all archive formats infer the same schema") {
-    val entries = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol")))
-      .zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) }
-    val schemas = archiveExtensions.map { ext =>
-      withArchiveFile(ext) { archive =>
-        writeArchive(archive, entries)
-        spark.read.options(readOptions).option("inferSchema", "true")
-          .format(format).load(archive.getCanonicalPath).schema
-      }
-    }
-    assert(schemas.distinct.size == 1,
-      s"archive formats inferred different schemas: ${archiveExtensions.zip(schemas)}")
-  }
-
   /** CSV bytes for `rows`, prefixed with a `cols` header line when [[header]] is set. */
   private def csvEntry(cols: String, rows: String*): Array[Byte] =
     csvBytes((if (header) cols +: rows else rows).mkString("", "\n", "\n"))
-
-  test("CSV: inference skips a corrupt archive among good ones (ignoreCorruptFiles)") {
-    withTempDir { dir =>
-      val good = sampleDf((1, "Alice"), (2, "Bob"))
-      writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
-        Seq(entryName(0) -> encodeFile(good)))
-      writeCorruptArchive(new File(dir, s"bad.$corruptArchiveExtension"))
-      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-        val schema = spark.read.options(readOptions).option("inferSchema", "true")
-          .format(format).load(dir.getCanonicalPath).schema
-        withTempDir { onlyGood =>
-          Files.write(new File(onlyGood, entryName(0)).toPath, encodeFile(good))
-          val expected = spark.read.options(readOptions).option("inferSchema", "true")
-            .format(format).load(onlyGood.getCanonicalPath).schema
-          assert(schema == expected,
-            s"corrupt archive not skipped during inference; got $schema, want $expected")
-        }
-      }
-    }
-  }
-
-  test("CSV: inference widens a column's type across archive entries") {
-    withArchiveFile() { archive =>
-      writeArchive(archive, Seq(
-        entryName(0) -> csvEntry("c", "1", "2"),
-        entryName(1) -> csvEntry("c", "x")))
-      val schema = spark.read.options(readOptions).option("inferSchema", "true")
-        .format(format).load(archive.getCanonicalPath).schema
-      assert(schema.length == 1 && schema.head.dataType == StringType,
-        s"expected the column widened to string across entries, got $schema")
-    }
-  }
-
-  test("CSV: inference merges archive entries with loose files in the same directory") {
-    withTempDir { dir =>
-      val inArchive = sampleDf((1, "Alice"), (2, "Bob"))
-      val loose = sampleDf((3, "Carol"))
-      writeArchive(new File(dir, s"data.${archiveExtensions.head}"),
-        Seq(entryName(0) -> encodeFile(inArchive)))
-      Files.write(new File(dir, s"loose.$fileExtension").toPath, encodeFile(loose))
-      val schema = spark.read.options(readOptions).option("inferSchema", "true")
-        .format(format).load(dir.getCanonicalPath).schema
-      withTempDir { looseDir =>
-        Files.write(new File(looseDir, entryName(0)).toPath, encodeFile(inArchive))
-        Files.write(new File(looseDir, s"loose.$fileExtension").toPath, encodeFile(loose))
-        val expected = spark.read.options(readOptions).option("inferSchema", "true")
-          .format(format).load(looseDir.getCanonicalPath).schema
-        assert(schema == expected,
-          s"mixed archive+loose inference diverged from directory; got $schema, want $expected")
-      }
-    }
-  }
 
   test("CSV: a column empty in the archive but typed in a loose file is not collapsed to string") {
     // One inference pass over all inputs keeps the empty column NullType until the end, so it
@@ -224,11 +131,8 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   test("CSV: the DSv2 path refuses to infer a schema for an archive (UNABLE_TO_INFER_SCHEMA)") {
-    // Archive scanning is wired into the V1 file source only, so the DSv2 reader cannot read
-    // archives. On the V2 path inference must keep returning None for an archive input -- raising
-    // UNABLE_TO_INFER_SCHEMA -- rather than inferring a schema and letting the V2 scan parse the
-    // raw archive bytes as CSV. Forcing csv off the V1 source list routes the read through
-    // CSVTable.
+    // Forcing csv off the V1 source list routes the archive read through the DSv2 CSVTable, which
+    // cannot read archives and must fail with UNABLE_TO_INFER_SCHEMA, not parse raw bytes.
     withArchiveFile() { archive =>
       writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
@@ -243,3 +147,92 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
     }
   }
 }
+
+/**
+ * [[CSVArchiveReadBase]] reading CSV files that carry a header row, plus header-specific archive
+ * tests (mismatched headers, and delimiter/multiline cases whose first row is a header).
+ */
+trait CSVHeaderArchiveReadBase extends CSVArchiveReadBase {
+
+  import testImplicits._
+
+  override protected def header: Boolean = true
+
+  test("CSV: entries with mismatched headers behave like standalone files") {
+    assertArchiveMatchesDir(
+      Seq(
+        entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob"))),
+        // A different second-column header: the schema's "name" column is absent from this entry.
+        entryName(1) -> encodeFile(Seq((3, "Carol")).toDF("id", "nickname"))))
+  }
+
+  test("CSV: custom delimiter matches a directory read") {
+    assertArchiveMatchesDir(
+      Seq("a.csv" -> csvBytes("id;name\n1;Alice\n2;Bob\n")),
+      extraOptions = Map("delimiter" -> ";"))
+  }
+
+  test("CSV: multiline quoted fields with embedded newlines match a directory read") {
+    assertArchiveMatchesDir(
+      Seq(
+        "a.csv" -> csvBytes("id,note\n1,\"line1\nline2\"\n2,\"plain\"\n"),
+        "b.csv" -> csvBytes("id,note\n3,\"a\nb\nc\"\n")),
+      extraOptions = Map("multiLine" -> "true"),
+      schema = "id INT, note STRING")
+  }
+}
+
+/**
+ * [[CSVArchiveReadBase]] reading headerless CSV files (columns are positional), plus headerless
+ * delimiter/multiline archive tests. The shared archive tests from [[ArchiveReadSuiteBase]] cover
+ * the common headerless read paths.
+ */
+trait CSVHeaderlessArchiveReadBase extends CSVArchiveReadBase {
+
+  override protected def header: Boolean = false
+
+  test("CSV: headerless custom delimiter matches a directory read") {
+    assertArchiveMatchesDir(
+      Seq("a.csv" -> csvBytes("1;Alice\n2;Bob\n"), "b.csv" -> csvBytes("3;Carol\n")),
+      extraOptions = Map("delimiter" -> ";"))
+  }
+
+  test("CSV: headerless multiline quoted fields with embedded newlines match a directory read") {
+    assertArchiveMatchesDir(
+      Seq(
+        "a.csv" -> csvBytes("1,\"line1\nline2\"\n2,\"plain\"\n"),
+        "b.csv" -> csvBytes("3,\"a\nb\nc\"\n")),
+      extraOptions = Map("multiLine" -> "true"),
+      schema = "id INT, note STRING")
+  }
+}
+
+class CSVHeaderTarArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with CSVHeaderArchiveReadBase
+  with TarArchiveReadBase
+
+class CSVHeaderZipArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with CSVHeaderArchiveReadBase
+  with ZipArchiveReadBase
+
+class CSVHeaderSevenZArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with CSVHeaderArchiveReadBase
+  with SevenZArchiveReadBase
+
+class CSVHeaderlessTarArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with CSVHeaderlessArchiveReadBase
+  with TarArchiveReadBase
+
+class CSVHeaderlessZipArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with CSVHeaderlessArchiveReadBase
+  with ZipArchiveReadBase
+
+class CSVHeaderlessSevenZArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with CSVHeaderlessArchiveReadBase
+  with SevenZArchiveReadBase

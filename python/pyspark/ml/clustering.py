@@ -15,49 +15,51 @@
 # limitations under the License.
 #
 
+import functools
 import sys
 import warnings
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
-import functools
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import numpy as np
 
-from pyspark import since, keyword_only
+from pyspark import keyword_only, since
+from pyspark.ml.common import inherit_doc
+from pyspark.ml.linalg import Matrix, Vector
 from pyspark.ml.param.shared import (
-    HasMaxIter,
-    HasFeaturesCol,
-    HasSeed,
-    HasPredictionCol,
     HasAggregationDepth,
-    HasWeightCol,
-    HasTol,
-    HasProbabilityCol,
-    HasDistanceMeasure,
     HasCheckpointInterval,
-    HasSolver,
+    HasDistanceMeasure,
+    HasFeaturesCol,
+    HasIntermediateStorageLevel,
     HasMaxBlockSizeInMB,
+    HasMaxIter,
+    HasPredictionCol,
+    HasProbabilityCol,
+    HasSeed,
+    HasSolver,
+    HasTol,
+    HasWeightCol,
     Param,
     Params,
     TypeConverters,
 )
+from pyspark.ml.stat import MultivariateGaussian
 from pyspark.ml.util import (
-    JavaMLWritable,
-    JavaMLReadable,
     GeneralJavaMLWritable,
     HasTrainingSummary,
-    try_remote_attribute_relation,
+    JavaMLReadable,
+    JavaMLWritable,
     invoke_helper_relation,
+    try_remote_attribute_relation,
 )
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
-from pyspark.ml.common import inherit_doc
-from pyspark.ml.stat import MultivariateGaussian
 from pyspark.sql import DataFrame
-from pyspark.ml.linalg import Vector, Matrix
 from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
-    from pyspark.ml._typing import M
     from py4j.java_gateway import JavaObject
+
+    from pyspark.ml._typing import M
 
 
 __all__ = [
@@ -582,6 +584,7 @@ class _KMeansParams(
     HasWeightCol,
     HasSolver,
     HasMaxBlockSizeInMB,
+    HasIntermediateStorageLevel,
 ):
     """
     Params for :py:class:`KMeans` and :py:class:`KMeansModel`.
@@ -920,6 +923,13 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         Sets the value of :py:attr:`maxBlockSizeInMB`.
         """
         return self._set(maxBlockSizeInMB=value)
+
+    @since("5.0.0")
+    def setIntermediateStorageLevel(self, value: str) -> "KMeans":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 @inherit_doc
@@ -2171,7 +2181,9 @@ class PowerIterationClustering(
 
 if __name__ == "__main__":
     import doctest
+
     import numpy
+
     import pyspark.ml.clustering
     from pyspark.sql import SparkSession
 

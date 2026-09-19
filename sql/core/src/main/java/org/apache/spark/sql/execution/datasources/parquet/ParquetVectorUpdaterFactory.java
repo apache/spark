@@ -24,22 +24,24 @@ import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.IntLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
-import org.apache.parquet.schema.LogicalTypeAnnotation.TimeLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.UnknownLogicalTypeAnnotation;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
+import org.apache.spark.sql.catalyst.util.DateTimeUtils$;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException;
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps$;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.*;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.nio.ByteOrder;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
@@ -76,6 +78,13 @@ public class ParquetVectorUpdaterFactory {
     boolean isUnknownType = type.getLogicalTypeAnnotation() instanceof UnknownLogicalTypeAnnotation;
     if (isUnknownType && sparkType instanceof NullType) {
       return new NullTypeUpdater();
+    }
+
+    // Types Framework: a framework-managed type provides its own vectorized updater.
+    ParquetVectorUpdater frameworkUpdater =
+        ParquetTypeOps$.MODULE$.getVectorUpdaterOrNull(sparkType, descriptor);
+    if (frameworkUpdater != null) {
+      return frameworkUpdater;
     }
 
     switch (typeName) {
@@ -161,12 +170,29 @@ public class ParquetVectorUpdaterFactory {
           isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
           // TIMESTAMP_NTZ is a new data type and has no legacy files that need to do rebase.
           return new LongAsMicrosUpdater();
+        } else if (sparkType instanceof TimestampLTZNanosType &&
+          isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS, true)) {
+          // Read side of widening a microsecond LTZ timestamp (TIMESTAMP(6)) to nanosecond
+          // precision: old files stay INT64 TIMESTAMP(MICROS); promote each micros value to
+          // (epochMicros = value, nanosWithinMicro = 0). The isAdjustedToUTC=true match keeps this
+          // to the LTZ family. LTZ files can be legacy Julian, so rebase exactly like the
+          // TimestampType read path above.
+          if ("CORRECTED".equals(datetimeRebaseMode)) {
+            return new MicrosAsTimestampNanosUpdater();
+          } else {
+            boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
+            return new MicrosAsTimestampNanosRebaseUpdater(failIfRebase, datetimeRebaseTz);
+          }
+        } else if (sparkType instanceof TimestampNTZNanosType &&
+          isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS, false)) {
+          // TIMESTAMP_NTZ(nanos) postdates the proleptic Gregorian switch: no legacy files, no
+          // rebase (mirrors the TimestampNTZType read path). The isAdjustedToUTC=false match keeps
+          // this to the NTZ family.
+          return new MicrosAsTimestampNanosUpdater();
         } else if (sparkType instanceof DayTimeIntervalType) {
           return new LongUpdater();
         } else if (canReadAsDecimal(descriptor, sparkType)) {
           return new LongToDecimalUpdater(descriptor, (DecimalType) sparkType);
-        } else if (sparkType instanceof TimeType) {
-          return new LongAsNanosUpdater();
         }
       }
       case FLOAT -> {
@@ -203,6 +229,16 @@ public class ParquetVectorUpdaterFactory {
                 int96RebaseTz);
             }
           }
+        } else if (sparkType instanceof TimestampNTZNanosType) {
+          return new Int96AsTimestampNanosUpdater(
+              false, false, null, null, ((TimestampNTZNanosType) sparkType).precision());
+        } else if (sparkType instanceof TimestampLTZNanosType) {
+          final boolean failIfRebase = "EXCEPTION".equals(int96RebaseMode);
+          final boolean rebase = !"CORRECTED".equals(int96RebaseMode);
+          final ZoneId tz = shouldConvertTimestamps() ? convertTz : null;
+          return new Int96AsTimestampNanosUpdater(
+              rebase, failIfRebase, int96RebaseTz, tz,
+              ((TimestampLTZNanosType) sparkType).precision());
         }
       }
       case BINARY -> {
@@ -244,9 +280,11 @@ public class ParquetVectorUpdaterFactory {
       annotation.getUnit() == unit;
   }
 
-  boolean isTimeTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
-    return logicalTypeAnnotation instanceof TimeLogicalTypeAnnotation annotation &&
-      annotation.getUnit() == unit;
+  // Also matches the time-zone family (isAdjustedToUTC). Used when reading a micros column as a
+  // nanosecond type, so a cross-family file (e.g. an NTZ file requested as LTZ) is not mis-decoded.
+  boolean isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit unit, boolean isAdjustedToUTC) {
+    return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation annotation &&
+      annotation.getUnit() == unit && annotation.isAdjustedToUTC() == isAdjustedToUTC;
   }
 
   boolean isUnsignedIntTypeMatched(int bitWidth) {
@@ -347,6 +385,16 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
+    public void decodeDictionaryIds(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      ParquetVectorUpdater.decodeBatch(total, offset, values, dictionaryIds, dictionary, this);
+    }
+
+    @Override
     public void decodeSingleDictionaryId(
         int offset,
         WritableColumnVector values,
@@ -377,6 +425,16 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       values.putLong(offset, valuesReader.readInteger());
+    }
+
+    @Override
+    public void decodeDictionaryIds(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      ParquetVectorUpdater.decodeBatch(total, offset, values, dictionaryIds, dictionary, this);
     }
 
     @Override
@@ -672,6 +730,16 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
+    public void decodeDictionaryIds(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      ParquetVectorUpdater.decodeBatch(total, offset, values, dictionaryIds, dictionary, this);
+    }
+
+    @Override
     public void decodeSingleDictionaryId(
         int offset,
         WritableColumnVector values,
@@ -717,6 +785,8 @@ public class ParquetVectorUpdaterFactory {
   }
 
   private static class UnsignedLongUpdater implements ParquetVectorUpdater {
+    private final byte[] unsignedLongScratch = new byte[9];
+
     @Override
     public void readValues(
         int total,
@@ -736,8 +806,9 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      byte[] bytes = new BigInteger(Long.toUnsignedString(valuesReader.readLong())).toByteArray();
-      values.putByteArray(offset, bytes);
+      int start = VectorizedReaderBase.encodeUnsignedLongBigEndian(
+          valuesReader.readLong(), unsignedLongScratch);
+      values.putByteArray(offset, unsignedLongScratch, start, 9 - start);
     }
 
     @Override
@@ -747,8 +818,8 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       long signed = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
-      byte[] unsigned = new BigInteger(Long.toUnsignedString(signed)).toByteArray();
-      values.putByteArray(offset, unsigned);
+      int start = VectorizedReaderBase.encodeUnsignedLongBigEndian(signed, unsignedLongScratch);
+      values.putByteArray(offset, unsignedLongScratch, start, 9 - start);
     }
   }
 
@@ -880,16 +951,18 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private static class LongAsNanosUpdater implements ParquetVectorUpdater {
+  // Reads an INT64 TIMESTAMP(MICROS) column as a nanosecond timestamp, promoting each micros value
+  // to the two-child (epochMicros, nanosWithinMicro) vector as (value, 0) -- the vectorized read
+  // side of widening TIMESTAMP(6) to nanosecond precision.
+  private static class MicrosAsTimestampNanosUpdater implements ParquetVectorUpdater {
     @Override
     public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      valuesReader.readLongs(total, values, offset);
       for (int i = 0; i < total; i++) {
-        values.putLong(offset + i, DateTimeUtils.microsToNanos(values.getLong(offset + i)));
+        putMicrosAsNanos(offset + i, values, valuesReader.readLong());
       }
     }
 
@@ -903,7 +976,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      values.putLong(offset, DateTimeUtils.microsToNanos(valuesReader.readLong()));
+      putMicrosAsNanos(offset, values, valuesReader.readLong());
     }
 
     @Override
@@ -912,8 +985,67 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      long micros = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
-      values.putLong(offset, DateTimeUtils.microsToNanos(micros));
+      putMicrosAsNanos(offset, values, dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
+    }
+
+    private static void putMicrosAsNanos(
+        int offset, WritableColumnVector values, long epochMicros) {
+      values.getChild(0).putLong(offset, epochMicros);
+      values.getChild(1).putShort(offset, (short) 0);
+    }
+  }
+
+  // LTZ variant of MicrosAsTimestampNanosUpdater: legacy (Julian) micros files are rebased to
+  // proleptic Gregorian before promotion, mirroring LongWithRebaseUpdater for the microsecond read
+  // path. Rebase is applied per value (not via the bulk readLongsWithRebase primitive) because the
+  // target is a two-child struct vector rather than a flat long vector.
+  private static class MicrosAsTimestampNanosRebaseUpdater implements ParquetVectorUpdater {
+    private final boolean failIfRebase;
+    private final String timeZone;
+
+    MicrosAsTimestampNanosRebaseUpdater(boolean failIfRebase, String timeZone) {
+      this.failIfRebase = failIfRebase;
+      this.timeZone = timeZone;
+    }
+
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; i++) {
+        putRebasedMicrosAsNanos(offset + i, values, valuesReader.readLong());
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      putRebasedMicrosAsNanos(offset, values, valuesReader.readLong());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      putRebasedMicrosAsNanos(
+          offset, values, dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
+    }
+
+    private void putRebasedMicrosAsNanos(
+        int offset, WritableColumnVector values, long julianMicros) {
+      values.getChild(0).putLong(offset, rebaseMicros(julianMicros, failIfRebase, timeZone));
+      values.getChild(1).putShort(offset, (short) 0);
     }
   }
 
@@ -938,6 +1070,16 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       values.putFloat(offset, valuesReader.readFloat());
+    }
+
+    @Override
+    public void decodeDictionaryIds(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      ParquetVectorUpdater.decodeBatch(total, offset, values, dictionaryIds, dictionary, this);
     }
 
     @Override
@@ -974,6 +1116,16 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
+    public void decodeDictionaryIds(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      ParquetVectorUpdater.decodeBatch(total, offset, values, dictionaryIds, dictionary, this);
+    }
+
+    @Override
     public void decodeSingleDictionaryId(
         int offset,
         WritableColumnVector values,
@@ -1004,6 +1156,16 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       values.putDouble(offset, valuesReader.readDouble());
+    }
+
+    @Override
+    public void decodeDictionaryIds(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      ParquetVectorUpdater.decodeBatch(total, offset, values, dictionaryIds, dictionary, this);
     }
 
     @Override
@@ -1386,6 +1548,83 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
+  // Reads a legacy INT96 timestamp column as a nanosecond timestamp, into the two-child
+  // (epochMicros, nanosWithinMicro) vector -- the vectorized read side of widening a legacy INT96
+  // timestamp to nanosecond precision. INT96 stores nanoseconds-of-day, so a foreign file (e.g.
+  // Impala/Hive) can carry true sub-microsecond digits; binaryToSQLTimestamp floors to micros, so
+  // the sub-micro remainder is recovered straight from the raw INT96 and truncated to the read
+  // precision (kept in lock-step with the row-based int96AsNanosConverter). The LTZ family applies
+  // the same INT96 Julian rebase and timezone conversion as the TimestampType path; the NTZ family
+  // passes rebase=false and convertTz=null (mirrors the TimestampNTZType path).
+  private static class Int96AsTimestampNanosUpdater implements ParquetVectorUpdater {
+    private final boolean rebase;
+    private final boolean failIfRebase;
+    private final String timeZone;
+    private final ZoneId convertTz;
+    private final int precision;
+
+    Int96AsTimestampNanosUpdater(
+        boolean rebase, boolean failIfRebase, String timeZone, ZoneId convertTz, int precision) {
+      this.rebase = rebase;
+      this.failIfRebase = failIfRebase;
+      this.timeZone = timeZone;
+      this.convertTz = convertTz;
+      this.precision = precision;
+    }
+
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; i++) {
+        readValue(offset + i, values, valuesReader);
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipFixedLenByteArray(total, 12);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      putInt96AsNanos(offset, values, valuesReader.readBinary(12));
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      putInt96AsNanos(offset, values, dictionary.decodeToBinary(dictionaryIds.getDictId(offset)));
+    }
+
+    private void putInt96AsNanos(int offset, WritableColumnVector values, Binary binary) {
+      long micros = ParquetRowConverter.binaryToSQLTimestamp(binary);
+      if (rebase) {
+        micros = rebaseInt96(micros, failIfRebase, timeZone);
+      }
+      if (convertTz != null) {
+        micros = DateTimeUtils.convertTz(micros, convertTz, UTC);
+      }
+      // INT96 stores nanoseconds-of-day (first 8 bytes, little-endian). Recover the sub-micro
+      // remainder (1000 ns per micro), truncate to the read precision (matching
+      // int96AsNanosConverter), so a foreign nanosecond INT96 is not silently floored to micros.
+      long timeOfDayNanos = binary.toByteBuffer().order(ByteOrder.LITTLE_ENDIAN).getLong();
+      int rawNanosWithinMicro = (int) (timeOfDayNanos % 1000L);
+      short nanosWithinMicro = (short) DateTimeUtils$.MODULE$
+        .truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision);
+      values.getChild(0).putLong(offset, micros);
+      values.getChild(1).putShort(offset, nanosWithinMicro);
+    }
+  }
+
   private static class FixedLenByteArrayUpdater implements ParquetVectorUpdater {
     private final int arrayLen;
 
@@ -1399,9 +1638,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; i++) {
-        readValue(offset + i, values, valuesReader);
-      }
+      valuesReader.readFixedLenByteArray(total, arrayLen, values, offset);
     }
 
     @Override

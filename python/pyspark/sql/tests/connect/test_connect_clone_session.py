@@ -32,6 +32,10 @@ class SparkConnectCloneSessionTest(SparkConnectSQLTestCase):
         # Clone the session
         cloned_session = self.connect.cloneSession()
 
+        # The cloned session bypasses SparkSession.__init__, so make sure it still
+        # carries the attributes that SparkSession.stop() reads.
+        self.assertTrue(cloned_session.release_session_on_close)
+
         # Verify the configuration was copied
         # (if cloning doesn't preserve dynamic configs, use a different approach)
         cloned_value = cloned_session.sql("SET spark.test.original").collect()[0][1]

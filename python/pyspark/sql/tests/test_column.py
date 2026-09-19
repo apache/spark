@@ -1,4 +1,3 @@
-# -*- encoding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -16,22 +15,26 @@
 # limitations under the License.
 #
 
-from enum import Enum
-from itertools import chain
 import datetime
 import unittest
 import uuid
+from enum import Enum
+from itertools import chain
 
+from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
+from pyspark.sql.types import IntegerType, LongType, StringType, StructField, StructType
 from pyspark.sql.window import Window
-from pyspark.sql.types import StructType, StructField, IntegerType, LongType, StringType
-from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import have_pandas, pandas_requirement_message
 
 
 class ColumnTestsMixin:
+    def assert_column_resolution_error(self, exception, *, classic_condition, connect_condition):
+        """Assert the API-specific condition for a shared Classic/Connect test."""
+        self.assertEqual(exception.getCondition(), classic_condition)
+
     def test_column_name_encoding(self):
         """Ensure that created columns has `str` type consistently."""
         columns = self.spark.createDataFrame([("Alice", 1)], ["name", "age"]).columns
@@ -48,8 +51,8 @@ class ColumnTestsMixin:
         self.assertRaises(ValueError, lambda: not self.df.key == 1)
 
     def test_validate_column_types(self):
-        from pyspark.sql.functions import udf, to_json
         from pyspark.sql.classic.column import _to_java_column
+        from pyspark.sql.functions import to_json, udf
 
         self.assertTrue("Column" in _to_java_column("a").getClass().toString())
         self.assertTrue("Column" in _to_java_column("a").getClass().toString())
@@ -205,7 +208,7 @@ class ColumnTestsMixin:
         self.assertEqual(~75, result["~b"])
 
     def test_with_field(self):
-        from pyspark.sql.functions import lit, col
+        from pyspark.sql.functions import col, lit
 
         df = self.spark.createDataFrame([Row(a=Row(b=1, c=2))])
         self.assertIsInstance(df["a"].withField("b", lit(3)), Column)
@@ -831,33 +834,65 @@ class ColumnTestsMixin:
         # Connect lenient diverges: name-based fallback resolves the
         # shadowed name (overridden in the lenient parity suite).
         df = self.spark.sql("SELECT 1 AS c")
-        with self.assertRaises(AnalysisException):
+        with self.assertRaises(AnalysisException) as error:
             df.withColumn("c", sf.col("c").cast("string")).withColumn(
                 "c", sf.col("c").cast("int")
             ).select(df.c).collect()
+        self.assert_column_resolution_error(
+            error.exception,
+            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        )
 
     def test_resolve_after_select_alias_shadow(self):
         # Same shadowing shape as withColumn but via select + alias.
         # Connect lenient diverges: name-based fallback resolves the
         # shadowed name (overridden in the lenient parity suite).
         df = self.spark.sql("SELECT 1 AS c")
-        with self.assertRaises(AnalysisException):
+        with self.assertRaises(AnalysisException) as error:
             df.select(df.c.cast("string").alias("c")).select(df.c).collect()
+        self.assert_column_resolution_error(
+            error.exception,
+            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        )
 
     def test_resolve_after_withcolumnrenamed(self):
         # withColumnRenamed drops the original `c` attribute and projects it
         # as `c2`; the tagged `df.c` matches neither the original attribute
         # nor a current column named `c`, so all modes raise.
         df = self.spark.sql("SELECT 1 AS c")
-        with self.assertRaises(AnalysisException):
+        with self.assertRaises(AnalysisException) as error:
             df.withColumnRenamed("c", "c2").select(df.c).collect()
+        self.assert_column_resolution_error(
+            error.exception,
+            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        )
 
     def test_resolve_after_drop(self):
         # drop("c") removes the column entirely; the tagged `df.c` cannot
         # resolve under any mode.
         df = self.spark.sql("SELECT 1 AS c, 2 AS d")
-        with self.assertRaises(AnalysisException):
+        with self.assertRaises(AnalysisException) as error:
             df.drop("c").select(df.c).collect()
+        self.assert_column_resolution_error(
+            error.exception,
+            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        )
+
+    def test_resolve_generator_after_projection(self):
+        # A generator cannot restore a tagged column removed by an earlier projection.
+        df = self.spark.sql("SELECT array(1, 2) AS arr")
+        projected = df.select(sf.lit(0).alias("keep"))
+        with self.assertRaises(AnalysisException) as error:
+            projected.select(sf.explode(df.arr)).collect()
+        self.assert_column_resolution_error(
+            error.exception,
+            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        )
 
     def test_resolve_through_filter(self):
         # filter is a pass-through operator: the child Project's attributes
@@ -892,8 +927,13 @@ class ColumnTestsMixin:
         # Connect lenient diverges: name-based fallback resolves the
         # aliased name (overridden in the lenient parity suite).
         df = self.spark.sql("SELECT 1 AS c")
-        with self.assertRaises(AnalysisException):
+        with self.assertRaises(AnalysisException) as error:
             df.groupBy().agg(sf.sum("c").alias("c")).select(df.c).collect()
+        self.assert_column_resolution_error(
+            error.exception,
+            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        )
 
     def test_resolve_after_pivot(self):
         # pivot preserves the grouping key's attribute id, so the tagged
@@ -928,6 +968,130 @@ class ColumnTestsMixin:
         rows = df1.intersect(df2).select(df1.c).collect()
         self.assertEqual([r.c for r in rows], [2])
 
+    def test_resolve_after_zip(self):
+        # zip merges two column-projected DataFrames side by side. Classic
+        # resolves the tagged left/right reference by attribute id, which
+        # ResolveZip preserves in the merged Project, so it succeeds. Connect
+        # resolves by plan id, but ResolveZip collapses the two sides into one
+        # plan and drops the per-DataFrame plan-id tags, so the tagged
+        # reference is never found and it raises (overridden in the parity suite).
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
+        left = df.select((df.a + 1).alias("x"))
+        right = df.select((df.b * 2).alias("y"))
+        zipped = left.zip(right)
+        self.assertEqual(zipped.columns, ["x", "y"])
+        self.assertEqual(sorted(r.x for r in zipped.select(left.x).collect()), [2, 3, 4])
+        self.assertEqual(sorted(r.y for r in zipped.select(right.y).collect()), [20, 40, 60])
+        self.assertEqual(
+            sorted((r.x, r.y) for r in zipped.select(left.x, right.y).collect()),
+            [(2, 20), (3, 40), (4, 60)],
+        )
+
+    def test_resolve_after_zip_reordered(self):
+        # The originating DataFrame controls which side each column reads from, in
+        # any order. Classic resolves by attribute id; Connect raises.
+        df = self.spark.createDataFrame([(1, 10), (2, 20)], ["a", "b"])
+        left = df.select(df.a.alias("x"))
+        right = df.select(df.b.alias("y"))
+        zipped = left.zip(right)
+        self.assertEqual(
+            sorted((r.y, r.x) for r in zipped.select(right.y, left.x).collect()),
+            [(10, 1), (20, 2)],
+        )
+
+    def test_resolve_after_zip_duplicate_names(self):
+        # Both sides expose a column named "v" from different sources, so the
+        # merged schema has two "v"s. A bare "v" is ambiguous, but the tagged
+        # left/right reference disambiguates by attribute id on Classic.
+        # Connect raises (no plan-id node survives the merge).
+        df = self.spark.createDataFrame([(1, 2), (3, 4)], ["a", "b"])
+        left = df.select(df.a.alias("v"))
+        right = df.select(df.b.alias("v"))
+        zipped = left.zip(right)
+        self.assertEqual(zipped.columns, ["v", "v"])
+        self.assertEqual(sorted(r.v for r in zipped.select(left.v).collect()), [1, 3])
+        self.assertEqual(sorted(r.v for r in zipped.select(right.v).collect()), [2, 4])
+
+    def test_resolve_after_zip_shared_producer(self):
+        # Both sides project the same producer under the same name "v";
+        # ResolveZip dedups the producer but keeps one output column per side,
+        # each still selectable by its originating DataFrame on Classic.
+        df = self.spark.createDataFrame([(1, 2), (3, 4)], ["a", "b"])
+        left = df.select(df.a.alias("v"))
+        right = df.select(df.a.alias("v"))
+        zipped = left.zip(right)
+        self.assertEqual(zipped.columns, ["v", "v"])
+        self.assertEqual(sorted(r.v for r in zipped.select(left.v).collect()), [1, 3])
+        self.assertEqual(sorted(r.v for r in zipped.select(right.v).collect()), [1, 3])
+
+    def test_resolve_after_zip_in_expression(self):
+        # A tagged reference from each side can be combined in one expression.
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
+        left = df.select(df.a.alias("x"))
+        right = df.select(df.b.alias("y"))
+        zipped = left.zip(right)
+        self.assertEqual(
+            sorted(r.s for r in zipped.select((left.x + right.y).alias("s")).collect()),
+            [11, 22, 33],
+        )
+
+    def test_resolve_after_zip_in_filter(self):
+        # A tagged reference resolves in a filter over the zip result too.
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
+        left = df.select(df.a.alias("x"))
+        right = df.select(df.b.alias("y"))
+        zipped = left.zip(right)
+        result = zipped.filter(left.x >= 2).select(left.x, right.y)
+        self.assertEqual(
+            sorted((r.x, r.y) for r in result.collect()),
+            [(2, 20), (3, 30)],
+        )
+
+    def test_resolve_after_zip_chained(self):
+        # Each side is its own chain of projections off the shared base; the
+        # tagged reference still resolves on Classic.
+        df = self.spark.createDataFrame([(1, 2, 3), (4, 5, 6)], ["a", "b", "c"])
+        left0 = df.select("a", "b")
+        left = left0.select((left0.a + 1).alias("x"))
+        right0 = df.select("b", "c")
+        right = right0.select((right0.c * 2).alias("y"))
+        zipped = left.zip(right)
+        self.assertEqual(
+            sorted((r.x, r.y) for r in zipped.select(left.x, right.y).collect()),
+            [(2, 6), (5, 12)],
+        )
+
+    def test_resolve_after_zip_base_side(self):
+        # A base-side reference: df.zip(right).select(df.a). Classic resolves
+        # by attribute id like the projected-side cases. On Connect the result
+        # depends on the base plan's root node: createDataFrame analyzes to a
+        # Project over a LocalRelation, and that Project - the node carrying
+        # the DataFrame's plan-id tag - is dissolved into the merged chain by
+        # ResolveZip, so the tagged reference raises (overridden in the parity
+        # suite). See test_resolve_after_zip_bare_base_side for a base whose
+        # tagged root survives the merge.
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
+        right = df.select((df.b * 2).alias("y"))
+        zipped = df.zip(right)
+        self.assertEqual(zipped.columns, ["a", "b", "y"])
+        self.assertEqual(sorted(r.a for r in zipped.select(df.a).collect()), [1, 2, 3])
+        self.assertEqual(
+            sorted((r.b, r.a) for r in zipped.select(df.b, df.a).collect()),
+            [(10, 1), (20, 2), (30, 3)],
+        )
+
+    def test_resolve_after_zip_bare_base_side(self):
+        # When the base DataFrame's plan root is the base relation itself
+        # (range analyzes to a bare Range node), ResolveZip reuses that node
+        # unchanged as the merged plan's base, so its plan-id tag survives and
+        # the tagged reference resolves on Connect in all modes as well - the
+        # one zip shape with no Classic/Connect divergence for df.col.
+        df = self.spark.range(3)
+        right = df.select((df.id * 2).alias("y"))
+        zipped = df.zip(right)
+        self.assertEqual(zipped.columns, ["id", "y"])
+        self.assertEqual(sorted(r.id for r in zipped.select(df.id).collect()), [0, 1, 2])
+
     def test_resolve_self_join_alias(self):
         # Both self-join sides originate from the same plan-id-tagged
         # ancestor, yielding two equal-depth candidates with the same
@@ -935,8 +1099,13 @@ class ColumnTestsMixin:
         # an ambiguous-reference error.
         df = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
         a, b = df.alias("a"), df.alias("b")
-        with self.assertRaises(AnalysisException):
+        with self.assertRaises(AnalysisException) as error:
             a.join(b, a.c == b.c).select(df.c).collect()
+        self.assert_column_resolution_error(
+            error.exception,
+            classic_condition="_LEGACY_ERROR_TEMP_1182",
+            connect_condition="AMBIGUOUS_COLUMN_REFERENCE",
+        )
 
     def test_resolve_after_subquery_view(self):
         # Persisting the DataFrame as a temp view and reading it back via
@@ -957,8 +1126,13 @@ class ColumnTestsMixin:
         # modes; the strict / lenient switch does not gate this throw.
         df1 = self.spark.range(3)
         df2 = self.spark.range(5)
-        with self.assertRaises(AnalysisException):
+        with self.assertRaises(AnalysisException) as error:
             df1.select(df2.id).collect()
+        self.assert_column_resolution_error(
+            error.exception,
+            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        )
 
     def test_resolve_df_star(self):
         # `df["*"]` is an UnresolvedDataFrameStar carrying df's plan id; the

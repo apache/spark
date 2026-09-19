@@ -38,11 +38,7 @@ public enum ByteUnit {
   public long convertTo(long d, ByteUnit u) {
     if (multiplier > u.multiplier) {
       long ratio = multiplier / u.multiplier;
-      if (Long.MAX_VALUE / ratio < d) {
-        throw new IllegalArgumentException("Conversion of " + d + " exceeds Long.MAX_VALUE in "
-          + name() + ". Try a larger unit (e.g. MiB instead of KiB)");
-      }
-      return d * ratio;
+      return checkedMultiply(d, ratio);
     } else {
       // Perform operations in this order to avoid potential overflow
       // when computing d * multiplier
@@ -54,7 +50,18 @@ public enum ByteUnit {
     if (d < 0) {
       throw new IllegalArgumentException("Negative size value. Size must be positive: " + d);
     }
-    return d * multiplier;
+    return checkedMultiply(d, multiplier);
+  }
+
+  // Multiply `d` by `factor`, throwing IllegalArgumentException if the product would overflow a
+  // long. Shared by the conversions that scale up to a smaller unit (including toBytes), where
+  // `d * factor` can exceed Long.MAX_VALUE.
+  private long checkedMultiply(long d, long factor) {
+    if (Long.MAX_VALUE / factor < d) {
+      throw new IllegalArgumentException("Conversion of " + d + " " + name()
+        + " exceeds Long.MAX_VALUE. Try a larger unit (e.g. MiB instead of KiB).");
+    }
+    return d * factor;
   }
 
   public long toKiB(long d) { return convertTo(d, KiB); }

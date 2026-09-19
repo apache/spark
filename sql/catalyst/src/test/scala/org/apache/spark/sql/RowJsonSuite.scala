@@ -134,11 +134,13 @@ class RowJsonSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-57338: TIME column renders the external LocalTime in JSON") {
     assert(timeRowJson(LocalTime.of(12, 13, 14), TimeType.MICROS_PRECISION) ===
       JObject("a" -> JString("12:13:14")))
-    // The fraction is rendered up to microsecond resolution with trailing zeros trimmed.
+    // The fraction is rendered up to nanosecond resolution with trailing zeros trimmed.
     assert(timeRowJson(LocalTime.of(1, 2, 3, 123456000), TimeType.MICROS_PRECISION) ===
       JObject("a" -> JString("01:02:03.123456")))
     assert(timeRowJson(LocalTime.of(10, 30, 0, 100000000), TimeType.MICROS_PRECISION) ===
       JObject("a" -> JString("10:30:00.1")))
+    assert(timeRowJson(LocalTime.of(1, 2, 3, 123456789), TimeType.NANOS_PRECISION) ===
+      JObject("a" -> JString("01:02:03.123456789")))
     assert(timeRowJson(LocalTime.MIDNIGHT, TimeType.MICROS_PRECISION) ===
       JObject("a" -> JString("00:00:00")))
   }

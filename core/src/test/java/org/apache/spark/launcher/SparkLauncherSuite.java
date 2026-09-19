@@ -152,8 +152,10 @@ public class SparkLauncherSuite extends BaseSuite {
         // SPARK-23020: see doc for InProcessTestApp.LOCK for a description of the race. Here
         // we wait until we know that the connection between the app and the launcher has been
         // established before allowing the app to finish.
+        // Use a generous timeout because, under heavy CI load, establishing the connection
+        // between the in-process app and the launcher can take longer than a few seconds.
         final SparkAppHandle _handle = handle;
-        eventually(Duration.ofSeconds(5), Duration.ofMillis(10), () -> {
+        eventually(Duration.ofSeconds(30), Duration.ofMillis(100), () -> {
           assertNotEquals(SparkAppHandle.State.UNKNOWN, _handle.getState());
         });
 

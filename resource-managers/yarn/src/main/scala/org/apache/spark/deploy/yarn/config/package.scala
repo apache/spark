@@ -301,6 +301,16 @@ package object config extends Logging {
     .intConf
     .createWithDefault(1)
 
+  private[spark] val YARN_AM_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
+    ConfigBuilder("spark.yarn.am.limitActiveProcessorCount.enabled")
+      .doc("Whether to add -XX:ActiveProcessorCount=<spark.yarn.am.cores> to the YARN " +
+        "Application Master JVM options in client mode. In cluster mode, use " +
+        "`spark.driver.limitActiveProcessorCount.enabled` instead.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val AM_DEFAULT_JAVA_OPTIONS = ConfigBuilder("spark.yarn.am.defaultJavaOptions")
     .doc("Default Java options for the client-mode AM to prepend to " +
       "`spark.yarn.am.extraJavaOptions`. This is intended to be set by administrators.")

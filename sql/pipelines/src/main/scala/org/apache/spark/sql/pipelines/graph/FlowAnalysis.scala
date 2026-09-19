@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CTESubstitution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.classic.{DataFrame, DataFrameReader, Dataset, DataStreamReader, SparkSession}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.graph.GraphIdentifierManager.{ExternalDatasetIdentifier, InternalDatasetIdentifier}
 
 
@@ -44,17 +45,23 @@ object FlowAnalysis {
       confs: Map[String, String],
       queryContext: QueryContext,
       queryOrigin: QueryOrigin) => {
+      // Flows are resolved in parallel on a shared session, so applying per-flow confs by mutating
+      // that session's conf would race across flows. Instead, give each flow a private SQLConf
+      // (a clone of the session's conf plus this flow's overrides) and install it for the analyzing
+      // thread via SQLConf.withExistingConf. Analysis still runs on the shared session, so its
+      // catalog and the resolved DataFrames are unaffected; only the confs the analyzer reads are
+      // isolated per flow.
+      val spark = SparkSession.active
       val ctx = FlowAnalysisContext(
         allInputs = allInputs,
         availableInputs = availableInputs,
         queryContext = queryContext,
-        spark = SparkSession.active
+        spark = spark,
+        flowConf = spark.sessionState.conf.clone()
       )
-      val df = try {
+      val df = SQLConf.withExistingConf(ctx.flowConf) {
         confs.foreach { case (k, v) => ctx.setConf(k, v) }
         Try(FlowAnalysis.analyze(ctx, plan))
-      } finally {
-        ctx.restoreOriginalConf()
       }
       FlowFunctionResult(
         requestedInputs = ctx.requestedInputs.toSet,
@@ -71,9 +78,12 @@ object FlowAnalysis {
    * Constructs an analyzed [[DataFrame]] from a [[LogicalPlan]] by resolving Pipelines specific
    * TVFs and datasets that cannot be resolved directly by Catalyst.
    *
-   * This function shouldn't call any singleton as it will break concurrent access to graph
-   * analysis; or any thread local variables as graph analysis and this function will use
-   * different threads in python repl.
+   * This runs on the flow-resolution thread pool, which may differ from the thread that defined
+   * the flow (e.g. in a Python REPL), so it must not depend on ambient singletons or thread-locals
+   * carried over from that defining thread. The one piece of per-flow state it relies on - the
+   * flow's SQL confs - is installed on the analyzing thread by
+   * [[createFlowFunctionFromLogicalPlan]] via `SQLConf.withExistingConf`, so the Catalyst analysis
+   * this triggers reads them through `SQLConf.get`.
    *
    * @param plan     The [[LogicalPlan]] defining a flow.
    * @return An analyzed [[DataFrame]].
@@ -229,7 +239,7 @@ object FlowAnalysis {
     // pass through trivially as their [[VirtualTableInput.load]] honors `asStreaming` by
     // construction. The check only ever fires for flows.
     val incompatibleViewReadCheck =
-      ctx.spark.conf.get("pipelines.incompatibleViewCheck.enabled", "true").toBoolean
+      ctx.flowConf.getConfString("pipelines.incompatibleViewCheck.enabled", "true").toBoolean
 
     if (incompatibleViewReadCheck && isStreamingRead && !inputDF.isStreaming) {
       throw new AnalysisException(

@@ -24,11 +24,11 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, TableSummary, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, TableSummary, View}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * Read-side v2 view execs. Each receives the typed [[ViewInfo]] resolved at analysis time
+ * Read-side v2 view execs. Each receives the typed [[View]] resolved at analysis time
  * (carried on `ResolvedPersistentView.info`) and formats output rows directly from it --
  * matching the way v2 table inspection execs (e.g. `ShowCreateTableExec`, `DescribeTableExec`)
  * consume the [[org.apache.spark.sql.connector.catalog.Table]] attached to `ResolvedTable`.
@@ -40,15 +40,15 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Physical plan node for SHOW CREATE TABLE on a v2 view. Reconstructs the {@code CREATE VIEW}
- * statement directly from the typed [[ViewInfo]] -- the column list comes from
- * [[ViewInfo#schema]], the body from [[ViewInfo#queryText]], the binding mode from
- * [[ViewInfo#schemaMode]], and the user TBLPROPERTIES from [[ViewInfo#properties]] (with the
+ * statement directly from the typed [[View]] -- the column list comes from
+ * [[View#schema]], the body from [[View#queryText]], the binding mode from
+ * [[View#schemaMode]], and the user TBLPROPERTIES from [[View#properties]] (with the
  * reserved-keys filter applied so internal entries don't leak into the rendered DDL).
  */
 case class ShowCreateV2ViewExec(
     output: Seq[Attribute],
     quotedName: String,
-    viewInfo: ViewInfo) extends LeafV2CommandExec with SQLConfHelper {
+    viewInfo: View) extends LeafV2CommandExec with SQLConfHelper {
 
   override protected def run(): Seq[InternalRow] = {
     val builder = new StringBuilder
@@ -99,7 +99,7 @@ case class ShowCreateV2ViewExec(
 
 /**
  * Physical plan node for SHOW TBLPROPERTIES on a v2 view. Returns the user-facing properties
- * from [[ViewInfo#properties]] -- reserved first-class keys (PROP_COMMENT, PROP_COLLATION,
+ * from [[View#properties]] -- reserved first-class keys (PROP_COMMENT, PROP_COLLATION,
  * PROP_OWNER, PROP_TABLE_TYPE, ...) are filtered out so users see only what they (or the
  * catalog) explicitly set, matching v1 `SHOW TBLPROPERTIES` on a session-catalog view (which
  * hides these because v1 stores them in typed `CatalogTable` fields rather than `properties`).
@@ -108,7 +108,7 @@ case class ShowCreateV2ViewExec(
 case class ShowV2ViewPropertiesExec(
     output: Seq[Attribute],
     quotedName: String,
-    viewInfo: ViewInfo,
+    viewInfo: View,
     propertyKey: Option[String]) extends LeafV2CommandExec with SQLConfHelper {
 
   override protected def run(): Seq[InternalRow] = {
@@ -133,11 +133,11 @@ case class ShowV2ViewPropertiesExec(
 
 /**
  * Physical plan node for SHOW COLUMNS on a v2 view. Returns one row per top-level field in
- * [[ViewInfo#schema]].
+ * [[View#schema]].
  */
 case class ShowV2ViewColumnsExec(
     output: Seq[Attribute],
-    viewInfo: ViewInfo) extends LeafV2CommandExec {
+    viewInfo: View) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     viewInfo.schema.map(c => toCatalystRow(c.name)).toSeq
@@ -157,7 +157,7 @@ case class DescribeV2ViewExec(
     output: Seq[Attribute],
     catalogName: String,
     identifier: Identifier,
-    viewInfo: ViewInfo,
+    viewInfo: View,
     isExtended: Boolean) extends DescribeIdentifierRows with SQLConfHelper {
 
   override protected def run(): Seq[InternalRow] = {
@@ -170,7 +170,7 @@ case class DescribeV2ViewExec(
       result += toCatalystRow("# Detailed View Information", "", "")
       addIdentifierRows(result, catalogName, identifier, entityLabel = "View")
       // Surface the view sub-kind so users see whether they're looking at a plain VIEW
-      // or a sub-kind like METRIC_VIEW. `ViewInfo`'s constructor unconditionally stamps
+      // or a sub-kind like METRIC_VIEW. `View`'s constructor unconditionally stamps
       // `PROP_TABLE_TYPE` (defaulting to `VIEW`), so this row is always present and
       // matches v1 `CatalogTable.toJsonLinkedHashMap`'s `Type` row for parity.
       result += toCatalystRow(
@@ -235,7 +235,7 @@ case class DescribeV2ViewExec(
  */
 case class DescribeV2ViewColumnExec(
     output: Seq[Attribute],
-    viewInfo: ViewInfo,
+    viewInfo: View,
     colNameParts: Seq[String],
     isExtended: Boolean) extends LeafV2CommandExec with SQLConfHelper {
 

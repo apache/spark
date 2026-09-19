@@ -1,0 +1,143 @@
+================================================================================================
+Section A - FIRST sliding respect-nulls
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+FIRST sliding respect-nulls, N=10K rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+FIRST sliding respect-nulls naive                   233            240           8          0.0       22730.8       1.0X
+FIRST sliding respect-nulls segtree                  37             43           9          0.3        3610.3       6.3X
+
+
+================================================================================================
+Section A - LAST sliding respect-nulls
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+LAST sliding respect-nulls, N=10K rows:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+LAST sliding respect-nulls naive                    305            316          11          0.0       29737.6       1.0X
+LAST sliding respect-nulls segtree                   35             38           3          0.3        3385.0       8.8X
+
+
+================================================================================================
+Section A - FIRST sliding IGNORE NULLS
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+FIRST sliding ignore-nulls, N=10K rows:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+FIRST sliding ignore-nulls naive                    290            292           2          0.0       28287.5       1.0X
+FIRST sliding ignore-nulls segtree                   33             37           4          0.3        3175.7       8.9X
+
+
+================================================================================================
+Section A - LAST sliding IGNORE NULLS
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+LAST sliding ignore-nulls, N=10K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+LAST sliding ignore-nulls naive                     451            457           5          0.0       44034.6       1.0X
+LAST sliding ignore-nulls segtree                    33             36           4          0.3        3196.2      13.8X
+
+
+================================================================================================
+Section B - FIRST shrinking respect-nulls
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+FIRST shrinking respect-nulls, N=10K rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+FIRST shrinking respect-nulls naive                  966            984          20          0.0       94362.3       1.0X
+FIRST shrinking respect-nulls segtree                 24             25           2          0.4        2326.8      40.6X
+
+
+================================================================================================
+Section B - LAST shrinking respect-nulls
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+LAST shrinking respect-nulls, N=10K rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+LAST shrinking respect-nulls naive                 1113           1120           8          0.0      108684.1       1.0X
+LAST shrinking respect-nulls segtree                 25             28           4          0.4        2446.9      44.4X
+
+
+================================================================================================
+Section B - FIRST shrinking IGNORE NULLS
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+FIRST shrinking ignore-nulls, N=10K rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+FIRST shrinking ignore-nulls naive                 1101           1109           9          0.0      107499.5       1.0X
+FIRST shrinking ignore-nulls segtree                 23             25           2          0.4        2257.5      47.6X
+
+
+================================================================================================
+Section B - LAST shrinking IGNORE NULLS
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+LAST shrinking ignore-nulls, N=10K rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+LAST shrinking ignore-nulls naive                  1482           1486           3          0.0      144723.5       1.0X
+LAST shrinking ignore-nulls segtree                  25             27           2          0.4        2446.8      59.1X
+
+
+================================================================================================
+Section C - N=5K
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+FIRST shrinking frame, N=5K rows:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+FIRST naive N=5K                                    261            266           3          0.0       51030.4       1.0X
+FIRST segtree N=5K                                   18             20           4          0.3        3462.3      14.7X
+
+
+================================================================================================
+Section C - N=25K (stress)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+FIRST shrinking frame, N=25K rows:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+FIRST naive N=25K                                  6107           6135          26          0.0      238553.4       1.0X
+FIRST segtree N=25K                                  41             49           8          0.6        1609.4     148.2X
+
+
+================================================================================================
+Section C - N=50K (stress, last naive run)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+FIRST shrinking frame, N=50K rows:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+FIRST naive N=50K                                 25199          25240          36          0.0      492170.9       1.0X
+FIRST segtree N=50K                                  58             59           0          0.9        1142.1     431.0X
+
+
+================================================================================================
+Section C - N=100K (segtree-only, stress)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+FIRST shrinking frame, N=100K rows (segtree-only):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------
+FIRST segtree N=100K                                         104            106           1          1.0        1019.4       1.0X
+
+

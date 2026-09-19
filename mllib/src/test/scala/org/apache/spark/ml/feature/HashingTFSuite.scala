@@ -97,6 +97,18 @@ class HashingTFSuite extends MLTest with DefaultReadWriteTest {
     assert(loadedHashingTF.indexOf("c") === mLlibHashingTF.indexOf("c"))
     assert(loadedHashingTF.indexOf("d") === mLlibHashingTF.indexOf("d"))
 
+    mLlibHashingTF.setBinary(loadedHashingTF.getBinary)
+    val terms = "a a b b c d".split(" ").toSeq
+    val df = Seq(Tuple1(terms)).toDF("words")
+    val features = loadedHashingTF
+      .setInputCol("words")
+      .setOutputCol("features")
+      .transform(df)
+      .select("features")
+      .first()
+      .getAs[Vector](0)
+    assert(features ~== mLlibHashingTF.transform(terms).asML absTol 1e-14)
+
     val metadata = spark.read.json(s"$hashingTFPath/metadata")
     val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
     assert(sparkVersionStr === "2.4.4")

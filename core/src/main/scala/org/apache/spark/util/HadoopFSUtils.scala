@@ -18,9 +18,9 @@
 package org.apache.spark.util
 
 import java.io.FileNotFoundException
+import java.util.regex.Pattern
 
 import scala.collection.mutable
-import scala.util.matching.Regex
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -38,6 +38,18 @@ import org.apache.spark.util.ArrayImplicits._
  */
 private[spark] object HadoopFSUtils extends Logging {
   /**
+   * The default value of the `ignoredPathSegmentRegex` option: a regex evaluated with find
+   * semantics against each individual directory and file name during file listing. It hides names
+   * that start with '_' or '.'; see `shouldFilterOutPathName` for the carve-outs that apply
+   * regardless of the regex.
+   */
+  val DEFAULT_IGNORED_PATH_SEGMENT_REGEX = "^[._]"
+
+  /** The compiled form of [[DEFAULT_IGNORED_PATH_SEGMENT_REGEX]]. */
+  val defaultIgnoredPathSegmentRegexPattern: Pattern =
+    Pattern.compile(DEFAULT_IGNORED_PATH_SEGMENT_REGEX)
+
+  /**
    * Lists a collection of paths recursively. Picks the listing strategy adaptively depending
    * on the number of paths to list.
    *
@@ -49,6 +61,10 @@ private[spark] object HadoopFSUtils extends Logging {
    * @param filter Path filter used to exclude leaf files from result
    * @param ignoreMissingFiles Ignore missing files that happen during recursive listing
    *                           (e.g., due to race conditions)
+   * @param ignoredPathSegmentRegex Regex evaluated with find semantics against each directory and
+   *                           file name below the input paths; matching names are skipped and a
+   *                           matching directory name excludes its subtree. See
+   *                           `shouldFilterOutPathName` for the carve-outs that always apply.
    * @param ignoreLocality Whether to fetch data locality info when listing leaf files. If false,
    *                       this will return `FileStatus` without `BlockLocation` info.
    * @param parallelismThreshold The threshold to enable parallelism. If the number of input paths
@@ -65,11 +81,13 @@ private[spark] object HadoopFSUtils extends Logging {
     hadoopConf: Configuration,
     filter: PathFilter,
     ignoreMissingFiles: Boolean,
+    ignoredPathSegmentRegex: Pattern,
     ignoreLocality: Boolean,
     parallelismThreshold: Int,
     parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
     parallelListLeafFilesInternal(sc, paths, hadoopConf, filter, isRootLevel = true,
-      ignoreMissingFiles, ignoreLocality, parallelismThreshold, parallelismMax)
+      ignoreMissingFiles, ignoredPathSegmentRegex, ignoreLocality, parallelismThreshold,
+      parallelismMax)
   }
 
   /**
@@ -81,12 +99,17 @@ private[spark] object HadoopFSUtils extends Logging {
    * @param path a path to list
    * @param hadoopConf Hadoop configuration
    * @param filter Path filter used to exclude leaf files from result
+   * @param ignoredPathSegmentRegex Regex evaluated with find semantics against each directory and
+   *                           file name below `path`; matching names are skipped. See
+   *                           `shouldFilterOutPathName` for the carve-outs that always apply.
    * @return  the set of discovered files for the path
    */
   def listFiles(
       path: Path,
       hadoopConf: Configuration,
-      filter: PathFilter): Seq[(Path, Seq[FileStatus])] = {
+      filter: PathFilter,
+      ignoredPathSegmentRegex: Pattern = defaultIgnoredPathSegmentRegexPattern)
+      : Seq[(Path, Seq[FileStatus])] = {
     logInfo(log"Listing ${MDC(PATH, path)} with listFiles API")
     try {
       val prefixLength = path.toString.length
@@ -94,7 +117,9 @@ private[spark] object HadoopFSUtils extends Logging {
       val statues = new Iterator[LocatedFileStatus]() {
         def next(): LocatedFileStatus = remoteIter.next
         def hasNext: Boolean = remoteIter.hasNext
-      }.filterNot(status => shouldFilterOutPath(status.getPath.toString.substring(prefixLength)))
+      }.filterNot(status =>
+        shouldFilterOutPath(
+          status.getPath.toString.substring(prefixLength), ignoredPathSegmentRegex))
         .filter(f => filter.accept(f.getPath))
         .toArray
       Seq((path, statues.toImmutableArraySeq))
@@ -113,6 +138,7 @@ private[spark] object HadoopFSUtils extends Logging {
       filter: PathFilter,
       isRootLevel: Boolean,
       ignoreMissingFiles: Boolean,
+      ignoredPathSegmentRegex: Pattern,
       ignoreLocality: Boolean,
       parallelismThreshold: Int,
       parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
@@ -126,6 +152,7 @@ private[spark] object HadoopFSUtils extends Logging {
           filter,
           Some(sc),
           ignoreMissingFiles = ignoreMissingFiles,
+          ignoredPathSegmentRegex = ignoredPathSegmentRegex,
           ignoreLocality = ignoreLocality,
           isRootPath = isRootLevel,
           parallelismThreshold = parallelismThreshold,
@@ -166,6 +193,7 @@ private[spark] object HadoopFSUtils extends Logging {
               filter = filter,
               contextOpt = None, // Can't execute parallel scans on workers
               ignoreMissingFiles = ignoreMissingFiles,
+              ignoredPathSegmentRegex = ignoredPathSegmentRegex,
               ignoreLocality = ignoreLocality,
               isRootPath = isRootLevel,
               parallelismThreshold = Int.MaxValue,
@@ -193,6 +221,7 @@ private[spark] object HadoopFSUtils extends Logging {
       filter: PathFilter,
       contextOpt: Option[SparkContext],
       ignoreMissingFiles: Boolean,
+      ignoredPathSegmentRegex: Pattern,
       ignoreLocality: Boolean,
       isRootPath: Boolean,
       parallelismThreshold: Int,
@@ -251,7 +280,8 @@ private[spark] object HadoopFSUtils extends Logging {
     }
 
     val filteredStatuses =
-      statuses.filterNot(status => shouldFilterOutPathName(status.getPath.getName))
+      statuses.filterNot(status =>
+        shouldFilterOutPathName(status.getPath.getName, ignoredPathSegmentRegex))
 
     val allLeafStatuses = {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
@@ -264,6 +294,7 @@ private[spark] object HadoopFSUtils extends Logging {
             filter = filter,
             isRootLevel = false,
             ignoreMissingFiles = ignoreMissingFiles,
+            ignoredPathSegmentRegex = ignoredPathSegmentRegex,
             ignoreLocality = ignoreLocality,
             parallelismThreshold = parallelismThreshold,
             parallelismMax = parallelismMax
@@ -276,6 +307,7 @@ private[spark] object HadoopFSUtils extends Logging {
               filter = filter,
               contextOpt = contextOpt,
               ignoreMissingFiles = ignoreMissingFiles,
+              ignoredPathSegmentRegex = ignoredPathSegmentRegex,
               ignoreLocality = ignoreLocality,
               isRootPath = false,
               parallelismThreshold = parallelismThreshold,
@@ -342,39 +374,35 @@ private[spark] object HadoopFSUtils extends Logging {
   }
   // scalastyle:on argcount
 
-  /** Checks if we should filter out this path name. */
-  def shouldFilterOutPathName(pathName: String): Boolean = {
-    // We filter follow paths:
-    // 1. everything that starts with _ and ., except _common_metadata and _metadata
-    // because Parquet needs to find those metadata files from leaf files returned by this method.
+  /**
+   * Checks if we should filter out this path name, i.e. whether `ignoredPathSegmentRegex` finds a
+   * match in it. Regardless of the regex, names starting with `_common_metadata` or `_metadata`
+   * are never filtered, names ending with `._COPYING_` are always filtered, and '_'-prefixed
+   * names containing '=' (partition directories) are never filtered.
+   */
+  def shouldFilterOutPathName(
+      pathName: String,
+      ignoredPathSegmentRegex: Pattern = defaultIgnoredPathSegmentRegexPattern): Boolean = {
+    // Parquet summary files must stay visible to listing regardless of the filter, because
+    // Parquet needs to find those metadata files from leaf files returned by this method.
     // We should refactor this logic to not mix metadata files with data files.
-    // 2. everything that ends with `._COPYING_`, because this is a intermediate state of file. we
-    // should skip this file in case of double reading.
-    val exclude = (pathName.startsWith("_") && !pathName.contains("=")) ||
-      pathName.startsWith(".") || pathName.endsWith("._COPYING_")
-    val include = pathName.startsWith("_common_metadata") || pathName.startsWith("_metadata")
-    exclude && !include
+    if (pathName.startsWith("_common_metadata") || pathName.startsWith("_metadata")) return false
+    // In-flight copy files (hadoop fs -put) are always skipped to avoid double reads.
+    if (pathName.endsWith("._COPYING_")) return true
+    // '_'-prefixed names containing '=' are partition directories, never hidden.
+    if (pathName.startsWith("_") && pathName.contains("=")) return false
+    ignoredPathSegmentRegex.matcher(pathName).find()
   }
 
-  private val underscore: Regex = "/_[^=/]*/".r
-  private val underscoreEnd: Regex = "/_[^=/]*$".r
-
-  /** Checks if we should filter out this path. */
-  @scala.annotation.tailrec
-  def shouldFilterOutPath(path: String): Boolean = {
-    if (path.contains("/.") || path.endsWith("._COPYING_")) return true
-    underscoreEnd.findFirstIn(path) match {
-      case Some(dir) if dir.equals("/_metadata") || dir.equals("/_common_metadata") => false
-      case Some(_) => true
-      case None =>
-        underscore.findFirstIn(path) match {
-          case Some(dir) if dir.equals("/_metadata/") =>
-            shouldFilterOutPath(path.replaceFirst("/_metadata", ""))
-          case Some(dir) if dir.equals("/_common_metadata/") =>
-            shouldFilterOutPath(path.replaceFirst("/_common_metadata", ""))
-          case Some(_) => true
-          case None => false
-        }
-    }
+  /**
+   * Checks if we should filter out this path, i.e. whether any of its individual directory or
+   * file name components below the listed base path is filtered by `ignoredPathSegmentRegex`
+   * according to [[shouldFilterOutPathName]].
+   */
+  def shouldFilterOutPath(
+      path: String,
+      ignoredPathSegmentRegex: Pattern = defaultIgnoredPathSegmentRegexPattern): Boolean = {
+    path.split("/").exists(name =>
+      name.nonEmpty && shouldFilterOutPathName(name, ignoredPathSegmentRegex))
   }
 }

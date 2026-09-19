@@ -685,6 +685,45 @@ public final class CollationSupport {
     }
   }
 
+  public static class StringInstrWithOccurrence {
+    public static int exec(final UTF8String string, UTF8String substring,
+        final int start, final int occurrence, final int collationId) {
+      CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      if (collation.supportsSpaceTrimming) {
+        substring = CollationFactory.applyTrimmingPolicy(substring, collationId);
+      }
+      if (collation.isUtf8BinaryType) {
+        return execBinary(string, substring, start, occurrence);
+      } else if (collation.isUtf8LcaseType) {
+        return execLowercase(string, substring, start, occurrence);
+      } else {
+        return execICU(string, substring, start, occurrence, collationId);
+      }
+    }
+    public static String genCode(final String string, final String substring,
+        final String start, final String occurrence, final int collationId) {
+      String expr = "CollationSupport.StringInstrWithOccurrence.exec";
+      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+        return String.format(expr + "Binary(%s, %s, %s, %s)", string, substring, start, occurrence);
+      } else {
+        return String.format(expr + "(%s, %s, %s, %s, %d)",
+                string, substring, start, occurrence, collationId);
+      }
+    }
+    public static int execBinary(final UTF8String string, final UTF8String substring,
+        final int start, final int occurrence) {
+      return string.indexOf(substring, start, occurrence);
+    }
+    public static int execLowercase(final UTF8String string, final UTF8String substring,
+        final int start, final int occurrence) {
+      return CollationAwareUTF8String.lowercaseIndexOf(string, substring, start, occurrence);
+    }
+    public static int execICU(final UTF8String string, final UTF8String substring,
+        final int start, final int occurrence, final int collationId) {
+      return CollationAwareUTF8String.indexOf(string, substring, start, occurrence, collationId);
+    }
+  }
+
   // TODO: Add more collation-aware string expressions.
 
   /**

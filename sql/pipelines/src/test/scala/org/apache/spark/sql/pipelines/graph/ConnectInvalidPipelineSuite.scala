@@ -31,6 +31,9 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  */
 class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
+  private def validateGraph(graph: DataflowGraph): DataflowGraph =
+    graph.validate(spark.sessionState.conf.caseSensitiveAnalysis)
+
   test("Missing source") {
     class P extends TestGraphRegistrationContext(spark) {
       registerPersistedView("b", query = readFlowFunc("a"))
@@ -39,7 +42,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     val dfg = new P().resolveToDataflowGraph()
     assert(!dfg.resolved, "Pipeline should not have resolved properly")
     val ex = intercept[UnresolvedPipelineException] {
-      dfg.validate()
+      validateGraph(dfg)
     }
     assert(ex.getMessage.contains("Failed to resolve flows in the pipeline"))
     assertAnalysisException(
@@ -64,7 +67,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     val dfg = new P().resolveToDataflowGraph()
     assert(!dfg.resolved, "Pipeline should not have resolved properly")
     val ex = intercept[UnresolvedPipelineException] {
-      dfg.validate()
+      validateGraph(dfg)
     }
     assert(ex.getMessage.contains("Failed to resolve flows in the pipeline"))
     assert(
@@ -141,7 +144,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
       registerFlow("a", "a_2", sqlFlowFunc(spark, "SELECT non_existent_col FROM RANGE(5)"))
       registerTable("b", query = Option(readFlowFunc("a")))
     }
-    val ex = intercept[UnresolvedPipelineException] { new P().resolveToDataflowGraph().validate() }
+    val ex = intercept[UnresolvedPipelineException] {
+      validateGraph(new P().resolveToDataflowGraph())
+    }
     assert(ex.directFailures.keySet == Set(fullyQualifiedIdentifier("a_2")))
     assert(ex.downstreamFailures.keySet == Set(fullyQualifiedIdentifier("b")))
 
@@ -158,7 +163,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
     val dfg = new P().resolveToDataflowGraph()
     val ex = intercept[UnresolvedPipelineException] {
-      dfg.validate()
+      validateGraph(dfg)
     }.directFailures(fullyQualifiedIdentifier("b")).getMessage
     verifyUnresolveColumnError(ex, "x", Seq("z"))
   }
@@ -175,7 +180,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
     val dfg = new P().resolveToDataflowGraph()
     val ex = intercept[UnresolvedPipelineException] {
-      dfg.validate()
+      validateGraph(dfg)
     }
     assert(
       ex.directFailures(fullyQualifiedIdentifier("c"))
@@ -200,7 +205,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     val dfg = new P().resolveToDataflowGraph()
     assert(!dfg.resolved)
     val ex = intercept[UnresolvedPipelineException] {
-      dfg.validate()
+      validateGraph(dfg)
     }
     assert(
       ex.directFailures(fullyQualifiedIdentifier("c"))
@@ -217,7 +222,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
       registerPersistedView("a", query = readFlowFunc("a"))
     }
     val e = intercept[CircularDependencyException] {
-      new P().resolveToDataflowGraph().validate()
+      validateGraph(new P().resolveToDataflowGraph())
     }
     assert(e.upstreamDataset == fullyQualifiedIdentifier("a"))
     assert(e.downstreamTable == fullyQualifiedIdentifier("a"))
@@ -229,7 +234,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
       registerPersistedView("b", query = readFlowFunc("a"))
     }
     val e = intercept[CircularDependencyException] {
-      new P().resolveToDataflowGraph().validate()
+      validateGraph(new P().resolveToDataflowGraph())
     }
     val cycle = Set(
       fullyQualifiedIdentifier("a"),
@@ -260,7 +265,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
         fullyQualifiedIdentifier("d")
       )
     val e = intercept[CircularDependencyException] {
-      new P().resolveToDataflowGraph().validate()
+      validateGraph(new P().resolveToDataflowGraph())
     }
     assert(e.upstreamDataset != e.downstreamTable)
     assert(cycle.contains(e.upstreamDataset))
@@ -287,7 +292,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
         fullyQualifiedIdentifier("d")
       )
     val e = intercept[CircularDependencyException] {
-      new P().resolveToDataflowGraph().validate()
+      validateGraph(new P().resolveToDataflowGraph())
     }
     assert(e.upstreamDataset != e.downstreamTable)
     assert(cycle.contains(e.upstreamDataset))
@@ -313,7 +318,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
         fullyQualifiedIdentifier("d")
       )
     val e = intercept[CircularDependencyException] {
-      new P().resolveToDataflowGraph().validate()
+      validateGraph(new P().resolveToDataflowGraph())
     }
     assert(e.upstreamDataset != e.downstreamTable)
     assert(cycle.contains(e.upstreamDataset))
@@ -340,7 +345,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
         fullyQualifiedIdentifier("d")
       )
     val e = intercept[CircularDependencyException] {
-      new P().resolveToDataflowGraph().validate()
+      validateGraph(new P().resolveToDataflowGraph())
     }
     assert(e.upstreamDataset != e.downstreamTable)
     assert(cycle.contains(e.upstreamDataset))
@@ -408,7 +413,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
       registerPersistedView("a", query = dfFlowFunc(Seq(1).toDF()))
       registerTable("b", query = Option(readStreamFlowFunc("a")))
     }
-    val ex = intercept[UnresolvedPipelineException] { p.resolveToDataflowGraph().validate() }
+    val ex = intercept[UnresolvedPipelineException] {
+      validateGraph(p.resolveToDataflowGraph())
+    }
     assert(
       ex.directFailures(fullyQualifiedIdentifier("b"))
         .getMessage
@@ -429,7 +436,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
       registerPersistedView("a", query = dfFlowFunc(mem.toDF()))
       registerTable("b", query = Option(readFlowFunc("a")))
     }
-    val ex = intercept[UnresolvedPipelineException] { p.resolveToDataflowGraph().validate() }
+    val ex = intercept[UnresolvedPipelineException] { validateGraph(p.resolveToDataflowGraph()) }
     assert(
       ex.directFailures(fullyQualifiedIdentifier("b"))
         .getMessage
@@ -449,7 +456,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     }.resolveToDataflowGraph()
 
     val ex = intercept[AnalysisException] {
-      graph.validate()
+      validateGraph(graph)
     }
 
     checkError(
@@ -471,7 +478,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     }.resolveToDataflowGraph()
 
     val ex = intercept[AnalysisException] {
-      graph.validate()
+      validateGraph(graph)
     }
 
     checkError(
@@ -499,7 +506,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     }.resolveToDataflowGraph()
 
     val ex = intercept[AnalysisException] {
-      graph.validate()
+      validateGraph(graph)
     }
 
     checkError(
@@ -522,7 +529,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
         specifiedSchema = Option(new StructType().add("x", IntegerType))
       )
     }.resolveToDataflowGraph()
-    val ex1 = intercept[AnalysisException] { graph1.validate() }
+    val ex1 = intercept[AnalysisException] { validateGraph(graph1) }
     assert(
       ex1.getMessage.contains(
         s"'${fullyQualifiedIdentifier("a").unquotedString}' " +
@@ -535,7 +542,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
       registerTable("a", specifiedSchema = Option(new StructType().add("x", IntegerType)))
       registerFlow("a", "a", query = dfFlowFunc(Seq(true, false).toDF("x")), once = true)
     }.resolveToDataflowGraph()
-    val ex2 = intercept[AnalysisException] { graph2.validate() }
+    val ex2 = intercept[AnalysisException] { validateGraph(graph2) }
     assert(
       ex2.getMessage.contains(
         s"'${fullyQualifiedIdentifier("a").unquotedString}' " +
@@ -592,7 +599,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     }.resolveToDataflowGraph()
 
     val ex = intercept[AnalysisException] {
-      graph.validate()
+      validateGraph(graph)
     }
 
     checkError(
@@ -642,7 +649,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     }.resolveToDataflowGraph()
 
     val ex = intercept[AnalysisException] {
-      graph.validate()
+      validateGraph(graph)
     }
 
     checkError(
@@ -704,7 +711,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     }.resolveToDataflowGraph()
 
     val ex = intercept[AnalysisException] {
-      graph.validate()
+      validateGraph(graph)
     }
 
     checkError(
@@ -749,7 +756,7 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     }.resolveToDataflowGraph()
 
     val ex = intercept[AnalysisException] {
-      graph.validate()
+      validateGraph(graph)
     }
 
     checkError(
@@ -763,5 +770,16 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
         ).sorted.mkString(", ")
       )
     )
+  }
+
+  test("DUPLICATE_GRAPH_ELEMENT: duplicate graph element identifiers") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        DataflowGraph.mapUnique(Seq("a", "a"), "view")(identity)
+      },
+      condition = "DUPLICATE_GRAPH_ELEMENT",
+      parameters = Map(
+        "graphElementType" -> "view",
+        "graphElementName" -> "a"))
   }
 }

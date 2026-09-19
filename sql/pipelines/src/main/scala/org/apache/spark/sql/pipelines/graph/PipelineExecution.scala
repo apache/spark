@@ -110,7 +110,8 @@ class PipelineExecution(context: PipelineUpdateContext) {
 
   private def resolveGraph(): DataflowGraph = {
     try {
-      context.unresolvedGraph.resolve().validate()
+      val sessionCaseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis
+      context.unresolvedGraph.resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
     } catch {
       case e: UnresolvedPipelineException =>
         handleInvalidPipeline(e)

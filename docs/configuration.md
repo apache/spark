@@ -812,8 +812,90 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.9.0</td>
 </tr>
 <tr>
+  <td><code>spark.pythonWorkerEnv.[EnvironmentVariableName]</code></td>
+  <td>(none)</td>
+  <td>
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Python
+    worker processes that run the session's Python UDFs, making it visible to
+    <code>os.environ</code> inside a UDF. Multiple of these may be set to add several environment
+    variables. Supported on both classic Spark and Spark Connect.
+    <br /><br />
+    Unlike <code>spark.executorEnv.[EnvironmentVariableName]</code>, which is scoped to the whole
+    application and fixed before it starts, this is a session configuration: each session carries
+    its own environment, may change it while running, and a change takes effect on the next action.
+    Where both set the same variable, this one wins. An environment variable that Spark sets for a
+    Python worker itself takes precedence over both.
+    <br /><br />
+    Applied to every Python worker the session launches for a Python function it supplied: scalar
+    UDFs in each of their forms, including Arrow-optimized, non-Arrow, pandas, iterator and the
+    element-wise form a UDF takes inside the lambda of a higher-order function such as
+    <code>transform</code>; <code>mapInPandas</code> and <code>mapInArrow</code>; grouped-map,
+    cogrouped-map, grouped-aggregate and window functions; Python UDTFs, both row and Arrow;
+    <code>applyInPandasWithState</code> and <code>transformWithState</code>;
+    <code>writeStream.foreach</code>; and Python data sources, including the workers that plan them
+    and read a streaming source.
+    <br /><br />
+    A running streaming query holds a configuration snapshot, because its batches run on a cloned
+    session whose configurations are copied when the query starts. A change made while a query is
+    running therefore reaches it only when the query restarts.
+    <br /><br />
+    A dynamic Python UDTF's <code>analyze</code> method and a Python data source's schema and
+    partition planning run in a worker while a query is being planned. Those results are resolved
+    once for a given DataFrame and are not recomputed if the environment changes afterwards; a new
+    read picks up the current values.
+    <br /><br />
+    Some Python code a session supplies does not run in a worker Spark launches, and no session
+    environment applies to it. <code>foreachBatch</code> receives the environment on Spark Connect,
+    where the function runs in a worker the server starts, but not on classic Spark, where it is a
+    callback into the client's own Python process. A streaming query listener added with
+    <code>addListener</code> likewise runs its callbacks in the client process on both classic Spark
+    and Spark Connect. In each of those cases the client process's own environment is what the
+    callback observes.
+    <br /><br />
+    Names Spark reserves for itself are rejected: any name beginning with <code>SPARK_</code>,
+    <code>PYSPARK_</code> or <code>PYTHON_WORKER_FACTORY_</code>, together with
+    <code>OMP_NUM_THREADS</code> and the <code>PYTHON_*</code> variables Spark sets only under a
+    condition (<code>PYTHON_FAULTHANDLER_DIR</code>,
+    <code>PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS</code>,
+    <code>PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE</code> and
+    <code>PYTHON_UNIX_DOMAIN_ENABLED</code>).
+    Where Spark sets a variable unconditionally, such as <code>PYTHONUNBUFFERED</code> or
+    <code>PYTHON_UDF_BATCH_SIZE</code>, a session may still set it and Spark's value wins.
+    <code>PYTHONPATH</code> is the one name that is neither reserved nor simply overridden: Spark
+    merges the session's value into the path it computes for the worker, so a session adds to the
+    worker's import path. The relative order is not guaranteed -- Spark contributes no entries of
+    its own when <code>SPARK_HOME</code> is unset and its classes did not come from a jar, which can
+    leave the session's path first -- so do not rely on a session entry being shadowed by Spark's.
+    <br /><br />
+    Each variable is a separate configuration, so setting several is not atomic: a client that sets
+    a batch may have some applied and then one rejected, leaving the earlier ones in place. Read the
+    configurations back to confirm what the session holds.
+    <br /><br />
+    On Spark Connect a variable cannot be read back through <code>spark.conf.get</code> when
+    <em>either</em> its name or its value matches <code>spark.redaction.regex</code> -- which by
+    default covers <code>secret</code>, <code>password</code>, <code>token</code> and
+    <code>access key</code> -- because the Spark Connect configuration RPC withholds such entries on
+    every read. So a variable named <code>MY_TOKEN</code> is hidden, and so is one whose value
+    merely contains <code>password</code>. The variable still reaches the worker. Classic Spark
+    returns the value.
+    <br /><br />
+    A variable name must match <code>[A-Za-z_][A-Za-z0-9_]*</code>, and a value must not contain a
+    NUL character, which a process environment cannot carry. The number of variables and the total
+    size of the environment are also bounded. Setting one fails immediately and stores nothing if
+    the result would be invalid -- through <code>spark.conf.set</code> or SQL <code>SET</code>, on
+    both classic Spark and Spark Connect. A configuration passed to
+    <code>SparkSession.builder</code> and merged into the session does not pass through that check,
+    so such a value is stored and instead fails the queries that would install it in a worker; unset
+    it to recover.
+    <br /><br />
+    Values are not redacted from the worker environment, so a session that puts a secret here is
+    responsible for keeping the Python code it runs from disclosing it.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.redaction.regex</code></td>
-  <td>(?i)secret|password|token|access[.]?key</td>
+  <td>(?i)secret|password|token|access[.]?key|credential</td>
   <td>
     Regex to decide which Spark configuration properties and environment variables in driver and
     executor environments contain sensitive information. When this regex matches a property key or
@@ -827,7 +909,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Regex to decide which parts of strings produced by Spark contain sensitive information.
     When this regex matches a string part, that string part is replaced by a dummy value.
-    This is currently used to redact the output of SQL explain commands.
+    This is currently used to redact the output of SQL explain commands and the exit exception annotation on Kubernetes.
   </td>
   <td>2.2.0</td>
 </tr>
@@ -1606,6 +1688,21 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.ui.holdEnabled</code></td>
+  <td>true</td>
+  <td>
+    Allows the whole application to be held and resumed from the web UI. Holding gracefully
+    decommissions all executors and stops requesting new ones. Cached blocks are not preserved
+    and are recomputed after resuming. This takes effect only when
+    <code>spark.decommission.enabled</code> is true, the shuffle data is kept outside the
+    executors (through either <code>spark.shuffle.service.enabled</code> or a
+    <code>ShuffleDataIO</code> with reliable storage), and the cluster manager can hold
+    executors: Standalone, YARN, and Kubernetes with
+    <code>spark.kubernetes.allocation.pods.allocator=direct</code>.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.threadDumpsEnabled</code></td>
   <td>true</td>
   <td>
@@ -2091,7 +2188,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.rdd.compress</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Whether to compress serialized RDD partitions (e.g. for
     <code>StorageLevel.MEMORY_ONLY_SER</code> in Java
@@ -2224,7 +2321,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.cleaner.periodicGC.interval</code></td>
   <td>30min</td>
   <td>
-    Controls how often to trigger a garbage collection.<br><br>
+    Controls how often to trigger a garbage collection. Setting this to 0 or a negative
+    value disables the periodic garbage collection.<br><br>
     This context cleaner triggers cleanups only when weak references are garbage collected.
     In long-running applications with large driver JVMs, where there is little memory pressure
     on the driver, this may happen very occasionally or not at all. Not cleaning at all may
@@ -3131,9 +3229,11 @@ Apart from these, the following properties are also available, and may be useful
     slots on a single executor and the task is taking longer time than the threshold. This config
     helps speculate stage with very few tasks. Regular speculation configs may also apply if the
     executor slots are large enough. E.g. tasks might be re-launched if there are enough successful
-    runs even though the threshold hasn't been reached. The number of slots is computed based on
-    the conf values of spark.executor.cores and spark.task.cpus minimum 1.
-    Default unit is bytes, unless otherwise specified.
+    runs even though the threshold hasn't been reached. The number of slots is the maximum
+    number of concurrent tasks per executor for the stage's resource profile, computed from
+    the executor cores and the task cpus amount (which may be fractional), or 1 when the
+    executor cores are not known.
+    Default unit is milliseconds, unless otherwise specified.
   </td>
   <td>3.0.0</td>
 </tr>
@@ -3141,7 +3241,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.speculation.efficiency.processRateMultiplier</code></td>
   <td>0.75</td>
   <td>
-    A multiplier that used when evaluating inefficient tasks. The higher the multiplier
+    A multiplier that is used when evaluating inefficient tasks. The higher the multiplier
     is, the more tasks will be possibly considered as inefficient.
   </td>
   <td>3.4.0</td>
@@ -3176,7 +3276,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.task.cpus</code></td>
   <td>1</td>
   <td>
-    Number of cores to allocate for each task.
+    Number of cores to allocate for each task. This can also be set to a fractional value,
+    either below 1 (e.g. <code>0.2</code>) to allow multiple tasks to share a CPU core, or
+    above 1 (e.g. <code>1.5</code>). In either case the number of tasks that can run
+    concurrently on an executor is <code>floor(executor cores / spark.task.cpus)</code>.
   </td>
   <td>0.5.0</td>
 </tr>
@@ -3561,6 +3664,30 @@ They are typically set via the config file and command-line options with `--conf
   <td>3.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.connect.grpc.keepAlive.enabled</code></td>
+  <td>
+    true
+  </td>
+  <td>Whether the server sends gRPC/HTTP2 keepalive PINGs to detect and terminate silently-dead client connections. Can be turned off as an escape hatch, e.g. if it interacts badly with a particular network path, or a server environment is prone to stalls (long GC pauses, etc.) long enough to trip false-positive disconnects.</td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.keepAlive.time</code></td>
+  <td>
+    60s
+  </td>
+  <td>Sets the time the server waits for the connection to be idle before sending a gRPC/HTTP2 keepalive PING, to detect and terminate a silently-dead connection (e.g. after a NAT gateway or load balancer drops an idle connection mapping without closing the socket). The server separately tolerates client-sent keepalive PINGs no more often than every 10s regardless of this setting; a client configured with <code>grpc_keepalive_time_ms</code> below that floor will have its connection torn down as "too_many_pings".</td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.keepAlive.timeout</code></td>
+  <td>
+    20s
+  </td>
+  <td>Sets how long the server waits for a keepalive PING ack before considering the connection dead.</td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.connect.extensions.relation.classes</code></td>
   <td>
     (none)
@@ -3659,6 +3786,10 @@ Command types in proto.</td>
 
 Please refer to the [Security](security.html) page for available options on how to secure different
 Spark subsystems.
+
+For OIDC credential propagation (obtaining and distributing short-lived, identity-derived
+credentials to executors), the `spark.security.oidc.*` configuration keys are documented under
+[OIDC Credential Propagation](security.html#oidc-credential-propagation).
 
 
 ### Spark SQL

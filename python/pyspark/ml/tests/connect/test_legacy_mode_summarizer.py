@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -20,9 +19,9 @@ import unittest
 
 import numpy as np
 
-from pyspark.util import is_remote_only
-from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.util import is_remote_only
 
 if should_test_connect:
     from pyspark.ml.connect.summarizer import summarize_dataframe

@@ -41,8 +41,8 @@ trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase with Q
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $src RENAME TO dst_ns.dst_tbl")
           },
-          condition = "_LEGACY_ERROR_TEMP_1073",
-          parameters = Map("db" -> "src_ns", "newDb" -> "dst_ns")
+          condition = "RENAME_TABLE_SOURCE_DESTINATION_DATABASE_MISMATCH",
+          parameters = Map("db" -> "`src_ns`", "newDb" -> "`dst_ns`")
         )
       }
     }

@@ -51,6 +51,12 @@ import org.apache.spark.sql.util.NumericHistogram
       statistical computing packages. Note: the output type of the 'x' field in the return value is
       propagated from the input value consumed in the aggregate function.
     """,
+  arguments = """
+    Arguments:
+      * expr - A numeric, date, timestamp, or interval expression whose values are aggregated
+          into the histogram.
+      * nb - A foldable integer expression (at least 2) giving the number of histogram bins.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col, 5) FROM VALUES (0), (1), (2), (10) AS tab(col);
@@ -78,11 +84,11 @@ case class HistogramNumeric(
   private lazy val propagateInputType: Boolean = SQLConf.get.histogramNumericPropagateInputType
 
   override def inputTypes: Seq[AbstractDataType] = {
-    // Support NumericType, DateType, TimestampType and TimestampNTZType, YearMonthIntervalType,
-    // DayTimeIntervalType since their internal types are all numeric,
+    // Support NumericType, DateType, TimestampType, TimestampNTZType, TimeType,
+    // YearMonthIntervalType, DayTimeIntervalType since their internal types are all numeric,
     // and can be easily cast to double for processing.
     Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
-      YearMonthIntervalType, DayTimeIntervalType), IntegerType)
+      YearMonthIntervalType, DayTimeIntervalType, AnyTimeType), IntegerType)
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -163,7 +169,8 @@ case class HistogramNumeric(
               coord.x.toInt
             case FloatType => coord.x.toFloat
             case ShortType => coord.x.toShort
-            case _: DayTimeIntervalType | LongType | TimestampType | TimestampNTZType =>
+            case _: DayTimeIntervalType | LongType | TimestampType | TimestampNTZType
+                | _: TimeType =>
               coord.x.toLong
             case d: DecimalType =>
               val bigDecimal = BigDecimal

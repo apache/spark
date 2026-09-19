@@ -53,9 +53,6 @@ case class OrcTable(
   override def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: GeometryType | _: GeographyType => false
 
-    // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => false
-
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportsDataType(f.dataType) }
@@ -71,4 +68,10 @@ case class OrcTable(
   }
 
   override def formatName: String = "ORC"
+
+  // A row is decoded from the columns the scan asked for, so under strict file reads reading more
+  // columns can only surface an error, never silently change which rows come back. When the read is
+  // not strict that error is swallowed and the rest of the file's rows go with it, which is why
+  // FileTable withholds the capability there.
+  override protected def supportsScanMerging: Boolean = true
 }

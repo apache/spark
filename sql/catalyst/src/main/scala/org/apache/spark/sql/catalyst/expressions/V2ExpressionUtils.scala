@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, Unresolv
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, SampleMethod}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.fromAttributes
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
@@ -67,7 +68,35 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       refs: Array[NamedReference],
       output: Seq[Attribute]): AttributeSet = {
     val plan = LocalRelation(output)
-    AttributeSet(resolveRefs[Attribute](refs.toImmutableArraySeq, plan))
+    AttributeSet(resolveRefs[NamedExpression](refs.toImmutableArraySeq, plan))
+  }
+
+  /**
+   * Resolves data source runtime-filter attributes and wraps resolution failures with connector
+   * context.
+   */
+  private[sql] def resolveDataSourceRuntimeFilterRefs(
+      refs: Array[NamedReference],
+      output: Seq[Attribute],
+      method: String,
+      scanClass: String): AttributeSet = {
+    if (refs.isEmpty) return AttributeSet.empty
+
+    val plan = LocalRelation(output)
+    val resolvedAttrs = refs.map { ref =>
+      try {
+        resolveRef[NamedExpression](ref, plan)
+      } catch {
+        case e: AnalysisException =>
+          throw QueryCompilationErrors.cannotResolveDataSourceRuntimeFilterAttributeError(
+            attribute = ref.fieldNames,
+            method = method,
+            scanClass = scanClass,
+            relationOutput = fromAttributes(output),
+            cause = e)
+      }
+    }
+    AttributeSet(resolvedAttrs)
   }
 
   /**
@@ -315,8 +344,8 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "EXP" => convertUnaryExpr(expr, Exp)
       case "POWER" => convertBinaryExpr(expr, Pow)
       case "SQRT" => convertUnaryExpr(expr, Sqrt)
-      case "FLOOR" => convertUnaryExpr(expr, Floor)
-      case "CEIL" => convertUnaryExpr(expr, Ceil)
+      case "FLOOR" => convertUnaryExpr(expr, Floor(_))
+      case "CEIL" => convertUnaryExpr(expr, Ceil(_))
       case "ROUND" => convertBinaryExpr(expr, Round(_, _, ansiEnabled = true))
       case "CBRT" => convertUnaryExpr(expr, Cbrt)
       case "DEGREES" => convertUnaryExpr(expr, ToDegrees)

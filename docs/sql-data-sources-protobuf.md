@@ -397,7 +397,13 @@ Spark supports the writing of all Spark SQL types into Protobuf. For most types,
     <td>MapType</td>
     <td>map</td>
   </tr>
+  <tr>
+    <td>TimeType</td>
+    <td>int64 (nanoseconds-of-day)</td>
+  </tr>
 </table>
+
+`TimeType` is written as a plain Protobuf `int64` holding the number of nanoseconds since midnight. Because a bare `int64` carries no logical-type marker, `from_protobuf` reads such a field back as `LongType` (the nanoseconds-of-day value), which can be cast back to a TIME value with `cast(... AS TIME)` if needed.
 
 ## Handling circular references protobuf fields
 
@@ -472,7 +478,7 @@ Data source options of Protobuf can be set via:
   <tr>
     <td><code>emit.default.values</code></td>
     <td><code>false</code></td>
-    <td>Whether to render fields with zero values when deserializing Protobuf to a Spark struct. When a field is empty in the serialized Protobuf, this library will deserialize them as <code>null</code> by default, this option can control whether to render the type-specific zero values.</td>
+    <td>Whether to render fields with zero values when deserializing Protobuf to a Spark struct. When a field is empty in the serialized Protobuf, this library will deserialize it as <code>null</code> by default; this option controls whether to render the type-specific zero value instead. This option does not affect unwrapped primitive wrapper types.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -490,7 +496,7 @@ Data source options of Protobuf can be set via:
   <tr>
     <td><code>unwrap.primitive.wrapper.types</code></td>
     <td><code>false</code></td>
-    <td>Whether to unwrap the struct representation for well-known primitive wrapper types when deserializing. By default, the wrapper types for primitives (i.e. google.protobuf.Int32Value, google.protobuf.Int64Value, etc.) will get deserialized as structs.</td>
+    <td>Whether to unwrap the struct representation for well-known primitive wrapper types when deserializing. By default, the wrapper types for primitives (i.e. google.protobuf.Int32Value, google.protobuf.Int64Value, etc.) will get deserialized as structs. When unwrapped, an absent singular wrapper is <code>null</code>, while a present wrapper produces its scalar value or the scalar's type-specific default, independent of <code>emit.default.values</code>.</td>
     <td>read</td>
   </tr>
   <tr>

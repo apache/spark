@@ -92,10 +92,10 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     require($(lower) < $(upper), s"The specified lower quantile(${$(lower)}) is " +
       s"larger or equal to upper quantile(${$(upper)})")
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
-    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(outputCol), SQLDataTypes.VectorType)
   }
 }
 
@@ -233,6 +233,17 @@ class RobustScalerModel private[ml] (
 
   // For ml connect only
   private[ml] def this() = this("", Vectors.empty, Vectors.empty)
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (range != null) {
+      size += range.getSizeInBytes
+    }
+    if (median != null) {
+      size += median.getSizeInBytes
+    }
+    size
+  }
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)

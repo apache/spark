@@ -1908,6 +1908,7 @@ class DatasetSuite extends SharedSparkSession
             val treeString = cp.logicalPlan.treeString(verbose = true)
             fail(s"Expecting a LogicalRDD, but got\n$treeString")
         }
+        assert(logicalRDD.isCheckpointedInput === eager)
 
         val dsPhysicalPlan = ds.queryExecution.executedPlan
         val cpPhysicalPlan = cp.queryExecution.executedPlan
@@ -1928,6 +1929,7 @@ class DatasetSuite extends SharedSparkSession
 
         // For a lazy checkpoint() call, the first check also materializes the checkpoint.
         checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
+        assert(logicalRDD.isCheckpointedInput)
 
         // Reads back from checkpointed data and check again.
         checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
@@ -1940,7 +1942,7 @@ class DatasetSuite extends SharedSparkSession
         val agg = cp.groupBy($"id" % 2).agg(count($"id"))
 
         agg.queryExecution.executedPlan.collectFirst {
-          case ShuffleExchangeExec(_, _: RDDScanExec, _, _) =>
+          case ShuffleExchangeExec(_, _: RDDScanExec, _, _, _) =>
           case BroadcastExchangeExec(_, _: RDDScanExec) =>
         }.foreach { _ =>
           fail(

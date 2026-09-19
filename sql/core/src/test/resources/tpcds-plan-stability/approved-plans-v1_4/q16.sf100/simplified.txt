@@ -4,8 +4,8 @@ WholeStageCodegen (12)
       Exchange #1
         WholeStageCodegen (11)
           HashAggregate [sum,sum,cs_order_number] [sum(UnscaledValue(cs_ext_ship_cost)),sum(UnscaledValue(cs_net_profit)),count(cs_order_number),count,sum,sum,count]
-            HashAggregate [cs_order_number,sum,sum] [sum(UnscaledValue(cs_ext_ship_cost)),sum(UnscaledValue(cs_net_profit)),sum,sum]
-              HashAggregate [cs_order_number,cs_ext_ship_cost,cs_net_profit] [sum(UnscaledValue(cs_ext_ship_cost)),sum(UnscaledValue(cs_net_profit)),sum,sum,sum,sum]
+            SortAggregate [cs_order_number,sum,sum] [sum(UnscaledValue(cs_ext_ship_cost)),sum(UnscaledValue(cs_net_profit)),sum,sum]
+              SortAggregate [cs_order_number,cs_ext_ship_cost,cs_net_profit] [sum(UnscaledValue(cs_ext_ship_cost)),sum(UnscaledValue(cs_net_profit)),sum,sum,sum,sum]
                 Project [cs_order_number,cs_ext_ship_cost,cs_net_profit]
                   BroadcastHashJoin [cs_ship_date_sk,d_date_sk]
                     Project [cs_ship_date_sk,cs_order_number,cs_ext_ship_cost,cs_net_profit]

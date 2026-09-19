@@ -22,6 +22,7 @@ import scala.util.Using
 
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResult, Relation, ResolvedIdentifier}
 import org.apache.spark.connect.proto.PipelineCommand.DefineFlow.AutoCdcFlowDetails
@@ -30,7 +31,7 @@ import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DescribeTablePartition, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DescribeTablePartition, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews, UnresolvedInsert}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -172,6 +173,7 @@ private[connect] object PipelinesHandler extends Logging {
       queryPlan.isInstanceOf[CreateTable] ||
       queryPlan.isInstanceOf[CreateView] ||
       queryPlan.isInstanceOf[InsertIntoStatement] ||
+      queryPlan.isInstanceOf[UnresolvedInsert] ||
       queryPlan.isInstanceOf[RenameTable] ||
       queryPlan.isInstanceOf[CreateNamespace] ||
       queryPlan.isInstanceOf[DropView]
@@ -428,9 +430,6 @@ private[connect] object PipelinesHandler extends Logging {
       transformExpressionFunc: proto.Expression => Expression): AutoCdcFlow = {
     // TODO(SPARK-57092): apply_as_truncates is declared on AutoCdcFlowDetails but is not yet
     //   honored by the engine; wire it through once SCD1 truncate support lands.
-    // TODO(SPARK-57093): ignore_null_updates_column_list and ignore_null_updates_except_column_list
-    //   are declared on AutoCdcFlowDetails but are not yet honored by the engine; wire them
-    //   through once SCD1 ignore-null support lands.
 
     if (!autoCdcDetails.hasSource) {
       throw new AnalysisException("AUTOCDC_MISSING_SOURCE", Map.empty)
@@ -477,8 +476,60 @@ private[connect] object PipelinesHandler extends Logging {
       case proto.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_1 |
           proto.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_UNSPECIFIED =>
         ScdType.Type1
+      case proto.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_2 =>
+        ScdType.Type2
       case other =>
         throw new UnsupportedOperationException(s"Unsupported AutoCDC SCD type: $other")
+    }
+
+    // SCD2-only history-tracking column selection. Mirrors the column_list/except_column_list
+    // handling above: at most one side may be non-empty, and an empty selection means "track
+    // every eligible column" (None).
+    val trackHistorySelection: Option[ColumnSelection] = {
+      val included = autoCdcDetails.getTrackHistoryColumnListList.asScala.toSeq
+      val excluded = autoCdcDetails.getTrackHistoryExceptColumnListList.asScala.toSeq
+      if (included.nonEmpty && excluded.nonEmpty) {
+        throw new AnalysisException(
+          "AUTOCDC_BOTH_TRACK_HISTORY_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST",
+          Map.empty)
+      } else if (included.nonEmpty) {
+        Some(ColumnSelection.IncludeColumns(included.map(asUnqualifiedColumnName)))
+      } else if (excluded.nonEmpty) {
+        Some(ColumnSelection.ExcludeColumns(excluded.map(asUnqualifiedColumnName)))
+      } else {
+        None
+      }
+    }
+
+    // History-tracking columns only make sense under SCD2. The Python client rejects this
+    // client-side, but a raw Connect client can still send it, so mirror the check here to
+    // surface a clean user-facing error rather than the internal error the [[ChangeArgs]]
+    // guard would otherwise raise.
+    if (scdType != ScdType.Type2 && trackHistorySelection.isDefined) {
+      throw new AnalysisException("AUTOCDC_TRACK_HISTORY_REQUIRES_SCD2", Map.empty)
+    }
+
+    // Ignore-null (partial update) selection. The three inputs are mutually exclusive:
+    // ignore_null_updates (all columns), ignore_null_updates_column_list (an include list), and
+    // ignore_null_updates_except_column_list (an except list). "All columns" is represented as an
+    // ExcludeColumns selection with an empty list; this cannot be expressed via the repeated
+    // except field alone (an empty repeated field is indistinguishable from an unset one), which
+    // is why the dedicated boolean exists.
+    val ignoreNullSelection: Option[ColumnSelection] = {
+      val all = autoCdcDetails.getIgnoreNullUpdates
+      val included = autoCdcDetails.getIgnoreNullUpdatesColumnListList.asScala.toSeq
+      val excluded = autoCdcDetails.getIgnoreNullUpdatesExceptColumnListList.asScala.toSeq
+      if (Seq(all, included.nonEmpty, excluded.nonEmpty).count(identity) > 1) {
+        throw new AnalysisException("AUTOCDC_CONFLICTING_IGNORE_NULL_UPDATES_OPTIONS", Map.empty)
+      } else if (all) {
+        Some(ColumnSelection.ExcludeColumns(Seq.empty))
+      } else if (included.nonEmpty) {
+        Some(ColumnSelection.IncludeColumns(included.map(asUnqualifiedColumnName)))
+      } else if (excluded.nonEmpty) {
+        Some(ColumnSelection.ExcludeColumns(excluded.map(asUnqualifiedColumnName)))
+      } else {
+        None
+      }
     }
 
     val changeArgs = ChangeArgs(
@@ -487,7 +538,9 @@ private[connect] object PipelinesHandler extends Logging {
       storedAsScdType = scdType,
       deleteCondition =
         Option.when(autoCdcDetails.hasApplyAsDeletes)(toColumn(autoCdcDetails.getApplyAsDeletes)),
-      columnSelection = columnSelection)
+      columnSelection = columnSelection,
+      trackHistorySelection = trackHistorySelection,
+      ignoreNullSelection = ignoreNullSelection)
 
     AutoCdcFlow(
       identifier = flowIdentifier,
@@ -563,10 +616,25 @@ private[connect] object PipelinesHandler extends Logging {
 
       // Rethrow any exceptions that caused the pipeline run to fail so that the exception is
       // propagated back to the SC client / CLI.
-      runFailureEvent.foreach { event =>
-        throw event.error.get
-      }
+      runFailureEvent.foreach(throwRunFailure)
     }
+  }
+
+  /**
+   * Rethrows the failure behind a terminal run-failure event so it reaches the Spark Connect
+   * client. Most failures carry the underlying cause (e.g. a flow's QueryExecutionFailure), but
+   * some termination reasons (UnexpectedRunFailure, FailureStoppingFlow) have none. When the
+   * cause is absent, throw a PIPELINE_RUN_FAILED error built from the event message rather than
+   * calling Option.get, which would throw a NoSuchElementException and hide the real failure.
+   * Using PIPELINE_RUN_FAILED instead of INTERNAL_ERROR avoids mislabeling operational failures
+   * as bugs.
+   */
+  private[connect] def throwRunFailure(failureEvent: PipelineEvent): Nothing = {
+    throw failureEvent.error.getOrElse(
+      new SparkException(
+        errorClass = "PIPELINE_RUN_FAILED",
+        messageParameters = Map("message" -> failureEvent.message),
+        cause = null))
   }
 
   /**

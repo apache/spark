@@ -93,9 +93,13 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPl
  * @param aggregateExpressionsExtractor [[GroupingAndAggregateExpressionsExtractor]] object defined
  *   in case the outer parent operator is a partially resolved HAVING. Used to extract the
  *   aggregate expressions from the outer [[Aggregate]] operator.
+ * @param parentOperator the operator hosting this subquery expression. Used by
+ *   [[NameScopeStack.expandStarFromOuterScope]] to gate star expansion from outer scopes to
+ *   `Project`, `Aggregate`, or `CollectMetrics` operators, matching the fixed-point behavior.
  */
 class SubqueryScope(
     val aggregateExpressionsExtractor: Option[GroupingAndAggregateExpressionsExtractor] = None,
+    val parentOperator: Option[LogicalPlan] = None,
     private val outerOperatorResolutionContext: OperatorResolutionContext =
       new OperatorResolutionContext,
     private val outerReferenceScopeLevels: HashMap[ExprId, Int] = new HashMap[ExprId, Int]) {
@@ -167,6 +171,7 @@ class SubqueryRegistry {
     stack.push(
       new SubqueryScope(
         aggregateExpressionsExtractor = groupingAndAggregateExpressionsExtractor,
+        parentOperator = Some(parentOperator),
         outerOperatorResolutionContext = outerOperatorResolutionContext
       )
     )

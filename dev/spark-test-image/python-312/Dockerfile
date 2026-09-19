@@ -59,12 +59,10 @@ ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=23.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2 pystack>=1.6.0 psutil"
-ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
-# Python deps for Kafka streaming tests
-ARG KAFKA_TEST_PKGS="testcontainers[kafka]>=3.7.0 kafka-python-ng>=2.0.2"
+COPY --from=root pyproject.toml ./pyproject.toml
 
-RUN python3.12 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS $KAFKA_TEST_PKGS lxml && \
-    python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
-    python3.12 -m pip install torcheval && \
+RUN python3.12 -m pip install -U pip
+
+RUN python3.12 -m pip install --group ml_torch --index-url https://download.pytorch.org/whl/cpu && \
+    python3.12 -m pip install --group ci_classic_standard --group ci_connect_standard && \
     python3.12 -m pip cache purge

@@ -21,13 +21,11 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.concurrent.duration.DurationInt
-
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{SparkConf, TestUtils}
-import org.apache.spark.sql.DataFrameReader
+import org.apache.spark.sql.{DataFrame, DataFrameReader}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -151,6 +149,105 @@ abstract class KafkaRelationSuiteBase extends SharedSparkSession with KafkaTest 
     // latest offset partition 1, should change
     testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(1))
     checkAnswer(df, (0 to 30).map(_.toString).toDF())
+  }
+
+  test("topic-level offsets") {
+    val topic1 = newTopic()
+    val topic2 = newTopic()
+    testUtils.createTopic(topic1, partitions = 3)
+    testUtils.createTopic(topic2, partitions = 2)
+    testUtils.sendMessages(topic1, (0 to 9).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic1, (10 to 19).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic1, Array("20"), Some(2))
+    testUtils.sendMessages(topic2, (100 to 109).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic2, (110 to 119).map(_.toString).toArray, Some(1))
+
+    // A topic bound as a whole covers all of its partitions, without enumerating them. This is a
+    // def so that every query plans against the partitions discovered at that point.
+    def df: DataFrame = createDF(s"$topic1,$topic2", withOptions = Map(
+      "kafka.metadata.max.age.ms" -> "1",
+      "startingOffsets" -> s"""{"$topic1":"earliest","$topic2":"earliest"}""",
+      "endingOffsets" -> s"""{"$topic1":"latest","$topic2":"latest"}"""))
+    checkAnswer(df, ((0 to 20) ++ (100 to 119)).map(_.toString).toDF())
+
+    // Topic-level offsets are expanded against the partitions discovered when the query is
+    // planned, so a partition added afterwards is picked up without touching the options
+    testUtils.addPartitions(topic2, 3)
+    testUtils.sendMessages(topic2, Array("120"), Some(2))
+    checkAnswer(df, ((0 to 20) ++ (100 to 120)).map(_.toString).toDF())
+  }
+
+  test("mixed topic-level and partition-level offsets") {
+    val topic1 = newTopic()
+    val topic2 = newTopic()
+    testUtils.createTopic(topic1, partitions = 2)
+    testUtils.createTopic(topic2, partitions = 2)
+    testUtils.sendMessages(topic1, (0 to 9).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic1, (10 to 19).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic2, (100 to 109).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic2, (110 to 119).map(_.toString).toArray, Some(1))
+
+    // topic1 starts from its earliest offsets, while topic2 is enumerated per partition
+    val df = createDF(s"$topic1,$topic2", withOptions = Map(
+      "startingOffsets" -> s"""{"$topic1":"earliest","$topic2":{"0":5,"1":-2}}""",
+      "endingOffsets" -> s"""{"$topic1":"latest","$topic2":{"0":-1,"1":8}}"""))
+    checkAnswer(df, ((0 to 19) ++ (105 to 109) ++ (110 to 117)).map(_.toString).toDF())
+  }
+
+  test("topic-level offsets with subscribePattern") {
+    val prefix = newTopic()
+    val topic1 = s"$prefix-a"
+    val topic2 = s"$prefix-b"
+    testUtils.createTopic(topic1, partitions = 2)
+    testUtils.createTopic(topic2, partitions = 2)
+    testUtils.sendMessages(topic1, (0 to 9).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic1, (10 to 19).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic2, (100 to 109).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic2, (110 to 119).map(_.toString).toArray, Some(1))
+
+    val df = spark
+      .read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribePattern", s"$prefix-.*")
+      .option("startingOffsets", s"""{"$topic1":"earliest","$topic2":{"0":5,"1":-2}}""")
+      .option("endingOffsets", s"""{"$topic1":"latest","$topic2":{"0":-1,"1":8}}""")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+    checkAnswer(df, ((0 to 19) ++ (105 to 109) ++ (110 to 117)).map(_.toString).toDF())
+  }
+
+  test("topic-level offsets must line up with the topics matched by subscribePattern") {
+    val prefix = newTopic()
+    val topic1 = s"$prefix-a"
+    val topic2 = s"$prefix-b"
+    testUtils.createTopic(topic1, partitions = 1)
+    testUtils.createTopic(topic2, partitions = 1)
+    testUtils.sendMessages(topic1, Array("1"), Some(0))
+    testUtils.sendMessages(topic2, Array("2"), Some(0))
+
+    def readWith(startingOffsets: String): Unit = {
+      spark
+        .read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribePattern", s"$prefix-.*")
+        .option("startingOffsets", startingOffsets)
+        .load()
+        .collect()
+    }
+
+    // A topic matched by the pattern must still be covered by the offsets
+    val uncovered = intercept[KafkaIllegalStateException] {
+      readWith(s"""{"$topic1":"earliest"}""")
+    }
+    assert(uncovered.getCondition === "KAFKA_START_OFFSET_DOES_NOT_MATCH_ASSIGNED")
+
+    // ... and a topic-level offset for a topic the pattern doesn't match is rejected
+    val unknown = intercept[KafkaIllegalStateException] {
+      readWith(s"""{"$topic1":"earliest","$topic2":"earliest","$prefix-ghost":"earliest"}""")
+    }
+    assert(unknown.getCondition === "KAFKA_TOPIC_OFFSET_DOES_NOT_MATCH_ASSIGNED")
   }
 
   test("default starting and ending offsets with headers") {
@@ -472,6 +569,9 @@ abstract class KafkaRelationSuiteBase extends SharedSparkSession with KafkaTest 
     testBadOptions("subscribe" -> "t", "startingOffsets" -> startingOffsets)(
       "startingOffsets for t-0 can't be latest for batch queries on Kafka")
 
+    // Now do it with a topic-level start offset indicating latest
+    testBadOptions("subscribe" -> "t", "startingOffsets" -> """{"t":"latest"}""")(
+      "startingOffsets for t can't be latest for batch queries on Kafka")
 
     // Make sure we catch ending offsets that indicate earliest
     testBadOptions("endingOffsets" -> "earliest")("ending offset can't be earliest " +
@@ -482,6 +582,10 @@ abstract class KafkaRelationSuiteBase extends SharedSparkSession with KafkaTest 
     val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
     testBadOptions("subscribe" -> "t", "endingOffsets" -> endingOffsets)(
       "ending offset for t-0 can't be earliest for batch queries on Kafka")
+
+    // Make sure we catch a topic-level ending offset indicating earliest
+    testBadOptions("subscribe" -> "t", "endingOffsets" -> """{"t":"earliest"}""")(
+      "ending offset for t can't be earliest for batch queries on Kafka")
 
     // No strategy specified
     testBadOptions()("options must be specified", "subscribe", "subscribePattern")
@@ -675,12 +779,21 @@ abstract class KafkaRelationSuiteBase extends SharedSparkSession with KafkaTest 
   test("resolved start offset greater than end offset (without latest)") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
-    val timestamp1 =
-      testUtils.sendMessages(topic, Seq("0", "0").toArray, Some(0))(1)._2.timestamp()
-    val timestamp2 =
-      testUtils.sendMessages(topic, Seq("0", "0").toArray, Some(1))(1)._2.timestamp()
-    val timestamp3 =
-      testUtils.sendMessages(topic, Seq("0", "0").toArray, Some(2))(1)._2.timestamp()
+    // Two messages per partition with explicit, increasing timestamps so the second message
+    // (offset 1) is deterministically resolved by offsetsForTimes. Without explicit timestamps
+    // both messages can share a CreateTime millisecond and resolve to offset 0, making the test
+    // flaky (produced timestamps are fixed at produce time, so retrying always resolves the same
+    // wrong offset). Returns base + 1 directly; broker echoes the producer timestamp unchanged
+    // under the default CreateTime semantics.
+    def sendTwoWithDistinctTs(part: Int): Long = {
+      val base = System.currentTimeMillis()
+      testUtils.sendMessages(Seq(
+        new RecordBuilder(topic, "0").partition(part).timestamp(base).build(),
+        new RecordBuilder(topic, "0").partition(part).timestamp(base + 1).build()
+      ))
+      base + 1
+    }
+    val Seq(timestamp1, timestamp2, timestamp3) = (0 to 2).map(sendTwoWithDistinctTs)
     val df = spark.read
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
@@ -699,13 +812,11 @@ abstract class KafkaRelationSuiteBase extends SharedSparkSession with KafkaTest 
       )
       .load()
 
-    eventually(timeout(60.seconds)) {
-      val e = intercept[IllegalStateException] {
-        df.collect()
-      }
-      assert(e.getMessage.contains(
-        "The resolved start offset 3 is greater than the resolved end offset 1 for"))
+    val e = intercept[IllegalStateException] {
+      df.collect()
     }
+    assert(e.getMessage.contains(
+      "The resolved start offset 3 is greater than the resolved end offset 1 for"))
   }
 }
 

@@ -95,6 +95,9 @@ from primitive_arrays;
 select element_at(array(1, 2, 3), 5);
 select element_at(array(1, 2, 3), -5);
 select element_at(array(1, 2, 3), 0);
+select element_at(array(1, 2, 3), -2147483648);
+-- non-literal index: avoids constant folding so the codegen path is exercised end-to-end
+select element_at(array(1, 2, 3), idx) from values (-2147483648) as t(idx);
 
 select elt(4, '123', '456');
 select elt(0, '123', '456');
@@ -189,3 +192,17 @@ select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String));
 -- SPARK-45599: Confirm 0.0, -0.0, and NaN are handled appropriately.
 select array_union(array(0.0, -0.0, DOUBLE("NaN")), array(0.0, -0.0, DOUBLE("NaN")));
 select array_distinct(array(0.0, -0.0, -0.0, DOUBLE("NaN"), DOUBLE("NaN")));
+
+-- function trim_array
+select trim_array(array(1, 2, 3, 4, 5), 0);
+select trim_array(array(1, 2, 3, 4, 5), 2);
+select trim_array(array(1, 2, 3, 4, 5), 5);
+select trim_array(array('a', 'b', 'c'), 1);
+select trim_array(array(1, 2, null, 4), 1);
+select trim_array(array(), 0);
+-- trim_array errors: n negative or greater than the array cardinality
+select trim_array(array(1, 2, 3), -1);
+select trim_array(array(1, 2, 3), 4);
+-- trim_array with NULL array or NULL n returns NULL
+select trim_array(CAST(null AS ARRAY<INT>), 1);
+select trim_array(array(1, 2, 3), CAST(null AS INT));

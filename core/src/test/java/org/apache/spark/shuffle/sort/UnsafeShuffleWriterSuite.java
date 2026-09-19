@@ -557,6 +557,22 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     assertEquals(3, spillFilesCreated.size());
   }
 
+  @Test
+  public void smallInitialSortBufferDoesNotSpillEveryRecordRadixOff() throws Exception {
+    conf.set(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE(), 1L);
+    conf.set(package$.MODULE$.SHUFFLE_SORT_USE_RADIXSORT(), false);
+    writeEnoughRecordsToTriggerSortBufferExpansionAndSpill();
+    assertEquals(12, spillFilesCreated.size());
+  }
+
+  @Test
+  public void smallInitialSortBufferDoesNotSpillEveryRecordRadixOn() throws Exception {
+    conf.set(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE(), 1L);
+    conf.set(package$.MODULE$.SHUFFLE_SORT_USE_RADIXSORT(), true);
+    writeEnoughRecordsToTriggerSortBufferExpansionAndSpill();
+    assertEquals(14, spillFilesCreated.size());
+  }
+
   private void writeEnoughRecordsToTriggerSortBufferExpansionAndSpill() throws Exception {
     memoryManager.limit(DEFAULT_INITIAL_SORT_BUFFER_SIZE * 16);
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);

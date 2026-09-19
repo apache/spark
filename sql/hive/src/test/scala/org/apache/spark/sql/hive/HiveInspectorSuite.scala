@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo
 import org.apache.hadoop.io.LongWritable
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{Row, TestUserClassUDT}
+import org.apache.spark.sql.{AnalysisException, Row, TestUserClassUDT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
@@ -290,5 +290,42 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     val typeInfo2 = oi2.getTypeInfo.asInstanceOf[DecimalTypeInfo]
     assert(typeInfo2.precision() === 18)
     assert(typeInfo2.scale() === 10)
+  }
+
+  test("SPARK-57556: TIME type is unsupported in Hive object inspectors") {
+    val timeType = TimeType()
+    val expectedParams = Map("typeName" -> s"\"${timeType.sql}\"")
+    checkError(
+      exception = intercept[AnalysisException](toInspector(timeType)),
+      condition = "UNSUPPORTED_DATATYPE",
+      parameters = expectedParams)
+    checkError(
+      exception = intercept[AnalysisException](toInspector(Literal.create(null, timeType))),
+      condition = "UNSUPPORTED_DATATYPE",
+      parameters = expectedParams)
+    checkError(
+      exception = intercept[AnalysisException](timeType.toTypeInfo),
+      condition = "UNSUPPORTED_DATATYPE",
+      parameters = expectedParams)
+  }
+
+  test("SPARK-57815: nanosecond timestamp types are unsupported in Hive object inspectors") {
+    Seq(
+      TimestampNTZNanosType(9), TimestampNTZNanosType(7),
+      TimestampLTZNanosType(9), TimestampLTZNanosType(8)).foreach { nanosType =>
+      val expectedParams = Map("typeName" -> s"\"${nanosType.sql}\"")
+      checkError(
+        exception = intercept[AnalysisException](toInspector(nanosType)),
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = expectedParams)
+      checkError(
+        exception = intercept[AnalysisException](toInspector(Literal.create(null, nanosType))),
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = expectedParams)
+      checkError(
+        exception = intercept[AnalysisException](nanosType.toTypeInfo),
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = expectedParams)
+    }
   }
 }

@@ -148,8 +148,10 @@ abstract class OfflineStateRepartitionIntegrationSuiteBase extends StateDataSour
       }
 
       // Step 3: Run repartition
-      spark.streamingCheckpointManager.repartition(
-        checkpointDir.getAbsolutePath, newPartitions)
+      withWritableCheckpoint {
+        spark.streamingCheckpointManager.repartition(
+          checkpointDir.getAbsolutePath, newPartitions)
+      }
 
       val repartitionBatchId = lastBatchId + 1
       val hadoopConf = spark.sessionState.newHadoopConf()

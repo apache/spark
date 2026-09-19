@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, InsertIntoHadoopFsRelationCommand, SQLHadoopMapReduceCommitProtocol, V1WriteCommand}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec}
 import org.apache.spark.sql.execution.window.WindowGroupLimitExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
@@ -446,6 +446,47 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
+  test("SortMergeAsOfJoin metrics") {
+    // Only numOutputRows here; spillSize is covered in SortMergeAsOfJoinSuite.
+    def checkNumOutputRows(df: DataFrame, expected: Long): Unit = {
+      df.collect()
+      val op = df.queryExecution.executedPlan.collectFirst {
+        case s: SortMergeAsOfJoinExec => s
+      }
+      assert(op.isDefined, "The query plan should have SortMergeAsOfJoin")
+      testMetricsInSparkPlanOperator(op.get, Map("numOutputRows" -> expected))
+    }
+
+    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+      // No equi-key. Left key 0 has no match: INNER drops it (2), LEFT OUTER null-pads (3).
+      val left = Seq((0, 0), (5, 5), (10, 10)).toDF("a", "left_val")
+      val right = Seq((1, 1), (3, 3), (7, 7)).toDF("a", "right_val")
+      checkNumOutputRows(
+        left.joinAsOf(
+          right, left.col("a"), right.col("a"), usingColumns = Seq.empty,
+          joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        2L)
+      checkNumOutputRows(
+        left.joinAsOf(
+          right, left.col("a"), right.col("a"), usingColumns = Seq.empty,
+          joinType = "leftouter", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        3L)
+
+      // NULL left equi-key never matches, so LEFT OUTER null-pads it (a separate path).
+      val nullLeft = Seq((Some(1), 5), (None, 5), (None, 10)).toDF("grp", "ts")
+      val nullRight = Seq((Some(1), 4), (None, 3), (None, 8)).toDF("grp", "ts")
+      checkNumOutputRows(
+        nullLeft.joinAsOf(
+          nullRight, nullLeft.col("ts"), nullRight.col("ts"),
+          usingColumns = Seq("grp"),
+          joinType = "leftouter", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        3L)
+    }
+  }
+
   test("BroadcastHashJoin metrics") {
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key", "value")
@@ -830,7 +871,9 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("SPARK-25497: LIMIT within whole stage codegen should not consume all the inputs") {
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false",
+        SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "false") {
       // A special query that only has one partition, so there is no shuffle and the entire query
       // can be whole-stage-codegened.
       val df = spark.range(0, 1500, 1, 1).limit(10).groupBy($"id")

@@ -28,7 +28,7 @@ def exit_from_command_with_retcode(cmd, retcode):
         print("[error] running", " ".join(cmd), "; process was terminated by signal", -retcode)
     else:
         print("[error] running", " ".join(cmd), "; received return code", retcode)
-    sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
+    sys.exit(1)
 
 
 def rm_r(path):

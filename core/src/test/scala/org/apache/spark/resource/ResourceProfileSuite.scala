@@ -408,6 +408,85 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     assert(msg.contains("The task resource amount 0.7 must be either <= 0.5, or a whole number"))
   }
 
+  test("SPARK-58192: fractional cpus amounts above 0.5 and above 1 are valid") {
+    // The "<= 0.5 or whole number" rule only applies to addressable custom resources; cpus is
+    // a plain quantity drawn from the core pool, so any amount of at least 1e-9 is valid.
+    Seq(0.7, 1.5, 2.5).foreach { amount =>
+      val ereqs = new ExecutorResourceRequests().cores(4)
+      val treqs = new TaskResourceRequests().cpus(amount)
+      val rp = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
+      assert(rp.getTaskCpus.get == BigDecimal(amount.toString), s"for amount $amount")
+    }
+  }
+
+  test("SPARK-58192: cpus amounts that round to zero at the accounting scale are rejected") {
+    Seq(0.0, -1.0, 1e-10, Double.NaN,
+      Double.PositiveInfinity, Double.NegativeInfinity).foreach { amount =>
+      val e = intercept[IllegalArgumentException] {
+        new TaskResourceRequests().cpus(amount)
+      }
+      assert(e.getMessage.contains("must be at least 1e-9"), s"for amount $amount")
+    }
+    // Above the maximum: no executor can have more than Int.MaxValue cores, so a larger
+    // request could never be satisfied anywhere. The maximum itself stays valid.
+    Seq(2147483647.5, 1e100).foreach { amount =>
+      val e = intercept[IllegalArgumentException] {
+        new TaskResourceRequests().cpus(amount)
+      }
+      assert(e.getMessage.contains("at most"), s"for amount $amount")
+    }
+    assert(new TaskResourceRequests().cpus(Int.MaxValue.toDouble)
+      .requests(ResourceProfile.CPUS).amount === Int.MaxValue.toDouble)
+    // Every live entry point validates, not just cpus(): resource() and addRequest() route
+    // cpus amounts through the same check (spark.task.resource.cpus.amount flows through
+    // resource() as well), while valid amounts still land in the request map.
+    intercept[IllegalArgumentException] {
+      new TaskResourceRequests().resource(ResourceProfile.CPUS, 1e-10)
+    }
+    intercept[IllegalArgumentException] {
+      new TaskResourceRequests().addRequest(new TaskResourceRequest(ResourceProfile.CPUS, 0.0))
+    }
+    assert(new TaskResourceRequests().resource(ResourceProfile.CPUS, 0.5)
+      .requests(ResourceProfile.CPUS).amount === 0.5)
+    // The constructor itself stays fully lenient: it also runs when the history server
+    // deserializes persisted data (event logs, the protobuf KVStore), which can carry any
+    // amount an earlier release accepted -- the pre-4.3 check was `amount <= 1.0 || whole`,
+    // which admitted 0, negatives, and even -Infinity, and protobuf round-trips non-finite
+    // doubles unchanged.
+    assert(new TaskResourceRequest(ResourceProfile.CPUS, 0.0).amount === 0.0)
+    assert(new TaskResourceRequest(ResourceProfile.CPUS, Double.NegativeInfinity)
+      .amount === Double.NegativeInfinity)
+  }
+
+  test("SPARK-58192: numTasksBasedOnCores clamps to [0, Int.MaxValue]") {
+    def numTasks(cores: String, cpusPerTask: String): Int = {
+      ResourceProfile.numTasksBasedOnCores(
+        CpuAmount.normalize(BigDecimal(cores)), CpuAmount.normalize(BigDecimal(cpusPerTask)))
+    }
+    assert(numTasks("4", "1.5") === 2)
+    assert(numTasks("1", "0.1") === 10)
+    // 4 / 1e-9 == 4e9 overflows Int; BigDecimal.intValue() would wrap it to a negative value
+    assert(numTasks("4", "0.000000001") === Int.MaxValue)
+    assert(numTasks("-1", "1") === 0)
+  }
+
+  test("SPARK-58192: numMemoryShareSlotsCeil rounds up and clamps to [0, Int.MaxValue]") {
+    def numSlots(cores: String, cpusPerTask: String): Int = {
+      ResourceProfile.numMemoryShareSlotsCeil(
+        CpuAmount.normalize(BigDecimal(cores)), CpuAmount.normalize(BigDecimal(cpusPerTask)))
+    }
+    // Exact quotients match the floor variant ...
+    assert(numSlots("4", "1") === 4)
+    assert(numSlots("4", "2") === 2)
+    assert(numSlots("1", "0.1") === 10)
+    // ... while non-dividing cpus round up, so a memory budget divided by the result never
+    // exceeds the cpus-proportional share: budget / ceil(4 / 3) is at most budget * 3 / 4.
+    assert(numSlots("4", "3") === 2)
+    assert(numSlots("4", "1.5") === 3)
+    assert(numSlots("4", "0.000000001") === Int.MaxValue)
+    assert(numSlots("-1", "1") === 0)
+  }
+
   test("SPARK-45527 fractional TaskResourceRequests in TaskResourceProfile") {
     var treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.1)
     new ResourceProfileBuilder().require(treqs).build()

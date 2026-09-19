@@ -22,6 +22,7 @@ import java.io.File
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -59,8 +60,11 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
+      // In pipelined mode the queue's add() runs in the writer thread and remove() runs in
+      // the task thread; use lock-free mode to skip per-row synchronization.
+      val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
       val queue = HybridRowQueue(context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length)
+        new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length, lockFree = pipelined)
       context.addTaskCompletionListener[Unit] { ctx =>
         queue.close()
       }

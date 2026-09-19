@@ -14,11 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.internal.connector;
+package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.sql.connector.read.streaming.PartitionOffset;
+import org.apache.spark.sql.connector.read.streaming.PartitionOffset
 
 /**
  * Internal class for real time mode to pass partition offset from executors to the driver.
  */
-private[sql] case class PartitionOffsetWithIndex(index: Long, partitionOffset: PartitionOffset);
+private[sql] case class PartitionOffsetWithIndex(index: Long, partitionOffset: PartitionOffset)

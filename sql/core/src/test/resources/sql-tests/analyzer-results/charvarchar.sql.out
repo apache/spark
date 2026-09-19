@@ -152,7 +152,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 alter table char_tbl1 change column c type char(5)
 -- !query analysis
-AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_tbl1`, c, StructField(c,CharType(5),true)
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_tbl1`, c, StructField(c,CharType(5),true), false
 
 
 -- !query
@@ -280,13 +280,13 @@ DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, d
 -- !query
 alter table char_part change column c1 comment 'char comment'
 -- !query analysis
-AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_part`, c1, StructField(c1,CharType(5),true)
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_part`, c1, StructField(c1,CharType(5),true), false
 
 
 -- !query
 alter table char_part change column v1 comment 'varchar comment'
 -- !query analysis
-AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_part`, v1, StructField(v1,VarcharType(6),true)
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_part`, v1, StructField(v1,VarcharType(6),true), false
 
 
 -- !query

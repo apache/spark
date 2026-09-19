@@ -50,6 +50,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     new MetadataBuilder()
       .putLong("scale", 0)
       .putBoolean("isTimestampNTZ", false)
+      .putBoolean("preferTimestampNanos", false)
       .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
       .putString("jdbcClientType", jdbcClientType)
       .build()

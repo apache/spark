@@ -35,7 +35,7 @@ FWDIR="$(cd "`dirname "${BASH_SOURCE[0]}"`"; pwd)"
 SPARK_HOME="$(cd "`dirname "${BASH_SOURCE[0]}"`"/../../..; pwd)"
 
 # 1.Compile spark outside the container to prepare for generating documents inside the container.
-build/sbt -Phive -Pkinesis-asl clean unidoc package
+build/sbt -Phive -Pkinesis-asl -Pcredential-aws clean unidoc package
 
 # 2.Build container image.
 docker buildx build \

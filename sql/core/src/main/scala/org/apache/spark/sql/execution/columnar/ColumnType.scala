@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
 
 
 /**
@@ -816,6 +816,73 @@ private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval] 
 }
 
 /**
+ * Used to append/extract [[TimestampNanosVal]] into/from the underlying [[ByteBuffer]] of a
+ * column. The on-buffer layout mirrors the UnsafeRow variable-length payload: an 8-byte
+ * epochMicros followed by an 8-byte word holding nanosWithinMicro (zero-extended), 16 bytes total
+ * (see TimestampNanosRowValues). NTZ and LTZ share this storage and differ only by physical type,
+ * so the two singletons below pass their own physicalType and row getter/setter.
+ */
+private[columnar] abstract class TIMESTAMP_NANOS(physicalType: PhysicalDataType)
+  extends ColumnType[TimestampNanosVal] {
+
+  override def dataType: PhysicalDataType = physicalType
+
+  override def defaultSize: Int = TimestampNanosVal.SIZE_IN_BYTES
+
+  protected def getNanos(row: InternalRow, ordinal: Int): TimestampNanosVal
+  protected def setNanos(row: InternalRow, ordinal: Int, value: TimestampNanosVal): Unit
+
+  override def getField(row: InternalRow, ordinal: Int): TimestampNanosVal = getNanos(row, ordinal)
+
+  override def setField(row: InternalRow, ordinal: Int, value: TimestampNanosVal): Unit =
+    setNanos(row, ordinal, value)
+
+  override def extract(buffer: ByteBuffer): TimestampNanosVal = {
+    val epochMicros = ByteBufferHelper.getLong(buffer)
+    // The nanos field is stored in a full 8-byte word (matching the UnsafeRow payload), so read a
+    // long and narrow it; the writer guarantees the value is in [0, 999].
+    val nanosWithinMicro = ByteBufferHelper.getLong(buffer).toShort
+    TimestampNanosVal.fromTrustedRowBytes(epochMicros, nanosWithinMicro)
+  }
+
+  // Copy the fixed 16-byte payload straight into the UnsafeRow, like CALENDAR_INTERVAL.
+  override def extract(buffer: ByteBuffer, row: InternalRow, ordinal: Int): Unit = {
+    row match {
+      case mutable: MutableUnsafeRow =>
+        val cursor = buffer.position()
+        buffer.position(cursor + defaultSize)
+        mutable.writer.write(ordinal, buffer.array(),
+          buffer.arrayOffset() + cursor, defaultSize)
+      case _ =>
+        setField(row, ordinal, extract(buffer))
+    }
+  }
+
+  override def append(v: TimestampNanosVal, buffer: ByteBuffer): Unit = {
+    ByteBufferHelper.putLong(buffer, v.epochMicros)
+    ByteBufferHelper.putLong(buffer, v.nanosWithinMicro.toLong)
+  }
+}
+
+private[columnar] object TIMESTAMP_NTZ_NANOS
+  extends TIMESTAMP_NANOS(PhysicalTimestampNTZNanosType) {
+  override protected def getNanos(row: InternalRow, ordinal: Int): TimestampNanosVal =
+    row.getTimestampNTZNanos(ordinal)
+  override protected def setNanos(
+      row: InternalRow, ordinal: Int, value: TimestampNanosVal): Unit =
+    row.setTimestampNTZNanos(ordinal, value)
+}
+
+private[columnar] object TIMESTAMP_LTZ_NANOS
+  extends TIMESTAMP_NANOS(PhysicalTimestampLTZNanosType) {
+  override protected def getNanos(row: InternalRow, ordinal: Int): TimestampNanosVal =
+    row.getTimestampLTZNanos(ordinal)
+  override protected def setNanos(
+      row: InternalRow, ordinal: Int, value: TimestampNanosVal): Unit =
+    row.setTimestampLTZNanos(ordinal, value)
+}
+
+/**
  * Used to append/extract Java VariantVals into/from the underlying [[ByteBuffer]] of a column.
  *
  * Variants are encoded in `append` as:
@@ -876,6 +943,8 @@ private[columnar] object ColumnType {
       case s: StringType => STRING(s)
       case BinaryType => BINARY
       case i: CalendarIntervalType => CALENDAR_INTERVAL
+      case _: TimestampNTZNanosType => TIMESTAMP_NTZ_NANOS
+      case _: TimestampLTZNanosType => TIMESTAMP_LTZ_NANOS
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS => COMPACT_DECIMAL(dt)
       case dt: DecimalType => LARGE_DECIMAL(dt)
       case arr: ArrayType => ARRAY(PhysicalArrayType(arr.elementType, arr.containsNull))

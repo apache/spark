@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 object ColumnarTestUtils {
   def makeNullRow(length: Int): GenericInternalRow = {
@@ -54,6 +54,10 @@ object ColumnarTestUtils {
       case BINARY => randomBytes(Random.nextInt(32))
       case CALENDAR_INTERVAL =>
         new CalendarInterval(Random.nextInt(), Random.nextInt(), Random.nextLong())
+      case _: TIMESTAMP_NANOS =>
+        // nanosWithinMicro must be in [0, 999]; epochMicros can be any long.
+        TimestampNanosVal.fromParts(
+          Random.nextLong(), Random.nextInt(TimestampNanosVal.MAX_NANOS_WITHIN_MICRO + 1).toShort)
       case COMPACT_DECIMAL(precision, scale) => Decimal(Random.nextLong() % 100, precision, scale)
       case LARGE_DECIMAL(precision, scale) => Decimal(Random.nextLong(), precision, scale)
       case STRUCT(_) =>

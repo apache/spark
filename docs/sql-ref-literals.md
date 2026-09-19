@@ -433,7 +433,7 @@ SELECT DATE '2011-11-11' AS col;
 ```sql
 TIME { '[h]h:[m]m[:]' |
        '[h]h:[m]m:[s]s[.]' |
-       '[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]'}
+       '[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][ns][ns][ns]'}
 ```
 **Note:** defaults to `00` if hour, minute or second is not specified.
 
@@ -464,6 +464,12 @@ SELECT TIME'23:59:59.999999' as col;
 +---------------+
 |23:59:59.999999|
 +---------------+
+SELECT TIME'23:59:59.999999999' as col;
++------------------+
+|col               |
++------------------+
+|23:59:59.999999999|
++------------------+
 ```
 
 #### Timestamp Syntax

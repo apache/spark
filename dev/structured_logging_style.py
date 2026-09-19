@@ -17,10 +17,10 @@
 # limitations under the License.
 #
 
-import os
-import sys
-import re
 import glob
+import os
+import re
+import sys
 
 
 def main():
@@ -82,7 +82,7 @@ def main():
                 print(f"[error] {file_path}:{line_number}:{start_char}", file=sys.stderr)
                 print(
                     "[error]\tPlease use the Structured Logging Framework for logging messages "
-                    'with variables. For example: log"...${{MDC(TASK_ID, taskId)}}..."'
+                    'with variables. For example: log"...${MDC(TASK_ID, taskId)}..."'
                     "\n\tRefer to the guidelines in the file `internal/Logging.scala`.",
                     file=sys.stderr,
                 )

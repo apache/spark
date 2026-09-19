@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
 
 /**
@@ -105,6 +106,73 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
         Row("p1=__HIVE_DEFAULT_PARTITION__"))
     }
   }
+
+  test("show partitions as JSON") {
+    withNamespaceAndTable("ns", "dateTable") { t =>
+      createDateTable(t)
+      val df = spark.sql(s"SHOW PARTITIONS $t AS JSON")
+      assert(df.schema.length == 1)
+      assert(df.schema.head.name == "json_metadata")
+      checkAnswer(
+        df,
+        Row(
+          """{"partitions":[{"year":"2015","month":"1"},{"year":"2015","month":"2"},""" +
+            """{"year":"2016","month":"2"},{"year":"2016","month":"3"}]}"""))
+    }
+  }
+
+  test("show partitions with spec as JSON") {
+    withNamespaceAndTable("ns", "dateTable") { t =>
+      createDateTable(t)
+      checkAnswer(
+        spark.sql(s"SHOW PARTITIONS $t PARTITION(year=2015) AS JSON"),
+        Row("""{"partitions":[{"year":"2015","month":"1"},{"year":"2015","month":"2"}]}"""))
+      checkAnswer(
+        spark.sql(s"SHOW PARTITIONS $t PARTITION(year=2015, month=1) AS JSON"),
+        Row("""{"partitions":[{"year":"2015","month":"1"}]}"""))
+      checkAnswer(
+        spark.sql(s"SHOW PARTITIONS $t PARTITION(month=2) AS JSON"),
+        Row("""{"partitions":[{"year":"2015","month":"2"},{"year":"2016","month":"2"}]}"""))
+    }
+  }
+
+  test("show partitions as JSON with no partitions matching the spec") {
+    withNamespaceAndTable("ns", "dateTable") { t =>
+      createDateTable(t)
+      checkAnswer(
+        spark.sql(s"SHOW PARTITIONS $t PARTITION(year=9999) AS JSON"),
+        Row("""{"partitions":[]}"""))
+    }
+  }
+
+  test("null as a partition value AS JSON") {
+    val t = "part_table"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t AS JSON"),
+        Row("""{"partitions":[{"p1":"__HIVE_DEFAULT_PARTITION__"}]}"""))
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t PARTITION (p1 = null) AS JSON"),
+        Row("""{"partitions":[{"p1":"__HIVE_DEFAULT_PARTITION__"}]}"""))
+    }
+  }
+
+  test("non-partitioning columns AS JSON") {
+    withNamespaceAndTable("ns", "dateTable") { t =>
+      createDateTable(t)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SHOW PARTITIONS $t PARTITION(abcd=2015, xyz=1) AS JSON")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`abcd`",
+          "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`datetable`")
+      )
+    }
+  }
 }
 
 /**
@@ -168,6 +236,20 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
     }
   }
 
+  test("show partitions of non-partitioned table AS JSON") {
+    withNamespaceAndTable("ns", "not_partitioned_table") { t =>
+      sql(s"CREATE TABLE $t (col1 int) $defaultUsing")
+      val tableName =
+        UnresolvedAttribute.parseAttributeName(t).map(quoteIdentifier).mkString(".")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SHOW PARTITIONS $t AS JSON")
+        },
+        condition = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
+        parameters = Map("name" -> tableName))
+    }
+  }
+
   test("SPARK-33904: null and empty string as partition values") {
     withNamespaceAndTable("ns", "tbl") { t =>
       createNullPartTable(t, "parquet")
@@ -175,6 +257,41 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
         s"SHOW PARTITIONS $t",
         Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
       checkAnswer(spark.table(t), Row(0, null) :: Row(1, null) :: Nil)
+    }
+  }
+
+  test("null and empty string as partition values AS JSON") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createNullPartTable(t, "parquet")
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t AS JSON"),
+        Row("""{"partitions":[{"part":"__HIVE_DEFAULT_PARTITION__"}]}"""))
+    }
+  }
+
+  test("partition value containing '/' AS JSON") {
+    withTable("slash_part") {
+      sql(s"CREATE TABLE slash_part (col1 INT, p STRING) $defaultUsing PARTITIONED BY (p)")
+      sql("INSERT INTO TABLE slash_part PARTITION (p = 'a/b') SELECT 0")
+      checkAnswer(
+        sql("SHOW PARTITIONS slash_part AS JSON"),
+        Row("""{"partitions":[{"p":"a%2Fb"}]}"""))
+      // Filtering by the escaped spec also works and returns the same encoded value.
+      checkAnswer(
+        sql("SHOW PARTITIONS slash_part PARTITION (p = 'a/b') AS JSON"),
+        Row("""{"partitions":[{"p":"a%2Fb"}]}"""))
+    }
+  }
+
+  test("partition value containing '=' AS JSON") {
+    // '=' is encoded as '%3D'; splitting on the first '=' in each segment is still
+    // correct because a column name never contains an unencoded '='.
+    withTable("eq_part") {
+      sql(s"CREATE TABLE eq_part (col1 INT, p STRING) $defaultUsing PARTITIONED BY (p)")
+      sql("INSERT INTO TABLE eq_part PARTITION (p = 'a=b') SELECT 0")
+      checkAnswer(
+        sql("SHOW PARTITIONS eq_part AS JSON"),
+        Row("""{"partitions":[{"p":"a%3Db"}]}"""))
     }
   }
 }

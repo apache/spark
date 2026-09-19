@@ -17,39 +17,30 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import java.io.ByteArrayInputStream
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
-import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
-import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
-import org.codehaus.janino.ClassBodyEvaluator
-import org.codehaus.janino.util.ClassFile
-import org.codehaus.janino.util.ClassFile.CodeAttribute
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskContext, TaskKilledException}
-import org.apache.spark.executor.InputMetrics
-import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.WITH_EXPRESSION
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationAwareUTF8String, CollationFactory, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-import org.apache.spark.util.{LongAccumulator, NonFateSharingCache, ParentClassLoader, Utils}
+import org.apache.spark.util.{LongAccumulator, NonFateSharingCache, Utils}
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -218,6 +209,239 @@ class CodegenContext extends Logging {
   }
 
   /**
+   * The slots a `CommonExpressionRef` reads: the value and its nullness, plus the flag saying
+   * whether this row has computed them yet, and the definition to compute them from.
+   */
+  case class CommonExprSlots(
+      value: ExprCode,
+      computed: String,
+      definition: Expression) {
+
+    // Not constructor parameters: a mutable one takes part in `equals`/`hashCode`/`copy`, so a
+    // slot's hash would change as it is filled and a `copy` would carry another scope's code.
+    private var fillCode: Option[Block] = None
+    private var filling: Boolean = false
+
+    /**
+     * The code that computes the definition into the slots and sets `computed`, which a reference
+     * emits behind that flag. Cached, so every reference shares whatever mutable state the
+     * definition allocated, such as an RNG.
+     *
+     * The cache lives on the slot, so it lasts exactly as long as the scope: the code names the
+     * `INPUT_ROW` and `currentVars` in effect when it was generated. `GenerateOrdering` generates
+     * its key once per comparison side under a different row variable, so a slot shared between the
+     * sides would read the wrong row, or not compile where `Expression.reduceCodeSize` has hoisted
+     * the reference into a method taking one row.
+     *
+     * `filling` catches a definition that references its own id, which would otherwise re-enter and
+     * recurse, since `fillCode` is set only after `definition.genCode` returns.
+     *
+     * The body goes into a method where it is worth it -- a definition that is or holds another
+     * `With`, or a body past the split threshold -- so it is emitted once per scope rather than
+     * once per reference, which for nested `With`s would double per level. `methodArgs` says what
+     * the method takes, and which definitions cannot have one.
+     */
+    def fill: Block = {
+      if (fillCode.isEmpty) {
+        if (filling) {
+          throw SparkException.internalError(
+            "Cannot generate a common expression whose definition references it: " +
+              definition.toString)
+        }
+        filling = true
+        try {
+          fillCode = Some(build)
+        } finally {
+          filling = false
+        }
+      }
+      fillCode.get
+    }
+
+    private def build: Block = {
+      val defGen = definition.genCode(CodegenContext.this)
+      // Whether the isNull slot exists is decided by the definition, so it is read off the slot
+      // rather than off a reference's own `nullable`: taking it from both would let the two
+      // disagree, and either emit `false = <isNull>;`, which does not compile, or leave the slot
+      // holding the previous row's nullness.
+      val assignIsNull = if (value.isNull == FalseLiteral) {
+        ""
+      } else {
+        s"${value.isNull} = ${defGen.isNull};"
+      }
+      val body = code"""
+         |${defGen.code}
+         |$assignIsNull
+         |${value.value} = ${defGen.value};
+         |$computed = true;
+       """.stripMargin
+      // A definition that is or holds another `With` is the shape whose code doubles per level, and
+      // what this is aimed at. A definition reading a sibling definition of the same `With` doubles
+      // the same way, but not through this arm: a `CommonExpressionRef` carries `COMMON_EXPR_REF`,
+      // not `WITH_EXPRESSION`, so a short one reaches a method only through the length arm. Nothing
+      // builds that tree today (`With.refsToBind` says why). The length arm keeps one body from
+      // being split once per reference; it fires in the band just under the threshold where
+      // `reduceCodeSize` applies, since `body` is assembled after `definition.genCode` already ran
+      // it.
+      val worthAMethod = definition.containsPattern(WITH_EXPRESSION) ||
+        body.length > SQLConf.get.methodSplitThreshold
+      (if (worthAMethod) methodArgs else None) match {
+        case Some(args) =>
+          val funcName = freshName("computeCommonExpr")
+          val params = args.map(a => s"${typeName(a.javaType)} ${a.variableName}").mkString(", ")
+          val funcFullName = addNewFunction(funcName,
+            s"""
+               |private void $funcName($params) {
+               |  $body
+               |}
+           """.stripMargin)
+          code"$funcFullName(${args.map(_.variableName).mkString(", ")});"
+        case None =>
+          body
+      }
+    }
+
+    /**
+     * The locals to pass the method, or None where a method is not possible. What it collects are
+     * the values the body would otherwise read from the scope the call replaces it in: the input
+     * row, and an input variable the operator evaluated before generating this expression. Those
+     * variables are declared by code the operator emits ahead of this expression, so they enclose
+     * every reference to this definition; the input row is taken on the operator's word that
+     * `INPUT_ROW` names something in scope where it has this expression generated, which is what
+     * `Expression.reduceCodeSize` takes it on as well.
+     *
+     * A definition that reads an input variable the operator has *not* evaluated yet gets no
+     * method: that variable's code cannot travel into one, since it was generated by the operator
+     * producing the row, against that operator's scope, so it names a local of that scope -- the
+     * column batch's row index, or the input adapter's row. Nor can it be hoisted to before the
+     * call, the way `getLocalInputVariableValues` does for subexpression elimination, since that
+     * evaluates it on rows that reach no reference.
+     *
+     * Nor does a definition that is or holds a node subexpression elimination has computed, for
+     * which see the walk below. The two remaining refusals are local: `canPass` on a value no
+     * parameter can name, and the descriptor length at the end.
+     */
+    private def methodArgs: Option[Seq[VariableValue]] = {
+      val args = mutable.LinkedHashMap.empty[String, VariableValue]
+      // False for a value no parameter can carry: `ExpandExec` hands out a `VariableValue` naming a
+      // slot of a compacted mutable state array, and a `SimpleExprValue` is an expression rather
+      // than a name -- `posexplode_outer` gives its position the nullness `index == -1`, and a
+      // `Byte` or `Short` literal's value is `(byte)1`. A field or a literal needs no parameter and
+      // is read as it stands.
+      def canPass(v: ExprValue): Boolean = v match {
+        case local: VariableValue =>
+          val name = local.variableName
+          val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
+            name.forall(Character.isJavaIdentifierPart)
+          if (isName) {
+            args.getOrElseUpdate(name, local)
+          }
+          isName
+        case _: GlobalValue | _: LiteralValue => true
+        case _ => false
+      }
+      var possible = INPUT_ROW == null ||
+        canPass(JavaCode.variable(INPUT_ROW, classOf[InternalRow]))
+      val visited = mutable.HashSet.empty[Long]
+      // The definitions of a `With` in the tree walked here, which reach `currentCommonExprs` only
+      // once that `With` is generated. Ids come from one counter, so one map serves every scope.
+      val nestedDefs = mutable.HashMap.empty[Long, Expression]
+      val toVisit = mutable.Stack[Expression](definition)
+      while (possible && toVisit.nonEmpty) {
+        val next = toVisit.pop()
+        // A node subexpression elimination has computed keeps the definition inline. Which values
+        // the body reads there cannot be told from the tree: `Expression.genCode` reads the state,
+        // for a `With` as much as anything else since `With` overrides only `doGenCode`, while
+        // `Alias`, `Collate` and an identity `Cast` override `genCode` and generate their child
+        // again -- two different parameter lists. Refusing also keeps what this collects within
+        // what `getLocalInputVariableValues` collects for the operator's whole expression, which
+        // stops at a state as well and computes the parameters of the methods `ExpandExec` and the
+        // aggregates move this call into.
+        if (subExprEliminationExprs.contains(ExpressionEquals(next))) {
+          possible = false
+        } else {
+          next match {
+            case ref: BoundReference if currentVars != null && currentVars(ref.ordinal) != null =>
+              val input = currentVars(ref.ordinal)
+              possible = input.code == EmptyBlock && canPass(input.value) && canPass(input.isNull)
+            case w: With =>
+              // Only `child` is generated: a definition is generated where a reference reaches it,
+              // so one no reference reaches is not in the body, and what it reads decides nothing.
+              w.defs.foreach(d => nestedDefs.put(d.id.id, d.child))
+              toVisit.push(w.child)
+            case ref: CommonExpressionRef =>
+              // The definition this reference fills, which it does inside this method, so what
+              // that definition reads has to come in as well. One belonging to a `With` in the
+              // tree walked here is in `nestedDefs`; a sibling of this definition, or one of an
+              // enclosing scope, is registered in `currentCommonExprs`.
+              if (visited.add(ref.id.id)) {
+                nestedDefs.get(ref.id.id)
+                  .orElse(currentCommonExprs.get(ref.id.id).map(_.definition))
+                  .foreach(toVisit.push)
+              }
+            case e => toVisit.pushAll(e.children)
+          }
+        }
+      }
+      val params = args.values.toSeq
+      Option.when(
+        possible && isValidParamLength(calculateParamLengthFromExprValues(params)))(params)
+    }
+  }
+
+  /**
+   * Holding a map of the common expressions of the `With` expressions currently being generated,
+   * the same way [[currentLambdaVars]] holds the variables of the enclosing lambdas.
+   */
+  var currentCommonExprs: mutable.Map[Long, CommonExprSlots] = mutable.HashMap.empty
+
+  /**
+   * Allocates a value slot and a `computed` flag per definition, generates `f` with them in scope,
+   * then takes them out of scope again. A reference generated inside `f` reads the slots back by
+   * id and fills them the first time it is reached on a row -- the enclosing `With` only clears the
+   * flags.
+   */
+  def withCommonExprs(defs: Seq[CommonExpressionDef])(f: Seq[CommonExprSlots] => ExprCode)
+    : ExprCode = {
+    // The ids this call registered, so the cleanup takes back exactly those: the duplicate-id check
+    // below throws partway, and removing by the whole `defs` list would take that duplicate out of
+    // the enclosing scope that still owns it. Allocating inside the `try` is what runs the cleanup
+    // at all -- otherwise the slots allocated before the throw stay registered, and a later
+    // `getCommonExpr` for one of those ids resolves an orphan instead of reporting it out of scope.
+    val added = mutable.ArrayBuffer.empty[Long]
+    try {
+      val slots = defs.map { d =>
+        val id = d.id.id
+        if (currentCommonExprs.contains(id)) {
+          throw SparkException.internalError(s"Common expression $id is already being generated")
+        }
+        val isNull = if (d.nullable) {
+          JavaCode.isNullGlobal(addMutableState(JAVA_BOOLEAN, "commonExprIsNull"))
+        } else {
+          FalseLiteral
+        }
+        val value = addMutableState(javaType(d.dataType), "commonExprValue")
+        val slot = CommonExprSlots(
+          ExprCode(isNull, JavaCode.global(value, d.dataType)),
+          addMutableState(JAVA_BOOLEAN, "commonExprComputed"),
+          d.child)
+        currentCommonExprs.put(id, slot)
+        added += id
+        slot
+      }
+      f(slots)
+    } finally {
+      added.foreach(currentCommonExprs.remove)
+    }
+  }
+
+  def getCommonExpr(id: Long): CommonExprSlots = {
+    currentCommonExprs.getOrElse(
+      id,
+      throw SparkException.internalError(s"Common expression $id is not in scope"))
+  }
+
+  /**
    * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
    * 2-tuple: java type, variable name.
    * As an example, ("int", "count") will produce code:
@@ -301,9 +525,10 @@ class CodegenContext extends Logging {
    *
    * @param javaType Java type of the field. Note that short names can be used for some types,
    *                 e.g. InternalRow, UnsafeRow, UnsafeArrayData, etc. Other types will have to
-   *                 specify the fully-qualified Java type name. See the code in doCompile() for
-   *                 the list of default imports available.
-   *                 Also, generic type arguments are accepted but ignored.
+   *                 specify the fully-qualified Java type name. See
+   *                 `CodeCompiler.DefaultImports` for the list of default imports available.
+   *                 Also, generic type arguments are kept in field declarations, but stripped
+   *                 from array creation expressions because Java forbids generic array creation.
    * @param variableName Name of the field.
    * @param initFunc Function includes statement(s) to put into the init() method to initialize
    *                 this field. The argument is the name of the mutable state variable.
@@ -402,6 +627,18 @@ class CodegenContext extends Logging {
   }
 
   def declareMutableStates(): String = {
+    def rawJavaType(javaType: String): String = {
+      val builder = new StringBuilder
+      var depth = 0
+      javaType.foreach {
+        case '<' => depth += 1
+        case '>' => depth -= 1
+        case c if depth == 0 => builder.append(c)
+        case _ =>
+      }
+      builder.toString
+    }
+
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
     val inlinedStates = inlinedMutableStates.distinct.map { case (javaType, variableName) =>
@@ -419,10 +656,10 @@ class CodegenContext extends Logging {
         if (javaType.contains("[]")) {
           // initializer had an one-dimensional array variable
           val baseType = javaType.substring(0, javaType.length - 2)
-          s"private $javaType[] $arrayName = new $baseType[$length][];"
+          s"private $javaType[] $arrayName = new ${rawJavaType(baseType)}[$length][];"
         } else {
           // initializer had a scalar variable
-          s"private $javaType[] $arrayName = new $javaType[$length];"
+          s"private $javaType[] $arrayName = new ${rawJavaType(javaType)}[$length];"
         }
       }
     }
@@ -704,7 +941,7 @@ class CodegenContext extends Logging {
     case CalendarIntervalType => s"$c1.compareTo($c2)"
     // TimestampNanosVal exposes only `compareTo`; the AtomicType fallback below emits
     // `$c1.compare($c2)`, which would not resolve as a Java method call.
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => s"$c1.compareTo($c2)"
+    case _: AnyTimestampNanoType => s"$c1.compareTo($c2)"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
@@ -794,7 +1031,7 @@ class CodegenContext extends Logging {
     val isNullA = freshName("isNullA")
     val elementB = freshName("elementB")
     val isNullB = freshName("isNullB")
-    val jt = javaType(elementType);
+    val jt = javaType(elementType)
     s"""
        |boolean $isNullA = $arrayA.isNullAt($i);
        |boolean $isNullB = $arrayB.isNullAt($i);
@@ -1478,7 +1715,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 }
 
 /**
- * Java bytecode statistics of a compiled class by Janino.
+ * Java bytecode statistics of a compiled generated class. Populated by whichever
+ * [[CodeCompiler]] backend produced the class.
  */
 case class ByteCodeStats(maxMethodCodeSize: Int, maxConstPoolSize: Int, numInnerClasses: Int)
 
@@ -1508,6 +1746,25 @@ object CodeGenerator extends Logging {
   // class.
   final val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
 
+  /**
+   * The `scala.Function1` `apply(Object)` bridge that projection codegen must emit for
+   * the Janino backend but hide from the JDK backend.
+   *
+   * Generated projections extend a Scala `Projection` (an `InternalRow => *`) and define
+   * the typed `apply(InternalRow)`. Janino does not synthesize bridge methods for the
+   * inherited generic supertype method, so it reports the class as not implementing
+   * `scala.Function1.apply(Object)` unless this explicit bridge is present. The JDK
+   * compiler, on the other hand, synthesizes the bridge itself and rejects an explicit
+   * one as a name clash. The two backends therefore need different source, so the bridge
+   * is emitted here in exactly the shape [[JdkCodeCompiler]] strips before invoking javac
+   * (keep the two in sync). `argName` can be any valid Java identifier - the body just
+   * casts and delegates to the typed overload.
+   */
+  def function1ApplyBridge(argName: String): String =
+    s"""public java.lang.Object apply(java.lang.Object $argName) {
+       |  return apply((InternalRow) $argName);
+       |}""".stripMargin
+
   // This is the threshold for the number of global variables, whose types are primitive type or
   // complex type (e.g. more than one-dimensional array), that will be placed at the outer class
   final val OUTER_CLASS_VARIABLES_THRESHOLD = 10000
@@ -1535,141 +1792,28 @@ object CodeGenerator extends Logging {
   def resetCompileTime(): Unit = _compileTime.reset()
 
   /**
-   * Compile the Java source code into a Java class, using Janino.
+   * Compile the Java source code into a Java class via the active [[CodeCompiler]]
+   * backend (normally the one [[SQLConf.CODEGEN_COMPILER]] selects; see
+   * [[CodeCompiler.active]] for the deterministic routing overrides).
    *
    * @return a pair of a generated class and the bytecode statistics of generated functions.
    */
   def compile(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = try {
     val classLoaderRef = new HashableWeakReference(Utils.getContextOrSparkClassLoader)
-    cache.get((classLoaderRef, code))
+    // The active backend is part of the cache key: flipping
+    // `spark.sql.codegen.compiler` mid-session must not silently reuse a class
+    // (and `ByteCodeStats`) compiled by the previously selected backend. The key
+    // holds the CodeCompiler singleton itself rather than its name: identity
+    // equality/hashCode is stable for an in-memory cache and immune to case
+    // variants of the name.
+    val backend = CodeCompiler.active(code)
+    cache.get((classLoaderRef, backend, code))
   } catch {
     // Cache.get() may wrap the original exception. See the following URL
     // https://guava.dev/releases/14.0.1/api/docs/com/google/common/cache/
     //   Cache.html#get(K,%20java.util.concurrent.Callable)
     case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
       throw e.getCause
-  }
-
-  /**
-   * Compile the Java source code into a Java class, using Janino.
-   */
-  private[this] def doCompile(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = {
-    val evaluator = new ClassBodyEvaluator()
-
-    // A special classloader used to wrap the actual parent classloader of
-    // [[org.codehaus.janino.ClassBodyEvaluator]] (see CodeGenerator.doCompile). This classloader
-    // does not throw a ClassNotFoundException with a cause set (i.e. exception.getCause returns
-    // a null). This classloader is needed because janino will throw the exception directly if
-    // the parent classloader throws a ClassNotFoundException with cause set instead of trying to
-    // find other possible classes (see org.codehaus.janinoClassLoaderIClassLoader's
-    // findIClass method). Please also see https://issues.apache.org/jira/browse/SPARK-15622 and
-    // https://issues.apache.org/jira/browse/SPARK-11636.
-    val parentClassLoader = new ParentClassLoader(Utils.getContextOrSparkClassLoader)
-    evaluator.setParentClassLoader(parentClassLoader)
-    // Cannot be under package codegen, or fail with java.lang.InstantiationException
-    evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
-    evaluator.setDefaultImports(
-      classOf[Platform].getName,
-      classOf[InternalRow].getName,
-      classOf[UnsafeRow].getName,
-      classOf[BinaryView].getName,
-      classOf[UTF8String].getName,
-      classOf[Decimal].getName,
-      classOf[CalendarInterval].getName,
-      classOf[org.apache.spark.unsafe.types.TimestampNanosVal].getName,
-      classOf[VariantVal].getName,
-      classOf[ArrayData].getName,
-      classOf[UnsafeArrayData].getName,
-      classOf[MapData].getName,
-      classOf[UnsafeMapData].getName,
-      classOf[Expression].getName,
-      classOf[TaskContext].getName,
-      classOf[TaskKilledException].getName,
-      classOf[InputMetrics].getName,
-      classOf[CollationAwareUTF8String].getName,
-      classOf[CollationFactory].getName,
-      classOf[CollationSupport].getName,
-      QueryExecutionErrors.getClass.getName.stripSuffix("$")
-    )
-    evaluator.setExtendedClass(classOf[GeneratedClass])
-
-    logBasedOnLevel(SQLConf.get.codegenLogLevel) {
-      // Only add extra debugging info to byte code when we are going to print the source code.
-      evaluator.setDebuggingInformation(true, true, false)
-      log"\n${MDC(LogKeys.CODE, CodeFormatter.format(code))}"
-    }
-
-    val codeStats = try {
-      evaluator.cook("generated.java", code.body)
-      updateAndGetCompilationStats(evaluator)
-    } catch {
-      case e: InternalCompilerException =>
-        logError("Failed to compile the generated Java code.", e)
-        logGeneratedCode(code)
-        throw QueryExecutionErrors.internalCompilerError(e)
-      case e: CompileException =>
-        logError("Failed to compile the generated Java code.", e)
-        logGeneratedCode(code)
-        throw QueryExecutionErrors.compilerError(e)
-    }
-
-    (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], codeStats)
-  }
-
-  private def logGeneratedCode(code: CodeAndComment): Unit = {
-    val maxLines = SQLConf.get.loggingMaxLinesForCodegen
-    if (Utils.isTesting) {
-      logError(s"\n${CodeFormatter.format(code, maxLines)}")
-    } else {
-      logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
-    }
-  }
-
-  /**
-   * Returns the bytecode statistics (max method bytecode size, max constant pool size, and
-   * # of inner classes) of generated classes by inspecting Janino classes.
-   * Also, this method updates the metrics information.
-   */
-  private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
-    // First retrieve the generated classes.
-    val classes = evaluator.getBytecodes.asScala
-
-    // Then walk the classes to get at the method bytecode.
-    val codeStats = classes.map { case (_, classBytes) =>
-      val classCodeSize = classBytes.length
-      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classCodeSize)
-      try {
-        val cf = new ClassFile(new ByteArrayInputStream(classBytes))
-        val constPoolSize = cf.getConstantPoolSize
-        val methodCodeSizes = cf.methodInfos.asScala.flatMap { method =>
-          method.getAttributes.collect { case attr: CodeAttribute =>
-            val byteCodeSize = attr.code.length
-            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
-
-            if (byteCodeSize > DEFAULT_JVM_HUGE_METHOD_LIMIT) {
-              logInfo(log"Generated method too long to be JIT compiled: " +
-                log"${MDC(LogKeys.CLASS_NAME, cf.getThisClassName)}." +
-                log"${MDC(LogKeys.METHOD_NAME, method.getName)} is " +
-                log"${MDC(LogKeys.BYTECODE_SIZE, byteCodeSize)} bytes")
-            }
-
-            byteCodeSize
-          }
-        }
-        (methodCodeSizes.max, constPoolSize)
-      } catch {
-        case NonFatal(e) =>
-          logWarning("Error calculating stats of compiled class.", e)
-          (-1, -1)
-      }
-    }
-
-    val (maxMethodSizes, constPoolSize) = codeStats.unzip
-    ByteCodeStats(
-      maxMethodCodeSize = maxMethodSizes.max,
-      maxConstPoolSize = constPoolSize.max,
-      // Minus 2 for `GeneratedClass` and an outer-most generated class
-      numInnerClasses = classes.size - 2)
   }
 
   /**
@@ -1686,10 +1830,11 @@ object CodeGenerator extends Logging {
    * aborted. See [[NonFateSharingCache]] for more details.
    */
   private val cache = {
-    val loadFunc: ((HashableWeakReference, CodeAndComment)) => (GeneratedClass, ByteCodeStats) = {
-      case (_, code) =>
+    val loadFunc: ((HashableWeakReference, CodeCompiler, CodeAndComment))
+        => (GeneratedClass, ByteCodeStats) = {
+      case (_, backend, code) =>
         val startTime = System.nanoTime()
-        val result = doCompile(code)
+        val result = backend.compile(code)
         val endTime = System.nanoTime()
         val duration = endTime - startTime
         val timeMs: Double = duration.toDouble / NANOS_PER_MILLIS
@@ -1718,6 +1863,20 @@ object CodeGenerator extends Logging {
    */
   val primitiveTypes =
     Seq(JAVA_BOOLEAN, JAVA_BYTE, JAVA_SHORT, JAVA_INT, JAVA_LONG, JAVA_FLOAT, JAVA_DOUBLE)
+
+  /**
+   * Returns the class name to embed as a type reference in generated code: the
+   * JVM binary name from `Class#getName` (e.g. `Outer$Inner` for nested classes).
+   *
+   * Janino accepts binary names directly, so this matches the historical
+   * behaviour. The JDK backend cannot, and adapts the name to the source form it
+   * requires in `JdkCodeCompiler.rewriteInnerClassRefs`: a regular nested class
+   * becomes `Outer.Inner`, while a class nested in a Scala `object` keeps its
+   * binary name (its canonical form carries a module `$` that javac cannot
+   * resolve). Feeding both backends the binary name from one place keeps that
+   * single adaptation correct for every reference.
+   */
+  def javaSourceName(cls: Class[_]): String = cls.getName
 
   /**
    * Returns true if a Java type is Java primitive primitive type
@@ -2026,7 +2185,7 @@ object CodeGenerator extends Logging {
     case _: GeographyType | _: GeometryType => "BinaryView"
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
-    case ObjectType(cls) => cls.getName
+    case ObjectType(cls) => javaSourceName(cls)
     case _ => PhysicalDataType(dt) match {
       case _: PhysicalArrayType => "ArrayData"
       case PhysicalBinaryType => "byte[]"
@@ -2057,7 +2216,7 @@ object CodeGenerator extends Logging {
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
     case IntegerType | DateType | _: YearMonthIntervalType => java.lang.Integer.TYPE
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
       java.lang.Long.TYPE
     case FloatType => java.lang.Float.TYPE
     case DoubleType => java.lang.Double.TYPE

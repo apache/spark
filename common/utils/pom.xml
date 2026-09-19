@@ -41,6 +41,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
+      <artifactId>spark-config_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-common-utils-java_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>

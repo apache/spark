@@ -55,6 +55,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.util.PartitionKeyedAccumulator
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
 import org.apache.spark.tags.SlowSQLTest
@@ -474,12 +475,12 @@ class CachedTableSuite extends SharedSparkSession
       val toBeCleanedAccIds = new HashSet[Long]
 
       val accId1 = spark.table("t1").queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
+        case i: InMemoryRelation => i.cacheBuilder.materializationAccumulatorId
       }.head
       toBeCleanedAccIds += accId1
 
       val accId2 = spark.table("t1").queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
+        case i: InMemoryRelation => i.cacheBuilder.materializationAccumulatorId
       }.head
       toBeCleanedAccIds += accId2
 
@@ -506,6 +507,52 @@ class CachedTableSuite extends SharedSparkSession
 
       assert(AccumulatorContext.get(accId1).isEmpty)
       assert(AccumulatorContext.get(accId2).isEmpty)
+    }
+  }
+
+  test("SPARK-57547: clearCache isolates materialization bookkeeping by cache generation") {
+    val df = spark.range(0, 100, 1, numPartitions = 4).filter($"id" >= 0)
+    df.cache()
+    try {
+      val cacheRelations = df.queryExecution.withCachedData.collect {
+        case i: InMemoryRelation => i
+      }
+      assert(cacheRelations.length == 1)
+      val builder = cacheRelations.head.cacheBuilder
+      // Force the cache build directly (a plain df action can be served from the query-result
+      // cache and skip the rebuild after clearCache).
+      builder.cachedColumnBuffers.count()
+      assert(builder.isCachedColumnBuffersLoaded)
+      assert(builder.materializedRowCount == 100L)
+      val oldAccumulatorId = builder.materializationAccumulatorId
+      val oldAccumulator = AccumulatorContext.get(oldAccumulatorId).get
+        .asInstanceOf[PartitionKeyedAccumulator[(Long, Long)]]
+
+      builder.clearCache()
+      assert(builder.materializationAccumulatorId != oldAccumulatorId)
+      assert(!builder.isCachedColumnBuffersLoaded)
+      assert(builder.materializedRowCount == 0L)
+      assert(builder.materializedSizeInBytes == 0L)
+
+      // Simulate tasks from the previous cache generation completing after clearCache. Their
+      // updates must remain isolated from the new generation.
+      (0 until 4).foreach(partitionId => oldAccumulator.add((partitionId, (1L, 1L))))
+      assert(builder.materializedRowCount == 0L)
+      assert(builder.materializedSizeInBytes == 0L)
+      val rebuiltBuffers = builder.cachedColumnBuffers
+      assert(!builder.isCachedColumnBuffersLoaded)
+
+      rebuiltBuffers.count()
+      assert(builder.isCachedColumnBuffersLoaded)
+      assert(builder.materializedRowCount == 100L)
+      val rebuiltSizeInBytes = builder.materializedSizeInBytes
+      assert(rebuiltSizeInBytes > 0L)
+
+      oldAccumulator.add((0, (999L, 999L)))
+      assert(builder.materializedRowCount == 100L)
+      assert(builder.materializedSizeInBytes == rebuiltSizeInBytes)
+    } finally {
+      df.unpersist(blocking = true)
     }
   }
 
@@ -2677,6 +2724,33 @@ class CachedTableSuite extends SharedSparkSession
       val result = sql(s"SELECT * FROM $t ORDER BY id")
       assertCached(result)
       checkAnswer(result, Seq(Row(1, "a", null), Row(2, "b", null)))
+    }
+  }
+
+  test("SPARK-59009: cached relation with outputOrdering can be referenced more than once") {
+    withTempView("t", "ordered_t") {
+      spark.range(0, 20).selectExpr("id", "id % 3 AS k").createOrReplaceTempView("t")
+      val ordered = sql("SELECT id, k FROM t ORDER BY k, id")
+      ordered.persist()
+      try {
+        ordered.createOrReplaceTempView("ordered_t")
+        // The CTE below is referenced twice, so InlineCTE deduplicates the second copy and calls
+        // newInstance() on the cached relation. The join then canonicalizes it, which used to
+        // throw because newInstance() left `outputOrdering` on the old attributes.
+        checkAnswer(
+          sql(
+            """
+              |WITH r AS (
+              |  SELECT *, row_number() OVER (PARTITION BY k ORDER BY id DESC) AS rn
+              |  FROM ordered_t
+              |)
+              |SELECT x.id AS x_id, y.id AS y_id
+              |FROM r x JOIN r y ON x.k = y.k AND x.rn = 1 AND y.rn = 2
+            """.stripMargin),
+          Row(18L, 15L) :: Row(19L, 16L) :: Row(17L, 14L) :: Nil)
+      } finally {
+        ordered.unpersist()
+      }
     }
   }
 

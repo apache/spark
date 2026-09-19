@@ -20,10 +20,11 @@ package org.apache.spark.sql
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Lag, Literal, NonFoldableLiteral}
+import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, AttributeReference, Expression, If, IsNotNull, Lag, Literal, NonFoldableLiteral, RowNumber}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
 import org.apache.spark.sql.catalyst.plans.logical.{Window => LogicalWindow}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.window.WindowExec
@@ -76,6 +77,28 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
         df.select(row_number().over(Window.partitionBy("value"))).collect()),
       condition = "WINDOW_FUNCTION_FRAME_NOT_ORDERED",
       parameters = Map("wf_name" -> "row_number", "wf_expr" -> "row_number()"))
+  }
+
+  test("SPARK-58757: collapse window with an empty order spec into an ordered sibling") {
+    val df = Seq(
+      (0, 0), (0, 2), (0, 4),
+      (1, 1), (1, 3), (1, 5)).toDF("k", "v")
+    val ordered = Window.partitionBy("k").orderBy("v")
+    val unordered = Window.partitionBy("k")
+    val res = df.select(
+      $"k",
+      $"v",
+      row_number().over(ordered).as("rn"),
+      collect_list($"v").over(unordered).as("vs"),
+      first($"v").over(unordered).as("f"))
+    assert(res.queryExecution.optimizedPlan.collect { case w: LogicalWindow => w }.size === 1)
+    checkAnswer(res, Seq(
+      Row(0, 0, 1, Array(0, 2, 4), 0),
+      Row(0, 2, 2, Array(0, 2, 4), 0),
+      Row(0, 4, 3, Array(0, 2, 4), 0),
+      Row(1, 1, 1, Array(1, 3, 5), 1),
+      Row(1, 3, 2, Array(1, 3, 5), 1),
+      Row(1, 5, 3, Array(1, 3, 5), 1)))
   }
 
   test("corr, covar_pop, stddev_pop functions in specific window") {
@@ -902,6 +925,28 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
     )
   }
 
+  test("SPARK-57505: a window function expression wrapped into a Column works with over()") {
+    val df = Seq((1, "a"), (2, "a"), (3, "b")).toDF("value", "key")
+    val window = Window.partitionBy($"key").orderBy($"value")
+    // Wrapping a catalyst window function expression directly with Column(expr) used to box the
+    // AggregateWindowFunction (RowNumber is one) in an AggregateExpression, which then failed
+    // analysis with WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE. It must now behave like by-name
+    // row_number().
+    checkAnswer(
+      df.select($"value", Column(RowNumber()).over(window).as("rn")),
+      Seq(Row(1, 1), Row(2, 2), Row(3, 1)))
+  }
+
+  test("SPARK-57505: a custom AggregateWindowFunction wrapped into a Column works with over()") {
+    val df = Seq((1, "a"), (2, "a"), (3, "b")).toDF("value", "key")
+    val window = Window.partitionBy($"key").orderBy($"value")
+    // Mirrors plugging in a user-defined AggregateWindowFunction through the Column API:
+    //   Column(MyWindowFunction(inputColumn.expr)).over(window)
+    checkAnswer(
+      df.select($"value", Column(NonNullRunningCount($"value".expr)).over(window).as("cnt")),
+      Seq(Row(1, 1), Row(2, 2), Row(3, 1)))
+  }
+
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
     val src = Seq((0, 3, 5)).toDF("a", "b", "c")
       .withColumn("Data", struct("a", "b"))
@@ -1337,7 +1382,7 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
     def isShuffleExecByRequirement(
         plan: ShuffleExchangeExec,
         desiredClusterColumns: Seq[String]): Boolean = plan match {
-      case ShuffleExchangeExec(op: HashPartitioning, _, ENSURE_REQUIREMENTS, _) =>
+      case ShuffleExchangeExec(op: HashPartitioning, _, ENSURE_REQUIREMENTS, _, _) =>
         partitionExpressionsColumns(op.expressions) === desiredClusterColumns
       case _ => false
     }
@@ -1829,4 +1874,26 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
       }
     }
   }
+}
+
+/**
+ * A minimal user-defined window function, it counts the non-null values of `child` from the start
+ * of the window frame up to and including the current row.
+ */
+case class NonNullRunningCount(child: Expression)
+  extends AggregateWindowFunction with UnaryLike[Expression] {
+
+  private lazy val count = AttributeReference("count", IntegerType, nullable = false)()
+
+  override lazy val aggBufferAttributes: Seq[AttributeReference] = count :: Nil
+  override lazy val initialValues: Seq[Expression] = Literal(0) :: Nil
+  override lazy val updateExpressions: Seq[Expression] =
+    If(IsNotNull(child), Add(count, Literal(1)), count) :: Nil
+  override lazy val evaluateExpression: Expression = count
+
+  override def nullable: Boolean = false
+  override def prettyName: String = "non_null_running_count"
+
+  override protected def withNewChildInternal(newChild: Expression): NonNullRunningCount =
+    copy(child = newChild)
 }

@@ -33,7 +33,13 @@ private[spark] class TaskSet(
     val priority: Int,
     val properties: Properties,
     val resourceProfileId: Int,
-    val shuffleId: Option[Int]) {
+    val shuffleId: Option[Int],
+    // True if this stage is a member of a pipelined group (connected to another stage by a
+    // PipelinedShuffleDependency). Such a stage's transient shuffle output cannot be re-read in
+    // isolation, so any task failure must fail the whole group rather than be retried per-task;
+    // the TaskSetManager uses this to fail fast (maxTaskFailures = 1) and to count every failure,
+    // including otherwise-uncounted ones like executor loss. Defaults to false.
+    val isPipelined: Boolean = false) {
   val id: String = s"$stageId.$stageAttemptId"
 
   override def toString: String = "TaskSet " + id

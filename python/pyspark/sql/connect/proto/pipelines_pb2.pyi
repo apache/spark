@@ -519,12 +519,14 @@ class PipelineCommand(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
             SCD_TYPE_UNSPECIFIED: PipelineCommand.DefineFlow._SCDType.ValueType  # 0
             SCD_TYPE_1: PipelineCommand.DefineFlow._SCDType.ValueType  # 1
+            SCD_TYPE_2: PipelineCommand.DefineFlow._SCDType.ValueType  # 2
 
         class SCDType(_SCDType, metaclass=_SCDTypeEnumTypeWrapper):
             """SCD Type for Auto CDC target tables."""
 
         SCD_TYPE_UNSPECIFIED: PipelineCommand.DefineFlow.SCDType.ValueType  # 0
         SCD_TYPE_1: PipelineCommand.DefineFlow.SCDType.ValueType  # 1
+        SCD_TYPE_2: PipelineCommand.DefineFlow.SCDType.ValueType  # 2
 
         class SqlConfEntry(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -588,8 +590,11 @@ class PipelineCommand(google.protobuf.message.Message):
             COLUMN_LIST_FIELD_NUMBER: builtins.int
             EXCEPT_COLUMN_LIST_FIELD_NUMBER: builtins.int
             STORED_AS_SCD_TYPE_FIELD_NUMBER: builtins.int
+            TRACK_HISTORY_COLUMN_LIST_FIELD_NUMBER: builtins.int
+            TRACK_HISTORY_EXCEPT_COLUMN_LIST_FIELD_NUMBER: builtins.int
             IGNORE_NULL_UPDATES_COLUMN_LIST_FIELD_NUMBER: builtins.int
             IGNORE_NULL_UPDATES_EXCEPT_COLUMN_LIST_FIELD_NUMBER: builtins.int
+            IGNORE_NULL_UPDATES_FIELD_NUMBER: builtins.int
             source: builtins.str
             """The name of the CDC source to stream from."""
             @property
@@ -625,6 +630,24 @@ class PipelineCommand(google.protobuf.message.Message):
             stored_as_scd_type: global___PipelineCommand.DefineFlow.SCDType.ValueType
             """SCD Type for target table."""
             @property
+            def track_history_column_list(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                pyspark.sql.connect.proto.expressions_pb2.Expression
+            ]:
+                """SCD2 only. Columns whose value change opens a new history record. When empty, every
+                eligible selected user column is tracked.
+                """
+            @property
+            def track_history_except_column_list(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                pyspark.sql.connect.proto.expressions_pb2.Expression
+            ]:
+                """SCD2 only. Columns excluded from history tracking. Mutually exclusive with
+                track_history_column_list.
+                """
+            @property
             def ignore_null_updates_column_list(
                 self,
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
@@ -638,6 +661,10 @@ class PipelineCommand(google.protobuf.message.Message):
                 pyspark.sql.connect.proto.expressions_pb2.Expression
             ]:
                 """Subset of columns excluded from ignoring null in updates."""
+            ignore_null_updates: builtins.bool
+            """When true, ignore null updates on all columns of the target table. Mutually exclusive
+            with ignore_null_updates_column_list and ignore_null_updates_except_column_list.
+            """
             def __init__(
                 self,
                 *,
@@ -657,6 +684,14 @@ class PipelineCommand(google.protobuf.message.Message):
                 ]
                 | None = ...,
                 stored_as_scd_type: global___PipelineCommand.DefineFlow.SCDType.ValueType = ...,
+                track_history_column_list: collections.abc.Iterable[
+                    pyspark.sql.connect.proto.expressions_pb2.Expression
+                ]
+                | None = ...,
+                track_history_except_column_list: collections.abc.Iterable[
+                    pyspark.sql.connect.proto.expressions_pb2.Expression
+                ]
+                | None = ...,
                 ignore_null_updates_column_list: collections.abc.Iterable[
                     pyspark.sql.connect.proto.expressions_pb2.Expression
                 ]
@@ -665,6 +700,7 @@ class PipelineCommand(google.protobuf.message.Message):
                     pyspark.sql.connect.proto.expressions_pb2.Expression
                 ]
                 | None = ...,
+                ignore_null_updates: builtins.bool | None = ...,
             ) -> None: ...
             def HasField(
                 self,
@@ -673,6 +709,8 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"_apply_as_deletes",
                     "_apply_as_truncates",
                     b"_apply_as_truncates",
+                    "_ignore_null_updates",
+                    b"_ignore_null_updates",
                     "_sequence_by",
                     b"_sequence_by",
                     "_source",
@@ -681,6 +719,8 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"apply_as_deletes",
                     "apply_as_truncates",
                     b"apply_as_truncates",
+                    "ignore_null_updates",
+                    b"ignore_null_updates",
                     "sequence_by",
                     b"sequence_by",
                     "source",
@@ -694,6 +734,8 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"_apply_as_deletes",
                     "_apply_as_truncates",
                     b"_apply_as_truncates",
+                    "_ignore_null_updates",
+                    b"_ignore_null_updates",
                     "_sequence_by",
                     b"_sequence_by",
                     "_source",
@@ -706,6 +748,8 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"column_list",
                     "except_column_list",
                     b"except_column_list",
+                    "ignore_null_updates",
+                    b"ignore_null_updates",
                     "ignore_null_updates_column_list",
                     b"ignore_null_updates_column_list",
                     "ignore_null_updates_except_column_list",
@@ -718,6 +762,10 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"source",
                     "stored_as_scd_type",
                     b"stored_as_scd_type",
+                    "track_history_column_list",
+                    b"track_history_column_list",
+                    "track_history_except_column_list",
+                    b"track_history_except_column_list",
                 ],
             ) -> None: ...
             @typing.overload
@@ -732,6 +780,13 @@ class PipelineCommand(google.protobuf.message.Message):
                     "_apply_as_truncates", b"_apply_as_truncates"
                 ],
             ) -> typing_extensions.Literal["apply_as_truncates"] | None: ...
+            @typing.overload
+            def WhichOneof(
+                self,
+                oneof_group: typing_extensions.Literal[
+                    "_ignore_null_updates", b"_ignore_null_updates"
+                ],
+            ) -> typing_extensions.Literal["ignore_null_updates"] | None: ...
             @typing.overload
             def WhichOneof(
                 self, oneof_group: typing_extensions.Literal["_sequence_by", b"_sequence_by"]

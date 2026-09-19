@@ -24,8 +24,9 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobArtifactSet, PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, EmptyRow, Expression, JoinedRow, NamedArgumentExpression, NamedExpression, PythonFuncExpression, PythonUDAF, SortOrder, SpecificInternalRow, UnsafeProjection, UnsafeRow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, EmptyRow, Expression, JoinedRow, NamedArgumentExpression, NamedExpression, PythonFuncExpression, SortOrder, SpecificInternalRow, UnsafeProjection, UnsafeRow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
@@ -155,8 +156,12 @@ class ArrowWindowPythonEvaluatorFactory(
 
     // Extract window expressions and window functions
     private val windowExpressions = expressions.flatMap(_.collect { case e: WindowExpression => e })
+    // The window aggregate function is either a `PythonUDAF` (grouped-agg pandas/arrow UDF) or the
+    // incremental `PythonAggregate`; both are `PythonFuncExpression`s and share the per-frame Arrow
+    // window path (only the worker-side per-frame computation and eval type differ).
     private val udfExpressions = windowExpressions.map { e =>
-      e.windowFunction.asInstanceOf[AggregateExpression].aggregateFunction.asInstanceOf[PythonUDAF]
+      e.windowFunction.asInstanceOf[AggregateExpression].aggregateFunction
+        .asInstanceOf[PythonFuncExpression]
     }
 
     // We shouldn't be chaining anything here.
@@ -255,8 +260,11 @@ class ArrowWindowPythonEvaluatorFactory(
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
+      // In pipelined mode the queue's add() runs in the writer thread and remove() runs in
+      // the task thread; use lock-free mode to skip per-row synchronization.
+      val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
       val queue = HybridRowQueue(context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)), childOutput.length)
+        new File(Utils.getLocalDir(SparkEnv.get.conf)), childOutput.length, lockFree = pipelined)
       context.addTaskCompletionListener[Unit] { _ =>
         queue.close()
       }

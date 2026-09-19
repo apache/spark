@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -201,7 +202,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         pyFuncs, evalType, argMetas, udfInputSchema,
         sessionLocalTimeZone, largeVarTypes, pythonRunnerConf,
         pythonMetrics, jobArtifactUUID, sessionUUID,
-        columnIndices)
+        columnIndices, udfs.map(_.elementwiseNestingDepth))
 
       val resultIter = pyRunner.compute(
         bufferedIter, context.partitionId(), context)
@@ -235,10 +236,14 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         inputColumnIndices: Option[Array[Int]]
     ): Iterator[ColumnarBatch] = {
 
+      // In pipelined mode the queue's add() runs in the writer thread and remove() runs in
+      // the task thread; use lock-free mode to skip per-row synchronization.
+      val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
       val queue = HybridRowQueue(
         context.taskMemoryManager(),
         new File(Utils.getLocalDir(SparkEnv.get.conf)),
-        childOutput.length)
+        childOutput.length,
+        lockFree = pipelined)
       context.addTaskCompletionListener[Unit] { _ => queue.close() }
 
       val unsafeProj = UnsafeProjection.create(
@@ -257,7 +262,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
             pyFuncs, evalType, argMetas, udfInputSchema,
             sessionLocalTimeZone, largeVarTypes, pythonRunnerConf,
             pythonMetrics, jobArtifactUUID, sessionUUID,
-            inputColumnIndices.get)
+            inputColumnIndices.get, udfs.map(_.elementwiseNestingDepth))
         pyRunner.compute(
           bufferedIter, context.partitionId(), context)
       } else {
@@ -274,7 +279,8 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         val pyRunner = new ArrowPythonWithNamedArgumentRunner(
           pyFuncs, evalType, argMetas, udfInputSchema,
           sessionLocalTimeZone, largeVarTypes, pythonRunnerConf,
-          pythonMetrics, jobArtifactUUID, sessionUUID
+          pythonMetrics, jobArtifactUUID, sessionUUID,
+          udfs.map(_.elementwiseNestingDepth)
         ) with BasicPythonArrowInput
         pyRunner.compute(
           batchIter, context.partitionId(), context)

@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -33,14 +34,17 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
@@ -281,6 +285,52 @@ public class OneForOneBlockFetcherSuite {
       new String[]{"shuffleChunk_0_0_0_0_0"},
       new FetchShuffleBlockChunks("app-id", "exec-id", 0, 0, new int[] { 0 },
         new int[][] {{ 0 }}), conf));
+  }
+
+  /**
+   * Verifies that when fetching to disk, a failure of
+   * {@link DownloadFileWritableChannel#closeAndRead} does not leak the temp file: the channel is
+   * closed and the temp file is deleted, and it is never registered for later cleanup.
+   */
+  @Test
+  public void testFetchToDiskClosesAndDeletesTempFileWhenCloseAndReadFails() throws IOException {
+    String blockId = "shuffle_0_0_0";
+    String[] blockIds = new String[] { blockId };
+
+    TransportClient client = mock(TransportClient.class);
+    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+
+    DownloadFileWritableChannel channel = mock(DownloadFileWritableChannel.class);
+    when(channel.closeAndRead()).thenThrow(new IOException("boom"));
+    DownloadFile downloadFile = mock(DownloadFile.class);
+    when(downloadFile.openForWriting()).thenReturn(channel);
+    DownloadFileManager downloadFileManager = mock(DownloadFileManager.class);
+    when(downloadFileManager.createTempFile(any())).thenReturn(downloadFile);
+
+    OneForOneBlockFetcher fetcher = new OneForOneBlockFetcher(
+      client, "app-id", "exec-id", blockIds, listener, conf, downloadFileManager);
+
+    // Respond to the "openBlocks" RPC with a StreamHandle of a single chunk.
+    doAnswer(invocation -> {
+      RpcResponseCallback callback = (RpcResponseCallback) invocation.getArguments()[1];
+      callback.onSuccess(new StreamHandle(123, 1).toByteBuffer());
+      return null;
+    }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
+
+    // Drive the StreamCallback's onComplete, which triggers the failing closeAndRead().
+    doAnswer(invocation -> {
+      StreamCallback callback = (StreamCallback) invocation.getArguments()[1];
+      assertThrows(IOException.class, () -> callback.onComplete("stream"));
+      return null;
+    }).when(client).stream(any(), any(StreamCallback.class));
+
+    fetcher.start();
+
+    verify(channel).close();
+    verify(downloadFile).delete();
+    verify(downloadFileManager, never()).registerTempFileToClean(any());
+    // closeAndRead() failed, so the buffer must not have been handed off to the listener.
+    verify(listener, never()).onBlockFetchSuccess(any(), any());
   }
 
   /**

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTableAsSelect, CreateTempView, CreateUserDefinedFunction, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, ReplaceTableAsSelect, TableSpec, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -245,6 +245,19 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
 
   private def transform(plan: LogicalPlan, collation: String): LogicalPlan = {
     plan resolveOperators {
+      // The ResolvedIdentifier child of CreateTable/ReplaceTable exposes the resolved table
+      // columns as output attributes. Re-point any default string/char/varchar typed ones to the
+      // default collation so the resolved schema stays consistent with the column definitions.
+      // Matched before the generic case below so it is not routed through transformPlan, which
+      // does not rewrite bare output attributes.
+      case ri: ResolvedIdentifier
+          if ri.output.exists(a => hasDefaultStringCharOrVarcharType(a.dataType)) =>
+        ri.copy(output = ri.output.map {
+          case a if hasDefaultStringCharOrVarcharType(a.dataType) =>
+            a.withDataType(replaceDefaultStringCharAndVarcharTypes(a.dataType, collation))
+          case a => a
+        })
+
       case p if isCreateOrAlterPlan(p) || AnalysisContext.get.collation.isDefined =>
         transformPlan(p, collation)
 
@@ -254,7 +267,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
       case replaceCols: ReplaceColumns =>
         replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, collation))
 
-      case a @ AlterColumns(ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec]) =>
+      case a @ AlterColumns(ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec], _) =>
         val newSpecs = specs.map {
           case spec if shouldApplyDefaultCollationToAlterColumn(spec) =>
             spec.copy(newDataType =
@@ -279,7 +292,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
   private def pruneRedundantAlterColumnTypes(plan: LogicalPlan): LogicalPlan = {
     plan match {
       case alterColumns@AlterColumns(
-      ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec]) =>
+      ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec], _) =>
         val resolvedSpecs = specs.map { spec =>
           if (isAlterColumnNOP(spec)) {
             spec.copy(newDataType = None)
@@ -348,9 +361,24 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
    * collated types.
    */
   private def transformExpression: PartialFunction[Expression, String => Expression] = {
-    case columnDef: ColumnDefinition if hasDefaultStringCharOrVarcharType(columnDef.dataType) =>
-      collation => columnDef.copy(dataType =
-        replaceDefaultStringCharAndVarcharTypes(columnDef.dataType, collation))
+    case columnDef: ColumnDefinition
+        if hasDefaultStringCharOrVarcharType(columnDef.dataType) ||
+          generationExpressionNeedsCollation(columnDef) =>
+      collation =>
+        // Re-point any default string/char/varchar typed references inside the generation
+        // expression to the default collation, matching the collation applied to the columns
+        // they reference. Other nodes (e.g. literals and casts) are handled by the dedicated
+        // cases below as part of the bottom-up traversal.
+        val newGenExpr = columnDef.generationExpression.map { genExpr =>
+          val newChild = genExpr.child.transform {
+            case a: AttributeReference if hasDefaultStringCharOrVarcharType(a.dataType) =>
+              a.withDataType(replaceDefaultStringCharAndVarcharTypes(a.dataType, collation))
+          }
+          if (newChild eq genExpr.child) genExpr else genExpr.copy(child = newChild)
+        }
+        columnDef.copy(
+          dataType = replaceDefaultStringCharAndVarcharTypes(columnDef.dataType, collation),
+          generationExpression = newGenExpr)
 
     case cast: Cast if hasDefaultStringCharOrVarcharType(cast.dataType) &&
       cast.containsTag(Cast.USER_SPECIFIED_CAST) =>
@@ -372,6 +400,20 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
   }
 
   /**
+   * Returns true if the column's generation expression references a default string/char/varchar
+   * type.
+   */
+  private def generationExpressionNeedsCollation(columnDef: ColumnDefinition): Boolean = {
+    columnDef.generationExpression.exists { genExpr =>
+      // Only inspect AttributeReferences, avoiding calling dataType on unresolved nodes.
+      genExpr.child.exists {
+        case a: AttributeReference => hasDefaultStringCharOrVarcharType(a.dataType)
+        case _ => false
+      }
+    }
+  }
+
+  /**
    * Casts [[DefaultStringProducingExpression]] in the plan to the `newType`.
    */
   private def castDefaultStringExpressions(plan: LogicalPlan, newType: StringType): LogicalPlan = {
@@ -382,8 +424,12 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
       case cast @ Cast(e: DefaultStringProducingExpression, dt, _, _) if newType == dt =>
         cast.copy(child = e.withNewChildren(e.children.map(inner)))
 
-      // Add cast on top of [[DefaultStringProducingExpression]].
-      case e: DefaultStringProducingExpression =>
+      // Add cast on top of [[DefaultStringProducingExpression]], unless it carries an explicitly
+      // collated string type -- e.g. `JSON_ARRAY(... RETURNING STRING COLLATE UTF8_BINARY)`, a
+      // distinct instance the user chose deliberately (even for the default UTF8_BINARY) that the
+      // object/view default must not override. A plain `RETURNING STRING` is the companion (see
+      // `hasExplicitStringCollation`), indistinguishable from omission, and correctly recolored.
+      case e: DefaultStringProducingExpression if !hasExplicitStringCollation(e.dataType) =>
         Cast(e.withNewChildren(e.children.map(inner)), newType)
 
       case other =>
@@ -397,6 +443,19 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
 
   private def hasDefaultStringCharOrVarcharType(dataType: DataType): Boolean =
     dataType.existsRecursively(isDefaultStringCharOrVarcharType)
+
+  /**
+   * A [[StringType]] written with an explicit `COLLATE` clause -- a distinct instance rather than
+   * the `StringType` companion, told apart by reference identity (matching the single-pass
+   * resolver's `DefaultCollationTypeCoercion`), even for the default UTF8_BINARY. Only the explicit
+   * `COLLATE` form is distinct: `DataTypeAstBuilder` returns the companion for a plain `STRING`, so
+   * a plain `RETURNING STRING` is indistinguishable from omission and recolored like it. An
+   * explicit collation is a deliberate choice the object/view default must not overwrite.
+   */
+  private def hasExplicitStringCollation(dataType: DataType): Boolean = dataType match {
+    case st: StringType => !st.eq(StringType)
+    case _ => false
+  }
 
   private def replaceColumnTypes(
       colTypes: Seq[QualifiedColType],

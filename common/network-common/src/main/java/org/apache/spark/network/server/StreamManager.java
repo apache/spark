@@ -74,6 +74,16 @@ public abstract class StreamManager {
   public void checkAuthorization(TransportClient client, long streamId) { }
 
   /**
+   * Verify that the client is authorized to read from the given stream. This variant covers the
+   * {@link #openStream(String)} path (i.e. {@code StreamRequest}). The default implementation is a
+   * no-op; subclasses that key streams on a string id should override it, typically by delegating
+   * to {@link #checkAuthorization(TransportClient, long)}.
+   *
+   * @throws SecurityException If client is not authorized.
+   */
+  public void checkAuthorization(TransportClient client, String streamId) { }
+
+  /**
    * Return the number of chunks being transferred and not finished yet in this StreamManager.
    */
   public long chunksBeingTransferred() {

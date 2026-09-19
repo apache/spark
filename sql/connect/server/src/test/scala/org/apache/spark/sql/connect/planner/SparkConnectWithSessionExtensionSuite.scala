@@ -23,7 +23,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.catalyst.parser.{ParserInterface, SqlStatementSplitResult}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.connect.SparkConnectTestUtils
@@ -58,6 +58,9 @@ class SparkConnectWithSessionExtensionSuite extends SparkFunSuite {
 
     override def parseRoutineParam(sqlText: String): StructType =
       delegate.parseRoutineParam(sqlText)
+
+    override def splitStatements(sqlText: String): SqlStatementSplitResult =
+      delegate.splitStatements(sqlText)
   }
 
   test("Parse table name with test parser") {

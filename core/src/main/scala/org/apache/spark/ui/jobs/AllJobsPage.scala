@@ -123,7 +123,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }
   }
 
-  private def makeExecutorEvent(executors: Seq[v1.ExecutorSummary]):
+  def makeExecutorEvent(executors: Seq[v1.ExecutorSummary]):
       Seq[String] = {
     val events = ListBuffer[String]()
     executors.sortBy { e =>
@@ -158,7 +158,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
              |    '${
                       e.removeReason.map { reason =>
                         s"""<br>Reason: ${StringEscapeUtils.escapeEcmaScript(
-                          reason.replace("\n", " "))}"""
+                          Utility.escape(Utility.escape(reason.replace("\n", " "))))}"""
                       }.getOrElse("")
                    }"' +
              |    'data-bs-html="true">Executor ${e.id} removed</div>'
@@ -278,6 +278,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     val startDate = appInfo.attempts.head.startTime
     val startTime = startDate.getTime()
     val endTime = appInfo.attempts.head.endTime.getTime()
+    val exitCode = appInfo.attempts.head.exitCode
 
     val activeJobs = new ListBuffer[v1.JobData]()
     val completedJobs = new ListBuffer[v1.JobData]()
@@ -322,9 +323,63 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       <div>
         <ul class="list-unstyled">
           <li>
+            <strong>User:</strong>
+            {parent.getSparkUser}
+          </li>
+          <li>
+            <strong>Started At:</strong>
+            {UIUtils.formatDate(startDate)}
+          </li>
+          <li>
+            <strong>Total Uptime:</strong>
+            {
+              if (endTime < 0 && parent.sc.isDefined) {
+                UIUtils.formatDuration(System.currentTimeMillis() - startTime)
+              } else if (endTime > 0) {
+                UIUtils.formatDuration(endTime - startTime)
+              }
+            }
+          </li>
+          {
+            exitCode match {
+              case Some(code) if code != 0 =>
+                <li>
+                  <strong>Exit Code:</strong>
+                  {code.toString}
+                </li>
+              case _ => <!-- -->
+            }
+          }
+          <li>
             <strong>Scheduling Mode: </strong>
             {schedulingMode}
           </li>
+          {
+            if (parent.holdEnabled && parent.sc.exists(_.executorHoldSupported)) {
+              val basePathUri = UIUtils.prependBaseUri(request, parent.basePath)
+              val (status, action, confirm) = if (parent.sc.get.executorsHeld) {
+                val numDraining = parent.sc.get.getExecutorIds().size
+                val status = if (numDraining > 0) {
+                  s"Held (draining $numDraining executor${if (numDraining > 1) "s" else ""})"
+                } else {
+                  "Held"
+                }
+                (status, "resume", "Are you sure you want to resume this application?")
+              } else {
+                ("Running", "hold", "Are you sure you want to hold this application? All " +
+                  "executors will be decommissioned after finishing their running tasks.")
+              }
+              val label = action.capitalize
+              <li>
+                <strong>Application:</strong>
+                {status}
+                <a href={s"$basePathUri/jobs/$action/"} role="button"
+                   data-confirm-message={confirm}
+                   class="btn btn-sm btn-outline-secondary confirm-link">{label}</a>
+                {parent.lastHoldRequestStatus.getOrElse("")}
+              </li>
+            }
+          }
           {
             if (shouldShowActiveJobs) {
               <li>
@@ -560,9 +615,9 @@ private[ui] class JobPagedTable(
     val killLink = if (killEnabled) {
       // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
       val killLinkUri = s"$basePath/jobs/job/kill/?id=${job.jobId}"
-      <a href={killLinkUri}
+      <a href={killLinkUri} role="button"
          data-kill-message={s"Are you sure you want to kill job ${job.jobId} ?"}
-         class="kill-link float-end">(kill)</a>
+         class="btn btn-sm btn-outline-danger kill-link float-end">Kill</a>
     } else {
       Seq.empty
     }

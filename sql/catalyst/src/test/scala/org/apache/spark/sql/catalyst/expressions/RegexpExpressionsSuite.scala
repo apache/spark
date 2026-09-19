@@ -377,6 +377,26 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       RegExpReplace(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")) :: Nil)
   }
 
+  test("SPARK-57932: regexp_replace position is a code-point position for supplementary chars") {
+    // scalastyle:off nonascii
+    checkEvaluation(
+      RegExpReplace(Literal("😀aXa"), Literal("a"), Literal("Z"), Literal(3)),
+      "😀aXZ")
+    checkEvaluation(
+      RegExpReplace(Literal("😀😀"), Literal("😀"),
+        Literal("Z"), Literal(3)),
+      "😀😀")
+    // Position beyond the string length: nothing is replaced.
+    checkEvaluation(
+      RegExpReplace(Literal("😀a"), Literal("a"), Literal("Z"), Literal(4)),
+      "😀a")
+    // Position at the last code-point.
+    checkEvaluation(
+      RegExpReplace(Literal("a😀b"), Literal("b"), Literal("Z"), Literal(3)),
+      "a😀Z")
+    // scalastyle:on nonascii
+  }
+
   test("SPARK-22570: RegExpReplace should not create a lot of global variables") {
     val ctx = new CodegenContext
     RegExpReplace(Literal("100"), Literal("(\\d+)"), Literal("num")).genCode(ctx)
@@ -638,6 +658,17 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       new RegExpInStr(Literal("\"quote"), Literal("\"quote")) :: Nil)
   }
 
+  test("SPARK-57932: regexp_instr returns a code-point position for supplementary characters") {
+    // scalastyle:off nonascii
+    checkEvaluation(RegExpInStr(Literal("😀ab"), Literal("ab"), Literal(0)), 2)
+    checkEvaluation(RegExpInStr(Literal("a😀b"), Literal("b"), Literal(0)), 3)
+    checkEvaluation(
+      RegExpInStr(Literal("😀😁xy"), Literal("xy"), Literal(0)), 3)
+    // A match made up entirely of supplementary characters.
+    checkEvaluation(RegExpInStr(Literal("😀😁😂"), Literal("😁"), Literal(0)), 2)
+    // scalastyle:on nonascii
+  }
+
   test("SPARK-39758: invalid regexp pattern") {
     val s = $"s".string.at(0)
     val p = $"p".string.at(1)
@@ -679,5 +710,29 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         )
       )
     )
+  }
+
+  test("RegExpReplace and RegExpExtractBase are stateful and produce fresh copies") {
+    val s = Literal("hello world")
+    val p = Literal("(\\w+)")
+    val r = Literal("X")
+
+    val replace = RegExpReplace(s, p, r)
+    assert(replace.stateful, "RegExpReplace.stateful should be true")
+    val replaceCopy = replace.freshCopyIfContainsStatefulExpression()
+    assert(replaceCopy ne replace,
+      "freshCopyIfContainsStatefulExpression should return a new instance for RegExpReplace")
+
+    val extract = RegExpExtract(s, p, Literal(1))
+    assert(extract.stateful, "RegExpExtract.stateful should be true")
+    val extractCopy = extract.freshCopyIfContainsStatefulExpression()
+    assert(extractCopy ne extract,
+      "freshCopyIfContainsStatefulExpression should return a new instance for RegExpExtract")
+
+    val extractAll = RegExpExtractAll(s, p, Literal(1))
+    assert(extractAll.stateful, "RegExpExtractAll.stateful should be true")
+    val extractAllCopy = extractAll.freshCopyIfContainsStatefulExpression()
+    assert(extractAllCopy ne extractAll,
+      "freshCopyIfContainsStatefulExpression should return a new instance for RegExpExtractAll")
   }
 }

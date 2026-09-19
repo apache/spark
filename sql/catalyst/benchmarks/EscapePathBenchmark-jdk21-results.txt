@@ -2,23 +2,23 @@
 Escape
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
 Escape Tests:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Legacy                                             6581           6593           9          0.2        6581.0       1.0X
-New                                                 737            739           1          1.4         737.5       8.9X
+Legacy                                             5954           6026          57          0.2        5954.3       1.0X
+New                                                 598            616          11          1.7         597.8      10.0X
 
 
 ================================================================================================
 Unescape
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+INTEL(R) XEON(R) PLATINUM 8573C
 Unescape Tests:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Legacy                                             5175           5184          11          0.2        5175.5       1.0X
-New                                                 599            604           2          1.7         598.7       8.6X
+Legacy                                             3576           3631          50          0.3        3576.4       1.0X
+New                                                 411            427          20          2.4         411.5       8.7X
 
 

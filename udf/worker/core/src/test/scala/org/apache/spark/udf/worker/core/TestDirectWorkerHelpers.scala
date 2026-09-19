@@ -16,15 +16,13 @@
  */
 package org.apache.spark.udf.worker.core
 
-import java.io.{File, IOException}
-import java.nio.file.{Files, FileVisitResult, Path, SimpleFileVisitor}
-import java.nio.file.attribute.{BasicFileAttributes, PosixFilePermissions}
+import java.io.File
 
 import org.apache.spark.udf.worker.{Cancel, DataRequest, DataResponse, Finish, FinishResponse,
   Init, InitResponse, UDFProtoCommunicationPattern, UDFWorkerSpecification, WorkerConnectionSpec}
 import org.apache.spark.udf.worker.core.direct.{DirectWorkerDispatcher, DirectWorkerException,
-  DirectWorkerTimeoutException}
-import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.SOCKET_POLL_INTERVAL_MS
+  DirectWorkerProcess, DirectWorkerTimeoutException, UnixDomainSocketEndpointDirectory}
+import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.READY_POLL_INTERVAL_MS
 
 /**
  * A [[WorkerConnection]] test implementation that treats the connection as
@@ -83,53 +81,28 @@ class TestDirectWorkerDispatcher(
     logger: WorkerLogger = WorkerLogger.NoOp)
   extends DirectWorkerDispatcher(workerSpec, logger) {
 
-  // Upper bound on the rename-on-collision retry loop in newEndpointAddress.
-  private val MAX_SOCKET_LEAF_RETRIES = 16
-
-  // The private 0700 socket directory, created in [[initialize]] (after the
-  // base class has validated the spec) and removed in [[closeTransport]].
-  private lazy val socketDir: Path = createPrivateTempDirectory()
+  private lazy val endpointDirectory = new UnixDomainSocketEndpointDirectory(logger)
 
   override protected def initialize(): Unit = {
     super.initialize()
-    // Force the lazy val now so the directory is created (and any failure
-    // surfaces) at construction time, after spec validation has passed.
-    socketDir
+    endpointDirectory
   }
 
-  /**
-   * Returns the UDS path the worker should bind. Uses a short 16-hex-char leaf
-   * (the worker's full UUID still travels via `--id`) to stay within the
-   * 108-byte UDS `sun_path` limit.
-   */
-  override protected def newEndpointAddress(workerId: String): String = {
-    val short = workerId.replace("-", "").take(16)
-    var candidate = socketDir.resolve(s"w-$short.sock")
-    var suffix = 0
-    while (Files.exists(candidate) && suffix < MAX_SOCKET_LEAF_RETRIES) {
-      suffix += 1
-      candidate = socketDir.resolve(s"w-$short-$suffix.sock")
-    }
-    if (Files.exists(candidate)) {
-      throw new IllegalStateException(
-        s"could not allocate a free UDS path under $socketDir after " +
-          s"$MAX_SOCKET_LEAF_RETRIES retries (truncated id=$short)")
-    }
-    candidate.toString
-  }
+  override protected def newEndpointAddress(workerId: String): String =
+    endpointDirectory.newEndpointAddress(workerId)
 
-  override protected def waitForReady(
+  override protected def connectWorker(
       address: String,
       process: Process,
-      outputFile: File): Unit = {
+      outputFile: File): WorkerConnection = {
     val file = new File(address)
     // At least one poll so very small initTimeouts don't trip a premature
     // timeout before the worker has any chance to create the socket.
-    val maxAttempts = math.max(1, (initTimeoutMs / SOCKET_POLL_INTERVAL_MS).toInt)
+    val maxAttempts = math.max(1, (initTimeoutMs / READY_POLL_INTERVAL_MS).toInt)
     var attempts = 0
     while (!file.exists() && attempts < maxAttempts) {
       if (!process.isAlive) throwWorkerExitedBeforeSocket(process, address, outputFile)
-      Thread.sleep(SOCKET_POLL_INTERVAL_MS)
+      Thread.sleep(READY_POLL_INTERVAL_MS)
       attempts += 1
     }
     if (!file.exists()) {
@@ -145,28 +118,13 @@ class TestDirectWorkerDispatcher(
         throwWorkerExitedBeforeSocket(process, address, outputFile)
       }
     }
+    newConnection(address)
   }
 
-  override protected def cleanupEndpointAddress(address: String): Unit = {
-    Files.deleteIfExists(new File(address).toPath)
-  }
+  override protected def cleanupEndpointAddress(address: String): Unit =
+    endpointDirectory.cleanupEndpointAddress(address)
 
-  override protected def closeTransport(): Unit = {
-    if (!Files.exists(socketDir)) return
-    // Recursive post-order delete: today socketDir contains only socket files
-    // at the top level, but a future change that namespaces workers into
-    // subdirectories should not silently leak them.
-    Files.walkFileTree(socketDir, new SimpleFileVisitor[Path] {
-      override def visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult = {
-        try Files.deleteIfExists(file) catch { case _: IOException => () }
-        FileVisitResult.CONTINUE
-      }
-      override def postVisitDirectory(dir: Path, exc: IOException): FileVisitResult = {
-        try Files.deleteIfExists(dir) catch { case _: IOException => () }
-        FileVisitResult.CONTINUE
-      }
-    })
-  }
+  override protected def closeTransport(): Unit = endpointDirectory.close()
 
   // `spec` is the same object as the `workerSpec` field but passed explicitly:
   // at the point this runs (parent constructor body), `this` is only partially
@@ -191,13 +149,11 @@ class TestDirectWorkerDispatcher(
         "in WorkerCapabilities.supported_communication_patterns")
   }
 
-  override protected def newConnection(address: String): WorkerConnection =
+  protected def newConnection(address: String): WorkerConnection =
     new SocketFileConnection(address)
 
-  override protected def newSession(
-      workerHandle: WorkerHandle,
-      connection: WorkerConnection): WorkerSession =
-    new NoOpWorkerSession(workerHandle, logger)
+  override protected def newSession(worker: DirectWorkerProcess): WorkerSession =
+    new NoOpWorkerSession(worker, logger)
 
   private def throwWorkerExitedBeforeSocket(
       process: Process,
@@ -207,35 +163,5 @@ class TestDirectWorkerDispatcher(
     throw new DirectWorkerException(
       s"Worker exited with code ${process.exitValue()} " +
         s"before creating socket at $address\n$tail")
-  }
-
-  /**
-   * Creates a private (owner-only, 0700) temp directory for worker sockets.
-   * On POSIX filesystems the permissions are applied atomically at creation;
-   * the non-POSIX branch tightens best-effort after creation.
-   */
-  private def createPrivateTempDirectory(): Path = {
-    val attr = PosixFilePermissions.asFileAttribute(
-      PosixFilePermissions.fromString("rwx------"))
-    try {
-      Files.createTempDirectory("spark-udf-worker", attr)
-    } catch {
-      case _: UnsupportedOperationException =>
-        val dir = Files.createTempDirectory("spark-udf-worker")
-        val f = dir.toFile
-        // Bit-wise AND (NOT &&): all six setters must run even if an earlier
-        // one returns false, so the final permission state matches owner-only.
-        val applied =
-          f.setReadable(false, false) & f.setWritable(false, false) &
-            f.setExecutable(false, false) & f.setReadable(true, true) &
-            f.setWritable(true, true) & f.setExecutable(true, true)
-        if (!applied) {
-          logger.warn(
-            s"Could not fully restrict permissions on $dir; socket " +
-              s"directory may be accessible to other local users on this " +
-              s"filesystem")
-        }
-        dir
-    }
   }
 }

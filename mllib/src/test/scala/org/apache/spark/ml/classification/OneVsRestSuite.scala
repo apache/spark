@@ -68,6 +68,27 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(model)
   }
 
+  test("SPARK-58250 and SPARK-58509: OneVsRestModel estimated size") {
+    val trainingData = Seq(
+      (0.0, Vectors.dense(0.0, 0.0)),
+      (0.0, Vectors.dense(0.0, 1.0)),
+      (1.0, Vectors.dense(1.0, 0.0)),
+      (1.0, Vectors.dense(1.0, 1.0)),
+      (2.0, Vectors.dense(2.0, 0.0)),
+      (2.0, Vectors.dense(2.0, 1.0))).toDF("label", "features")
+
+    val classifier = new LogisticRegression().setMaxIter(1)
+    // Initialize the classifier's logger before retaining it in the OneVsRestModel.
+    classifier.fit(trainingData)
+    val model = new OneVsRest()
+      .setClassifier(classifier)
+      .fit(trainingData)
+
+    val maxSize = 32 * 1024
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should not include shared runtime state")
+  }
+
   test("one-vs-rest: default params") {
     val numClasses = 3
     val ova = new OneVsRest()

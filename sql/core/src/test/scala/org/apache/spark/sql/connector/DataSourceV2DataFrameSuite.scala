@@ -23,30 +23,32 @@ import java.util.Collections
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SessionQueryTest, SparkSession}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, GenerationExpression, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
-import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, CachingInMemoryTableCatalog, CatalogV2Util, Column, ColumnDefaultValue, DefaultValue, GenerationExpression, Identifier, InMemoryBaseTable, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TruncatableTable
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, Cast => V2Cast, Extract, FieldReference, GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
-import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
+import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, DataSourceV2ScanRelation, ReplaceTableExec}
 import org.apache.spark.sql.functions.{lit, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
+  with SessionQueryTest
   with DSv2TempViewWithStoredPlanTests
   with DSv2RepeatedTableAccessTests
   with DSv2IncrementallyConstructedQueryTests
@@ -77,10 +79,7 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.mixedcolidcat",
       classOf[MixedColumnIdTableCatalog].getName)
     .set("spark.sql.catalog.mixedcolidcat.copyOnLoad", "true")
-    .set("spark.sql.catalog.composedidcat",
-      classOf[ComposedColumnIdTableCatalog].getName)
-    .set("spark.sql.catalog.composedidcat.copyOnLoad", "true")
-    .set(SQLConf.TIME_TYPE_ENABLED.key, "true")
+    .set(InMemoryBaseTable.ASSIGN_COLUMN_IDS, "true")
 
   after {
     catalog("cachingcat").asInstanceOf[CachingInMemoryTableCatalog].clearCache()
@@ -97,12 +96,6 @@ class DataSourceV2DataFrameSuite
 
   // DSv2ExternalMutationTestBase implementations for classic mode
   override protected def testPrefix: String = ""
-  override protected def isConnect: Boolean = false
-
-  override protected def withTestSession(fn: SparkSession => Unit): Unit = fn(spark)
-
-  override protected def checkRows(df: => DataFrame, expected: Seq[Row]): Unit =
-    checkAnswer(df, expected)
 
   override protected def getTableCatalog[C <: TableCatalog: ClassTag](
       session: SparkSession,
@@ -113,16 +106,6 @@ class DataSourceV2DataFrameSuite
       ct.runtimeClass.isInstance(c),
       s"Expected ${ct.runtimeClass.getName} but got ${c.getClass.getName}")
     c.asInstanceOf[C]
-  }
-
-  override protected def withTestTableAndViews(
-      session: SparkSession,
-      table: String,
-      views: Seq[String] = Seq.empty)(fn: => Unit): Unit = {
-    withTable(table) {
-      try { fn }
-      finally { views.foreach(v => session.sql(s"DROP VIEW IF EXISTS $v")) }
-    }
   }
 
   override def verifyTable(tableName: String, expected: DataFrame): Unit = {
@@ -1018,7 +1001,7 @@ class DataSourceV2DataFrameSuite
               Column.create("c1", IntegerType),
               Column.create("c2", StringType))
           }
-          assert(cols === expectedCols)
+          assert(CatalogV2Util.clearIds(cols) === expectedCols)
         }
       }
     }
@@ -1602,6 +1585,12 @@ class DataSourceV2DataFrameSuite
     stripAQEPlan(qe.executedPlan).asInstanceOf[T]
   }
 
+  private def scanRelationOf(df: DataFrame): DataSourceV2ScanRelation = {
+    df.queryExecution.optimizedPlan.collectFirst {
+      case scan: DataSourceV2ScanRelation => scan
+    }.get
+  }
+
   private def checkDefaultValues(
       columns: Array[Column],
       expectedDefaultValues: Array[ColumnDefaultValue],
@@ -1743,6 +1732,531 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("a captured nested field a fresh query cannot resolve fails the refreshed query too") {
+    // Spark resolves a top-level column by folding names with `toLowerCase(ROOT)` to collect
+    // candidates and only then filtering them with the resolver, but resolves a struct field with
+    // the resolver alone. Adding U+017F LONG S beside `s` therefore leaves a top-level `s`
+    // resolvable while making a nested `st.s` ambiguous. A refreshed plan has to report that
+    // ambiguity rather than keep reading one of the two, so that a stale plan and a fresh query
+    // agree on whether the name is readable.
+    //
+    // Spark's own DDL refuses the addition at either level (it looks for an existing field with the
+    // resolver and reports FIELD_ALREADY_EXISTS), so it is applied through the catalog the way
+    // another engine would. That is also why this only reaches tables mutated outside Spark.
+    val longS = new String(Character.toChars(0x17f))
+    val t = "testcat.ns1.ns2.tbl"
+
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, st STRUCT<s: INT>) USING foo")
+
+      // Analyze but do not execute: a Dataset memoizes its optimized plan, so collecting here would
+      // refresh once and never see the change below.
+      val stale = spark.table(t).selectExpr("st.s AS v")
+      assert(stale.queryExecution.analyzed.resolved)
+
+      catalog("testcat")
+        .alterTable(testIdent, TableChange.addColumn(Array("st", longS), IntegerType, true))
+
+      val fresh = intercept[AnalysisException](sql(s"SELECT st.s FROM $t").collect())
+      assert(fresh.getCondition == "AMBIGUOUS_REFERENCE_TO_FIELDS")
+
+      val refreshed = intercept[AnalysisException](stale.collect())
+      assert(
+        refreshed.getCondition == "AMBIGUOUS_REFERENCE_TO_FIELDS",
+        "the refreshed plan must report the ambiguity a fresh query reports")
+    }
+
+    // The same addition at the top level stays readable, for both a fresh and a refreshed plan.
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, s INT) USING foo")
+      val stale = spark.table(t).filter("id > 0")
+      assert(stale.queryExecution.analyzed.resolved)
+
+      val cat = catalog("testcat")
+      cat.alterTable(testIdent, TableChange.addColumn(Array(longS), IntegerType, true))
+      externalAppend(cat, testIdent, InternalRow(1, 10, 99))
+
+      checkAnswer(sql(s"SELECT s FROM $t"), Seq(Row(10)))
+      checkAnswer(stale, Seq(Row(1, 10)))
+    }
+  }
+
+  test("rebind a captured column renamed beside an addition the resolver cannot tell apart") {
+    // U+017F LONG S folds to itself under `toLowerCase`, so it is a distinct column name to the
+    // fold that name resolution and refresh validation key on, while `equalsIgnoreCase` equates it
+    // with `s`. Renaming `s` to `S` and adding U+017F is therefore a compatible change, and the
+    // captured `s` must keep reading the renamed column rather than becoming ambiguous.
+    val longS = new String(Character.toChars(0x17f))
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, s INT) USING foo")
+
+      // Analyze the plan but do not execute it: a Dataset memoizes its optimized plan, so a collect
+      // before the change would refresh once and never see the change below.
+      val df = spark.table(t).filter("id > 0")
+      assert(df.queryExecution.analyzed.resolved)
+
+      // Spark's own DDL refuses both changes because it checks for an existing field with the
+      // resolver, so apply them through the catalog the way another engine would. Data is written
+      // afterwards because this fixture migrates rows by exact field name and so drops the values
+      // of a renamed column.
+      val cat = catalog("testcat")
+      cat.alterTable(testIdent, TableChange.renameColumn(Array("s"), "S"))
+      cat.alterTable(testIdent, TableChange.addColumn(Array(longS), IntegerType, true))
+      externalAppend(cat, testIdent, InternalRow(2, 20, 99))
+
+      // Reading 99 instead of 20 would mean the captured name bound to the addition.
+      checkAnswer(df, Seq(Row(2, 20)))
+      assert(df.queryExecution.optimizedPlan.output.map(_.name) == Seq("id", "s"))
+    }
+  }
+
+  test("refresh keeps an exact-name binding under a Turkish locale fold collision") {
+    val capitalIDot = new String(Character.toChars(0x130))
+    val iCombiningDot = "i" + new String(Character.toChars(0x307))
+    val t = "testcat.ns1.ns2.tbl"
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withLocale("tr") {
+        withTable(t) {
+          sql(s"CREATE TABLE $t (id INT, `$iCombiningDot` INT) USING foo")
+
+          // Analyze but do not execute so that collection has to refresh this captured plan.
+          val stale = spark.table(t).selectExpr("id", s"`$iCombiningDot`")
+          assert(stale.queryExecution.analyzed.resolved)
+
+          // Under a Turkish default locale, duplicate validation admits U+0130 beside
+          // i+U+0307, although Spark's root-locale fold puts both names in one lookup bucket.
+          // Put the addition first so that choosing the bucket's first field would be observable.
+          val cat = catalog("testcat")
+          cat.alterTable(
+            testIdent,
+            TableChange.addColumn(
+              Array(capitalIDot),
+              IntegerType,
+              true,
+              null,
+              TableChange.ColumnPosition.first(),
+              null))
+          assert(
+            cat.loadTable(testIdent).columns().map(_.name).toSeq ==
+              Seq(capitalIDot, "id", iCombiningDot))
+          externalAppend(cat, testIdent, InternalRow(99, 1, 20))
+
+          // A fresh query establishes that the exact name reads 20. The captured plan must make
+          // the same choice rather than read 99 from the preceding addition.
+          checkAnswer(sql(s"SELECT id, `$iCombiningDot` FROM $t"), Seq(Row(1, 20)))
+          checkAnswer(stale, Seq(Row(1, 20)))
+        }
+      }
+    }
+  }
+
+  test("refresh reconciles a wider partially-pruned scan with stored temp view output") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(
+          s"""CREATE TABLE $t (id INT, salary INT) USING foo
+             |TBLPROPERTIES (
+             |  '${InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING}' = 'true')
+             |""".stripMargin)
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+
+        spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+        val cat = catalog("testcat")
+        val addCol = TableChange.addColumn(Array("new_column"), IntegerType, true)
+        cat.alterTable(testIdent, addCol)
+        externalAppend(cat, testIdent, InternalRow(2, 200, -1))
+
+        val refreshedView = spark.table("v")
+        val scan = refreshedView.queryExecution.optimizedPlan.collectFirst {
+          case scan: DataSourceV2ScanRelation => scan
+        }.get
+        assert(scan.output.map(_.name) == Seq("id", "salary", "new_column"))
+        assert(refreshedView.queryExecution.optimizedPlan.output.map(_.name) == Seq("id", "salary"))
+        checkAnswer(refreshedView, Seq(Row(1, 100), Row(2, 200)))
+      }
+    }
+  }
+
+  test("refresh recreates a captured nested schema from a partially-pruned scan") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""CREATE TABLE $t (id INT, person STRUCT<name: STRING>) USING foo
+           |TBLPROPERTIES (
+           |  '${InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING}' = 'true')
+           |""".stripMargin)
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice'))")
+
+      val df = spark.table(t)
+      assert(df.queryExecution.analyzed.resolved)
+
+      sql(s"ALTER TABLE $t ADD COLUMN person.age INT FIRST")
+      sql(s"INSERT INTO $t VALUES (2, named_struct('age', 25, 'name', 'Bob'))")
+      sql(s"INSERT INTO $t VALUES (3, NULL)")
+
+      checkAnswer(df, Seq(
+        Row(1, Row("Alice")),
+        Row(2, Row("Bob")),
+        Row(3, null)))
+    }
+  }
+
+  test("refresh recreates a captured nested schema without nested pruning or filter pushdown") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, city: STRING>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'city', 'SF'))")
+
+      def nestedQuery(): DataFrame =
+        spark.table(t).where("person.name = 'Alice'").select("person.name")
+
+      def personFieldsRead(df: DataFrame): Seq[String] = {
+        val readSchema = scanRelationOf(df).scan.readSchema()
+        readSchema("person").dataType.asInstanceOf[StructType].fieldNames.toSeq
+      }
+
+      // Every filter this source reports is one Spark managed to translate and hand to
+      // `pushFilters`. The scan relation's own `pushedFilters` cannot be used here: it keeps only
+      // fully-pushed filters, and this source evaluates none on an unpartitioned table.
+      def filtersReachingSource(df: DataFrame): Seq[String] = {
+        scanRelationOf(df).scan match {
+          case scan: InMemoryBaseTable#InMemoryBatchScan =>
+            scan.pushedFilters.map(_.toString).toSeq
+          case other =>
+            fail(s"unexpected scan type ${other.getClass.getName}")
+        }
+      }
+
+      // capture the plan, then add a field inside the struct
+      val captured = nestedQuery()
+      assert(captured.queryExecution.analyzed.resolved)
+      sql(s"ALTER TABLE $t ADD COLUMN person.age INT FIRST")
+      sql(s"INSERT INTO $t VALUES (2, named_struct('age', 25, 'name', 'Bob', 'city', 'NY'))")
+
+      val fresh = nestedQuery()
+      checkAnswer(captured, Seq(Row("Alice")))
+      checkAnswer(fresh, Seq(Row("Alice")))
+
+      // a plan analyzed after the change prunes to the one field it reads and translates the
+      // predicate down to the source
+      assert(personFieldsRead(fresh) == Seq("name"))
+      assert(filtersReachingSource(fresh).nonEmpty)
+
+      // Rebinding rebuilds the struct as `If(IsNull(person), null, CreateNamedStruct(...))`, which
+      // the extraction, schema-pruning and pushdown rules cannot see through, so the captured plan
+      // reads the whole current struct and its predicate never reaches the source. Results stay
+      // correct, only wider than necessary. Tighten both assertions to match `fresh` once the
+      // projection uses an optimizer-friendly null-preserving form.
+      assert(personFieldsRead(captured) == Seq("age", "name", "city"))
+      assert(filtersReachingSource(captured).isEmpty)
+    }
+  }
+
+  test("refresh recreates a captured schema nested through a map and an array") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      // A struct is needed between the map and the array: CatalogV2Util.replace only walks into a
+      // collection whose element/value type is a struct, so ALTER TABLE cannot reach the inner
+      // field of MAP<STRING, ARRAY<STRUCT<...>>>. AnalyzedSchemaProjectionSuite covers that shape
+      // directly at the expression level.
+      sql(
+        s"""CREATE TABLE $t (
+           |  id INT,
+           |  data STRUCT<m: MAP<STRING, STRUCT<arr: ARRAY<STRUCT<v: STRING>>>>>)
+           |USING foo
+           |TBLPROPERTIES (
+           |  '${InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING}' = 'true')
+           |""".stripMargin)
+      sql(
+        s"""INSERT INTO $t VALUES (
+           |  1,
+           |  named_struct('m', map('k', named_struct('arr', array(named_struct('v', 'a'))))))
+           |""".stripMargin)
+
+      val df = spark.table(t)
+      assert(df.queryExecution.analyzed.resolved)
+
+      // Add a field at two depths, each FIRST, so the captured field that follows it moves to a
+      // different ordinal at each level.
+      sql(s"ALTER TABLE $t ADD COLUMN data.m.value.arr.element.extra INT FIRST")
+      sql(s"ALTER TABLE $t ADD COLUMN data.added INT FIRST")
+      sql(
+        s"""INSERT INTO $t VALUES (
+           |  2,
+           |  named_struct(
+           |    'added', 9,
+           |    'm', map('k', named_struct('arr', array(named_struct('extra', 7, 'v', 'b'))))))
+           |""".stripMargin)
+
+      checkAnswer(df, Seq(
+        Row(1, Row(Map("k" -> Row(Seq(Row("a")))))),
+        Row(2, Row(Map("k" -> Row(Seq(Row("b"))))))))
+    }
+  }
+
+  // Narrowing a map key back to the captured type is the one case where rebinding cannot reproduce
+  // the captured output: dropping a key field can collapse keys that are distinct under the current
+  // type into one captured key, and the captured type then cannot say how many entries the map has.
+  // The projection rebuilds the map through Spark's map builder, so the map-key uniqueness
+  // invariant decides the outcome instead.
+  test("refresh fails when narrowing a map key collapses distinct keys") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""CREATE TABLE $t (m MAP<STRUCT<name: STRING>, INT>) USING foo
+           |TBLPROPERTIES (
+           |  '${InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING}' = 'true')
+           |""".stripMargin)
+
+      val df = spark.table(t).selectExpr("size(m) AS n", "map_keys(m) AS keys")
+      assert(df.queryExecution.analyzed.resolved)
+
+      sql(s"ALTER TABLE $t ADD COLUMN m.key.id INT")
+      sql(
+        s"""INSERT INTO $t SELECT map(
+           |  named_struct('name', 'a', 'id', 1), 10,
+           |  named_struct('name', 'a', 'id', 2), 20)
+           |""".stripMargin)
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.EXCEPTION.toString) {
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            df.collect()
+          },
+          condition = "DUPLICATED_MAP_KEY",
+          parameters = Map(
+            "key" -> "[a]",
+            "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
+      }
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+        checkAnswer(df, Seq(Row(1, Seq(Row("a")))))
+      }
+    }
+  }
+
+  test("refresh does not evaluate an unselected sibling with a narrowed map key") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(
+        s"""CREATE TABLE $t (
+           |  payload STRUCT<x: INT, m: MAP<STRUCT<name: STRING>, INT>>)
+           |USING foo
+           |""".stripMargin)
+
+      val selectedMap = spark.table(t).select("payload.m")
+      val selectedSibling = spark.table(t).select("payload.x")
+      assert(selectedMap.queryExecution.analyzed.resolved)
+      assert(selectedSibling.queryExecution.analyzed.resolved)
+
+      sql(s"ALTER TABLE $t ADD COLUMN payload.m.key.id INT")
+      sql(
+        s"""INSERT INTO $t SELECT named_struct(
+           |  'x', 1,
+           |  'm', map(
+           |    named_struct('name', 'a', 'id', 1), 10,
+           |    named_struct('name', 'a', 'id', 2), 20))
+           |""".stripMargin)
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.EXCEPTION.toString) {
+        // Reading the map proves that this row's keys collapse under the captured key type.
+        val error = intercept[SparkRuntimeException] {
+          selectedMap.collect()
+        }
+        assert(error.getCondition == "DUPLICATED_MAP_KEY")
+
+        // Reading only the sibling must not evaluate the unused map reconstruction.
+        checkAnswer(selectedSibling, Seq(Row(1)))
+      }
+    }
+  }
+
+  test("refresh preserves a captured metadata column across a wider partially-pruned scan") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(
+          s"""CREATE TABLE $t (id INT, salary INT) USING foo
+             |TBLPROPERTIES (
+             |  '${InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING}' = 'true')
+             |""".stripMargin)
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+
+        spark.table(t).select("id", "salary", "index").createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1, 100, 0)))
+
+        val cat = catalog("testcat")
+        cat.alterTable(testIdent, TableChange.addColumn(Array("new_column"), IntegerType, true))
+        externalAppend(cat, testIdent, InternalRow(2, 200, -1))
+
+        val refreshedView = spark.table("v")
+        assert(refreshedView.schema.map(_.name) == Seq("id", "salary", "index"))
+        checkAnswer(refreshedView, Seq(Row(1, 100, 0), Row(2, 200, 0)))
+      }
+    }
+  }
+
+  // This test does not enable partial column pruning, so the scan reports only the captured
+  // columns and `toOutputAttrs` finds every name: the new data column never reaches the read
+  // schema, and so cannot collapse onto the captured metadata attribute. What is pinned here is
+  // that rebinding keeps the captured `index` bound to the metadata column, which this connector
+  // exposes under a renamed name, rather than to the new data column. Unlike the other tests in
+  // this group it therefore also passes without the rebinding call.
+  test("refresh keeps a captured metadata column when a new data column takes its name") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+
+        spark.table(t).select("id", "salary", "index").createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1, 100, 0)))
+
+        // The new data column conflicts with the `index` metadata column, so the current relation
+        // exposes the metadata column under a conflict-renamed name.
+        val cat = catalog("testcat")
+        cat.alterTable(testIdent, TableChange.addColumn(Array("index"), IntegerType, true))
+        externalAppend(cat, testIdent, InternalRow(2, 200, -1))
+
+        val refreshedView = spark.table("v")
+        assert(refreshedView.schema.map(_.name) == Seq("id", "salary", "index"))
+        // `index` still resolves to the metadata column (0), not to the new data column (-1).
+        checkAnswer(refreshedView, Seq(Row(1, 100, 0), Row(2, 200, 0)))
+      }
+    }
+  }
+
+  test("refresh restores the captured column order when a column is added first") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(
+          s"""CREATE TABLE $t (id INT, salary INT) USING foo
+             |TBLPROPERTIES (
+             |  '${InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING}' = 'true')
+             |""".stripMargin)
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+
+        spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+        sql(s"ALTER TABLE $t ADD COLUMN new_column INT FIRST")
+        sql(s"INSERT INTO $t VALUES (-1, 2, 200)")
+
+        val refreshedView = spark.table("v")
+        val scan = refreshedView.queryExecution.optimizedPlan.collectFirst {
+          case scan: DataSourceV2ScanRelation => scan
+        }.get
+        assert(scan.output.map(_.name) == Seq("new_column", "id", "salary"))
+        // The projection restores the captured order, not the current table order.
+        assert(refreshedView.queryExecution.optimizedPlan.output.map(_.name) == Seq("id", "salary"))
+        checkAnswer(refreshedView, Seq(Row(1, 100), Row(2, 200)))
+      }
+    }
+  }
+
+  // A case-only rename is rejected by ALTER TABLE, so it can only reach the refresh path when an
+  // external writer performs it directly through the catalog. This test also does not enable
+  // partial column pruning, but it still fails without the rebinding call: the scan reports renamed
+  // `SALARY` while the captured output has `salary`, and `toOutputAttrs` looks read-schema names up
+  // in `relation.output`.
+  test("refresh restores the captured column name after an external case-only rename") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+
+        spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+        val cat = catalog("testcat")
+        cat.alterTable(testIdent, TableChange.renameColumn(Array("salary"), "SALARY"))
+        assert(cat.loadTable(testIdent).columns().map(_.name).toSeq == Seq("id", "SALARY"))
+
+        // The scan reads the current name while the view keeps the captured one. Rows written
+        // before the rename are not asserted here: the in-memory connector resolves buffered rows
+        // by exact column name, so it cannot read them back under the new name.
+        val refreshedView = spark.table("v")
+        val scan = refreshedView.queryExecution.optimizedPlan.collectFirst {
+          case scan: DataSourceV2ScanRelation => scan
+        }.get
+        assert(scan.output.map(_.name) == Seq("id", "SALARY"))
+        assert(refreshedView.queryExecution.optimizedPlan.output.map(_.name) == Seq("id", "salary"))
+        assert(refreshedView.schema.map(_.name) == Seq("id", "salary"))
+      }
+    }
+  }
+
+  test("refresh keeps a captured column bound to its exact name past a folding sibling") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(s"CREATE TABLE $t (s INT) USING foo")
+        sql(s"INSERT INTO $t VALUES (1)")
+
+        spark.table(t).createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1)))
+
+        // U+017F is a distinct name to the duplicate-name check, which folds names with
+        // `toLowerCase`, and equal to `s` for the case-insensitive resolver. The column is added
+        // through the catalog, like the other external changes in this group.
+        val longS = new String(Character.toChars(0x17f))
+        val cat = catalog("testcat")
+        cat.alterTable(
+          testIdent,
+          TableChange.addColumn(
+            Array(longS), IntegerType, true, null, TableChange.ColumnPosition.first(), null))
+        assert(cat.loadTable(testIdent).columns().map(_.name).toSeq == Seq(longS, "s"))
+        externalAppend(cat, testIdent, InternalRow(7, 2))
+
+        // The captured `s` reads the current `s`, not the column that precedes it and matches only
+        // after folding.
+        checkAnswer(spark.table("v"), Seq(Row(1), Row(2)))
+      }
+    }
+  }
+
+  test("refresh rebinds every relation of a self-joined partially-pruned table") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withView("v") {
+        sql(
+          s"""CREATE TABLE $t (id INT, salary INT) USING foo
+             |TBLPROPERTIES (
+             |  '${InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING}' = 'true')
+             |""".stripMargin)
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+
+        sql(s"SELECT l.id, r.salary FROM $t l JOIN $t r ON l.id = r.id")
+          .createOrReplaceTempView("v")
+        checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+        val cat = catalog("testcat")
+        cat.alterTable(testIdent, TableChange.addColumn(Array("new_column"), IntegerType, true))
+        externalAppend(cat, testIdent, InternalRow(2, 200, -1))
+
+        val refreshedView = spark.table("v")
+        val scans = refreshedView.queryExecution.optimizedPlan.collect {
+          case scan: DataSourceV2ScanRelation => scan
+        }
+        assert(scans.size == 2)
+        // Both sides see the current schema; column pruning then keeps only what each side needs.
+        assert(scans.forall(_.relation.output.map(_.name) == Seq("id", "salary", "new_column")))
+        assert(refreshedView.schema.map(_.name) == Seq("id", "salary"))
+        checkAnswer(refreshedView, Seq(Row(1, 100), Row(2, 200)))
+      }
+    }
+  }
+
   test("SPARK-54157: detect multiple change types after DataFrame analysis") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1765,6 +2279,32 @@ class DataSourceV2DataFrameSuite
           "errors" ->
             """- `col3` is nullable now
               |- `col4` STRING has been removed""".stripMargin))
+    }
+  }
+
+  test("SPARK-59014: detect a data column hiding a captured metadata column after analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      // this table suppresses metadata/data name conflicts instead of renaming them, which is the
+      // default in SupportsMetadataColumns and the case where the metadata column becomes lost
+      sql(s"CREATE TABLE $t (id INT, data STRING) USING foo " +
+        "TBLPROPERTIES ('rename-conflicting-metadata-columns' = 'false')")
+      sql(s"INSERT INTO $t VALUES (1, 'a')")
+
+      // create DataFrame projecting the metadata column and trigger analysis
+      val table = spark.table(t)
+      val df = table.select($"id", table.metadataColumn("index"))
+
+      // a data column takes the metadata column's name after the plan was analyzed
+      sql(s"ALTER TABLE $t ADD COLUMN `index` INT")
+
+      // execution should fail instead of silently reading the data column's values
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.METADATA_COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "- `index` metadata column is hidden by a data column with the same name"))
     }
   }
 
@@ -2045,7 +2585,7 @@ class DataSourceV2DataFrameSuite
   //
   // Core behavior: when a DataFrame captures column IDs at analysis time,
   // and those IDs change before execution, the query is rejected with
-  // COLUMN_ID_MISMATCH.
+  // COLUMNS_MISMATCH.
 
   test("drop+re-add column with same name and type rejects stale DataFrame") {
     val t = "testcat.ns1.ns2.tbl"
@@ -2060,7 +2600,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2079,9 +2619,15 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
-        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+        parameters = Map(
+          "tableName" -> ".*",
+          "errors" ->
+            """|
+               |- `salary` field ID has changed from \d+ to \d+
+               |- `salary` type has changed from INT to STRING
+               |""".stripMargin.strip))
     }
   }
 
@@ -2098,7 +2644,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2119,7 +2665,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*",
           "errors" -> "(?s).*salary.*bonus.*"))
@@ -2161,7 +2707,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2196,7 +2742,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2214,14 +2760,14 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
   }
 
   test("drop+re-add nested struct field rejects stale DataFrame") {
-    val t = "composedidcat.ns1.ns2.tbl"
+    val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
       sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
@@ -2232,7 +2778,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2271,7 +2817,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2288,7 +2834,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2339,54 +2885,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  // Column ID tests: Composed nested IDs
-  //
-  // ComposedColumnIdTableCatalog encodes nested field IDs into the
-  // top-level Column.id() string, modeling the recommended adoption
-  // pattern for connectors with nested IDs. Any nested
-  // change produces a different encoded string, so validateColumnIds
-  // detects it even though Spark only compares top-level strings.
-
-  test("composed nested IDs detect drop+re-add of nested field") {
-    val t = "composedidcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
-      val df = spark.table(t)
-
-      sql(s"ALTER TABLE $t DROP COLUMN person.age")
-      sql(s"ALTER TABLE $t ADD COLUMN person.age INT")
-
-      // The inner age field got a new nested ID on re-add. The composed
-      // top-level string changes, so COLUMN_ID_MISMATCH fires.
-      checkError(
-        exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
-        matchPVals = true,
-        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
-    }
-  }
-
-  test("composed nested IDs tolerate same data inserted into nested column") {
-    val t = "composedidcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
-      val df = spark.table(t)
-
-      // pure data insert, no schema change: composed IDs stay the same
-      sql(s"INSERT INTO $t VALUES (2, named_struct('name', 'Bob', 'age', 25))")
-
-      checkAnswer(df, Seq(
-        Row(1, Row("Alice", 30)),
-        Row(2, Row("Bob", 25))))
-    }
-  }
-
   // Column ID tests: Additional nested coverage
-  //
-  // These tests fill specific nested cells that are not covered by the
-  // coarse (testcat) or composed (composedidcat) groups above.
 
   // Nested type change with preserved top-level ID: the standard catalog
   // preserves the parent ID, so schema validation catches the incompatible
@@ -2410,10 +2909,8 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  // Depth >= 3 nesting with composed IDs: drop+re-add at depth 3 produces
-  // a different composed ID at the top level.
-  test("depth 3 nesting with composed IDs detects deep field change") {
-    val t = "composedidcat.ns1.ns2.tbl"
+  test("depth 3 nesting detects deep nested field drop+re-add") {
+    val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, a STRUCT<b: STRUCT<c: INT>>) USING foo")
       sql(s"INSERT INTO $t VALUES (1, named_struct('b', named_struct('c', 42)))")
@@ -2422,11 +2919,9 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN a.b.c")
       sql(s"ALTER TABLE $t ADD COLUMN a.b.c INT")
 
-      // The deep nested field c got a new ID on re-add, changing the
-      // composed top-level ID for column a.
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2461,14 +2956,8 @@ class DataSourceV2DataFrameSuite
   // nested fields are added or dropped (assignMissingIds matches by name
   // only). These tests verify that behavior using the catalog API.
 
-  // Column ID tests: Composed IDs for container types (arrays, maps)
-  //
-  // ComposedColumnIdTableCatalog encodes nested field IDs into the
-  // top-level string. These tests verify detection of nested drop+re-add
-  // inside array element structs and map value structs.
-
-  test("composed nested IDs detect drop+re-add in array element struct") {
-    val t = "composedidcat.ns1.ns2.tbl"
+  test("drop+re-add in array element struct detected by field ID") {
+    val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, items ARRAY<STRUCT<name: STRING, price: INT>>) USING foo")
       sql(s"INSERT INTO $t VALUES (1, array(named_struct('name', 'x', 'price', 10)))")
@@ -2477,48 +2966,6 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN items.element.price")
       sql(s"ALTER TABLE $t ADD COLUMN items.element.price INT")
 
-      // The nested price field got a new ID on re-add. The composed
-      // top-level ID for items changes, so COLUMN_ID_MISMATCH fires.
-      checkError(
-        exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
-        matchPVals = true,
-        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
-    }
-  }
-
-  test("composed nested IDs detect drop+re-add in map value struct") {
-    val t = "composedidcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, props MAP<STRING, STRUCT<x: INT, y: INT>>) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, map('k1', named_struct('x', 10, 'y', 20)))")
-      val df = spark.table(t)
-
-      sql(s"ALTER TABLE $t DROP COLUMN props.value.y")
-      sql(s"ALTER TABLE $t ADD COLUMN props.value.y INT")
-
-      // The nested y field got a new ID on re-add. The composed
-      // top-level ID for props changes, so COLUMN_ID_MISMATCH fires.
-      checkError(
-        exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
-        matchPVals = true,
-        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
-    }
-  }
-
-  test("composed nested IDs detect rename within struct") {
-    val t = "composedidcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
-      val df = spark.table(t)
-
-      sql(s"ALTER TABLE $t RENAME COLUMN person.name TO first_name")
-
-      // With position-based keys, the renamed field stays at position 0
-      // and keeps its nested ID. The composed string is unchanged, so
-      // schema validation catches the struct type difference instead.
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
         condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
@@ -2527,13 +2974,31 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("composed nested IDs: reorder preserves composed column ID") {
-    val t = "composedidcat.ns1.ns2.tbl"
+  test("drop+re-add in map value struct detected by field ID") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, props MAP<STRING, STRUCT<x: INT, y: INT>>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, map('k1', named_struct('x', 10, 'y', 20)))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN props.value.y")
+      sql(s"ALTER TABLE $t ADD COLUMN props.value.y INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("reorder preserves top-level column ID") {
+    val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
 
-      val cat = catalog("composedidcat")
+      val cat = catalog("testcat")
       val personBefore = cat.loadTable(ident).columns().find(_.name() == "person").get
       val idBefore = personBefore.id()
       val typeBefore = personBefore.dataType()
@@ -2552,32 +3017,14 @@ class DataSourceV2DataFrameSuite
       assert(typeAfter.toString.startsWith("StructType(StructField(age"),
         s"age should be first field after reorder, got: $typeAfter")
 
-      // Position-based keys: each ordinal position keeps its old ID after
-      // reorder, so the composed string is unchanged despite the schema change.
+      // The top-level column ID is preserved after reorder.
       assert(idBefore == idAfter,
-        s"Composed ID should be unchanged after reorder: $idBefore vs $idAfter")
+        s"Top-level column ID should be unchanged after reorder: $idBefore vs $idAfter")
     }
   }
 
-  test("composed nested IDs tolerate nested field reorder end-to-end") {
-    val t = "composedidcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
-      val df = spark.table(t)
-
-      sql(s"ALTER TABLE $t ALTER COLUMN person.age FIRST")
-
-      // InMemoryTable does not actually reorder nested struct fields in stored
-      // data, so the read still returns the original field order. This is fine
-      // because the purpose of this test is to verify that the column ID check
-      // passes (no COLUMN_ID_MISMATCH) after a nested field reorder.
-      checkAnswer(df, Seq(Row(1, Row("Alice", 30))))
-    }
-  }
-
-  test("composed nested IDs detect drop+re-add in map key struct") {
-    val t = "composedidcat.ns1.ns2.tbl"
+  test("drop+re-add in map key struct detected by field ID") {
+    val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t " +
         s"(id INT, coords MAP<STRUCT<x: INT, y: INT>, STRING>) USING foo")
@@ -2588,11 +3035,9 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN coords.key.y")
       sql(s"ALTER TABLE $t ADD COLUMN coords.key.y INT")
 
-      // The nested y field in the map key struct got a new ID on re-add.
-      // The composed top-level ID for coords changes.
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2693,7 +3138,7 @@ class DataSourceV2DataFrameSuite
         exception = intercept[AnalysisException] {
           df1.join(df2, df1("id") === df2("id")).collect()
         },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2718,7 +3163,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.filter("salary > 50").collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2739,7 +3184,7 @@ class DataSourceV2DataFrameSuite
         exception = intercept[AnalysisException] {
           df.groupBy("id").agg(sum("salary")).collect()
         },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2758,7 +3203,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.orderBy("salary").collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2777,7 +3222,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.select("salary").collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2801,7 +3246,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2853,7 +3298,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2874,7 +3319,7 @@ class DataSourceV2DataFrameSuite
       // stale DataFrame detects salary ID mismatch
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*salary.*"))
 
@@ -2905,9 +3350,15 @@ class DataSourceV2DataFrameSuite
       // reset-id catalog assigns a new ID for the widened column
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
-        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+        parameters = Map(
+          "tableName" -> ".*",
+          "errors" ->
+            """|
+               |- `salary` field ID has changed from \d+ to \d+
+               |- `salary` type has changed from INT to BIGINT
+               |""".stripMargin.strip))
     }
   }
 
@@ -3008,7 +3459,7 @@ class DataSourceV2DataFrameSuite
   // [[commandExecuted]] phase, before the refresh phase runs. As a result,
   // column ID validation does not apply to the source DataFrame in a
   // [[writeTo]] path. The append succeeds without throwing a
-  // COLUMN_ID_MISMATCH error.
+  // COLUMNS_MISMATCH error.
   test("writeTo().append() does not throw column ID mismatch after drop+re-add column") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -3020,7 +3471,7 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
       // Command is eagerly executed before the refresh phase validates
-      // column IDs. No COLUMN_ID_MISMATCH exception is thrown.
+      // column IDs. No COLUMNS_MISMATCH exception is thrown.
       source.writeTo(t).append()
     }
   }
@@ -3039,7 +3490,7 @@ class DataSourceV2DataFrameSuite
         exception = intercept[AnalysisException] {
           source.write.format(v2Format).insertInto(t)
         },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
     }
@@ -3067,7 +3518,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
     }
@@ -3110,7 +3561,7 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t ADD COLUMN bonus INT")
 
       // The stale DataFrame has only [id, salary] while the table now has
-      // [id, salary, bonus]. Since column IDs are null, no COLUMN_ID_MISMATCH
+      // [id, salary, bonus]. Since column IDs are null, no COLUMNS_MISMATCH
       // error is thrown; new columns are tolerated for read queries.
       checkAnswer(df, Seq(Row(1, 100)))
     }
@@ -3176,6 +3627,22 @@ class DataSourceV2DataFrameSuite
       // No column ID error because original ID is null. The table is refreshed via
       // version tracking, so the re-added salary column has null values.
       checkAnswer(df, Seq(Row(1, null)))
+    }
+  }
+
+  test("SPARK-57544: V1 CTAS from DSv2 scan does not persist column IDs in catalog schema") {
+    val v2Src = "testcat.ns1.ns2.v2_src"
+    val v1Dst = "v1_dst"
+    withTable(v2Src, v1Dst) {
+      sql(s"CREATE TABLE $v2Src (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $v2Src VALUES (1, 100)")
+
+      // DSv2 source carries column IDs on its output attributes.
+      assert(spark.table(v2Src).schema.fields.forall(_.id.isDefined))
+
+      // V1 CTAS from a DSv2 scan: column IDs must not be stored in the V1 catalog schema.
+      sql(s"CREATE TABLE $v1Dst USING parquet AS SELECT * FROM $v2Src")
+      assert(spark.table(v1Dst).schema.fields.forall(_.id.isEmpty))
     }
   }
 
@@ -3723,6 +4190,35 @@ class DataSourceV2DataFrameSuite
       checkAnswer(
         spark.table(t),
         Seq(Row(1, 10, null), Row(2, 20, null), Row(3, 30, null), Row(4, 40, "40")))
+
+      // a second compatible change now refreshes a cached plan that was already rebound once
+      val secondChange = TableChange.addColumn(Array("extra"), StringType, true)
+      catalog("testcat").alterTable(ident, secondChange)
+
+      // refresh table is supposed to trigger recaching
+      spark.sql(s"REFRESH TABLE $t")
+
+      // recaching is expected to succeed
+      assert(spark.sharedState.cacheManager.numCachedEntries == 1)
+
+      // Rebinding an already rebound plan adds a second projection rather than replacing the first,
+      // so the retained entry no longer matches the single projection a derived query rebuilds from
+      // its own captured output, and stops being reused. Assert that directly: the entry surviving
+      // is not the same claim as the entry being usable. Flip this back to `assertCached` once
+      // refresh replaces the generated projection instead of nesting inside it.
+      assertNotCached(df.filter("id > 0"))
+
+      // Derived queries must still return the captured schema and the latest data.
+      checkAnswer(df.filter("id > 0"), Seq(Row(1, 10), Row(2, 20), Row(3, 30), Row(4, 40)))
+
+      // verify latest schema is propagated again
+      checkAnswer(
+        spark.table(t),
+        Seq(
+          Row(1, 10, null, null),
+          Row(2, 20, null, null),
+          Row(3, 30, null, null),
+          Row(4, 40, "40", null)))
     }
   }
 
@@ -3899,7 +4395,7 @@ class DataSourceV2DataFrameSuite
 
       df.write.mode("append").format(v2Format).withSchemaEvolution().saveAsTable(t)
 
-      assert(spark.table(t).schema ===
+      assert(SchemaUtils.clearFieldIds(spark.table(t).schema) ===
         new StructType().add("id", LongType).add("data", StringType))
       checkAnswer(spark.table(t), Seq(Row(1L, "a")))
     }
@@ -3913,7 +4409,7 @@ class DataSourceV2DataFrameSuite
 
       df.write.format(v2Format).withSchemaEvolution().insertInto(t)
 
-      assert(spark.table(t).schema ===
+      assert(SchemaUtils.clearFieldIds(spark.table(t).schema) ===
         new StructType().add("id", LongType).add("data", StringType))
       checkAnswer(spark.table(t), Seq(Row(1L, "a")))
     }
@@ -3927,7 +4423,7 @@ class DataSourceV2DataFrameSuite
 
       df.write.mode("overwrite").format(v2Format).withSchemaEvolution().insertInto(t)
 
-      assert(spark.table(t).schema ===
+      assert(SchemaUtils.clearFieldIds(spark.table(t).schema) ===
         new StructType().add("id", LongType).add("data", StringType))
       checkAnswer(spark.table(t), Seq(Row(1L, "a")))
     }
@@ -3942,7 +4438,7 @@ class DataSourceV2DataFrameSuite
         Seq((1L, "a")).toDF("id", "data")
           .write.mode("overwrite").format(v2Format).withSchemaEvolution().insertInto(t)
 
-        assert(spark.table(t).schema ===
+        assert(SchemaUtils.clearFieldIds(spark.table(t).schema) ===
           new org.apache.spark.sql.types.StructType()
             .add("id", org.apache.spark.sql.types.LongType)
             .add("data", StringType))

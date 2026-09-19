@@ -1,10 +1,10 @@
-OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 constructor:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-arrayOfAny                                            6              6           0       1610.9           0.6       1.0X
-arrayOfAnyAsObject                                    6              6           0       1610.7           0.6       1.0X
-arrayOfAnyAsSeq                                     171            172           1         58.4          17.1       0.0X
-arrayOfInt                                          246            247           1         40.6          24.6       0.0X
-arrayOfIntAsObject                                  246            247           1         40.6          24.6       0.0X
+arrayOfAny                                            6              6           0       1610.1           0.6       1.0X
+arrayOfAnyAsObject                                    6              6           0       1610.1           0.6       1.0X
+arrayOfAnyAsSeq                                     438            439           1         22.8          43.8       0.0X
+arrayOfInt                                          280            281           1         35.8          28.0       0.0X
+arrayOfIntAsObject                                  280            281           1         35.7          28.0       0.0X
 

@@ -506,6 +506,54 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(struct.toString() === "StructType(StructField(a,IntegerType,true))")
   }
 
+  test("SPARK-58525: case-insensitive merge folds case-only field names, including nested") {
+    // Top-level: a case-only difference merges into a single field keeping the left name.
+    assert(
+      new StructType().add("value", StringType)
+        .merge(new StructType().add("Value", StringType), caseSensitive = false) ===
+        new StructType().add("value", StringType))
+
+    // The case-sensitive default keeps both as distinct fields.
+    assert(
+      new StructType().add("value", StringType)
+        .merge(new StructType().add("Value", StringType)) ===
+        new StructType().add("value", StringType).add("Value", StringType))
+
+    // Nested struct: the flag must propagate through the recursive merge (SPARK-58525), so a
+    // case-only difference nested under a matched parent also folds rather than producing both.
+    assert(
+      new StructType().add("s", new StructType().add("value", StringType))
+        .merge(
+          new StructType().add("s", new StructType().add("Value", StringType)),
+          caseSensitive = false) ===
+        new StructType().add("s", new StructType().add("value", StringType)))
+
+    // array<struct> element recursion.
+    assert(
+      new StructType().add("a", ArrayType(new StructType().add("value", StringType)))
+        .merge(
+          new StructType().add("a", ArrayType(new StructType().add("Value", StringType))),
+          caseSensitive = false) ===
+        new StructType().add("a", ArrayType(new StructType().add("value", StringType))))
+
+    // map<_, struct> value recursion.
+    assert(
+      new StructType().add("m", MapType(StringType, new StructType().add("value", StringType)))
+        .merge(
+          new StructType().add("m", MapType(StringType, new StructType().add("Value", StringType))),
+          caseSensitive = false) ===
+        new StructType().add("m", MapType(StringType, new StructType().add("value", StringType))))
+
+    // map<struct, _> key recursion. mergeInternal recurses through map keys and values
+    // independently, so the key path needs its own coverage.
+    assert(
+      new StructType().add("m", MapType(new StructType().add("value", StringType), StringType))
+        .merge(
+          new StructType().add("m", MapType(new StructType().add("Value", StringType), StringType)),
+          caseSensitive = false) ===
+        new StructType().add("m", MapType(new StructType().add("value", StringType), StringType)))
+  }
+
   test("SPARK-37191: Merge DecimalType") {
     val source1 = StructType.fromDDL("c1 DECIMAL(12, 2)")
       .merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))

@@ -26,7 +26,7 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.Pipeline.SharedReadWrite
-import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler}
+import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler, StringIndexer, Tokenizer}
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util._
@@ -126,6 +126,22 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       "copy should handle extra stage params")
     assert(copied.parent === model.parent,
       "copy should create an instance with the same parent")
+  }
+
+  test("PipelineModel estimated size") {
+    val dataset = Seq("a", "b", "c").toDF("input")
+    val pipeline = new Pipeline().setStages(Array(
+      new Tokenizer().setInputCol("input").setOutputCol("tokens"),
+      new StringIndexer().setInputCol("input").setOutputCol("indexed")))
+    val model = pipeline.fit(dataset)
+    val minSize = 1024
+    val maxSize = 1024 * 16
+    val estimatedSize = model.estimatedSize
+    assert(estimatedSize > minSize,
+      s"Estimation ($estimatedSize) should be greater than $minSize")
+    assert(estimatedSize < maxSize,
+      s"Estimation ($estimatedSize) should be less than $maxSize")
+    assert(model.hasParent, "parent should be preserved after estimatedSize call")
   }
 
   test("pipeline model constructors") {

@@ -87,12 +87,17 @@ class KubernetesSuite extends SparkFunSuite
       .asScala
       .headOption
     driverPodOption.foreach { driverPod =>
-      logInfo("BEGIN driver POD log\n" +
+      val driverPodLog = try {
         kubernetesTestComponents.kubernetesClient
           .pods()
           .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
-          .getLog)
+          .getLog
+      } catch {
+        case e: KubernetesClientException =>
+          s"Error fetching log (pod is likely not ready) $e"
+      }
+      logInfo("BEGIN driver POD log\n" + driverPodLog)
       logInfo("END driver POD log")
     }
     kubernetesTestComponents.kubernetesClient

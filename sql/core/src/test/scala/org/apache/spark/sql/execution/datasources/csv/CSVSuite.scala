@@ -48,6 +48,7 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 
 abstract class CSVSuite
   extends SharedSparkSession
@@ -865,6 +866,80 @@ abstract class CSVSuite
         }
       }
     }
+  }
+
+  test("treatNullAsEmptyString write option wins over " +
+    "spark.sql.legacy.nullValueWrittenAsQuotedEmptyStringCsv for both values") {
+    // The written bytes are what a downstream consumer relies on to tell null from an actual
+    // empty string. Note Spark's own default CSV reader cannot distinguish them: it maps both a
+    // bare token and a quoted "" back to null (nullSafeDatum treats datum == nullValue ("") as
+    // null), so we assert on the raw file text rather than a read round trip.
+    // The option must win regardless of the session-level legacy config, so a single write can
+    // differentiate null from an actual empty string without changing the session default.
+    Seq("true", "false").foreach { confVal =>
+      withSQLConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key -> confVal) {
+        // treatNullAsEmptyString = false: null is a bare unquoted token, empty string stays "".
+        withTempPath { path =>
+          Seq(("Tesla", null: String, ""))
+            .toDF("make", "comment", "blank")
+            .write
+            .option("treatNullAsEmptyString", "false")
+            .csv(path.getCanonicalPath)
+          checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
+        }
+        // treatNullAsEmptyString = true: null is written as the (quoted) empty value, so it is
+        // no longer distinguishable from an actual empty string.
+        withTempPath { path =>
+          Seq(("Tesla", null: String, ""))
+            .toDF("make", "comment", "blank")
+            .write
+            .option("treatNullAsEmptyString", "true")
+            .csv(path.getCanonicalPath)
+          checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,\"\",\"\""))
+        }
+      }
+    }
+  }
+
+  test("treatNullAsEmptyString is a no-op when a non-empty nullValue is set") {
+    // A non-empty nullValue is written verbatim, so the option has no observable effect,
+    // matching how the SQL config it overrides composes with nullValue.
+    Seq("true", "false").foreach { optVal =>
+      withTempPath { path =>
+        Seq(("Tesla", null: String, ""))
+          .toDF("make", "comment", "blank")
+          .write
+          .option("nullValue", "NULL")
+          .option("treatNullAsEmptyString", optVal)
+          .csv(path.getCanonicalPath)
+        checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,NULL,\"\""))
+      }
+    }
+  }
+
+  test("treatNullAsEmptyString handles null and invalid values") {
+    // An explicit null value behaves as if the option were absent (session config decides).
+    withTempPath { path =>
+      Seq(("Tesla", null: String, ""))
+        .toDF("make", "comment", "blank")
+        .write
+        .option("treatNullAsEmptyString", null)
+        .csv(path.getCanonicalPath)
+      checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
+    }
+    // A non-boolean value raises a structured error naming the option.
+    checkError(
+      exception = intercept[SparkException] {
+        withTempPath { path =>
+          Seq(("Tesla", null: String, ""))
+            .toDF("make", "comment", "blank")
+            .write
+            .option("treatNullAsEmptyString", "yes")
+            .csv(path.getCanonicalPath)
+        }
+      },
+      condition = "_LEGACY_ERROR_TEMP_2147",
+      parameters = Map("paramName" -> "treatNullAsEmptyString"))
   }
 
   test("save csv with compression codec option") {
@@ -2610,15 +2685,20 @@ abstract class CSVSuite
         StandardOpenOption.CREATE, StandardOpenOption.WRITE
       )
 
-      val errMsg = intercept[TextParsingException] {
+      // Univocity wraps maxCharsPerColumn violations as TextParsingException(cause=AIOOBE),
+      // which UnivocityParser.parseLine now converts to MALFORMED_CSV_RECORD. The badRecord
+      // value is still bounded to MAX_ERROR_CONTENT_LENGTH (1000 chars) with a "..." suffix,
+      // preserving the original intent of SPARK-28431.
+      val e = intercept[SparkRuntimeException] {
         spark.read
           .option("maxCharsPerColumn", maxCharsPerCol)
           .csv(path.getAbsolutePath)
           .count()
-      }.getMessage
-
-      assert(errMsg.contains("..."),
-        "expect the TextParsingException truncate the error content to be 1000 length.")
+      }
+      checkErrorMatchPVals(
+        exception = e,
+        condition = "MALFORMED_CSV_RECORD",
+        parameters = Map("badRecord" -> ".*\\.\\.\\."))
     }
   }
 
@@ -3089,6 +3169,41 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-58946: reject empty or non-letter file extensions") {
+    Seq("", "ab1", "a/b").foreach { ext =>
+      withTempPath { path =>
+        checkError(
+          exception = intercept[SparkIllegalArgumentException] {
+            spark.range(1).write.option("extension", ext).csv(path.getAbsolutePath)
+          },
+          condition = "INVALID_PARAMETER_VALUE.EXTENSION",
+          parameters = Map(
+            "functionName" -> "`csv`",
+            "parameter" -> "`extension`",
+            "invalidValue" -> s"`$ext`"))
+      }
+    }
+  }
+
+  test("SPARK-58946: allow alphabetic file extensions of arbitrary length") {
+    Seq("a", "abcd").foreach { ext =>
+      withTempPath { path =>
+        val input = Seq(
+          "1423-11-12T23:41:00",
+          "1765-03-28",
+          "2016-01-28T20:00:00"
+        ).toDF().repartition(1)
+        input.write.option("extension", ext).csv(path.getAbsolutePath)
+
+        val files = Files.list(path.toPath)
+          .iterator().asScala.map(_.getFileName.toString)
+          .toList.filter(_.endsWith(s".$ext"))
+
+        assert(files.size == 1)
+      }
+    }
+  }
+
   test("SPARK-50616: We can write with a tsv file extension") {
     withTempPath { path =>
       val input = Seq(
@@ -3336,7 +3451,7 @@ abstract class CSVSuite
   }
 
   test("validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 42)
+    assert(CSVOptions.getAllOptions.size == 44)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3366,6 +3481,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("inputBufferSize"))
     assert(CSVOptions.isValidOption("columnNameOfCorruptRecord"))
     assert(CSVOptions.isValidOption("nullValue"))
+    assert(CSVOptions.isValidOption("treatNullAsEmptyString"))
     assert(CSVOptions.isValidOption("nanValue"))
     assert(CSVOptions.isValidOption("positiveInf"))
     assert(CSVOptions.isValidOption("negativeInf"))
@@ -3380,6 +3496,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("delimiter"))
     assert(CSVOptions.isValidOption("singleVariantColumn"))
     assert(CSVOptions.isValidOption("columnPruning"))
+    assert(CSVOptions.isValidOption("variantRespectInferSchema"))
     // Please add validation on any new CSV options with alternative here
     assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
     assert(CSVOptions.getAlternativeOption("delimiter").contains("sep"))
@@ -3504,6 +3621,218 @@ abstract class CSVSuite
     assert(malformedCSVException.getCause.isInstanceOf[TextParsingException])
     val textParsingException = malformedCSVException.getCause.asInstanceOf[TextParsingException]
     assert(textParsingException.getCause.isInstanceOf[ArrayIndexOutOfBoundsException])
+  }
+
+  test("SPARK-57195: multiLine CSV schema inference surfaces MALFORMED_CSV_RECORD for a row " +
+    "exceeding maxColumns") {
+    // multiLine schema inference reads through UnivocityParser.tokenizeStream, whose parseNext
+    // call was unguarded (SPARK-49444 only fixed the per-line parseLine path). A row with more
+    // columns than maxColumns must surface as MALFORMED_CSV_RECORD, not a raw
+    // ArrayIndexOutOfBoundsException. The overflow is on a later row so it is hit during inference.
+    withTempPath { path =>
+      Files.write(path.toPath, "a,b\nc,d\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
+      val e = intercept[SparkRuntimeException] {
+        spark.read
+          .option("header", "false")
+          .option("inferSchema", "true")
+          .option("multiLine", "true")
+          .option("maxColumns", "2")
+          .csv(path.getAbsolutePath)
+      }
+      // badRecord comes from TextParsingException.getParsedContent (bounded), so its exact value
+      // is not pinned; ".*" keeps the error class, sqlState, and parameter validation.
+      checkError(
+        exception = e,
+        condition = "MALFORMED_CSV_RECORD",
+        sqlState = Some("KD000"),
+        parameters = Map("badRecord" -> ".*"),
+        matchPVals = true)
+    }
+  }
+
+  test("SPARK-57195: non-multiLine CSV schema inference surfaces MALFORMED_CSV_RECORD for a row " +
+    "exceeding maxColumns") {
+    // Without multiLine, inference reads through TextInputCSVDataSource.inferFromDataset, which
+    // parsed each line with a raw Univocity CsvParser, bypassing the guarded parseLine. A row with
+    // more columns than maxColumns must surface as MALFORMED_CSV_RECORD, not a raw
+    // ArrayIndexOutOfBoundsException.
+    withTempPath { path =>
+      Files.write(path.toPath, "a,b\nc,d\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
+      val e = intercept[SparkRuntimeException] {
+        spark.read
+          .option("header", "false")
+          .option("inferSchema", "true")
+          .option("maxColumns", "2")
+          .csv(path.getAbsolutePath)
+      }
+      checkError(
+        exception = e,
+        condition = "MALFORMED_CSV_RECORD",
+        parameters = Map("badRecord" -> "1,2,3"),
+        sqlState = "KD000")
+    }
+  }
+
+  test("SPARK-57195: multiLine CSV read failure with more than max columns") {
+    // The multiLine read path (parseStream) uses the same guarded streaming tokenizer as inference.
+    // With an explicit schema, an overflow row surfaces as MALFORMED_CSV_RECORD wrapped in
+    // FAILED_READ_FILE, mirroring the non-multiLine SPARK-49444 test above.
+    val schema = new StructType()
+      .add("intColumn", IntegerType, nullable = true)
+      .add("decimalColumn", DecimalType(10, 2), nullable = true)
+
+    val fileReadException = intercept[SparkException] {
+      spark.read
+        .schema(schema)
+        .option("header", "false")
+        .option("multiLine", "true")
+        .option("maxColumns", "2")
+        .csv(testFile(moreColumnsFile))
+        .collect()
+    }
+
+    checkErrorMatchPVals(
+      exception = fileReadException,
+      condition = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> s".*$moreColumnsFile"))
+
+    val malformedCSVException = fileReadException.getCause.asInstanceOf[SparkRuntimeException]
+    checkError(
+      exception = malformedCSVException,
+      condition = "MALFORMED_CSV_RECORD",
+      sqlState = Some("KD000"),
+      parameters = Map("badRecord" -> ".*"),
+      matchPVals = true)
+  }
+
+  test("SPARK-57515: non-multiLine CSV read with header exceeding maxColumns surfaces " +
+    "MALFORMED_CSV_RECORD") {
+    // Without an explicit schema, inference runs eagerly via inferFromDataset and parses the first
+    // line there, so the error surfaces from CSVDataSource rather than from CSVHeaderChecker.
+    // This test validates the inferFromDataset path.
+    withTempPath { path =>
+      Files.write(path.toPath, "a,b,c\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
+      val e = intercept[SparkRuntimeException] {
+        spark.read
+          .option("header", "true")
+          .option("maxColumns", "2")
+          .csv(path.getAbsolutePath)
+          .collect()
+      }
+      checkError(
+        exception = e,
+        condition = "MALFORMED_CSV_RECORD",
+        sqlState = Some("KD000"),
+        parameters = Map("badRecord" -> "a,b,c"),
+        matchPVals = false)
+    }
+  }
+
+  test("SPARK-57515: non-multiLine CSV read with header exceeding maxColumns and explicit schema " +
+    "surfaces MALFORMED_CSV_RECORD") {
+    // With an explicit schema, inference is skipped and the read-time header check in
+    // CSVHeaderChecker.checkHeaderColumnNames(lines, tokenizer) runs inside a Spark task, so the
+    // SparkRuntimeException(MALFORMED_CSV_RECORD) is wrapped in SparkException(FAILED_READ_FILE).
+    // Verify the cause chain surfaces the MALFORMED_CSV_RECORD condition.
+    withTempPath { path =>
+      Files.write(path.toPath, "a,b,c\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
+      val schema = StructType(Seq(
+        StructField("a", StringType), StructField("b", StringType)))
+      val e = intercept[SparkException] {
+        spark.read
+          .schema(schema)
+          .option("header", "true")
+          .option("maxColumns", "2")
+          .csv(path.getAbsolutePath)
+          .collect()
+      }
+      checkErrorMatchPVals(
+        exception = e,
+        condition = "FAILED_READ_FILE.NO_HINT",
+        parameters = Map("path" -> ".*"))
+      val cause = e.getCause
+      assert(cause.isInstanceOf[SparkRuntimeException])
+      checkError(
+        exception = cause.asInstanceOf[SparkRuntimeException],
+        condition = "MALFORMED_CSV_RECORD",
+        sqlState = Some("KD000"),
+        parameters = Map("badRecord" -> "a,b,c"),
+        matchPVals = false)
+    }
+  }
+
+  test("SPARK-57515: multiLine CSV read with header exceeding maxColumns surfaces " +
+    "MALFORMED_CSV_RECORD") {
+    // For multiLine reads, schema inference runs inside an RDD task, so the
+    // SparkRuntimeException(MALFORMED_CSV_RECORD) is wrapped in SparkException(FAILED_READ_FILE).
+    // Verify the cause chain surfaces the MALFORMED_CSV_RECORD condition.
+    withTempPath { path =>
+      Files.write(path.toPath, "a,b,c\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
+      val e = intercept[SparkException] {
+        spark.read
+          .option("header", "true")
+          .option("multiLine", "true")
+          .option("maxColumns", "2")
+          .csv(path.getAbsolutePath)
+          .collect()
+      }
+      checkErrorMatchPVals(
+        exception = e,
+        condition = "FAILED_READ_FILE.NO_HINT",
+        parameters = Map("path" -> ".*"))
+      val cause = e.getCause
+      assert(cause.isInstanceOf[SparkRuntimeException])
+      // In the multiLine path the header is parsed from a live stream via parseNext(); by the time
+      // the AIOOBE is caught the field appender has already been reset, so badRecord is empty.
+      checkErrorMatchPVals(
+        exception = cause.asInstanceOf[SparkRuntimeException],
+        condition = "MALFORMED_CSV_RECORD",
+        parameters = Map("badRecord" -> ".*"))
+    }
+  }
+
+  test("SPARK-57515: Dataset[String] CSV read with header exceeding maxColumns surfaces " +
+    "MALFORMED_CSV_RECORD") {
+    // Without an explicit schema, inference runs eagerly via inferFromDataset and parses the
+    // first line there. This validates the inferFromDataset path for Dataset[String].
+    val lines = spark.createDataset(Seq("a,b,c", "1,2,3"))
+    val e = intercept[SparkRuntimeException] {
+      spark.read
+        .option("header", "true")
+        .option("maxColumns", "2")
+        .csv(lines)
+        .collect()
+    }
+    checkError(
+      exception = e,
+      condition = "MALFORMED_CSV_RECORD",
+      sqlState = Some("KD000"),
+      parameters = Map("badRecord" -> "a,b,c"),
+      matchPVals = false)
+  }
+
+  test("SPARK-57515: Dataset[String] CSV read with header exceeding maxColumns and explicit " +
+    "schema surfaces MALFORMED_CSV_RECORD") {
+    // With an explicit schema, inference is skipped and the read-time header check in
+    // CSVHeaderChecker.checkHeaderColumnNames(line: String) runs. That guard must surface
+    // MALFORMED_CSV_RECORD rather than a raw TextParsingException.
+    val schema = StructType(Seq(
+      StructField("a", StringType), StructField("b", StringType)))
+    val lines = spark.createDataset(Seq("a,b,c", "1,2,3"))
+    val e = intercept[SparkRuntimeException] {
+      spark.read
+        .schema(schema)
+        .option("header", "true")
+        .option("maxColumns", "2")
+        .csv(lines)
+        .collect()
+    }
+    checkError(
+      exception = e,
+      condition = "MALFORMED_CSV_RECORD",
+      sqlState = Some("KD000"),
+      parameters = Map("badRecord" -> "a,b,c"),
+      matchPVals = false)
   }
 
   test("csv with variant") {
@@ -3680,6 +4009,125 @@ abstract class CSVSuite
     }
   }
 
+  test("csv variant retains scalars as strings when inferSchema is disabled") {
+    withTempPath { path =>
+      val data =
+        """field 1,field2
+          |100,1.1
+          |2000-01-01,2000-01-01 01:02:03
+          |,true
+          |1e9,hello,extra
+          |missing
+          |""".stripMargin
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+
+      def checkSingleVariant(options: Map[String, String], expected: String*): Unit = {
+        val allOptions = options ++ Map("singleVariantColumn" -> "v")
+        checkAnswer(
+          spark.read.options(allOptions).csv(path.getCanonicalPath).selectExpr("cast(v as string)"),
+          expected.map(Row(_))
+        )
+      }
+
+      // A small partition size ensures each value is parsed independently and would otherwise get
+      // its type inferred.
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        // With variantRespectInferSchema on and inferSchema off, scalar values parse as string,
+        // while the null value (empty token) parses as a variant null. inferSchema defaults to
+        // false, so passing it explicitly and omitting it behave the same.
+        for (opts <- Seq(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "false"),
+            Map("variantRespectInferSchema" -> "true"))) {
+          checkSingleVariant(opts,
+            """{"_c0":"field 1","_c1":"field2"}""",
+            """{"_c0":"100","_c1":"1.1"}""",
+            """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03"}""",
+            """{"_c0":null,"_c1":"true"}""",
+            """{"_c0":"1e9","_c1":"hello","_c2":"extra"}""",
+            """{"_c0":"missing"}""")
+        }
+
+        // Explicitly enabling inference or disabling variantRespectInferSchema causes types
+        // to be inferred. Timestamps should be inferred correctly for all parsing modes.
+        for ((policy, timestampField) <- Seq(
+            "CORRECTED" -> "\"2000-01-01 01:02:03+00:00\"",
+            "LEGACY" -> "\"2000-01-01 01:02:03\"")) {
+          withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+            // Explicitly enabling inference infers types even with variantRespectInferSchema on.
+            checkSingleVariant(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "true"),
+              """{"_c0":"field 1","_c1":"field2"}""",
+              """{"_c0":100,"_c1":1.1}""",
+              s"""{"_c0":"2000-01-01","_c1":$timestampField}""",
+              """{"_c0":null,"_c1":true}""",
+              """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
+              """{"_c0":"missing"}""")
+
+            // variantRespectInferSchema defaults to false, so scalar types are inferred regardless
+            // of inferSchema.
+            checkSingleVariant(Map("inferSchema" -> "false"),
+              """{"_c0":"field 1","_c1":"field2"}""",
+              """{"_c0":100,"_c1":1.1}""",
+              s"""{"_c0":"2000-01-01","_c1":$timestampField}""",
+              """{"_c0":null,"_c1":true}""",
+              """{"_c0":1000000000,"_c1":"hello","_c2":"extra"}""",
+              """{"_c0":"missing"}""")
+          }
+        }
+      }
+
+      // Works with a header too: field names come from the header, values stay strings.
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkSingleVariant(
+          Map("header" -> "true", "variantRespectInferSchema" -> "true", "inferSchema" -> "false"),
+          """{"field 1":"100","field2":"1.1"}""",
+          """{"field 1":"2000-01-01","field2":"2000-01-01 01:02:03"}""",
+          """{"field 1":null,"field2":"true"}""",
+          """{"field 1":"1e9","field2":"hello"}""",
+          """{"field 1":"missing"}""")
+      }
+
+      // Values whose textual form is lost by type inference: leading zeros ("0001" -> 1), a leading
+      // sign ("+5" -> 5), and boolean case ("True" -> true). With retention on they are kept
+      // verbatim as strings; with it off they are inferred (the surprising default behavior).
+      val lossyData =
+        """0001,+5
+          |True,007
+          |""".stripMargin
+      Files.write(path.toPath, lossyData.getBytes(StandardCharsets.UTF_8))
+
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10") {
+        checkSingleVariant(Map("variantRespectInferSchema" -> "true", "inferSchema" -> "false"),
+          """{"_c0":"0001","_c1":"+5"}""",
+          """{"_c0":"True","_c1":"007"}""")
+
+        checkSingleVariant(Map("inferSchema" -> "false"),
+          """{"_c0":1,"_c1":5}""",
+          """{"_c0":true,"_c1":7}""")
+      }
+    }
+  }
+
+  test("csv variant retains explicit schema with variantRespectInferSchema") {
+    // Explicit schemas with VariantType columns share a converter with singleVariantColumn,
+    // so retention applies there too. Check and assert the type using schema_of_variant.
+    withTempPath { path =>
+      Files.write(path.toPath, "1000,0001,'0001'\n".getBytes(StandardCharsets.UTF_8))
+      val schema = "c1 variant, c2 variant, c3 variant"
+      val exprs = Seq("schema_of_variant(c1)", "schema_of_variant(c2)", "schema_of_variant(c3)")
+
+      // With variantRespectInferSchema values should be treated as string
+      val retained = spark.read.schema(schema)
+        .options(Map("inferSchema" -> "false", "variantRespectInferSchema" -> "true"))
+        .csv(path.getCanonicalPath)
+      checkAnswer(retained.selectExpr(exprs: _*), Row("STRING", "STRING", "STRING"))
+
+      // Without variantRespectInferSchema values should be inferred. Integral values are
+      // inferred as BIGINT by default.
+      val inferred = spark.read.schema(schema).csv(path.getCanonicalPath)
+      checkAnswer(inferred.selectExpr(exprs: _*), Row("BIGINT", "BIGINT", "STRING"))
+    }
+  }
+
   test("write variant with csv is disallowed") {
     checkError(
       exception = intercept[AnalysisException] {
@@ -3839,6 +4287,22 @@ abstract class CSVSuite
       )
     }
   }
+
+  test("SPARK-57572: infer TimeType from CSV via spark.read.csv") {
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      withTempDir { dir =>
+        val path = s"${dir.getCanonicalPath}/time_infer.csv"
+        Seq("time", "12:13:14", "23:59:59.123456").toDF("value")
+          .coalesce(1).write.text(path)
+        val df = spark.read
+          .option("header", "true")
+          .option("inferSchema", "true")
+          .csv(path)
+        assert(df.schema("time").dataType === TimeType(TimeType.DEFAULT_PRECISION))
+      }
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
@@ -3871,6 +4335,7 @@ class CSVv1Suite extends CSVSuite {
   }
 }
 
+@ExtendedSQLTest
 class CSVv2Suite extends CSVSuite {
   override protected def sparkConf: SparkConf =
     super
@@ -3950,7 +4415,9 @@ class CSVLegacyTimeParserSuite extends CSVSuite {
     Seq("Write timestamps correctly in ISO8601 format by default",
       // The result is different because the date/timestamp parser behavior is different. Not too
       // much value to test it.
-      "csv with variant")
+      "csv with variant",
+      // Legacy time parser does not support TIME type inference
+      "SPARK-57572: infer TimeType from CSV via spark.read.csv")
 
   override protected def sparkConf: SparkConf =
     super

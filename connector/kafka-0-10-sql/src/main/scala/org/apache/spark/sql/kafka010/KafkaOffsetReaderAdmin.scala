@@ -19,6 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -56,6 +57,13 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
   private[kafka010] val offsetFetchAttemptIntervalMs =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
+
+  private val partitionMetadataCacheTtlMs: Long =
+    readerOptions.getOrElse(KafkaSourceProvider.PARTITION_METADATA_CACHE_TTL_MS, "-1").toLong
+
+  // Protected by this.synchronized (always accessed inside withRetries, which holds the lock).
+  private var cachedPartitions: Set[TopicPartition] = Set.empty
+  private var cacheTimestampNanos: Option[Long] = None
 
   /**
    * An AdminClient used in the driver to query the latest Kafka offsets.
@@ -116,6 +124,9 @@ private[kafka010] class KafkaOffsetReaderAdmin(
     stopAdmin()
   }
 
+  override protected def fetchTopicPartitions(): Set[TopicPartition] =
+    withRetries { resolvePartitions() }
+
   override def fetchPartitionOffsets(
       offsetRangeLimit: KafkaOffsetRangeLimit,
       isStartingOffsets: Boolean): Map[TopicPartition, Long] = {
@@ -127,7 +138,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       logDebug(s"Assigned partitions: $partitions. Seeking to $partitionOffsets")
       partitionOffsets
     }
-    val partitions = withRetries { consumerStrategy.assignedTopicPartitions(admin) }
+    val partitions = fetchTopicPartitions()
     // Obtain TopicPartition offsets with late binding support
     offsetRangeLimit match {
       case EarliestOffsetRangeLimit => partitions.map {
@@ -136,8 +147,8 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       case LatestOffsetRangeLimit => partitions.map {
         case tp => tp -> KafkaOffsetRangeLimit.LATEST
       }.toMap
-      case SpecificOffsetRangeLimit(partitionOffsets) =>
-        validateTopicPartitions(partitions, partitionOffsets)
+      case offsets: SpecificOffsetRangeLimit =>
+        validateTopicPartitions(partitions, offsets.resolve(partitions))
       case SpecificTimestampRangeLimit(partitionTimestamps, strategyOnNoMatchingStartingOffset) =>
         fetchSpecificTimestampBasedOffsets(partitionTimestamps, isStartingOffsets,
           strategyOnNoMatchingStartingOffset).partitionToOffsets
@@ -148,9 +159,12 @@ private[kafka010] class KafkaOffsetReaderAdmin(
   }
 
   override def fetchSpecificOffsets(
-      partitionOffsets: Map[TopicPartition, Long],
+      offsets: SpecificOffsetRangeLimit,
       reportDataLoss: (String, () => Throwable) => Unit): KafkaSourceOffset = {
+    // Topic-level offsets are expanded against the partitions the fetch is actually run with,
+    // so that metadata changing in between cannot make valid offsets fail the assertion below
     val fnAssertParametersWithPartitions: ju.Set[TopicPartition] => Unit = { partitions =>
+      val partitionOffsets = offsets.resolve(partitions.asScala.toSet)
       assert(partitions.asScala == partitionOffsets.keySet,
         "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
           "Use -1 for latest, -2 for earliest, if you don't care.\n" +
@@ -158,8 +172,8 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       logDebug(s"Assigned partitions: $partitions. Seeking to $partitionOffsets")
     }
 
-    val fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long] = { _ =>
-      partitionOffsets
+    val fnRetrievePartitionOffsets: ju.Set[TopicPartition] => Map[TopicPartition, Long] = {
+      partitions => offsets.resolve(partitions.asScala.toSet)
     }
 
     fetchSpecificOffsets0(fnAssertParametersWithPartitions, fnRetrievePartitionOffsets)
@@ -417,9 +431,11 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
       // No need to report data loss here
       val resolvedFromOffsets =
-        fetchSpecificOffsets(fromOffsetsMap, (_, _) => ()).partitionToOffsets
+        fetchSpecificOffsets(SpecificOffsetRangeLimit(fromOffsetsMap), (_, _) => ())
+          .partitionToOffsets
       val resolvedUntilOffsets =
-        fetchSpecificOffsets(untilOffsetsMap, (_, _) => ()).partitionToOffsets
+        fetchSpecificOffsets(SpecificOffsetRangeLimit(untilOffsetsMap), (_, _) => ())
+          .partitionToOffsets
       val ranges = offsetRangesBase.map(_.topicPartition).map { tp =>
         KafkaOffsetRange(tp, resolvedFromOffsets(tp), resolvedUntilOffsets(tp), preferredLoc = None)
       }
@@ -439,12 +455,34 @@ private[kafka010] class KafkaOffsetReaderAdmin(
     }
   }
 
+  // Must be called inside withRetries (which holds this.synchronized).
+  private def resolvePartitions(): Set[TopicPartition] = {
+    if (partitionMetadataCacheTtlMs <= 0) {
+      return consumerStrategy.assignedTopicPartitions(admin)
+    }
+    val nowNanos = System.nanoTime()
+    cacheTimestampNanos match {
+      case Some(timestampNanos)
+          if nowNanos - timestampNanos <
+            TimeUnit.MILLISECONDS.toNanos(partitionMetadataCacheTtlMs) =>
+        val cacheAgeMs = TimeUnit.NANOSECONDS.toMillis(nowNanos - timestampNanos)
+        logDebug(s"Reusing cached partitions (age ${cacheAgeMs}ms < " +
+          s"${partitionMetadataCacheTtlMs}ms TTL): $cachedPartitions")
+        cachedPartitions
+      case _ =>
+        val fresh = consumerStrategy.assignedTopicPartitions(admin)
+        cachedPartitions = fresh
+        cacheTimestampNanos = Some(nowNanos)
+        fresh
+    }
+  }
+
   private def partitionsAssignedToAdmin(
       body: ju.Set[TopicPartition] => Map[TopicPartition, Long])
     : Map[TopicPartition, Long] = {
 
     withRetries {
-      val partitions = consumerStrategy.assignedTopicPartitions(admin).asJava
+      val partitions = resolvePartitions().asJava
       logDebug(s"Partitions assigned: $partitions.")
       body(partitions)
     }
@@ -493,5 +531,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
   private def resetAdmin(): Unit = synchronized {
     stopAdmin()
     _admin = null  // will automatically get reinitialized again
+    cachedPartitions = Set.empty
+    cacheTimestampNanos = None
   }
 }

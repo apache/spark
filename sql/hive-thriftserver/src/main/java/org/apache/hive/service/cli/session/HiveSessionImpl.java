@@ -234,8 +234,23 @@ public class HiveSessionImpl implements HiveSession {
     }
   }
 
-  // Copy from org.apache.hadoop.hive.ql.processors.SetProcessor, only change:
-  // setConf(varname, propName, varvalue, true) when varname.startsWith(HIVECONF_PREFIX)
+  // Resolved once at server init by SparkSQLSessionManager. See setAllowSettingSystemProperties.
+  private static volatile boolean allowSettingSystemProperties = false;
+
+  /**
+   * Configure whether `set:system:*` is permitted. Intended to be called once at server init
+   * from SparkSQLSessionManager. Reading and writing this value is intentionally not routed
+   * through any per-session HiveConf, since that would let a low-privilege client mutate it
+   * via `set:hiveconf:` from the same JDBC overlay this gate is meant to guard.
+   */
+  public static void setAllowSettingSystemProperties(boolean allow) {
+    allowSettingSystemProperties = allow;
+  }
+
+  // Copy from org.apache.hadoop.hive.ql.processors.SetProcessor, only changes:
+  // 1. setConf(varname, propName, varvalue, true) when varname.startsWith(HIVECONF_PREFIX)
+  // 2. system:* variables can not be set unless the legacy configuration
+  //    spark.sql.legacy.hive.thriftServer.allowSettingSystemProperties is enabled
   public static int setVariable(String varname, String varvalue) throws Exception {
     SessionState ss = SessionState.get();
     VariableSubstitution substitution = new VariableSubstitution(() -> ss.getHiveVariables());
@@ -247,8 +262,17 @@ public class HiveSessionImpl implements HiveSession {
       ss.err.println("env:* variables can not be set.");
       return 1;
     } else if (varname.startsWith(SYSTEM_PREFIX)){
-      String propName = varname.substring(SYSTEM_PREFIX.length());
-      System.getProperties().setProperty(propName, substitution.substitute(ss.getConf(),varvalue));
+      // Setting JVM system properties is allowed only when the legacy configuration
+      // spark.sql.legacy.hive.thriftServer.allowSettingSystemProperties is enabled.
+      // The toggle is read from a static field set once at server init time, NOT from the
+      // per-session HiveConf, to prevent bypass via `set:hiveconf:`.
+      if (allowSettingSystemProperties) {
+        String propName = varname.substring(SYSTEM_PREFIX.length());
+        System.getProperties().setProperty(propName, substitution.substitute(ss.getConf(),varvalue));
+      } else {
+        ss.err.println("system:* variables can not be set.");
+        return 1;
+      }
     } else if (varname.startsWith(HIVECONF_PREFIX)){
       String propName = varname.substring(HIVECONF_PREFIX.length());
       setConf(varname, propName, varvalue, true);

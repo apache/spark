@@ -75,6 +75,8 @@ Here are the details of all the sources in Spark.
         "s3n://a/b/dataset.txt"<br/>
         "s3a://a/b/c/dataset.txt"
         <br/>
+        <code>ignoredPathSegmentRegex</code>: a Java regular expression matched against each directory and file name during file listing; matching names are treated as hidden and skipped (default: "^[._]", which skips names starting with '_' or '.')
+        <br/>
         <code>maxFileAge</code>: Maximum age of a file that can be found in this directory, before it is ignored. For the first batch all files will be considered valid. If <code>latestFirst</code> is set to `true` and <code>maxFilesPerTrigger</code> or <code>maxBytesPerTrigger</code> is set, then this parameter will be ignored, because old files that are valid, and should be processed, may be ignored. The max age is specified with respect to the timestamp of the latest file, and not the timestamp of the current system.(default: 1 week)
         <br/>
         <code>maxCachedFiles</code>: maximum number of files to cache to be processed in subsequent batches (default: 10000).  If files are available in the cache, they will be read from first before listing from the input source.
@@ -1849,7 +1851,7 @@ Here are the configs regarding to RocksDB instance of the state store provider:
   </tr>
   <tr>
     <td>spark.sql.streaming.stateStore.rocksdb.maxOpenFiles</td>
-    <td>The number of open files that can be used by the RocksDB instance. Value of -1 means that files opened are always kept open. If the open file limit is reached, RocksDB will evict entries from the open file cache and close those file descriptors and remove the entries from the cache.</td>
+    <td>The number of open files that can be used by the RocksDB instance. Value of -1 means that files opened are always kept open. If the open file limit is reached, RocksDB will evict entries from the open file cache and close those file descriptors and remove the entries from the cache. Set this configuration to a positive value if a query fails when opening RocksDB with <code>Too many open files</code>.</td>
     <td>-1</td>
   </tr>
   <tr>

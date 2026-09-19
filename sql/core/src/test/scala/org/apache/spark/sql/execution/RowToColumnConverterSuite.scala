@@ -107,6 +107,22 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-59273: CHAR/VARCHAR columns") {
+    val schema = StructType(Seq(
+      StructField("c", CharType(3)),
+      StructField("v", VarcharType(3)),
+      StructField("a", ArrayType(CharType(3)))))
+    val rows = Seq(InternalRow(
+      UTF8String.fromString("a  "),
+      UTF8String.fromString("bc"),
+      new GenericArrayData(Seq(UTF8String.fromString("d  ")))))
+    val vectors = convertRows(rows, schema)
+
+    assert(vectors(0).getUTF8String(0).toString === "a  ")
+    assert(vectors(1).getUTF8String(0).toString === "bc")
+    assert(vectors(2).getArray(0).getUTF8String(0).toString === "d  ")
+  }
+
   test("non-nullable map column with null values") {
     val mapType = MapType(IntegerType, StringType, valueContainsNull = true)
     val schema = StructType(Seq(StructField("m", mapType, nullable = false)))
@@ -131,16 +147,18 @@ class RowToColumnConverterSuite extends SparkFunSuite {
   }
 
   test("TimestampNTZNanosType column roundtrip") {
-    val t = TimestampNTZNanosType(9)
-    val schema = StructType(Seq(StructField("ts", t)))
-    val values = Seq(
-      TimestampNanosVal.fromParts(0L, 0.toShort),
-      TimestampNanosVal.fromParts(1_000_000L, 999.toShort),
-      TimestampNanosVal.fromParts(-1L, 123.toShort))
-    val rows = values.map(v => InternalRow(v))
-    val vectors = convertRows(rows, schema)
-    values.zipWithIndex.foreach { case (v, i) =>
-      assert(vectors.head.getTimestampNTZNanos(i) === v)
+    Seq(7, 8, 9).foreach { precision =>
+      val t = TimestampNTZNanosType(precision)
+      val schema = StructType(Seq(StructField("ts", t)))
+      val values = Seq(
+        TimestampNanosVal.fromParts(0L, 0.toShort),
+        TimestampNanosVal.fromParts(1_000_000L, 999.toShort),
+        TimestampNanosVal.fromParts(-1L, 123.toShort))
+      val rows = values.map(v => InternalRow(v))
+      val vectors = convertRows(rows, schema)
+      values.zipWithIndex.foreach { case (v, i) =>
+        assert(vectors.head.getTimestampNTZNanos(i) === v)
+      }
     }
   }
 
@@ -158,16 +176,18 @@ class RowToColumnConverterSuite extends SparkFunSuite {
   }
 
   test("TimestampLTZNanosType column roundtrip") {
-    val t = TimestampLTZNanosType(9)
-    val schema = StructType(Seq(StructField("ts", t)))
-    val values = Seq(
-      TimestampNanosVal.fromParts(0L, 0.toShort),
-      TimestampNanosVal.fromParts(1_000_000L, 999.toShort),
-      TimestampNanosVal.fromParts(-1L, 123.toShort))
-    val rows = values.map(v => InternalRow(v))
-    val vectors = convertRows(rows, schema)
-    values.zipWithIndex.foreach { case (v, i) =>
-      assert(vectors.head.getTimestampLTZNanos(i) === v)
+    Seq(7, 8, 9).foreach { precision =>
+      val t = TimestampLTZNanosType(precision)
+      val schema = StructType(Seq(StructField("ts", t)))
+      val values = Seq(
+        TimestampNanosVal.fromParts(0L, 0.toShort),
+        TimestampNanosVal.fromParts(1_000_000L, 999.toShort),
+        TimestampNanosVal.fromParts(-1L, 123.toShort))
+      val rows = values.map(v => InternalRow(v))
+      val vectors = convertRows(rows, schema)
+      values.zipWithIndex.foreach { case (v, i) =>
+        assert(vectors.head.getTimestampLTZNanos(i) === v)
+      }
     }
   }
 
@@ -182,6 +202,30 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     assert(vectors.head.getTimestampLTZNanos(0) === TimestampNanosVal.fromParts(100L, 42.toShort))
     assert(vectors.head.isNullAt(1))
     assert(vectors.head.getTimestampLTZNanos(2) === TimestampNanosVal.fromParts(200L, 1.toShort))
+  }
+
+  test("TimeType column roundtrip") {
+    Seq(0, 3, 6).foreach { precision =>
+      val schema = StructType(Seq(StructField("t", TimeType(precision))))
+      val values = Seq(0L, 12L * 60 * 60 * 1000 * 1000 * 1000, 86399999999999L)
+      val rows = values.map(v => InternalRow(v))
+      val vectors = convertRows(rows, schema)
+      values.zipWithIndex.foreach { case (v, i) =>
+        assert(vectors.head.getLong(i) === v)
+      }
+    }
+  }
+
+  test("TimeType column with nulls") {
+    val schema = StructType(Seq(StructField("t", TimeType(6), nullable = true)))
+    val rows = Seq(
+      InternalRow(0L),
+      InternalRow(null),
+      InternalRow(86399999999999L))
+    val vectors = convertRows(rows, schema)
+    assert(vectors.head.getLong(0) === 0L)
+    assert(vectors.head.isNullAt(1))
+    assert(vectors.head.getLong(2) === 86399999999999L)
   }
 
   test("multiple columns") {

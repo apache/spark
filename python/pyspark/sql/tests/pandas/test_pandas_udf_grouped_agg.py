@@ -15,24 +15,24 @@
 # limitations under the License.
 #
 
-import unittest
 import logging
+import unittest
 from typing import Iterator, Tuple
 
-from pyspark.util import PythonEvalType, is_remote_only
-from pyspark.sql import Row, functions as sf
+from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
+from pyspark.sql import Row
+from pyspark.sql import functions as sf
 from pyspark.sql.functions import (
+    PandasUDFType,
     array,
-    explode,
     col,
+    explode,
     lit,
     mean,
-    udf,
     pandas_udf,
-    PandasUDFType,
+    udf,
 )
 from pyspark.sql.types import ArrayType, YearMonthIntervalType
-from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     assertDataFrameEqual,
@@ -41,6 +41,7 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark.util import PythonEvalType, is_remote_only
 
 if have_pandas:
     import pandas as pd
@@ -752,8 +753,9 @@ class GroupedAggPandasUDFTestsMixin:
                     )
 
     def test_arrow_cast_enabled_numeric_to_decimal(self):
-        import numpy as np
         from decimal import Decimal
+
+        import numpy as np
 
         columns = [
             "int8",
@@ -828,18 +830,18 @@ class GroupedAggPandasUDFTestsMixin:
         self.assertEqual(expected2.collect(), result2.collect())
 
     def test_arrow_batch_slicing(self):
-        df = self.spark.range(10000000).select(
+        df = self.spark.range(1000000).select(
             (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
         )
 
         @pandas_udf("long", PandasUDFType.GROUPED_AGG)
         def pandas_max(v):
-            assert len(v) == 10000000 / 2, len(v)
+            assert len(v) == 1000000 / 2, len(v)
             return v.max()
 
         expected = (df.groupby("key").agg(sf.max("v").alias("res")).sort("key")).collect()
 
-        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+        for maxRecords, maxBytes in [(100, 2**31 - 1), (0, 104858), (100, 104858)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {

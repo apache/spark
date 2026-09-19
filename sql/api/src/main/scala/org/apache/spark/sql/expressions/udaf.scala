@@ -67,7 +67,7 @@ abstract class UserDefinedAggregateFunction extends Serializable with UserDefine
    * ```
    *
    * The name of a field of this `StructType` is only used to identify the corresponding buffer
-   * value. Users can choose names to identify the input arguments.
+   * value. Users can choose names to identify the buffer values.
    *
    * @since 1.5.0
    */

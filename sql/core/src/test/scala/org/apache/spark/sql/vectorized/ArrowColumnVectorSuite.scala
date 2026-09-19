@@ -19,6 +19,7 @@ package org.apache.spark.sql.vectorized
 
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex._
+import org.apache.arrow.vector.types.pojo.{ArrowType, FieldType}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
@@ -331,10 +332,154 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     allocator.close()
   }
 
+  test("string_view") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("string_view", 0, Long.MaxValue)
+    val vector = new ViewVarCharVector("stringView", allocator)
+    vector.allocateNew()
+
+    // Mix short (inline, <= 12 bytes) and long (stored in a data buffer, > 12 bytes) values to
+    // exercise both view-storage paths.
+    val values = (0 until 10).map { i =>
+      if (i % 2 == 0) s"str$i" else s"a-long-string-value-$i"
+    }
+    values.zipWithIndex.foreach { case (s, i) =>
+      val utf8 = s.getBytes("utf8")
+      vector.setSafe(i, utf8, 0, utf8.length)
+    }
+    vector.setNull(10)
+    vector.setValueCount(11)
+
+    val columnVector = new ArrowColumnVector(vector)
+    assert(columnVector.dataType === StringType)
+    assert(columnVector.hasNull)
+    assert(columnVector.numNulls === 1)
+
+    values.zipWithIndex.foreach { case (s, i) =>
+      assert(columnVector.getUTF8String(i) === UTF8String.fromString(s))
+    }
+    assert(columnVector.isNullAt(10))
+
+    columnVector.close()
+    allocator.close()
+  }
+
+  test("binary_view") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("binary_view", 0, Long.MaxValue)
+    val vector = new ViewVarBinaryVector("binaryView", allocator)
+    vector.allocateNew()
+
+    // Mix short (inline, <= 12 bytes) and long (stored in a data buffer, > 12 bytes) values to
+    // exercise both view-storage paths.
+    val values = (0 until 10).map { i =>
+      if (i % 2 == 0) s"str$i" else s"a-long-binary-value-$i"
+    }
+    values.zipWithIndex.foreach { case (s, i) =>
+      val utf8 = s.getBytes("utf8")
+      vector.setSafe(i, utf8, 0, utf8.length)
+    }
+    vector.setNull(10)
+    vector.setValueCount(11)
+
+    val columnVector = new ArrowColumnVector(vector)
+    assert(columnVector.dataType === BinaryType)
+    assert(columnVector.hasNull)
+    assert(columnVector.numNulls === 1)
+
+    values.zipWithIndex.foreach { case (s, i) =>
+      assert(columnVector.getBinary(i) === s.getBytes("utf8"))
+    }
+    assert(columnVector.isNullAt(10))
+
+    columnVector.close()
+    allocator.close()
+  }
+
+  test("string_view with multiple data buffers") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("string_view", 0, Long.MaxValue)
+    val vector = new ViewVarCharVector("stringView", allocator)
+    // Keep the variadic data buffers small (16 * 8 = 128 bytes each) so the long values below
+    // spill into multiple buffers, exercising the non-zero buffer-index branch of the accessor.
+    vector.setInitialCapacity(16, 8)
+    vector.allocateNew()
+
+    val values = (0 until 16).map(i => s"a-long-string-value-spilling-over-$i")
+    values.zipWithIndex.foreach { case (s, i) =>
+      val utf8 = s.getBytes("utf8")
+      vector.setSafe(i, utf8, 0, utf8.length)
+    }
+    vector.setValueCount(16)
+    // The values must not fit in a single data buffer, otherwise this test exercises nothing
+    // beyond the plain string_view test.
+    assert(vector.getDataBuffers.size() > 1)
+
+    val columnVector = new ArrowColumnVector(vector)
+    assert(columnVector.dataType === StringType)
+    values.zipWithIndex.foreach { case (s, i) =>
+      assert(columnVector.getUTF8String(i) === UTF8String.fromString(s))
+    }
+
+    columnVector.close()
+    allocator.close()
+  }
+
   test("array") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("array", 0, Long.MaxValue)
     val vector = ArrowUtils.toArrowField("array", ArrayType(IntegerType), nullable = true, null)
       .createVector(allocator).asInstanceOf[ListVector]
+    vector.allocateNew()
+    val elementVector = vector.getDataVector().asInstanceOf[IntVector]
+
+    // [1, 2]
+    vector.startNewValue(0)
+    elementVector.setSafe(0, 1)
+    elementVector.setSafe(1, 2)
+    vector.endValue(0, 2)
+
+    // [3, null, 5]
+    vector.startNewValue(1)
+    elementVector.setSafe(2, 3)
+    elementVector.setNull(3)
+    elementVector.setSafe(4, 5)
+    vector.endValue(1, 3)
+
+    // null
+
+    // []
+    vector.startNewValue(3)
+    vector.endValue(3, 0)
+
+    elementVector.setValueCount(5)
+    vector.setValueCount(4)
+
+    val columnVector = new ArrowColumnVector(vector)
+    assert(columnVector.dataType === ArrayType(IntegerType))
+    assert(columnVector.hasNull)
+    assert(columnVector.numNulls === 1)
+
+    val array0 = columnVector.getArray(0)
+    assert(array0.numElements() === 2)
+    assert(array0.getInt(0) === 1)
+    assert(array0.getInt(1) === 2)
+
+    val array1 = columnVector.getArray(1)
+    assert(array1.numElements() === 3)
+    assert(array1.getInt(0) === 3)
+    assert(array1.isNullAt(1))
+    assert(array1.getInt(2) === 5)
+
+    assert(columnVector.isNullAt(2))
+
+    val array3 = columnVector.getArray(3)
+    assert(array3.numElements() === 0)
+
+    columnVector.close()
+    allocator.close()
+  }
+
+  test("array_view") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("array_view", 0, Long.MaxValue)
+    val vector = ListViewVector.empty("arrayView", allocator)
+    vector.addOrGetVector(FieldType.nullable(new ArrowType.Int(8 * 4, true)))
     vector.allocateNew()
     val elementVector = vector.getDataVector().asInstanceOf[IntVector]
 

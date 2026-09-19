@@ -33,26 +33,27 @@ import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkRuntimeException, SparkThrowable, SparkUpgradeException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkArithmeticException, SparkConf, SparkException, SparkRuntimeException, SparkThrowable, SparkUpgradeException}
 import org.apache.spark.TestUtils.assertExceptionMsg
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.IntervalData
 import org.apache.spark.sql.avro.AvroCompressionCodec._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
-import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
+import org.apache.spark.sql.connector.catalog.TableCapability
+import org.apache.spark.sql.execution.{FileSourceScanExec, FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileDataSourceV2, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileDataSourceV2, FileTable}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
-import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.Utils
 
 abstract class AvroSuite
@@ -1255,6 +1256,108 @@ abstract class AvroSuite
     assertExceptionMsg[FileNotFoundException](e, "File not_exists.avsc does not exist")
   }
 
+  // spark.sql.avro.schemaUrlAllowedSchemes is a static SQL config, so it cannot be set with
+  // withSQLConf; these drive AvroOptions directly under a SQLConf provided via withExistingConf.
+  // testFile returns a "file:" URL, so its scheme is an explicit "file"; the scheme-less path that
+  // resolves against the default file system is covered by its own test below.
+  test("SPARK-59329: avroSchemaUrl scheme allowlist permits an allowed scheme") {
+    val avroSchemaUrl = testFile("test_sub.avsc")
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val conf = new SQLConf()
+    conf.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
+    SQLConf.withExistingConf(conf) {
+      val options = new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
+      assert(options.schema.isDefined)
+    }
+  }
+
+  test("SPARK-59329: avroSchemaUrl allowlist rejects a disallowed scheme " +
+    "before opening the file system") {
+    // An explicit non-"file" scheme is rejected by the allowlist check, which runs before the
+    // file system for the URL is instantiated -- so this surfaces the clean allowlist error
+    // rather than a lower-level failure from trying to load the s3a file system. The URL uses an
+    // upper-case "S3A" scheme so the lower-case "s3a" in the message pins the scheme-side case
+    // folding: dropping the fold on the scheme leaves no lower-case "s3a" in the message.
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val conf = new SQLConf()
+    conf.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
+    SQLConf.withExistingConf(conf) {
+      val e = intercept[AnalysisException] {
+        new AvroOptions(Map("avroSchemaUrl" -> "S3A://bucket/user.avsc"), hadoopConf)
+      }
+      assert(e.getCondition == "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
+      assert(e.getMessage.contains("avroSchemaUrl"))
+      assert(e.getMessage.contains("not in the allowlist"))
+      assert(e.getMessage.contains("The scheme 's3a'"))
+    }
+  }
+
+  test("SPARK-59329: avroSchemaUrl scheme allowlist is disabled by default") {
+    val avroSchemaUrl = testFile("test_sub.avsc")
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    // The empty default skips the scheme check entirely, preserving the previous behavior.
+    val conf = new SQLConf()
+    SQLConf.withExistingConf(conf) {
+      assert(conf.getConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES).isEmpty)
+      val options = new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
+      assert(options.schema.isDefined)
+    }
+  }
+
+  test("SPARK-59329: avroSchemaUrl scheme allowlist is case-insensitive") {
+    val avroSchemaUrl = testFile("test_sub.avsc")
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    // Allowlist entries and the URL scheme are compared case-insensitively: an upper-case "FILE"
+    // entry still permits the "file" scheme. Dropping the allowlist's case folding fails this.
+    val conf = new SQLConf()
+    conf.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("FILE"))
+    SQLConf.withExistingConf(conf) {
+      val options = new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
+      assert(options.schema.isDefined)
+    }
+  }
+
+  test("SPARK-59329: avroSchemaUrl allowlist resolves a scheme-less path " +
+    "against the default file system") {
+    // testFile returns a "file:" URL, so strip the scheme to get a genuinely scheme-less path.
+    // This exercises the FileSystem.getDefaultUri fallback that the other cases do not reach.
+    val avroSchemaUrl = new URI(testFile("test_sub.avsc")).getPath
+    assert(new URI(avroSchemaUrl).getScheme == null)
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    // The default file system is "file", so allowing "file" permits the scheme-less path ...
+    val allowed = new SQLConf()
+    allowed.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file"))
+    SQLConf.withExistingConf(allowed) {
+      assert(new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf).schema.isDefined)
+    }
+    // ... and an allowlist without it rejects the same path, reporting the resolved "file" scheme.
+    val disallowed = new SQLConf()
+    disallowed.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("s3a"))
+    SQLConf.withExistingConf(disallowed) {
+      val e = intercept[AnalysisException] {
+        new AvroOptions(Map("avroSchemaUrl" -> avroSchemaUrl), hadoopConf)
+      }
+      assert(e.getMessage.contains("The scheme 'file'"))
+    }
+  }
+
+  test("SPARK-59329: the allowlist rejection echoes the parsed allowlist") {
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    // "file://" is the shape an operator is most likely to write by mistake: it parses to one
+    // entry ("file://", not "file") that matches nothing, so every read then fails with a scheme
+    // that looks like it should be allowed. Echoing what the config parsed to is what makes the
+    // message readable, so pin it: dropping the parsed allowlist from the message fails here.
+    val conf = new SQLConf()
+    conf.setConf(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES, Seq("file://"))
+    SQLConf.withExistingConf(conf) {
+      val e = intercept[AnalysisException] {
+        new AvroOptions(Map("avroSchemaUrl" -> testFile("test_sub.avsc")), hadoopConf)
+      }
+      assert(e.getMessage.contains("The scheme 'file'"))
+      assert(e.getMessage.contains("not in the allowlist [file://]"))
+    }
+  }
+
   test("support user provided avro schema with defaults for missing fields") {
     val avroSchema =
       """
@@ -1733,6 +1836,143 @@ abstract class AvroSuite
         new StructType().add("foo", StringType).add("foo_map", MapType(StringType, IntegerType)))
       assert(reloadedDf.select($"foo".as("string"), $"foo_map".as("simple_map")).collect().toSet ===
         expectedDf.collect().toSet)
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching resolves fields against the full schema") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 5).selectExpr("id AS a", "id * 100 AS b", "id * 10000 AS c")
+        .write.format("avro").save(path)
+      // The names differ from the file's, so only the positions can pair the two schemas.
+      val renamedSchema = new StructType()
+        .add("x", LongType).add("y", LongType).add("z", LongType)
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema(renamedSchema)
+        .load(path)
+
+      val rows = (0 until 5).map(i => Row(i.toLong, i * 100L, i * 10000L))
+      checkAnswer(df, rows)
+      // A column keeps its own Avro field however few of them the query projects.
+      checkAnswer(df.select("z"), rows.map(r => Row(r.get(2))))
+      checkAnswer(df.select("y"), rows.map(r => Row(r.get(1))))
+      checkAnswer(df.select("x", "z"), rows.map(r => Row(r.get(0), r.get(2))))
+      checkAnswer(df.select("z", "x"), rows.map(r => Row(r.get(2), r.get(0))))
+      checkAnswer(df.select("y", "z"), rows.map(r => Row(r.get(1), r.get(2))))
+      checkAnswer(df.selectExpr("sum(z)"), Row(100000L))
+      // With pushdown on, the filter runs inside the deserializer; with it off, it runs above the
+      // scan.
+      // Either way a wrong pairing drops rows rather than only returning wrong values for them.
+      Seq("true", "false").foreach { pushDown =>
+        withSQLConf(SQLConf.AVRO_FILTER_PUSHDOWN_ENABLED.key -> pushDown) {
+          checkAnswer(df.where("z = 20000").select("z"), Row(20000L))
+          checkAnswer(df.where("z > 20000").select("x"), Seq(Row(3L), Row(4L)))
+        }
+      }
+      // A projection of no columns at all.
+      checkAnswer(df.selectExpr("count(1)"), Row(5L))
+
+      // The projected schema carries the schema's own spelling whatever casing the query used, so
+      // the name lookup that resolves a position finds the field either way.
+      val mixedCase = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema(new StructType().add("Xx", LongType).add("yY", LongType).add("ZZ", LongType))
+        .load(path)
+      Seq("true", "false").foreach { caseSensitive =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+          checkAnswer(mixedCase.select("ZZ"), rows.map(r => Row(r.get(2))))
+        }
+      }
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        checkAnswer(mixedCase.select("zz"), rows.map(r => Row(r.get(2))))
+      }
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching with a partition column in the schema") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 4).selectExpr("id AS a", "id * 100 AS b", "id % 2 AS p")
+        .write.partitionBy("p").format("avro").save(path)
+      // p is a partition column, so the files hold a and b only and the data schema is x and z.
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, p int, z long")
+        .load(path)
+
+      checkAnswer(df.select("z"), (0 until 4).map(i => Row(i * 100L)))
+      checkAnswer(df.select("x"), (0 until 4).map(i => Row(i.toLong)))
+      checkAnswer(df.select("p", "z"), (0 until 4).map(i => Row(i % 2, i * 100L)))
+      checkAnswer(df.where("p = 1").select("z"), Seq(Row(100L), Row(300L)))
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching with a nested record and the avroSchema option") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 3).selectExpr(
+          "id AS a",
+          "named_struct('f1', id * 10, 'f2', cast(id AS string)) AS r",
+          "id * 1000 AS c")
+        .write.format("avro").save(path)
+
+      // Only the top level is a projection, so the nested record keeps resolving by its own
+      // positions. Reading the struct alone would take Avro field 0, a long, and fail.
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, s struct<g1: long, g2: string>, z long")
+        .load(path)
+      checkAnswer(df.select("s"), (0 until 3).map(i => Row(Row(i * 10L, i.toString))))
+      checkAnswer(df.select("s.g2"), (0 until 3).map(i => Row(i.toString)))
+      checkAnswer(df.select("z"), (0 until 3).map(i => Row(i * 1000L)))
+
+      // The avroSchema option supplies the Avro side, and the data schema is inferred from it, so
+      // the positions are the option's.
+      val avroSubset =
+        """{"type":"record","name":"topLevelRecord","fields":[
+          |{"name":"a","type":"long"},
+          |{"name":"c","type":"long"}]}""".stripMargin
+      val fromOption = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .option("avroSchema", avroSubset)
+        .load(path)
+      checkAnswer(fromOption.select("c"), (0 until 3).map(i => Row(i * 1000L)))
+      checkAnswer(fromOption.select("a"), (0 until 3).map(i => Row(i.toLong)))
+    }
+  }
+
+  test("SPARK-59108: a position past the end of the Avro schema reads null") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 3).selectExpr("id AS a", "id * 100 AS b").write.format("avro").save(path)
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, y long, z long")
+        .load(path)
+
+      // z is at position 2 of the schema and the file has two fields, so it has no Avro field to
+      // read and comes back null however few columns the query projects.
+      checkAnswer(df.select("z"), Seq(Row(null), Row(null), Row(null)))
+      checkAnswer(df, (0 until 3).map(i => Row(i.toLong, i * 100L, null)))
+    }
+  }
+
+  test("SPARK-59108: positionalFieldMatching fails a mispaired type rather than reading it") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(0, 3).selectExpr("id AS a", "cast(id AS string) AS b", "id * 10 AS c")
+        .write.format("avro").save(path)
+      val df = spark.read.format("avro")
+        .option("positionalFieldMatching", true.toString)
+        .schema("x long, y long, z long")
+        .load(path)
+
+      // y takes Avro field 1, which is a string, so the read fails instead of returning the values
+      // of a neighbouring field.
+      val ex = intercept[SparkException](df.select("y").collect())
+      assert(Utils.exceptionString(ex).contains("Cannot convert Avro"))
+      checkAnswer(df.select("z"), (0 until 3).map(i => Row(i * 10L)))
     }
   }
 
@@ -3192,43 +3432,536 @@ abstract class AvroSuite
     }
   }
 
-  test("SPARK-57166: nanosecond timestamp types are not supported in Avro") {
-    val nanosTypes = Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
+  test("SPARK-57459: nanosecond timestamp types round-trip through Avro (v1 and v2)") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-      nanosTypes.foreach { nanosType =>
-        val expectedType = s""""${nanosType.sql}""""
-        withTempDir { dir =>
-          // Write path: a nanos-typed column cannot be written. The nanos literal is built
-          // directly from its internal value to avoid relying on cast/parser support.
-          val nanosLiteral = Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
-          val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
-          val writeDir = new File(dir, "write").getCanonicalPath
-          checkError(
-            exception = intercept[AnalysisException] {
-              df.write.format("avro").mode("overwrite").save(writeDir)
-            },
-            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-            parameters = Map(
-              "columnName" -> "`ts`",
-              "columnType" -> expectedType,
-              "format" -> "Avro"))
-
-          // Read path: a user-specified nanos schema is rejected. Write a benign file first
-          // so schema validation (not file listing) is what fails.
-          val readDir = new File(dir, "read").getCanonicalPath
-          Seq("a").toDF("ts").write.format("avro").mode("overwrite").save(readDir)
-          checkError(
-            exception = intercept[AnalysisException] {
-              spark.read.schema(new StructType().add("ts", nanosType))
-                .format("avro").load(readDir).collect()
-            },
-            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-            parameters = Map(
-              "columnName" -> "`ts`",
-              "columnType" -> expectedType,
-              "format" -> "Avro"))
+      Seq(true, false).foreach { useV1 =>
+        val useV1List = if (useV1) "avro" else ""
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+          Seq(7, 8, 9).foreach { precision =>
+            Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+              nanosType =>
+                withTempDir { dir =>
+                  // Build the row from an external java.time value; the column schema carries the
+                  // precision and truncates the sub-microsecond digits, matching the ORC suites.
+                  val wallClock = LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123)
+                  val value: Any = nanosType match {
+                    case _: TimestampNTZNanosType => wallClock
+                    case _: TimestampLTZNanosType => wallClock.toInstant(java.time.ZoneOffset.UTC)
+                  }
+                  val df = spark.createDataFrame(
+                    spark.sparkContext.parallelize(Seq(Row(value), Row(null))),
+                    new StructType().add("ts", nanosType))
+                  val path = new File(dir, s"avro_nanos_${nanosType.typeName}").getCanonicalPath
+                  df.write.format("avro").mode("overwrite").save(path)
+                  // The inferred schema preserves the declared precision via the catalyst prop.
+                  val inferred = spark.read.format("avro").load(path)
+                  assert(inferred.schema("ts").dataType == nanosType)
+                  val readBack = spark.read.schema(new StructType().add("ts", nanosType))
+                    .format("avro").load(path)
+                  checkAnswer(readBack, df)
+                }
+            }
+          }
         }
       }
+    }
+  }
+
+  test("SPARK-57459: nanosecond timestamps are written as unit-correct epoch-nanos") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // LocalDateTime at the epoch plus 567890123 ns, truncated to each precision.
+      val wallClock = LocalDateTime.of(1970, 1, 1, 0, 0, 0, 567890123)
+      val expectedNanos = Map(7 -> 567890100L, 8 -> 567890120L, 9 -> 567890123L)
+      Seq(
+        (false, "timestamp-nanos"),
+        (true, "local-timestamp-nanos")).foreach { case (isNtz, logicalName) =>
+        Seq(7, 8, 9).foreach { p =>
+          withTempPath { dir =>
+            val nanosType: DataType =
+              if (isNtz) TimestampNTZNanosType(p) else TimestampLTZNanosType(p)
+            val value: Any =
+              if (isNtz) wallClock else wallClock.toInstant(java.time.ZoneOffset.UTC)
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value)), numSlices = 1),
+              new StructType().add("t", nanosType))
+            df.write.format("avro").save(dir.toString)
+
+            val avroFile = dir.listFiles()
+              .filter(f => f.isFile && f.getName.endsWith("avro"))
+              .head
+            val reader = new DataFileReader[GenericRecord](
+              avroFile, new GenericDatumReader[GenericRecord]())
+            try {
+              val fieldSchema = reader.getSchema.getField("t").schema()
+              val tsSchema = if (fieldSchema.getType == Type.UNION) {
+                fieldSchema.getTypes.asScala.find(_.getType == Type.LONG).get
+              } else {
+                fieldSchema
+              }
+              assert(tsSchema.getLogicalType.getName == logicalName,
+                s"$nanosType should be written with the $logicalName logical type")
+              assert(reader.hasNext)
+              val stored = reader.next().get("t").asInstanceOf[Long]
+              assert(stored == expectedNanos(p),
+                s"$nanosType should store epoch-nanos ${expectedNanos(p)}, but was $stored")
+            } finally {
+              reader.close()
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57459: nanosecond timestamps read from a plain Avro file (no catalyst prop)") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // Build Avro files the way an external tool would: a nanos logical type on a long with no
+      // `spark.sql.catalyst.type` property. Spark must default to nanosecond precision and convert
+      // the stored epoch-nanoseconds back to its internal (epochMicros, nanosWithinMicro) form.
+      val epochNanos = 567890123L
+      Seq(
+        ("timestamp-nanos", TimestampLTZNanosType(9),
+          java.time.Instant.ofEpochSecond(0L, epochNanos)),
+        ("local-timestamp-nanos", TimestampNTZNanosType(9),
+          LocalDateTime.of(1970, 1, 1, 0, 0, 0, epochNanos.toInt))).foreach {
+        case (logicalName, expectedType, expectedValue) =>
+          withTempDir { dir =>
+            val avroSchema = new Schema.Parser().parse(
+              s"""
+                |{
+                |  "type": "record",
+                |  "name": "top",
+                |  "fields": [
+                |    {"name": "t", "type": {"type": "long", "logicalType": "$logicalName"}}
+                |  ]
+                |}
+              """.stripMargin)
+            val avroFile = new File(dir, "external.avro")
+            val datumWriter = new GenericDatumWriter[GenericRecord](avroSchema)
+            val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+            dataFileWriter.create(avroSchema, avroFile)
+            try {
+              val record = new GenericData.Record(avroSchema)
+              record.put("t", epochNanos)
+              dataFileWriter.append(record)
+            } finally {
+              dataFileWriter.close()
+            }
+
+            val readDf = spark.read.format("avro").load(dir.toString)
+            assert(readDf.schema("t").dataType == expectedType)
+            checkAnswer(readDf, Row(expectedValue))
+          }
+      }
+    }
+  }
+
+  test("SPARK-57459: reading a foreign nanos Avro file with an explicit lower-precision schema") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // A full-precision (9-digit) foreign value read with an explicit TIMESTAMP_*(7) schema must
+      // truncate the sub-microsecond digits (123 -> 100), mirroring ParquetTimestampNanosSuite's
+      // "explicit lower-precision read schema" case.
+      val epochNanos = 567890123L
+      Seq(
+        ("timestamp-nanos", TimestampLTZNanosType(7),
+          java.time.Instant.ofEpochSecond(0L, 567890100L)),
+        ("local-timestamp-nanos", TimestampNTZNanosType(7),
+          LocalDateTime.of(1970, 1, 1, 0, 0, 0, 567890100))).foreach {
+        case (logicalName, readType, expectedValue) =>
+          withTempDir { dir =>
+            val avroSchema = new Schema.Parser().parse(
+              s"""
+                |{
+                |  "type": "record",
+                |  "name": "top",
+                |  "fields": [
+                |    {"name": "t", "type": {"type": "long", "logicalType": "$logicalName"}}
+                |  ]
+                |}
+              """.stripMargin)
+            val avroFile = new File(dir, "external.avro")
+            val datumWriter = new GenericDatumWriter[GenericRecord](avroSchema)
+            val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+            dataFileWriter.create(avroSchema, avroFile)
+            try {
+              val record = new GenericData.Record(avroSchema)
+              record.put("t", epochNanos)
+              dataFileWriter.append(record)
+            } finally {
+              dataFileWriter.close()
+            }
+
+            val readDf = spark.read.schema(new StructType().add("t", readType))
+              .format("avro").load(dir.toString)
+            assert(readDf.schema("t").dataType == readType)
+            checkAnswer(readDf, Row(expectedValue))
+          }
+      }
+    }
+  }
+
+  test("SPARK-57459: writing an out-of-range nanosecond timestamp fails loudly") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      Seq("TIMESTAMP_NTZ", "TIMESTAMP_LTZ").foreach { typeName =>
+        withTempPath { dir =>
+          // Year 9999 is far outside the signed-int64 epoch-nanos range (~2262).
+          val df = spark.sql(s"SELECT $typeName '9999-12-31 23:59:59.999999999' AS ts")
+          val e = intercept[SparkException] {
+            df.write.format("avro").save(dir.getCanonicalPath)
+          }
+          var cause: Throwable = e
+          while (cause != null && !cause.isInstanceOf[SparkArithmeticException]) {
+            cause = cause.getCause
+          }
+          assert(cause != null,
+            s"Expected a DATETIME_OVERFLOW error for $typeName, but got: ${e.getMessage}")
+          // NTZ renders without a zone; LTZ renders as a UTC instant with a trailing `Z`.
+          val renderedValue =
+            if (typeName == "TIMESTAMP_NTZ") "9999-12-31T23:59:59.999999999"
+            else "9999-12-31T23:59:59.999999999Z"
+          checkError(
+            exception = cause.asInstanceOf[SparkArithmeticException],
+            condition = "DATETIME_OVERFLOW",
+            parameters = Map("operation" ->
+              (s"write the timestamp value $renderedValue as Avro epoch-nanoseconds " +
+                "(supported range: 1677-09-21T00:12:43.145224192Z to " +
+                "2262-04-11T23:47:16.854775807Z)")))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57459: nanosecond timestamps round-trip at the maximum supported instant") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // Long.MaxValue epoch-nanoseconds = 2262-04-11T23:47:16.854775807Z, the largest instant the
+      // INT64 epoch-nanos encoding can represent. The lower bound Long.MinValue is intentionally
+      // not exercised: re-encoding its floored epoch-microseconds overflows Long (see
+      // DateTimeUtilsSuite), so it is not writable.
+      val maxInstant = java.time.Instant.ofEpochSecond(9223372036L, 854775807L)
+      val maxLocal = LocalDateTime.ofEpochSecond(9223372036L, 854775807, java.time.ZoneOffset.UTC)
+      Seq(
+        (TimestampLTZNanosType(9), maxInstant: Any),
+        (TimestampNTZNanosType(9), maxLocal: Any)).foreach { case (nanosType, value) =>
+        withTempPath { dir =>
+          val df = spark.createDataFrame(
+            spark.sparkContext.parallelize(Seq(Row(value)), numSlices = 1),
+            new StructType().add("ts", nanosType))
+          df.write.format("avro").mode("overwrite").save(dir.getCanonicalPath)
+          val readBack = spark.read.schema(new StructType().add("ts", nanosType))
+            .format("avro").load(dir.getCanonicalPath)
+          checkAnswer(readBack, df)
+        }
+      }
+    }
+  }
+
+  test("SPARK-57459: pre-epoch and minimum-instant nanosecond timestamp round-trips") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // The smallest *writable* instant: Long.MinValue epoch-nanoseconds floor to an epochMicros
+      // whose re-encode overflows Long, so the practical minimum is the next whole microsecond up
+      // (~1677-09-21), the symmetric counterpart of the maximum-instant test above.
+      val minEpochNanos = (Long.MinValue / 1000L) * 1000L
+      // Pre-epoch full-precision value: 1969-12-31T23:59:59.999999999Z (= -1 epoch-nanosecond),
+      // exercising the floor semantics end to end (mirrors the Parquet/ORC suites).
+      Seq(-1L, minEpochNanos).foreach { epochNanos =>
+        val seconds = Math.floorDiv(epochNanos, 1000000000L)
+        val nanoOfSecond = Math.floorMod(epochNanos, 1000000000L).toInt
+        val instant = java.time.Instant.ofEpochSecond(seconds, nanoOfSecond.toLong)
+        val localDateTime =
+          LocalDateTime.ofEpochSecond(seconds, nanoOfSecond, java.time.ZoneOffset.UTC)
+        Seq(
+          (TimestampLTZNanosType(9), instant: Any),
+          (TimestampNTZNanosType(9), localDateTime: Any)).foreach { case (nanosType, value) =>
+          withTempPath { dir =>
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value)), numSlices = 1),
+              new StructType().add("ts", nanosType))
+            df.write.format("avro").mode("overwrite").save(dir.getCanonicalPath)
+            val readBack = spark.read.schema(new StructType().add("ts", nanosType))
+              .format("avro").load(dir.getCanonicalPath)
+            checkAnswer(readBack, df)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57459: TIMESTAMP_LTZ nanos on-disk value is independent of the session time zone") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // TIMESTAMP_LTZ is an absolute instant, so the stored epoch-nanoseconds and the read-back
+      // value must not depend on the session time zone.
+      val instant = LocalDateTime.of(2024, 6, 15, 12, 34, 56, 789012345)
+        .toInstant(java.time.ZoneOffset.UTC)
+      val schema = new StructType().add("ts", TimestampLTZNanosType(9))
+
+      def writeAndReadStored(zone: String, dir: File): Long = {
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          val df = spark.createDataFrame(
+            spark.sparkContext.parallelize(Seq(Row(instant: Any)), numSlices = 1), schema)
+          df.write.format("avro").mode("overwrite").save(dir.getCanonicalPath)
+          // The instant reads back unchanged regardless of the session zone.
+          val readBack = spark.read.schema(schema).format("avro").load(dir.getCanonicalPath)
+          checkAnswer(readBack, Row(instant))
+        }
+        val avroFile = dir.listFiles()
+          .filter(f => f.isFile && f.getName.endsWith("avro"))
+          .head
+        val reader = new DataFileReader[GenericRecord](
+          avroFile, new GenericDatumReader[GenericRecord]())
+        try {
+          val fieldSchema = reader.getSchema.getField("ts").schema()
+          val tsSchema = if (fieldSchema.getType == Type.UNION) {
+            fieldSchema.getTypes.asScala.find(_.getType == Type.LONG).get
+          } else {
+            fieldSchema
+          }
+          assert(tsSchema.getLogicalType.getName == "timestamp-nanos")
+          reader.next().get("ts").asInstanceOf[Long]
+        } finally {
+          reader.close()
+        }
+      }
+
+      withTempPath { utcDir =>
+        withTempPath { laDir =>
+          val storedUtc = writeAndReadStored("UTC", utcDir)
+          val storedLa = writeAndReadStored("America/Los_Angeles", laDir)
+          assert(storedUtc === storedLa,
+            "TIMESTAMP_LTZ epoch-nanoseconds must not depend on the session time zone")
+        }
+      }
+    }
+  }
+
+  test("SPARK-57459: nanosecond timestamp types in nested and complex Avro structures") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val ntz = LocalDateTime.of(2024, 1, 2, 3, 4, 5, 123456789)
+      val ltz = ntz.toInstant(java.time.ZoneOffset.UTC)
+      val schema = new StructType()
+        .add("s", new StructType()
+          .add("a", TimestampNTZNanosType(9))
+          .add("b", TimestampLTZNanosType(8)))
+        .add("arr", ArrayType(TimestampNTZNanosType(7)))
+        .add("m", MapType(StringType, TimestampLTZNanosType(9)))
+      val row = Row(
+        Row(ntz, ltz),
+        Seq(ntz, null, ntz),
+        Map("k1" -> ltz, "k2" -> null))
+      withTempPath { dir =>
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(row), numSlices = 1), schema)
+        df.write.format("avro").mode("overwrite").save(dir.getCanonicalPath)
+        val readBack = spark.read.schema(schema).format("avro").load(dir.getCanonicalPath)
+        checkAnswer(readBack, df)
+      }
+    }
+  }
+
+  test("TIME type read/write with Avro format") {
+    withTempPath { dir =>
+      // Test boundary values and NULL handling
+      val df = spark.sql("""
+        SELECT
+          TIME'00:00:00.123456' as midnight,
+          TIME'12:34:56.789012' as noon,
+          TIME'23:59:59.999999' as max_time,
+          CAST(NULL AS TIME) as null_time
+      """)
+
+      df.write.format("avro").save(dir.toString)
+      val readDf = spark.read.format("avro").load(dir.toString)
+
+      checkAnswer(readDf, df)
+
+      // Verify schema - all should be default TimeType(6)
+      readDf.schema.fields.foreach { field =>
+        assert(field.dataType == TimeType(), s"Field ${field.name} should be TimeType")
+      }
+
+      // Verify boundary values
+      val row = readDf.collect()(0)
+      assert(row.getAs[java.time.LocalTime]("midnight") ==
+        java.time.LocalTime.of(0, 0, 0, 123456000))
+      assert(row.getAs[java.time.LocalTime]("noon") ==
+        java.time.LocalTime.of(12, 34, 56, 789012000))
+      assert(row.getAs[java.time.LocalTime]("max_time") ==
+        java.time.LocalTime.of(23, 59, 59, 999999000))
+      assert(row.get(3) == null, "NULL time should be preserved")
+    }
+  }
+
+  test("TIME type in nested structures in Avro") {
+    withTempPath { dir =>
+      // Test TIME type in arrays and structs with different precisions
+      val df = spark.sql("""
+        SELECT
+          named_struct('start', CAST(TIME'09:00:00.123' AS TIME(3)),
+                       'end', CAST(TIME'17:30:45.654321' AS TIME(6))) as schedule,
+          array(TIME'08:15:30.111222', TIME'12:45:15.333444', TIME'16:20:50.555666') as checkpoints
+      """)
+
+      df.write.format("avro").save(dir.toString)
+      val readDf = spark.read.format("avro").load(dir.toString)
+
+      checkAnswer(readDf, df)
+    }
+  }
+
+  test("TIME type precision metadata is preserved in Avro") {
+    withTempPath { dir =>
+      // Test all TIME precisions (0-6) with multiple columns
+      val df = spark.sql("""
+        SELECT
+          id,
+          CAST(TIME '12:34:56' AS TIME(0)) as time_p0,
+          CAST(TIME '12:34:56.1' AS TIME(1)) as time_p1,
+          CAST(TIME '12:34:56.12' AS TIME(2)) as time_p2,
+          CAST(TIME '12:34:56.123' AS TIME(3)) as time_p3,
+          CAST(TIME '12:34:56.1234' AS TIME(4)) as time_p4,
+          CAST(TIME '12:34:56.12345' AS TIME(5)) as time_p5,
+          CAST(TIME '12:34:56.123456' AS TIME(6)) as time_p6,
+          description
+        FROM VALUES
+          (1, 'Morning'),
+          (2, 'Evening')
+        AS t(id, description)
+      """)
+
+      // Verify original schema has all precisions
+      (0 to 6).foreach { p =>
+        assert(df.schema(s"time_p$p").dataType == TimeType(p))
+      }
+
+      // Write to Avro and read back
+      df.write.format("avro").save(dir.toString)
+      val readDf = spark.read.format("avro").load(dir.toString)
+
+      // Verify ALL precisions are preserved after round-trip
+      (0 to 6).foreach { p =>
+        assert(readDf.schema(s"time_p$p").dataType == TimeType(p),
+          s"Precision $p should be preserved")
+      }
+
+      // Verify data integrity
+      checkAnswer(readDf, df)
+    }
+  }
+
+  test("SPARK-57551: TIME(7-9) is truncated to microseconds when written to Avro") {
+    // Avro has no time-nanos logical type (upstream AVRO-4043), so TIME is stored as time-micros.
+    // Writing a TIME(7-9) value therefore drops the sub-microsecond digits, while the column's
+    // precision metadata (time(p)) is still preserved via the spark.sql.catalyst.type property.
+    withTempPath { dir =>
+      val df = spark.sql("""
+        SELECT
+          CAST(TIME '12:34:56.1234567' AS TIME(7)) as time_p7,
+          CAST(TIME '12:34:56.12345678' AS TIME(8)) as time_p8,
+          CAST(TIME '12:34:56.123456789' AS TIME(9)) as time_p9
+      """)
+
+      df.write.format("avro").save(dir.toString)
+      val readDf = spark.read.format("avro").load(dir.toString)
+
+      // The declared precision is preserved.
+      Seq(7, 8, 9).foreach { p =>
+        assert(readDf.schema(s"time_p$p").dataType == TimeType(p),
+          s"Precision $p should be preserved")
+      }
+
+      // The value reads back truncated to microsecond resolution (.123456789 -> .123456).
+      val micros = java.time.LocalTime.of(12, 34, 56, 123456000)
+      checkAnswer(readDf, Row(micros, micros, micros))
+    }
+  }
+
+  test("SPARK-57581: TIME is written as unit-correct time-micros for external readers") {
+    // Expected microseconds-since-midnight for TIME'12:34:56.123456' truncated to each precision.
+    val baseSeconds = (12 * 3600 + 34 * 60 + 56).toLong
+    val expectedMicros = Map(
+      0 -> (baseSeconds * 1000000L + 0L),
+      1 -> (baseSeconds * 1000000L + 100000L),
+      2 -> (baseSeconds * 1000000L + 120000L),
+      3 -> (baseSeconds * 1000000L + 123000L),
+      4 -> (baseSeconds * 1000000L + 123400L),
+      5 -> (baseSeconds * 1000000L + 123450L),
+      6 -> (baseSeconds * 1000000L + 123456L))
+    // Valid micros-of-day range; values mislabeled as micros but holding nanos would exceed this.
+    val microsPerDay = 24L * 3600L * 1000000L
+
+    (0 to 6).foreach { p =>
+      withTempPath { dir =>
+        spark.sql(s"SELECT CAST(TIME'12:34:56.123456' AS TIME($p)) as t")
+          .write.format("avro").save(dir.toString)
+
+        val avroFile = dir.listFiles()
+          .filter(f => f.isFile && f.getName.endsWith("avro"))
+          .head
+        val reader = new DataFileReader[GenericRecord](
+          avroFile, new GenericDatumReader[GenericRecord]())
+        try {
+          // The Avro field must be annotated with the time-micros logical type.
+          val fieldSchema = reader.getSchema.getField("t").schema()
+          val timeSchema = if (fieldSchema.getType == Type.UNION) {
+            fieldSchema.getTypes.asScala.find(_.getType == Type.LONG).get
+          } else {
+            fieldSchema
+          }
+          assert(timeSchema.getLogicalType.getName == "time-micros",
+            s"precision $p should be written as time-micros")
+
+          assert(reader.hasNext)
+          val record = reader.next()
+          val stored = record.get("t").asInstanceOf[Long]
+          assert(stored == expectedMicros(p),
+            s"precision $p should store micros-of-day ${expectedMicros(p)}, but was $stored")
+          assert(stored >= 0 && stored < microsPerDay,
+            s"precision $p stored value $stored is outside the valid micros-of-day range")
+        } finally {
+          reader.close()
+        }
+      }
+    }
+  }
+
+  test("SPARK-57581: TIME read from a plain time-micros Avro file (no catalyst prop)") {
+    withTempDir { dir =>
+      // Build an Avro file the way an external tool (Hive/Trino/fastavro) would: a `time-micros`
+      // long with no `spark.sql.catalyst.type` property. Spark must read it back as TIME,
+      // converting the stored microseconds-since-midnight to its internal nanoseconds and
+      // defaulting to the micros precision TIME(6). This pins the deserializer's micros -> nanos
+      // conversion independently of the write path.
+      val micros = (12L * 3600 + 34 * 60 + 56) * 1000000L + 123456L
+      val avroSchema = new Schema.Parser().parse(
+        """
+          |{
+          |  "type": "record",
+          |  "name": "top",
+          |  "fields": [
+          |    {"name": "t", "type": {"type": "long", "logicalType": "time-micros"}}
+          |  ]
+          |}
+        """.stripMargin)
+      val avroFile = new File(dir, "external.avro")
+      val datumWriter = new GenericDatumWriter[GenericRecord](avroSchema)
+      val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+      dataFileWriter.create(avroSchema, avroFile)
+      try {
+        val record = new GenericData.Record(avroSchema)
+        record.put("t", micros)
+        dataFileWriter.append(record)
+      } finally {
+        dataFileWriter.close()
+      }
+
+      val readDf = spark.read.format("avro").load(dir.toString)
+      assert(readDf.schema("t").dataType == TimeType(TimeType.MICROS_PRECISION))
+      checkAnswer(readDf, Row(java.time.LocalTime.of(12, 34, 56, 123456000)))
     }
   }
 
@@ -3239,6 +3972,35 @@ class AvroV1Suite extends AvroSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
+
+  test("SPARK-59108: two positional reads of different columns share one widened scan") {
+    // SPARK-59107 named avro under this option, so the two subqueries used to keep their own scans.
+    // They share one now, and the values are the file's either way because each column resolves
+    // against the data schema. AQE off because `AdaptiveSparkPlanExec` is a leaf node, so with it
+    // on the scan underneath is not reachable from the executed plan.
+    withSQLConf(
+        SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.IGNORE_MISSING_FILES.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(0, 5).selectExpr("id AS a", "id * 10 AS b", "id * 100 AS c")
+          .write.format("avro").save(path)
+        withTempView("t") {
+          spark.read.option("positionalFieldMatching", true.toString).format("avro").load(path)
+            .createOrReplaceTempView("t")
+          // b and c sit at data schema positions 1 and 2, so the merged read of the two has to
+          // resolve against the data schema rather than against its own projection.
+          val df = sql("SELECT (SELECT sum(b) FROM t), (SELECT sum(c) FROM t)")
+          checkAnswer(df, Row(100L, 1000L))
+          val scanColumns = df.queryExecution.executedPlan
+            .collectWithSubqueries { case s: FileSourceScanExec => s }
+            .map(_.requiredSchema.fieldNames.sorted.toSeq)
+          assert(scanColumns === Seq(Seq("b", "c")))
+        }
+      }
+    }
+  }
 
   test("SPARK-36271: V1 insert should check schema field name too") {
     withView("v") {
@@ -3278,6 +4040,43 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  test("SPARK-59108: two positional reads of different columns share one widened scan") {
+    // SPARK-57205 withheld SCAN_MERGING from AvroTable under this option, so the two subqueries
+    // used to keep their own scans. The table declares it now, they share one, and the values are
+    // the file's either way because each column resolves against the data schema. FileTable
+    // withholds the capability when the reads are not strict, so pin that rather than inherit it.
+    withSQLConf(
+        SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+      val dsV2 = DataSource.lookupDataSourceV2("avro", spark.sessionState.conf)
+        .get.asInstanceOf[FileDataSourceV2]
+      val positional = dsV2.getTable(new StructType(), Array.empty,
+        JCollections.singletonMap("positionalFieldMatching", "true"))
+      assert(positional.capabilities().contains(TableCapability.SCAN_MERGING))
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(0, 5).selectExpr("id AS a", "id * 10 AS b", "id * 100 AS c")
+          .write.format("avro").save(path)
+        withTempView("t") {
+          spark.read.option("positionalFieldMatching", true.toString).format("avro").load(path)
+            .createOrReplaceTempView("t")
+          // b and c sit at data schema positions 1 and 2, so the merged read of the two has to
+          // resolve against the data schema rather than against its own projection.
+          val df = sql("SELECT (SELECT sum(b) FROM t), (SELECT sum(c) FROM t)")
+          checkAnswer(df, Row(100L, 1000L))
+          // Distinct by canonical form: the merged subquery is referenced twice, so it is
+          // collected once per reference.
+          val scanColumns = df.queryExecution.optimizedPlan
+            .collectWithSubqueries { case r: DataSourceV2ScanRelation => r }
+            .distinctBy(_.canonicalized)
+            .map(_.output.map(_.name).sorted)
+          assert(scanColumns === Seq(Seq("b", "c")))
+        }
+      }
+    }
+  }
 
   test("Avro source v2: support partition pruning") {
     withTempPath { dir =>
@@ -3433,96 +4232,6 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
     }
   }
 
-  test("TIME type read/write with Avro format") {
-    withTempPath { dir =>
-      // Test boundary values and NULL handling
-      val df = spark.sql("""
-        SELECT
-          TIME'00:00:00.123456' as midnight,
-          TIME'12:34:56.789012' as noon,
-          TIME'23:59:59.999999' as max_time,
-          CAST(NULL AS TIME) as null_time
-      """)
-
-      df.write.format("avro").save(dir.toString)
-      val readDf = spark.read.format("avro").load(dir.toString)
-
-      checkAnswer(readDf, df)
-
-      // Verify schema - all should be default TimeType(6)
-      readDf.schema.fields.foreach { field =>
-        assert(field.dataType == TimeType(), s"Field ${field.name} should be TimeType")
-      }
-
-      // Verify boundary values
-      val row = readDf.collect()(0)
-      assert(row.getAs[java.time.LocalTime]("midnight") ==
-        java.time.LocalTime.of(0, 0, 0, 123456000))
-      assert(row.getAs[java.time.LocalTime]("noon") ==
-        java.time.LocalTime.of(12, 34, 56, 789012000))
-      assert(row.getAs[java.time.LocalTime]("max_time") ==
-        java.time.LocalTime.of(23, 59, 59, 999999000))
-      assert(row.get(3) == null, "NULL time should be preserved")
-    }
-  }
-
-  test("TIME type in nested structures in Avro") {
-    withTempPath { dir =>
-      // Test TIME type in arrays and structs with different precisions
-      val df = spark.sql("""
-        SELECT
-          named_struct('start', CAST(TIME'09:00:00.123' AS TIME(3)),
-                       'end', CAST(TIME'17:30:45.654321' AS TIME(6))) as schedule,
-          array(TIME'08:15:30.111222', TIME'12:45:15.333444', TIME'16:20:50.555666') as checkpoints
-      """)
-
-      df.write.format("avro").save(dir.toString)
-      val readDf = spark.read.format("avro").load(dir.toString)
-
-      checkAnswer(readDf, df)
-    }
-  }
-
-  test("TIME type precision metadata is preserved in Avro") {
-    withTempPath { dir =>
-      // Test all TIME precisions (0-6) with multiple columns
-      val df = spark.sql("""
-        SELECT
-          id,
-          CAST(TIME '12:34:56' AS TIME(0)) as time_p0,
-          CAST(TIME '12:34:56.1' AS TIME(1)) as time_p1,
-          CAST(TIME '12:34:56.12' AS TIME(2)) as time_p2,
-          CAST(TIME '12:34:56.123' AS TIME(3)) as time_p3,
-          CAST(TIME '12:34:56.1234' AS TIME(4)) as time_p4,
-          CAST(TIME '12:34:56.12345' AS TIME(5)) as time_p5,
-          CAST(TIME '12:34:56.123456' AS TIME(6)) as time_p6,
-          description
-        FROM VALUES
-          (1, 'Morning'),
-          (2, 'Evening')
-        AS t(id, description)
-      """)
-
-      // Verify original schema has all precisions
-      (0 to 6).foreach { p =>
-        assert(df.schema(s"time_p$p").dataType == TimeType(p))
-      }
-
-      // Write to Avro and read back
-      df.write.format("avro").save(dir.toString)
-      val readDf = spark.read.format("avro").load(dir.toString)
-
-      // Verify ALL precisions are preserved after round-trip
-      (0 to 6).foreach { p =>
-        assert(readDf.schema(s"time_p$p").dataType == TimeType(p),
-          s"Precision $p should be preserved")
-      }
-
-      // Verify data integrity
-      checkAnswer(readDf, df)
-    }
-  }
-
   test("SPARK-56457: Avro V2 formatName matches V1 FileFormat.toString") {
     val v2Provider = DataSource.lookupDataSourceV2("avro", spark.sessionState.conf)
     assert(v2Provider.isDefined)
@@ -3533,6 +4242,45 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       new StructType(), Array.empty, emptyProps).asInstanceOf[FileTable]
     assert(v2Table.formatName == v1Format.toString,
       s"V2 formatName '${v2Table.formatName}' != V1 toString '${v1Format.toString}'")
+  }
+
+  test("SPARK-57205: Avro V2 declares SCAN_MERGING and merges scans differing only in columns") {
+    // FileTable withholds the capability when the reads are not strict, so pin that rather than
+    // inherit it.
+    withSQLConf(
+        SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+      val v2Provider = DataSource.lookupDataSourceV2("avro", spark.sessionState.conf)
+      assert(v2Provider.isDefined)
+      val dsV2 = v2Provider.get.asInstanceOf[FileDataSourceV2]
+      val v2Table = dsV2.getTable(
+        new StructType(), Array.empty, JCollections.emptyMap[String, String]())
+      assert(v2Table.capabilities().contains(TableCapability.SCAN_MERGING))
+
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(0, 20).selectExpr("id AS a", "id * 2 AS b", "id % 3 AS c")
+          .write.format("avro").save(path)
+        withTempView("avro_scan_merging") {
+          spark.read.format("avro").load(path).createOrReplaceTempView("avro_scan_merging")
+          val df = sql(
+            """
+              |SELECT
+              |  (SELECT sum(a) FROM avro_scan_merging WHERE c = 1),
+              |  (SELECT sum(b) FROM avro_scan_merging WHERE c = 1)
+              |""".stripMargin)
+          checkAnswer(df, Row(70, 140))
+          val scans = df.queryExecution.optimizedPlan.collectWithSubqueries {
+            case s: DataSourceV2ScanRelation => s
+          }
+          assert(scans.map(_.canonicalized).distinct.length == 1,
+            s"the two Avro scans should be fused into one:\n${df.queryExecution.optimizedPlan}")
+          // c is read because the filter stays above the merged scan.
+          assert(scans.head.output.map(_.name).toSet == Set("a", "b", "c"),
+            s"the merged scan should read the union of both columns; got ${scans.head.output}")
+        }
+      }
+    }
   }
 
   test("Geospatial types are not supported in Avro") {
@@ -3557,6 +4305,50 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
             "columnType" -> expectedType,
             "format" -> "Avro"))
       }
+    }
+  }
+}
+
+// The allowlist is a static SQL config, so it cannot be set with `withSQLConf`; it is fixed on the
+// session here via `sparkConf`. These go through a real `spark.read ... load()` so they pin the
+// production path the option guards: that the value set on the session reaches the `SQLConf.get`
+// the check reads, that the check fires in a read, and that a session cannot relax it.
+class AvroSchemaUrlAllowlistSuite extends QueryTest with SharedSparkSession {
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key, "file")
+
+  private val testAvro = testFile("test.avro")
+
+  test("SPARK-59329: an allowed avroSchemaUrl scheme is permitted through a read") {
+    // testFile returns a "file:" URL, whose scheme "file" is allowed.
+    val result = spark.read.option("avroSchemaUrl", testFile("test_sub.avsc"))
+      .format("avro").load(testAvro).collect()
+    val expected = spark.read.format("avro").load(testAvro).select("string").collect()
+    assert(result.sameElements(expected))
+  }
+
+  test("SPARK-59329: a disallowed avroSchemaUrl scheme is rejected through a read") {
+    val e = intercept[AnalysisException] {
+      spark.read.option("avroSchemaUrl", "s3a://bucket/user.avsc")
+        .format("avro").load(testAvro).collect()
+    }
+    assert(e.getCondition == "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
+    assert(e.getMessage.contains("not in the allowlist"))
+  }
+
+  test("SPARK-59329: a session cannot relax the avroSchemaUrl scheme allowlist") {
+    // buildStaticConf makes the allowlist an operator-level boundary: neither the DataFrame conf
+    // API nor SQL SET can widen it at runtime.
+    val key = StaticSQLConf.AVRO_SCHEMA_URL_ALLOWED_SCHEMES.key
+    Seq[() => Unit](
+      () => spark.conf.set(key, "s3a"),
+      () => spark.sql(s"SET $key=s3a").collect()
+    ).foreach { f =>
+      checkError(
+        exception = intercept[AnalysisException](f()),
+        condition = "CANNOT_MODIFY_STATIC_CONFIG",
+        parameters = Map("key" -> s""""$key""""))
     }
   }
 }

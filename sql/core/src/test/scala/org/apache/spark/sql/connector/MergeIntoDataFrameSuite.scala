@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{sources, Column, Row}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.classic.MergeIntoWriter
@@ -28,6 +29,9 @@ import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.StringType
 
 class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
+
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set(InMemoryBaseTable.ASSIGN_COLUMN_IDS, "true")
 
   import testImplicits._
 
@@ -180,7 +184,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
             .update(Map("salary" -> targetTableCol("salary").plus(1)))
             .merge()
         },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
 

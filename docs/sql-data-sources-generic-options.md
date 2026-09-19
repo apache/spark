@@ -97,6 +97,46 @@ you can use:
 </div>
 </div>
 
+### Ignored Path Segment Regex
+
+Spark allows you to use the configuration `spark.sql.files.ignoredPathSegmentRegex` or the data source option `ignoredPathSegmentRegex` to control which files are treated as
+hidden during file listing. The value is a Java regular expression that is matched (with find semantics, i.e. `java.util.regex.Matcher.find`) against each individual
+directory and file name below the path being read; names in which the regex finds a match are skipped from file listing, partition discovery, and reads, and a matching
+directory name excludes its whole subtree. The default value is `^[._]`, which skips files and directories whose names start with `_` or `.`. The data source option
+takes precedence over the configuration when both are set.
+
+Regardless of the regex, three rules always apply: names starting with `_metadata` or `_common_metadata` (Parquet summary files) are always listed, names ending in
+`._COPYING_` (in-flight copies) are always skipped, and `_`-prefixed names containing `=` (partition directories) are always kept.
+
+An empty string disables the generic hidden-file filtering (an empty regex matches nothing) and surfaces hidden files, including Spark-internal marker files such as
+`_SUCCESS` and files under `_temporary` directories (the three rules above still apply). Note the difference from `pathGlobFilter`: `pathGlobFilter` is an
+include-style glob applied to leaf file names only, while `ignoredPathSegmentRegex` is an exclude-style regex applied to every directory and file name component; the two
+can be combined, e.g. using `pathGlobFilter` to narrow the results of a relaxed `ignoredPathSegmentRegex`.
+
+Note that directories surfaced by a relaxed regex also participate in partition discovery, so a hidden directory next to partition directories causes a conflicting
+directory structures error unless `spark.sql.files.ignoreInvalidPartitionPaths` is enabled.
+
+To surface files that are hidden by default, you can use:
+
+<div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% include_example ignored_path_segment_regex python/sql/datasource.py %}
+</div>
+
+<div data-lang="scala"  markdown="1">
+{% include_example ignored_path_segment_regex scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example ignored_path_segment_regex java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="r"  markdown="1">
+{% include_example ignored_path_segment_regex r/RSparkSQLExample.R %}
+</div>
+</div>
+
 ### Recursive File Lookup
 `recursiveFileLookup` is used to recursively load files and it disables partition inferring. Its default value is `false`.
 If data source explicitly specifies the `partitionSpec` when `recursiveFileLookup` is true, exception will be thrown.

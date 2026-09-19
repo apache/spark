@@ -17,7 +17,6 @@
 import inspect
 from typing import IO, Iterator, Union
 
-from pyspark.sql.conversion import ArrowTableToRowsConversion
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
@@ -25,26 +24,27 @@ from pyspark.serializers import (
     read_int,
 )
 from pyspark.sql import Row
+from pyspark.sql.conversion import ArrowTableToRowsConversion
 from pyspark.sql.datasource import (
-    DataSource,
-    DataSourceWriter,
-    DataSourceArrowWriter,
-    WriterCommitMessage,
     CaseInsensitiveDict,
-    DataSourceStreamWriter,
+    DataSource,
+    DataSourceArrowWriter,
     DataSourceStreamArrowWriter,
+    DataSourceStreamWriter,
+    DataSourceWriter,
+    WriterCommitMessage,
 )
 from pyspark.sql.types import (
-    _parse_datatype_json_string,
-    StructType,
     BinaryType,
+    StructType,
     _create_row,
+    _parse_datatype_json_string,
 )
 from pyspark.sql.worker.utils import worker_run
 from pyspark.worker_util import (
     get_sock_file_to_executor,
-    read_command,
     pickleSer,
+    read_command,
     utf8_deserializer,
 )
 
@@ -187,7 +187,9 @@ def _main(infile: IO, outfile: IO) -> None:
     def data_source_write_func(iterator: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         def batch_to_rows() -> Iterator[Row]:
             for batch in iterator:
-                columns = [column.to_pylist() for column in batch.columns]
+                columns = [
+                    ArrowTableToRowsConversion._to_pylist(column) for column in batch.columns
+                ]
                 for row in range(0, batch.num_rows):
                     values = [
                         converters[col](columns[col][row]) for col in range(batch.num_columns)

@@ -18,6 +18,8 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 
@@ -40,5 +42,30 @@ class ContinuousMemorySuite extends StreamTest {
       AddData(inputData, 10, 11),
       StartStream(),
       CheckAnswer(2, 3, 4, 5, 6, 7, 8, 11, 12))
+  }
+
+  test("UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK") {
+    val sink = new ContinuousMemorySink()
+
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sink.latestBatchData
+      },
+      condition = "UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK",
+      parameters = Map("operation" -> "latestBatchData"))
+
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sink.dataSinceBatch(0)
+      },
+      condition = "UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK",
+      parameters = Map("operation" -> "dataSinceBatch"))
+
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sink.write(batchId = 0, needTruncate = false, newRows = Array.empty[Row])
+      },
+      condition = "UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK",
+      parameters = Map("operation" -> "write"))
   }
 }

@@ -19,7 +19,6 @@ package org.apache.spark.storage
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success}
@@ -166,9 +165,16 @@ private class PushBasedFetchHelper(
           meta: MergedBlockMeta): Unit = {
         logDebug(s"Received the meta of push-merged block for ($shuffleId, $shuffleMergeId," +
           s" $reduceId) from ${req.address.host}:${req.address.port}")
+        val mergedBlock = ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId)
         try {
-          iterator.addToResultsQueue(PushMergedRemoteMetaFetchResult(shuffleId, shuffleMergeId,
-            reduceId, sizeMap((shuffleId, reduceId)), meta.readChunkBitmaps(), address))
+          val chunkBitmaps = meta.readChunkBitmaps()
+          if (checkStaleMapIdInMergedBlock(mergedBlock, address, chunkBitmaps)) {
+            iterator.addToResultsQueue(PushMergedRemoteMetaFetchResult(shuffleId, shuffleMergeId,
+              reduceId, sizeMap((shuffleId, reduceId)), chunkBitmaps, address))
+          } else {
+            iterator.addToResultsQueue(PushMergedRemoteMetaFailedFetchResult(shuffleId,
+              shuffleMergeId, reduceId, address))
+          }
         } catch {
           case exception: Exception =>
             logError(log"Failed to parse the meta of push-merged block for (" +
@@ -273,9 +279,15 @@ private class PushBasedFetchHelper(
     try {
       val shuffleBlockId = blockId.asInstanceOf[ShuffleMergedBlockId]
       val chunksMeta = blockManager.getLocalMergedBlockMeta(shuffleBlockId, localDirs)
-      iterator.addToResultsQueue(PushMergedLocalMetaFetchResult(
-        shuffleBlockId.shuffleId, shuffleBlockId.shuffleMergeId,
-        shuffleBlockId.reduceId, chunksMeta.readChunkBitmaps(), localDirs))
+      val chunkBitmaps = chunksMeta.readChunkBitmaps()
+      if (checkStaleMapIdInMergedBlock(shuffleBlockId, blockManagerId, chunkBitmaps)) {
+        iterator.addToResultsQueue(PushMergedLocalMetaFetchResult(
+          shuffleBlockId.shuffleId, shuffleBlockId.shuffleMergeId,
+          shuffleBlockId.reduceId, chunkBitmaps, localDirs))
+      } else {
+        iterator.addToResultsQueue(FallbackOnPushMergedFailureResult(
+          blockId, blockManagerId, 0, isNetworkReqDone = false))
+      }
     } catch {
       case e: Exception =>
         // If we see an exception with reading a push-merged-local meta, we fallback to
@@ -286,6 +298,36 @@ private class PushBasedFetchHelper(
         iterator.addToResultsQueue(
           FallbackOnPushMergedFailureResult(blockId, blockManagerId, 0, isNetworkReqDone = false))
     }
+  }
+
+  /**
+   * Check whether a push-merged block contains data from stale (duplicate) task attempts.
+   * When speculation is enabled, multiple attempts for the same map output may both push data
+   * to the merger. The merger may include data from both attempts in the same merged block,
+   * but the driver only tracks one as the canonical MapStatus. We detect this by checking
+   * if any stale pushed map index appears in the server-side chunkBitmaps.
+   *
+   * @param shuffleBlockId ShuffleMergedBlockId to be checked
+   * @param address BlockManagerId of push-based shuffle service
+   * @param chunkBitmaps Chunks bitmap from push-based shuffle service side
+   * @return false if any stale-marked mapIndex is present in this block (forcing fallback),
+   *         true otherwise
+   */
+  private[this] def checkStaleMapIdInMergedBlock(
+      shuffleBlockId: ShuffleMergedBlockId,
+      address: BlockManagerId,
+      chunkBitmaps: Array[RoaringBitmap]): Boolean = {
+    val staleMapIndexes =
+      mapOutputTracker.getStaleMapIndexes(shuffleBlockId.shuffleId)
+    if (staleMapIndexes.isEmpty) return true
+    val mergedBlockBitmap = new RoaringBitmap()
+    chunkBitmaps.foreach(mergedBlockBitmap.or)
+    val hasStale = staleMapIndexes.exists(id => mergedBlockBitmap.contains(id))
+    if (hasStale) {
+      logWarning(s"Found stale pushed map indexes in merged block $shuffleBlockId from" +
+        s" ${address.host}:${address.port}, falling back to fetch the original blocks")
+    }
+    !hasStale
   }
 
   /**

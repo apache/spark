@@ -131,7 +131,29 @@ class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
     metrics: Map[String, SQLMetric],
     partitionSpecs: Array[ShufflePartitionSpec])
-  extends RDD[InternalRow](dependency.rdd.context, Nil) {
+  extends RDD[InternalRow](dependency.rdd.context, Nil)
+  with org.apache.spark.rdd.ShuffleReducePartitionMapping {
+
+  /**
+   * The reduce partition this RDD's partition reads, taken from its spec rather than assumed to be
+   * the partition index: only a width-1 `CoalescedPartitionSpec` and a
+   * `PartialReducerPartitionSpec`
+   * name a single reducer. A coalesced range covers several, and a `PartialMapperPartitionSpec`
+   * reads a mapper range rather than one reducer, so both report None (the scheduler then keeps
+   * every reduce partition live instead of dropping records). See
+   * `org.apache.spark.rdd.ShuffleReducePartitionMapping`.
+   */
+  override def reducePartitionIndex(partitionIndex: Int): Option[Int] = {
+    if (partitionIndex < 0 || partitionIndex >= partitionSpecs.length) {
+      None
+    } else {
+      partitionSpecs(partitionIndex) match {
+        case CoalescedPartitionSpec(start, end, _) if end - start == 1 => Some(start)
+        case PartialReducerPartitionSpec(reducerIndex, _, _, _) => Some(reducerIndex)
+        case _ => None
+      }
+    }
+  }
 
   def this(
       dependency: ShuffleDependency[Int, InternalRow, InternalRow],
@@ -192,7 +214,7 @@ class ShuffledRowRDD(
     val sqlMetricsReporter = new SQLShuffleReadMetricsReporter(tempMetrics, metrics)
     val reader = split.asInstanceOf[ShuffledRowRDDPartition].spec match {
       case CoalescedPartitionSpec(startReducerIndex, endReducerIndex, _) =>
-        SparkEnv.get.shuffleManager.getReader(
+        SparkEnv.get.shuffleManagerFor(dependency).getReader(
           dependency.shuffleHandle,
           startReducerIndex,
           endReducerIndex,
@@ -200,7 +222,7 @@ class ShuffledRowRDD(
           sqlMetricsReporter)
 
       case PartialReducerPartitionSpec(reducerIndex, startMapIndex, endMapIndex, _) =>
-        SparkEnv.get.shuffleManager.getReader(
+        SparkEnv.get.shuffleManagerFor(dependency).getReader(
           dependency.shuffleHandle,
           startMapIndex,
           endMapIndex,
@@ -210,7 +232,7 @@ class ShuffledRowRDD(
           sqlMetricsReporter)
 
       case PartialMapperPartitionSpec(mapIndex, startReducerIndex, endReducerIndex) =>
-        SparkEnv.get.shuffleManager.getReader(
+        SparkEnv.get.shuffleManagerFor(dependency).getReader(
           dependency.shuffleHandle,
           mapIndex,
           mapIndex + 1,
@@ -220,7 +242,7 @@ class ShuffledRowRDD(
           sqlMetricsReporter)
 
       case CoalescedMapperPartitionSpec(startMapIndex, endMapIndex, numReducers) =>
-        SparkEnv.get.shuffleManager.getReader(
+        SparkEnv.get.shuffleManagerFor(dependency).getReader(
           dependency.shuffleHandle,
           startMapIndex,
           endMapIndex,

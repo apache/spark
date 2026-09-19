@@ -14,25 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import uuid
+import faulthandler
+import gc
 import os
-import signal
 import select
+import signal
 import socket
 import sys
-import traceback
 import time
-import gc
-import faulthandler
-from errno import EINTR, EAGAIN
+import traceback
+import uuid
+from errno import EAGAIN, EINTR
+from signal import SIG_DFL, SIG_IGN, SIGCHLD, SIGHUP, SIGINT, SIGTERM
 from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
-from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 from types import FrameType
 from typing import Any, Optional
 
-from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
-from pyspark.util import enable_faulthandler
 from pyspark.errors import PySparkRuntimeError
+from pyspark.serializers import UTF8Deserializer, read_int, write_int, write_with_length
+from pyspark.util import enable_faulthandler
 
 
 def compute_real_exit_code(exit_code: Any) -> int:
@@ -98,7 +98,9 @@ def worker(sock: socket.socket, authenticated: bool) -> int:
                 faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
                 if faulthandler_log_path:
                     faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
-                    with open(faulthandler_log_path, "w") as faulthandler_log_file:
+                    with open(
+                        faulthandler_log_path, "w", encoding="utf-8"
+                    ) as faulthandler_log_file:
                         faulthandler.dump_traceback(file=faulthandler_log_file)
                 raise
             else:
@@ -244,7 +246,7 @@ def manager() -> None:
                         # Therefore, here we redirects it to '/dev/null' by duplicating
                         # another file descriptor for '/dev/null' to the standard input (0).
                         # See SPARK-26175.
-                        devnull = open(os.devnull, "r")
+                        devnull = open(os.devnull, "r", encoding="utf-8")
                         os.dup2(devnull.fileno(), 0)
                         devnull.close()
 

@@ -1144,6 +1144,11 @@ private[hive] object HiveClientImpl extends Logging {
       CatalystSqlParser.parseDataType(typeStr)
     } catch {
       case e: ParseException =>
+        // Hive's union type (uniontype<...>) is not supported by Spark SQL and makes the parser
+        // fail with a generic message. Detect it and report a clearer error (SPARK-21529).
+        if (hc.getType.toLowerCase(Locale.ROOT).contains("uniontype<")) {
+          throw QueryExecutionErrors.unsupportedHiveTypeError(hc.getType, hc.getName)
+        }
         throw QueryExecutionErrors.cannotRecognizeHiveTypeError(e, typeStr, hc.getName)
     }
   }
@@ -1158,11 +1163,23 @@ private[hive] object HiveClientImpl extends Logging {
     Option(hc.getComment).map(field.withComment).getOrElse(field)
   }
 
+  // Converting metastore metadata does not need the format class initialized: the resolved
+  // Class is only stored (via setInputFormatClass/setOutputFormatClass, which read getName),
+  // compared by identity, or tested with isAssignableFrom downstream, and it is instantiated
+  // through ReflectionUtils, which initializes it there. So when
+  // spark.sql.hive.initializeMetastoreFormatClasses is false the class is resolved without
+  // running its static initializer here; the initializer then runs when the format is actually
+  // instantiated for a scan/write. Defaults to true (the previous behavior).
+  private def initializeFormatClasses: Boolean =
+    SQLConf.get.getConf(HiveUtils.INITIALIZE_METASTORE_FORMAT_CLASSES)
+
   private def toInputFormat(name: String) =
-    Utils.classForName[org.apache.hadoop.mapred.InputFormat[_, _]](name)
+    Utils.classForName[org.apache.hadoop.mapred.InputFormat[_, _]](
+      name, initialize = initializeFormatClasses)
 
   private def toOutputFormat(name: String) =
-    Utils.classForName[org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]](name)
+    Utils.classForName[org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]](
+      name, initialize = initializeFormatClasses)
 
   def toHiveTableType(catalogTableType: CatalogTableType): HiveTableType = {
     catalogTableType match {

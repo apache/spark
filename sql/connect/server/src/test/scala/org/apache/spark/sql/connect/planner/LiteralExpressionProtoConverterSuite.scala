@@ -17,15 +17,20 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.time.{Instant, LocalDateTime, LocalTime}
+
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.ToLiteralProtoOptions
 import org.apache.spark.sql.connect.planner.LiteralExpressionProtoConverter
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
@@ -50,6 +55,149 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     val values = Array(null, true, 1.toByte, 1.toShort, 1, 1L, 1.1d, 1.1f, "spark")
     for (v <- values) {
       assertResult(v)(LiteralValueProtoConverter.toScalaValue(toLiteralProto(v)))
+    }
+  }
+
+  test("SPARK-57566: TIME literal proto and catalyst value round-trip") {
+    val times =
+      Seq(LocalTime.of(0, 0, 0), LocalTime.of(12, 13, 14), LocalTime.of(23, 59, 59, 999999999))
+    for (t <- times) {
+      val literalProto = toLiteralProto(t, TimeType())
+      // The literal carries the TIME proto type with the expected precision.
+      assert(literalProto.getTime.getPrecision == TimeType.DEFAULT_PRECISION)
+      // Proto -> Scala value round-trips back to the original LocalTime.
+      assertResult(t)(LiteralValueProtoConverter.toScalaValue(literalProto))
+      // Proto -> Catalyst expression matches a directly-built catalyst literal.
+      val convert = CatalystTypeConverters.createToCatalystConverter(TimeType())
+      val expected = expressions.Literal(convert(t), TimeType())
+      assertResult(expected)(LiteralExpressionProtoConverter.toCatalystExpression(literalProto))
+    }
+  }
+
+  test("SPARK-57566: TIME literal proto propagates a non-default precision") {
+    val literalProto = toLiteralProto(LocalTime.of(1, 2, 3), TimeType(3))
+    assert(literalProto.getTime.getPrecision == 3)
+    assertResult(LocalTime.of(1, 2, 3))(LiteralValueProtoConverter.toScalaValue(literalProto))
+  }
+
+  test("SPARK-57161: nanosecond timestamp DataType proto round-trip across precisions") {
+    for (precision <-
+        TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
+      for (dt <- Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision))) {
+        val protoType = DataTypeProtoConverter.toConnectProtoType(dt)
+        assertResult(dt)(DataTypeProtoConverter.toCatalystType(protoType))
+      }
+    }
+  }
+
+  test("SPARK-57161: TIMESTAMP_NTZ nanosecond literal proto and catalyst value round-trip") {
+    // Boundary and pre-epoch values, plus a sub-microsecond value that exercises the extra nanos.
+    val values = Seq(
+      LocalDateTime.of(1, 1, 1, 0, 0, 0, 0),
+      LocalDateTime.of(1969, 12, 31, 23, 59, 59, 999999999),
+      LocalDateTime.of(1970, 1, 1, 0, 0, 0, 123456789),
+      LocalDateTime.of(2023, 6, 15, 12, 34, 56, 987654321),
+      LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999))
+    for (precision <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION;
+      v <- values) {
+      val t = TimestampNTZNanosType(precision)
+      val literalProto = toLiteralProto(v, t)
+      // The literal carries the nanos proto arm with the expected precision.
+      assert(literalProto.getTimestampNtzNanos.getPrecision == precision)
+      // Scala value -> proto -> Catalyst value equals converting the Scala value directly, so the
+      // same sub-microsecond truncation to `precision` is applied on both paths.
+      val convert = CatalystTypeConverters.createToCatalystConverter(t)
+      val expected = expressions.Literal(convert(v), t)
+      assertResult(expected)(LiteralExpressionProtoConverter.toCatalystExpression(literalProto))
+    }
+  }
+
+  test("SPARK-57161: TIMESTAMP_LTZ nanosecond literal proto and catalyst value round-trip") {
+    val values = Seq(
+      Instant.parse("0001-01-01T00:00:00Z"),
+      Instant.parse("1969-12-31T23:59:59.999999999Z"),
+      Instant.parse("1970-01-01T00:00:00.123456789Z"),
+      Instant.parse("2023-06-15T12:34:56.987654321Z"),
+      Instant.parse("9999-12-31T23:59:59.999999999Z"))
+    for (precision <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION;
+      v <- values) {
+      val t = TimestampLTZNanosType(precision)
+      val literalProto = toLiteralProto(v, t)
+      assert(literalProto.getTimestampLtzNanos.getPrecision == precision)
+      val convert = CatalystTypeConverters.createToCatalystConverter(t)
+      val expected = expressions.Literal(convert(v), t)
+      assertResult(expected)(LiteralExpressionProtoConverter.toCatalystExpression(literalProto))
+    }
+  }
+
+  test("SPARK-57161: nanosecond timestamp literal proto carries epoch micros + extra nanos") {
+    // 1970-01-01T00:00:00.000001500Z is 1 microsecond and 500 extra nanoseconds past the epoch.
+    val ntzProto = toLiteralProto(
+      LocalDateTime.of(1970, 1, 1, 0, 0, 0, 1500),
+      TimestampNTZNanosType(TimestampNTZNanosType.NANOS_PRECISION))
+    assert(ntzProto.getTimestampNtzNanos.getEpochMicros == 1L)
+    assert(ntzProto.getTimestampNtzNanos.getNanosWithinMicro == 500)
+
+    val ltzProto = toLiteralProto(
+      Instant.parse("1970-01-01T00:00:00.000001500Z"),
+      TimestampLTZNanosType(TimestampLTZNanosType.NANOS_PRECISION))
+    assert(ltzProto.getTimestampLtzNanos.getEpochMicros == 1L)
+    assert(ltzProto.getTimestampLtzNanos.getNanosWithinMicro == 500)
+  }
+
+  test(
+    "SPARK-57161: nanosecond timestamp literal with out-of-range nanos_within_micro is " +
+      "rejected") {
+    // nanos_within_micro is an int32 on the wire but must be in [0, 999]. Build literals directly
+    // with out-of-range values, including 65536 which would truncate to 0 if narrowed to Short
+    // before validation, and confirm the read path rejects them instead of wrapping.
+    for (nanos <- Seq(1000, 65536, 65636, -1)) {
+      val ntzProto = proto.Expression.Literal
+        .newBuilder()
+        .setTimestampNtzNanos(
+          proto.Expression.Literal.TimestampNTZNanos
+            .newBuilder()
+            .setEpochMicros(0L)
+            .setNanosWithinMicro(nanos)
+            .setPrecision(TimestampNTZNanosType.NANOS_PRECISION))
+        .build()
+      val ltzProto = proto.Expression.Literal
+        .newBuilder()
+        .setTimestampLtzNanos(
+          proto.Expression.Literal.TimestampLTZNanos
+            .newBuilder()
+            .setEpochMicros(0L)
+            .setNanosWithinMicro(nanos)
+            .setPrecision(TimestampLTZNanosType.NANOS_PRECISION))
+        .build()
+      for (literalProto <- Seq(ntzProto, ltzProto)) {
+        val e = intercept[InvalidPlanInput] {
+          LiteralValueProtoConverter.toScalaValue(literalProto)
+        }
+        assert(e.getMessage.contains("nanos_within_micro"))
+      }
+    }
+  }
+
+  test("SPARK-57161: nanosecond timestamp literals are rejected when the feature is disabled") {
+    // Build the proto with the feature enabled (default in tests), mirroring a message arriving
+    // over the wire, then convert it on the server with the feature turned off.
+    val ntzProto = toLiteralProto(
+      LocalDateTime.of(2023, 1, 1, 0, 0, 0, 0),
+      TimestampNTZNanosType(TimestampNTZNanosType.NANOS_PRECISION))
+    val ltzProto = toLiteralProto(
+      Instant.parse("2023-01-01T00:00:00Z"),
+      TimestampLTZNanosType(TimestampLTZNanosType.NANOS_PRECISION))
+
+    val disabledConf = new SQLConf()
+    disabledConf.setConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED, false)
+    SQLConf.withExistingConf(disabledConf) {
+      for (literalProto <- Seq(ntzProto, ltzProto)) {
+        val e = intercept[SparkException] {
+          LiteralExpressionProtoConverter.toCatalystExpression(literalProto)
+        }
+        assert(e.getCondition == "FEATURE_NOT_ENABLED")
+      }
     }
   }
 

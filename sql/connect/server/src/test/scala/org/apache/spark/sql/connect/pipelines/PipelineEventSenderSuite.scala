@@ -18,8 +18,10 @@
 package org.apache.spark.sql.connect.pipelines
 
 import java.sql.Timestamp
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import io.grpc.stub.StreamObserver
+import org.apache.logging.log4j.Level
 import org.mockito.{ArgumentCaptor, Mockito}
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
@@ -89,6 +91,9 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
 
       val pipelineEvent = response.getPipelineEventResult.getEvent
       assert(pipelineEvent.getMessage == "Test message")
+
+      // A healthy sender that never overflows its queue must report zero dropped events.
+      assert(eventSender.numDroppedEvents == 0)
     } finally {
       eventSender.shutdown()
     }
@@ -227,6 +232,110 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
         responses.get(4).getPipelineEventResult.getEvent.getMessage
           == runProgressCompletedEvent.message)
     } finally {
+      eventSender.shutdown()
+    }
+  }
+
+  test("PipelineEventSender logs a warning when it drops events due to a full queue") {
+    val (mockObserver, mockSessionHolder) = createMockSetup(queueSize = "1")
+
+    // `workerStarted` fires once the background thread has dequeued and begun processing the
+    // first event; `release` keeps that thread parked so the queue fills deterministically
+    // (no timing assumptions) while we submit the events that must be dropped.
+    val workerStarted = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    val eventSender = new PipelineEventSender(mockObserver, mockSessionHolder) {
+      override def sendEventToClient(event: PipelineEvent): Unit = {
+        workerStarted.countDown()
+        release.await()
+        super.sendEventToClient(event)
+      }
+    }
+
+    val logAppender = new LogAppender("dropped pipeline event warning")
+    try {
+      withLogAppender(logAppender, level = Some(Level.WARN)) {
+        // Occupy the single worker thread and wait until it is actually parked.
+        eventSender.sendEvent(
+          createTestEvent(id = "started", details = FlowProgress(FlowStatus.STARTING)))
+        assert(workerStarted.await(10, TimeUnit.SECONDS), "worker thread did not start")
+
+        // Fill the single queue slot.
+        eventSender.sendEvent(
+          createTestEvent(id = "queued", details = FlowProgress(FlowStatus.RUNNING)))
+
+        // These two non-terminal events have nowhere to go and must be dropped.
+        eventSender.sendEvent(
+          createTestEvent(id = "dropped-1", details = FlowProgress(FlowStatus.RUNNING)))
+        eventSender.sendEvent(
+          createTestEvent(id = "dropped-2", details = FlowProgress(FlowStatus.RUNNING)))
+
+        release.countDown()
+        eventSender.shutdown() // drains the started + queued events and logs the drop summary
+      }
+
+      assert(eventSender.numDroppedEvents == 2)
+
+      val warnings = logAppender.loggingEvents
+        .filter(_.getLevel == Level.WARN)
+        .map(_.getMessage.getFormattedMessage)
+      // The two drops are submitted back-to-back, far inside the default 60s throttle window, so
+      // the per-drop warning fires exactly once (first logs, second suppressed) and the running
+      // total is logged at shutdown. The assertions match on substrings so they stay robust to
+      // the exact WARN wording.
+      assert(warnings.count(_.contains("Dropped pipeline event for session")) == 1)
+      assert(warnings.exists(_.contains("dropped a total of")))
+    } finally {
+      release.countDown()
+      eventSender.shutdown()
+    }
+  }
+
+  test("PipelineEventSender re-logs a drop warning once the throttle interval has elapsed") {
+    val (mockObserver, mockSessionHolder) = createMockSetup(queueSize = "1")
+
+    val workerStarted = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    // A negative interval makes the throttle treat every drop as past the window, so each drop
+    // re-logs. This exercises the re-log branch deterministically, independent of the wall clock
+    // (a zero interval would instead depend on currentTimeMillis() being monotonic across drops).
+    val eventSender = new PipelineEventSender(mockObserver, mockSessionHolder) {
+      override protected def droppedEventLogIntervalMs: Long = Long.MinValue
+      override def sendEventToClient(event: PipelineEvent): Unit = {
+        workerStarted.countDown()
+        release.await()
+        super.sendEventToClient(event)
+      }
+    }
+
+    val logAppender = new LogAppender("throttle reset warning")
+    try {
+      withLogAppender(logAppender, level = Some(Level.WARN)) {
+        eventSender.sendEvent(
+          createTestEvent(id = "started", details = FlowProgress(FlowStatus.STARTING)))
+        assert(workerStarted.await(10, TimeUnit.SECONDS), "worker thread did not start")
+
+        eventSender.sendEvent(
+          createTestEvent(id = "queued", details = FlowProgress(FlowStatus.RUNNING)))
+        eventSender.sendEvent(
+          createTestEvent(id = "dropped-1", details = FlowProgress(FlowStatus.RUNNING)))
+        eventSender.sendEvent(
+          createTestEvent(id = "dropped-2", details = FlowProgress(FlowStatus.RUNNING)))
+
+        release.countDown()
+        eventSender.shutdown()
+      }
+
+      assert(eventSender.numDroppedEvents == 2)
+
+      val warnings = logAppender.loggingEvents
+        .filter(_.getLevel == Level.WARN)
+        .map(_.getMessage.getFormattedMessage)
+      // With the throttle disabled, both drops re-arm the warning, so the per-drop message is
+      // logged once per drop rather than being suppressed.
+      assert(warnings.count(_.contains("Dropped pipeline event for session")) == 2)
+    } finally {
+      release.countDown()
       eventSender.shutdown()
     }
   }

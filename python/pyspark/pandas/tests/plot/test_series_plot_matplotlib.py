@@ -16,14 +16,14 @@
 #
 
 import base64
-from io import BytesIO
 import unittest
+from io import BytesIO
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.config import set_option, reset_option
+from pyspark.pandas.config import reset_option, set_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 from pyspark.testing.utils import have_matplotlib, matplotlib_requirement_message
 
@@ -321,7 +321,7 @@ class SeriesPlotMatplotlibTestsMixin:
             check_box_plot(p, k, showfliers=True)
             check_box_plot(p, k, sym="")
             check_box_plot(p, k, sym=".", color="r")
-            check_box_plot(p, k, use_index=False, labels=["Test"])
+            check_box_plot(p, k, use_index=False)
             check_box_plot(p, k, usermedians=[2.0])
             check_box_plot(p, k, conf_intervals=[(1.0, 3.0)])
 

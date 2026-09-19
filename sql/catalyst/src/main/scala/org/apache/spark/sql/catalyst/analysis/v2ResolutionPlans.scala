@@ -229,19 +229,19 @@ case class ResolvedProcedure(
 /**
  * A plan containing a resolved persistent view.
  *
- * `info` is the typed v2 [[org.apache.spark.sql.connector.catalog.ViewInfo]] payload for the
+ * `info` is the typed v2 [[org.apache.spark.sql.connector.catalog.View]] payload for the
  * view. Session-catalog (v1) views are surfaced through the same channel via
- * [[org.apache.spark.sql.connector.catalog.V1ViewInfo]], which extends `ViewInfo` and wraps
+ * [[org.apache.spark.sql.connector.catalog.V1View]], which extends `View` and wraps
  * the original [[CatalogTable]] -- mirroring the way
  * [[org.apache.spark.sql.connector.catalog.V1Table]] exposes a v1 `CatalogTable` through the
  * v2 [[org.apache.spark.sql.connector.catalog.Table]] surface for `ResolvedTable`. v1-only
  * paths (e.g. `DescribeTableCommand`, `ShowCreateTableCommand`) recover the original
- * `CatalogTable` by pattern-matching `info` against `V1ViewInfo`.
+ * `CatalogTable` by pattern-matching `info` against `V1View`.
  */
 case class ResolvedPersistentView(
     catalog: CatalogPlugin,
     identifier: Identifier,
-    info: org.apache.spark.sql.connector.catalog.ViewInfo)
+    info: org.apache.spark.sql.connector.catalog.View)
   extends LeafNodeWithoutStats {
   // Surface the view's schema as `output` so `ResolveReferences` can resolve column references
   // against it (e.g. `DescribeColumn(ResolvedPersistentView, UnresolvedAttribute, ...)`). The
@@ -252,7 +252,7 @@ case class ResolvedPersistentView(
     toAttributes(CharVarcharUtils.replaceCharVarcharWithStringInSchema(info.schema))
 
   // Render `info` in plan-tree output as the qualified view name. The default case-class
-  // `toString` would format `info` via `Object.toString`, which produces `V1ViewInfo@<hash>`
+  // `toString` would format `info` via `Object.toString`, which produces `V1View@<hash>`
   // for the v1 leg and a similarly opaque hash for the v2 leg -- non-deterministic and useless
   // in EXPLAIN / golden file output. Replace it with the multi-part `catalog.namespace.name`
   // form so EXPLAIN, plan-tree dumps, and `SQLQueryTestSuite` golden files remain stable.

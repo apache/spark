@@ -118,6 +118,16 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
+
+    override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
+      dataType match {
+        case DoubleType =>
+          // The common JDBC mapping is DOUBLE PRECISION, which is not a portable CAST target for
+          // MySQL-compatible databases. In particular, MariaDB rejects it with a syntax error.
+          throw new UnsupportedOperationException("Cannot cast to double type")
+        case _ => super.visitCast(expr, exprDataType, dataType)
+      }
+    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
@@ -266,7 +276,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
   override def getTableCommentQuery(table: String, comment: String): String = {
-    s"ALTER TABLE $table COMMENT = '$comment'"
+    s"ALTER TABLE $table COMMENT = '${escapeSql(comment)}'"
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
@@ -318,12 +328,12 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
     val sql = s"SHOW INDEXES FROM ${quoteIdentifier(tableIdent.name())} " +
-      s"WHERE key_name = '$indexName'"
+      s"WHERE key_name = '${escapeSql(indexName)}'"
     JdbcUtils.checkIfIndexExists(conn, sql, options)
   }
 
   override def dropIndex(indexName: String, tableIdent: Identifier): String = {
-    s"DROP INDEX ${quoteIdentifier(indexName)} ON ${tableIdent.name()}"
+    s"DROP INDEX ${quoteIdentifier(indexName)} ON ${quoteIdentifier(tableIdent.name())}"
   }
 
   // SHOW INDEX syntax
@@ -332,7 +342,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       conn: Connection,
       tableIdent: Identifier,
       options: JDBCOptions): Array[TableIndex] = {
-    val sql = s"SHOW INDEXES FROM ${tableIdent.name()}"
+    val sql = s"SHOW INDEXES FROM ${quoteIdentifier(tableIdent.name())}"
     var indexMap: Map[String, TableIndex] = Map()
     try {
       JdbcUtils.executeQuery(conn, options, sql) { rs =>
@@ -350,7 +360,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
           } else {
             // The only property we are building here is `COMMENT` because it's the only one
             // we can get from `SHOW INDEXES`.
-            val properties = new util.Properties();
+            val properties = new util.Properties()
             if (indexComment.nonEmpty) properties.put("COMMENT", indexComment)
             val index = new TableIndex(indexName, indexType, Array(FieldReference(colName)),
               new util.HashMap[NamedReference, util.Properties](), properties)

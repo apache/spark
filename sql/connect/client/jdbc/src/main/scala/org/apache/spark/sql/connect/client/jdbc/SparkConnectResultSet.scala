@@ -27,8 +27,8 @@ import java.util.Calendar
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connect.client.SparkResult
-import org.apache.spark.sql.connect.client.jdbc.util.JdbcErrorUtils
-import org.apache.spark.sql.types.{TimestampNTZType, TimestampType}
+import org.apache.spark.sql.connect.client.jdbc.util.{JdbcErrorUtils, JdbcTypeUtils}
+import org.apache.spark.sql.types.{ArrayType, MapType, StructType, TimestampNTZType, TimestampType}
 
 class SparkConnectResultSet(
     sparkResult: SparkResult[Row],
@@ -54,17 +54,21 @@ class SparkConnectResultSet(
   override def next(): Boolean = {
     checkOpen()
 
-    val hasNext = iterator.hasNext
-    if (hasNext) {
-      currentRow = iterator.next()
-      cursor += 1
-    } else {
-      currentRow = null
-      if (cursor > 0 && cursor == sparkResult.length) {
+    // rows are fetched lazily, so an error raised while the query is still
+    // streaming results surfaces here rather than in execute()
+    JdbcErrorUtils.mapToSQLException {
+      val hasNext = iterator.hasNext
+      if (hasNext) {
+        currentRow = iterator.next()
         cursor += 1
+      } else {
+        currentRow = null
+        if (cursor > 0 && cursor == sparkResult.length) {
+          cursor += 1
+        }
       }
+      hasNext
     }
-    hasNext
   }
 
   @volatile private var closed: Boolean = false
@@ -115,10 +119,15 @@ class SparkConnectResultSet(
 
   override def getString(columnIndex: Int): String = {
     getColumnValue(columnIndex, null: String) { idx =>
-      currentRow.get(idx) match {
-        case bytes: Array[Byte] =>
-          new String(bytes, java.nio.charset.StandardCharsets.UTF_8)
-        case other => String.valueOf(other)
+      sparkResult.schema(idx).dataType match {
+        case dt @ (_: ArrayType | _: MapType | _: StructType) =>
+          JdbcTypeUtils.toJson(currentRow.get(idx), dt)
+        case _ =>
+          currentRow.get(idx) match {
+            case bytes: Array[Byte] =>
+              new String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+            case other => String.valueOf(other)
+          }
       }
     }
   }
@@ -269,7 +278,7 @@ class SparkConnectResultSet(
 
   override def getObject(columnIndex: Int): AnyRef = {
     getColumnValue(columnIndex, null: AnyRef) { idx =>
-      currentRow.get(idx).asInstanceOf[AnyRef]
+      JdbcTypeUtils.toJdbcObject(currentRow.get(idx), sparkResult.schema(idx).dataType)
     }
   }
 
@@ -529,7 +538,14 @@ class SparkConnectResultSet(
     throw new SQLFeatureNotSupportedException
 
   override def getArray(columnIndex: Int): JdbcArray =
-    throw new SQLFeatureNotSupportedException
+    getColumnValue(columnIndex, null: JdbcArray) { idx =>
+      JdbcTypeUtils.toJdbcObject(currentRow.get(idx), sparkResult.schema(idx).dataType) match {
+        case array: JdbcArray => array
+        case _ =>
+          throw new SQLException(
+            s"The column ${idx + 1} is not an ARRAY type.")
+      }
+    }
 
   override def getObject(columnLabel: String, map: util.Map[String, Class[_]]): AnyRef =
     throw new SQLFeatureNotSupportedException

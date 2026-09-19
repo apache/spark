@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, EvalInlineTables}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
-import org.apache.spark.sql.types.{LongType, NullType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{LongType, NullType, TimestampNTZType, TimestampType, TimeType}
 
 /**
  * Unit tests for [[ResolveInlineTables]]. Note that there are also test cases defined in
@@ -48,6 +48,10 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     intercept[AnalysisException] {
       EvaluateUnresolvedInlineTable.validateInputEvaluable(
         UnresolvedInlineTable(Seq("c1"), Seq(Seq(Rand(1)))))
+    }
+    intercept[AnalysisException] {
+      EvaluateUnresolvedInlineTable.validateInputEvaluable(
+        UnresolvedInlineTable(Seq("c1"), Seq(Seq(Cast(Rand(1), TimestampNTZType)))))
     }
 
     // aggregate should not work

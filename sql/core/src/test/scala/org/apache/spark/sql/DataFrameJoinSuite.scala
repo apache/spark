@@ -225,7 +225,7 @@ class DataFrameJoinSuite extends SharedSparkSession
       spark.range(10e10.toLong)
         .join(spark.range(10e10.toLong), "id")
         .queryExecution.executedPlan
-    assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size == 0)
+    assert(plan1.collect { case p: BroadcastHashJoinExec => p }.isEmpty)
 
     // now with a hint it should be broadcasted
     val plan2 =
@@ -447,7 +447,7 @@ class DataFrameJoinSuite extends SharedSparkSession
             }
             assert(broadcastExchanges.size == 1)
             val tables = broadcastExchanges.head.collect {
-              case FileSourceScanExec(_, _, _, _, _, _, _, _, Some(tableIdent), _) => tableIdent
+              case FileSourceScanExec(_, _, _, _, _, _, _, _, Some(tableIdent), _, _) => tableIdent
             }
             assert(tables.size == 1)
             assert(tables.head ===
@@ -629,5 +629,14 @@ class DataFrameJoinSuite extends SharedSparkSession
       val df2 = testData3.as("x").join(testData3.as("y"), $"x.a" <=> $"y.b", joinType)
       checkAnswer(df1, df2)
     })
+  }
+
+  test("SPARK-58384: preserve null semantics under NOT in join condition") {
+    val left = Seq((Some(0), 10), (None, 11)).toDF("a", "b").as("left")
+    val right = Seq((None, 20), (Some(0), 21), (Some(1), 22)).toDF("x", "y").as("right")
+    val condition = !(($"left.a" === $"right.x") ||
+      ($"left.a".isNull && $"right.x".isNull))
+
+    checkAnswer(left.join(right, condition), Row(0, 10, 1, 22))
   }
 }

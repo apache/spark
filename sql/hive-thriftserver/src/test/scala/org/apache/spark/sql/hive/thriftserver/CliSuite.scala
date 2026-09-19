@@ -25,7 +25,6 @@ import java.util.concurrent.CountDownLatch
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Promise
 import scala.concurrent.duration._
-import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -588,7 +587,11 @@ class CliSuite extends SparkFunSuite {
       "SELECT 'test'; /* SELECT 'test';*/;" -> "test",
       "/*$meta chars{^\\;}*/ SELECT 'test';" -> "test",
       "/*\nmulti-line\n*/ SELECT 'test';" -> "test",
-      "/*/* multi-level bracketed*/ SELECT 'test';" -> "test"
+      // Nested bracketed comments are honored: a `;` inside any nesting
+      // level is ignored as long as every level is closed, so the fully
+      // closed `/* outer; /* inner; */ outer; */` is skipped and only the
+      // trailing `SELECT 'test'` executes.
+      "/* outer; /* inner; */ outer; */ SELECT 'test';" -> "test"
     )
   }
 
@@ -619,25 +622,29 @@ class CliSuite extends SparkFunSuite {
   }
 
   test("SPARK-37471: spark-sql support nested bracketed comment ") {
+    // Both ordinary and hint-shaped nested comments close before the outer comment.
     runCliWithin(1.minute)(
       """
-        |/* SELECT /*+ HINT() */ 4; */
-        |SELECT 1;
-        |""".stripMargin -> "SELECT 1"
+        |/* outer /* inner */ outer */
+        |SELECT 'nested-comment';
+        |""".stripMargin -> "nested-comment",
+      """
+        |/* outer /*+ inner */ outer */
+        |SELECT 'nested-hint-comment';
+        |""".stripMargin -> "nested-hint-comment"
     )
   }
 
   testRetry("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
+    val unclosedCommentError =
+      "Found an unclosed bracketed comment. Please, append */ at the end of the comment."
     runCliWithin(1.minute)(
-      // Only unclosed comment.
-      "/* SELECT /*+ HINT() 4; */;".stripMargin -> "Syntax error at or near ';'",
-      // Unclosed nested bracketed comment.
-      "/* SELECT /*+ HINT() 4; */ SELECT 1;".stripMargin -> "1",
-      // Unclosed comment with query.
-      "/* Here is a unclosed bracketed comment SELECT 1;"->
-        "Found an unclosed bracketed comment. Please, append */ at the end of the comment.",
-      // Whole comment.
-      "/* SELECT /*+ HINT() */ 4; */;".stripMargin -> ""
+      // SPARK-59536: the inner terminator leaves the outer comment open.
+      "/* SELECT /*+ HINT() 4; */ SELECT 1;" -> unclosedCommentError,
+      // The splitter flushes unclosed comments to the backend for error reporting.
+      "/* Here is a unclosed bracketed comment SELECT 1;" -> unclosedCommentError,
+      // Both comment levels close before the following query executes.
+      "/* SELECT /*+ HINT() */ 4; */; SELECT 'after-comment';" -> "after-comment"
     )
   }
 
@@ -658,25 +665,27 @@ class CliSuite extends SparkFunSuite {
     val sessionState = new CliSessionState(cliConf)
     SessionState.setCurrentSessionState(sessionState)
     val cli = new SparkSQLCLIDriver
+    // SPARK-56147: the parser-based splitter trims surrounding whitespace from
+    // each chunk and drops chunks that contain only comments / whitespace.
     Seq("SELECT 1; --comment" -> Seq("SELECT 1"),
       "SELECT 1; /* comment */" -> Seq("SELECT 1"),
-      "SELECT 1; /* comment" -> Seq("SELECT 1", " /* comment"),
-      "SELECT 1; /* comment select 1;" -> Seq("SELECT 1", " /* comment select 1;"),
+      "SELECT 1; /* comment" -> Seq("SELECT 1", "/* comment"),
+      "SELECT 1; /* comment select 1;" -> Seq("SELECT 1", "/* comment select 1;"),
       "/* This is a comment without end symbol SELECT 1;" ->
         Seq("/* This is a comment without end symbol SELECT 1;"),
       "SELECT 1; --comment\n" -> Seq("SELECT 1"),
       "SELECT 1; /* comment */\n" -> Seq("SELECT 1"),
-      "SELECT 1; /* comment\n" -> Seq("SELECT 1", " /* comment\n"),
-      "SELECT 1; /* comment select 1;\n" -> Seq("SELECT 1", " /* comment select 1;\n"),
+      "SELECT 1; /* comment\n" -> Seq("SELECT 1", "/* comment"),
+      "SELECT 1; /* comment select 1;\n" -> Seq("SELECT 1", "/* comment select 1;"),
       "/* This is a comment without end symbol SELECT 1;\n" ->
-        Seq("/* This is a comment without end symbol SELECT 1;\n"),
+        Seq("/* This is a comment without end symbol SELECT 1;"),
       "/* comment */ SELECT 1;" -> Seq("/* comment */ SELECT 1"),
       "SELECT /* comment */  1;" -> Seq("SELECT /* comment */  1"),
       "-- comment " -> Seq(),
       "-- comment \nSELECT 1" -> Seq("-- comment \nSELECT 1"),
       "/*  comment */  " -> Seq(),
       // SPARK-54876: statement after semicolon ending with block comment should not be dropped
-      "SELECT 1; SELECT 2 /* comment */" -> Seq("SELECT 1", " SELECT 2 /* comment */"),
+      "SELECT 1; SELECT 2 /* comment */" -> Seq("SELECT 1", "SELECT 2 /* comment */"),
       // SPARK-54876: line comment followed by block comment should produce empty result
       "-- foo\n/* bar */" -> Seq(),
       "SELECT 1; -- foo\n /* bar */" -> Seq("SELECT 1"),
@@ -685,9 +694,9 @@ class CliSuite extends SparkFunSuite {
       // SPARK-54876: preceding closed block comment + line comment (no SQL statement)
       "/* a */ -- foo\n/* b */" -> Seq(),
       // SPARK-54876: semicolons inside backtick-quoted identifiers are not split points
-      "SELECT * FROM `t;a`; SELECT 1" -> Seq("SELECT * FROM `t;a`", " SELECT 1")
+      "SELECT * FROM `t;a`; SELECT 1" -> Seq("SELECT * FROM `t;a`", "SELECT 1")
     ).foreach { case (query, ret) =>
-      assert(cli.splitSemiColon(query).asScala === ret)
+      assert(cli.splitStatements(query) === ret)
     }
     sessionState.close()
     SparkSQLEnv.stop()
@@ -897,5 +906,41 @@ class CliSuite extends SparkFunSuite {
       Files.writeString(sqlFilePath, sql)
       runCliWithin(2.minutes, extraArgs = Seq("-f", sqlFilePath.toString))("" -> "x\t1")
     }
+  }
+
+  test("SPARK-56147: `\\;` at end of line is a Hive-compat line continuation marker") {
+    // `\;` at the end of an interactive line is a Hive-compat continuation
+    // marker: it defers execution and shows the continuation prompt for the
+    // next line. The joined input is then sent to the backend; the `\;` chunk
+    // reattachment in `processLine` reinjects a literal `;` in the middle,
+    // so the backend reports a parse error. Asserting the parse error here
+    // also confirms the continuation prompt for the second line was reached
+    // (otherwise the queryEcho for `' second';` would carry the main prompt
+    // and the first expected echo would not match).
+    runCliWithin(2.minutes, errorResponses = Nil)(
+      """SELECT 'first' \;
+        |, 'second';""".stripMargin -> "PARSE_SYNTAX_ERROR"
+    )
+  }
+
+  test("SPARK-56147: interactive BEGIN ... END block buffers across lines " +
+      "and runs as a single statement") {
+    // The interactive loop is line-level. A multi-line `BEGIN ... END` SQL
+    // scripting block carries internal `;` delimiters (after `DECLARE`, `SET`,
+    // the `WHILE ... END WHILE`, etc.), but the parser-based splitter recognises
+    // the whole block as one compound statement, so the CLI keeps buffering on
+    // the continuation prompt until the closing `END;` instead of firing early
+    // at an internal `;`. Feeding the block line-by-line and asserting the
+    // trailing `SELECT` produces the value computed by the loop confirms the
+    // block executed as a single statement.
+    runCliWithin(2.minutes)(
+      """BEGIN
+        |  DECLARE c INT = 0;
+        |  WHILE c < 3 DO
+        |    SET c = c + 1;
+        |  END WHILE;
+        |  SELECT 'loop-ran-' || CAST(c AS STRING) AS r;
+        |END;""".stripMargin -> "loop-ran-3"
+    )
   }
 }

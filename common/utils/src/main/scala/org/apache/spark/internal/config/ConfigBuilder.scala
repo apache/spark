@@ -345,6 +345,32 @@ private[spark] case class ConfigBuilder(key: String) {
     new TypedConfigBuilder(this, toNumber(_, _.toDouble, key, "double"))
   }
 
+  /**
+   * Configure a config entry whose value is a (possibly fractional) decimal number, parsed
+   * directly from its string form into a [[scala.math.BigDecimal]]. Constructing the value from
+   * the string (rather than going through a [[Double]]) preserves the exact decimal value the user
+   * typed (e.g. `0.1` is the exact decimal `0.1`, not the double `0.1000000000000000055...`),
+   * which is required for exact accounting of fractional resources such as a fractional
+   * `spark.task.cpus`.
+   */
+  def decimalConf: TypedConfigBuilder[BigDecimal] = {
+    checkPrependConfig
+    new TypedConfigBuilder(this,
+      toNumber(_, s => BigDecimal(s), key, "decimal"),
+      // strip trailing zeros (so a normalized value like 0.200000000 is written back as 0.2) and
+      // use toPlainString to avoid scientific notation. For extreme exponents (e.g. 1e100000000,
+      // as can be rendered in a checkValue rejection message) toPlainString would materialize
+      // one character per zero, so fall back to scientific notation there.
+      { v: BigDecimal =>
+        val stripped = v.bigDecimal.stripTrailingZeros()
+        if (stripped.scale > 100 || stripped.scale < -100) {
+          stripped.toString
+        } else {
+          stripped.toPlainString
+        }
+      })
+  }
+
   def booleanConf: TypedConfigBuilder[Boolean] = {
     checkPrependConfig
     new TypedConfigBuilder(this, toBoolean(_, key))

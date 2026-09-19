@@ -170,6 +170,17 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
       Vectors.dense(1.0), Vectors.dense(2.0)))
   }
 
+  test("RobustScalerModel estimated size") {
+    val model = new RobustScaler()
+      .setInputCol("features")
+      .setOutputCol("scaled")
+      .fit(data.map(Tuple1.apply).toSeq.toDF("features"))
+
+    val maxSize = 4 * 1024
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("Scaling with default parameter") {
     val df0 = data.zip(resWithScaling).toSeq.toDF("features", "expected")
 

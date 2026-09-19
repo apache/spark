@@ -299,7 +299,7 @@ Data source options of Avro can be set via:
   <tr>
     <td><code>compression</code></td>
     <td>snappy</td>
-    <td>The <code>compression</code> option allows to specify a compression codec used in write.<br>
+    <td>The <code>compression</code> option allows you to specify a compression codec used in write.<br>
   Currently supported codecs are <code>uncompressed</code>, <code>snappy</code>, <code>deflate</code>, <code>bzip2</code>, <code>xz</code> and <code>zstandard</code>.<br> If the option is not set, the configuration <code>spark.sql.avro.compression.codec</code> config is taken into account.</td>
     <td>write</td>
     <td>2.4.0</td>
@@ -307,7 +307,7 @@ Data source options of Avro can be set via:
   <tr>
     <td><code>mode</code></td>
     <td>FAILFAST</td>
-    <td>The <code>mode</code> option allows to specify parse mode for function <code>from_avro</code>.<br>
+    <td>The <code>mode</code> option allows you to specify parse mode for function <code>from_avro</code>.<br>
       Currently supported modes are:
       <ul>
         <li><code>FAILFAST</code>: Throws an exception on processing corrupted record.</li>
@@ -321,7 +321,7 @@ Data source options of Avro can be set via:
   <tr>
     <td><code>datetimeRebaseMode</code></td>
     <td>(value of <code>spark.sql.avro.datetimeRebaseModeInRead</code> configuration)</td>
-    <td>The <code>datetimeRebaseMode</code> option allows to specify the rebasing mode for the values of the <code>date</code>, <code>timestamp-micros</code>, <code>timestamp-millis</code> logical types from the Julian to Proleptic Gregorian calendar.<br>
+    <td>The <code>datetimeRebaseMode</code> option allows you to specify the rebasing mode for the values of the <code>date</code>, <code>timestamp-micros</code>, <code>timestamp-millis</code> logical types from the Julian to Proleptic Gregorian calendar.<br>
       Currently supported modes are:
       <ul>
         <li><code>EXCEPTION</code>: fails in reads of ancient dates/timestamps that are ambiguous between the two calendars.</li>
@@ -349,7 +349,7 @@ Data source options of Avro can be set via:
   <tr>
     <td><code>stableIdentifierPrefixForUnionType</code></td>
     <td>member_</td>
-    <td>When `enableStableIdentifiersForUnionType` is enabled, the option allows to configure the prefix for fields of Avro Union type.</td>
+    <td>When `enableStableIdentifiersForUnionType` is enabled, the option allows you to configure the prefix for fields of Avro Union type.</td>
     <td>read</td>
     <td>4.0.0</td>
   </tr>
@@ -561,6 +561,21 @@ It also supports reading the following Avro [logical types](https://avro.apache.
     <td>TimestampType</td>
   </tr>
   <tr>
+    <td>time-micros</td>
+    <td>long</td>
+    <td>TimeType</td>
+  </tr>
+  <tr>
+    <td>timestamp-nanos</td>
+    <td>long</td>
+    <td>TimestampType(p) (with p in 7-9, requires <code>spark.sql.timestampNanosTypes.enabled=true</code>)</td>
+  </tr>
+  <tr>
+    <td>local-timestamp-nanos</td>
+    <td>long</td>
+    <td>TimestampNTZType(p) (with p in 7-9, requires <code>spark.sql.timestampNanosTypes.enabled=true</code>)</td>
+  </tr>
+  <tr>
     <td>decimal</td>
     <td>fixed</td>
     <td>DecimalType</td>
@@ -602,6 +617,21 @@ Spark supports writing of all Spark SQL types into Avro. For most types, the map
     <td>TimestampType</td>
     <td>long</td>
     <td>timestamp-micros</td>
+  </tr>
+  <tr>
+    <td>TimeType</td>
+    <td>long</td>
+    <td>time-micros</td>
+  </tr>
+  <tr>
+    <td>TimestampType(p) (with p in 7-9)</td>
+    <td>long</td>
+    <td>timestamp-nanos</td>
+  </tr>
+  <tr>
+    <td>TimestampNTZType(p) (with p in 7-9)</td>
+    <td>long</td>
+    <td>local-timestamp-nanos</td>
   </tr>
   <tr>
     <td>DecimalType</td>

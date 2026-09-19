@@ -92,14 +92,17 @@ private[window] object SegmentTreeWindowTestHelper {
     /** Create a new frame. Caller owns lifecycle unless tracked via `track()`. */
     def newFrame(): SegmentTreeWindowFunctionFrame = {
       val target = new SpecificInternalRow(Seq(bufAttrs.head.dataType))
+      val lb = RowBoundOrdering(-1)
+      val ub = RowBoundOrdering(1)
       val frame = new SegmentTreeWindowFunctionFrame(
         target,
         processor,
         Array(fn),
         input,
         RowFrame,
-        RowBoundOrdering(-1),
-        RowBoundOrdering(1),
+        lb,
+        ubound = Some(ub),
+        fallbackFactory = () => new SlidingWindowFunctionFrame(target, processor, lb, ub),
         (es, s) => GenerateMutableProjection.generate(es, s),
         conf,
         None,

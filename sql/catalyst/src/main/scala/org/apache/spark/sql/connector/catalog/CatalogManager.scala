@@ -380,8 +380,7 @@ private[sql] class DefaultCatalogManager(
    * list (the only thing returned here) is unaffected. Moving the read inside the CM lock
    * would re-introduce the SPARK-56939 lock-order inversion this helper exists to avoid.
    *
-   * Callers (e.g. [[SessionCatalog.sessionFunctionKindsInResolutionOrder]],
-   * [[org.apache.spark.sql.catalyst.analysis.FunctionResolution.isSessionBeforeBuiltinInPath]])
+   * Callers (e.g. [[SessionCatalog.sessionFunctionKindsInResolutionOrder]])
    * MUST NOT hold [[SessionCatalog]]'s intrinsic lock when invoking this method.
    */
   override def sessionFunctionKindsForUnqualifiedResolution(): Seq[SessionFunctionKind] = {
@@ -587,6 +586,15 @@ private[sql] object CatalogManager extends Logging {
     parts.length == 2 &&
       parts.head.equalsIgnoreCase(SYSTEM_CATALOG_NAME) &&
       parts(1).equalsIgnoreCase(BUILTIN_NAMESPACE)
+
+  /**
+   * True when `system.builtin` is the first entry of `pathEntries`. This is the path-shape
+   * condition under which a built-in function found by an unqualified single-part name cannot be
+   * shadowed by any earlier path entry -- the precise property the function-resolution built-in
+   * fast-path relies on. Pure predicate over the path shape; callers decide how to use it.
+   */
+  def isBuiltinFirstOnPath(pathEntries: Seq[Seq[String]]): Boolean =
+    pathEntries.headOption.exists(isSystemBuiltinPathEntry)
 
   /**
    * Extract `system.builtin` / `system.session` entries from a resolved PATH, mapped to

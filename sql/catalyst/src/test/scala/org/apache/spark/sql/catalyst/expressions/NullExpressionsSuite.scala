@@ -21,6 +21,7 @@ import java.sql.Timestamp
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, SimpleAnalyzer, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -207,8 +208,39 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-22705: Coalesce should use less global variables") {
     val ctx = new CodegenContext()
-    Coalesce(Seq(Literal("a"), Literal("b"))).genCode(ctx)
+    // Use three children so that the general do-while codegen path is exercised: the two-argument
+    // form with a non-nullable pure fallback is now special-cased to a ternary with no global
+    // state (covered by the test below).
+    Coalesce(Seq(Literal("a"), Literal("b"), Literal("c"))).genCode(ctx)
     assert(ctx.inlinedMutableStates.size == 1)
+  }
+
+  test("Coalesce with a non-nullable pure fallback compiles to a ternary with no global state") {
+    val ctx = new CodegenContext()
+    Coalesce(Seq(Literal.create(null, StringType), Literal("b"))).genCode(ctx)
+    assert(ctx.inlinedMutableStates.isEmpty)
+    checkEvaluation(Coalesce(Seq(Literal.create(null, StringType), Literal("a"))), "a")
+    checkEvaluation(Coalesce(Seq(Literal("x"), Literal("y"))), "x")
+  }
+
+  test("Coalesce ternary fast path over a BoundReference first arg and a primitive fallback") {
+    // The motivating hot path is coalesce(nullable_column, literal): the first arg is a
+    // BoundReference read from the input row (a distinct codegen path from a Literal), and the
+    // fallback is a non-nullable primitive that emits no code, so the ternary fast path applies.
+    val coalesce = Coalesce(Seq(BoundReference(0, IntegerType, nullable = true), Literal(0)))
+    checkEvaluation(coalesce, 42, InternalRow(42))
+    checkEvaluation(coalesce, 0, InternalRow(null))
+  }
+
+  test("Coalesce reuses the probed ExprCode when the non-nullable fallback emits code") {
+    // A two-arg coalesce whose non-nullable fallback is itself a BoundReference: its code is
+    // non-empty, so the ternary fast path does not apply and the probed ExprCodes are threaded
+    // into the general do-while path (rather than generating the children a second time).
+    val coalesce = Coalesce(Seq(
+      BoundReference(0, IntegerType, nullable = true),
+      BoundReference(1, IntegerType, nullable = false)))
+    checkEvaluation(coalesce, 42, InternalRow(42, 7))
+    checkEvaluation(coalesce, 7, InternalRow(null, 7))
   }
 
   test("AtLeastNNonNulls should not throw 64KiB exception") {

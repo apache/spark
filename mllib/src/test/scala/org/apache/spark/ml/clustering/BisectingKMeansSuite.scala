@@ -56,6 +56,14 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(copiedModel.hasSummary)
   }
 
+  test("BisectingKMeansModel estimated size") {
+    val model = new BisectingKMeans().setK(2).fit(dataset)
+    val maxSize = 1024 * 16
+    assert(
+      model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("BisectingKMeans validate input dataset") {
     testInvalidWeights(new BisectingKMeans().setWeightCol("weight").fit(_))
     testInvalidVectors(new BisectingKMeans().fit(_))

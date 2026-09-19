@@ -109,7 +109,8 @@ private[spark] object StandaloneResourceUtils extends Logging {
         logError(errMsg, e)
         throw new SparkException(errMsg.message, e)
     }
-    val resourcesFile = File.createTempFile(s"resource-$compShortName-", ".json", dir)
+    val resourcesFile = Files.createTempFile(dir.toPath, s"resource-$compShortName-", ".json")
+      .toFile
     tmpFile.renameTo(resourcesFile)
     Some(resourcesFile)
   }

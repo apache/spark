@@ -90,15 +90,18 @@ trait TaskContextAwareLogging extends Logging {
   override protected def logError(msg: => String, throwable: Throwable): Unit =
     super.logError(formatMessage(msg), throwable)
 
-  protected case class LogThrottler(logFn: String => Unit, interval: Duration) {
+  protected case class LogThrottler(logFn: LogEntry => Unit, interval: Duration) {
     private var nextLogNanos = Long.MinValue
     private var suppressed = 0
 
     def apply(msg: => MessageWithContext): Unit = {
       val now = System.nanoTime()
       if (now >= nextLogNanos) {
-        val suffix = if (suppressed > 0) s" ($suppressed suppressed)" else ""
-        logFn(msg.message + suffix)
+        logFn(if (suppressed > 0) {
+          msg + log" (${MDC(LogKeys.COUNT, suppressed)} suppressed warnings)"
+        } else {
+          msg
+        })
         nextLogNanos = now + interval.toNanos
         suppressed = 0
       } else {

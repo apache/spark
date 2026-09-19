@@ -24,15 +24,15 @@ import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData, STUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.TypeApiOps
-import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String, VariantVal}
 
 object EvaluatePython {
 
@@ -46,9 +46,24 @@ object EvaluatePython {
     TypeApiOps(dt).flatMap(_.needConversionInPython)
       .getOrElse(needConversionInPythonDefault(dt))
 
+  /**
+   * True if `dt` is, or structurally contains, a nanosecond-capable timestamp type. Used to gate
+   * the map-key collision check in [[toJava]] to maps whose key type can actually truncate when
+   * handed to Python (directly, or as a nanos field nested in a struct/array/map key).
+   */
+  private def typeCarriesTimestampNanos(dt: DataType): Boolean = dt match {
+    case _: AnyTimestampNanoType => true
+    case ArrayType(elementType, _) => typeCarriesTimestampNanos(elementType)
+    case MapType(keyType, valueType, _) =>
+      typeCarriesTimestampNanos(keyType) || typeCarriesTimestampNanos(valueType)
+    case StructType(fields) => fields.exists(f => typeCarriesTimestampNanos(f.dataType))
+    case udt: UserDefinedType[_] => typeCarriesTimestampNanos(udt.sqlType)
+    case _ => false
+  }
+
   private def needConversionInPythonDefault(dt: DataType): Boolean = dt match {
     case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType
-         | _: TimeType | _: GeometryType | _: GeographyType => true
+         | _: GeometryType | _: GeographyType => true
     case _: StructType => true
     case _: UserDefinedType[_] => true
     case ArrayType(elementType, _) => needConversionInPython(elementType)
@@ -59,56 +74,111 @@ object EvaluatePython {
 
   /**
    * Helper for converting from Catalyst type to java type suitable for Pickle.
+   *
+   * When `sizeAcc` is defined, the conversion additionally accumulates a best-effort estimate of
+   * the PICKLED size of the converted value, accounted at the leaf cases during the same
+   * traversal (a separate estimation pass would walk every field a second time). Catalyst leaves
+   * carry exact payload sizes (UTF8String.numBytes is the UTF-8 byte count that pickle writes;
+   * Decimal.precision tracks the digit string). The estimate is best-effort: unknown leaf types
+   * contribute a small positive constant, and residual error is observable by comparing the
+   * pythonEstimatedInputBytes metric against pythonDataSent. INVARIANT: every leaf case must
+   * account something positive to sizeAcc -- a case that converts without accounting makes the
+   * byte cap (see [[BatchEvalPythonExec.getInputIterator]]) blind to that type. The type sweep in
+   * BatchEvalPythonExecSuite ("estimate is positive for every data type") enforces this.
    */
   def toJava(
       obj: Any,
       dataType: DataType,
-      binaryAsBytes: Boolean): Any = {
+      binaryAsBytes: Boolean,
+      sizeAcc: Option[PickledSizeAccumulator] = None): Any = {
     (obj, dataType) match {
-      case (null, _) => null
+      case (null, _) =>
+        sizeAcc.foreach(_.add(1L))
+        null
 
       case (row: InternalRow, struct: StructType) =>
+        sizeAcc.foreach(_.add(PickledSizeAccumulator.PER_VALUE_OVERHEAD))
         val values = new Array[Any](row.numFields)
         var i = 0
         while (i < row.numFields) {
           val field = struct.fields(i)
-          values(i) = toJava(row.get(i, field.dataType), field.dataType, binaryAsBytes)
+          values(i) = toJava(row.get(i, field.dataType), field.dataType, binaryAsBytes, sizeAcc)
           i += 1
         }
         new GenericRowWithSchema(values, struct)
 
       case (a: ArrayData, array: ArrayType) =>
+        sizeAcc.foreach(_.add(PickledSizeAccumulator.PER_VALUE_OVERHEAD))
         val values = new java.util.ArrayList[Any](a.numElements())
         a.foreach(array.elementType, (_, e) => {
-          values.add(toJava(e, array.elementType, binaryAsBytes))
+          values.add(toJava(e, array.elementType, binaryAsBytes, sizeAcc))
         })
         values
 
+      case (map: MapData, mt: MapType) if typeCarriesTimestampNanos(mt.keyType) =>
+        // A nanosecond timestamp key is handed to Python as epoch micros (datetime.datetime is
+        // microsecond-resolution), so two keys that differ only below a microsecond collapse to
+        // the same Python key and one entry is silently dropped. A post-hoc size check is not
+        // reliable: composite keys (e.g. a struct with a nanos field and a binary field) stay
+        // distinct in the JVM map -- BytesWrapper uses identity equality -- yet still collapse
+        // once pickled to Python. Scalar precision loss is tolerable, but silently changing a
+        // map's cardinality is not, so reject nanosecond-keyed maps on this path outright. This
+        // covers the Python UDF input path, where the task failure propagates; the collect path
+        // is guarded earlier, in Python, since a failure in the background serve thread would not
+        // surface (see DataFrame.collect).
+        throw new SparkRuntimeException(
+          errorClass = "TIMESTAMP_NANOS_PYTHON_MAP_KEY",
+          messageParameters = Map("type" -> mt.keyType.sql))
+
       case (map: MapData, mt: MapType) =>
+        sizeAcc.foreach(_.add(PickledSizeAccumulator.PER_VALUE_OVERHEAD))
         val jmap = new java.util.HashMap[Any, Any](map.numElements())
         map.foreach(mt.keyType, mt.valueType, (k, v) => {
-          jmap.put(toJava(k, mt.keyType, binaryAsBytes), toJava(v, mt.valueType, binaryAsBytes))
+          jmap.put(toJava(k, mt.keyType, binaryAsBytes, sizeAcc),
+            toJava(v, mt.valueType, binaryAsBytes, sizeAcc))
         })
         jmap
 
-      case (ud, udt: UserDefinedType[_]) => toJava(ud, udt.sqlType, binaryAsBytes)
+      case (ud, udt: UserDefinedType[_]) => toJava(ud, udt.sqlType, binaryAsBytes, sizeAcc)
 
-      case (d: Decimal, _) => d.toJavaBigDecimal
+      case (d: Decimal, _) =>
+        sizeAcc.foreach(_.addValue(d.precision.toLong))
+        d.toJavaBigDecimal
 
-      case (s: UTF8String, _: StringType) => s.toString
+      case (s: UTF8String, _: StringType) =>
+        sizeAcc.foreach(_.addValue(s.numBytes.toLong))
+        s.toString
 
-      case (g: BinaryView, gt: GeometryType) => STUtils.deserializeGeom(g, gt)
+      case (g: BinaryView, gt: GeometryType) =>
+        // Geometry payloads can be arbitrarily large; size by the serialized byte length.
+        sizeAcc.foreach(_.addValue(g.numBytes.toLong))
+        STUtils.deserializeGeom(g, gt)
 
-      case (g: BinaryView, gt: GeographyType) => STUtils.deserializeGeog(g, gt)
+      case (g: BinaryView, gt: GeographyType) =>
+        sizeAcc.foreach(_.addValue(g.numBytes.toLong))
+        STUtils.deserializeGeog(g, gt)
 
       case (bytes: Array[Byte], BinaryType) =>
+        sizeAcc.foreach(_.addValue(bytes.length.toLong))
         if (binaryAsBytes) {
           new BytesWrapper(bytes)
         } else {
           bytes
         }
 
-      case (other, _) => other
+      case (v: TimestampNanosVal, _: AnyTimestampNanoType) =>
+        // `datetime.datetime` is microsecond-resolution, so the sub-microsecond remainder cannot
+        // be represented on the Python side: hand over epoch micros and let the Python type's
+        // fromInternal build the datetime. Without this case the value would fall through as a
+        // raw TimestampNanosVal, which has no registered pickler. See the Python Interop section
+        // of TimestampNanosTypeApiOps for the reverse direction and SPARK-57808 for the
+        // documented microsecond-only Python/UDF boundary.
+        sizeAcc.foreach(_.addLeaf(v.epochMicros))
+        v.epochMicros
+
+      case (other, _) =>
+        sizeAcc.foreach(_.addLeaf(other))
+        other
     }
   }
 
@@ -170,7 +240,7 @@ object EvaluatePython {
       case c: Int => c
     }
 
-    case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType => (obj: Any) =>
+    case TimestampType | TimestampNTZType | _: DayTimeIntervalType => (obj: Any) =>
       nullSafeConvert(obj) {
         case c: Long => c
         // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs

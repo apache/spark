@@ -64,4 +64,17 @@ class NamedExpressionSuite extends SparkFunSuite {
     assert(!alias.metadata.contains(nonInheritableMetadataKey))
     assert(alias.metadata.contains("key"))
   }
+
+  test("SPARK-57726: AttributeReference.hashCode is null-safe when the name is null") {
+    // An AttributeReference can carry a null name (e.g. from a StructField built with a null
+    // name). hashCode must not throw a NullPointerException so the attribute can be used in
+    // hash-based collections; equals is already null-safe on the name.
+    val exprId = NamedExpression.newExprId
+    val a1 = AttributeReference(null, IntegerType)(exprId)
+    val a2 = AttributeReference(null, IntegerType)(exprId)
+    a1.hashCode()
+    assert(a1 == a2)
+    assert(a1.hashCode() == a2.hashCode())
+    assert(Set(a1).contains(a2))
+  }
 }

@@ -147,7 +147,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val equivalence = new EquivalentExpressions
     equivalence.addExprTree(add)
     // the `two` inside `fallback` should not be added
-    assert(equivalence.getAllExprStates(1).size == 0)
+    assert(equivalence.getAllExprStates(1).isEmpty)
     assert(equivalence.getAllExprStates().count(_.useCount == 1) == 3) // add, two, explode
   }
 
@@ -426,7 +426,8 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
   test("SPARK-38333: PlanExpression expression should skip addExprTree function in Executor") {
     try {
       // suppose we are in executor
-      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, 1, null, new Properties, null, cpus = 0)
+      val context1 =
+        new TaskContextImpl(0, 0, 0, 0, 0, 1, null, new Properties, null, cpuAmount = 0)
       TaskContext.setTaskContext(context1)
 
       val equivalence = new EquivalentExpressions
@@ -495,6 +496,44 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     checkShortcut(Not(And(equal, Literal(false))), 1)
   }
 
+  test("SPARK-58211: shortcut eliminate operand past the first in a chained AND/OR") {
+    val add = Add(Literal(1), Literal(0))
+    val equal = EqualTo(add, add)
+
+    def checkShortcut(expr: Expression, numCommonExpr: Int): Unit = {
+      val e1 = If(expr, Literal(1), Literal(2))
+      val ee1 = new EquivalentExpressions(true)
+      ee1.addExprTree(e1)
+      assert(ee1.getCommonSubexpressions.size == numCommonExpr)
+
+      val e2 = expr
+      val ee2 = new EquivalentExpressions(true)
+      ee2.addExprTree(e2)
+      assert(ee2.getCommonSubexpressions.size == numCommonExpr)
+    }
+
+    // A left-deep chain `a AND b AND c` is `And(And(a, b), c)`. Only `a` is always evaluated;
+    // `b` and `c` are short-circuited, so their subexpressions must not be eliminated. Peeling
+    // a single operand would wrongly recurse into `b` and eliminate its inner subexpression.
+    checkShortcut(And(And(Literal(false), equal), Literal(true)), 0)
+    checkShortcut(Or(Or(Literal(true), equal), Literal(false)), 0)
+    checkShortcut(And(And(Literal(false), Literal(true)), equal), 0)
+    checkShortcut(Or(Or(Literal(true), Literal(false)), equal), 0)
+
+    // The always-evaluated leftmost operand is still eligible for elimination.
+    checkShortcut(And(And(equal, Literal(false)), Literal(true)), 1)
+    checkShortcut(Or(Or(equal, Literal(true)), Literal(false)), 1)
+
+    // Deeper chain `a AND b AND c AND d` = `And(And(And(a, b), c), d)`. The subexpression lives
+    // in a conditional operand (`c`), so it must not be eliminated no matter the nesting depth.
+    checkShortcut(And(And(And(Literal(false), Literal(true)), equal), Literal(true)), 0)
+
+    // Mixed nesting: the always-evaluated leaf `equal` is reached through a left spine of both
+    // `And` and `Or`. Its internal subexpression (`add`, which appears twice inside `equal`) is
+    // still eliminated, so the recursive peel is not over-conservative on the leaf.
+    checkShortcut(And(Or(equal, Literal(true)), equal), 1)
+  }
+
   test("Equivalent ternary expressions have different children") {
     val add1 = Add(Add(Literal(1), Literal(2)), Literal(3))
     val add2 = Add(Add(Literal(3), Literal(1)), Literal(2))
@@ -505,6 +544,57 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val equivalence1 = new EquivalentExpressions
     equivalence1.addExprTree(caseWhenExpr1)
     assert(equivalence1.getCommonSubexpressions.size == 1)
+  }
+
+  test("SPARK-58902: no candidate below a With, with or without the short-circuit peel") {
+    // A `CommonExpressionRef` can only be evaluated inside the `With` that binds it: the codegen
+    // slots exist only while that `With` is being generated, and `getCommonExpr` throws otherwise.
+    // Subexpression elimination generates its candidates outside every `With` scope, so a candidate
+    // holding a reference would fail the query. `childrenToRecurse` therefore stops at a `With`,
+    // including after `skipForShortcut` has peeled an `And`/`Or` down to one.
+    val a = AttributeReference("a", IntegerType)()
+    val memoized = With(Add(a, a)) { case Seq(ref) =>
+      And(GreaterThan(ref, Literal(0)), LessThan(ref, Literal(10)))
+    }
+    // The bare `With`; one behind an `And`, which is where the peel lands on it; and one in every
+    // branch of a `CaseWhen`, which reaches the map through `commonChildrenToRecurse` instead.
+    val shapes = Seq[Expression](
+      memoized,
+      And(memoized, GreaterThan(a, Literal(0))),
+      CaseWhen(Seq((GreaterThan(a, Literal(0)), memoized)), memoized))
+    Seq(false, true).foreach { peel =>
+      shapes.foreach { expr =>
+        val equivalence = new EquivalentExpressions(skipForShortcutEnable = peel)
+        equivalence.addExprTree(expr)
+        val states = equivalence.getAllExprStates()
+        // Without this, an implementation that recorded nothing at all would satisfy every
+        // assertion below by iterating over an empty list.
+        assert(states.nonEmpty, s"nothing was recorded for $expr (peel = $peel)")
+        // The `With` itself stays a candidate wherever it is reached: deduplicating it as a whole
+        // is safe, since it carries its own definitions and brings their slots into scope wherever
+        // it is generated. The exception is an `And` root with the peel on, where the peel lands on
+        // the `With` and the guard drops it along with its subtree -- no opportunity is lost there,
+        // because the peel never hands back the node it lands on, only that node's children.
+        if (!(peel && expr.isInstanceOf[And])) {
+          assert(states.exists(_.expr.isInstanceOf[With]),
+            s"the With itself stopped being a candidate for $expr (peel = $peel)")
+        }
+        states.foreach { state =>
+          // A candidate may hold a reference only if it also holds the `With` that binds it -- the
+          // whole `With`, or something above it, is a legal candidate; anything below it is not.
+          // The ids are collected over the whole candidate rather than per reference, so a
+          // reference sitting beside its binder rather than under it would pass; `With.apply`
+          // cannot build that shape.
+          val refIds = state.expr.collect { case r: CommonExpressionRef => r.id }.toSet
+          val boundIds =
+            state.expr.collect { case inScope: With => inScope.defs.map(_.id) }.flatten.toSet
+          assert(refIds.subsetOf(boundIds),
+            s"a candidate below the With was added for $expr (peel = $peel): ${state.expr}")
+          assert(!state.expr.isInstanceOf[CommonExpressionDef],
+            s"an unevaluable definition was added for $expr (peel = $peel): ${state.expr}")
+        }
+      }
+    }
   }
 }
 

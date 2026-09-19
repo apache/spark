@@ -19,14 +19,95 @@ package org.apache.spark.sql.pipelines.util
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{
+  caseInsensitiveResolution,
+  caseSensitiveResolution,
+  Resolver
+}
+import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.common.DatasetType
-import org.apache.spark.sql.pipelines.graph.{GraphElementTypeUtils, GraphErrors, ResolvedFlow}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.pipelines.graph.{
+  Flow,
+  GraphElementTypeUtils,
+  GraphErrors,
+  ResolvedFlow
+}
+import org.apache.spark.sql.types.{
+  ArrayType, DataType, MapType, Metadata, MetadataBuilder,
+  StructField, StructType
+}
 
 
-object SchemaInferenceUtils {
+object SchemaInferenceUtils extends Logging {
+
+  def resolverFor(caseSensitive: Boolean): Resolver = {
+    if (caseSensitive) {
+      caseSensitiveResolution
+    } else {
+      caseInsensitiveResolution
+    }
+  }
+
+  /**
+   * The effective `spark.sql.caseSensitive` for schema derivation on `tableIdentifier`, taken from
+   * the flows writing to it rather than from the session.
+   *
+   * A pipeline can set `spark.sql.caseSensitive` for itself, and a `SET` in pipeline source does
+   * not touch the session: [[org.apache.spark.sql.pipelines.graph.GraphRegistrationContext]] folds
+   * it into each flow's `sqlConf`, and it is applied when the flow is analyzed and executed. Schema
+   * derivation therefore has to read it from the same place, or evolution can disagree with the
+   * flows whose schemas it is deriving from -- e.g. folding an incoming `Value` onto a persisted
+   * `value` while the flow, resolving case-sensitively, expects `Value` to be its own column.
+   *
+   * All flows writing to a table must agree: the value decides whether names differing only in case
+   * identify the same column, so a disagreement would make the resulting schema depend on the order
+   * the flows are evaluated in. Throws
+   * [[org.apache.spark.sql.pipelines.graph.GraphErrors.conflictingFlowConfigurationError]] if they
+   * disagree. Flows that do not set it at all inherit the session's value.
+   */
+  def effectiveCaseSensitivity(
+      tableIdentifier: TableIdentifier,
+      flows: Seq[Flow],
+      sessionCaseSensitive: Boolean): Boolean = {
+    val declaredByFlow = flows.flatMap { flow =>
+      flow.sqlConf.get(SQLConf.CASE_SENSITIVE.key).map(value => value -> flow.identifier)
+    }
+    if (declaredByFlow.isEmpty) {
+      return sessionCaseSensitive
+    }
+
+    // Compare the parsed booleans, so that e.g. "TRUE" and "true" are not reported as a conflict,
+    // but report the values as written to keep the error recognizable to the user.
+    val byParsedValue = declaredByFlow.groupBy { case (value, _) => value.trim.toBoolean }
+    // A flow that leaves the conf unset inherits the session value, which conflicts just as much as
+    // an explicitly opposite value.
+    val flowsWithoutDeclaration = flows.filterNot { flow =>
+      flow.sqlConf.contains(SQLConf.CASE_SENSITIVE.key)
+    }
+    val effectiveValues = byParsedValue.keySet ++
+      Option.when(flowsWithoutDeclaration.nonEmpty)(sessionCaseSensitive)
+    if (effectiveValues.sizeIs > 1) {
+      val valuesByFlow = declaredByFlow
+        .groupBy { case (value, _) => value }
+        .map { case (value, entries) => value -> entries.map { case (_, id) => id } } ++
+        Option
+          .when(flowsWithoutDeclaration.nonEmpty)(
+            s"$sessionCaseSensitive (session default)" -> flowsWithoutDeclaration.map(_.identifier)
+          )
+          .toMap
+      throw GraphErrors.conflictingFlowConfigurationError(
+        tableIdentifier = tableIdentifier,
+        configKey = SQLConf.CASE_SENSITIVE.key,
+        valuesByFlow = valuesByFlow
+      )
+    }
+    effectiveValues.head
+  }
 
   /**
    * Given a set of flows that write to the same destination and possibly a user-specified schema,
@@ -39,42 +120,70 @@ object SchemaInferenceUtils {
    *    The user-specified schema will take precedence over the inferred schema.
    * Returns an error if encountered during schema inference or merging the inferred schema with
    * the user-specified one.
+   *
+   * All merges honor the effective `spark.sql.caseSensitive` of the flows writing to
+   * `tableIdentifier`, falling back to `sessionCaseSensitive` for flows that do not set it. Under
+   * case-insensitive analysis, flows emitting column names that differ only in case contribute a
+   * single column, and a declared column matches a flow column differing only in case -- consistent
+   * with how the rest of the engine resolves those names.
+   *
+   * When flows differ only in column casing, the surviving spelling is the one from the flow with
+   * the lowest identifier: `flows` is merged in sorted identifier order, not in the order given. We
+   * sort on the identifier's parts (catalog, database, table) to avoid collisions for identifiers
+   * whose parts contain dots.
+   * Sorting here rather than at the call sites keeps every caller agreeing on the result, since the
+   * schemas they derive are compared against each other -- the graph's inferred schema materializes
+   * the table, while [[org.apache.spark.sql.pipelines.graph.VirtualTableInput]] produces the schema
+   * downstream flows resolve against, and `diffSchemas` keys column identity on the exact name. Two
+   * callers ordering the same flows differently would spell one column two ways, leaving a
+   * downstream view disagreeing with its source and turning the next refresh into a drop-then-add.
    */
   def inferSchemaFromFlows(
+      tableIdentifier: TableIdentifier,
       flows: Seq[ResolvedFlow],
-      userSpecifiedSchema: Option[StructType]): StructType = {
+      userSpecifiedSchema: Option[StructType],
+      sessionCaseSensitive: Boolean): StructType = {
     if (flows.isEmpty) {
       return userSpecifiedSchema.getOrElse(new StructType())
     }
 
     require(
-      flows.forall(_.destinationIdentifier == flows.head.destinationIdentifier),
+      flows.forall(_.destinationIdentifier == tableIdentifier),
       "Expected all flows to have the same destination"
     )
 
-    val inferredSchema = flows.map(_.schema).fold(new StructType()) { (schemaSoFar, schema) =>
-      try {
-        SchemaMergingUtils.mergeSchemas(schemaSoFar, schema)
-      } catch {
-        case NonFatal(e) =>
-          throw GraphErrors.unableToInferSchemaError(
-            flows.head.destinationIdentifier,
-            schemaSoFar,
-            schema,
-            cause = Option(e)
-          )
-      }
-    }
+    val caseSensitive = effectiveCaseSensitivity(
+      tableIdentifier = tableIdentifier,
+      flows = flows,
+      sessionCaseSensitive = sessionCaseSensitive
+    )
 
-    val identifier = flows.head.destinationIdentifier
+    val inferredSchema = flows
+      .sortBy(f => (f.identifier.catalog, f.identifier.database, f.identifier.table))
+      .map(_.schema)
+      .fold(new StructType()) { (schemaSoFar, schema) =>
+        try {
+          SchemaMergingUtils.mergeSchemas(schemaSoFar, schema, caseSensitive)
+        } catch {
+          case NonFatal(e) =>
+            throw GraphErrors.unableToInferSchemaError(
+              tableIdentifier,
+              schemaSoFar,
+              schema,
+              cause = Option(e)
+            )
+        }
+      }
+
     val datasetType = GraphElementTypeUtils.getDatasetTypeForMaterializedViewOrStreamingTable(flows)
     // We merge the inferred schema with the user-specified schema to pick up any schema metadata
     // that is provided by the user, e.g., comments or column masks.
     mergeInferredAndUserSchemasIfNeeded(
-      identifier,
+      tableIdentifier,
       datasetType,
       inferredSchema,
-      userSpecifiedSchema
+      userSpecifiedSchema,
+      caseSensitive
     )
   }
 
@@ -82,12 +191,13 @@ object SchemaInferenceUtils {
       tableIdentifier: TableIdentifier,
       datasetType: DatasetType,
       inferredSchema: StructType,
-      userSpecifiedSchema: Option[StructType]): StructType = {
+      userSpecifiedSchema: Option[StructType],
+      caseSensitive: Boolean): StructType = {
     userSpecifiedSchema match {
       case Some(userSpecifiedSchema) =>
         try {
           // Merge the inferred schema with the user-provided schema hint
-          SchemaMergingUtils.mergeSchemas(userSpecifiedSchema, inferredSchema)
+          SchemaMergingUtils.mergeSchemas(userSpecifiedSchema, inferredSchema, caseSensitive)
         } catch {
           case NonFatal(e) =>
             throw GraphErrors.incompatibleUserSpecifiedAndInferredSchemasError(
@@ -103,70 +213,256 @@ object SchemaInferenceUtils {
   }
 
   /**
-   * Determines the column changes needed to transform the current schema into the target schema.
+   * Produces the [[TableChange]] sequence needed to transform `currentSchema` into
+   * `targetSchema`: additions, type updates, deletions, nullability, and comment changes.
+   * Recurses into structs, arrays, and maps so changes are emitted at the leaf level.
+   * Similar to [[org.apache.spark.sql.catalyst.analysis.ResolveSchemaEvolution]], but
+   * produces a full bidirectional sync (deletes, nullability, and comment changes) rather
+   * than additive-only evolution.
    *
-   * This function compares the current schema with the target schema and produces a sequence of
-   * TableChange objects representing:
-   * 1. New columns that need to be added
-   * 2. Existing columns that need type updates
+   * Column identity is keyed on the exact field name, not on a case-normalized one. On the
+   * incremental streaming-table path, `targetSchema` is the merge of the current and desired
+   * schemas, and [[SchemaMergingUtils.mergeSchemas]] has already folded an incoming
+   * case-only-differing field onto the persisted one. On the non-merging paths (materialized views
+   * and any full refresh), `targetSchema` is the run's declared schema as-is, so exact-name keying
+   * keeps a case-only rename visible as an explicit drop-then-add.
+   * Exact keying also avoids silently collapsing two genuinely distinct declared columns that
+   * differ only in case (`value` and `Value`) into an arbitrary one of the two.
+   *
+   * TODO (SPARK-59269): Support changes to field default value in the target schema.
    *
    * @param currentSchema The current schema of the table
    * @param targetSchema The target schema that we want the table to have
    * @return A sequence of TableChange objects representing the necessary changes
    */
-  def diffSchemas(currentSchema: StructType, targetSchema: StructType): Seq[TableChange] = {
-    val changes = scala.collection.mutable.ArrayBuffer.empty[TableChange]
+  def diffSchemas(currentSchema: StructType, targetSchema: StructType): Seq[TableChange] =
+    diffStructs(
+      currentStruct = currentSchema,
+      targetStruct = targetSchema,
+      // Root call: path is empty because current and target are the
+      // top-level schemas.
+      pathToStruct = Seq.empty
+    )
 
-    // Helper function to get a map of field name to field
-    def getFieldMap(schema: StructType): Map[String, StructField] = {
-      schema.fields.map(field => field.name -> field).toMap
-    }
+  /**
+   * Diffs two structs field-by-field, matching fields by exact name.
+   *
+   * @param currentStruct The struct as it exists in the current schema.
+   * @param targetStruct The struct as it should look in the target schema.
+   * @param pathToStruct Path segments from the top-level schema to this
+   *                     struct, if this is a nested struct. Empty for the
+   *                     root call.
+   */
+  private def diffStructs(
+      currentStruct: StructType,
+      targetStruct: StructType,
+      pathToStruct: Seq[String]): Seq[TableChange] = {
+    val topLevelFieldsInCurrent = currentStruct.fields.map(field => field.name -> field).toMap
+    val topLevelFieldsInTarget = targetStruct.fields.map(field => field.name -> field).toMap
 
-    val currentFields = getFieldMap(currentSchema)
-    val targetFields = getFieldMap(targetSchema)
-
-    // Find columns to add (in target but not in current)
-    val columnsToAdd = targetFields.keySet.diff(currentFields.keySet)
-    columnsToAdd.foreach { columnName =>
-      val field = targetFields(columnName)
-      changes += TableChange.addColumn(
-        Array(columnName),
-        field.dataType,
-        field.nullable,
-        field.getComment().orNull
+    // Fields present in target but not in current are columns that need to be added.
+    val columnsAdded = topLevelFieldsInTarget.values.toSeq
+      .filterNot(fieldInTarget =>
+        topLevelFieldsInCurrent.contains(fieldInTarget.name)
       )
-    }
-
-    // Find columns to delete (in current but not in target)
-    val columnsToDelete = currentFields.keySet.diff(targetFields.keySet)
-    columnsToDelete.foreach { columnName =>
-      changes += TableChange.deleteColumn(Array(columnName), false)
-    }
-
-    // Find columns with type changes (in both but with different types)
-    val commonColumns = currentFields.keySet.intersect(targetFields.keySet)
-    commonColumns.foreach { columnName =>
-      val currentField = currentFields(columnName)
-      val targetField = targetFields(columnName)
-
-      // If data types are different, add a type update change
-      if (currentField.dataType != targetField.dataType) {
-        changes += TableChange.updateColumnType(Array(columnName), targetField.dataType)
+      .map { fieldInTarget =>
+        TableChange.addColumn(
+          (pathToStruct :+ fieldInTarget.name).toArray,
+          fieldInTarget.dataType,
+          fieldInTarget.nullable,
+          fieldInTarget.getComment().orNull
+        )
       }
 
-      // If nullability is different, add a nullability update change
-      if (currentField.nullable != targetField.nullable) {
-        changes += TableChange.updateColumnNullability(Array(columnName), targetField.nullable)
-      }
+    // Fields present in current but not in target are columns that need to be removed.
+    val columnsDeleted = topLevelFieldsInCurrent.values.toSeq
+      .filterNot(fieldInCurrent =>
+        topLevelFieldsInTarget.contains(fieldInCurrent.name)
+      )
+      .map(fieldInCurrent =>
+        TableChange
+          .deleteColumn(
+            (pathToStruct :+ fieldInCurrent.name).toArray,
+            false
+          )
+      )
 
-      // If comments are different, add a comment update change
-      val currentComment = currentField.getComment().orNull
-      val targetComment = targetField.getComment().orNull
-      if (currentComment != targetComment) {
-        changes += TableChange.updateColumnComment(Array(columnName), targetComment)
-      }
+    // Fields in both current and target but vary in metadata or nested sub-fields represent
+    // columns that need to be updated.
+    val columnsUpdated = topLevelFieldsInCurrent.values.toSeq.flatMap {
+      fieldInCurrent =>
+        topLevelFieldsInTarget.get(fieldInCurrent.name).toSeq.flatMap {
+          fieldInTarget =>
+            diffField(
+              currentField = fieldInCurrent,
+              targetField = fieldInTarget,
+              pathToField = pathToStruct :+ fieldInCurrent.name
+            )
+        }
     }
 
-    changes.toSeq
+    columnsAdded ++ columnsDeleted ++ columnsUpdated
+  }
+
+  /**
+   * Diffs the type, nullability, and comment of one field present in both schemas. Other
+   * StructField.metadata entries (generated-column expressions, connector-specific metadata) are
+   * not diffed: pipeline schema synchronization does not support propagating them, and Spark's
+   * own ResolveSchemaEvolution likewise ignores them.
+   */
+  private def diffField(
+      currentField: StructField,
+      targetField: StructField,
+      pathToField: Seq[String]): Seq[TableChange] = {
+    warnOnFieldMetadataDrift(currentField, targetField, pathToField)
+    diffDataTypes(currentField.dataType, targetField.dataType, pathToField) ++
+      diffNullability(currentField.nullable, targetField.nullable, pathToField) ++
+      diffComment(currentField.getComment(), targetField.getComment(), pathToField)
+  }
+
+  /**
+   * Logs a warning when two fields' metadata bags differ beyond the keys that are either already
+   * handled (comment) or known-safe to ignore (catalog-assigned field IDs). Pipeline schema
+   * synchronization does not support propagating other metadata entries (defaults,
+   * generated-column expressions, connector-specific metadata), so these differences are left
+   * for the user to reconcile.
+   */
+  private def warnOnFieldMetadataDrift(
+      currentField: StructField,
+      targetField: StructField,
+      pathToField: Seq[String]): Unit = {
+    val current = stripHandledMetadata(currentField.metadata)
+    val target = stripHandledMetadata(targetField.metadata)
+    if (current != target) {
+      logWarning(
+        s"Field ${pathToField.mkString(".")} has metadata changes that pipeline schema " +
+          s"synchronization does not propagate and will be ignored. " +
+          s"Current: ${current.json}, Target: ${target.json}")
+    }
+  }
+
+  private def stripHandledMetadata(m: Metadata): Metadata =
+    new MetadataBuilder().withMetadata(m)
+      .remove("comment")
+      .remove(FIELD_ID_METADATA_KEY) // Catalog-assigned; not present in target schemas
+      .build()
+
+  private def diffNullability(
+      currentNullable: Boolean,
+      targetNullable: Boolean,
+      pathToField: Seq[String]
+  ): Option[TableChange] = {
+    Option.when(currentNullable != targetNullable)(
+      TableChange.updateColumnNullability(pathToField.toArray, targetNullable)
+    )
+  }
+
+  private def diffComment(
+      currentComment: Option[String],
+      targetComment: Option[String],
+      pathToField: Seq[String]
+  ): Option[TableChange] = {
+    Option.when(currentComment != targetComment)(
+      TableChange.updateColumnComment(pathToField.toArray, targetComment.orNull)
+    )
+  }
+
+  /**
+   * Diffs two data types at `path`, descending through matching complex types.
+   *
+   * Recurses freely through structs, arrays, and maps. After recursing into an array element
+   * or map key/value, any actual changes are rejected when the child type is itself an array
+   * or map, because [[org.apache.spark.sql.connector.catalog.CatalogV2Util]] cannot resolve
+   * paths with consecutive `element`/`key`/`value` segments (see SPARK-59188).
+   */
+  private def diffDataTypes(
+      currentType: DataType,
+      targetType: DataType,
+      pathToField: Seq[String]): Seq[TableChange] = (currentType, targetType) match {
+    case (currentStruct: StructType, targetStruct: StructType) =>
+      diffStructs(currentStruct, targetStruct, pathToField)
+
+    case (currentArray: ArrayType, targetArray: ArrayType) =>
+      val elementPath = pathToField :+ "element"
+      val dataTypeChanges = diffDataTypes(
+        currentType = currentArray.elementType,
+        targetType = targetArray.elementType,
+        pathToField = elementPath
+      )
+      val nullabilityChanges = diffNullability(
+        currentNullable = currentArray.containsNull,
+        targetNullable = targetArray.containsNull,
+        pathToField = elementPath
+      )
+      rejectUnsupportedNestedTypeChanges(
+        currentType = currentArray.elementType,
+        targetType = targetArray.elementType,
+        typeChanges = dataTypeChanges,
+        pathToElement = elementPath
+      )
+      dataTypeChanges ++ nullabilityChanges
+
+    case (currentMap: MapType, targetMap: MapType) =>
+      val keyPath = pathToField :+ "key"
+      val valuePath = pathToField :+ "value"
+      val keyTypeChanges = diffDataTypes(
+        currentType = currentMap.keyType,
+        targetType = targetMap.keyType,
+        pathToField = keyPath
+      )
+      val valueTypeChanges = diffDataTypes(
+        currentType = currentMap.valueType,
+        targetType = targetMap.valueType,
+        pathToField = valuePath
+      )
+      val valueNullabilityChanges = diffNullability(
+        currentNullable = currentMap.valueContainsNull,
+        targetNullable = targetMap.valueContainsNull,
+        pathToField = valuePath
+      )
+      rejectUnsupportedNestedTypeChanges(
+        currentType = currentMap.keyType,
+        targetType = targetMap.keyType,
+        typeChanges = keyTypeChanges,
+        pathToElement = keyPath
+      )
+      rejectUnsupportedNestedTypeChanges(
+        currentType = currentMap.valueType,
+        targetType = targetMap.valueType,
+        typeChanges = valueTypeChanges,
+        pathToElement = valuePath
+      )
+      keyTypeChanges ++ valueTypeChanges ++ valueNullabilityChanges
+
+    case _ if currentType == targetType =>
+      Seq.empty
+
+    case _ =>
+      Seq(TableChange.updateColumnType(pathToField.toArray, targetType))
+  }
+
+  /**
+   * Throws when an array element or map key/value is itself an array or map and the
+   * recursive diff found changes. The resulting paths would contain consecutive
+   * `element`/`key`/`value` segments that
+   * [[org.apache.spark.sql.connector.catalog.CatalogV2Util]] cannot resolve (SPARK-59188).
+   */
+  private def rejectUnsupportedNestedTypeChanges(
+      currentType: DataType,
+      targetType: DataType,
+      typeChanges: Seq[TableChange],
+      pathToElement: Seq[String]): Unit = {
+    if (typeChanges.nonEmpty) {
+      (currentType, targetType) match {
+        case (_: ArrayType | _: MapType, _: ArrayType | _: MapType) =>
+          throw new SparkUnsupportedOperationException(
+            errorClass = "PIPELINE_NESTED_COMPLEX_TYPE_SCHEMA_EVOLUTION_UNSUPPORTED",
+            messageParameters = Map(
+              "columnPath" -> pathToElement.mkString("."),
+              "currentType" -> currentType.simpleString,
+              "targetType" -> targetType.simpleString))
+        case _ =>
+      }
+    }
   }
 }

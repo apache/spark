@@ -36,12 +36,13 @@ import org.apache.spark.util.Utils
 
 private[spark] class BasicExecutorFeatureStep(
     kubernetesConf: KubernetesExecutorConf,
-    secMgr: SecurityManager,
     resourceProfile: ResourceProfile)
   extends KubernetesFeatureConfigStep with Logging {
 
   // Consider moving some of these fields to KubernetesConf or KubernetesExecutorSpecificConf
   private val executorContainerImage = kubernetesConf.image
+  private val allowPrivilegeEscalation =
+    kubernetesConf.get(KUBERNETES_EXECUTOR_ALLOW_PRIVILEGE_ESCALATION)
   private val blockManagerPort = kubernetesConf
     .sparkConf
     .getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
@@ -51,7 +52,8 @@ private[spark] class BasicExecutorFeatureStep(
 
   private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
-  private val driverAddress = if (kubernetesConf.get(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP)) {
+  private val driverAddress = if (kubernetesConf.get(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP) &&
+      !Utils.isAnyLocalAddress(kubernetesConf.get(DRIVER_BIND_ADDRESS))) {
     kubernetesConf.get(DRIVER_BIND_ADDRESS)
   } else {
     kubernetesConf.get(DRIVER_HOST_ADDRESS)
@@ -134,7 +136,7 @@ private[spark] class BasicExecutorFeatureStep(
       buildExecutorResourcesQuantities(execResources.customResources.values.toSet)
 
     val executorEnv: Seq[EnvVar] = {
-      val sparkAuthSecret = Option(secMgr.getSecretKey()).map {
+      val sparkAuthSecret = kubernetesConf.authSecret.map {
         case authSecret: String if kubernetesConf.get(AUTH_SECRET_FILE_EXECUTOR).isEmpty =>
           Seq(SecurityManager.ENV_AUTH_SECRET -> authSecret)
         case _ => Nil
@@ -166,7 +168,11 @@ private[spark] class BasicExecutorFeatureStep(
           ENV_DRIVER_URL -> driverUrl,
           ENV_EXECUTOR_CORES -> {
             if (kubernetesConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).getOrElse(false)) {
-              kubernetesConf.get("spark.task.cpus", "1")
+              // `spark.task.cpus` may be fractional, so round up to an integer (at least 1).
+              // When it is 0.5 or less, the single announced core fits more than one task and
+              // the single-task-per-recovery-executor guarantee no longer holds;
+              // ExecutorPodsAllocator logs a warning for that case.
+              math.max(1, kubernetesConf.get("spark.task.cpus", "1.0").toDouble.ceil.toInt).toString
             } else {
               execResources.cores.get.toString
             }
@@ -238,6 +244,9 @@ private[spark] class BasicExecutorFeatureStep(
       .addAllToEnv(executorEnv.asJava)
       .addAllToPorts(requiredPorts.asJava)
       .addToArgs("executor")
+      .editOrNewSecurityContext()
+        .withAllowPrivilegeEscalation(allowPrivilegeEscalation)
+        .endSecurityContext()
       .build()
     val executorContainerWithConfVolume = if (disableConfigMap) {
       executorContainer

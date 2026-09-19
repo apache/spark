@@ -232,6 +232,34 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-58113: publishNotReadyAddresses defaults to false") {
+    val kconf = KubernetesTestConf.createDriverConf(
+      sparkConf = new SparkConf(false),
+      labels = DRIVER_LABELS,
+      serviceLabels = DRIVER_SERVICE_LABELS,
+      serviceAnnotations = DRIVER_SERVICE_ANNOTATIONS)
+    val driverService = new DriverServiceFeatureStep(kconf)
+      .getAdditionalKubernetesResources()
+      .head
+      .asInstanceOf[Service]
+    assert(driverService.getSpec.getPublishNotReadyAddresses === false)
+  }
+
+  test("SPARK-58113: Support publishNotReadyAddresses") {
+    val sparkConf = new SparkConf(false)
+      .set(KUBERNETES_DRIVER_SERVICE_PUBLISH_NOT_READY_ADDRESSES, true)
+    val kconf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      labels = DRIVER_LABELS,
+      serviceLabels = DRIVER_SERVICE_LABELS,
+      serviceAnnotations = DRIVER_SERVICE_ANNOTATIONS)
+    val driverService = new DriverServiceFeatureStep(kconf)
+      .getAdditionalKubernetesResources()
+      .head
+      .asInstanceOf[Service]
+    assert(driverService.getSpec.getPublishNotReadyAddresses === true)
+  }
+
   private def verifyService(
       driverPort: Int,
       blockManagerPort: Int,

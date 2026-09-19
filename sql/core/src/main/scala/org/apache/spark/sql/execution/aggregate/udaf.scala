@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, USER_DEFINED_AGGREGATION}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, UserDefinedAggregator}
 import org.apache.spark.sql.types._
@@ -358,6 +359,8 @@ case class ScalaUDAF(
   with ImplicitCastInputTypes
   with UserDefinedExpression {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(USER_DEFINED_AGGREGATION)
+
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
@@ -499,6 +502,8 @@ case class ScalaAggregator[IN, BUF, OUT](
   with UserDefinedExpression
   with ImplicitCastInputTypes
   with Logging {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(USER_DEFINED_AGGREGATION)
 
   // input and buffer encoders are resolved by ResolveEncodersInScalaAgg
   @transient private[this] lazy val inputDeserializer = inputEncoder.createDeserializer()

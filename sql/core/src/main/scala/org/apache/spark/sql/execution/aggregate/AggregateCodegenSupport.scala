@@ -45,9 +45,10 @@ trait AggregateCodegenSupport
 
   /**
    * The variables are used as aggregation buffers and each aggregate function has one or more
-   * ExprCode to initialize its buffer slots. Only used for aggregation without keys.
+   * ExprCode to initialize its buffer slots. Used for aggregation without keys, and for sort-based
+   * aggregation with keys (where a single group is aggregated at a time).
    */
-  private var bufVars: Seq[Seq[ExprCode]] = _
+  protected var bufVars: Seq[Seq[ExprCode]] = _
 
   /**
    * Whether this operator needs to build hash table.
@@ -94,13 +95,13 @@ trait AggregateCodegenSupport
   override def usedInputs: AttributeSet = inputSet
 
   /**
-   * The generated code for `doProduce` call when aggregate does not have grouping keys.
+   * Creates global mutable state variables to hold the aggregation buffer, one nested sequence of
+   * `ExprCode` per aggregate function. The returned `ExprCode`s carry the code that (re)initializes
+   * the buffer slots with the aggregate functions' initial values; running that code resets the
+   * buffer for a new group. The result is also stored in `bufVars` so that `doConsume` can update
+   * the same variables.
    */
-  private def doProduceWithoutKeys(ctx: CodegenContext): String = {
-    val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
-    // The generated function doesn't have input row in the code context.
-    ctx.INPUT_ROW = null
-
+  protected def createAggBufVars(ctx: CodegenContext): Seq[Seq[ExprCode]] = {
     // generate variables for aggregation buffer
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val initExpr = functions.map(f => f.initialValues)
@@ -121,9 +122,21 @@ trait AggregateCodegenSupport
           JavaCode.global(value, e.dataType))
       }
     }
-    val flatBufVars = bufVars.flatten
-    val initBufVar = evaluateVariables(flatBufVars)
+    bufVars
+  }
 
+  /**
+   * The generated code for `doProduce` call when aggregate does not have grouping keys.
+   */
+  private def doProduceWithoutKeys(ctx: CodegenContext): String = {
+    val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
+    // The generated function doesn't have input row in the code context.
+    ctx.INPUT_ROW = null
+    // generate variables for aggregation buffer
+    val flatBufVars = createAggBufVars(ctx).flatten
+    val initBufVar = evaluateVariables(flatBufVars)
+    val functions =
+      aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     // generate variables for output
     val (resultVars, genResult) = if (modes.contains(Final) || modes.contains(Complete)) {
       // evaluate aggregate results
@@ -195,6 +208,15 @@ trait AggregateCodegenSupport
    * The generated code for `doConsume` call when aggregate does not have grouping keys.
    */
   private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    generateAggBufferUpdateCode(ctx, input)
+  }
+
+  /**
+   * The generated code that evaluates the aggregate functions for one input row and updates the
+   * aggregation buffer held in `bufVars`. Shared by the no-keys path and the sort-based with-keys
+   * path, both of which keep the aggregation buffer in global mutable state variables.
+   */
+  protected def generateAggBufferUpdateCode(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ inputAttributes

@@ -23,36 +23,37 @@ object from MLlib or pass SciPy `scipy.sparse` column vectors if
 SciPy is available in their environment.
 """
 
-import sys
 import array
 import struct
+import sys
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
-    cast,
     Dict,
     Iterable,
     List,
     Optional,
-    overload,
     Sequence,
     Tuple,
     Type,
-    TYPE_CHECKING,
     Union,
+    cast,
+    overload,
 )
 
 import numpy as np
 
 from pyspark.sql.types import (
-    UserDefinedType,
-    StructField,
-    StructType,
     ArrayType,
+    BooleanType,
+    ByteType,
+    DataTypeSingleton,
     DoubleType,
     IntegerType,
-    ByteType,
-    BooleanType,
+    StructField,
+    StructType,
+    UserDefinedType,
 )
 
 __all__ = [
@@ -67,8 +68,8 @@ __all__ = [
 ]
 
 if TYPE_CHECKING:
-    from pyspark.mllib._typing import NormType
     from pyspark.ml._typing import VectorLike
+    from pyspark.mllib._typing import NormType
 
 
 # Check whether we have SciPy. MLlib works without it too, but if we have it, some methods,
@@ -157,7 +158,7 @@ def _double_to_long_bits(value: float) -> int:
     return struct.unpack("Q", struct.pack("d", value))[0]
 
 
-class VectorUDT(UserDefinedType):
+class VectorUDT(UserDefinedType, metaclass=DataTypeSingleton):
     """
     SQL user-defined type (UDT) for Vector.
     """
@@ -212,7 +213,7 @@ class VectorUDT(UserDefinedType):
         return "vector"
 
 
-class MatrixUDT(UserDefinedType):
+class MatrixUDT(UserDefinedType, metaclass=DataTypeSingleton):
     """
     SQL user-defined type (UDT) for Matrix.
     """

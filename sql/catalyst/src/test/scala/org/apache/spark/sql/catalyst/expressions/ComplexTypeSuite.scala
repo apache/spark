@@ -294,6 +294,53 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(GetMapValue(dupTimeMap, Literal(t1, timeType)), 10)
         checkEvaluation(GetMapValue(dupTimeMap, Literal(t2, timeType)), 20)
 
+        // Nanosecond timestamp keys (SPARK-57841). Physically TimestampNanosVal objects, so they
+        // use the hashCode()/equals() fall-through arm of genHash / hashKeyOnDriver / genEqual --
+        // NOT the primitive-long arm that lists only microsecond timestamps. Keys share epochMicros
+        // and differ only in nanosWithinMicro, so a correct lookup must consult the full
+        // sub-microsecond value on both the hash (threshold 0) and linear (threshold Int.MaxValue)
+        // paths. Built from internal TimestampNanosVal via ArrayBasedMapData because Literal.create
+        // of a Scala Map with a nanos type routes through the schema-aware converter, which accepts
+        // only LocalDateTime / Instant keys (see the Decimal / Time duplicate-key cases above).
+        val ntz9 = TimestampNTZNanosType(9)
+        val micros = 1577836800000000L // 2020-01-01T00:00:00Z
+        val n1 = TimestampNanosTestUtils.nanosVal(micros, 1)
+        val n2 = TimestampNanosTestUtils.nanosVal(micros, 999) // same micro as n1, must not alias
+        val n3 = TimestampNanosTestUtils.nanosVal(micros + 1, 0)
+        val ntzNanosMap = Literal.create(
+          new ArrayBasedMapData(
+            new GenericArrayData(Array[Any](n1, n2, n3)),
+            new GenericArrayData(Array[Any](10, 20, 30))),
+          MapType(ntz9, IntegerType))
+        checkEvaluation(GetMapValue(ntzNanosMap, Literal(n1, ntz9)), 10)
+        checkEvaluation(GetMapValue(ntzNanosMap, Literal(n2, ntz9)), 20)
+        checkEvaluation(GetMapValue(ntzNanosMap, Literal(n3, ntz9)), 30)
+        checkEvaluation(GetMapValue(ntzNanosMap,
+          Literal(TimestampNanosTestUtils.nanosVal(micros, 500), ntz9)), null)
+
+        // LTZ family behaves the same; also cover a null map value.
+        val ltz9 = TimestampLTZNanosType(9)
+        val l1 = TimestampNanosTestUtils.nanosVal(micros, 100)
+        val l2 = TimestampNanosTestUtils.nanosVal(micros, 900)
+        val ltzNanosMap = Literal.create(
+          new ArrayBasedMapData(
+            new GenericArrayData(Array[Any](l1, l2)),
+            new GenericArrayData(Array[Any](10, null))),
+          MapType(ltz9, IntegerType))
+        checkEvaluation(GetMapValue(ltzNanosMap, Literal(l1, ltz9)), 10)
+        checkEvaluation(GetMapValue(ltzNanosMap, Literal(l2, ltz9)), null) // present, null value
+        checkEvaluation(GetMapValue(ltzNanosMap,
+          Literal(TimestampNanosTestUtils.nanosVal(micros, 500), ltz9)), null) // absent
+
+        // Nanosecond duplicate keys: first match wins (ArrayBasedMapData first-wins semantics).
+        val dupNanosMap = Literal.create(
+          new ArrayBasedMapData(
+            new GenericArrayData(Array[Any](n1, n2, n1)),
+            new GenericArrayData(Array[Any](10, 20, 30))),
+          MapType(ntz9, IntegerType))
+        checkEvaluation(GetMapValue(dupNanosMap, Literal(n1, ntz9)), 10)
+        checkEvaluation(GetMapValue(dupNanosMap, Literal(n2, ntz9)), 20)
+
         // 6. Binary Keys
         val binaryMap = Literal.create(Map(Array(1.toByte) -> 10, Array(2.toByte) -> 20),
           MapType(BinaryType, IntegerType))
@@ -366,6 +413,23 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "1000") {
       assert(GetMapValue(foldableLit, Literal(1)).usesFoldableHashLookup)
       assert(ElementAt(foldableLit, Literal(1)).usesFoldableHashLookup)
+    }
+
+    // A nanosecond-timestamp key type is a hashable AtomicType, so a foldable nanos-keyed map above
+    // the threshold takes the hash path too (SPARK-57841). Keys are internal TimestampNanosVal.
+    val ntz9 = TimestampNTZNanosType(9)
+    val nanosEntries = (0 until 2000).map { i =>
+      TimestampNanosTestUtils.nanosVal(1577836800000000L + i, i % 1000) -> i
+    }
+    val nanosFoldableLit = Literal.create(
+      new ArrayBasedMapData(
+        new GenericArrayData(nanosEntries.map(_._1.asInstanceOf[Any]).toArray),
+        new GenericArrayData(nanosEntries.map(_._2.asInstanceOf[Any]).toArray)),
+      MapType(ntz9, IntegerType))
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "1000") {
+      assert(GetMapValue(nanosFoldableLit,
+        Literal(TimestampNanosTestUtils.nanosVal(1577836800000000L, 0), ntz9))
+        .usesFoldableHashLookup)
     }
 
     // Foldable but below threshold --> LinearExecutor.
@@ -748,6 +812,29 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         "actualNum" -> "3",
         "docroot" -> SPARK_DOC_ROOT)
     )
+  }
+
+  test("SPARK-57736: CreateNamedStruct.dataType is null-safe when a field name is null") {
+    // Accessing `dataType` must not throw an NPE even though a null field name is invalid input.
+    val struct = CreateNamedStruct(Seq(Literal.create(null, StringType), Literal(1)))
+    val dt = struct.dataType
+    assert(dt.length == 1)
+    assert(dt.head.name == null)
+    // The null field name is still reported as invalid by input type checking.
+    assert(struct.checkInputDataTypes().isFailure)
+    val result = struct.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(result.errorSubClass == "UNEXPECTED_NULL")
+
+    // A null field name mixed with valid named fields is null-safe and still flagged.
+    val mixed = CreateNamedStruct(Seq(
+      Literal("a"), Literal(1),
+      Literal.create(null, StringType), Literal(2)))
+    val mixedDt = mixed.dataType
+    assert(mixedDt.length == 2)
+    assert(mixedDt.head.name == "a")
+    assert(mixedDt(1).name == null)
+    assert(mixed.checkInputDataTypes().asInstanceOf[DataTypeMismatch].errorSubClass ==
+      "UNEXPECTED_NULL")
   }
 
   test("test dsl for complex type") {

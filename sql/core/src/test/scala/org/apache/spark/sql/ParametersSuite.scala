@@ -20,10 +20,10 @@ package org.apache.spark.sql
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier, UnresolvedInsertTarget, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, Limit, OverwriteByExpression, ReplaceTableAsSelect, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, InsertIntoStatement, Limit, ReplaceTableAsSelect, UnresolvedInsert, WithCTE}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -72,6 +72,16 @@ class ParametersSuite extends SharedSparkSession {
     checkAnswer(
       spark.sql("""SELECT contains('Spark \'SQL\'', ?)""", Array("SQL")),
       Row(true))
+  }
+
+  test("SPARK-58341: bind 5 or more positional parameters in order") {
+    checkAnswer(
+      spark.sql("SELECT ?, ?, ?, ?, ?, ?", Array(1, 2, 3, 4, 5, 6)),
+      Row(1, 2, 3, 4, 5, 6))
+
+    checkAnswer(
+      spark.sql("SELECT ? + ?, ? * ?, ? - ?", Array(1, 2, 30, 4, 500, 6)),
+      Row(3, 120, 494))
   }
 
   test("parameter binding is case sensitive") {
@@ -2464,9 +2474,8 @@ class ParametersSuite extends SharedSparkSession {
   }
 
   // SPARK-46625: WITH ... <write-with-IDENTIFIER> SELECT ... FROM cte
-  // The placeholder is pushed into the command's identifier slot at parse time, so
-  // `CTESubstitution` sees the `CTEInChildren` directly and never produces the invalid
-  // `WithCTE(InsertIntoStatement, ...)` / `WithCTE(CreateTableAsSelect, ...)` shape.
+  // The placeholder stays inside a CTEInChildren command at parse time, so CTESubstitution never
+  // produces a WithCTE around the command itself.
   private def assertNoWithCTEAroundCTEInChildren(df: DataFrame): Unit = {
     df.queryExecution.analyzed.foreach {
       case WithCTE(_: CTEInChildren, _) =>
@@ -2502,6 +2511,17 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
+  test("INSERT target is not substituted by a same-named CTE") {
+    withTable("t_cte_target") {
+      sql("CREATE TABLE t_cte_target (a INT) USING PARQUET")
+      sql(
+        """WITH t_cte_target AS (SELECT 99 AS a)
+          |INSERT INTO IDENTIFIER(lower('T_CTE_TARGET'))
+          |SELECT 1 AS a""".stripMargin)
+      checkAnswer(spark.table("t_cte_target"), Row(1))
+    }
+  }
+
   test("SPARK-46625: CREATE TABLE IDENTIFIER(:p) AS WITH ... SELECT ... FROM cte") {
     withTable("t_cte_ctas") {
       val df = spark.sql(
@@ -2514,45 +2534,27 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  // SPARK-46625: legacy parameter-substitution mode triggers the parameters.scala traversal
-  // path. The placeholder lives in `InsertIntoStatement.table`, which is *not* a child, so this
-  // exercises the `InsertIntoStatement` special-case in `BindParameters.bind` that recurses into
-  // the `table` slot, and the `getDefaultTreePatternBits` override on `InsertIntoStatement` that
-  // exposes `table`'s tree-pattern bits for pruning.
-  test("SPARK-46625: INSERT IDENTIFIER(:p) under legacy parameter substitution") {
-    withSQLConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "true") {
-      withTable("t_legacy_param") {
-        sql("CREATE TABLE t_legacy_param (a INT) USING PARQUET")
-        spark.sql(
-          """WITH transformation AS (SELECT 11 AS a)
-            |INSERT INTO IDENTIFIER(:tname)
-            |SELECT * FROM transformation""".stripMargin,
-          Map("tname" -> "t_legacy_param"))
-        checkAnswer(spark.table("t_legacy_param"), Row(11))
-      }
-    }
-  }
-
-  // SPARK-46625: INSERT INTO REPLACE WHERE goes through `OverwriteByExpression`, whose `table`
-  // slot is typed `NamedRelation`. `PlanWithUnresolvedIdentifier` extends `NamedRelation` so the
-  // placeholder sits in the slot directly. Verify on the parsed plan that the placeholder lives
-  // in `OverwriteByExpression.table` rather than wrapping the whole command -- running the
-  // analyzer fully would require a v2 catalog.
+  // The unresolved binary node exposes the target to analyzer traversal and keeps CTE definitions
+  // on the input query.
   test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) REPLACE WHERE ... parser") {
     // Use a non-literal-string expression so `withIdentClause` produces
-    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to `UnresolvedRelation`.
+    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to `UnresolvedInsertTarget`.
     val parsedPlan = spark.sessionState.sqlParser.parsePlan(
       """WITH transformation AS (SELECT 99 AS a)
         |INSERT INTO IDENTIFIER('some' || '_table') REPLACE WHERE a = 10
         |SELECT * FROM transformation""".stripMargin)
-    val overwrite = parsedPlan.collectFirst { case o: OverwriteByExpression => o }.getOrElse(
-      fail(s"Expected OverwriteByExpression in parsed plan:\n$parsedPlan"))
-    assert(overwrite.table.isInstanceOf[PlanWithUnresolvedIdentifier],
-      s"Expected OverwriteByExpression.table to be PlanWithUnresolvedIdentifier, " +
-        s"got ${overwrite.table.getClass.getSimpleName}:\n$parsedPlan")
-    // After CTESubstitution runs, the CTE defs should land on the command's children (because
-    // OverwriteByExpression is a CTEInChildren) -- never as `WithCTE(OverwriteByExpression, _)`.
+    val insert = parsedPlan.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in parsed plan:\n$parsedPlan"))
+    assert(insert.table.isInstanceOf[PlanWithUnresolvedIdentifier],
+      s"Expected UnresolvedInsert.table to be PlanWithUnresolvedIdentifier, " +
+        s"got ${insert.table.getClass.getSimpleName}:\n$parsedPlan")
+    assert(insert.children === Seq(insert.table, insert.query))
+
     val substituted = CTESubstitution.apply(parsedPlan)
+    val substitutedInsert = substituted.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert after CTE substitution:\n$substituted"))
+    assert(!substitutedInsert.table.exists(_.isInstanceOf[WithCTE]),
+      s"CTE definitions must not wrap the target table:\n$substituted")
     substituted.foreach {
       case WithCTE(_: CTEInChildren, _) =>
         fail(s"Found invalid WithCTE(CTEInChildren, _) shape after CTESubstitution:\n$substituted")
@@ -2560,40 +2562,80 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  // SPARK-46625: Parameter inside `IDENTIFIER(:p)` on REPLACE WHERE lives in
-  // `OverwriteByExpression.table`, which is a non-child slot. Verify that
-  // `BindParameters.bind` reaches into the slot via the explicit `OverwriteByExpression`
-  // recursion (parameters.scala) and that the `getDefaultTreePatternBits` override on
-  // `OverwriteByExpression` exposes the PARAMETER bit for pruning. Done at the rule level
-  // because driving REPLACE WHERE through full analysis would require a v2 catalog.
-  test("SPARK-46625: BindParameters recurses into OverwriteByExpression.table") {
+  test("parsed INSERT targets use an unresolved binary plan") {
+    val regularInsert = spark.sessionState.sqlParser
+      .parsePlan("INSERT INTO target_table SELECT 1")
+      .asInstanceOf[UnresolvedInsert]
+    assert(regularInsert.table.isInstanceOf[UnresolvedInsertTarget])
+    assert(regularInsert.children === Seq(regularInsert.table, regularInsert.query))
+
+    val identifierInsert = spark.sessionState.sqlParser
+      .parsePlan("INSERT INTO IDENTIFIER(lower('TESTCAT.NS.TARGET_TABLE')) SELECT 1")
+      .asInstanceOf[UnresolvedInsert]
+    assert(identifierInsert.table.isInstanceOf[PlanWithUnresolvedIdentifier])
+    assert(identifierInsert.children === Seq(identifierInsert.table, identifierInsert.query))
+
+    val lowered = spark.sessionState.analyzer.resolveUnresolvedInsert(identifierInsert)
+      .asInstanceOf[InsertIntoStatement]
+    assert(lowered.table.asInstanceOf[UnresolvedRelation].multipartIdentifier ===
+      Seq("testcat", "ns", "target_table"))
+    assert(lowered.children === Seq(lowered.query))
+  }
+
+  // BindParameters reaches a dynamic target through normal child traversal.
+  test("SPARK-46625: BindParameters visits UnresolvedInsert.table") {
     val parsedPlan = spark.sessionState.sqlParser.parsePlan(
       """INSERT INTO IDENTIFIER(:tname) REPLACE WHERE a = 10
         |SELECT 1 AS a""".stripMargin)
-    val overwrite = parsedPlan.collectFirst { case o: OverwriteByExpression => o }.getOrElse(
-      fail(s"Expected OverwriteByExpression in parsed plan:\n$parsedPlan"))
-    // Pruning prerequisite: the PARAMETER bit must be visible at the OverwriteByExpression
-    // level (it lives inside `table`, which is not a child); this exercises the
-    // `getDefaultTreePatternBits` override.
-    assert(overwrite.containsPattern(PARAMETER),
-      "OverwriteByExpression.getDefaultTreePatternBits must propagate `table`'s PARAMETER bit")
+    val insert = parsedPlan.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in parsed plan:\n$parsedPlan"))
+    assert(insert.containsPattern(PARAMETER),
+      "UnresolvedInsert must propagate the table child's PARAMETER bit")
 
     val bound = BindParameters.apply(
       NameParameterizedQuery(parsedPlan, Seq("tname"), Seq(Literal("foo_table"))))
-    val boundOverwrite = bound.collectFirst { case o: OverwriteByExpression => o }.getOrElse(
-      fail(s"Expected OverwriteByExpression in bound plan:\n$bound"))
-    assert(!boundOverwrite.table.containsPattern(PARAMETER),
-      s"Expected :tname inside OverwriteByExpression.table to be bound, got:\n$boundOverwrite")
+    val boundInsert = bound.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in bound plan:\n$bound"))
+    assert(!boundInsert.table.containsPattern(PARAMETER),
+      s"Expected :tname inside UnresolvedInsert.table to be bound, got:\n$boundInsert")
   }
 
-  // SPARK-46625 followup: `INSERT INTO IDENTIFIER(<sql-variable>) ...` places a
-  // `PlanWithUnresolvedIdentifier` in `InsertIntoStatement.table`, whose `identifierExpr`
-  // holds an `UnresolvedAttribute` for the variable name. That slot is a non-child
-  // `LogicalPlan`, so the default `ResolveReferences` traversal never resolves the
-  // attribute, `ResolveIdentifierClause` cannot fire (it waits on `identifierExpr.resolved`),
-  // and analysis fails. Verify that the explicit `InsertIntoStatement` case added to
-  // `ResolveReferences` rewrites the attribute to a `VariableReference` and the insert
-  // completes end-to-end.
+  test("BindParameters binds IDENTIFIER(:p) in the table slot for REPLACE WHERE with a column " +
+      "list and preserves the column list") {
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """INSERT INTO IDENTIFIER(:tname) (id, name) REPLACE WHERE id = 1
+        |SELECT 1 AS id, 'x' AS name""".stripMargin)
+    val insert = parsedPlan.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in parsed plan:\n$parsedPlan"))
+    assert(insert.containsPattern(PARAMETER),
+      "UnresolvedInsert must expose the table child's PARAMETER bit for pruning")
+
+    val bound = BindParameters.apply(
+      NameParameterizedQuery(parsedPlan, Seq("tname"), Seq(Literal("foo_table"))))
+
+    val boundInsert = bound.collectFirst { case i: UnresolvedInsert => i }.getOrElse(
+      fail(s"Expected UnresolvedInsert in bound plan:\n$bound"))
+    assert(!boundInsert.table.containsPattern(PARAMETER),
+      s"Expected :tname inside UnresolvedInsert.table to be bound, got:\n$boundInsert")
+    assert(boundInsert.userSpecifiedCols === Seq("id", "name"),
+      s"Expected the column list to survive table-slot binding, got: " +
+        s"${boundInsert.userSpecifiedCols}")
+  }
+
+  test("ResolveFunctions resolves expressions in an UnresolvedInsert target") {
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """INSERT INTO IDENTIFIER(lower(regexp_replace(
+        |  'TESTCAT.PLACEHOLDER', 'PLACEHOLDER', 'TAB'))) REPLACE WHERE id = 1
+        |SELECT 1 AS id""".stripMargin)
+    val insert = parsedPlan.asInstanceOf[UnresolvedInsert]
+
+    val resolvedInsert = spark.sessionState.analyzer.ResolveFunctions(insert)
+      .asInstanceOf[UnresolvedInsert]
+    assert(resolvedInsert.table.asInstanceOf[PlanWithUnresolvedIdentifier]
+      .identifierExpr.resolved)
+  }
+
+  // Normal child traversal resolves a SQL variable in the target IDENTIFIER expression.
   test("SPARK-46625: INSERT INTO IDENTIFIER(<sql-variable>) resolves variable in table slot") {
     withTable("t_var_insert") {
       sql("CREATE TABLE t_var_insert (a INT) USING PARQUET")
@@ -2608,13 +2650,8 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  // SPARK-46625 followup: when the SQL variable name in `IDENTIFIER(<name>)` collides
-  // with a query output column, the IDENTIFIER expression must still bind to the
-  // variable, not to the column. The `ResolveReferences` case for `InsertIntoStatement`
-  // resolves `identifierExpr` against the `PlanWithUnresolvedIdentifier` itself (whose
-  // `children` are `Nil` on this path), not against the surrounding `InsertIntoStatement`
-  // (whose child is `query`), so query output columns are out of scope and only the
-  // last-resort variable resolution path fires.
+  // The identifier leaf has no children, so a colliding query output column is out of scope and
+  // variable resolution remains the last resort.
   test("SPARK-46625: INSERT INTO IDENTIFIER(<sql-variable>) ignores colliding query columns") {
     withTable("t_shadow") {
       sql("CREATE TABLE t_shadow (a INT) USING PARQUET")

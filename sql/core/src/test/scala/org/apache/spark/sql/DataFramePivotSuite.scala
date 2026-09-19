@@ -476,4 +476,45 @@ class DataFramePivotSuite extends SharedSparkSession {
         Row(10, 30))
     }
   }
+
+  test("ORDER BY on a column dropped by PIVOT fails name resolution") {
+    // PIVOT drops the pivoted measure column, so `t.v` fails name resolution with
+    // UNRESOLVED_COLUMN: the dropped column is never appended to a lower operator.
+    withSQLConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(
+            """SELECT * FROM VALUES (1, 1, 100), (2, 2, 200) AS t(id, m, v)
+              |PIVOT (SUM(v) FOR m IN (1, 2))
+              |ORDER BY t.v""".stripMargin)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
+          "objectName" -> "`t`.`v`",
+          "proposal" -> "`1`, `2`, `t`.`id`"),
+        queryContext =
+          Array(ExpectedContext(fragment = "t.v", start = 101, stop = 103)))
+    }
+  }
+
+  test("DataFrame sort on a column dropped by PIVOT is rejected") {
+    // The Column reference carries the dropped column's id, so unlike the SQL case above it
+    // reaches hidden-output insertion rather than failing name resolution, and analysis fails
+    // with MISSING_ATTRIBUTES.
+    withSQLConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      val df = Seq((1, 1, 100), (2, 2, 200)).toDF("id", "m", "v")
+      val pivoted = df.groupBy("id").pivot("m", Seq(1, 2)).agg(sum($"v"))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          pivoted.sort(df("v"))
+        },
+        condition = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+        parameters = Map(
+          "missingAttributes" -> "\"v\"",
+          "input" -> "\"id\", \"1\", \"2\"",
+          "operator" -> "!Sort \\[v#\\d+ ASC NULLS FIRST\\], true"),
+        matchPVals = true)
+    }
+  }
 }

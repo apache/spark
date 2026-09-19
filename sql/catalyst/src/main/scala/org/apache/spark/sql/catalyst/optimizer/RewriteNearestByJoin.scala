@@ -92,11 +92,26 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
       //    cross-product today -- should not silently bypass that choice.
       val join = Join(taggedLeft, right, joinType, None, JoinHint.NONE)
 
-      val (aggInput, rankingForAgg) = if (!rankingExpression.deterministic) {
-        val rankingAlias = Alias(rankingExpression, "__ranking__")()
+      // A LEFT OUTER join widens the right-side columns to nullable. The synthesized Aggregate
+      // (and the optional `__ranking__` Project) below sit directly on top of this join, so every
+      // reference to a right-side column must carry that widened nullability. Otherwise the
+      // rewritten plan would declare a right column non-nullable while its child -- the join --
+      // produces it as nullable, which plan-integrity validation flags as a nullability
+      // regression. INNER joins do not widen the right side, so this is a no-op there.
+      val rightAttrs = joinType match {
+        case LeftOuter => right.output.map(_.withNullability(true))
+        case _ => right.output
+      }
+      val rightNullabilityMap = AttributeMap(right.output.zip(rightAttrs))
+      val rankingInJoin = rankingExpression.transform {
+        case a: Attribute => rightNullabilityMap.getOrElse(a, a)
+      }
+
+      val (aggInput, rankingForAgg) = if (!rankingInJoin.deterministic) {
+        val rankingAlias = Alias(rankingInJoin, "__ranking__")()
         Project(join.output :+ rankingAlias, join) -> rankingAlias.toAttribute
       } else {
-        join -> rankingExpression
+        join -> rankingInJoin
       }
 
       // 4. Aggregate grouped by `__qid`:
@@ -104,7 +119,7 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
       //      - max_by/min_by(struct(right.*), ranking, k) as `_matches`.
       //    The ranking expression references left and right columns directly; no outer
       //    reference is needed because both sides are present in the joined input.
-      val rightStruct = CreateStruct(right.output)
+      val rightStruct = CreateStruct(rightAttrs)
       // reverse = true  -> MIN_BY (smallest ranking value first, for DISTANCE)
       // reverse = false -> MAX_BY (largest ranking value first, for SIMILARITY)
       val reverse = direction match {

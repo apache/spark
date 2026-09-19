@@ -34,7 +34,7 @@ import org.apache.spark.util.NextIterator
  * @param keyExprEnc - Spark SQL encoder for key
  * @param valEncoder - Spark SQL encoder for value
  * @param ttlConfig  - TTL configuration for values  stored in this state
- * @param batchTimestampMs - current batch processing timestamp.
+ * @param currentTimestampMs - function to get the current processing time timestamp.
  * @param prevBatchTimestampMs - batch timestamp from the previous micro-batch (exclusive).
  *                               Entries with expiration at or below this timestamp are assumed
  *                               to have been already cleaned up and will be skipped during
@@ -48,11 +48,11 @@ class ListStateImplWithTTL[S](
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: ExpressionEncoder[Any],
     ttlConfig: TTLConfig,
-    batchTimestampMs: Long,
+    currentTimestampMs: () => Long,
     prevBatchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric])
   extends OneToManyTTLState(
-    stateName, store, keyExprEnc.schema, ttlConfig, batchTimestampMs,
+    stateName, store, keyExprEnc.schema, ttlConfig, currentTimestampMs,
     prevBatchTimestampMs, metrics) with ListState[S] {
 
   private lazy val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
@@ -83,7 +83,7 @@ class ListStateImplWithTTL[S](
 
       override protected def getNext(): S = {
         val iter = unsafeRowValuesIterator.dropWhile { row =>
-          stateTypesEncoder.isExpired(row, batchTimestampMs)
+          stateTypesEncoder.isExpired(row, currentTimestampMs())
         }
 
         if (iter.hasNext) {
@@ -167,7 +167,7 @@ class ListStateImplWithTTL[S](
     var newMinExpirationMsOpt: Option[Long] = None
     var isFirst = true
     unsafeRowValuesIterator.foreach { encodedValue =>
-      if (!stateTypesEncoder.isExpired(encodedValue, batchTimestampMs)) {
+      if (!stateTypesEncoder.isExpired(encodedValue, currentTimestampMs())) {
         if (isFirst) {
           isFirst = false
           store.put(elementKey, encodedValue, stateName)

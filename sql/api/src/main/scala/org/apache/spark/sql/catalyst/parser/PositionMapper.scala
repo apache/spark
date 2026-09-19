@@ -47,7 +47,7 @@ case class PositionRange(
 /**
  * Maps positions between original SQL text and substituted SQL text using sparse ranges.
  *
- * This implementation uses O(k) space and O(log k) lookup time where k = number of substitutions.
+ * This implementation uses O(k) space and O(k) lookup time where k = number of substitutions.
  *
  * @param originalText
  *   The original SQL text with parameter markers
@@ -65,8 +65,8 @@ case class PositionMapper(
   private val positionRanges = buildPositionRanges()
 
   /**
-   * Map a position in the substituted text back to the original text. Uses binary search for
-   * O(log k) lookup time.
+   * Map a position in the substituted text back to the original text. Uses a linear scan over the
+   * substitution ranges.
    *
    * @param substitutedPos
    *   Position in the substituted text
@@ -74,7 +74,7 @@ case class PositionMapper(
    *   Position in the original text, or the same position if no mapping exists
    */
   def mapToOriginal(substitutedPos: Int): Int = {
-    // Binary search for the range containing this position
+    // Linear scan for the range containing this position
     positionRanges.find(range =>
       substitutedPos >= range.substitutedStart && substitutedPos < range.substitutedEnd) match {
       case Some(range) =>
@@ -101,7 +101,7 @@ case class PositionMapper(
    *
    * Creates PositionRanges:
    *   - Range for "'John'": substituted[7,13) -> original[7,12), offset=-1
-   *   - Range for "25": substituted[15,17) -> original[14,18), offset=-3
+   *   - Range for "25": substituted[15,17) -> original[14,18), offset=2
    *
    * This allows mapping any position in "SELECT 'John', 25" back to "SELECT :name, :age".
    */

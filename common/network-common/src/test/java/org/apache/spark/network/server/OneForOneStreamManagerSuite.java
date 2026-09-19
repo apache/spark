@@ -29,6 +29,7 @@ import org.mockito.Mockito;
 
 import org.apache.spark.network.TestManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.client.TransportClient;
 
 public class OneForOneStreamManagerSuite {
 
@@ -161,5 +162,46 @@ public class OneForOneStreamManagerSuite {
     // only buffers1 has been released
     Mockito.verify(mockManagedBuffer, Mockito.times(1)).release();
     Assertions.assertEquals(0, manager.numStreamStates());
+  }
+
+  @Test
+  public void testStreamRequestAuthorization() {
+    OneForOneStreamManager manager = new OneForOneStreamManager();
+    Channel dummyChannel = Mockito.mock(Channel.class, Mockito.RETURNS_SMART_NULLS);
+    long streamId = manager.registerStream(
+      "app1", new ArrayList<ManagedBuffer>().iterator(), dummyChannel);
+    // StreamRequest addresses a registered stream via a "streamId_chunkIndex" string.
+    String streamChunkId = OneForOneStreamManager.genStreamChunkId(streamId, 0);
+
+    // A client authenticated as a different application is rejected, matching the
+    // ChunkFetchRequest path.
+    TransportClient otherApp = Mockito.mock(TransportClient.class);
+    Mockito.when(otherApp.getClientId()).thenReturn("app2");
+    Mockito.when(otherApp.getChannel()).thenReturn(dummyChannel);
+    Assertions.assertThrows(SecurityException.class,
+      () -> manager.checkAuthorization(otherApp, streamChunkId));
+
+    // The owning application, on the connection that registered the stream, is allowed.
+    TransportClient owner = Mockito.mock(TransportClient.class);
+    Mockito.when(owner.getClientId()).thenReturn("app1");
+    Mockito.when(owner.getChannel()).thenReturn(dummyChannel);
+    manager.checkAuthorization(owner, streamChunkId);
+
+    // With authentication disabled the client id is null; requests are still only allowed from
+    // the connection that registered the stream.
+    TransportClient noAuth = Mockito.mock(TransportClient.class);
+    Mockito.when(noAuth.getClientId()).thenReturn(null);
+    Mockito.when(noAuth.getChannel()).thenReturn(dummyChannel);
+    manager.checkAuthorization(noAuth, streamChunkId);
+
+    // A never-authenticated client (null client id) on a different connection is rejected:
+    // streams are bound to the registering connection, so a raw second connection cannot read
+    // another application's in-flight stream by guessing its stream id.
+    Channel otherChannel = Mockito.mock(Channel.class, Mockito.RETURNS_SMART_NULLS);
+    TransportClient hijacker = Mockito.mock(TransportClient.class);
+    Mockito.when(hijacker.getClientId()).thenReturn(null);
+    Mockito.when(hijacker.getChannel()).thenReturn(otherChannel);
+    Assertions.assertThrows(SecurityException.class,
+      () -> manager.checkAuthorization(hijacker, streamChunkId));
   }
 }

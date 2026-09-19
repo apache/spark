@@ -175,6 +175,11 @@ message durationMsg {
   Duration duration = 2;
 }
 
+message timeMsg {
+  string key = 1;
+  int64 time_val = 2;
+}
+
 message OneOfEvent {
   string key = 1;
   oneof payload {

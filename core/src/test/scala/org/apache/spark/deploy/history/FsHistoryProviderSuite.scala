@@ -83,9 +83,10 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       appId: String,
       appAttemptId: Option[String],
       inProgress: Boolean,
-      codec: Option[String] = None): File = {
+      codec: Option[String] = None,
+      logDir: File = testDir): File = {
     val ip = if (inProgress) EventLogFileWriter.IN_PROGRESS else ""
-    val logUri = SingleEventLogFileWriter.getLogPath(testDir.toURI, appId, appAttemptId, codec)
+    val logUri = SingleEventLogFileWriter.getLogPath(logDir.toURI, appId, appAttemptId, codec)
     val logPath = new Path(logUri).toUri.getPath + ip
     new File(logPath)
   }
@@ -121,7 +122,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     writeFile(newAppComplete, None,
       SparkListenerApplicationStart(newAppComplete.getName(), Some("new-app-complete"), 1L, "test",
         None),
-      SparkListenerApplicationEnd(5L)
+      SparkListenerApplicationEnd(5L, Some(1))
       )
 
     // Write a new-style application log.
@@ -153,7 +154,8 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
           end: Long,
           lastMod: Long,
           user: String,
-          completed: Boolean): ApplicationInfo = {
+          completed: Boolean,
+          exitCode: Option[Int] = None): ApplicationInfo = {
 
         val duration = if (end > 0) end - start else 0
         // Get log dir info from the provider
@@ -161,13 +163,13 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         val (logSourceName, logSourceFullPath) = provider.getLogDirInfo(logPath)
         new ApplicationInfo(id, name, None, None, None, None,
           List(ApplicationAttemptInfo(None, new Date(start),
-            new Date(end), new Date(lastMod), duration, user, completed, SPARK_VERSION,
+            new Date(end), new Date(lastMod), duration, user, completed, SPARK_VERSION, exitCode,
             Some(logSourceName), Some(logSourceFullPath))))
       }
 
       // For completed files, lastUpdated would be lastModified time.
       list(0) should be (makeAppInfo("new-app-complete", newAppComplete.getName(), 1L, 5L,
-        newAppComplete.lastModified(), "test", true))
+        newAppComplete.lastModified(), "test", true, Some(1)))
       list(1) should be (makeAppInfo("new-complete-lzf", newAppCompressedComplete.getName(),
         1L, 4L, newAppCompressedComplete.lastModified(), "test", true))
 
@@ -1730,6 +1732,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         val conf = createTestConf(true)
         conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
         conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, onDemandEnabled)
+        conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, false)
         val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
         val provider = new FsHistoryProvider(conf)
 
@@ -1755,6 +1758,186 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
 
         provider.stop()
       }
+    }
+  }
+
+  test("Support spark.history.fs.eventLog.onDemandLoadEnabled") {
+    Seq(true, false).foreach { onDemandEnabled =>
+      Seq(None, Some(CompressionCodec.LZF)).foreach { codecName =>
+        withTempDir { dir =>
+          val conf = createTestConf(true)
+          conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+          conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+          conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, onDemandEnabled)
+          val provider = new FsHistoryProvider(conf)
+          val appId = s"app1-${codecName.getOrElse("none")}"
+          val logFile = newLogFile(appId, None, inProgress = false, codecName, dir)
+          val codec = codecName.map(CompressionCodec.createCodec(conf, _))
+          writeFile(logFile, codec,
+            SparkListenerApplicationStart(appId, Some(appId), 1000, "testuser", None),
+            SparkListenerApplicationEnd(5000))
+
+          assert(provider.getListing().isEmpty)
+          assert(provider.getAppUI(appId, None).isDefined == onDemandEnabled)
+          assert(provider.getListing().length === (if (onDemandEnabled) 1 else 0))
+
+          if (onDemandEnabled) {
+            val appInfo = provider.getListing().next()
+            assert(appInfo.name === appId)
+            assert(appInfo.attempts.head.sparkUser === "testuser")
+            assert(appInfo.attempts.head.completed)
+            assert(appInfo.attempts.head.duration === 4000)
+          }
+
+          assert(provider.getAppUI("nonexist", None).isEmpty)
+          assert(provider.getListing().length === (if (onDemandEnabled) 1 else 0))
+
+          provider.stop()
+        }
+      }
+    }
+  }
+
+  test("Support on-demand loading for in-progress single event logs") {
+    Seq(None, Some(CompressionCodec.LZF)).foreach { codecName =>
+      withTempDir { dir =>
+        val conf = createTestConf(true)
+        conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+        conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+        conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
+        val provider = new FsHistoryProvider(conf)
+        val appId = s"app1-${codecName.getOrElse("none")}"
+        val logFile = newLogFile(appId, None, inProgress = true, codecName, dir)
+        val codec = codecName.map(CompressionCodec.createCodec(conf, _))
+        writeFile(logFile, codec,
+          SparkListenerApplicationStart(appId, Some(appId), 1000, "testuser", None))
+
+        assert(provider.getAppUI(appId, None).isDefined)
+        assert(!provider.getListing().next().attempts.head.completed)
+
+        provider.stop()
+      }
+    }
+  }
+
+  test("On-demand loading preserves in-progress single event logs during cleanup") {
+    withTempDir { dir =>
+      val clock = new ManualClock(0)
+      val conf = createTestConf(true)
+        .set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+        .set(CLEANER_ENABLED, true)
+        .set(MAX_LOG_AGE_S, 0L)
+        .set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+        .set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
+      val provider = new FsHistoryProvider(conf, clock)
+      val logFile = newLogFile("app1", None, inProgress = true, logDir = dir)
+      writeFile(logFile, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 0, "testuser", None))
+
+      assert(provider.getAppUI("app1", None).isDefined)
+      assert(provider.getListing().next().attempts.head.appSparkVersion === SPARK_VERSION)
+      assert(logFile.exists())
+
+      provider.cleanLogs()
+      assert(logFile.exists())
+
+      provider.stop()
+    }
+  }
+
+  test("On-demand loading respects single event log attempts") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+      conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
+      val provider = new FsHistoryProvider(conf)
+      val logFile = newLogFile("app1", Some("attempt1"), inProgress = false, logDir = dir)
+      writeFile(logFile, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 1000, "testuser", Some("attempt1")),
+        SparkListenerApplicationEnd(5000))
+
+      assert(provider.getAppUI("app1", None).isEmpty)
+      assert(provider.getListing().isEmpty)
+      assert(provider.getAppUI("app1", Some("attempt1")).isDefined)
+
+      provider.stop()
+    }
+  }
+
+  test("On-demand loading finds single event logs in all directories") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, s"${testDir.getAbsolutePath},${dir.getAbsolutePath}")
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+      conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
+      val provider = new FsHistoryProvider(conf)
+      val logFile = newLogFile("app1", None, inProgress = false, logDir = dir)
+      writeFile(logFile, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 1000, "testuser", None),
+        SparkListenerApplicationEnd(5000))
+
+      assert(provider.getAppUI("app1", None).isDefined)
+      assert(provider.getListing().next().attempts.head.logSourceFullPath ===
+        Some(dir.getAbsolutePath))
+
+      provider.stop()
+    }
+  }
+
+  test("On-demand loading supports single event logs when scanning is disabled") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(SCAN_DISABLED_PATH_PATTERNS, Seq("file:.*"))
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+      conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
+      val provider = new FsHistoryProvider(conf)
+      val logFile = newLogFile("app1", None, inProgress = false, logDir = dir)
+      writeFile(logFile, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 1000, "testuser", None),
+        SparkListenerApplicationEnd(5000))
+
+      provider.checkForLogs()
+      assert(provider.getListing().isEmpty)
+      assert(provider.getAppUI("app1", None).isDefined)
+
+      provider.checkForLogs()
+      assert(provider.getListing().length === 1)
+
+      provider.stop()
+    }
+  }
+
+  test("On-demand loading supports rolling and single event logs together") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, true)
+      conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val provider = new FsHistoryProvider(conf)
+
+      val rollingWriter = new RollingEventLogFilesWriter(
+        "app-rolling", None, dir.toURI, conf, hadoopConf)
+      rollingWriter.start()
+      writeEventsToRollingWriter(rollingWriter, Seq(
+        SparkListenerApplicationStart("app-rolling", Some("app-rolling"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      rollingWriter.stop()
+
+      val singleLog = newLogFile("app-single", None, inProgress = false, logDir = dir)
+      writeFile(singleLog, None,
+        SparkListenerApplicationStart("app-single", Some("app-single"), 0, "user", None),
+        SparkListenerApplicationEnd(1))
+
+      assert(provider.getAppUI("app-rolling", None).isDefined)
+      assert(provider.getAppUI("app-single", None).isDefined)
+      assert(provider.getListing().length === 2)
+      assert(provider.getAppUI("nonexist", None).isEmpty)
+      assert(provider.getListing().length === 2)
+
+      provider.stop()
     }
   }
 

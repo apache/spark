@@ -32,9 +32,9 @@ import org.apache.spark.sql.pipelines.graph.DataflowGraphTransformer.{
  * Processor that is responsible for analyzing each flow and sort the nodes in
  * topological order
  */
-class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
+class CoreDataflowNodeProcessor(rawGraph: DataflowGraph, sessionCaseSensitive: Boolean) {
 
-  private val flowResolver = new FlowResolver(rawGraph)
+  private val flowResolver = new FlowResolver(rawGraph, sessionCaseSensitive)
 
   // Map of input identifier to resolved [[Input]].
   private val resolvedInputs = new ConcurrentHashMap[TableIdentifier, Input]()
@@ -86,7 +86,8 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
           identifier = table.identifier,
           specifiedSchema = table.specifiedSchema,
           incomingFlowIdentifiers = flowsToTable.map(_.identifier).toSet,
-          availableFlows = resolvedFlowsToTable
+          availableFlows = resolvedFlowsToTable,
+          sessionCaseSensitive = sessionCaseSensitive
         )
         resolvedInputs.put(table.identifier, virtualTableInput)
         Seq(table)
@@ -110,7 +111,7 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
   }
 }
 
-private class FlowResolver(rawGraph: DataflowGraph) {
+private class FlowResolver(rawGraph: DataflowGraph, sessionCaseSensitive: Boolean) {
 
   /** Helper used to track which confs were set by which flows. */
   private case class FlowConf(key: String, value: String, flowIdentifier: TableIdentifier)
@@ -203,7 +204,7 @@ private class FlowResolver(rawGraph: DataflowGraph) {
       flow: UnresolvedFlow,
       funcResult: FlowFunctionResult): ResolvedFlow = {
     flow match {
-      case acf: AutoCdcFlow => new AutoCdcMergeFlow(acf, funcResult)
+      case acf: AutoCdcFlow => new AutoCdcMergeFlow(acf, funcResult, sessionCaseSensitive)
       case utf: UntypedFlow => transformUntypedFlowToResolvedFlow(utf, funcResult)
     }
   }

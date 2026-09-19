@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, LocalTime}
 import java.util
 
 import scala.collection.mutable
@@ -32,7 +32,7 @@ import scala.util.Random
 import org.apache.arrow.vector.IntVector
 import org.apache.parquet.bytes.ByteBufferInputStream
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1432,6 +1432,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
             assert(r1.getLong(ordinal) ==
               DateTimeUtils.localDateTimeToMicros(r2.getAs[LocalDateTime](ordinal)),
               "Seed = " + seed)
+          case _: TimeType =>
+            assert(r1.getLong(ordinal) ==
+              DateTimeUtils.localTimeToNanos(r2.getAs[LocalTime](ordinal)),
+              "Seed = " + seed)
           case t: DecimalType =>
             val d1 = r1.getDecimal(ordinal, t.precision, t.scale).toBigDecimal
             val d2 = r2.getDecimal(ordinal)
@@ -1506,6 +1510,17 @@ class ColumnarBatchSuite extends SparkFunSuite {
                   }
                   i += 1
                 }
+              case _: TimeType =>
+                var i = 0
+                while (i < a1.length) {
+                  assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
+                  if (a1(i) != null) {
+                    val i1 = a1(i).asInstanceOf[Long]
+                    val i2 = DateTimeUtils.localTimeToNanos(a2(i).asInstanceOf[LocalTime])
+                    assert(i1 === i2, "Seed = " + seed)
+                  }
+                  i += 1
+                }
               case t: DecimalType =>
                 var i = 0
                 while (i < a1.length) {
@@ -1562,7 +1577,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       DecimalType.ShortDecimal, DecimalType.IntDecimal, DecimalType.ByteDecimal,
       DecimalType.FloatDecimal, DecimalType.LongDecimal, new DecimalType(5, 2),
       new DecimalType(12, 2), new DecimalType(30, 10), CalendarIntervalType,
-      DateType, StringType, BinaryType, TimestampType, TimestampNTZType)
+      DateType, StringType, BinaryType, TimestampType, TimestampNTZType,
+      TimeType(0), TimeType(3), TimeType(), TimeType(TimeType.MAX_PRECISION))
     val seed = System.nanoTime()
     val NUM_ROWS = 200
     val NUM_ITERS = 1000
@@ -2087,6 +2103,95 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
+  // Nanosecond-precision timestamp values used to exercise ColumnarRow/ColumnarBatchRow
+  // dispatch. They cover a null (index 3), the sub-microsecond boundaries (0 and 999), and
+  // several pre-epoch instants; nanosWithinMicro must survive the round-trip unchanged.
+  private val nanosTestValues: Seq[Option[TimestampNanosVal]] = Seq(
+    Some(TimestampNanosVal.fromParts(0L, 0.toShort)),                  // epoch, no sub-micro
+    Some(TimestampNanosVal.fromParts(1L, 1.toShort)),
+    Some(TimestampNanosVal.fromParts(1000000L, 999.toShort)),         // max sub-micro
+    None,                                                             // null slot
+    Some(TimestampNanosVal.fromParts(-1L, 500.toShort)),             // pre-epoch
+    Some(TimestampNanosVal.fromParts(-1000000000000L, 1.toShort)),   // pre-epoch, far
+    Some(TimestampNanosVal.fromParts(1234567890123456L, 789.toShort)),
+    Some(TimestampNanosVal.fromParts(-42L, 999.toShort)),            // pre-epoch, max sub-micro
+    Some(TimestampNanosVal.fromParts(Long.MaxValue, 0.toShort)),
+    Some(TimestampNanosVal.fromParts(Long.MinValue, 123.toShort)))
+
+  // Populates a nanos-typed vector (child 0 = epochMicros Long, child 1 = nanosWithinMicro
+  // Short) from `nanosTestValues`, writing a null for the None slot.
+  private def putNanosTestValues(column: WritableColumnVector, isLtz: Boolean): Unit = {
+    nanosTestValues.zipWithIndex.foreach {
+      case (Some(v), i) =>
+        if (isLtz) column.putTimestampLTZNanos(i, v) else column.putTimestampNTZNanos(i, v)
+      case (None, i) =>
+        column.putNull(i)
+    }
+  }
+
+  // Verifies the typed leaf accessor, get(ordinal, dataType) and the copy() round-trip for a
+  // single nanosecond-timestamp field at ordinal 0 of `row`.
+  private def assertNanosRow(
+      row: InternalRow,
+      dt: DataType,
+      isLtz: Boolean,
+      expected: Option[TimestampNanosVal]): Unit = {
+    def leaf(r: InternalRow): TimestampNanosVal =
+      if (isLtz) r.getTimestampLTZNanos(0) else r.getTimestampNTZNanos(0)
+    expected match {
+      case Some(v) =>
+        assert(!row.isNullAt(0))
+        assert(leaf(row) === v)
+        assert(leaf(row).nanosWithinMicro == v.nanosWithinMicro)
+        // get(ordinal, dataType) must return a TimestampNanosVal, not a boxed Long.
+        val got = row.get(0, dt)
+        assert(got.isInstanceOf[TimestampNanosVal])
+        assert(got === v)
+        // copy() must yield a GenericInternalRow whose nanos field matches the source.
+        val copied = row.copy()
+        assert(copied.isInstanceOf[GenericInternalRow])
+        assert(!copied.isNullAt(0))
+        assert(leaf(copied) === v)
+        assert(copied.get(0, dt) === v)
+      case None =>
+        assert(row.isNullAt(0))
+        assert(row.get(0, dt) == null)
+        assert(row.copy().isNullAt(0))
+    }
+  }
+
+  Seq(7, 8, 9).foreach { p =>
+    Seq(
+      (TimestampNTZNanosType(p): DataType, false),
+      (TimestampLTZNanosType(p): DataType, true)).foreach { case (dt, isLtz) =>
+      val family = if (isLtz) "LTZ" else "NTZ"
+
+      testVector(
+        s"ColumnarBatchRow nanos $family(precision=$p) round-trips copy()/get()",
+        nanosTestValues.length,
+        dt) { column =>
+        putNanosTestValues(column, isLtz)
+        val batchRow = new ColumnarBatchRow(Array(column))
+        nanosTestValues.zipWithIndex.foreach { case (expected, i) =>
+          batchRow.rowId = i
+          assertNanosRow(batchRow, dt, isLtz, expected)
+        }
+      }
+
+      // ColumnarRow is produced by getStruct on a struct-typed vector, so nest the nanos
+      // column inside a struct to exercise ColumnarRow's copy()/get() dispatch.
+      testVector(
+        s"ColumnarRow nanos $family(precision=$p) round-trips copy()/get()",
+        nanosTestValues.length,
+        new StructType().add("ts", dt)) { column =>
+        putNanosTestValues(column.getChild(0), isLtz)
+        nanosTestValues.zipWithIndex.foreach { case (expected, i) =>
+          assertNanosRow(column.getStruct(i), dt, isLtz, expected)
+        }
+      }
+    }
+  }
+
   testVector("WritableColumnVector.reserve(): requested capacity is negative", 1024, ByteType) {
     column =>
       val ex = intercept[RuntimeException] { column.reserve(-1) }
@@ -2123,6 +2228,71 @@ class ColumnarBatchSuite extends SparkFunSuite {
           val batchRowCopy = bachRow.copy()
           assert(batchRowCopy.get(0, dt) === i)
         }
+    }
+  }
+
+  // TimeType is physically a long (nanoseconds since midnight); precision affects display only.
+  // The generic `get(int, DataType)` accessor is intentionally not extended for TimeType in this
+  // change (tracked separately), so values are read back via the typed `getLong` accessor.
+  Seq(0, 6, 7, 9).foreach { p =>
+    val dt = TimeType(p)
+    testVector(s"TIME(precision=$p)", 10, dt) {
+      column =>
+        val values = Array(0L, 86399999999999L) ++ (2 until 10).map(_.toLong * 1000000000L)
+        (0 until 10).foreach { i =>
+          column.putLong(i, values(i))
+        }
+        val batchRow = new ColumnarBatchRow(Array(column))
+        (0 until 10).foreach { i =>
+          batchRow.rowId = i
+          assert(batchRow.getLong(0) == values(i))
+          val batchRowCopy = batchRow.copy()
+          assert(batchRowCopy.getLong(0) == values(i))
+        }
+    }
+  }
+
+  test("SPARK-57570: toBatch with TIME nested in struct and array") {
+    val schema = new StructType()
+      .add("s", new StructType().add("t", TimeType(6)).add("flag", BooleanType))
+      .add("a", ArrayType(TimeType(9)))
+    val t1 = LocalTime.parse("01:02:03.123456")
+    val t2 = LocalTime.parse("23:59:59.999999999")
+    val t3 = LocalTime.parse("00:00:00")
+    val n1 = DateTimeUtils.localTimeToNanos(t1)
+    val n2 = DateTimeUtils.localTimeToNanos(t2)
+    val n3 = DateTimeUtils.localTimeToNanos(t3)
+    val rows = Seq(
+      Row(Row(t1, true), Seq(t1, t2)),
+      Row(Row(t3, false), Seq(t3)))
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { memMode =>
+      val batch = ColumnVectorUtils.toBatch(schema, memMode, rows.iterator.asJava)
+      try {
+        assert(batch.numRows() == 2)
+        val structCol = batch.column(0)
+        assert(structCol.getChild(0).getLong(0) == n1)
+        assert(structCol.getChild(1).getBoolean(0))
+        assert(structCol.getChild(0).getLong(1) == n3)
+        assert(!structCol.getChild(1).getBoolean(1))
+        val arrCol = batch.column(1)
+        val a0 = arrCol.getArray(0)
+        assert(a0.numElements() == 2)
+        assert(a0.getLong(0) == n1)
+        assert(a0.getLong(1) == n2)
+        val a1 = arrCol.getArray(1)
+        assert(a1.numElements() == 1)
+        assert(a1.getLong(0) == n3)
+      } finally {
+        batch.close()
+      }
+    }
+  }
+
+  test("SPARK-57570: toBatch throws on unsupported data type") {
+    val schema = new StructType().add("m", MapType(IntegerType, IntegerType))
+    intercept[SparkUnsupportedOperationException] {
+      ColumnVectorUtils.toBatch(
+        schema, MemoryMode.ON_HEAP, Seq(Row(Map(1 -> 2))).iterator.asJava)
     }
   }
 

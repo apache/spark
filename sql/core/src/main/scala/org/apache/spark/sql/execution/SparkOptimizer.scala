@@ -23,9 +23,11 @@ import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.datasources.{PruneFileSourcePartitions, PushVariantIntoScan, SchemaPruning, V1Writes}
+import org.apache.spark.sql.execution.datasources.{MarkSingleTaskExecution, PruneFileSourcePartitions, PullOutVariantExtractions, PushVariantIntoScan, SchemaPruning, V1Writes}
 import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
+import org.apache.spark.sql.execution.externalUDF.{ExtractExternalUDFFromWindow, PlanExternalUDFs}
+import org.apache.spark.sql.execution.planmerging.MergeSubplans
 import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs, ExtractPythonUDTFs}
 
 class SparkOptimizer(
@@ -37,6 +39,10 @@ class SparkOptimizer(
   override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
     // TODO: move SchemaPruning into catalyst
     Seq(
+      // Hoist variant extractions out of operators that variant-into-scan pushdown cannot see
+      // through (aggregate function arguments, etc.) into a Project above the scan, so the
+      // extractions below become visible to V2ScanRelationPushDown and PushVariantIntoScan.
+      PullOutVariantExtractions,
       SchemaPruning,
       GroupBasedRowLevelOperationScanPlanning,
       V1Writes,
@@ -48,7 +54,10 @@ class SparkOptimizer(
       V2ScanPartitioningAndOrdering,
       V2Writes,
       PruneFileSourcePartitions,
-      PushVariantIntoScan)
+      PushVariantIntoScan,
+      // Variant pushdown can make a reconstruction projection unnecessary. Prune again so this
+      // Once batch reaches the same plan on its first application as it would on a second one.
+      SchemaPruning)
 
   override def preCBORules: Seq[Rule[LogicalPlan]] =
     Seq(OptimizeMetadataOnlyDeleteFromTable)
@@ -67,6 +76,7 @@ class SparkOptimizer(
       InjectRuntimeFilter),
     Batch("MergeSubplans", Once,
       MergeSubplans,
+      CombineApproximatePercentiles,
       RewriteDistinctAggregates),
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates),
@@ -76,14 +86,16 @@ class SparkOptimizer(
       BooleanSimplification,
       PruneFilters),
     postHocOptimizationBatches,
-    Batch("Extract Python UDFs", Once,
+    Batch("Extract UDFs", Once,
       ExtractPythonUDFFromJoinCondition,
-      // `ExtractPythonUDFFromJoinCondition` can convert a join to a cartesian product.
-      // Here, we rerun cartesian product check.
-      CheckCartesianProducts,
+      // Expose window results as attributes before creating external UDF evaluation nodes.
+      ExtractExternalUDFFromWindow,
+      PlanExternalUDFs,
       ExtractPythonUDFFromAggregate,
       // This must be executed after `ExtractPythonUDFFromAggregate` and before `ExtractPythonUDFs`.
       ExtractGroupingPythonUDFFromAggregate,
+      // `ExtractPythonUDFs` first lifts Python UDFs out of higher-order function lambdas
+      // (via `ExtractPythonUDFFromLambda`) and then extracts them as ordinary top-level UDFs.
       ExtractPythonUDFs,
       ExtractPythonUDTFs,
       // The eval-python node may be between Project/Filter and the scan node, which breaks
@@ -93,6 +105,10 @@ class SparkOptimizer(
       PushPredicateThroughNonJoin,
       PushProjectionThroughLimitAndOffset,
       RemoveNoopOperators),
+    // Join-condition UDF extraction can convert a join to a cartesian product. Keep this in a
+    // subsequent batch so validation structurally follows both join-condition extractors.
+    Batch("Check Cartesian Products After UDF Extraction", Once,
+      CheckCartesianProducts),
     Batch("Infer window group limit", Once,
       InferWindowGroupLimit,
       LimitPushDown,
@@ -100,19 +116,32 @@ class SparkOptimizer(
       ConstantFolding,
       EliminateLimits),
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*),
-    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)))
+    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition),
+    // Must run last: it inspects the final plan shape to mark scans that can run in a single task,
+    // and no subsequent rule should reshape the plan or copy the marked scan nodes.
+    Batch("MarkSingleTaskExecution", Once, MarkSingleTaskExecution)))
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules ++
     Seq(
       ExtractPythonUDFFromJoinCondition.ruleName,
       ExtractPythonUDFFromAggregate.ruleName,
       ExtractGroupingPythonUDFFromAggregate.ruleName,
+      ExtractExternalUDFFromWindow.ruleName,
+      PlanExternalUDFs.ruleName,
+      // Non-excludable: a plan with a Python UDF in a higher-order function lambda only works
+      // because `ExtractPythonUDFs` lifts it out (via `ExtractPythonUDFFromLambda`).
       ExtractPythonUDFs.ruleName,
       GroupBasedRowLevelOperationScanPlanning.ruleName,
       V2ScanRelationPushDown.ruleName,
       V2ScanPartitioningAndOrdering.ruleName,
       V2Writes.ruleName,
-      ReplaceCTERefWithRepartition.ruleName)
+      ReplaceCTERefWithRepartition.ruleName,
+      // CleanupDynamicPruningFilters finalizes the DPP predicates inserted by PartitionPruning --
+      // notably rewriting non-deterministic ones to `true` so they are not re-evaluated. That is
+      // correctness behavior, not an optional optimization, so the rule must not be excludable.
+      // Disabling DPP is done by excluding PartitionPruning (the inserter), after which this rule
+      // is a no-op.
+      CleanupDynamicPruningFilters.ruleName)
 
   /**
    * Optimization batches that are executed before the regular optimization batches (also before
@@ -125,7 +154,7 @@ class SparkOptimizer(
    * batch executing the [[ExperimentalMethods]] optimizer rules. This hook can be used to add
    * custom optimizer batches to the Spark optimizer.
    *
-   * Note that 'Extract Python UDFs' batch is an exception and ran after the batches defined here.
+   * Note that 'Extract UDFs' batch is an exception and runs after the batches defined here.
    */
    def postHocOptimizationBatches: Seq[Batch] = Nil
 }

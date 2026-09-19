@@ -117,6 +117,7 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
       Option(JdbcType("CHAR(1)", java.sql.Types.CHAR))
     case BooleanType => Option(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
     case ShortType | ByteType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case _: TimeType => Some(JdbcType("TIME", java.sql.Types.TIME))
     case _ => None
   }
 

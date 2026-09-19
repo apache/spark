@@ -17,10 +17,11 @@
 
 package org.apache.spark.scheduler
 
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import com.codahale.metrics.{Gauge, Timer}
+import com.google.common.util.concurrent.Uninterruptibles
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
@@ -141,7 +142,10 @@ private class AsyncEventQueue(
     }
     if (stopped.compareAndSet(false, true)) {
       eventCount.incrementAndGet()
-      eventQueue.put(POISON_PILL)
+      // Shutdown may run on an interrupted thread, such as a streaming execution thread.
+      // Once stopped is set, the poison pill must still be enqueued or the dispatch thread can
+      // remain blocked forever.
+      Uninterruptibles.putUninterruptibly(eventQueue, POISON_PILL)
     }
     // This thread might be trying to stop itself as part of error handling -- we can't join
     // in that case.
@@ -151,7 +155,13 @@ private class AsyncEventQueue(
       // By default, the `waitingTimeMs` is set to 0,
       // which means it will wait until all events are drained.
       val exitTimeoutMs = conf.get(LISTENER_BUS_EXIT_TIMEOUT)
-      dispatchThread.join(exitTimeoutMs)
+      // Finish waiting despite interruption while preserving the configured timeout.
+      // Uninterruptibles restores the caller's interrupt status before returning.
+      if (exitTimeoutMs == 0) {
+        Uninterruptibles.joinUninterruptibly(dispatchThread)
+      } else {
+        Uninterruptibles.joinUninterruptibly(dispatchThread, exitTimeoutMs, TimeUnit.MILLISECONDS)
+      }
     }
   }
 

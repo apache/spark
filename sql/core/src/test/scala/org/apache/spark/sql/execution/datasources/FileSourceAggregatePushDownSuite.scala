@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.sql.{Date, Timestamp}
+import java.time.LocalTime
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.optimizer.CollapseGroupedSumOfCount
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
@@ -29,7 +30,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.functions.min
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructField, StructType, TimestampType, TimeType}
 import org.apache.spark.tags.SlowSQLTest
 
 /**
@@ -571,6 +572,131 @@ trait FileSourceAggregatePushDownSuite
       Seq(nullRow), Seq(nullRowWithOutTSAndBinary), Seq(zeroCount))
   }
 
+  private def testTimeAggPushDown(
+      precision: Int,
+      times: Seq[LocalTime],
+      expectedMin: LocalTime,
+      expectedMax: LocalTime): Unit = {
+    val schema = StructType(Seq(StructField("TimeCol", TimeType(precision))))
+    // One null row in addition to the non-null `times`, so COUNT(TimeCol) excludes it but
+    // COUNT(*) includes it.
+    val rows = times.map(Row(_)) :+ Row(null)
+    val rdd = sparkContext.parallelize(rows)
+    withTempPath { file =>
+      spark.createDataFrame(rdd, schema).write.format(format).save(file.getCanonicalPath)
+      withTempView("time_test") {
+        spark.read.format(format).load(file.getCanonicalPath)
+          .createOrReplaceTempView("time_test")
+        Seq("false", "true").foreach { enableVectorizedReader =>
+          withSQLConf(aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            val df = sql(
+              "SELECT min(TimeCol), max(TimeCol), count(TimeCol), count(*) FROM time_test")
+            checkPushedInfo(df,
+              "PushedAggregation: [MIN(TimeCol), MAX(TimeCol), COUNT(TimeCol), COUNT(*)]")
+            checkAnswer(df,
+              Seq(Row(expectedMin, expectedMax, times.length, times.length + 1)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57568: aggregate push down - TIME of different precisions") {
+    // Parquet stores TIME with precision 0..6 as INT64 TIME(MICROS) and precision 7..9 as
+    // INT64 TIME(NANOS); ORC stores TIME as the raw nanos-of-day LONG. To keep a single shared
+    // expectation valid across both engines, each value is chosen to be exactly representable at
+    // its column's precision, so no engine-specific truncation can diverge.
+    // precision 0 (seconds)
+    testTimeAggPushDown(0,
+      Seq(LocalTime.of(1, 2, 3), LocalTime.of(23, 59, 59), LocalTime.of(10, 30, 0)),
+      LocalTime.of(1, 2, 3), LocalTime.of(23, 59, 59))
+    // precision 6 (microseconds)
+    testTimeAggPushDown(6,
+      Seq(LocalTime.of(1, 2, 3, 123456000), LocalTime.of(23, 59, 59, 999999000),
+        LocalTime.of(10, 30, 0, 500000)),
+      LocalTime.of(1, 2, 3, 123456000), LocalTime.of(23, 59, 59, 999999000))
+    // precision 7 (hundreds of nanoseconds)
+    testTimeAggPushDown(7,
+      Seq(LocalTime.of(1, 2, 3, 123456700), LocalTime.of(23, 59, 59, 999999900),
+        LocalTime.of(10, 30, 0, 100)),
+      LocalTime.of(1, 2, 3, 123456700), LocalTime.of(23, 59, 59, 999999900))
+    // precision 9 (nanoseconds)
+    testTimeAggPushDown(9,
+      Seq(LocalTime.of(1, 2, 3, 123456789), LocalTime.of(23, 59, 59, 999999999),
+        LocalTime.of(10, 30, 0, 1)),
+      LocalTime.of(1, 2, 3, 123456789), LocalTime.of(23, 59, 59, 999999999))
+  }
+
+  test("SPARK-57568: aggregate push down - TIME over an empty file") {
+    // Aggregating a TIME column over zero rows: MIN/MAX return NULL and COUNT returns 0 on every
+    // engine. This pins the no-data path, which the precision test above (always >= 1 row) does
+    // not reach. An all-null but non-empty file is intentionally not asserted here: that is
+    // pre-existing, type-agnostic behavior shared by all push-down types (Parquet rejects MIN/MAX
+    // push-down on an all-null block while ORC returns NULL), unchanged by this PR.
+    Seq(6, 9).foreach { precision =>
+      val schema = StructType(Seq(StructField("TimeCol", TimeType(precision))))
+      val rdd = sparkContext.parallelize(Seq.empty[Row])
+      withTempPath { file =>
+        spark.createDataFrame(rdd, schema).write.format(format).save(file.getCanonicalPath)
+        withTempView("time_empty") {
+          spark.read.format(format).load(file.getCanonicalPath)
+            .createOrReplaceTempView("time_empty")
+          Seq("false", "true").foreach { enableVectorizedReader =>
+            withSQLConf(aggPushDownEnabledKey -> "true",
+              vectorizedReaderEnabledKey -> enableVectorizedReader) {
+              val df = sql(
+                "SELECT min(TimeCol), max(TimeCol), count(TimeCol), count(*) FROM time_empty")
+              checkPushedInfo(df,
+                "PushedAggregation: [MIN(TimeCol), MAX(TimeCol), COUNT(TimeCol), COUNT(*)]")
+              checkAnswer(df, Seq(Row(null, null, 0, 0)))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57568: aggregate not push down - TIME with filter or expression") {
+    val schema = StructType(Seq(StructField("TimeCol", TimeType(6))))
+    val rows = Seq(
+      Row(LocalTime.of(1, 2, 3)),
+      Row(LocalTime.of(23, 59, 59)),
+      Row(LocalTime.of(10, 30, 0)))
+    val rdd = sparkContext.parallelize(rows)
+    withTempPath { file =>
+      spark.createDataFrame(rdd, schema).write.format(format).save(file.getCanonicalPath)
+      withTempView("time_neg_test") {
+        spark.read.format(format).load(file.getCanonicalPath)
+          .createOrReplaceTempView("time_neg_test")
+        withSQLConf(aggPushDownEnabledKey -> "true") {
+          // A data filter on a non-partition column prevents push down.
+          val withFilter =
+            sql("SELECT min(TimeCol) FROM time_neg_test WHERE TimeCol > TIME'05:00:00'")
+          checkPushedInfo(withFilter, "PushedAggregation: []")
+          checkAnswer(withFilter, Seq(Row(LocalTime.of(10, 30, 0))))
+
+          // Aggregating over an expression (not a plain column) prevents push down. The two CASE
+          // branches differ so the optimizer cannot fold the expression back into a column.
+          val withExpr = sql(
+            "SELECT max(CASE WHEN TimeCol > TIME'05:00:00' THEN TimeCol ELSE TIME'00:00:00' END) " +
+              "FROM time_neg_test")
+          checkPushedInfo(withExpr, "PushedAggregation: []")
+          checkAnswer(withExpr, Seq(Row(LocalTime.of(23, 59, 59))))
+
+          // Aggregate push down disabled by config.
+          withSQLConf(aggPushDownEnabledKey -> "false") {
+            val disabled =
+              sql("SELECT min(TimeCol), max(TimeCol), count(TimeCol) FROM time_neg_test")
+            checkPushedInfo(disabled, "PushedAggregation: []")
+            checkAnswer(disabled,
+              Seq(Row(LocalTime.of(1, 2, 3), LocalTime.of(23, 59, 59), 3)))
+          }
+        }
+      }
+    }
+  }
+
   test("column name case sensitivity") {
     Seq("false", "true").foreach { enableVectorizedReader =>
       withSQLConf(aggPushDownEnabledKey -> "true",
@@ -618,6 +744,47 @@ class ParquetV2AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  // Aggregate push-down only happens with the DSv2 file source, so this test lives in the V2
+  // suite. It writes a Parquet file with column statistics disabled, which leaves both the
+  // min/max values and the number of nulls unavailable for push-down.
+  test("SPARK-57746: aggregate push-down fails when Parquet statistics are missing") {
+    Seq("false", "true").foreach { enableVectorizedReader =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(10).selectExpr("CAST(id AS INT) AS i").coalesce(1)
+          .write.option("parquet.column.statistics.enabled", "false").parquet(path)
+        withTempView("t") {
+          spark.read.parquet(path).createOrReplaceTempView("t")
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            checkErrorMatchPVals(
+              exception = interceptAggPushDownError("SELECT min(i) FROM t"),
+              condition = "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED.NO_MIN_MAX",
+              parameters = Map("filePath" -> ".*", "config" -> aggPushDownEnabledKey))
+            checkErrorMatchPVals(
+              exception = interceptAggPushDownError("SELECT count(i) FROM t"),
+              condition = "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED.NO_NUM_NULLS",
+              parameters = Map("filePath" -> ".*", "config" -> aggPushDownEnabledKey))
+          }
+        }
+      }
+    }
+  }
+
+  // The error originates in the executor-side partition reader, so it may be wrapped in a
+  // higher-level exception. Walk the cause chain to find the structured Spark exception.
+  private def interceptAggPushDownError(query: String): SparkUnsupportedOperationException = {
+    val e = intercept[Exception](spark.sql(query).collect())
+    var cause: Throwable = e
+    while (cause != null && !cause.isInstanceOf[SparkUnsupportedOperationException]) {
+      cause = cause.getCause
+    }
+    assert(cause != null,
+      s"Expected a SparkUnsupportedOperationException but got: $e")
+    cause.asInstanceOf[SparkUnsupportedOperationException]
+  }
 }
 
 abstract class OrcAggregatePushDownSuite extends OrcTest with FileSourceAggregatePushDownSuite {

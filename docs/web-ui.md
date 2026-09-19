@@ -70,6 +70,24 @@ The information displayed at the top of the page includes:
 The current user, application start time, and total uptime are shown in the footer at the
 bottom of every page.
 
+When the application can be held, the summary shows an **Application** line with a **Hold**
+button; clicking it stops requesting new executors and gracefully decommissions the running ones,
+so each finishes its tasks and then exits (unless `spark.executor.decommission.forceKillTimeout`
+is set, which kills a still-busy executor after that timeout). The line then reads `Held` with a
+**Resume** button that restores the executor requirement. Shuffle output written before the hold
+stays available, but cached blocks are recomputed after resuming, and an RDD created while held
+is sized against a default parallelism of 2 (no executors are alive) and keeps that partition
+count afterwards. Pipelined-shuffle jobs and workloads with long-running tasks (streaming
+receivers, continuous processing) are outside the hold's scope: a hold requested while a
+pipelined job is running is rejected, a pipelined job submitted while held fails immediately
+and should be resubmitted after the resume (unless the internal
+`spark.scheduler.pipelinedGroup.slotCheck.enabled` is false, in which case there is no
+admission check and it waits for the resume), and a long-running task never finishes, so the
+drain cannot complete. The control only appears when `spark.ui.holdEnabled` is true,
+`spark.decommission.enabled` is true, the shuffle data is kept outside the executors, and the
+cluster manager can hold executors (Standalone, YARN, and Kubernetes with the `direct` pods
+allocator); see [Configuration](configuration.html#spark-ui).
+
 <p style="text-align: center;">
   <img src="img/AllJobsPage.png" title="All Jobs page" alt="All Jobs page" width="100%"/>
 </p>
@@ -99,7 +117,7 @@ completed, skipped, and failed). In [Fair scheduling mode](job-scheduling.html#s
 a table of [pool properties](job-scheduling.html#configuring-pool-properties) is also shown.
 
 Below the summary are the stages, grouped by status (active, pending, completed, skipped, failed).
-An active stage shows a small **(kill)** link next to its description; clicking it asks Spark
+An active stage shows a small **Kill** button next to its description; clicking it asks Spark
 to cancel that stage. Only failed stages show the failure reason. Click a stage's description
 to open its [Stage detail](#stage-detail) page.
 
@@ -350,6 +368,9 @@ Here is the list of SQL metrics:
 <tr><td> <code>avg hash probe bucket list iters</code> </td><td> the average bucket list iterations per lookup during aggregation </td><td> HashAggregate </td></tr>
 <tr><td> <code>data size of build side</code> </td><td> the size of built hash map </td><td> ShuffledHashJoin </td></tr>
 <tr><td> <code>time to build hash map</code> </td><td> the time spent on building hash map </td><td> ShuffledHashJoin </td></tr>
+<tr><td> <code>number of pruned input partitions</code> </td><td> the number of input partitions skipped because the join proved their partition key cannot produce output </td><td> GroupPartitions </td></tr>
+<tr><td> <code>number of replicated input partition reads</code> </td><td> the number of extra reads of input partitions caused by replicating a key group across the other side's partitions </td><td> GroupPartitions </td></tr>
+<tr><td> <code>max partitions per group</code> </td><td> the largest number of input partitions one output partition holds; large values indicate a skewed partition key </td><td> GroupPartitions </td></tr>
 <tr><td> <code>task commit time</code> </td><td> the time spent on committing the output of a task after the writes succeed </td><td> any write operation on a file-based table </td></tr>
 <tr><td> <code>job commit time</code> </td><td> the time spent on committing the output of a job after the writes succeed </td><td> any write operation on a file-based table </td></tr>
 <tr><td> <code>data sent to Python workers</code> </td><td> the number of bytes of serialized data sent to the Python workers </td><td> Python UDFs, Pandas UDFs, Pandas Functions API and Python Data Source </td></tr>

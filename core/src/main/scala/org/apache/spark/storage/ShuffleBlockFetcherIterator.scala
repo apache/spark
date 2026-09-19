@@ -885,7 +885,7 @@ final class ShuffleBlockFetcherIterator(
                 bufIn
               }
             } catch {
-              // The exception could only be throwed by local shuffle block
+              // The exception could only be thrown by local shuffle block
               case e: IOException =>
                 assert(buf.isInstanceOf[FileSegmentManagedBuffer])
                 e match {
@@ -1325,15 +1325,12 @@ final class ShuffleBlockFetcherIterator(
     }
 
     def filterRequests(queue: mutable.Queue[FetchRequest]): Unit = {
-      val fetchRequestsToRemove = new mutable.Queue[FetchRequest]()
-      fetchRequestsToRemove ++= queue.dequeueAll { req =>
+      queue.dequeueAll { req =>
         val firstBlock = req.blocks.head
         firstBlock.blockId.isShuffleChunk && req.address.equals(address) &&
           sameShuffleReducePartition(firstBlock.blockId)
-      }
-      fetchRequestsToRemove.foreach { _ =>
-        removedChunkIds ++=
-          fetchRequestsToRemove.flatMap(_.blocks.map(_.blockId.asInstanceOf[ShuffleBlockChunkId]))
+      }.foreach { req =>
+        removedChunkIds ++= req.blocks.map(_.blockId.asInstanceOf[ShuffleBlockChunkId])
       }
     }
 
@@ -1671,7 +1668,7 @@ object ShuffleBlockFetcherIterator {
    *                       of shuffle by an indeterminate stage attempt.
    * @param reduceId reduce id.
    * @param bitmaps bitmaps for every chunk.
-   * @param localDirs local directories where the push-merged shuffle files are storedl
+   * @param localDirs local directories where the push-merged shuffle files are stored
    */
   private[storage] case class PushMergedLocalMetaFetchResult(
       shuffleId: Int,

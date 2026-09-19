@@ -1128,6 +1128,14 @@ table other
 select 3 as x, 4 as y
 |> aggregate group by all;
 
+-- The AGGREGATE GROUP BY ordinal position is out of range.
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 5;
+
+-- The AGGREGATE GROUP BY ordinal position is not positive.
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 0;
+
 -- GROUP BY ROLLUP is not supported yet.
 table courseSales
 |> aggregate sum(earnings) group by rollup(course, `year`)

@@ -139,7 +139,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
  * Common params for ALS.
  */
 private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter with HasRegParam
-  with HasCheckpointInterval with HasSeed {
+  with HasCheckpointInterval with HasSeed with HasIntermediateStorageLevel {
 
   /**
    * Param for rank of the matrix factorization (positive).
@@ -216,20 +216,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getNonnegative: Boolean = $(nonnegative)
 
   /**
-   * Param for StorageLevel for intermediate datasets. Pass in a string representation of
-   * `StorageLevel`. Cannot be "NONE".
-   * Default: "MEMORY_AND_DISK".
-   *
-   * @group expertParam
-   */
-  val intermediateStorageLevel = new Param[String](this, "intermediateStorageLevel",
-    "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
-    (s: String) => Try(StorageLevel.fromString(s)).isSuccess && s != "NONE")
-
-  /** @group expertGetParam */
-  def getIntermediateStorageLevel: String = $(intermediateStorageLevel)
-
-  /**
    * Param for StorageLevel for ALS model factors. Pass in a string representation of
    * `StorageLevel`.
    * Default: "MEMORY_AND_DISK".
@@ -246,7 +232,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
     implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
     ratingCol -> "rating", nonnegative -> false, checkpointInterval -> 10,
-    intermediateStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
     finalStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(), coldStartStrategy -> "nan")
 
   /**
@@ -308,20 +293,6 @@ class ALSModel private[ml] (
   @Since("3.0.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
 
-  private val predict = udf { (featuresA: Seq[Float], featuresB: Seq[Float]) =>
-    if (featuresA != null && featuresB != null) {
-      var dotProduct = 0.0f
-      var i = 0
-      while (i < rank) {
-        dotProduct += featuresA(i) * featuresB(i)
-        i += 1
-      }
-      dotProduct
-    } else {
-      Float.NaN
-    }
-  }
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
@@ -341,7 +312,8 @@ class ALSModel private[ml] (
       .join(itemFactors.alias(itemFactorsAlias),
         col(s"${validatedInputAlias}.${$(itemCol)}") === col(s"${itemFactorsAlias}.id"), "left")
       .select(col(s"${validatedInputAlias}.*"),
-        predict(col(s"${userFactorsAlias}.features"), col(s"${itemFactorsAlias}.features"))
+        ALSModel.getPredictUDF(rank)(
+          col(s"${userFactorsAlias}.features"), col(s"${itemFactorsAlias}.features"))
           .alias($(predictionCol)))
 
     getColdStartStrategy match {
@@ -488,8 +460,10 @@ class ALSModel private[ml] (
         var scores: Array[Float] = null
         var idxOrd: GuavaOrdering[Int] = null
         iter.flatMap { case (srcIds, srcMat, dstIds, dstMat) =>
-          require(srcMat.length == srcIds.length * rank)
-          require(dstMat.length == dstIds.length * rank)
+          require(srcMat.length == srcIds.length * rank,
+            s"srcMat must have ${srcIds.length * rank} entries but has ${srcMat.length}.")
+          require(dstMat.length == dstIds.length * rank,
+            s"dstMat must have ${dstIds.length * rank} entries but has ${dstMat.length}.")
           val m = srcIds.length
           val n = dstIds.length
           if (scores == null || scores.length < n) {
@@ -541,9 +515,11 @@ class ALSModel private[ml] (
   }
 
   private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
     val userCount = userFactors.count()
     val itemCount = itemFactors.count()
-    (userCount + itemCount) * (rank + 1) * 4
+    size += (userCount + itemCount) * (rank + 1) * 4
+    size
   }
 }
 
@@ -551,6 +527,22 @@ private[ml] case class FeatureData(id: Int, features: Array[Float])
 
 @Since("1.6.0")
 object ALSModel extends MLReadable[ALSModel] {
+
+  private def getPredictUDF(rank: Int) = {
+    udf { (featuresA: Seq[Float], featuresB: Seq[Float]) =>
+      if (featuresA != null && featuresB != null) {
+        var dotProduct = 0.0f
+        var i = 0
+        while (i < rank) {
+          dotProduct += featuresA(i) * featuresB(i)
+          i += 1
+        }
+        dotProduct
+      } else {
+        Float.NaN
+      }
+    }
+  }
 
   private[ml] def serializeData(data: FeatureData, dos: DataOutputStream): Unit = {
     import ReadWriteUtils._
@@ -820,10 +812,12 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   override def copy(extra: ParamMap): ALS = defaultCopy(extra)
 
   override def estimateModelSize(dataset: Dataset[_]): Long = {
+    var size = estimateMatadataSize
     val Row(userCount: Long, itemCount: Long) =
       dataset.select(count_distinct(col(getUserCol)), count_distinct(col(getItemCol))).head()
     val rank = getRank
-    (userCount + itemCount) * (rank + 1) * 4
+    size += (userCount + itemCount) * (rank + 1) * 4
+    size
   }
 }
 
@@ -899,7 +893,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         ata = new Array[Double](rank * rank)
         initialized = true
       } else {
-        require(this.rank == rank)
+        require(this.rank == rank,
+          s"NNLSSolver was initialized with rank ${this.rank} but got $rank.")
       }
     }
 
@@ -976,8 +971,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
     /** Adds an observation. */
     def add(a: Array[Float], b: Double, c: Double = 1.0): NormalEquation = {
-      require(c >= 0.0)
-      require(a.length == k)
+      require(c >= 0.0, s"Observation weight must be non-negative but found $c.")
+      require(a.length == k, s"Observation length ${a.length} must equal rank $k.")
       copyToDouble(a)
       BLAS.nativeBLAS.dspr(upper, k, c, da, 1, ata)
       if (b != 0.0) {
@@ -988,7 +983,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
     /** Merges another normal equation object. */
     def merge(other: NormalEquation): NormalEquation = {
-      require(other.k == k)
+      require(other.k == k, s"Cannot merge normal equations of rank ${other.k} into rank $k.")
       BLAS.nativeBLAS.daxpy(ata.length, 1.0, other.ata, 1, ata, 1)
       BLAS.nativeBLAS.daxpy(atb.length, 1.0, other.atb, 1, atb, 1)
       this
@@ -1338,8 +1333,10 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       ratings: Array[Float]) {
     /** Size of the block. */
     def size: Int = ratings.length
-    require(dstEncodedIndices.length == size)
-    require(dstPtrs.length == srcIds.length + 1)
+    require(dstEncodedIndices.length == size,
+      s"dstEncodedIndices must have $size entries but has ${dstEncodedIndices.length}.")
+    require(dstPtrs.length == srcIds.length + 1,
+      s"dstPtrs must have ${srcIds.length + 1} entries but has ${dstPtrs.length}.")
   }
 
   /**
@@ -1381,8 +1378,10 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       ratings: Array[Float]) {
     /** Size of the block. */
     def size: Int = srcIds.length
-    require(dstIds.length == srcIds.length)
-    require(ratings.length == srcIds.length)
+    require(dstIds.length == srcIds.length,
+      s"dstIds must have ${srcIds.length} entries but has ${dstIds.length}.")
+    require(ratings.length == srcIds.length,
+      s"ratings must have ${srcIds.length} entries but has ${ratings.length}.")
   }
 
   /**
@@ -1505,8 +1504,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         dstLocalIndices: Array[Int],
         ratings: Array[Float]): this.type = {
       val sz = srcIds.length
-      require(dstLocalIndices.length == sz)
-      require(ratings.length == sz)
+      require(dstLocalIndices.length == sz,
+        s"dstLocalIndices must have $sz entries but has ${dstLocalIndices.length}.")
+      require(ratings.length == sz, s"ratings must have $sz entries but has ${ratings.length}.")
       this.srcIds ++= srcIds
       this.ratings ++= ratings
       var j = 0
@@ -1886,8 +1886,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
     /** Encodes a (blockId, localIndex) into a single integer. */
     def encode(blockId: Int, localIndex: Int): Int = {
-      require(blockId < numBlocks)
-      require((localIndex & ~localIndexMask) == 0)
+      require(blockId < numBlocks, s"blockId $blockId must be less than numBlocks $numBlocks.")
+      require((localIndex & ~localIndexMask) == 0,
+        s"localIndex $localIndex must be in [0, $localIndexMask].")
       (blockId << numLocalIndexBits) | localIndex
     }
 

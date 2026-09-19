@@ -199,6 +199,24 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
     assert(agg.eval(buffer) != null)
   }
 
+  test("SPARK-57557: HistogramNumeric supports TIME type") {
+    // With propagateInputType, the histogram's 'x' field preserves the input TIME type and the
+    // bin centers are returned as Long nanos-of-day.
+    withSQLConf(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE.key -> "true") {
+      val agg = new HistogramNumeric(BoundReference(0, TimeType(), nullable = true), Literal(5))
+      val xType = agg.dataType match {
+        case ArrayType(StructType(Array(
+            StructField("x", t, _, _), StructField("y", _, _, _))), _) => t
+      }
+      assert(xType === TimeType())
+      val buffer = agg.createAggregationBuffer()
+      Seq(0L, 10L, 20L).foreach(v => agg.update(buffer, InternalRow(v)))
+      val result = agg.eval(buffer).asInstanceOf[GenericArrayData]
+      assert(result.numElements() > 0)
+      assert(result.getStruct(0, 2).get(0, TimeType()).isInstanceOf[Long])
+    }
+  }
+
   test("class HistogramNumeric, exercise many different numeric input types") {
     val inputs = Seq(
       (Literal(null),

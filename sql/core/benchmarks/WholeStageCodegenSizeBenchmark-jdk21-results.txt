@@ -1,0 +1,15 @@
+================================================================================================
+TPCDS codegen size
+================================================================================================
+
+queries measured                 135
+codegen stages                   2247
+source code size (chars)         21366327
+max method bytecode (sum)        820961
+max method bytecode (max)        4962
+inner classes                    252
+constant pool (sum)              423260
+constant pool (max)              631
+codegen fallbacks                0
+
+

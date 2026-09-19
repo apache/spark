@@ -157,7 +157,7 @@ case class LogicalRDD(
     }
   }
 
-  private[sql] def isCheckpointedInput: Boolean = fromCheckpoint
+  private[sql] def isCheckpointedInput: Boolean = fromCheckpoint && rdd.isCheckpointed
 
   override lazy val constraints: ExpressionSet = originConstraints.getOrElse(ExpressionSet())
     // Subqueries can have non-deterministic results even when they only contain deterministic

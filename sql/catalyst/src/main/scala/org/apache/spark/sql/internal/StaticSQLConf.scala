@@ -20,7 +20,10 @@ package org.apache.spark.sql.internal
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import scala.util.Try
+
 import org.apache.spark.internal.config.ConfigBindingPolicy
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.util.Utils
 
@@ -31,7 +34,7 @@ import org.apache.spark.util.Utils
  */
 object StaticSQLConf {
 
-  import SQLConf.buildStaticConf
+  import SQLConf.{buildConfFromConfigFile, buildStaticConf}
 
   val WAREHOUSE_PATH = buildStaticConf("spark.sql.warehouse.dir")
     .doc("The default location for managed databases and tables.")
@@ -123,6 +126,17 @@ object StaticSQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_HIVE_THRIFT_SERVER_ALLOW_SETTING_SYSTEM_PROPERTIES =
+    buildStaticConf("spark.sql.legacy.hive.thriftServer.allowSettingSystemProperties")
+      .internal()
+      .doc("When set to true, the Hive Thrift Server allows setting JVM system properties " +
+        "through the 'set:system:' session configuration overlay (for example, in a JDBC " +
+        "connection string). By default, such system property assignments are rejected.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val HIVE_THRIFT_SERVER_HTTP_SNI_HOST_CHECK_ENABLED =
     buildStaticConf("spark.sql.hive.thriftServer.http.sniHostCheckEnabled")
       .internal()
@@ -158,7 +172,10 @@ object StaticSQLConf {
       "org.apache.spark.sql.columnar.CachedBatchSerializer. It will be used to " +
       "translate SQL data into a format that can more efficiently be cached. The underlying " +
       "API is subject to change so use with caution. Multiple classes cannot be specified. " +
-      "The class must have a no-arg constructor.")
+      "The class must have a no-arg constructor. Available implementations include: " +
+      "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer (default) and " +
+      "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer (Arrow format with " +
+      "zero-copy columnar reads and better Arrow ecosystem interoperability).")
     .version("3.1.0")
     .stringConf
     .createWithDefault("org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
@@ -182,11 +199,7 @@ object StaticSQLConf {
     .createOptional
 
   val UI_RETAINED_EXECUTIONS =
-    buildStaticConf("spark.sql.ui.retainedExecutions")
-      .doc("Number of executions to retain in the Spark UI.")
-      .version("1.5.0")
-      .intConf
-      .createWithDefault(1000)
+    buildConfFromConfigFile[Int]("spark.sql.ui.retainedExecutions")
 
   val SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD =
     buildStaticConf("spark.sql.shuffleExchange.maxThreadThreshold")
@@ -325,4 +338,130 @@ object StaticSQLConf {
     .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL =
+    buildStaticConf("spark.sql.artifact.copyFromLocalToFs.allowDestLocal")
+      .internal()
+      .doc("Allow the `copyFromLocalToFs` destination to be a local file system path on the " +
+        "driver node. This lets the caller overwrite arbitrary files on the driver node, so it " +
+        "should only be enabled for testing purposes. This is a static conf: it can only be set " +
+        "when starting the driver, and not from a session.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val UNIFIED_UDF_EXECUTION_ENABLED =
+    buildStaticConf("spark.sql.execution.udf.unified.execution.enabled")
+      .doc("When true, enable planning through the language-agnostic external UDF worker " +
+        "framework. Execution requires a supported external UDF physical operator. When false, " +
+        "external UDF expressions are rejected. This config must be set before the SparkSession " +
+        "is created. Experimental.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val REFLECT_ALLOW_LIST = buildStaticConf("spark.sql.reflect.allowList")
+    .doc("A comma-separated allow list of regular expressions matched against the canonical " +
+      "static method name (in the form `class.method`, e.g. `java.util.UUID.randomUUID`) " +
+      "that the `reflect` and `java_method` SQL functions are allowed to invoke. A method is " +
+      "allowed when its `class.method` name fully matches at least one of the patterns. " +
+      "When the list is empty (the default), all such invocations are allowed.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .stringConf
+    .toSequence
+    .checkValue(
+      _.forall(pattern => Try(pattern.r).isSuccess),
+      "Every entry must be a valid regular expression.")
+    .createWithDefault(Nil)
+
+  val RESTRICTED_MODE_ENABLED = buildStaticConf("spark.sql.restrictedMode.enabled")
+    .internal()
+    .doc("When true, SQL features that load or execute externally provided code or scripts from " +
+      "the query itself are disabled: the reflect, java_method and try_reflect functions and the " +
+      "TRANSFORM ... USING clause are rejected during analysis. This is an opt-in profile for " +
+      "deployments that want a more constrained SQL surface. As a static configuration it can " +
+      "only be set when starting the driver, and not from a session, so that a session cannot " +
+      "turn it off for itself. The default of false preserves the previous behavior.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
+  val AVRO_SCHEMA_URL_ALLOWED_SCHEMES =
+    buildStaticConf("spark.sql.avro.schemaUrlAllowedSchemes")
+      .internal()
+      .doc("A comma-separated allowlist of URI schemes permitted for the 'avroSchemaUrl' Avro " +
+        "option. Empty by default, which permits any scheme and preserves the previous behavior; " +
+        "when non-empty, an avroSchemaUrl whose scheme is not listed is rejected before it is " +
+        "opened. As a static configuration it can only be set when starting the driver, and not " +
+        "from a session. It restricts the scheme an avroSchemaUrl may name; it does not restrict " +
+        "which file system serves that scheme. That is decided by fs.<scheme>.impl, which a " +
+        "session can still set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  // Bounds on the environment a session may install in its Python workers through the reserved
+  // `spark.pythonWorkerEnv.` prefix. Static, so a session cannot raise its own limits. Their keys
+  // are deliberately not under that prefix: every SparkConf entry is copied into a new session's
+  // SQLConf, so a limit named under it would be read back as an environment variable. The binding
+  // policy is NOT_APPLICABLE because a static limit cannot differ between the session that created
+  // a view and one that calls it.
+  val PYTHON_WORKER_ENV_MAX_VARIABLES =
+    buildStaticConf("spark.sql.pythonWorkerEnv.maxVariables")
+      .doc(
+        "The maximum number of environment variables a session may set for its Python " +
+          "workers, across all configurations under the reserved prefix. Zero accepts no " +
+          "user-provided environment at all.")
+      .version("4.4.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "The maximum number of variables must not be negative.")
+      .createWithDefault(100)
+
+  val PYTHON_WORKER_ENV_MAX_NAME_LENGTH =
+    buildStaticConf("spark.sql.pythonWorkerEnv.maxNameLength")
+      .doc("The maximum length, in characters, of an environment variable name a session may " +
+        "set for its Python workers. Zero accepts no user-provided environment at all.")
+      .version("4.4.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "The maximum name length must not be negative.")
+      .createWithDefault(512)
+
+  val PYTHON_WORKER_ENV_MAX_TOTAL_SIZE_BYTES =
+    buildStaticConf("spark.sql.pythonWorkerEnv.maxTotalSizeBytes")
+      .doc(
+        "The maximum total size of the environment a session may set for its Python workers, " +
+          "measured as the sum of the UTF-8 lengths of every variable name and value.")
+      .version("4.4.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= 0, "The maximum total size must not be negative.")
+      .createWithDefault(128 * 1024) // 128 KiB
+
+  val KAFKA_DISALLOWED_OPTIONS =
+    buildStaticConf("spark.sql.kafka.disallowedOptions")
+      .internal()
+      .doc("A comma-separated list of Kafka client option names (without the 'kafka.' prefix) " +
+        "that are not allowed to be set through Kafka source/sink options. Empty by default, " +
+        "which allows all options and preserves the previous behavior; when non-empty, setting a " +
+        "listed option raises an error. This is a static configuration fixed when the " +
+        "SparkSession is created and cannot be changed at runtime, so it acts as an operator " +
+        "boundary that a session cannot turn off.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .checkValue(_.forall(!_.toLowerCase(Locale.ROOT).startsWith("kafka.")),
+        "Kafka option names must be listed without the 'kafka.' prefix.")
+      .createWithDefault(Nil)
 }

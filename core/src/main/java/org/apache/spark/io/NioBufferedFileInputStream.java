@@ -27,6 +27,7 @@ import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
+import java.util.Objects;
 
 /**
  * {@link InputStream} implementation which uses direct buffer
@@ -87,9 +88,7 @@ public final class NioBufferedFileInputStream extends InputStream {
 
   @Override
   public synchronized int read(byte[] b, int offset, int len) throws IOException {
-    if (offset < 0 || len < 0 || offset + len < 0 || offset + len > b.length) {
-      throw new IndexOutOfBoundsException();
-    }
+    Objects.checkFromIndexSize(offset, len, b.length);
     if (!refill()) {
       return -1;
     }

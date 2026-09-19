@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.language.implicitConversions
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
@@ -258,6 +258,15 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a not like all ('foo%', 'b%')", $"a" notLikeAll("foo%", "b%"))
     assertEqual("not (a like all ('foo%', 'b%'))", !($"a" likeAll("foo%", "b%")))
 
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assertEqual(
+        "a like any (cast('foo%' as char(4)), cast('b%' as varchar(2)))",
+        $"a" likeAny("foo%", "b%"))
+      assertEqual(
+        "a like all (cast('foo%' as varchar(4)), cast('b%' as char(2)))",
+        $"a" likeAll("foo%", "b%"))
+    }
+
     Seq("any", "some", "all").foreach { quantifier =>
       checkError(
         exception = parseException(s"a like $quantifier()"),
@@ -307,12 +316,127 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("-+~~a", -( +(~(~$"a"))))
   }
 
+  test("JSON_VALUE expressions") {
+    import org.apache.spark.sql.catalyst.expressions.JsonValueBehavior
+    // Bare form (no clause) is an ordinary function call, routed through function resolution; the
+    // registered `json_value` built-in reconstructs the JsonValue when nothing shadows it.
+    assertEqual(
+      "json_value(a, '$.b')",
+      UnresolvedFunction("json_value", Seq($"a", Literal("$.b")), isDistinct = false))
+    // RETURNING.
+    assertEqual(
+      "json_value(a, '$.b' RETURNING INT)",
+      JsonValue($"a", "$.b", IntegerType, JsonValueBehavior.Null, JsonValueBehavior.Null,
+        None, None))
+    // ERROR ON EMPTY / ERROR ON ERROR.
+    assertEqual(
+      "json_value(a, '$.b' ERROR ON EMPTY ERROR ON ERROR)",
+      JsonValue($"a", "$.b", StringType, JsonValueBehavior.Error, JsonValueBehavior.Error,
+        None, None))
+    // DEFAULT ON EMPTY / DEFAULT ON ERROR carry expressions.
+    assertEqual(
+      "json_value(a, '$.b' DEFAULT 'x' ON EMPTY DEFAULT 'y' ON ERROR)",
+      JsonValue($"a", "$.b", StringType, JsonValueBehavior.Default, JsonValueBehavior.Default,
+        Some(Literal("x")), Some(Literal("y"))))
+  }
+
+  test("JSON_EXISTS expressions") {
+    import org.apache.spark.sql.catalyst.expressions.JsonExistsBehavior
+    // Bare form (no clause) is an ordinary function call, routed through function resolution.
+    assertEqual(
+      "json_exists(a, '$.b')",
+      UnresolvedFunction("json_exists", Seq($"a", Literal("$.b")), isDistinct = false))
+    assertEqual(
+      "json_exists(a, '$.b' TRUE ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.True))
+    assertEqual(
+      "json_exists(a, '$.b' FALSE ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.False))
+    assertEqual(
+      "json_exists(a, '$.b' UNKNOWN ON ERROR)",
+      JsonExists($"a", "$.b", JsonExistsBehavior.Unknown))
+    assertEqual(
+      "json_exists(a, '$.b' ERROR ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.Error))
+  }
+
+  test("JSON_QUERY expressions") {
+    import org.apache.spark.sql.catalyst.expressions.{JsonQueryBehavior, JsonQueryQuotes,
+      JsonQueryWrapper}
+    // Bare form (no clause) is an ordinary function call, routed through function resolution.
+    assertEqual(
+      "json_query(a, '$.b')",
+      UnresolvedFunction("json_query", Seq($"a", Literal("$.b")), isDistinct = false))
+    // WITH ARRAY WRAPPER defaults to UNCONDITIONAL; the ARRAY word is optional.
+    assertEqual(
+      "json_query(a, '$.b' WITH ARRAY WRAPPER)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Unconditional, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    assertEqual(
+      "json_query(a, '$.b' WITH CONDITIONAL WRAPPER)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Conditional, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    // WITHOUT ARRAY WRAPPER with OMIT QUOTES.
+    assertEqual(
+      "json_query(a, '$.b' WITHOUT ARRAY WRAPPER OMIT QUOTES)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Omit,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    // EMPTY ARRAY ON EMPTY / EMPTY OBJECT ON ERROR, plus RETURNING STRING.
+    assertEqual(
+      "json_query(a, '$.b' RETURNING STRING EMPTY ARRAY ON EMPTY EMPTY OBJECT ON ERROR)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.EmptyArray, JsonQueryBehavior.EmptyObject))
+    // The ARRAY word is optional in every wrapper spelling, and WITH alone means UNCONDITIONAL.
+    Seq("WITH WRAPPER", "WITH UNCONDITIONAL WRAPPER").foreach { spelling =>
+      assertEqual(
+        s"json_query(a, '$$.b' $spelling)",
+        JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Unconditional, JsonQueryQuotes.Keep,
+          JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    }
+    assertEqual(
+      "json_query(a, '$.b' WITHOUT WRAPPER)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    // Explicit NULL ON EMPTY / NULL ON ERROR (same as the omitted default) and KEEP QUOTES.
+    assertEqual(
+      "json_query(a, '$.b' KEEP QUOTES NULL ON EMPTY NULL ON ERROR)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+  }
+
   test("cast expressions") {
     // Note that DataType parsing is tested elsewhere.
     assertEqual("cast(a as int)", $"a".cast(IntegerType))
     assertEqual("cast(a as timestamp)", $"a".cast(TimestampType))
     assertEqual("cast(a as array<int>)", $"a".cast(ArrayType(IntegerType)))
     assertEqual("cast(cast(a as int) as long)", $"a".cast(IntegerType).cast(LongType))
+  }
+
+  test("SPARK-57164: CAST / TRY_CAST to nanos timestamp types") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            assertEqual(s"cast(a as $spelling)", $"a".cast(expected))
+            assertEqual(s"try_cast(a as $spelling)",
+              Cast($"a", expected, evalMode = EvalMode.TRY))
+        }
+      }
+    }
+    // With the preview flag off, a nanos data type in a cast target is rejected.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      Seq("cast(a as TIMESTAMP_NTZ(9))", "try_cast(a as TIMESTAMP_LTZ(7))").foreach { sql =>
+        checkError(
+          exception = intercept[SparkException](defaultParser.parseExpression(sql)),
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = Map(
+            "featureName" -> "Nanosecond-precision timestamp types",
+            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+            "configValue" -> "true"))
+      }
+    }
   }
 
   test("function expressions") {
@@ -526,6 +650,14 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a[b]", $"a".getItem($"b"))
     assertEqual("a[1 + 1]", $"a".getItem(Literal(1) + 1))
     assertEqual("`c`.a[b]", UnresolvedAttribute("c.a").getItem($"b"))
+  }
+
+  test("invalid semi-structured extract path") {
+    checkError(
+      exception = parseException("c:['']"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'['']'", "hint" -> ""),
+      queryContext = Array(ExpectedContext("c:['']", 0, 5)))
   }
 
   test("parenthesis") {
@@ -1292,12 +1424,14 @@ class ExpressionParserSuite extends AnalysisTest {
       assertEqual("current_date", CurrentDate())
       assertEqual("current_timestamp", CurrentTimestamp())
       assertEqual("current_time", CurrentTime())
+      assertEqual("localtime", CurrentTime())
     }
 
     def testNonAnsiBehavior(): Unit = {
       assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
       assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
       assertEqual("current_time", UnresolvedAttribute.quoted("current_time"))
+      assertEqual("localtime", UnresolvedAttribute.quoted("localtime"))
     }
     withSQLConf(
       SQLConf.ANSI_ENABLED.key -> "false",
@@ -1337,6 +1471,18 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("tIme '12:13:14'", Literal(LocalTime.parse("12:13:14")))
     assertEqual("TIME'23:59:59.999999'", Literal(LocalTime.parse("23:59:59.999999")))
 
+    // ANSI SQL: the literal precision is the number of fractional-second digits. 7-9 digits
+    // produce a nanosecond-precision TIME literal; <= 6 digits keep the default precision (6).
+    assertEqual(
+      "TIME '12:34:56.1234567'",
+      Literal.create(LocalTime.parse("12:34:56.123456700"), TimeType(7)))
+    assertEqual(
+      "TIME '12:34:56.12345678'",
+      Literal.create(LocalTime.parse("12:34:56.123456780"), TimeType(8)))
+    assertEqual(
+      "TIME '23:59:59.999999999'",
+      Literal.create(LocalTime.parse("23:59:59.999999999"), TimeType(9)))
+
     checkError(
       exception = parseException("time '12-13.14'"),
       condition = "INVALID_TYPED_LITERAL",
@@ -1346,6 +1492,17 @@ class ExpressionParserSuite extends AnalysisTest {
         fragment = "time '12-13.14'",
         start = 0,
         stop = 14))
+
+    // More than 9 fractional-second digits is rejected.
+    checkError(
+      exception = parseException("TIME '12:34:56.1234567890'"),
+      condition = "INVALID_TIME_LITERAL_PRECISION",
+      sqlState = "22023",
+      parameters = Map("value" -> "'12:34:56.1234567890'"),
+      context = ExpectedContext(
+        fragment = "TIME '12:34:56.1234567890'",
+        start = 0,
+        stop = 25))
   }
 
   test("collate expression origin") {

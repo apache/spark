@@ -15,27 +15,33 @@
 # limitations under the License.
 #
 
-from decimal import Decimal
 import datetime
+import logging
 import os
 import shutil
 import tempfile
-import unittest
-import logging
 import time
+import unittest
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Iterator, Optional
 
 from pyspark.errors import (
-    PySparkAttributeError,
-    PythonException,
-    PySparkTypeError,
     AnalysisException,
-    PySparkPicklingError,
     IllegalArgumentException,
+    PySparkAttributeError,
+    PySparkPicklingError,
+    PySparkTypeError,
+    PythonException,
 )
-from pyspark.util import PythonEvalType
+from pyspark.logger import PySparkLogger
 from pyspark.sql.functions import (
+    AnalyzeArgument,
+    AnalyzeResult,
+    OrderingColumn,
+    PartitioningColumn,
+    SelectedColumn,
+    SkipRestOfInputTableException,
     array,
     col,
     create_map,
@@ -43,12 +49,6 @@ from pyspark.sql.functions import (
     named_struct,
     udf,
     udtf,
-    AnalyzeArgument,
-    AnalyzeResult,
-    OrderingColumn,
-    PartitioningColumn,
-    SelectedColumn,
-    SkipRestOfInputTableException,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -64,7 +64,6 @@ from pyspark.sql.types import (
     StructType,
     VariantVal,
 )
-from pyspark.logger import PySparkLogger
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -74,7 +73,7 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.util import is_remote_only
+from pyspark.util import PythonEvalType, is_remote_only
 
 
 class BaseUDTFTestsMixin:
@@ -565,8 +564,11 @@ class BaseUDTFTestsMixin:
             with open(path, "r") as f:
                 data = f.read()
 
-            # Only cleanup method should be called.
-            self.assertEqual(data, "cleanup")
+            # Only the cleanup method should be called, not terminate. The UDTF may be retried,
+            # so cleanup can run more than once and the file may contain multiple "cleanup"
+            # strings; just check that "cleanup" is present and "terminate" is not.
+            self.assertIn("cleanup", data)
+            self.assertNotIn("terminate", data)
 
     def test_udtf_cleanup_with_exception_in_terminate(self):
         with tempfile.TemporaryDirectory(
@@ -595,7 +597,10 @@ class BaseUDTFTestsMixin:
             with open(path, "r") as f:
                 data = f.read()
 
-            self.assertEqual(data, "cleanup")
+            # The cleanup method should be called even when terminate raises. The UDTF may be
+            # retried, so cleanup can run more than once and the file may contain multiple
+            # "cleanup" strings; just check that "cleanup" is present.
+            self.assertIn("cleanup", data)
 
     def test_init_with_exception(self):
         @udtf(returnType="x: int")
@@ -1992,6 +1997,25 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(AnalysisException, "Failed to analyze."):
             func().collect()
+
+    def test_udtf_analyze_traceback_with_locals(self):
+        with self.sql_conf({"spark.sql.execution.pyspark.udf.tracebackWithLocals.enabled": True}):
+
+            class TestUDTF:
+                @staticmethod
+                def analyze() -> AnalyzeResult:
+                    local_marker = 1
+                    if local_marker:
+                        raise ValueError("boom")
+                    return AnalyzeResult(StructType().add("x", StringType()))
+
+                def eval(self):
+                    yield ("x",)
+
+            func = udtf(TestUDTF)
+
+            with self.assertRaisesRegex(AnalysisException, "local_marker = 1"):
+                func().collect()
 
     def test_udtf_with_analyze_null_literal(self):
         class TestUDTF:

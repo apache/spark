@@ -430,8 +430,8 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
   /**
    * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
    * {{{
-   *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
-   *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
+   *   sqlContext.readStream.parquet("/path/to/directory/of/parquet/files")
+   *   sqlContext.readStream.schema(schema).json("/path/to/directory/of/json/files")
    * }}}
    *
    * @since 2.0.0
@@ -463,8 +463,8 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
   }
 
   /**
-   * Creates an external table from the given path based on a data source and a set of options.
-   * Then, returns the corresponding DataFrame.
+   * Creates an external table based on the dataset in a data source and a set of options. Then,
+   * returns the corresponding DataFrame.
    *
    * @group ddl_ops
    * @since 1.3.0
@@ -478,8 +478,8 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
   }
 
   /**
-   * (Scala-specific) Creates an external table from the given path based on a data source and a
-   * set of options. Then, returns the corresponding DataFrame.
+   * (Scala-specific) Creates an external table based on the dataset in a data source and a set of
+   * options. Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
    * @since 1.3.0
@@ -493,7 +493,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
   }
 
   /**
-   * Create an external table from the given path based on a data source, a schema and a set of
+   * Create an external table based on the dataset in a data source, a schema and a set of
    * options. Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
@@ -509,8 +509,8 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
   }
 
   /**
-   * (Scala-specific) Create an external table from the given path based on a data source, a
-   * schema and a set of options. Then, returns the corresponding DataFrame.
+   * (Scala-specific) Create an external table based on the dataset in a data source, a schema and
+   * a set of options. Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
    * @since 1.3.0
@@ -598,7 +598,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
 
   /**
    * Returns a `DataFrame` containing names of existing tables in the current database. The
-   * returned DataFrame has three columns, database, tableName and isTemporary (a Boolean
+   * returned DataFrame has three columns, namespace, tableName and isTemporary (a Boolean
    * indicating if a table is a temporary one or not).
    *
    * @group ddl_ops
@@ -610,7 +610,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
 
   /**
    * Returns a `DataFrame` containing names of existing tables in the given database. The returned
-   * DataFrame has three columns, database, tableName and isTemporary (a Boolean indicating if a
+   * DataFrame has three columns, namespace, tableName and isTemporary (a Boolean indicating if a
    * table is a temporary one or not).
    *
    * @group ddl_ops

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, SQLException, Timestamp, Types}
+import java.time.LocalDateTime
 import java.util.Locale
 
 import scala.util.control.NonFatal
@@ -26,7 +27,7 @@ import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.connector.expressions.{Expression, Extract, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
 
@@ -54,6 +55,13 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       e.getMessage.contains("ORA-39165")
   }
 
+  override def isNotSelectableObjectException(e: SQLException): Boolean = {
+    // ORA-04044: object is not a table (e.g. a synonym to a procedure/function/package).
+    e.getMessage.contains("ORA-04044") ||
+      // ORA-04063: object is invalid (e.g. a view over a dropped base table).
+      e.getMessage.contains("ORA-04063")
+  }
+
   class OracleSQLBuilder extends JDBCSQLBuilder {
 
     override def visitExtract(extract: Extract): String = {
@@ -75,7 +83,22 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
       funcName match {
         case "TRUNC" =>
-          s"TRUNC(${inputs(0)}, 'IW')"
+          // Map Spark's trunc format strings to Oracle equivalents.
+          // inputs(1) arrives quoted, e.g. "'MONTH'" (see JDBCSQLBuilder.visitLiteral).
+          // Case-insensitive: Spark's parseTruncLevel uppercases before matching.
+          val fmt = inputs(1).toUpperCase(Locale.ROOT)
+          val oracleFormat = fmt match {
+            case "'WEEK'" => "'IW'"
+            case "'MONTH'" | "'MM'" | "'MON'" => "'MM'"
+            case "'QUARTER'" => "'Q'"
+            case "'YEAR'" | "'YYYY'" | "'YY'" => "'YYYY'"
+            case _ =>
+              // Unmapped formats: don't push down. compileExpression catches the
+              // exception and returns None, so Spark evaluates trunc locally.
+              throw new IllegalArgumentException(
+                s"Unsupported Oracle TRUNC format: ${inputs(1)}")
+          }
+          s"TRUNC(${inputs(0)}, $oracleFormat)"
         case _ => super.visitSQLFunction(funcName, inputs)
       }
     }
@@ -99,7 +122,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
         case (_, lit: Literal[_]) if lit.dataType == BinaryType =>
           compareBlob(le, name, lit)
         case _ =>
-          super.visitBinaryComparison(name, le, re);
+          super.visitBinaryComparison(name, le, re)
       }
     }
 
@@ -159,7 +182,30 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
       case INTERVAL_YM => Some(YearMonthIntervalType())
       case INTERVAL_DS => Some(DayTimeIntervalType())
+      case Types.TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
+          typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") =>
+        val metadata = if (md != null) md.build() else Metadata.empty
+        // Absent scale metadata: Oracle TIMESTAMP defaults to TIMESTAMP(6).
+        val scale = if (metadata.contains("scale")) metadata.getLong("scale").toInt else 6
+        val preferNanos = metadata.contains("preferTimestampNanos") &&
+          metadata.getBoolean("preferTimestampNanos")
+        val resolved = JdbcUtils.resolveTimestampType(
+          isTimestampNTZ = true, scale = scale, preferTimestampNanos = preferNanos)
+        // Oracle DATE/TIMESTAMP are zoneless; mark the microsecond NTZ wall-clock so a later flag
+        // flip can't desync the read. The nanos NTZ getter is wall-clock by construction.
+        if (md != null && resolved == TimestampNTZType) {
+          md.putBoolean(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
+        }
+        Some(resolved)
       case _ => None
+    }
+  }
+
+  override def updateExtraColumnMetaForWrite(dt: DataType, metadata: MetadataBuilder): Unit = {
+    dt match {
+      case TimestampNTZType if !conf.legacyOracleTimestampNTZMappingEnabled =>
+        metadata.putBoolean(JdbcUtils.WRITE_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
+      case _ =>
     }
   }
 
@@ -188,6 +234,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     // Appendix A Reference Information.
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
+    case localDateTimeValue: LocalDateTime => "{ts '" + Timestamp.valueOf(localDateTimeValue) + "'}"
     case dateValue: Date => "{d '" + dateValue + "'}"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case binaryValue: Array[Byte] =>

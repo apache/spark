@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions.{length, struct, sum}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -663,6 +664,50 @@ class DatasetUnpivotSuite extends SharedSparkSession {
           condition = "UNPIVOT_VALUE_SIZE_MISMATCH",
           parameters = Map("names" -> "2"))
       }
+    }
+  }
+
+  test("ORDER BY on a column dropped by UNPIVOT is rejected") {
+    // UNPIVOT drops the unpivoted value columns, so `ORDER BY t.a` cannot resolve against them;
+    // hidden-output insertion appends the column to an operator whose child does not produce it,
+    // and analysis fails with MISSING_ATTRIBUTES.
+    withSQLConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(
+            """SELECT * FROM VALUES (1, 10, 20) AS t(id, a, b)
+              |UNPIVOT (val FOR name IN (a, b))
+              |ORDER BY t.a""".stripMargin)
+        },
+        condition = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+        parameters = Map(
+          "missingAttributes" -> "\"a\"",
+          "input" -> "\"id\", \"name\", \"val\"",
+          "operator" -> "!Sort \\[a#\\d+ ASC NULLS FIRST\\], true"),
+        matchPVals = true,
+        queryContext =
+          Array(ExpectedContext(fragment = "ORDER BY t.a", start = 81, stop = 92)))
+    }
+  }
+
+  test("DataFrame sort on a column dropped by UNPIVOT is rejected") {
+    // The Column reference carries the dropped column's id, so it reaches hidden-output insertion
+    // rather than failing name resolution as a bare name would, and analysis fails with
+    // MISSING_ATTRIBUTES.
+    withSQLConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      val df = Seq((1, 10, 20)).toDF("id", "a", "b")
+      val unpivoted = df.unpivot(Array($"id"), Array($"a", $"b"), "name", "val")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          unpivoted.sort(df("a"))
+        },
+        condition = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+        parameters = Map(
+          "missingAttributes" -> "\"a\"",
+          "input" -> "\"id\", \"name\", \"val\"",
+          "operator" -> "!Sort \\[a#\\d+ ASC NULLS FIRST\\], true"),
+        matchPVals = true)
     }
   }
 

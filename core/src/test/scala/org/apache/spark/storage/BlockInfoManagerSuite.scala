@@ -313,9 +313,12 @@ class BlockInfoManagerSuite extends SparkFunSuite {
 
   test("removing a non-existent block throws SparkException") {
     withTaskId(0) {
-      intercept[SparkException] {
-        blockInfoManager.removeBlock("non-existent-block")
-      }
+      checkError(
+        exception = intercept[SparkException] {
+          blockInfoManager.removeBlock("non-existent-block")
+        },
+        condition = "INTERNAL_ERROR_STORAGE",
+        parameters = Map("message" -> "Block test_non-existent-block does not exist."))
     }
   }
 

@@ -54,6 +54,23 @@ trait TaskInterruptListener extends EventListener {
   def onTaskInterrupted(context: TaskContext, reason: String): Unit
 }
 
+/**
+ * Listener providing a callback to be invoked after the task's status update has been sent to
+ * the driver. This is useful for operations that should only begin after the driver has been
+ * notified of the task's result, such as push-based shuffle block push, where starting push
+ * before the driver processes the result can lead to stale data being merged without detection.
+ *
+ * The callback runs on the same executor thread that sends the status update. It should perform
+ * only lightweight work (e.g., submitting async I/O to another thread pool) to avoid blocking
+ * the executor task thread.
+ *
+ * Listeners are guaranteed to execute sequentially in reverse order of registration.
+ */
+private[spark]
+trait PostStatusUpdateListener extends EventListener {
+  def onStatusUpdateSent(context: TaskContext): Unit
+}
+
 
 /**
  * Exception thrown when there is an exception in executing the callback in TaskCompletionListener.

@@ -81,15 +81,7 @@ class ArrayWrappers {
 
     @Override
     public int compareTo(ComparableIntArray other) {
-      int len = Math.min(array.length, other.array.length);
-      for (int i = 0; i < len; i++) {
-        int diff = array[i] - other.array[i];
-        if (diff != 0) {
-          return diff;
-        }
-      }
-
-      return array.length - other.array.length;
+      return Arrays.compare(array, other.array);
     }
   }
 
@@ -120,15 +112,7 @@ class ArrayWrappers {
 
     @Override
     public int compareTo(ComparableLongArray other) {
-      int len = Math.min(array.length, other.array.length);
-      for (int i = 0; i < len; i++) {
-        long diff = array[i] - other.array[i];
-        if (diff != 0) {
-          return diff > 0 ? 1 : -1;
-        }
-      }
-
-      return array.length - other.array.length;
+      return Arrays.compare(array, other.array);
     }
   }
 
@@ -159,15 +143,7 @@ class ArrayWrappers {
 
     @Override
     public int compareTo(ComparableByteArray other) {
-      int len = Math.min(array.length, other.array.length);
-      for (int i = 0; i < len; i++) {
-        int diff = array[i] - other.array[i];
-        if (diff != 0) {
-          return diff;
-        }
-      }
-
-      return array.length - other.array.length;
+      return Arrays.compare(array, other.array);
     }
   }
 

@@ -20,9 +20,9 @@ A simple example demonstrating Spark SQL data sources.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/datasource.py
 """
-from pyspark.sql import SparkSession
 # $example on:schema_merging$
-from pyspark.sql import Row
+from pyspark.sql import Row, SparkSession
+
 # $example off:schema_merging$
 
 
@@ -67,6 +67,14 @@ def generic_file_source_options_example(spark: SparkSession) -> None:
     # |file2.parquet|
     # +-------------+
     # $example off:recursive_file_lookup$
+
+    # $example on:ignored_path_segment_regex$
+    # An empty regex surfaces files that are hidden by default (e.g. names starting with "_" or ".")
+    surfaced_df = spark.read.format("parquet")\
+        .option("ignoredPathSegmentRegex", "")\
+        .load("examples/src/main/resources/dir1")
+    surfaced_df.show()
+    # $example off:ignored_path_segment_regex$
     spark.sql("set spark.sql.files.ignoreCorruptFiles=false")
 
     # $example on:load_with_path_glob_filter$

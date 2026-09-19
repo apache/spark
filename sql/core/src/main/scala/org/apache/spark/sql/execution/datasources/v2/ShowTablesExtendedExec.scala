@@ -97,14 +97,12 @@ case class ShowTablesExtendedExec(
         }
       })
 
-    val properties =
-      conf.redactOptions(table.properties.asScala.toMap).toList
-        .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
-        .sortBy(_._1).map {
-        case (key, value) => key + "=" + value
-      }.mkString("[", ",", "]")
-    if (!table.properties().isEmpty) {
-      results.put("Table Properties", properties.mkString("[", ", ", "]"))
+    val displayedTableProperties = conf.redactOptions(table.properties.asScala.toMap).toList
+      .filterNot { case (key, _) => CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(key) }
+      .sortBy(_._1)
+      .map { case (key, value) => key + "=" + value }
+    if (displayedTableProperties.nonEmpty) {
+      results.put("Table Properties", displayedTableProperties.mkString("[", ", ", "]"))
     }
 
     // Partition Provider & Partition Columns

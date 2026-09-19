@@ -21,6 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.TestRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{OuterReference, OuterScopeReference, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CTERelationDef, CTERelationRef, LogicalPlan, OneRowRelation, WithCTE}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -49,5 +50,117 @@ class InlineCTESuite extends PlanTest {
       ReplaceCTERefWithRepartition(cteRef.select($"a"))
     }
     assert(e.getMessage.contains("No CTERelationDef found"))
+  }
+
+  test("SPARK-58006: forceSkipInline keeps a single-reference deterministic CTE") {
+    // A single-reference deterministic CTE is normally inlined, but `forceSkipInline` should
+    // keep it materialized in the `WithCTE` node.
+    val cteDef = CTERelationDef(
+      TestRelation(Seq($"a".int)).select($"a"), forceSkipInline = true)
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.select($"a"), Seq(cteDef)).analyze
+    val optimized = Optimize.execute(plan)
+    assert(optimized.collectFirst { case _: WithCTE => true }.isDefined,
+      "CTE with forceSkipInline should not be inlined")
+  }
+
+  test("SPARK-58006: forceSkipInline is inlined normally when not set") {
+    // The same single-reference deterministic CTE is inlined when `forceSkipInline` is false.
+    val cteDef = CTERelationDef(TestRelation(Seq($"a".int)).select($"a"))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.select($"a"), Seq(cteDef)).analyze
+    val optimized = Optimize.execute(plan)
+    assert(optimized.collectFirst { case _: WithCTE => true }.isEmpty,
+      "CTE without forceSkipInline should be inlined")
+  }
+
+  test("SPARK-58006: forceSkipInline CTE with an outer reference across its boundary fails") {
+    // A force-materialized CTE cannot carry an outer reference across its boundary, because after
+    // materialization there is no surrounding operator to resolve it against.
+    val relation = TestRelation(Seq($"a".int))
+    val cteChild = relation.where(OuterReference($"a".int) === 1)
+    val cteDef = CTERelationDef(cteChild, forceSkipInline = true)
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.select($"a"), Seq(cteDef))
+    val e = intercept[SparkException] {
+      Optimize.execute(plan)
+    }
+    assert(e.getCondition == "INTERNAL_ERROR")
+    assert(e.getMessage.contains(
+      "A force-materialized CTE cannot carry an outer reference across its boundary"))
+  }
+
+  test("SPARK-58006: forceSkipInline CTE with an outer-scope subquery reference fails") {
+    // Exercises the second validation branch: a subquery inside the CTE child carries an
+    // outer-scope reference (nested correlation), which also cannot cross the CTE boundary.
+    val relation = TestRelation(Seq($"a".int))
+    val subquery = ScalarSubquery(
+      TestRelation(Seq($"c".int)).select($"c"),
+      outerAttrs = Seq(OuterScopeReference($"a".int)))
+    val cteChild = relation.select(subquery.as("s"))
+    val cteDef = CTERelationDef(cteChild, forceSkipInline = true)
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.select($"s"), Seq(cteDef))
+    val e = intercept[SparkException] {
+      Optimize.execute(plan)
+    }
+    assert(e.getCondition == "INTERNAL_ERROR")
+    assert(e.getMessage.contains(
+      "found a subquery with outer-scope reference"))
+  }
+
+  test("MATERIALIZED keeps a single-reference deterministic CTE") {
+    val cteDef = CTERelationDef(
+      TestRelation(Seq($"a".int)).select($"a"), materialized = Some(true))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.select($"a"), Seq(cteDef)).analyze
+    assert(Optimize.execute(plan).exists(_.isInstanceOf[WithCTE]),
+      "MATERIALIZED CTE should not be inlined")
+    // `alwaysInline` mode still inlines it, e.g. to restore the plan shape for analysis checks.
+    assert(!InlineCTE(alwaysInline = true).apply(plan).exists(_.isInstanceOf[WithCTE]),
+      "MATERIALIZED CTE should be inlined in alwaysInline mode")
+  }
+
+  test("MATERIALIZED CTE with an outer reference across its boundary fails") {
+    // Analysis rejects this for SQL; the optimizer guard covers plans built programmatically,
+    // like it does for `forceSkipInline`.
+    val relation = TestRelation(Seq($"a".int))
+    val cteDef = CTERelationDef(
+      relation.where(OuterReference($"a".int) === 1), materialized = Some(true))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.select($"a"), Seq(cteDef))
+    val e = intercept[SparkException] {
+      Optimize.execute(plan)
+    }
+    assert(e.getCondition == "INTERNAL_ERROR")
+    assert(e.getMessage.contains(
+      "A force-materialized CTE cannot carry an outer reference across its boundary"))
+  }
+
+  test("NOT MATERIALIZED inlines a multi-reference non-deterministic CTE") {
+    val cteDef = CTERelationDef(
+      OneRowRelation().select(rand(0).as("a")), materialized = Some(false))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val plan = WithCTE(cteRef.union(cteRef), Seq(cteDef)).analyze
+    assert(!Optimize.execute(plan).exists(_.isInstanceOf[WithCTE]),
+      "NOT MATERIALIZED CTE should be inlined")
+  }
+
+  test("SPARK-58779: optimizer InlineCTE (isAnalysis = false) fails on a ref with no definition") {
+    // During analysis a CTERelationRef whose definition is not in the plan is tolerated -- it is
+    // owned by a surrounding scope (e.g. when `ResolveSQLTableFunctions` runs `checkAnalysis` on a
+    // table-function subplan whose argument references an outer CTE). In the optimizer the plan is
+    // complete, so a missing definition indicates corruption and must fail loudly rather than be
+    // dropped.
+    val defX = CTERelationDef(TestRelation(Seq($"a".int)).select($"a"))
+    val refX = CTERelationRef(defX.id, defX.resolved, defX.output, defX.isStreaming)
+    val danglingRef = CTERelationRef(defX.id + 1000, true, Seq($"a".int), false)
+    val plan = WithCTE(refX.union(danglingRef), Seq(defX))
+    val e = intercept[SparkException] {
+      InlineCTE(isAnalysis = false).apply(plan)
+    }
+    assert(e.getCondition == "INTERNAL_ERROR")
+    // The analysis path tolerates the out-of-scope reference (no throw).
+    InlineCTE(isAnalysis = true).apply(plan)
   }
 }

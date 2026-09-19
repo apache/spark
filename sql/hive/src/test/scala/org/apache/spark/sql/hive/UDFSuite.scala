@@ -204,7 +204,7 @@ class UDFSuite
         sql(s"SELECT $functionName(value) from $testTableName")
       }
 
-      assert(e.getMessage.contains("Can not get an evaluator of the empty UDAF"))
+      assert(e.getCause.getMessage.contains("Can not get an evaluator of the empty UDAF"))
     }
   }
 

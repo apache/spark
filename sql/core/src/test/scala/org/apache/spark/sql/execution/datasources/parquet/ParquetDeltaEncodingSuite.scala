@@ -16,18 +16,18 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.IOException
+import java.io.{ByteArrayOutputStream, IOException}
 import java.nio.ByteBuffer
 import java.util.Random
 
-import org.apache.parquet.bytes.{ByteBufferInputStream, DirectByteBufferAllocator}
+import org.apache.parquet.bytes.{ByteBufferInputStream, BytesUtils, DirectByteBufferAllocator}
 import org.apache.parquet.column.values.ValuesWriter
 import org.apache.parquet.column.values.delta.{DeltaBinaryPackingValuesWriterForInteger, DeltaBinaryPackingValuesWriterForLong}
 import org.apache.parquet.io.ParquetDecodingException
 
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, IntegralType, LongType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, IntegralType, LongType}
 
 /**
  * Read tests for vectorized Delta binary packed reader.
@@ -172,6 +172,40 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
     }
   }
 
+  test("reject invalid DELTA_BINARY_PACKED page header") {
+    // A corrupt header declaring blockSizeInValues = 2^30 would force multi-gigabyte scratch
+    // allocations from a few-byte page. The reader must reject it before allocating anything.
+    def craftHeader(blockSize: Int, miniBlockNum: Int, totalCount: Int): ByteBufferInputStream = {
+      val out = new ByteArrayOutputStream()
+      BytesUtils.writeUnsignedVarInt(blockSize, out)
+      BytesUtils.writeUnsignedVarInt(miniBlockNum, out)
+      BytesUtils.writeUnsignedVarInt(totalCount, out)
+      out.write(0) // firstValue (zigzag var long 0)
+      ByteBufferInputStream.wrap(ByteBuffer.wrap(out.toByteArray))
+    }
+
+    reader = new VectorizedDeltaBinaryPackedReader
+    val e = intercept[ParquetDecodingException] {
+      reader.initFromPage(100, craftHeader(1 << 30, 1, 1))
+    }
+    assert(e.getMessage.contains("Invalid DELTA_BINARY_PACKED block size"))
+
+    // A mini block count larger than the block size (mini blocks of zero values) is likewise
+    // rejected.
+    reader = new VectorizedDeltaBinaryPackedReader
+    val e2 = intercept[ParquetDecodingException] {
+      reader.initFromPage(100, craftHeader(128, 256, 1))
+    }
+    assert(e2.getMessage.contains("mini block count"))
+
+    // A negative total value count is rejected as well.
+    reader = new VectorizedDeltaBinaryPackedReader
+    val e3 = intercept[ParquetDecodingException] {
+      reader.initFromPage(100, craftHeader(128, 4, -1))
+    }
+    assert(e3.getMessage.contains("total value count"))
+  }
+
   test("skip()") {
     val data = allocDataArray(5 * blockSize + 1)
     for (i <- data.indices) {
@@ -261,6 +295,26 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
 
 class ParquetDeltaEncodingInteger extends ParquetDeltaEncodingSuite[Int] {
 
+  test("read INT32 as long with modular delta overflow") {
+    val data = Array(1, 2, Int.MinValue, 3)
+    shouldReadIntegersAsLongs(data, reads = Seq(data.length))
+  }
+
+  test("read INT32 as long with modular delta overflow across split reads") {
+    val data = Array(1, 2, Int.MinValue, 3)
+    shouldReadIntegersAsLongs(data, reads = Seq(2, 2))
+  }
+
+  test("read INT32 as double with modular delta overflow") {
+    val data = Array(1, 2, Int.MinValue, 3)
+    shouldReadIntegersAsDoubles(data, reads = Seq(data.length))
+  }
+
+  test("read INT32 as double with modular delta overflow across split reads") {
+    val data = Array(1, 2, Int.MinValue, 3)
+    shouldReadIntegersAsDoubles(data, reads = Seq(2, 2))
+  }
+
   override protected def getSparkSqlType: IntegralType = IntegerType
   override protected def writeData(data: Array[Int]): Unit = writeData(data, data.length)
 
@@ -308,6 +362,36 @@ class ParquetDeltaEncodingInteger extends ParquetDeltaEncodingSuite[Int] {
 
   override protected def compareValues(expected: Int, actual: Int) : Boolean =
     expected == actual
+
+  private def shouldReadIntegersAsLongs(data: Array[Int], reads: Seq[Int]): Unit = {
+    writeData(data)
+    reader = new VectorizedDeltaBinaryPackedReader
+    reader.initFromPage(data.length, writer.getBytes.toInputStream)
+    writableColumnVector = new OnHeapColumnVector(data.length, LongType)
+    var rowId = 0
+    reads.foreach { total =>
+      reader.readIntegersAsLongs(total, writableColumnVector, rowId)
+      rowId += total
+    }
+    data.indices.foreach { i =>
+      assert(writableColumnVector.getLong(i) == data(i).toLong)
+    }
+  }
+
+  private def shouldReadIntegersAsDoubles(data: Array[Int], reads: Seq[Int]): Unit = {
+    writeData(data)
+    reader = new VectorizedDeltaBinaryPackedReader
+    reader.initFromPage(data.length, writer.getBytes.toInputStream)
+    writableColumnVector = new OnHeapColumnVector(data.length, DoubleType)
+    var rowId = 0
+    reads.foreach { total =>
+      reader.readIntegersAsDoubles(total, writableColumnVector, rowId)
+      rowId += total
+    }
+    data.indices.foreach { i =>
+      assert(writableColumnVector.getDouble(i) == data(i).toDouble)
+    }
+  }
 
 }
 

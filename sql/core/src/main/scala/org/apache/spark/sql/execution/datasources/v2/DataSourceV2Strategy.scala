@@ -27,18 +27,19 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, DynamicPruning, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
+import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableSummary, TruncatableTable, V1Table, V1ViewInfo, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableSummary, TruncatableTable, V1Table, V1View, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
-import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, SupportsRealTimeMode}
 import org.apache.spark.sql.connector.write.{V1Write, Write}
@@ -105,10 +106,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   // Strategy cases that target v2 views read `ResolvedPersistentView.info` directly. For
-  // session-catalog (v1) views the payload is a `V1ViewInfo` wrapping the original
-  // `CatalogTable`; v2 catalogs supply a regular `ViewInfo` from the catalog.
+  // session-catalog (v1) views the payload is a `V1View` wrapping the original
+  // `CatalogTable`; v2 catalogs supply a regular `View` from the catalog.
   // `ResolveSessionCatalog` rewrites session-catalog views to v1 commands before this strategy
-  // fires, so v2 cases that don't expect a `V1ViewInfo` won't see one.
+  // fires, so v2 cases that don't expect a `V1View` won't see one.
 
   private def qualifyLocInTableSpec(tableSpec: TableSpec): TableSpec = {
     val newLoc = tableSpec.location.map { loc =>
@@ -171,22 +172,39 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // Extract scalar subquery filters on runtime-filterable columns for runtime pushdown.
       // These filters stay in postScanFilters for correctness (FilterExec above scan),
       // but are also routed into runtimeFilters so BatchScanExec can use them for
-      // partition pruning via SupportsRuntimeV2Filtering.filter().
+      // partition pruning via SupportsRuntimeV2Filtering.filter(). The exceptions are filters
+      // that only reference attributes the scan fully evaluates, which are dropped from
+      // postScanFilters below.
+      // Non-deterministic filters are not routed: they would be pushed to the source for
+      // pruning while the FilterExec above the scan re-evaluates them, so the two evaluations
+      // may disagree and rows the source pruned away could not be recovered. This is the
+      // runtime counterpart of the pushFilters guard in PushDownUtils (SPARK-58207).
       val scalarSubqueryFilters = if (relation.runtimeFilterAttrs.nonEmpty) {
         postScanFilters.filter { f =>
-          f.containsPattern(SCALAR_SUBQUERY) &&
+          f.deterministic &&
+            f.containsPattern(SCALAR_SUBQUERY) &&
             f.references.nonEmpty &&
             f.references.subsetOf(relation.runtimeFilterAttrs)
         }
       } else {
         Seq.empty
       }
+      // Screen with the same test pushdown applies, or a filter dropped here and rejected there
+      // would be evaluated nowhere.
+      val fullyPushedRuntimeFilters = scalarSubqueryFilters.filter { f =>
+        f.references.subsetOf(relation.fullyPushedRuntimeFilterAttrs) &&
+          PushDownUtils.isPushablePartitionFilter(f, includeSubquery = true)
+      }
+      // dynamicFilters need no such check: a DynamicPruningSubquery over a non-deterministic
+      // filtering plan is itself non-deterministic, so CleanupDynamicPruningFilters has already
+      // rewritten it to TrueLiteral by the time we get here.
       val runtimeFilters = dynamicFilters ++ scalarSubqueryFilters
 
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
         relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
       DataSourceV2Strategy.withProjectAndFilter(
-        project, postScanFilters, batchExec, !batchExec.supportsColumnar) :: Nil
+        project, postScanFilters.diff(fullyPushedRuntimeFilters),
+        batchExec, !batchExec.supportsColumnar) :: Nil
 
     case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isDefined =>
@@ -268,13 +286,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // Views are wrapped in V1Table so the exec can extract schema and provider uniformly --
     // session-catalog (v1) views unwrap to their original `CatalogTable`; non-session v2
     // views go through `V1Table.toCatalogTable` to synthesize an equivalent `CatalogTable`
-    // from the resolved `ViewInfo`.
+    // from the resolved `View`.
     case CreateTableLike(
         ResolvedIdentifier(catalog, ident), source,
         locationStr, provider, serdeInfo, properties, ifNotExists) =>
       val table = source match {
         case ResolvedTable(_, _, t, _) => t
-        case ResolvedPersistentView(_, _, info: V1ViewInfo) => V1Table(info.v1Table)
+        case ResolvedPersistentView(_, _, info: V1View) => V1Table(info.v1Table)
         case rpv @ ResolvedPersistentView(viewCatalog, viewIdent, _) =>
           V1Table(V1Table.toCatalogTable(viewCatalog, viewIdent, rpv.info))
         case ResolvedTempView(_, meta) => V1Table(meta)
@@ -364,7 +382,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     // View DDL / inspection on a non-session v2 catalog that the v1 rewrite in
     // `ResolveSessionCatalog` can't handle (its `ResolvedViewIdentifier` matcher is gated on
-    // `isSessionCatalog`). Routed to dedicated v2 execs that read the typed `ViewInfo`
+    // `isSessionCatalog`). Routed to dedicated v2 execs that read the typed `View`
     // resolved at analysis time directly from `ResolvedPersistentView.info` -- no re-loading
     // at exec time.
     case SetViewProperties(rpv @ ResolvedPersistentView(catalog, ident, _), props) =>
@@ -527,8 +545,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, _, Some(write)) =>
       OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write, r.name) :: Nil
 
-    case DeleteFromTableWithFilters(r: DataSourceV2Relation, filters) =>
-      DeleteFromTableExec(r.table.asDeletable, filters.toArray, refreshCache(r)) :: Nil
+    case DeleteFromTableWithFilters(r: DataSourceV2Relation, filters, options) =>
+      DeleteFromTableExec(r.table.asDeletable, filters.toArray, refreshCache(r), options) :: Nil
 
     case DeleteFromTable(relation, condition) =>
       relation match {
@@ -547,11 +565,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
           table match {
             case t: SupportsDeleteV2 if t.canDeleteWhere(filters) =>
-              DeleteFromTableExec(t, filters, refreshCache(r)) :: Nil
+              DeleteFromTableExec(t, filters, refreshCache(r), r.options) :: Nil
             case t: SupportsDeleteV2 =>
               throw QueryCompilationErrors.cannotDeleteTableWhereFiltersError(t, filters)
             case t: TruncatableTable if condition == TrueLiteral =>
-              TruncateTableExec(t, refreshCache(r)) :: Nil
+              TruncateTableExec(t, refreshCache(r), r.options) :: Nil
             case _ =>
               throw QueryCompilationErrors.tableDoesNotSupportDeletesError(table)
           }
@@ -955,17 +973,43 @@ private[sql] object DataSourceV2Strategy extends Logging {
    * If the underlying subquery hasn't completed yet, this method will throw an exception.
    */
   protected[sql] def translateRuntimeFilterV2(expr: Expression): Option[Predicate] = expr match {
+    case TrueLiteral => None
+    case in: InSubqueryExec if in.isResultUnavailable =>
+      None
+    case in: InSubqueryExec if in.values().exists(_.isEmpty) =>
+      Some(new AlwaysFalse())
     case in @ InSubqueryExec(PushableColumnAndNestedColumn(name), _, _, _, _, _) =>
-      val values = in.values().getOrElse {
-        throw SparkException.internalError(
-          s"Can't translate $in to v2 Predicate, no subquery result")
-      }
-      val literals = values.map(LiteralValue(_, in.child.dataType))
+      val literals = subqueryValues(in).map(LiteralValue(_, in.child.dataType))
       Some(new Predicate("IN", FieldReference(name) +: literals))
+    // Type coercion of the join keys may wrap the pruning key in a cast, e.g.
+    // `cast(part_col as bigint) IN (...)` when an INT partition column joins a BIGINT key.
+    // The optimizer can't unwrap it as the values are only known now, so unwrap it here with
+    // the same code the optimizer applies to `InSet` with literal values.
+    case in @ InSubqueryExec(cast: Cast, _, _, _, _, _) =>
+      UnwrapCastInBinaryComparison.unwrapCastInSet(InSet(cast, subqueryValues(in).toSet)) match {
+        case Some((col @ PushableColumnAndNestedColumn(name), values)) =>
+          if (values.isEmpty) {
+            // no value is representable in the column type, so no row can match
+            Some(new AlwaysFalse())
+          } else {
+            val literals = values.toArray.map(LiteralValue(_, col.dataType))
+            Some(new Predicate("IN", FieldReference(name) +: literals))
+          }
+        case _ =>
+          unsupportedRuntimeFilter(in)
+      }
 
     case other =>
-      logWarning(log"Can't translate ${MDC(EXPR, other)} to source filter, unsupported expression")
-      None
+      unsupportedRuntimeFilter(other)
+  }
+
+  private def subqueryValues(in: InSubqueryExec): Array[Any] = in.values().getOrElse {
+    throw SparkException.internalError(s"Can't translate $in to v2 Predicate, no subquery result")
+  }
+
+  private def unsupportedRuntimeFilter(expr: Expression): Option[Predicate] = {
+    logWarning(log"Can't translate ${MDC(EXPR, expr)} to source filter, unsupported expression")
+    None
   }
 
   /**

@@ -18,8 +18,10 @@ import io
 import unittest
 from typing import BinaryIO
 
+from pyspark.messages.socket.spark_socket_message_receiver import SparkSocketMessageReceiver
 from pyspark.messages.spark_message_receiver import SparkMessageReceiver
 from pyspark.messages.zero_copy_byte_stream import ZeroCopyByteStream
+from pyspark.serializers import SpecialLengths
 
 
 class StubMessageReceiver(SparkMessageReceiver):
@@ -71,6 +73,34 @@ class SparkMessageReceiverTests(unittest.TestCase):
                     getattr(receiver, call)()
                 with self.assertRaises(AssertionError):
                     getattr(receiver, invalid_call)()
+
+
+class SparkSocketMessageReceiverTests(unittest.TestCase):
+    """Tests for the socket-framed receiver."""
+
+    def _framed_init(self, content: bytes) -> io.BytesIO:
+        frame = io.BytesIO()
+        frame.write(SpecialLengths.START_OF_INIT_MESSAGE.to_bytes(4, "big", signed=True))
+        frame.write(len(content).to_bytes(4, "big", signed=True))
+        frame.write(content)
+        frame.seek(0)
+        return frame
+
+    def test_init_message_reads_declared_content(self):
+        receiver = SparkSocketMessageReceiver(self._framed_init(b"abcdef"))
+        stream = receiver.get_init_message()
+        self.assertEqual(bytes(stream.read(6)), b"abcdef")
+
+    def test_init_message_over_read_raises_eof_instead_of_blocking(self):
+        # The init message is fully materialized, so the stream must be marked finished:
+        # a parse that runs past the declared length (e.g. a writer/reader protocol
+        # mismatch, see SPARK-58241) must fail fast with EOFError -- with an unfinished
+        # stream it would block forever waiting for a chunk that never arrives.
+        receiver = SparkSocketMessageReceiver(self._framed_init(b"abcdef"))
+        stream = receiver.get_init_message()
+        stream.read(4)
+        with self.assertRaises(EOFError):
+            stream.read(4)
 
 
 if __name__ == "__main__":

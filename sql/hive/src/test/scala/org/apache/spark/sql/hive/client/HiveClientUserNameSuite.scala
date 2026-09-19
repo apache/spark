@@ -22,8 +22,10 @@ import java.security.PrivilegedExceptionAction
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.UserGroupInformation
 
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
+@SlowHiveTest
 class HiveClientUserNameSuite(version: String) extends HiveVersionSuite(version) {
 
   test("username of HiveClient - no UGI") {

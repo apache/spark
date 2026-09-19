@@ -133,9 +133,15 @@ class EquivalentExpressions(
     if (skipForShortcutEnable) {
       // The subexpression may not need to eval even if it appears more than once.
       // e.g., `if(or(a, and(b, b)))`, the expression `b` would be skipped if `a` is true.
+      // `And`/`Or` short-circuit, so only the left operand is guaranteed to be evaluated.
+      // A chained predicate `a AND b AND c` is left-deep, i.e. `And(And(a, b), c)`, so we must
+      // keep peeling left operands until we reach the single always-evaluated leaf. Peeling only
+      // one level would leave operands past the first (which are conditionally evaluated) to be
+      // treated as always-evaluated, so a subexpression they share could be hoisted and eagerly
+      // evaluated, breaking short-circuit semantics (e.g. a spurious NPE or divide-by-zero).
       expr match {
-        case and: And => and.left
-        case or: Or => or.left
+        case and: And => skipForShortcut(and.left)
+        case or: Or => skipForShortcut(or.left)
         case other => other
       }
     } else {
@@ -151,9 +157,21 @@ class EquivalentExpressions(
   //        ahead of time.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
+    // A `CommonExpressionRef` cannot be evaluated ahead of the `With` that binds it, for the same
+    // reason a `LambdaVariable` cannot be evaluated ahead of its loop. Do not descend, so that no
+    // subtree holding a reference -- nor a `CommonExpressionDef`, which is unevaluable -- becomes
+    // a candidate. The `With` itself may still be deduplicated as a whole, which is safe: it
+    // carries its own definitions and brings their slots into scope wherever it is generated.
+    case _: With => Nil
     case c: ConditionalExpression => c.alwaysEvaluatedInputs.map(skipForShortcut)
     case h: HigherOrderFunction => h.alwaysEvaluatedArguments
-    case other => skipForShortcut(other).children
+    case other => skipForShortcut(other) match {
+      // The peel walks past `And`/`Or`, which are not `ConditionalExpression`s, so it can land on a
+      // `With` and hand back its children -- the descent the case above exists to prevent. Ask
+      // again after peeling.
+      case _: With => Nil
+      case peeled => peeled.children
+    }
   }
 
   // For some special expressions we cannot just recurse into all of its children, but we can
