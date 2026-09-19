@@ -94,10 +94,7 @@ object DefaultCollationTypeCoercion {
       case _ => false
     }
 
-  /**
-   * A [[StringType]] that was written explicitly -- a distinct instance, not the companion-object
-   * default -- even when its collation is the default UTF8_BINARY (see [[isDefaultStringType]]).
-   */
+  /** A [[StringType]] with an explicit, non-default collation (see [[isDefaultStringType]]). */
   private def isExplicitlyCollatedStringType(dataType: DataType): Boolean =
     dataType.isInstanceOf[StringType] && !isDefaultStringType(dataType)
 

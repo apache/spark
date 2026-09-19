@@ -39,6 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -1683,6 +1684,40 @@ object JsonArrayExpressionBuilder extends ExpressionBuilder {
   }
 }
 
+@ExpressionDescription(
+  usage =
+    "_FUNC_([key, value [, key, value ...]]) - Returns a JSON object string built from the " +
+      "given key/value pairs.",
+  arguments = """
+    Arguments:
+      * key - a non-null string naming an object member.
+      * value - the member's value.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('id', 7, 'name', 'Ada');
+       {"id":7,"name":"Ada"}
+      > SELECT _FUNC_();
+       {}
+  """,
+  since = "4.4.0",
+  group = "json_funcs")
+object JsonObjectExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // The routed form is a flat `key, value, ...` list (the MySQL-style spelling), so it must have
+    // an even length; an odd count leaves a dangling key with no value.
+    if (expressions.length % 2 != 0) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        funcName, Seq("2n (n >= 0)"), expressions.length)
+    }
+    // A routed call carries no lexical FORMAT JSON, so every value is plain (quoted); splicing a
+    // nested constructor is preserved only via `JSON_OBJECT(...)` syntax.
+    // TODO(SPARK-59243): splice JSON-producing arguments reached through routed/qualified calls.
+    val members = expressions.grouped(2).map { case Seq(k, v) => (k, v) }.toSeq
+    JsonObjectExpr(members, members.map(_ => false))
+  }
+}
+
 /**
  * Shared builder for the plain `JSON_VALUE` / `JSON_QUERY` / `JSON_EXISTS` forms. The path must
  * be a foldable string expression; the parser-only SQL/JSON syntax supplies a string literal,
@@ -2209,4 +2244,354 @@ case class JsonTypeof(child: Expression)
 
   override protected def withNewChildInternal(newChild: Expression): JsonTypeof =
     copy(child = newChild)
+}
+
+/**
+ * The SQL:2016 `JSON_OBJECT` constructor function (feature T811): constructs a JSON object from
+ * key-value pairs, written `key VALUE value`, `KEY key VALUE value`, `key : value`, or the
+ * MySQL-style `key, value`.
+ *
+ * Keys must be non-null strings; a null key is an error. The `ON NULL` clause controls whether
+ * null-valued pairs are included (NULL ON NULL, the standard default) or omitted (ABSENT ON NULL).
+ *
+ * A value is spliced in raw (unquoted) when it is a lexically nested `ImplicitlyFormattedAsJson`
+ * producer whose `emitsImplicitJsonText` holds -- a nested JSON constructor, or `JSON_QUERY` under
+ * KEEP QUOTES -- tracked per member by `rawJson` (see `rawJsonValue`). The standard's explicit
+ * value-level `FORMAT JSON` clause (e.g. `JSON_OBJECT('a' VALUE '{"b":1}' FORMAT JSON)`) is
+ * deferred.
+ *
+ * Examples:
+ *   JSON_OBJECT('id' VALUE 7, 'name' VALUE 'Ada')      -> '{"id":7,"name":"Ada"}'
+ *   JSON_OBJECT('id': 7, 'v': NULL)                    -> '{"id":7,"v":null}'
+ *   JSON_OBJECT('id': 7, 'v': NULL ABSENT ON NULL)     -> '{"id":7}'
+ *   JSON_OBJECT()                                       -> '{}'
+ *
+ * A flat, clause-free call routes through function resolution and is rebuilt by
+ * `JsonObjectExpressionBuilder` (so a same-named routine can shadow the built-in `json_object`); a
+ * clause-bearing or nested form is built directly from the grammar (see
+ * `AstBuilder.visitJsonObject`). The user-facing reference lives in
+ * `docs/sql-ref-syntax-qry-select-json-object.md`.
+ */
+case class JsonObjectExpr(
+    members: Seq[(Expression, Expression)],
+    rawJson: Seq[Boolean],
+    nullBehavior: JsonConstructorNullBehavior = JsonConstructorNullBehavior.Null,
+    returning: DataType = StringType,
+    timeZoneId: Option[String] = None)
+  extends Expression
+  with TimeZoneAwareExpression
+  with CodegenFallback
+  with QueryErrorsBase
+  // Default RETURNING is a plain STRING, so `DefaultStringProducingExpression` lets
+  // `ApplyDefaultCollation` cast the result to a non-default collation; the `dataType` override
+  // below stays authoritative when RETURNING is given explicitly.
+  with DefaultStringProducingExpression
+  with ImplicitlyFormattedAsJson {
+
+  // `rawJson(i)` marks member `i`'s value as already-JSON text to splice verbatim, not quote; it is
+  // frozen at parse time (see `AstBuilder.visitJsonObject`, [[ImplicitlyFormattedAsJson]]).
+  require(members.length == rawJson.length,
+    "JsonObjectExpr requires one rawJson flag per member")
+
+  @transient private lazy val memberArray: Array[(Expression, Expression)] =
+    members.toArray
+
+  @transient private lazy val rawJsonArray: Array[Boolean] =
+    rawJson.toArray
+
+  // Always throwable: a null key raises JSON_OBJECT_NULL_KEY at eval even with non-throwable
+  // children, which keeps the optimizer from pushing it below a filtering join. Left non-foldable
+  // (the default) so folding a constant call does not eagerly raise that null-key error at
+  // optimization for rows a filter would later drop.
+  override lazy val throwable: Boolean = true
+
+  // The value is never null, but report nullable as `throwable` (like JsonArray): `NullPropagation`
+  // keys off `nullable`, so a non-nullable constructor would let it fold `IS [NOT] NULL` to a
+  // constant or `count(...)` to `count(1)`, skipping the eval that must raise JSON_OBJECT_NULL_KEY.
+  override def nullable: Boolean = throwable
+
+  override def dataType: DataType = returning
+
+  // Flattened `[k0, v0, k1, v1, ...]` view, cached since `children` is walked repeatedly.
+  @transient private lazy val childrenSeq: Seq[Expression] =
+    memberArray.flatMap { case (k, v) => Seq(k, v) }.toImmutableArraySeq
+
+  override def children: Seq[Expression] = childrenSeq
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputCheck = super.checkInputDataTypes()
+    if (inputCheck.isFailure) {
+      inputCheck
+    } else if (!JsonObjectExpr.isValidReturningType(returning)) {
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_RETURNING_TYPE",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "returningType" -> toSQLType(returning)))
+    } else {
+      // Keys must be character strings (they become JSON object member names). Reject any other
+      // concrete type up front so a non-string key cannot reach the StringType Jackson writer and
+      // fail with an internal ClassCastException. NullType is allowed through: a null key value is
+      // reported at runtime as JSON_OBJECT_NULL_KEY rather than a type error.
+      val keyCheck = memberArray.iterator.map(_._1).zipWithIndex.collectFirst {
+        case (k, keyIndex) if !(k.dataType.isInstanceOf[StringType] || k.dataType == NullType) =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> ordinalNumber(keyIndex * 2),
+              "requiredType" -> toSQLType(StringType),
+              "inputSql" -> toSQLExpr(k),
+              "inputType" -> toSQLType(k.dataType)))
+      }.getOrElse(TypeCheckResult.TypeCheckSuccess)
+      if (keyCheck.isFailure) {
+        keyCheck
+      } else {
+        // Every value must be serializable to JSON. This mirrors `to_json`'s analysis-time
+        // `JacksonUtils.verifyType` check, plus a guard for the spatial atomics that check accepts
+        // but `JacksonGenerator` cannot write (rejecting a runtime failure at analysis instead).
+        memberArray.iterator.map(_._2).zipWithIndex
+          .foldLeft(TypeCheckResult.TypeCheckSuccess: TypeCheckResult) {
+            case (acc, _) if acc.isFailure => acc
+            case (_, (v, valueIndex)) if rawJsonArray(valueIndex) &&
+                !(v.dataType.isInstanceOf[StringType] || v.dataType == NullType) =>
+              // `eval` casts a raw-spliced value to UTF8String. The parser only marks a nested
+              // constructor (STRING-typed) raw, so reject a non-string raw value from direct
+              // Catalyst construction here instead of failing with a ClassCastException at eval.
+              DataTypeMismatch(
+                errorSubClass = "UNEXPECTED_INPUT_TYPE",
+                messageParameters = Map(
+                  "paramIndex" -> ordinalNumber(valueIndex * 2 + 1),
+                  "requiredType" -> toSQLType(StringType),
+                  "inputSql" -> toSQLExpr(v),
+                  "inputType" -> toSQLType(v.dataType)))
+            case (_, (v, _)) =>
+              val elemCheck = JacksonUtils.verifyType(prettyName, v.dataType)
+              if (elemCheck.isFailure) {
+                elemCheck
+              } else if (JsonObjectExpr.containsUnsupportedJsonType(v.dataType)) {
+                DataTypeMismatch(
+                  errorSubClass = "CANNOT_CONVERT_TO_JSON",
+                  messageParameters = Map(
+                    "name" -> toSQLId(prettyName),
+                    "type" -> toSQLType(v.dataType)))
+              } else {
+                TypeCheckResult.TypeCheckSuccess
+              }
+          }
+      }
+    }
+  }
+
+  override def stateful: Boolean = true
+
+  @transient private lazy val resolvedZoneId: String =
+    timeZoneId.getOrElse(SQLConf.get.sessionLocalTimeZone)
+
+  // JacksonGenerator (shared with `to_json`, so rendering matches) can only serialize a container,
+  // not a bare scalar, so each key/value is wrapped in a one-element array whose brackets are
+  // stripped in renderKey/appendRenderedValue below.
+  @transient private lazy val keyEvaluator: StructsToJsonEvaluator =
+    StructsToJsonEvaluator(Map.empty, ArrayType(StringType), Some(resolvedZoneId))
+
+  @transient private lazy val valueEvaluators: Array[StructsToJsonEvaluator] =
+    memberArray.map { case (_, v) =>
+      StructsToJsonEvaluator(Map.empty, ArrayType(v.dataType),
+        Some(resolvedZoneId))
+    }
+
+  @transient private lazy val singleElem: Array[Any] = new Array[Any](1)
+
+  @transient private lazy val singleElemData: GenericArrayData =
+    new GenericArrayData(singleElem)
+
+  @transient private lazy val castInput: GenericInternalRow =
+    new GenericInternalRow(1)
+
+  @transient private lazy val returningCast: Expression =
+    Cast(BoundReference(0, StringType, nullable = true), returning, timeZoneId,
+      EvalMode.ANSI)
+
+  // `evaluateString` returns the Java String directly, skipping `evaluate`'s UTF8String round trip.
+  // The key is cached or appended whole, so it still materializes the interior substring.
+  private def renderKey(key: Any): String = {
+    singleElem(0) = key
+    val arrJson = keyEvaluator.evaluateString(singleElemData)
+    arrJson.substring(1, arrJson.length - 1)
+  }
+
+  // Append the interior of the "[<frag>]" wrapper straight into the builder (no per-value
+  // substring), mirroring `JsonArray.appendRenderedElement`.
+  private def appendRenderedValue(sb: java.lang.StringBuilder, idx: Int, value: Any): Unit = {
+    singleElem(0) = value
+    val arrJson = valueEvaluators(idx).evaluateString(singleElemData)
+    sb.append(arrJson, 1, arrJson.length - 1)
+  }
+
+  // A foldable, non-null key (the common literal-key case, e.g. `JSON_OBJECT('id' VALUE col)`)
+  // renders to the same JSON member name on every row, so render it once here instead of re-running
+  // the Jackson writer per row. `renderedKeys(i)` holds that cached name, or `null` when the key
+  // must be evaluated and rendered per row -- a non-foldable key, or a foldable key that evaluates
+  // to `null` (still reported as JSON_OBJECT_NULL_KEY at eval).
+  @transient private lazy val renderedKeys: Array[String] = memberArray.map { case (k, _) =>
+    if (k.foldable) {
+      val key = k.eval(EmptyRow)
+      if (key == null) null else renderKey(key)
+    } else {
+      null
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val sb = new java.lang.StringBuilder("{")
+    var first = true
+    var i = 0
+    val localMembers = memberArray
+    val localRawJson = rawJsonArray
+    while (i < localMembers.length) {
+      val (keyExpr, valueExpr) = localMembers(i)
+      // Resolve the member's key. A foldable non-null key is already rendered and cached. Otherwise
+      // evaluate the key before the value so a null key deterministically raises
+      // JSON_OBJECT_NULL_KEY, independent of whether the value expression happens to throw.
+      // Delay rendering dynamic keys until we know the member will be emitted, avoiding work for
+      // null values under ABSENT ON NULL.
+      val cachedKey = renderedKeys(i)
+      val key = if (cachedKey == null) {
+        val key = keyExpr.eval(input)
+        if (key == null) {
+          throw QueryExecutionErrors.jsonObjectNullKeyError()
+        }
+        key
+      } else {
+        null
+      }
+      val value = valueExpr.eval(input)
+      if (value != null || nullBehavior == JsonConstructorNullBehavior.Null) {
+        if (!first) sb.append(",")
+        first = false
+        val keyName = if (cachedKey != null) cachedKey else renderKey(key)
+        sb.append(keyName).append(":")
+        if (value == null) {
+          sb.append("null")
+        } else if (localRawJson(i)) {
+          sb.append(value.asInstanceOf[UTF8String].toString)
+        } else {
+          appendRenderedValue(sb, i, value)
+        }
+      }
+      i += 1
+    }
+    sb.append("}")
+    val jsonStr = UTF8String.fromString(sb.toString)
+    if (returning == StringType) {
+      jsonStr
+    } else {
+      castInput.update(0, jsonStr)
+      returningCast.eval(castInput)
+    }
+  }
+
+  override def prettyName: String = "json_object"
+
+  override def sql: String = {
+    val membersSQL = members.zip(rawJson).map { case ((k, v), raw) =>
+      // JSON_OBJECT has no value-level FORMAT JSON marker, so rawness can only be expressed in SQL
+      // by rendering the value as a bare JSON constructor (which reparse re-derives as implicit
+      // FORMAT JSON). Cover both directions of optimizer rewrites around the frozen `raw` flag:
+      val valueSQL = (raw, v) match {
+        // Raw value: a nested constructor, possibly behind collation-only wrappers (an explicit
+        // COLLATE or a default-collation Cast). Neither affects the raw-spliced bytes, so render
+        // the bare constructor and reparse re-derives raw splicing.
+        // TODO(SPARK-59243): a foldable nested value (e.g. JSON_ARRAY(1)) can be constant-folded to
+        // a string literal; with no value-level FORMAT JSON to restore rawness, this falls back to
+        // `v.sql` and the emitted SQL reparses quoted. Eval is unaffected (rawJson still splices).
+        case (true, _) => JsonObjectExpr.rawJsonConstructor(v).map(_.sql).getOrElse(v.sql)
+        // Quoted value the optimizer inlined here may now be a raw JSON constructor, bare or behind
+        // a pass-through COLLATE; neutralize it with CAST(... AS STRING) so reparse keeps it quoted
+        // (otherwise {"a":"{...}"} would flip to {"a":{...}}). A Cast-wrapped value already
+        // reparses as quoted, so it needs no extra cancellation.
+        case (false, _) if JsonObjectExpr.rawJsonValue(v).isDefined => s"CAST(${v.sql} AS STRING)"
+        case (false, _) => v.sql
+      }
+      s"${k.sql} VALUE $valueSQL"
+    }.mkString(", ")
+    val nullSQL = if (nullBehavior == JsonConstructorNullBehavior.Null) ""
+      else " ABSENT ON NULL"
+    // Use reference identity, not value equality: an explicit `RETURNING STRING COLLATE ...`
+    // produces a distinct StringType instance that `==` the default companion `StringType`, so `==`
+    // would drop it. `eq` renders nothing for anything reaching the companion (omitted RETURNING or
+    // plain `RETURNING STRING` alike) and renders only the distinct instance: a collated STRING.
+    val returningSQL = if (returning.eq(StringType)) "" else s" RETURNING ${returning.sql}"
+    s"JSON_OBJECT($membersSQL$nullSQL$returningSQL)"
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): JsonObjectExpr = {
+    val newMembers = newChildren.grouped(2).map { case Seq(k, v) =>
+      (k, v)
+    }.toSeq
+    copy(members = newMembers)
+  }
+}
+
+object JsonObjectExpr {
+  /**
+   * `JSON_OBJECT` returns JSON text, so RETURNING is restricted to a plain STRING (VARIANT is
+   * deferred). `CharType` / `VarcharType` extend `StringType` but carry a length that `JSON_OBJECT`
+   * does not enforce -- it serializes the fragment itself without a length-checking cast -- so they
+   * are rejected: the parser normalizes a SQL `CHAR`/`VARCHAR` RETURNING to STRING before
+   * construction, and this guards a raw `CharType`/`VarcharType` supplied by direct Catalyst
+   * construction.
+   */
+  def isValidReturningType(dataType: DataType): Boolean = dataType match {
+    case _: CharType | _: VarcharType => false
+    case _: StringType => true
+    case _ => false
+  }
+
+  /**
+   * The nested JSON constructor a value would be spliced raw from, seen through a pass-through
+   * `Collate`. `Collate` only annotates the string's collation and does not change the JSON text,
+   * so `JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1) COLLATE ...)` still splices the nested
+   * object. A `Cast` is deliberately NOT seen through: an explicit `CAST(... AS STRING)` is the way
+   * to cancel raw splicing and force the value to be quoted. Used to freeze the raw-splice decision
+   * at parse time (see `AstBuilder.visitJsonObject`).
+   */
+  def rawJsonValue(e: Expression): Option[ImplicitlyFormattedAsJson] = e match {
+    case i: ImplicitlyFormattedAsJson if i.emitsImplicitJsonText => Some(i)
+    case c: Collate => rawJsonValue(c.child)
+    case _ => None
+  }
+
+  /**
+   * Like `rawJsonValue`, but also sees through a `Cast` that the default-collation rule adds on top
+   * of the nested constructor. Used only by `.sql` rendering, where the raw flag is already frozen,
+   * to recover the bare constructor to render -- neither the `Cast` nor a `Collate` affects the
+   * spliced-raw bytes.
+   */
+  def rawJsonConstructor(e: Expression): Option[ImplicitlyFormattedAsJson] = e match {
+    case i: ImplicitlyFormattedAsJson if i.emitsImplicitJsonText => Some(i)
+    case c: Collate => rawJsonConstructor(c.child)
+    case Cast(child, _: StringType, _, _) => rawJsonConstructor(child)
+    case _ => None
+  }
+
+  /**
+   * Whether `dt` contains a spatial atomic (`GEOMETRY` / `GEOGRAPHY`) in a position that
+   * `JacksonGenerator` would have to serialize. These are `AtomicType`s that
+   * `JacksonUtils.verifyType` accepts but the JSON writer has no serializer for, so they must be
+   * rejected at analysis. The traversal mirrors `verifyType`: it descends into struct fields, array
+   * elements, and map *values* (map keys are written via `toString`, so a spatial key is fine) and
+   * unwraps UDTs.
+   */
+  def containsUnsupportedJsonType(dt: DataType): Boolean = dt match {
+    case _: GeometryType | _: GeographyType => true
+    case st: StructType => st.exists(f => containsUnsupportedJsonType(f.dataType))
+    case at: ArrayType => containsUnsupportedJsonType(at.elementType)
+    case mt: MapType => containsUnsupportedJsonType(mt.valueType)
+    case udt: UserDefinedType[_] => containsUnsupportedJsonType(udt.sqlType)
+    case _ => false
+  }
 }
