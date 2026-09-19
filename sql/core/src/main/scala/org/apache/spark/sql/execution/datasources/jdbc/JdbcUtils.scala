@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, SQLTransientConnectionException}
 import java.time.{Instant, LocalDate}
 import java.util
 
@@ -670,7 +670,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
-    val conn = dialect.createConnectionFactory(options)(-1)
+    val conn = createConnectionFactory(dialect, options)(-1)
 
     // Close JDBC connection so blocked native reads (e.g. executeBatch) fail instead of
     // ignoring Thread.interrupt(). Listener registered after opening the connection; we don't need
@@ -1250,12 +1250,68 @@ object JdbcUtils extends Logging with SQLConfHelper {
       description = "Failed to connect",
       isRuntime = false
     ) {
-      conn = dialect.createConnectionFactory(options)(-1)
+      conn = createConnectionFactory(dialect, options)(-1)
     }
     try {
       f(conn)
     } finally {
       conn.close()
     }
+  }
+
+  /**
+   * Wraps the dialect's connection factory with optional retry logic.
+   * Retry is driven by the connectionRetryAttempts / connectionRetryDelayMs options.
+   */
+  def createConnectionFactory(dialect: JdbcDialect, options: JDBCOptions): Int => Connection = {
+    val rawFactory = dialect.createConnectionFactory(options)
+    (partitionId: Int) => createConnectionWithRetry(rawFactory, partitionId, options)
+  }
+
+  private def isRetryableConnectionException(e: Throwable): Boolean = e match {
+    case _: SQLTransientConnectionException => true
+    case se: SQLException =>
+      val sqlState = Option(se.getSQLState).getOrElse("")
+      sqlState.startsWith("08")
+    case _ => false
+  }
+
+  private def createConnectionWithRetry(
+      rawFactory: Int => Connection,
+      partitionId: Int,
+      options: JDBCOptions): Connection = {
+    val maxRetries = options.connectionRetryAttempts
+    val retryDelayMs = options.connectionRetryDelayMs
+    var attempt = 0
+    var connection: Connection = null
+
+    while (connection == null) {
+      try {
+        connection = rawFactory(partitionId)
+      } catch {
+        case NonFatal(e) if attempt < maxRetries && isRetryableConnectionException(e) =>
+          attempt += 1
+          logWarning(s"JDBC connection attempt failed (attempt $attempt/$maxRetries). Retrying in ${retryDelayMs}ms...", e)
+          val tc = TaskContext.get()
+          if (tc != null && tc.isInterrupted()) {
+            throw e
+          }
+          if (retryDelayMs > 0) {
+            try {
+              Thread.sleep(retryDelayMs)
+            } catch {
+              case _: InterruptedException =>
+                logWarning("Interrupted while sleeping between JDBC connection retries.")
+                if (tc != null && tc.isInterrupted()) {
+                  throw e
+                }
+            }
+          }
+          if (tc != null && tc.isInterrupted()) {
+            throw e
+          }
+      }
+    }
+    connection
   }
 }

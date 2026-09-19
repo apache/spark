@@ -39,7 +39,7 @@ case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) ext
       // TODO (SPARK-32595): do truncate and append atomically.
       if (isTruncate) {
         val dialect = JdbcDialects.get(options.url)
-        val conn = dialect.createConnectionFactory(options)(-1)
+        val conn = JdbcUtils.createConnectionFactory(dialect, options)(-1)
         JdbcUtils.truncateTable(conn, options)
       }
       JdbcUtils.saveTable(data, Some(schema), SQLConf.get.caseSensitiveAnalysis, options)
