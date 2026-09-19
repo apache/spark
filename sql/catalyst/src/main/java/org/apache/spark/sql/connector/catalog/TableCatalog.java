@@ -221,7 +221,8 @@ public interface TableCatalog extends CatalogPlugin {
    * <p>
    * The default implementation ignores {@code stateOptions} and delegates to the existing
    * {@code loadTable} overloads based on {@code context}. Catalogs that want to receive the user
-   * options while reading a table must override {@link #tableStateOptionKeys()} and this method.
+   * options while loading a table for a read or write must override
+   * {@link #tableStateOptionKeys()} and this method.
    * Spark passes only the options declared by {@link #tableStateOptionKeys()}. Spark retains the
    * complete user option map on the resolved relation for subsequent scan and write planning.
    * <p>
@@ -345,7 +346,10 @@ public interface TableCatalog extends CatalogPlugin {
    * @param ident a table identifier
    * @param tableInfo information about the table
    * @return metadata for the new table. This can be null if getting the metadata for the new table
-   *         is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
+   *         is expensive. Spark will call
+   *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} if needed
+   *         (e.g. CTAS), forwarding the catalog-declared table-state options and required
+   *         privileges.
    *
    * @throws TableAlreadyExistsException If a table already exists for the identifier
    * @throws UnsupportedOperationException If a requested partition transform is not supported

@@ -15,46 +15,47 @@
 # limitations under the License.
 #
 
+import calendar
 import datetime
 import os
 import threading
-import calendar
 import time
 import unittest
 from collections import namedtuple
 
 from pyspark import SparkConf
+from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
 from pyspark.sql import Row, SparkSession
-from pyspark.sql.functions import rand, udf, assert_true, lit
+from pyspark.sql.functions import assert_true, lit, rand, udf
+from pyspark.sql.pandas.types import (
+    from_arrow_schema,
+    from_arrow_type,
+    time_precision_key,
+    to_arrow_schema,
+    to_arrow_type,
+)
 from pyspark.sql.types import (
+    ArrayType,
+    BinaryType,
     BooleanType,
     ByteType,
-    StructType,
-    StringType,
-    ShortType,
+    DateType,
+    DayTimeIntervalType,
+    DecimalType,
+    DoubleType,
+    FloatType,
     IntegerType,
     LongType,
-    FloatType,
-    DoubleType,
-    DecimalType,
-    DateType,
-    TimeType,
-    TimestampType,
-    TimestampNTZType,
-    BinaryType,
-    StructField,
-    ArrayType,
     MapType,
     NullType,
-    DayTimeIntervalType,
+    ShortType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampNTZType,
+    TimestampType,
+    TimeType,
     VariantType,
-)
-from pyspark.sql.pandas.types import (
-    from_arrow_type,
-    to_arrow_type,
-    from_arrow_schema,
-    to_arrow_schema,
-    time_precision_key,
 )
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -64,7 +65,6 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
 from pyspark.util import is_remote_only
 
 if have_pandas:
@@ -878,26 +878,18 @@ class ArrowTestsMixin:
                 field = arrow_schema.field("t")
                 self.assertTrue(types.is_time64(field.type))
                 self.assertEqual(field.type.unit, "ns")
-                self.assertEqual(
-                    field.metadata[time_precision_key], str(precision).encode("utf-8")
-                )
+                self.assertEqual(field.metadata[time_precision_key], str(precision).encode("utf-8"))
                 self.assertEqual(from_arrow_schema(arrow_schema), schema)
 
         # Bare time64 with no precision key maps to the default TIME(6).
         self.assertEqual(from_arrow_type(pa.time64("ns")), TimeType())
         self.assertEqual(from_arrow_type(pa.time64("us")), TimeType())
         untagged = pa.schema([pa.field("t", pa.time64("ns"))])
-        self.assertEqual(
-            from_arrow_schema(untagged), StructType([StructField("t", TimeType())])
-        )
+        self.assertEqual(from_arrow_schema(untagged), StructType([StructField("t", TimeType())]))
         # Foreign time64[us] stays TIME(6) even if a precision key is present.
         # JVM fromArrowField only honors the key on Time(NANOSECOND).
-        us_tagged = pa.schema(
-            [pa.field("t", pa.time64("us"), metadata={time_precision_key: b"3"})]
-        )
-        self.assertEqual(
-            from_arrow_schema(us_tagged), StructType([StructField("t", TimeType())])
-        )
+        us_tagged = pa.schema([pa.field("t", pa.time64("us"), metadata={time_precision_key: b"3"})])
+        self.assertEqual(from_arrow_schema(us_tagged), StructType([StructField("t", TimeType())]))
 
         # Present-but-invalid keys also fall back to TIME(6), matching the JVM.
         for raw in (b"-1", b"10", b"x"):
@@ -950,9 +942,7 @@ class ArrowTestsMixin:
         for literal, precision, expected in self._time_precision_e2e_cases():
             with self.subTest(precision=precision):
                 schema = StructType([StructField("t", TimeType(precision))])
-                sql_df = self.spark.sql(
-                    "SELECT CAST('%s' AS TIME(%d)) AS t" % (literal, precision)
-                )
+                sql_df = self.spark.sql("SELECT CAST('%s' AS TIME(%d)) AS t" % (literal, precision))
                 self._assert_time_precision_df(sql_df, precision, expected)
 
                 rows_df = self.spark.createDataFrame([(expected,)], schema)
@@ -967,17 +957,13 @@ class ArrowTestsMixin:
                     table.schema.field("t").metadata[time_precision_key],
                     str(precision).encode("utf-8"),
                 )
-                self.assertEqual(
-                    from_arrow_schema(table.schema)["t"].dataType, TimeType(precision)
-                )
+                self.assertEqual(from_arrow_schema(table.schema)["t"].dataType, TimeType(precision))
                 arrow_df = self.spark.createDataFrame(table)
                 self._assert_time_precision_df(arrow_df, precision, expected)
 
                 # Untagged time64 has no precision key, so inference stays TIME(6).
                 if precision != 6:
-                    untagged = pa.table(
-                        {"t": pa.array([expected], type=pa.time64("ns"))}
-                    )
+                    untagged = pa.table({"t": pa.array([expected], type=pa.time64("ns"))})
                     inferred = self.spark.createDataFrame(untagged)
                     self.assertEqual(inferred.schema["t"].dataType, TimeType())
 
@@ -1542,6 +1528,12 @@ class ArrowTestsMixin:
         ):
             df.toArrow()
 
+        # An empty result must reject duplicated struct field names just like a non-empty one.
+        with self.assertRaisesRegex(
+            UnsupportedOperationException, "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT"
+        ):
+            df.limit(0).toArrow()
+
     def test_createDataFrame_pandas_duplicate_field_names(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
@@ -1971,7 +1963,7 @@ class ArrowTestsMixin:
     def test_toPandas_with_compression_codec_large_dataset(self):
         # Test compression with a larger dataset to verify memory savings
         # Create a dataset with repetitive data that compresses well
-        from pyspark.sql.functions import lit, col
+        from pyspark.sql.functions import col, lit
 
         df = self.spark.range(10000).select(
             col("id"),
@@ -1988,7 +1980,7 @@ class ArrowTestsMixin:
 
     def test_toArrow_with_compression_codec_large_dataset(self):
         # Test compression with a larger dataset for toArrow
-        from pyspark.sql.functions import lit, col
+        from pyspark.sql.functions import col, lit
 
         df = self.spark.range(10000).select(
             col("id"),

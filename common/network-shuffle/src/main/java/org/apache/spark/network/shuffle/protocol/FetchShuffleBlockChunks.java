@@ -18,6 +18,7 @@
 package org.apache.spark.network.shuffle.protocol;
 
 import java.util.Arrays;
+import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
 
@@ -130,6 +131,9 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
     int shuffleMergeId = buf.readInt();
     int[] reduceIds = Encoders.IntArrays.decode(buf);
     int chunkIdsLen = buf.readInt();
+    // The divisor 4 is the minimum on-wire size of one element, since each chunk-id group
+    // is prefixed with its own 4-byte length.
+    Objects.checkFromIndexSize(0, chunkIdsLen, buf.readableBytes() / 4);
     int[][] chunkIds = new int[chunkIdsLen][];
     for (int i = 0; i < chunkIdsLen; i++) {
       chunkIds[i] = Encoders.IntArrays.decode(buf);

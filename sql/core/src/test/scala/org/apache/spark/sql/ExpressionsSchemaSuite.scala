@@ -23,6 +23,7 @@ import java.nio.file.Files
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.Utils
@@ -127,12 +128,15 @@ class ExpressionsSchemaSuite extends SharedSparkSession {
               // AvroDataToCatalyst or CatalystDataToAvro classes which are not available in this
               // test.
           case exampleRe(sql, _) =>
-            val df = spark.sql(sql)
-            val escapedSql = sql.replaceAll("\\|", "&#124;")
-            val schema = df.schema.catalogString.replaceAll("\\|", "&#124;")
-            val queryOutput = QueryOutput(className, funcName, escapedSql, schema)
-            outputBuffer += queryOutput.toString
-            outputs += queryOutput
+            // parse_sql examples require the experimental feature flag.
+            withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> true.toString) {
+              val df = spark.sql(sql)
+              val escapedSql = sql.replaceAll("\\|", "&#124;")
+              val schema = df.schema.catalogString.replaceAll("\\|", "&#124;")
+              val queryOutput = QueryOutput(className, funcName, escapedSql, schema)
+              outputBuffer += queryOutput.toString
+              outputs += queryOutput
+            }
           case _ =>
         }
       }

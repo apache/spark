@@ -15,14 +15,14 @@
 # limitations under the License.
 #
 
-from decimal import Decimal
 import datetime
 import unittest
+from decimal import Decimal
 
-from pyspark.errors import AnalysisException, PythonException, PySparkNotImplementedError
+from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
 from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row
-from pyspark.sql.functions import udf, col
+from pyspark.sql.functions import col, udf
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.sql.types import (
     ArrayType,
@@ -283,9 +283,7 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         for literal, precision, expected in cases:
             for use_arrow in (True, False):
                 with self.subTest(precision=precision, use_arrow=use_arrow):
-                    df = self.spark.sql(
-                        "SELECT CAST('%s' AS TIME(%d)) AS t" % (literal, precision)
-                    )
+                    df = self.spark.sql("SELECT CAST('%s' AS TIME(%d)) AS t" % (literal, precision))
                     ident = udf(lambda t: t, TimeType(precision), useArrow=use_arrow)
                     out = df.select(ident("t").alias("t"))
                     self.assertEqual(out.schema["t"].dataType, TimeType(precision))

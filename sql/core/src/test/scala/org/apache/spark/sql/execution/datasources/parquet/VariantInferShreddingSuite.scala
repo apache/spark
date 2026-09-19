@@ -764,6 +764,45 @@ class VariantInferShreddingSuite extends SharedSparkSession with ParquetTest {
     checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
   }
 
+  testWithTempDir(
+      "SPARK-58949: infer shredding schema from canonical and legacy fields") { dir =>
+    val bmpKey = new String(Character.toChars(65535))
+    val supplementaryKey = new String(Character.toChars(0x10000))
+    val quote = 34.toChar.toString
+    val json = "{" + quote + supplementaryKey + quote + ":1," +
+      quote + bmpKey + quote + ":2}"
+    val canonical = VariantBuilder.parseJson(json, false)
+    val legacyValue = canonical.getValue.clone()
+    VariantUtil.handleObject[Unit](legacyValue, 0,
+      (size, idSize, offsetSize, idStart, offsetStart, _dataStart) => {
+        def swap(start: Int, width: Int): Unit = {
+          val left = start + (size - 2) * width
+          val right = left + width
+          val leftValue = VariantUtil.readUnsigned(legacyValue, left, width)
+          val rightValue = VariantUtil.readUnsigned(legacyValue, right, width)
+          VariantUtil.writeLong(legacyValue, left, rightValue, width)
+          VariantUtil.writeLong(legacyValue, right, leftValue, width)
+        }
+        swap(idStart, idSize)
+        swap(offsetStart, offsetSize)
+      })
+    val canonicalValue = canonical.getValue
+    val metadata = canonical.getMetadata
+    val rdd = spark.sparkContext.parallelize(0 until 20, 1).map { i =>
+      val value = if (i % 2 == 0) canonicalValue else legacyValue
+      InternalRow(new VariantVal(value, metadata))
+    }
+    val writeSchema = DataType.fromDDL("struct<v variant>").asInstanceOf[StructType]
+    val df = Dataset.ofRows(spark, LogicalRDD(DataTypeUtils.toAttributes(writeSchema), rdd)(spark))
+
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+    val expected = StructType(Seq(
+      StructField(supplementaryKey, LongType),
+      StructField(bmpKey, LongType)))
+    checkFileSchema(expected, dir)
+    assert(spark.read.parquet(dir.getAbsolutePath).count() === 20)
+  }
+
   testWithTempDir("special characters in field names - dots") { dir =>
     val df = spark.sql(
       """

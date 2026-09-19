@@ -38,11 +38,10 @@ class AutoCdcScd1MultiPipelineSuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
+  import testImplicits._
+
   test("two AutoCDC pipelines targeting separate tables maintain independent target and " +
     "auxiliary tables") {
-    val session = spark
-    import session.implicits._
-
     // Two distinct target tables created up-front.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.t_a " +
@@ -92,9 +91,6 @@ class AutoCdcScd1MultiPipelineSuite
 
   test("a downstream pipeline can read an AutoCDC target written by a different pipeline " +
     "without observing the CDC metadata column") {
-    val session = spark
-    import session.implicits._
-
     // Pipeline #1 writes into target `src` via AutoCDC.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.src " +
@@ -130,9 +126,6 @@ class AutoCdcScd1MultiPipelineSuite
 
   test("two AutoCDC pipelines targeting the same table with identical key and data " +
     "schemas merge into a shared target table") {
-    val session = spark
-    import session.implicits._
-
     // Target table is created once up-front; both pipelines target it with the same
     // AutoCDC `keys` and the same source-DF data schema. The two pipelines have distinct
     // flow names ("flow_v1" / "flow_v2") so they own independent streaming checkpoints,
@@ -189,9 +182,6 @@ class AutoCdcScd1MultiPipelineSuite
 
   test("two AutoCDC pipelines targeting the same table with the same key but different " +
     "data columns evolve the shared target schema") {
-    val session = spark
-    import session.implicits._
-
     // Target is created up-front with pipeline #1's schema only; pipeline #2 brings a new
     // top-level nullable `age` column that the dataset materialization layer is expected
     // to schema-merge into the target.
@@ -260,9 +250,6 @@ class AutoCdcScd1MultiPipelineSuite
 
   test("a second pipeline targeting an existing AutoCDC table with different keys " +
     "fails with KEY_SCHEMA_DRIFT") {
-    val session = spark
-    import session.implicits._
-
     // Target table with both candidate keys present so the second pipeline would otherwise
     // be schema-compatible with the first; only the AutoCDC `keys` differ between flows.
     spark.sql(

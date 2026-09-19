@@ -258,6 +258,15 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a not like all ('foo%', 'b%')", $"a" notLikeAll("foo%", "b%"))
     assertEqual("not (a like all ('foo%', 'b%'))", !($"a" likeAll("foo%", "b%")))
 
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assertEqual(
+        "a like any (cast('foo%' as char(4)), cast('b%' as varchar(2)))",
+        $"a" likeAny("foo%", "b%"))
+      assertEqual(
+        "a like all (cast('foo%' as varchar(4)), cast('b%' as char(2)))",
+        $"a" likeAll("foo%", "b%"))
+    }
+
     Seq("any", "some", "all").foreach { quantifier =>
       checkError(
         exception = parseException(s"a like $quantifier()"),
@@ -309,11 +318,11 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("JSON_VALUE expressions") {
     import org.apache.spark.sql.catalyst.expressions.JsonValueBehavior
-    // Bare form: default STRING RETURNING, NULL ON EMPTY / NULL ON ERROR.
+    // Bare form (no clause) is an ordinary function call, routed through function resolution; the
+    // registered `json_value` built-in reconstructs the JsonValue when nothing shadows it.
     assertEqual(
       "json_value(a, '$.b')",
-      JsonValue($"a", "$.b", StringType, JsonValueBehavior.Null, JsonValueBehavior.Null,
-        None, None))
+      UnresolvedFunction("json_value", Seq($"a", Literal("$.b")), isDistinct = false))
     // RETURNING.
     assertEqual(
       "json_value(a, '$.b' RETURNING INT)",
@@ -329,6 +338,67 @@ class ExpressionParserSuite extends AnalysisTest {
       "json_value(a, '$.b' DEFAULT 'x' ON EMPTY DEFAULT 'y' ON ERROR)",
       JsonValue($"a", "$.b", StringType, JsonValueBehavior.Default, JsonValueBehavior.Default,
         Some(Literal("x")), Some(Literal("y"))))
+  }
+
+  test("JSON_EXISTS expressions") {
+    import org.apache.spark.sql.catalyst.expressions.JsonExistsBehavior
+    // Bare form (no clause) is an ordinary function call, routed through function resolution.
+    assertEqual(
+      "json_exists(a, '$.b')",
+      UnresolvedFunction("json_exists", Seq($"a", Literal("$.b")), isDistinct = false))
+    assertEqual(
+      "json_exists(a, '$.b' TRUE ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.True))
+    assertEqual(
+      "json_exists(a, '$.b' FALSE ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.False))
+    assertEqual(
+      "json_exists(a, '$.b' UNKNOWN ON ERROR)",
+      JsonExists($"a", "$.b", JsonExistsBehavior.Unknown))
+    assertEqual(
+      "json_exists(a, '$.b' ERROR ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.Error))
+  }
+
+  test("JSON_QUERY expressions") {
+    import org.apache.spark.sql.catalyst.expressions.{JsonQueryBehavior, JsonQueryQuotes,
+      JsonQueryWrapper}
+    // Bare form (no clause) is an ordinary function call, routed through function resolution.
+    assertEqual(
+      "json_query(a, '$.b')",
+      UnresolvedFunction("json_query", Seq($"a", Literal("$.b")), isDistinct = false))
+    // WITH ARRAY WRAPPER defaults to UNCONDITIONAL; the ARRAY word is optional.
+    assertEqual(
+      "json_query(a, '$.b' WITH ARRAY WRAPPER)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Unconditional, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    assertEqual(
+      "json_query(a, '$.b' WITH CONDITIONAL WRAPPER)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Conditional, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    // WITHOUT ARRAY WRAPPER with OMIT QUOTES.
+    assertEqual(
+      "json_query(a, '$.b' WITHOUT ARRAY WRAPPER OMIT QUOTES)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Omit,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    // EMPTY ARRAY ON EMPTY / EMPTY OBJECT ON ERROR, plus RETURNING STRING.
+    assertEqual(
+      "json_query(a, '$.b' RETURNING STRING EMPTY ARRAY ON EMPTY EMPTY OBJECT ON ERROR)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.EmptyArray, JsonQueryBehavior.EmptyObject))
+    // The ARRAY word is optional in every wrapper spelling, and WITH alone means UNCONDITIONAL.
+    Seq("WITH WRAPPER", "WITH UNCONDITIONAL WRAPPER").foreach { spelling =>
+      assertEqual(
+        s"json_query(a, '$$.b' $spelling)",
+        JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Unconditional, JsonQueryQuotes.Keep,
+          JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    }
+    assertEqual(
+      "json_query(a, '$.b' WITHOUT WRAPPER)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+    // Explicit NULL ON EMPTY / NULL ON ERROR (same as the omitted default) and KEEP QUOTES.
+    assertEqual(
+      "json_query(a, '$.b' KEEP QUOTES NULL ON EMPTY NULL ON ERROR)",
+      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
+        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
   }
 
   test("cast expressions") {
@@ -580,6 +650,14 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a[b]", $"a".getItem($"b"))
     assertEqual("a[1 + 1]", $"a".getItem(Literal(1) + 1))
     assertEqual("`c`.a[b]", UnresolvedAttribute("c.a").getItem($"b"))
+  }
+
+  test("invalid semi-structured extract path") {
+    checkError(
+      exception = parseException("c:['']"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'['']'", "hint" -> ""),
+      queryContext = Array(ExpectedContext("c:['']", 0, 5)))
   }
 
   test("parenthesis") {

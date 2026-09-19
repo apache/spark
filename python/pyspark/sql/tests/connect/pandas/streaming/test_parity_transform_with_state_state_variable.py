@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 
+from pyspark import SparkConf
 from pyspark.sql.tests.pandas.streaming.test_transform_with_state_state_variable import (
     TransformWithStateInPySparkStateVariableTestsMixin,
 )
-from pyspark import SparkConf
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 

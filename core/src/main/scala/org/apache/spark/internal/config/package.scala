@@ -1345,13 +1345,14 @@ package object config {
         "like YARN and event logs.")
       .version("2.1.2")
       .regexConf
-      .createWithDefault("(?i)secret|password|token|access[.]?key".r)
+      .createWithDefault("(?i)secret|password|token|access[.]?key|credential".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
       .doc("Regex to decide which parts of strings produced by Spark contain sensitive " +
         "information. When this regex matches a string part, that string part is replaced by a " +
-        "dummy value. This is currently used to redact the output of SQL explain commands.")
+        "dummy value. This is currently used to redact the output of SQL explain commands and " +
+        "the exit exception annotation on Kubernetes.")
       .version("2.2.0")
       .regexConf
       .createOptional
@@ -1867,6 +1868,36 @@ package object config {
       .stringConf
       .createWithDefault("streaming")
 
+  private[spark] val SHUFFLE_PIPELINED_CHANNEL_BATCH_SIZE =
+    ConfigBuilder("spark.shuffle.channel.batchSize")
+      .internal()
+      .doc("Number of records the in-process pipelined channel shuffle accumulates per output " +
+        "partition before handing a batch across its queue in one operation. Larger batches " +
+        "amortize the queue's per-operation lock cost at the price of higher hand-off latency " +
+        "and per-partition buffering. Only used when spark.shuffle.manager.incremental is the " +
+        "in-process channel manager.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "batch size must be positive")
+      .createWithDefault(1024)
+
+  private[spark] val SHUFFLE_PIPELINED_CHANNEL_QUEUE_CAPACITY =
+    ConfigBuilder("spark.shuffle.channel.queueCapacity")
+      .internal()
+      .doc("Depth, in BATCHES, of each per-reduce-partition queue in the in-process pipelined " +
+        "channel shuffle. This is the backpressure bound: a producer blocks once a partition's " +
+        "queue holds this many batches. It also sets the worst-case heap the transport pins for " +
+        "one shuffle -- roughly queueCapacity * spark.shuffle.channel.batchSize * " +
+        "numPartitions rows held as strong references (not tracked by the memory manager and not " +
+        "spilled), so raise it together with an eye on that product. Only used when " +
+        "spark.shuffle.manager.incremental is the in-process channel manager.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "queue capacity must be positive")
+      .createWithDefault(64)
+
   private[spark] val SHUFFLE_REDUCE_LOCALITY_ENABLE =
     ConfigBuilder("spark.shuffle.reduceLocality.enabled")
       .doc("Whether to compute locality preferences for reduce tasks")
@@ -1934,6 +1965,18 @@ package object config {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
       .createWithDefault(50)
+
+  private[spark] val STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT_MS =
+    ConfigBuilder("spark.shuffle.streaming.writerConnectionTimeout")
+      .doc("Maximum time a streaming shuffle writer waits for each reader to connect. " +
+        "Set to -1 to wait indefinitely.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(
+        timeoutMs => timeoutMs == -1 || timeoutMs > 0,
+        "The reader connection timeout must be positive or -1 to wait indefinitely.")
+      .createWithDefaultString("1h")
 
   private[spark] val STREAMING_SHUFFLE_WRITER_MAX_MEMORY =
     ConfigBuilder("spark.shuffle.streaming.writerMaxMemory")
@@ -2150,13 +2193,27 @@ package object config {
 
   private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
 
+  // A map from the short class names of built-in plugins to their fully-qualified class names.
+  private val BUILTIN_PLUGINS: Map[String, String] = Seq(
+    "org.apache.spark.deploy.DriverTimeoutPlugin",
+    "org.apache.spark.deploy.RedirectConsolePlugin",
+    "org.apache.spark.profiler.ProfilerPlugin",
+    "org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin",
+    "org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin",
+    "org.apache.spark.scheduler.cluster.k8s.ExecutorRollPlugin",
+    "org.apache.spark.sql.connect.SparkConnectPlugin"
+  ).map(name => name.substring(name.lastIndexOf('.') + 1) -> name).toMap
+
   private[spark] val PLUGINS =
     ConfigBuilder("spark.plugins")
       .withPrepended(DEFAULT_PLUGINS_LIST, separator = ",")
       .doc("Comma-separated list of class names implementing " +
-        "org.apache.spark.api.plugin.SparkPlugin to load into the application.")
+        "org.apache.spark.api.plugin.SparkPlugin to load into the application. " +
+        "Built-in plugins can also be specified by their short class names, " +
+        "e.g. `DriverTimeoutPlugin`.")
       .version("3.0.0")
       .stringConf
+      .transform(name => BUILTIN_PLUGINS.getOrElse(name, name))
       .toSequence
       .createWithDefault(Nil)
 

@@ -37,7 +37,7 @@ import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 class CollectionExpressionsSuite
   extends SparkFunSuite with ExpressionEvalHelper with DataTypeErrorsBase {
@@ -946,6 +946,45 @@ class CollectionExpressionsSuite
     checkEvaluation(Slice(a3, Literal(2), Literal(3)), Seq(2, null, 4))
   }
 
+  test("TrimArray") {
+    val a0 = Literal.create(Seq(1, 2, 3, 4, 5), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq[String]("a", "b", "c"), ArrayType(StringType))
+    val a2 = Literal.create(Seq[String]("a", null, "b"), ArrayType(StringType, containsNull = true))
+    val a3 = Literal.create(Seq.empty[Int], ArrayType(IntegerType))
+
+    // n between 0 and cardinality removes the last n elements.
+    checkEvaluation(TrimArray(a0, Literal(0)), Seq(1, 2, 3, 4, 5))
+    checkEvaluation(TrimArray(a0, Literal(2)), Seq(1, 2, 3))
+    checkEvaluation(TrimArray(a0, Literal(5)), Seq.empty[Int])
+    checkEvaluation(TrimArray(a1, Literal(1)), Seq("a", "b"))
+    checkEvaluation(TrimArray(a2, Literal(1)), Seq("a", null))
+    checkEvaluation(TrimArray(a3, Literal(0)), Seq.empty[Int])
+
+    // NULL array or NULL n yields NULL.
+    checkEvaluation(TrimArray(Literal.create(null, ArrayType(IntegerType)), Literal(1)), null)
+    checkEvaluation(TrimArray(a0, Literal.create(null, IntegerType)), null)
+
+    // n < 0 and n > cardinality are rejected.
+    checkErrorInExpression[SparkRuntimeException](
+      expression = TrimArray(a0, Literal(-1)),
+      condition = "INVALID_PARAMETER_VALUE.TRIM_ARRAY_LENGTH",
+      parameters = Map(
+        "parameter" -> toSQLId("n"),
+        "functionName" -> toSQLId("trim_array"),
+        "numElements" -> "5",
+        "length" -> (-1).toString
+      ))
+    checkErrorInExpression[SparkRuntimeException](
+      expression = TrimArray(a0, Literal(6)),
+      condition = "INVALID_PARAMETER_VALUE.TRIM_ARRAY_LENGTH",
+      parameters = Map(
+        "parameter" -> toSQLId("n"),
+        "functionName" -> toSQLId("trim_array"),
+        "numElements" -> "5",
+        "length" -> 6.toString
+      ))
+  }
+
   test("ArrayJoin") {
     def testArrays(
         arrays: Seq[Expression],
@@ -1183,6 +1222,20 @@ class CollectionExpressionsSuite
         "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString(),
         "parameter" -> toSQLId("count")))
 
+    // SPARK-58821: an overflow in the `Long` length computation does not by itself mean the
+    // sequence is too long, because the length also depends on the step. For a large step the
+    // result has only a few elements, so the exact length recomputed in `BigInt` has to be
+    // returned rather than treated as an unreachable case.
+    checkEvaluation(
+      new Sequence(Literal(Long.MinValue), Literal(Long.MaxValue), Literal(Long.MaxValue)),
+      Seq(Long.MinValue, -1L, Long.MaxValue - 1))
+    checkEvaluation(
+      new Sequence(Literal(Long.MinValue), Literal(0L), Literal(4611686018427387904L)),
+      Seq(Long.MinValue, -4611686018427387904L, 0L))
+    checkEvaluation(
+      new Sequence(Literal(Long.MaxValue), Literal(Long.MinValue), Literal(-Long.MaxValue)),
+      Seq(Long.MaxValue, 0L, -Long.MaxValue))
+
     // test sequence with one element (zero step or equal start and stop)
 
     checkEvaluation(new Sequence(Literal(1), Literal(1), Literal(-1)), Seq(1))
@@ -1346,6 +1399,148 @@ class CollectionExpressionsSuite
         Timestamp.valueOf("2020-11-01 00:00:00.000"),
         Timestamp.valueOf("2019-06-01 00:00:00.000"),
         Timestamp.valueOf("2018-01-01 00:00:00.000")))
+  }
+
+  test("SPARK-57834: sequence of nanosecond-precision timestamps") {
+    // The sequence advances on the microsecond grid and every element carries the start value's
+    // sub-microsecond fraction; the endpoints' own fractions decide the bound in full precision.
+    val sec = 1000000L // microseconds per second
+    val hour = 3600 * sec
+    val day = 86400000000L // microseconds per day
+    val month = 2678400000000L // microseconds in January 1970 (31 days), for the month-step case
+    def ntz(micros: Long, frac: Int, p: Int = 9): Literal =
+      Literal(TimestampNanosVal.fromParts(micros, frac.toShort), TimestampNTZNanosType(p))
+    def ltz(micros: Long, frac: Int, p: Int = 9): Literal =
+      Literal(TimestampNanosVal.fromParts(micros, frac.toShort), TimestampLTZNanosType(p))
+    def tnv(micros: Long, frac: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(micros, frac.toShort)
+
+    // NTZ(9), calendar-interval step; the 123ns fraction is kept on every element.
+    checkEvaluation(new Sequence(
+      ntz(0, 123), ntz(2 * sec, 123),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(0, 123), tnv(sec, 123), tnv(2 * sec, 123)))
+
+    // Day-time interval (Duration) step and year-month interval (Period) step, exercising the
+    // Duration/Period sequence implementations for nanos rather than only the calendar path.
+    checkEvaluation(new Sequence(
+      ntz(0, 123), ntz(2 * hour, 123), Literal(Duration.ofHours(1))),
+      Seq(tnv(0, 123), tnv(hour, 123), tnv(2 * hour, 123)))
+    checkEvaluation(new Sequence(
+      ntz(0, 123), ntz(month, 123), Literal(Period.ofMonths(1))),
+      Seq(tnv(0, 123), tnv(month, 123)))
+
+    // LTZ(9), hour step (zone-independent since it adds pure microseconds).
+    checkEvaluation(new Sequence(
+      ltz(0, 500), ltz(2 * hour, 500),
+      Literal(stringToInterval("interval 1 hour"))),
+      Seq(tnv(0, 500), tnv(hour, 500), tnv(2 * hour, 500)))
+
+    // Precision 8 (fraction is a multiple of 10) and precision 7 (multiple of 100).
+    checkEvaluation(new Sequence(
+      ntz(0, 120, 8), ntz(sec, 120, 8),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(0, 120), tnv(sec, 120)))
+    checkEvaluation(new Sequence(
+      ntz(0, 100, 7), ntz(sec, 100, 7),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(0, 100), tnv(sec, 100)))
+
+    // Differing fractions: start.frac > stop.frac drops the element that lands on stop's
+    // microsecond (it would exceed stop), so the result never overshoots stop.
+    checkEvaluation(new Sequence(
+      ntz(0, 900), ntz(2 * sec, 100),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(0, 900), tnv(sec, 900)))
+    // start.frac <= stop.frac keeps the boundary element.
+    checkEvaluation(new Sequence(
+      ntz(0, 100), ntz(2 * sec, 900),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(0, 100), tnv(sec, 100), tnv(2 * sec, 100)))
+    // stop on a whole second, start with a larger fraction: the element landing on stop's
+    // microsecond is dropped rather than overshooting stop (only start is in [start, stop]).
+    checkEvaluation(new Sequence(
+      ntz(0, 500), ntz(sec, 0),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(0, 500)))
+
+    // Negative step, equal fractions.
+    checkEvaluation(new Sequence(
+      ntz(2 * sec, 999), ntz(0, 999),
+      Literal(negateExact(stringToInterval("interval 1 second")))),
+      Seq(tnv(2 * sec, 999), tnv(sec, 999), tnv(0, 999)))
+    // Negative step, differing fractions: an element on stop's microsecond is kept only when it
+    // stays >= stop. startFrac < stopFrac drops it; startFrac >= stopFrac keeps it.
+    checkEvaluation(new Sequence(
+      ntz(2 * sec, 100), ntz(0, 900),
+      Literal(negateExact(stringToInterval("interval 1 second")))),
+      Seq(tnv(2 * sec, 100), tnv(sec, 100)))
+    checkEvaluation(new Sequence(
+      ntz(2 * sec, 900), ntz(0, 100),
+      Literal(negateExact(stringToInterval("interval 1 second")))),
+      Seq(tnv(2 * sec, 900), tnv(sec, 900), tnv(0, 900)))
+
+    // Negative calendar/day/month and default steps route through the while-loop sequence
+    // machinery (not the count-based micros path), where the micro-nudged bound cannot exclude an
+    // endpoint that lands on stop's microsecond. A descending whole-day step with
+    // startFrac < stopFrac must still drop that endpoint (tnv(0, 100) is < stop tnv(0, 900)).
+    checkEvaluation(new Sequence(
+      ntz(2 * day, 100), ntz(0, 900),
+      Literal(negateExact(stringToInterval("interval 1 day")))),
+      Seq(tnv(2 * day, 100), tnv(day, 100)))
+    // Same descending day step but startFrac >= stopFrac keeps the endpoint (it stays >= stop).
+    checkEvaluation(new Sequence(
+      ntz(2 * day, 900), ntz(0, 100),
+      Literal(negateExact(stringToInterval("interval 1 day")))),
+      Seq(tnv(2 * day, 900), tnv(day, 900), tnv(0, 900)))
+    // Descending month step (Period, while-loop path) with startFrac < stopFrac: the endpoint that
+    // lands on stop's microsecond is dropped.
+    checkEvaluation(new Sequence(
+      ntz(month, 100), ntz(0, 900), Literal(Period.ofMonths(-1))),
+      Seq(tnv(month, 100)))
+    // Default (implicit) step: start > stop picks a descending 1-day step (while-loop path); the
+    // endpoint that lands on stop's microsecond is dropped when startFrac < stopFrac.
+    checkEvaluation(new Sequence(ntz(2 * day, 100), ntz(0, 900)),
+      Seq(tnv(2 * day, 100), tnv(day, 100)))
+
+    // start == stop yields a single element that still carries the fraction.
+    checkEvaluation(new Sequence(
+      ntz(5 * sec, 42), ntz(5 * sec, 42),
+      Literal(stringToInterval("interval 1 second"))),
+      Seq(tnv(5 * sec, 42)))
+
+    // Endpoints share a microsecond but start > stop in full precision: with a positive step this
+    // is an illegal boundary, matching sequence(2, 1, 1). Codegen-only, like SPARK-58440 (the
+    // interpreted path reports this through `require`, a plain IllegalArgumentException). The
+    // reported bound is nudged one microsecond off stop to trigger the machinery's boundary check.
+    withSQLConf(
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          evaluateWithMutableProjection(Sequence(
+            ntz(sec, 500), ntz(sec, 100),
+            Some(Literal(stringToInterval("interval 1 second"))), UTC_OPT))
+        },
+        condition = "_LEGACY_ERROR_TEMP_3243",
+        parameters = Map("start" -> "1000000", "stop" -> "999999", "step" -> "1000000"))
+    }
+
+    // No explicit step: the default step (+1 day) is chosen from the full-precision comparison.
+    checkEvaluation(new Sequence(ntz(0, 7), ntz(day, 7)),
+      Seq(tnv(0, 7), tnv(day, 7)))
+    // Equal microseconds, differing fractions, no explicit step: the default step direction comes
+    // from the full-precision comparison, so the single in-range element is start itself (never an
+    // out-of-order pair). Ascending when start < stop, descending when start > stop.
+    checkEvaluation(new Sequence(ntz(5 * sec, 100), ntz(5 * sec, 500)), Seq(tnv(5 * sec, 100)))
+    checkEvaluation(new Sequence(ntz(5 * sec, 500), ntz(5 * sec, 100)), Seq(tnv(5 * sec, 500)))
+
+    // Null propagation.
+    checkEvaluation(new Sequence(
+      Literal.create(null, TimestampNTZNanosType(9)), ntz(sec, 1),
+      Literal(stringToInterval("interval 1 second"))), null)
+    checkEvaluation(new Sequence(
+      ntz(0, 1), Literal.create(null, TimestampNTZNanosType(9)),
+      Literal(stringToInterval("interval 1 second"))), null)
   }
 
   test("Sequence on DST boundaries") {
@@ -2496,6 +2691,17 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayRepeat(intArray, Literal(2)), Seq(Seq(1, 2), Seq(1, 2)))
     checkEvaluation(ArrayRepeat(strArray, Literal(2)), Seq(Seq("hi", "hola"), Seq("hi", "hola")))
     checkEvaluation(ArrayRepeat(Literal("hi"), Literal(null, IntegerType)), null)
+
+    // A count above the max array length must raise the same error in the interpreted and the
+    // codegen path. The codegen path used to let the array allocation fail with an internal error.
+    checkErrorInExpression[SparkRuntimeException](
+      ArrayRepeat(Literal("hi"), Literal(Int.MaxValue)),
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER",
+      parameters = Map(
+        "numberOfElements" -> Int.MaxValue.toString,
+        "functionName" -> toSQLId("array_repeat"),
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
+        "parameter" -> toSQLId("count")))
   }
 
   test("Array remove") {
@@ -3414,6 +3620,22 @@ class CollectionExpressionsSuite
       condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
       parameters = Map(
         "numberOfElements" -> (-BigInt(Int.MinValue) + 1).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
+        "functionName" -> "`array_insert`"))
+  }
+
+  test("SPARK-58631: Array insert with a non-foldable pos above the max array length") {
+    val a = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType))
+    // A foldable positive `pos` is handled by a separate codegen branch, so `pos` has to be
+    // non-foldable to reach the one that used to report COLLECTION_SIZE_LIMIT_EXCEEDED.PARAMETER,
+    // naming a `count` parameter that array_insert does not have.
+    checkErrorInExpression[SparkRuntimeException](
+      ArrayInsert(a, BoundReference(0, IntegerType, nullable = false), Literal(3),
+        legacyNegativeIndex = false),
+      InternalRow(Int.MaxValue),
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+      parameters = Map(
+        "numberOfElements" -> Int.MaxValue.toString,
         "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
         "functionName" -> "`array_insert`"))
   }

@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.streaming.state.{
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.{GlobalSingletonManualClock, StreamManualClock}
+import org.apache.spark.tags.SlowSQLTest
 
 private class RealTimeEagerCountProcessor
   extends StatefulProcessor[String, (String, Int), (String, Long)] {
@@ -571,6 +572,7 @@ private object RealTimeInitialStateBootstrapBlock {
   }
 }
 
+@SlowSQLTest
 class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
   import testImplicits._
 
@@ -2045,5 +2047,6 @@ class RealTimeTransformWithStateSuite extends StreamRealTimeModeE2ESuiteBase {
   }
 }
 
+@SlowSQLTest
 class RealTimeTransformWithStateSuiteWithRowChecksum
   extends RealTimeTransformWithStateSuite with EnableStateStoreRowChecksum

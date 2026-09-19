@@ -19,7 +19,7 @@ import os
 
 __all__ = ["SparkFiles"]
 
-from typing import cast, ClassVar, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, Optional, cast
 
 if TYPE_CHECKING:
     from pyspark import SparkContext
@@ -149,6 +149,7 @@ class SparkFiles:
 def _test() -> None:
     import doctest
     import sys
+
     from pyspark import SparkContext
 
     globs = globals().copy()

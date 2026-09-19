@@ -26,7 +26,7 @@ import org.apache.spark.{JobArtifactSet, PartitionEvaluator, PartitionEvaluatorF
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, EmptyRow, Expression, JoinedRow, NamedArgumentExpression, NamedExpression, PythonFuncExpression, PythonUDAF, SortOrder, SpecificInternalRow, UnsafeProjection, UnsafeRow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, EmptyRow, Expression, JoinedRow, NamedArgumentExpression, NamedExpression, PythonFuncExpression, SortOrder, SpecificInternalRow, UnsafeProjection, UnsafeRow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
@@ -156,8 +156,12 @@ class ArrowWindowPythonEvaluatorFactory(
 
     // Extract window expressions and window functions
     private val windowExpressions = expressions.flatMap(_.collect { case e: WindowExpression => e })
+    // The window aggregate function is either a `PythonUDAF` (grouped-agg pandas/arrow UDF) or the
+    // incremental `PythonAggregate`; both are `PythonFuncExpression`s and share the per-frame Arrow
+    // window path (only the worker-side per-frame computation and eval type differ).
     private val udfExpressions = windowExpressions.map { e =>
-      e.windowFunction.asInstanceOf[AggregateExpression].aggregateFunction.asInstanceOf[PythonUDAF]
+      e.windowFunction.asInstanceOf[AggregateExpression].aggregateFunction
+        .asInstanceOf[PythonFuncExpression]
     }
 
     // We shouldn't be chaining anything here.

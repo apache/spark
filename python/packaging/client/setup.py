@@ -22,12 +22,13 @@
 # cd python/packaging/classic
 # python setup.py sdist
 
-import sys
-from setuptools import setup
-import os
-from shutil import copyfile
 import glob
+import os
+import sys
 from pathlib import Path
+from shutil import copyfile
+
+from setuptools import setup
 
 if (
     # When we package, the parent directory 'client' dir
@@ -145,6 +146,7 @@ try:
     connect_packages = [
         "pyspark",
         "pyspark.cloudpickle",
+        "pyspark.eval_handlers",
         "pyspark.messages",
         "pyspark.messages.socket",
         "pyspark.mllib",

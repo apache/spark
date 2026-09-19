@@ -21,62 +21,86 @@ pandas instances during the type conversion.
 """
 
 import datetime
-import itertools
 import functools
+import itertools
 import json
 from decimal import Decimal
-from typing import Any, Callable, Dict, Iterable, List, Optional, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Union
 
-from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError, UnsupportedOperationException
 from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
-    cast,
+    AnyTimestampNanoType,
+    ArrayType,
+    BinaryType,
     BooleanType,
     ByteType,
-    ShortType,
+    DataType,
+    DateType,
+    DayTimeIntervalType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    Geography,
+    GeographyType,
+    Geometry,
+    GeometryType,
     IntegerType,
     IntegralType,
     LongType,
-    FloatType,
-    DoubleType,
-    DecimalType,
-    StringType,
-    BinaryType,
-    DateType,
-    TimeType,
-    TimestampType,
-    TimestampNTZType,
-    DayTimeIntervalType,
-    YearMonthIntervalType,
-    ArrayType,
     MapType,
-    StructType,
-    StructField,
     NullType,
-    DataType,
+    ShortType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampLTZNanosType,
+    TimestampNTZNanosType,
+    TimestampNTZType,
+    TimestampType,
+    TimeType,
     UserDefinedType,
     VariantType,
     VariantVal,
-    GeometryType,
-    Geometry,
-    GeographyType,
-    Geography,
+    YearMonthIntervalType,
     _create_row,
+    cast,
 )
 
 if TYPE_CHECKING:
+    import numpy as np
     import pandas as pd
     import pyarrow as pa
-    import numpy as np
 
-    from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
+    from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
 
 
 # Should keep in line with org.apache.spark.sql.util.ArrowUtils.metadataKey
 metadata_key = b"SPARK::metadata::json"
 # Keep in line with org.apache.spark.sql.util.ArrowUtils.timePrecisionKey
 time_precision_key = b"SPARK::time::precision"
+
+# Should keep in line with org.apache.spark.sql.util.ArrowUtils.timestampNanosPrecisionKey. The
+# nanosecond timestamp types map to an Arrow Timestamp(NANOSECOND) field whose declared precision
+# (7-9) cannot be recovered from the Arrow type alone; the JVM ArrowUtils.fromArrowField reads the
+# precision from this field-metadata key (defaulting to the maximum when it is absent). Tagging it
+# here keeps the precision through a Python -> Arrow -> JVM round trip (e.g. createDataFrame over
+# Spark Connect, which reconstructs the schema from the Arrow field rather than a passed schema).
+timestamp_nanos_precision_key = b"SPARK::timestampNanos::precision"
+
+
+def _with_timestamp_nanos_precision(
+    dt: DataType, metadata: Optional[Dict[bytes, bytes]]
+) -> Optional[Dict[bytes, bytes]]:
+    """Merge the nanosecond-precision tag into an Arrow field's metadata for a nanosecond
+    timestamp type, mirroring the JVM's ``toPrecisionTaggedArrowField``; other types are
+    unchanged."""
+    if isinstance(dt, AnyTimestampNanoType):
+        merged = dict(metadata) if metadata else {}
+        merged[timestamp_nanos_precision_key] = str(dt.precision).encode("utf-8")
+        return merged
+    return metadata
 
 
 def to_arrow_metadata(metadata: Optional[Dict[str, Any]] = None) -> Optional[Dict[bytes, bytes]]:
@@ -97,8 +121,8 @@ def _to_arrow_field_metadata(
     dt: DataType,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[bytes, bytes]]:
-    """Merge user metadata with the TIME precision tag when ``dt`` is TimeType."""
-    arrow_meta = to_arrow_metadata(metadata)
+    """Merge user metadata with Spark precision tags required by the field type."""
+    arrow_meta = _with_timestamp_nanos_precision(dt, to_arrow_metadata(metadata))
     if not isinstance(dt, TimeType):
         return arrow_meta
     tagged: Dict[bytes, bytes] = {time_precision_key: str(dt.precision).encode("utf-8")}
@@ -176,6 +200,15 @@ def to_arrow_type(
         arrow_type = pa.timestamp("us", tz=timezone)
     elif isinstance(dt, TimestampNTZType):
         arrow_type = pa.timestamp("us", tz=None)
+    elif isinstance(dt, TimestampLTZNanosType):
+        # Nanosecond-precision timestamps interchange as Arrow Timestamp(NANOSECOND), matching the
+        # JVM ArrowUtils mapping. This is the LTZ (timezone-aware) variant, so the session timezone
+        # is attached exactly like TimestampType. The precision (7-9) is carried out of band by the
+        # Spark schema; the Arrow unit is always nanoseconds.
+        assert timezone is not None
+        arrow_type = pa.timestamp("ns", tz=timezone)
+    elif isinstance(dt, TimestampNTZNanosType):
+        arrow_type = pa.timestamp("ns", tz=None)
     elif isinstance(dt, DayTimeIntervalType):
         arrow_type = pa.duration("us")
     elif isinstance(dt, TimeType):
@@ -589,9 +622,9 @@ def _check_arrow_array_timestamps_localize(
     -------
     :class:`pyarrow.Array` or :class:`pyarrow.ChunkedArray`
     """
-    import pyarrow.types as types
     import pyarrow as pa
     import pyarrow.compute as pc
+    import pyarrow.types as types
 
     if isinstance(a, pa.ChunkedArray) and (types.is_nested(a.type) or types.is_dictionary(a.type)):
         return pa.chunked_array(
@@ -601,14 +634,25 @@ def _check_arrow_array_timestamps_localize(
             ]
         )
 
-    if types.is_timestamp(a.type) and truncate and a.type.unit == "ns":
+    if (
+        types.is_timestamp(a.type)
+        and truncate
+        and a.type.unit == "ns"
+        and not isinstance(dt, AnyTimestampNanoType)
+    ):
+        # Nanosecond timestamps are floored to microseconds for the microsecond-precision Spark
+        # types, but a nanosecond-precision target type keeps its full resolution.
         a = pc.floor_temporal(a, unit="microsecond")
 
-    if types.is_timestamp(a.type) and a.type.tz is None and isinstance(dt, TimestampType):
+    if (
+        types.is_timestamp(a.type)
+        and a.type.tz is None
+        and isinstance(dt, (TimestampType, TimestampLTZNanosType))
+    ):
         assert timezone is not None
 
-        # Only localize timestamps that will become Spark TimestampType columns.
-        # Do not localize timestamps that will become Spark TimestampNTZType columns.
+        # Localize naive Arrow timestamps whose target is a Spark local-time-zone timestamp
+        # (TimestampType or the nanosecond LTZ type); leave NTZ / NTZ-nanos targets naive.
         return pc.assume_timezone(a, timezone)
     if types.is_list(a.type):
         # Return the ListArray as-is if it contains no nested fields or timestamps
@@ -698,8 +742,8 @@ def _check_arrow_table_timestamps_localize(
     -------
     :class:`pyarrow.Table`
     """
-    import pyarrow.types as types
     import pyarrow as pa
+    import pyarrow.types as types
 
     # Return the table as-is if it contains no nested fields or timestamps
     if all([not types.is_nested(at) and not types.is_timestamp(at) for at in table.schema.types]):
@@ -950,6 +994,10 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
             return np.dtype("datetime64[ns]")
         else:
             return np.dtype("datetime64[us]")
+    elif isinstance(dt, AnyTimestampNanoType):
+        # Nanosecond-precision timestamps always map to datetime64[ns] regardless of pandas
+        # version -- it is the only pandas resolution that preserves the sub-microsecond digits.
+        return np.dtype("datetime64[ns]")
     elif isinstance(dt, DayTimeIntervalType):
         if LooseVersion(pd.__version__) < "3.0.0":
             return np.dtype("timedelta64[ns]")
@@ -1065,7 +1113,10 @@ def _create_converter_to_pandas(
                 else:
                     return pser.astype(pandas_type, copy=False)
 
-        elif isinstance(data_type, TimestampType):
+        elif isinstance(data_type, (TimestampType, TimestampLTZNanosType)):
+            # TimestampLTZNanosType is the nanosecond-precision, timezone-aware timestamp; it is
+            # localized to the session timezone exactly like TimestampType. Its pandas_type is
+            # datetime64[ns] (see _to_corrected_pandas_type), so full resolution is preserved.
             assert timezone is not None
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
@@ -1251,7 +1302,7 @@ def _create_converter_to_pandas(
                     messageParameters={"var": str(_struct_in_pandas)},
                 )
 
-        elif isinstance(dt, TimestampType):
+        elif isinstance(dt, (TimestampType, TimestampLTZNanosType)):
             assert timezone is not None
 
             local_tz: Union[datetime.tzinfo, str] = (
@@ -1267,7 +1318,7 @@ def _create_converter_to_pandas(
 
             return convert_timestamp
 
-        elif isinstance(dt, TimestampNTZType):
+        elif isinstance(dt, (TimestampNTZType, TimestampNTZNanosType)):
 
             def convert_timestamp_ntz(value: Any) -> Any:
                 return pd.Timestamp(value)
@@ -1398,7 +1449,9 @@ def _create_converter_from_pandas(
     """
     import pandas as pd
 
-    if isinstance(data_type, TimestampType):
+    if isinstance(data_type, (TimestampType, TimestampLTZNanosType)):
+        # TimestampLTZNanosType is timezone-aware like TimestampType; the vectorized internal
+        # conversion preserves the datetime64[ns] resolution, so nanoseconds survive to Arrow.
         assert timezone is not None
 
         def correct_timestamp(pser: pd.Series) -> pd.Series:
@@ -1596,6 +1649,21 @@ def _create_converter_from_pandas(
                             }
 
             return convert_struct
+
+        elif isinstance(dt, TimestampLTZNanosType):
+            assert timezone is not None
+
+            def convert_timestamp_ltz_nanos(value: Any) -> Any:
+                if isinstance(value, datetime.datetime) and value.tzinfo is not None:
+                    ts = pd.Timestamp(value)
+                else:
+                    ts = pd.Timestamp(value).tz_localize(timezone)
+                # Keep the tz-aware pandas.Timestamp so a nested LTZ nanosecond value retains its
+                # sub-microsecond digits through the Arrow build (mirrors the nested NTZ path,
+                # which is identity). to_pydatetime() would truncate to microseconds.
+                return ts
+
+            return convert_timestamp_ltz_nanos
 
         elif isinstance(dt, TimestampType):
             assert timezone is not None

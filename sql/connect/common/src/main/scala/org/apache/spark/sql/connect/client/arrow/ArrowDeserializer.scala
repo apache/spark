@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.connect.common.types.ops.ConnectTypeOps
 import org.apache.spark.sql.errors.{CompilationErrors, ExecutionErrors}
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{Decimal, StringHelper}
 import org.apache.spark.sql.util.{CloseableIterator, ConcatenatingArrowStreamReader, MessageIterator}
 import org.apache.spark.unsafe.types.VariantVal
 
@@ -135,8 +135,14 @@ object ArrowDeserializers {
         new Deserializer[Any] {
           def get(i: Int): Any = null
         }
-      case (StringEncoder, v: FieldVector) =>
-        new LeafFieldDeserializer[String](encoder, v, timeZoneId) {
+      // CHAR/VARCHAR travel as plain Arrow string vectors; the length is part of the type, not of
+      // the encoding, and the values arrive already padded and length checked by the server. Read
+      // them against the unconstrained string type, since narrowing STRING to CHAR(n)/VARCHAR(n)
+      // is not an up-cast and the reader would reject the vector.
+      case (StringEncoder | _: CharEncoder | _: VarcharEncoder, v: FieldVector) =>
+        val stringReader =
+          ArrowVectorReader(StringHelper.plainStringType(encoder.dataType), v, timeZoneId)
+        new LeafFieldDeserializer[String](stringReader) {
           override def value(i: Int): String = reader.getString(i)
         }
       case (JavaEnumEncoder(tag), v: FieldVector) =>

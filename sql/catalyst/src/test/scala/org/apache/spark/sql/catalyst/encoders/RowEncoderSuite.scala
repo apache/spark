@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
-import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.{AnalysisException, RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
@@ -590,40 +590,77 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val row = encoder.createSerializer()(data)
   }
 
+  test("SPARK-58794: encoderFor rejects CHAR/VARCHAR when first-class types are off") {
+    Seq(CharType(4), VarcharType(6)).foreach { dt =>
+      val schema = new StructType().add("c", dt)
+      withSQLConf(
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            RowEncoder.encoderFor(schema)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
+          sqlState = "0A000",
+          parameters = Map("dataType" -> s"\"${dt.sql}\"")
+        )
+        // Engine-produced result schemas still decode on the Connect client.
+        RowEncoder.encoderForResultSchema(schema)
+      }
+    }
+  }
+
   test("do not allow serializing too long strings into char/varchar") {
     Seq(CharType(5), VarcharType(5)).foreach { typ =>
-      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-        val schema = new StructType().add("c", typ)
-        val encoder = ExpressionEncoder(schema).resolveAndBind()
-        val value = "abcdef"
-        checkError(
-          exception = intercept[SparkRuntimeException]({
-            val row = toRow(encoder, Row(value))
-          }),
-          condition = "EXCEED_LIMIT_LENGTH",
-          parameters = Map("limit" -> "5")
-        )
+      Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true").foreach { conf =>
+        withSQLConf(conf) {
+          val schema = new StructType().add("c", typ)
+          val encoder = ExpressionEncoder(schema).resolveAndBind()
+          val value = "abcdef"
+          checkError(
+            exception = intercept[SparkRuntimeException]({
+              val row = toRow(encoder, Row(value))
+            }),
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "5")
+          )
+        }
       }
     }
   }
 
   test("do not allow deserializing too long strings into char/varchar") {
     Seq(CharType(5), VarcharType(5)).foreach { typ =>
-      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-        val fromSchema = new StructType().add("c", StringType)
-        val fromEncoder = ExpressionEncoder(fromSchema).resolveAndBind()
-        val toSchema = new StructType().add("c", typ)
-        val toEncoder = ExpressionEncoder(toSchema).resolveAndBind()
-        val value = "abcdef"
-        val row = toRow(fromEncoder, Row(value))
-        checkError(
-          exception = intercept[SparkRuntimeException]({
-            val value = fromRow(toEncoder, row)
-          }),
-          condition = "EXCEED_LIMIT_LENGTH",
-          parameters = Map("limit" -> "5")
-        )
+      Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true").foreach { conf =>
+        withSQLConf(conf) {
+          val fromSchema = new StructType().add("c", StringType)
+          val fromEncoder = ExpressionEncoder(fromSchema).resolveAndBind()
+          val toSchema = new StructType().add("c", typ)
+          val toEncoder = ExpressionEncoder(toSchema).resolveAndBind()
+          val value = "abcdef"
+          val row = toRow(fromEncoder, Row(value))
+          checkError(
+            exception = intercept[SparkRuntimeException]({
+              val value = fromRow(toEncoder, row)
+            }),
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "5")
+          )
+        }
       }
+    }
+  }
+
+  test("SPARK-58803: RowEncoder pads CHAR under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val schema = new StructType().add("c", CharType(5)).add("v", VarcharType(5))
+      val encoder = ExpressionEncoder(schema).resolveAndBind()
+      val row = toRow(encoder, Row("ab", "cd"))
+      assert(fromRow(encoder, row) === Row("ab   ", "cd"))
     }
   }
 }

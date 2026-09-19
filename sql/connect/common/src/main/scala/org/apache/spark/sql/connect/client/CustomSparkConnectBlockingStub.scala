@@ -45,10 +45,22 @@ private[connect] class CustomSparkConnectBlockingStub(
   // GrpcExceptionConverter with a GRPC stub for fetching error details from server.
   private val grpcExceptionConverter = stubState.exceptionConverter
 
+  private def executePlanStub(operationId: String) = {
+    Option(operationId)
+      .filter(_.nonEmpty)
+      .map { id =>
+        stub.withInterceptors(
+          new SparkConnectClient.MetadataHeaderClientInterceptor(
+            Map(SparkConnectClient.OPERATION_ID_HEADER -> id)))
+      }
+      .getOrElse(stub)
+  }
+
   // Non-reattachable executePlan intentionally has no deadline: a timeout here would kill the
   // server-side execution with no way to recover (there is no ReattachExecute for this path).
   // Use reattachable execution for long-running queries that need deadline protection.
   def executePlan(request: ExecutePlanRequest): CloseableIterator[ExecutePlanResponse] = {
+    val stubWithOperationId = executePlanStub(request.getOperationId)
     grpcExceptionConverter.convert(
       request.getSessionId,
       request.getUserContext,
@@ -62,7 +74,7 @@ private[connect] class CustomSparkConnectBlockingStub(
           request,
           r => {
             stubState.responseValidator.wrapIterator(
-              CloseableIterator(stub.executePlan(r).asScala))
+              CloseableIterator(stubWithOperationId.executePlan(r).asScala))
           }),
         Option(request.getOperationId).filter(_.nonEmpty))
     }

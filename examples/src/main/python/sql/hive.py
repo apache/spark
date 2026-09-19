@@ -23,8 +23,8 @@ Run with:
 # $example on:spark_hive$
 from os.path import abspath
 
-from pyspark.sql import SparkSession
-from pyspark.sql import Row
+from pyspark.sql import Row, SparkSession
+
 # $example off:spark_hive$
 
 
