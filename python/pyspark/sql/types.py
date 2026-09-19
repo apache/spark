@@ -1463,7 +1463,7 @@ class StructField(DataType):
         metadata = json.get("metadata")
         collationsMap = {}
         if metadata and _COLLATIONS_METADATA_KEY in metadata:
-            collationsMap = metadata[_COLLATIONS_METADATA_KEY]
+            collationsMap = metadata[_COLLATIONS_METADATA_KEY].copy()
             for key, value in collationsMap.items():
                 nameParts = value.split(".")
                 assert len(nameParts) == 2

@@ -3236,6 +3236,24 @@ class TypesTestsMixin:
 
 
 class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
+    def test_from_json_does_not_mutate_collation_metadata(self):
+        import copy
+
+        for data_type in [
+            StringType("UTF8_LCASE"),
+            ArrayType(StringType("UNICODE_CI")),
+            MapType(StringType("UTF8_LCASE"), StringType("UNICODE_CI")),
+            StructType([StructField("nested", StringType("UTF8_LCASE"))]),
+        ]:
+            with self.subTest(data_type=data_type):
+                schema = StructType([StructField("s", data_type, metadata={"comment": "keep"})])
+                payload = schema.jsonValue()
+                original = copy.deepcopy(payload)
+                self.assertEqual(StructType.fromJson(payload), schema)
+                self.assertEqual(payload, original)
+                self.assertEqual(StructType.fromJson(payload), schema)
+                self.assertEqual(payload, original)
+
     # regression test for SPARK-6055
     def test_data_type_eq(self):
         lt = LongType()
