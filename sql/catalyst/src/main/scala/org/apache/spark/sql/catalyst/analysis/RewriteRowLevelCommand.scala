@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ReplaceDataProjectio
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.expressions.FieldReference
-import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable, SupportsDelta}
+import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable, SupportsColumnUpdates, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -72,8 +72,10 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   protected def buildOperationTable(
       table: SupportsRowLevelOperations,
       command: Command,
-      options: CaseInsensitiveStringMap): RowLevelOperationTable = {
-    val info = RowLevelOperationInfoImpl(command, options)
+      options: CaseInsensitiveStringMap,
+      updatedAttrs: Seq[AttributeReference] = Nil): RowLevelOperationTable = {
+    val updatedColumns = updatedAttrs.map(attr => FieldReference(Seq(attr.name)))
+    val info = RowLevelOperationInfoImpl(command, options, updatedColumns)
     val operation = table.newRowLevelOperationBuilder(info).build()
     RowLevelOperationTable(table, operation)
   }
@@ -85,6 +87,16 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       rowIdAttrs: Seq[AttributeReference] = Nil): DataSourceV2Relation = {
 
     val attrs = dedupAttrs(relation.output ++ rowIdAttrs ++ metadataAttrs)
+    relation.copy(table = table, output = attrs)
+  }
+
+  protected def buildNarrowRelationWithAttrs(
+      relation: DataSourceV2Relation,
+      table: RowLevelOperationTable,
+      dataAttrs: Seq[AttributeReference],
+      metadataAttrs: Seq[AttributeReference],
+      rowIdAttrs: Seq[AttributeReference] = Nil): DataSourceV2Relation = {
+    val attrs = dedupAttrs(dataAttrs ++ rowIdAttrs ++ metadataAttrs)
     relation.copy(table = table, output = attrs)
   }
 
@@ -109,6 +121,27 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       relation)
   }
 
+  /**
+   * Resolves the connector-declared required data attributes for column-update writes against
+   * the given relation. Non-existent columns are rejected with an `AnalysisException`.
+   */
+  protected def resolveRequiredDataAttrs(
+      relation: DataSourceV2Relation,
+      operation: SupportsColumnUpdates): Seq[AttributeReference] = {
+    val refs = operation.requiredDataAttributes
+    if (refs.isEmpty) {
+      throw QueryCompilationErrors.emptyRequiredDataAttributesError(operation.getClass.getName)
+    }
+    val resolved = V2ExpressionUtils.resolveRefs[AttributeReference](
+      refs.toImmutableArraySeq,
+      relation)
+    // `resolveRefs` matches case-insensitively but keeps the declared spelling, so map each
+    // resolved attribute back to the relation's own (by exprId) to avoid a spelling mismatch
+    // between the connector's declaration and the table's actual column name.
+    val byExprId = relation.output.map(a => a.exprId -> a).toMap
+    resolved.map(a => byExprId.getOrElse(a.exprId, a).asInstanceOf[AttributeReference])
+  }
+
   protected def resolveRowIdAttrs(
       relation: DataSourceV2Relation,
       operation: SupportsDelta): Seq[AttributeReference] = {
@@ -127,6 +160,21 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
 
   protected def resolveAttrRef(name: String, plan: LogicalPlan): AttributeReference = {
     V2ExpressionUtils.resolveRef[AttributeReference](FieldReference(name), plan)
+  }
+
+  protected def isIdentityAssignment(key: Attribute, value: Expression): Boolean = {
+    val valueWithoutAlias = value match {
+      case Alias(child, _) => child
+      case other => other
+    }
+    key.semanticEquals(valueWithoutAlias)
+  }
+
+  // returns the table attributes that are genuinely updated (non-identity) by these assignments
+  protected def collectUpdatedAttrs(assignments: Seq[Assignment]): Seq[AttributeReference] = {
+    assignments.collect {
+      case Assignment(key: AttributeReference, value) if !isIdentityAssignment(key, value) => key
+    }
   }
 
   protected def deltaDeleteOutput(
@@ -210,11 +258,29 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   protected def buildReplaceDataProjections(
       plan: LogicalPlan,
       rowAttrs: Seq[Attribute],
-      metadataAttrs: Seq[Attribute]): ReplaceDataProjections = {
+      metadataAttrs: Seq[Attribute],
+      updateRowAttrs: Seq[Attribute] = Nil): ReplaceDataProjections = {
     val outputs = extractOutputs(plan)
 
-    val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
-    val rowProjection = newLazyProjection(plan, outputsWithRow, rowAttrs)
+    val rowProjection = if (updateRowAttrs.nonEmpty) {
+      val outputsForInsert = filterOutputs(outputs,
+        OPERATIONS_WITH_ROW -- Set(UPDATE_OPERATION, COPY_OPERATION))
+      if (outputsForInsert.isEmpty) {
+        ProjectingInternalRow(StructType(Nil), Nil)
+      } else {
+        newLazyProjection(plan, outputsForInsert, rowAttrs)
+      }
+    } else {
+      val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
+      newLazyProjection(plan, outputsWithRow, rowAttrs)
+    }
+
+    val updateRowProjection = if (updateRowAttrs.nonEmpty) {
+      val outputsForUpdate = filterOutputs(outputs, Set(UPDATE_OPERATION, COPY_OPERATION))
+      Some(newLazyProjection(plan, outputsForUpdate, updateRowAttrs))
+    } else {
+      None
+    }
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
       val outputsWithMetadata = filterOutputs(outputs, OPERATIONS_WITH_METADATA)
@@ -223,19 +289,38 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       None
     }
 
-    ReplaceDataProjections(rowProjection, metadataProjection)
+    ReplaceDataProjections(rowProjection, updateRowProjection, metadataProjection)
   }
 
   protected def buildWriteDeltaProjections(
       plan: LogicalPlan,
       rowAttrs: Seq[Attribute],
       rowIdAttrs: Seq[Attribute],
-      metadataAttrs: Seq[Attribute]): WriteDeltaProjections = {
+      metadataAttrs: Seq[Attribute],
+      updateRowAttrs: Seq[Attribute] = Nil): WriteDeltaProjections = {
     val outputs = extractOutputs(plan)
 
-    val rowProjection = if (rowAttrs.nonEmpty) {
+    // When updateRowAttrs is non-empty, the row projection covers INSERT-shaped rows only and a
+    // separate updateRowProjection handles UPDATE/COPY/REINSERT-shaped rows.
+    val rowProjection = if (updateRowAttrs.nonEmpty) {
+      val outputsForInsert = filterOutputs(outputs,
+        OPERATIONS_WITH_ROW -- Set(UPDATE_OPERATION, COPY_OPERATION, REINSERT_OPERATION))
+      if (outputsForInsert.isEmpty) {
+        Some(ProjectingInternalRow(StructType(Nil), Nil))
+      } else {
+        Some(newLazyProjection(plan, outputsForInsert, rowAttrs))
+      }
+    } else if (rowAttrs.nonEmpty) {
       val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
       Some(newLazyProjection(plan, outputsWithRow, rowAttrs))
+    } else {
+      None
+    }
+
+    val updateRowProjection = if (updateRowAttrs.nonEmpty) {
+      val outputsForUpdate = filterOutputs(outputs,
+        Set(UPDATE_OPERATION, COPY_OPERATION, REINSERT_OPERATION))
+      Some(newLazyProjection(plan, outputsForUpdate, updateRowAttrs))
     } else {
       None
     }
@@ -250,7 +335,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       None
     }
 
-    WriteDeltaProjections(rowProjection, rowIdProjection, metadataProjection)
+    WriteDeltaProjections(rowProjection, updateRowProjection, rowIdProjection, metadataProjection)
   }
 
   private def extractOutputs(plan: LogicalPlan): Seq[Seq[Expression]] = {
