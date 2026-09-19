@@ -30,7 +30,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.EXIT_EXCEPTION_ANNOTATION
 import org.apache.spark.deploy.k8s.Fabric8Aliases.PODS
-import org.apache.spark.internal.config.STRING_REDACTION_PATTERN
+import org.apache.spark.internal.config.{STRING_REDACTION_PATTERN, SUBMIT_DEPLOY_MODE}
 import org.apache.spark.util.Utils
 
 class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
@@ -98,5 +98,19 @@ class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
     val annotation = podCaptor.getValue.getMetadata.getAnnotations.get(EXIT_EXCEPTION_ANNOTATION)
     assert(!annotation.contains("mySecret"))
     assert(annotation.contains(Utils.REDACTION_REPLACEMENT_TEXT))
+  }
+
+  test("SPARK-59656: setDiagnostics should not patch any pod in cluster mode submission") {
+    val diagnostics = new Throwable("Fake submission failure")
+    val conf = new SparkConf()
+      .set(KUBERNETES_DRIVER_MASTER_URL, k8sClusterManagerUrl)
+      .set(KUBERNETES_NAMESPACE, namespace)
+      .set(KUBERNETES_DRIVER_POD_NAME, driverPodName)
+      .set(SUBMIT_DEPLOY_MODE, "cluster")
+
+    setter.setDiagnostics(diagnostics, conf)
+
+    verify(clientProvider, never()).create(any(classOf[SparkConf]))
+    verifyNoInteractions(driverPodOperations)
   }
 }
