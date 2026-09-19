@@ -56,10 +56,18 @@ try:
     except ImportError:
         extension_float_dtypes_available = False
 
+    try:
+        from pandas import ArrowDtype
+
+        extension_arrow_dtypes_available = True
+    except ImportError:
+        extension_arrow_dtypes_available = False
+
 except ImportError:
     extension_dtypes_available = False
     extension_object_dtypes_available = False
     extension_float_dtypes_available = False
+    extension_arrow_dtypes_available = False
     extension_dtypes = ()
 
 import pyarrow as pa
@@ -253,6 +261,10 @@ def as_spark_type(
             elif isinstance(tpe, Float64Dtype) or (isinstance(tpe, str) and tpe == "Float64"):
                 return types.DoubleType()
 
+        # PyArrow-backed ArrowDtype
+        if extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype):
+            return from_arrow_type(tpe.pyarrow_dtype, prefer_timestamp_ntz)
+
     if raise_error:
         raise TypeError("Type %s was not understood." % tpe)
     else:
@@ -260,9 +272,15 @@ def as_spark_type(
 
 
 def spark_type_to_pandas_dtype(
-    spark_type: types.DataType, *, use_extension_dtypes: bool = False
+    spark_type: types.DataType,
+    *,
+    use_extension_dtypes: bool = False,
+    use_arrow_dtypes: bool = False,
 ) -> Dtype:
     """Return the given Spark DataType to pandas dtype."""
+
+    if use_arrow_dtypes and extension_arrow_dtypes_available:
+        return ArrowDtype(to_arrow_type(spark_type))
 
     if use_extension_dtypes and extension_dtypes_available:
         # IntegralType
@@ -335,14 +353,30 @@ def spark_type_to_pandas_dtype(
 def is_str_dtype(tpe: Dtype) -> bool:
     if LooseVersion(pd.__version__) < "3.0.0":
         return False
+    if extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype):
+        pyarrow_type = tpe.pyarrow_dtype
+        if pa.types.is_string(pyarrow_type) or pa.types.is_large_string(pyarrow_type):
+            return True
     if extension_object_dtypes_available:
         return isinstance(tpe, StringDtype) and tpe.na_value is np.nan
+    return False
+
+
+def is_pyarrow_backed_dtype(tpe: Dtype) -> bool:
+    """Return whether the given dtype is a PyArrow-backed dtype."""
+    if extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype):
+        return True
+    if extension_object_dtypes_available and isinstance(tpe, StringDtype):
+        storage = getattr(tpe, "storage", None)
+        return isinstance(storage, str) and storage.startswith("pyarrow")
     return False
 
 
 def handle_dtype_as_extension_dtype(tpe: Dtype) -> bool:
     if is_str_dtype(tpe):
         return False
+    elif extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype):
+        return True
     else:
         return isinstance(tpe, extension_dtypes)
 
