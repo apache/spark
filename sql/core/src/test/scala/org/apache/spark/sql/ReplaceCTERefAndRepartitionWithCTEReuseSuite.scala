@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.optimizer.{ReplaceCTERefWithRepartition, ReplaceRepartitionWithCTEReuse}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -29,7 +28,6 @@ import org.apache.spark.sql.types.IntegerType
 
 class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     extends QueryTest with SharedSparkSession {
-  import testImplicits._
 
   private val cteReuseConfKey = "spark.sql.optimizer.replaceCTERefWithCTEReuse.enabled"
 

@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 
 
-import org.apache.spark.sql.execution.{BaseSubqueryExec, ReusedSubqueryExec, SparkPlan}
+import org.apache.spark.sql.execution.{BaseSubqueryExec, ReusedSubqueryExec}
 import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -38,7 +38,7 @@ class CTEReuseWithoutAQESuite
 
   private def withCTEReuseNoAQE(f: => Unit): Unit = {
     withSQLConf(
-      cteReuseConf.key -> "true",
+      cteReuseConf -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false"
     )(f)
   }

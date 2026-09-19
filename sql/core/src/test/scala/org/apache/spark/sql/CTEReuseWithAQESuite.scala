@@ -41,7 +41,7 @@ class CTEReuseWithAQESuite
 
   private def withCTEReuseEnabled(f: => Unit): Unit = {
     withSQLConf(
-      cteReuseConf.key -> "true",
+      cteReuseConf -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true"
     )(f)
   }
