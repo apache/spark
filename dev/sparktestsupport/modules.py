@@ -23,6 +23,7 @@ from functools import total_ordering
 from pathlib import Path, PurePath
 
 all_modules = []
+all_modules_for_file_detection = []
 
 # These are `pathlib.PurePath` glob-style patterns with some customization:
 #   - Bare patterns match a file name at any depth.
@@ -105,10 +106,10 @@ def is_ignored_file(filename: str) -> bool:
 @total_ordering
 class Module(object):
     """
-    A module is the basic abstraction in our test runner script. Each module consists of a set
-    of source files, a set of test commands, and a set of dependencies on other modules. We use
-    modules to define a dependency graph that let us determine which tests to run based on which
-    files have changed.
+    A module is the basic abstraction in our test runner script. Each module owns a set of files,
+    may define test commands, and declares its dependencies on other modules. We use modules to
+    define a dependency graph that lets us determine which tests to run based on which files have
+    changed.
     """
 
     def __init__(
@@ -124,6 +125,7 @@ class Module(object):
         test_tags=(),
         should_run_r_tests=False,
         should_run_build_tests=False,
+        _is_internal=False,
     ):
         """
         Define a new module.
@@ -159,11 +161,14 @@ class Module(object):
         self.test_tags = test_tags
         self.should_run_r_tests = should_run_r_tests
         self.should_run_build_tests = should_run_build_tests
+        self.is_internal = _is_internal
 
         self.dependent_modules = set()
-        for dep in dependencies:
+        for dep in self.dependencies:
             dep.dependent_modules.add(self)
-        all_modules.append(self)
+        all_modules_for_file_detection.append(self)
+        if not _is_internal:
+            all_modules.append(self)
 
     def contains_file(self, filename):
         return any(re.match(p, filename) for p in self.source_file_prefixes)
@@ -174,10 +179,9 @@ class Module(object):
 
         Return True if it is a test file and is not included in the module.
         """
-        path = Path(filename)
-        last_part = path.parts[-1]
-        if not re.match(r"test_.*\.py", last_part):
+        if not _is_python_test_file(filename):
             return False
+        path = Path(filename)
         module_path = ".".join(path.parts)[:-3]  # Remove the ".py" suffix
         return not any(module_path.endswith(test) for test in self.python_test_goals)
 
@@ -197,6 +201,92 @@ class Module(object):
         return hash(self.name)
 
 
+def _is_python_test_file(filename):
+    return re.match(r"test_.*\.py$", Path(filename).name) is not None
+
+
+class SourceModule(Module):
+    """An internal graph node containing production source files but no runnable tests."""
+
+    def __init__(self, name, dependencies, source_file_regexes):
+        super().__init__(
+            name=name,
+            dependencies=dependencies,
+            source_file_regexes=source_file_regexes,
+            _is_internal=True,
+        )
+
+
+class TestModule(Module):
+    """
+    A public graph node containing test files and their runnable test goals.
+
+    Dependencies may contain both source modules and other test modules. A dependency on another
+    test module means changes to those tests also trigger this module.
+
+    Spark SQL tests, for example, depend on their source module and the Catalyst tests:
+    >>> spark_sql in spark_sql_test.dependencies
+    True
+    >>> catalyst_test in spark_sql_test.dependencies
+    True
+    """
+
+    def __init__(
+        self,
+        name,
+        dependencies,
+        test_file_regexes,
+        build_profile_flags=(),
+        environ=None,
+        sbt_test_goals=(),
+        python_test_goals=(),
+        excluded_python_implementations=(),
+        test_tags=(),
+        should_run_r_tests=False,
+        should_run_build_tests=False,
+    ):
+        super().__init__(
+            name=name,
+            dependencies=dependencies,
+            source_file_regexes=test_file_regexes,
+            build_profile_flags=build_profile_flags,
+            environ=environ,
+            sbt_test_goals=sbt_test_goals,
+            python_test_goals=python_test_goals,
+            excluded_python_implementations=excluded_python_implementations,
+            test_tags=test_tags,
+            should_run_r_tests=should_run_r_tests,
+            should_run_build_tests=should_run_build_tests,
+        )
+
+
+class PythonTestModule(TestModule):
+    """A test module whose test files are listed by its Python test goals."""
+
+    def __init__(self, python_test_goals=(), **kwargs):
+        test_file_regexes = [
+            re.escape(f"python/{goal.replace('.', '/')}.py") + "$"
+            for goal in python_test_goals
+            if goal.rsplit(".", 1)[-1].startswith("test_")
+        ]
+        super().__init__(
+            python_test_goals=python_test_goals,
+            test_file_regexes=test_file_regexes,
+            **kwargs,
+        )
+
+
+def _source_file_regexes(*file_regexes):
+    return [
+        rf"(?!.*(?:^|/)src/test(?:/|$))(?!.*(?:^|/)test_.*\.py$){file_regex}"
+        for file_regex in file_regexes
+    ]
+
+
+def _jvm_test_file_regexes(*file_regexes):
+    return [rf"(?={file_regex})(?=.*(?:^|/)src/test(?:/|$))" for file_regex in file_regexes]
+
+
 tags = Module(
     name="tags",
     dependencies=[],
@@ -205,140 +295,200 @@ tags = Module(
     ],
 )
 
-utils_java = Module(
-    name="utils-java",
+utils_java = SourceModule(
+    name="utils-java-source",
     dependencies=[tags],
-    source_file_regexes=[
-        "common/utils-java/",
-    ],
+    source_file_regexes=_source_file_regexes("common/utils-java/"),
+)
+
+utils_java_test = TestModule(
+    name="utils-java",
+    dependencies=[utils_java, tags],
+    test_file_regexes=_jvm_test_file_regexes("common/utils-java/"),
     sbt_test_goals=[
         "common-utils-java/test",
     ],
 )
 
-utils = Module(
-    name="utils",
+utils = SourceModule(
+    name="utils-source",
     dependencies=[tags, utils_java],
-    source_file_regexes=[
-        "common/utils/",
-    ],
+    source_file_regexes=_source_file_regexes("common/utils/"),
+)
+
+utils_test = TestModule(
+    name="utils",
+    dependencies=[utils, tags, utils_java_test],
+    test_file_regexes=_jvm_test_file_regexes("common/utils/"),
     sbt_test_goals=[
         "common-utils/test",
     ],
 )
 
-kvstore = Module(
-    name="kvstore",
+kvstore = SourceModule(
+    name="kvstore-source",
     dependencies=[tags],
-    source_file_regexes=[
-        "common/kvstore/",
-    ],
+    source_file_regexes=_source_file_regexes("common/kvstore/"),
+)
+
+kvstore_test = TestModule(
+    name="kvstore",
+    dependencies=[kvstore, tags],
+    test_file_regexes=_jvm_test_file_regexes("common/kvstore/"),
     sbt_test_goals=[
         "kvstore/test",
     ],
 )
 
-network_common = Module(
-    name="network-common",
+network_common = SourceModule(
+    name="network-common-source",
     dependencies=[tags, utils_java],
-    source_file_regexes=[
-        "common/network-common/",
-    ],
+    source_file_regexes=_source_file_regexes("common/network-common/"),
+)
+
+network_common_test = TestModule(
+    name="network-common",
+    dependencies=[network_common, tags, utils_java_test],
+    test_file_regexes=_jvm_test_file_regexes("common/network-common/"),
     sbt_test_goals=[
         "network-common/test",
     ],
 )
 
-network_shuffle = Module(
-    name="network-shuffle",
+network_shuffle = SourceModule(
+    name="network-shuffle-source",
     dependencies=[tags],
-    source_file_regexes=[
-        "common/network-shuffle/",
-    ],
+    source_file_regexes=_source_file_regexes("common/network-shuffle/"),
+)
+
+network_shuffle_test = TestModule(
+    name="network-shuffle",
+    dependencies=[network_shuffle, tags],
+    test_file_regexes=_jvm_test_file_regexes("common/network-shuffle/"),
     sbt_test_goals=[
         "network-shuffle/test",
     ],
 )
 
-unsafe = Module(
-    name="unsafe",
+unsafe = SourceModule(
+    name="unsafe-source",
     dependencies=[tags, utils],
-    source_file_regexes=[
-        "common/unsafe",
-    ],
+    source_file_regexes=_source_file_regexes("common/unsafe"),
+)
+
+unsafe_test = TestModule(
+    name="unsafe",
+    dependencies=[unsafe, tags, utils_test],
+    test_file_regexes=_jvm_test_file_regexes("common/unsafe"),
     sbt_test_goals=[
         "unsafe/test",
     ],
 )
 
-launcher = Module(
-    name="launcher",
+launcher = SourceModule(
+    name="launcher-source",
     dependencies=[tags],
-    source_file_regexes=[
-        "launcher/",
-    ],
+    source_file_regexes=_source_file_regexes("launcher/"),
+)
+
+launcher_test = TestModule(
+    name="launcher",
+    dependencies=[launcher, tags],
+    test_file_regexes=_jvm_test_file_regexes("launcher/"),
     sbt_test_goals=[
         "launcher/test",
     ],
 )
 
-sketch = Module(
-    name="sketch",
+sketch = SourceModule(
+    name="sketch-source",
     dependencies=[tags],
-    source_file_regexes=[
-        "common/sketch/",
-    ],
+    source_file_regexes=_source_file_regexes("common/sketch/"),
+)
+
+sketch_test = TestModule(
+    name="sketch",
+    dependencies=[sketch, tags],
+    test_file_regexes=_jvm_test_file_regexes("common/sketch/"),
     sbt_test_goals=["sketch/test"],
 )
 
-variant = Module(
-    name="variant",
+variant = SourceModule(
+    name="variant-source",
     dependencies=[tags],
-    source_file_regexes=[
-        "common/variant/",
-    ],
+    source_file_regexes=_source_file_regexes("common/variant/"),
+)
+
+variant_test = TestModule(
+    name="variant",
+    dependencies=[variant, tags],
+    test_file_regexes=_jvm_test_file_regexes("common/variant/"),
     sbt_test_goals=["variant/test"],
 )
 
-udf_worker = Module(
-    name="udf-worker",
+udf_worker = SourceModule(
+    name="udf-worker-source",
     dependencies=[tags],
-    source_file_regexes=[
-        "udf/worker/",
-    ],
+    source_file_regexes=_source_file_regexes("udf/worker/"),
+)
+
+udf_worker_test = TestModule(
+    name="udf-worker",
+    dependencies=[udf_worker, tags],
+    test_file_regexes=_jvm_test_file_regexes("udf/worker/"),
     sbt_test_goals=[
         "udf-worker-core/test",
     ],
 )
 
-core = Module(
-    name="core",
+core = SourceModule(
+    name="core-source",
     dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher, utils],
-    source_file_regexes=[
-        "core/",
+    source_file_regexes=_source_file_regexes("core/"),
+)
+
+core_test = TestModule(
+    name="core",
+    dependencies=[
+        core,
+        kvstore_test,
+        network_common_test,
+        network_shuffle_test,
+        unsafe_test,
+        launcher_test,
+        utils_test,
     ],
+    test_file_regexes=_jvm_test_file_regexes("core/"),
     sbt_test_goals=[
         "core/test",
     ],
 )
 
-api = Module(
-    name="api",
+api = SourceModule(
+    name="api-source",
     dependencies=[utils, unsafe],
-    source_file_regexes=[
-        "sql/api/",
-    ],
+    source_file_regexes=_source_file_regexes("sql/api/"),
+)
+
+api_test = TestModule(
+    name="api",
+    dependencies=[api, utils_test, unsafe_test],
+    test_file_regexes=_jvm_test_file_regexes("sql/api/"),
     sbt_test_goals=[
         "sql-api/test",
     ],
 )
 
-catalyst = Module(
-    name="catalyst",
+catalyst = SourceModule(
+    name="catalyst-source",
     dependencies=[tags, sketch, variant, core, api],
-    source_file_regexes=[
-        "sql/catalyst/",
-    ],
+    source_file_regexes=_source_file_regexes("sql/catalyst/"),
+)
+
+catalyst_test = TestModule(
+    name="catalyst",
+    dependencies=[catalyst, tags, sketch_test, variant_test, core_test, api_test],
+    test_file_regexes=_jvm_test_file_regexes("sql/catalyst/"),
     sbt_test_goals=[
         "catalyst/test",
     ],
@@ -347,13 +497,19 @@ catalyst = Module(
     ),
 )
 
-sql = Module(
-    name="sql",
+spark_sql = SourceModule(
+    name="sql-source",
     dependencies=[catalyst],
-    source_file_regexes=[
+    source_file_regexes=_source_file_regexes(
         "sql/core/",
         "python/pyspark/sql/worker/",  # analyze_udtf is invoked and tested in JVM
-    ],
+    ),
+)
+
+spark_sql_test = TestModule(
+    name="sql",
+    dependencies=[spark_sql, catalyst_test],
+    test_file_regexes=_jvm_test_file_regexes("sql/core/"),
     sbt_test_goals=[
         "sql/test",
     ],
@@ -362,13 +518,19 @@ sql = Module(
     ),
 )
 
-hive = Module(
-    name="hive",
-    dependencies=[sql],
-    source_file_regexes=[
+hive = SourceModule(
+    name="hive-source",
+    dependencies=[spark_sql],
+    source_file_regexes=_source_file_regexes(
         "sql/hive/",
         "bin/spark-sql",
-    ],
+    ),
+)
+
+hive_test = TestModule(
+    name="hive",
+    dependencies=[hive, spark_sql_test],
+    test_file_regexes=_jvm_test_file_regexes("sql/hive/"),
     build_profile_flags=[
         "-Phive",
     ],
@@ -378,24 +540,34 @@ hive = Module(
     test_tags=["org.apache.spark.tags.ExtendedHiveTest"],
 )
 
-repl = Module(
-    name="repl",
+repl = SourceModule(
+    name="repl-source",
     dependencies=[hive],
-    source_file_regexes=[
-        "repl/",
-    ],
+    source_file_regexes=_source_file_regexes("repl/"),
+)
+
+repl_test = TestModule(
+    name="repl",
+    dependencies=[repl, hive_test],
+    test_file_regexes=_jvm_test_file_regexes("repl/"),
     sbt_test_goals=[
         "repl/test",
     ],
 )
 
-hive_thriftserver = Module(
-    name="hive-thriftserver",
+hive_thriftserver = SourceModule(
+    name="hive-thriftserver-source",
     dependencies=[hive],
-    source_file_regexes=[
+    source_file_regexes=_source_file_regexes(
         "sql/hive-thriftserver",
         "sbin/start-thriftserver.sh",
-    ],
+    ),
+)
+
+hive_thriftserver_test = TestModule(
+    name="hive-thriftserver",
+    dependencies=[hive_thriftserver, hive_test],
+    test_file_regexes=_jvm_test_file_regexes("sql/hive-thriftserver"),
     build_profile_flags=[
         "-Phive-thriftserver",
     ],
@@ -404,23 +576,31 @@ hive_thriftserver = Module(
     ],
 )
 
-avro = Module(
+avro = SourceModule(
+    name="avro-source",
+    dependencies=[spark_sql],
+    source_file_regexes=_source_file_regexes("connector/avro"),
+)
+
+avro_test = TestModule(
     name="avro",
-    dependencies=[sql],
-    source_file_regexes=[
-        "connector/avro",
-    ],
+    dependencies=[avro, spark_sql_test],
+    test_file_regexes=_jvm_test_file_regexes("connector/avro"),
     sbt_test_goals=[
         "avro/test",
     ],
 )
 
-sql_kafka = Module(
+sql_kafka = SourceModule(
+    name="sql-kafka-0-10-source",
+    dependencies=[spark_sql],
+    source_file_regexes=_source_file_regexes("connector/kafka-0-10-sql"),
+)
+
+sql_kafka_test = TestModule(
     name="sql-kafka-0-10",
-    dependencies=[sql],
-    source_file_regexes=[
-        "connector/kafka-0-10-sql",
-    ],
+    dependencies=[sql_kafka, spark_sql_test],
+    test_file_regexes=_jvm_test_file_regexes("connector/kafka-0-10-sql"),
     sbt_test_goals=[
         "sql-kafka-0-10/test",
     ],
@@ -435,32 +615,44 @@ profiler = Module(
     ],
 )
 
-protobuf = Module(
+protobuf = SourceModule(
+    name="protobuf-source",
+    dependencies=[spark_sql],
+    source_file_regexes=_source_file_regexes("connector/protobuf"),
+)
+
+protobuf_test = TestModule(
     name="protobuf",
-    dependencies=[sql],
-    source_file_regexes=[
-        "connector/protobuf",
-    ],
+    dependencies=[protobuf, spark_sql_test],
+    test_file_regexes=_jvm_test_file_regexes("connector/protobuf"),
     sbt_test_goals=[
         "protobuf/test",
     ],
 )
 
-graphx = Module(
-    name="graphx",
+graphx = SourceModule(
+    name="graphx-source",
     dependencies=[tags, core],
-    source_file_regexes=[
-        "graphx/",
-    ],
+    source_file_regexes=_source_file_regexes("graphx/"),
+)
+
+graphx_test = TestModule(
+    name="graphx",
+    dependencies=[graphx, tags, core_test],
+    test_file_regexes=_jvm_test_file_regexes("graphx/"),
     sbt_test_goals=["graphx/test"],
 )
 
-streaming = Module(
-    name="streaming",
+streaming = SourceModule(
+    name="streaming-source",
     dependencies=[tags, core],
-    source_file_regexes=[
-        "streaming",
-    ],
+    source_file_regexes=_source_file_regexes("streaming"),
+)
+
+streaming_test = TestModule(
+    name="streaming",
+    dependencies=[streaming, tags, core_test],
+    test_file_regexes=_jvm_test_file_regexes("streaming"),
     sbt_test_goals=[
         "streaming/test",
     ],
@@ -471,13 +663,22 @@ streaming = Module(
 # Kinesis tests depends on external Amazon kinesis service. We should run these tests only when
 # files in streaming_kinesis_asl are changed, so that if Kinesis experiences an outage, we don't
 # fail other PRs.
-streaming_kinesis_asl = Module(
-    name="streaming-kinesis-asl",
+streaming_kinesis_asl = SourceModule(
+    name="streaming-kinesis-asl-source",
     dependencies=[tags, core],
-    source_file_regexes=[
+    source_file_regexes=_source_file_regexes(
         "connector/kinesis-asl/",
         "connector/kinesis-asl-assembly/",
-    ],
+    ),
+)
+
+streaming_kinesis_asl_test = TestModule(
+    name="streaming-kinesis-asl",
+    dependencies=[streaming_kinesis_asl, tags, core_test],
+    test_file_regexes=_jvm_test_file_regexes(
+        "connector/kinesis-asl/",
+        "connector/kinesis-asl-assembly/",
+    ),
     build_profile_flags=[
         "-Pkinesis-asl",
     ],
@@ -488,13 +689,22 @@ streaming_kinesis_asl = Module(
 )
 
 
-credential_aws = Module(
-    name="credential-aws",
+credential_aws = SourceModule(
+    name="credential-aws-source",
     dependencies=[tags, core],
-    source_file_regexes=[
+    source_file_regexes=_source_file_regexes(
         "connector/credential-aws/",
         "connector/credential-aws-integration-tests/",
-    ],
+    ),
+)
+
+credential_aws_test = TestModule(
+    name="credential-aws",
+    dependencies=[credential_aws, tags, core_test],
+    test_file_regexes=_jvm_test_file_regexes(
+        "connector/credential-aws/",
+        "connector/credential-aws-integration-tests/",
+    ),
     build_profile_flags=[
         "-Pcredential-aws",
     ],
@@ -504,58 +714,88 @@ credential_aws = Module(
 )
 
 
-streaming_kafka_0_10 = Module(
-    name="streaming-kafka-0-10",
+streaming_kafka_0_10 = SourceModule(
+    name="streaming-kafka-0-10-source",
     dependencies=[streaming, core],
-    source_file_regexes=[
+    source_file_regexes=_source_file_regexes(
         # The ending "/" is necessary otherwise it will include "sql-kafka" codes
         "connector/kafka-0-10/",
         "connector/kafka-0-10-assembly",
         "connector/kafka-0-10-token-provider",
-    ],
+    ),
+)
+
+streaming_kafka_0_10_test = TestModule(
+    name="streaming-kafka-0-10",
+    dependencies=[streaming_kafka_0_10, streaming_test, core_test],
+    test_file_regexes=_jvm_test_file_regexes(
+        "connector/kafka-0-10/",
+        "connector/kafka-0-10-assembly",
+        "connector/kafka-0-10-token-provider",
+    ),
     sbt_test_goals=["streaming-kafka-0-10/test", "token-provider-kafka-0-10/test"],
 )
 
 
-mllib_local = Module(
-    name="mllib-local",
+mllib_local = SourceModule(
+    name="mllib-local-source",
     dependencies=[tags, core],
-    source_file_regexes=[
-        "mllib-local",
-    ],
+    source_file_regexes=_source_file_regexes("mllib-local"),
+)
+
+mllib_local_test = TestModule(
+    name="mllib-local",
+    dependencies=[mllib_local, tags, core_test],
+    test_file_regexes=_jvm_test_file_regexes("mllib-local"),
     sbt_test_goals=[
         "mllib-local/test",
     ],
 )
 
 
-mllib = Module(
-    name="mllib",
-    dependencies=[mllib_local, streaming, sql],
-    source_file_regexes=[
+mllib = SourceModule(
+    name="mllib-source",
+    dependencies=[mllib_local, streaming, spark_sql],
+    source_file_regexes=_source_file_regexes(
         "data/mllib/",
         "mllib/",
-    ],
+    ),
+)
+
+mllib_test = TestModule(
+    name="mllib",
+    dependencies=[mllib, mllib_local_test, streaming_test, spark_sql_test],
+    test_file_regexes=_jvm_test_file_regexes("mllib/"),
     sbt_test_goals=[
         "mllib/test",
     ],
 )
 
-pipelines = Module(
+pipelines = SourceModule(
+    name="pipelines-source",
+    dependencies=[spark_sql],
+    source_file_regexes=_source_file_regexes("sql/pipelines"),
+)
+
+pipelines_test = TestModule(
     name="pipelines",
-    dependencies=[sql],
-    source_file_regexes=["sql/pipelines"],
+    dependencies=[pipelines, spark_sql_test],
+    test_file_regexes=_jvm_test_file_regexes("sql/pipelines"),
     sbt_test_goals=[
         "pipelines/test",
     ],
 )
 
-connect = Module(
-    name="connect",
+connect = SourceModule(
+    name="connect-source",
     dependencies=[hive, avro, protobuf, mllib],
-    source_file_regexes=[
-        "sql/connect",
-    ],
+    source_file_regexes=_source_file_regexes("sql/connect"),
+)
+
+connect_test = TestModule(
+    name="connect",
+    dependencies=[connect, hive_test, avro_test, protobuf_test, mllib_test],
+    test_file_regexes=_jvm_test_file_regexes("sql/connect"),
     sbt_test_goals=[
         "connect/test",
         "connect-client-jvm/test",
@@ -563,21 +803,32 @@ connect = Module(
     ],
 )
 
-examples = Module(
-    name="examples",
+examples = SourceModule(
+    name="examples-source",
     dependencies=[graphx, mllib, streaming, hive],
-    source_file_regexes=[
-        "examples/",
-    ],
+    source_file_regexes=_source_file_regexes("examples/"),
+)
+
+examples_test = TestModule(
+    name="examples",
+    dependencies=[examples, graphx_test, mllib_test, streaming_test, hive_test],
+    test_file_regexes=_jvm_test_file_regexes("examples/"),
     sbt_test_goals=[
         "examples/test",
     ],
 )
 
-pyspark_core = Module(
-    name="pyspark-core",
+pyspark_core = SourceModule(
+    name="pyspark-core-source",
     dependencies=[core],
-    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
+    source_file_regexes=_source_file_regexes(
+        "python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"
+    ),
+)
+
+pyspark_core_test = PythonTestModule(
+    name="pyspark-core",
+    dependencies=[pyspark_core],
     python_test_goals=[
         # doctests
         "pyspark.conf",
@@ -635,10 +886,15 @@ pyspark_core = Module(
     ],
 )
 
-pyspark_sql = Module(
-    name="pyspark-sql",
+pyspark_sql = SourceModule(
+    name="pyspark-sql-source",
     dependencies=[pyspark_core, hive, avro, protobuf],
-    source_file_regexes=["python/pyspark/sql"],
+    source_file_regexes=_source_file_regexes("python/pyspark/sql"),
+)
+
+pyspark_sql_test = PythonTestModule(
+    name="pyspark-sql",
+    dependencies=[pyspark_sql],
     python_test_goals=[
         # doctests
         "pyspark.sql.types",
@@ -754,10 +1010,15 @@ pyspark_sql = Module(
     ],
 )
 
-pyspark_testing = Module(
-    name="pyspark-testing",
+pyspark_testing = SourceModule(
+    name="pyspark-testing-source",
     dependencies=[pyspark_core, pyspark_sql],
-    source_file_regexes=["python/pyspark/testing"],
+    source_file_regexes=_source_file_regexes("python/pyspark/testing"),
+)
+
+pyspark_testing_test = PythonTestModule(
+    name="pyspark-testing",
+    dependencies=[pyspark_testing],
     python_test_goals=[
         # doctests
         "pyspark.testing.utils",
@@ -774,10 +1035,15 @@ pyspark_testing = Module(
     ],
 )
 
-pyspark_resource = Module(
-    name="pyspark-resource",
+pyspark_resource = SourceModule(
+    name="pyspark-resource-source",
     dependencies=[pyspark_core],
-    source_file_regexes=["python/pyspark/resource"],
+    source_file_regexes=_source_file_regexes("python/pyspark/resource"),
+)
+
+pyspark_resource_test = PythonTestModule(
+    name="pyspark-resource",
+    dependencies=[pyspark_resource],
     python_test_goals=[
         # doctests
         "pyspark.resource.profile",
@@ -788,10 +1054,15 @@ pyspark_resource = Module(
 )
 
 
-pyspark_streaming = Module(
-    name="pyspark-streaming",
+pyspark_streaming = SourceModule(
+    name="pyspark-streaming-source",
     dependencies=[pyspark_core, streaming, streaming_kinesis_asl],
-    source_file_regexes=["python/pyspark/streaming"],
+    source_file_regexes=_source_file_regexes("python/pyspark/streaming"),
+)
+
+pyspark_streaming_test = PythonTestModule(
+    name="pyspark-streaming",
+    dependencies=[pyspark_streaming],
     python_test_goals=[
         # doctests
         "pyspark.streaming.util",
@@ -804,14 +1075,19 @@ pyspark_streaming = Module(
 )
 
 
-pyspark_structured_streaming = Module(
-    name="pyspark-structured-streaming",
+pyspark_structured_streaming = SourceModule(
+    name="pyspark-structured-streaming-source",
     dependencies=[pyspark_core, pyspark_streaming, pyspark_sql, sql_kafka],
-    source_file_regexes=[
+    source_file_regexes=_source_file_regexes(
         "python/pyspark/sql/streaming",
         "python/pyspark/sql/pandas",
         "python/pyspark/sql/worker",
-    ],
+    ),
+)
+
+pyspark_structured_streaming_test = PythonTestModule(
+    name="pyspark-structured-streaming",
+    dependencies=[pyspark_structured_streaming],
     python_test_goals=[
         # doctests
         "pyspark.sql.streaming.query",
@@ -829,7 +1105,8 @@ pyspark_structured_streaming = Module(
         "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state",
         "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_checkpoint_v2",
         "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable",
-        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable_checkpoint_v2",
+        "pyspark.sql.tests.pandas.streaming."
+        "test_pandas_transform_with_state_state_variable_checkpoint_v2",
         "pyspark.sql.tests.pandas.streaming.test_transform_with_state",
         "pyspark.sql.tests.pandas.streaming.test_transform_with_state_checkpoint_v2",
         "pyspark.sql.tests.pandas.streaming.test_transform_with_state_state_variable",
@@ -838,10 +1115,15 @@ pyspark_structured_streaming = Module(
     ],
 )
 
-pyspark_mllib = Module(
-    name="pyspark-mllib",
+pyspark_mllib = SourceModule(
+    name="pyspark-mllib-source",
     dependencies=[pyspark_core, pyspark_streaming, pyspark_sql, mllib],
-    source_file_regexes=["python/pyspark/mllib"],
+    source_file_regexes=_source_file_regexes("python/pyspark/mllib"),
+)
+
+pyspark_mllib_test = PythonTestModule(
+    name="pyspark-mllib",
+    dependencies=[pyspark_mllib],
     python_test_goals=[
         # doctests
         "pyspark.mllib.classification",
@@ -869,10 +1151,15 @@ pyspark_mllib = Module(
 )
 
 
-pyspark_ml = Module(
-    name="pyspark-ml",
+pyspark_ml = SourceModule(
+    name="pyspark-ml-source",
     dependencies=[pyspark_core, pyspark_mllib],
-    source_file_regexes=["python/pyspark/ml/"],
+    source_file_regexes=_source_file_regexes("python/pyspark/ml/"),
+)
+
+pyspark_ml_test = PythonTestModule(
+    name="pyspark-ml",
+    dependencies=[pyspark_ml],
     python_test_goals=[
         # doctests
         "pyspark.ml.classification",
@@ -931,27 +1218,37 @@ pyspark_ml = Module(
     ],
 )
 
-pyspark_install = Module(
-    name="pyspark-install",
+pyspark_install = SourceModule(
+    name="pyspark-install-source",
     dependencies=[],
-    source_file_regexes=[
+    source_file_regexes=_source_file_regexes(
         # Python package tests will be triggered with this module
         # Any changes in python/ should trigger this module
         # This module won't be executed for post-commit CIs so it's cheap
         "python/",
         "python/pyspark/install.py",
         "python/pyspark/tests/test_install_spark.py",
-    ],
+    ),
+)
+
+pyspark_install_test = PythonTestModule(
+    name="pyspark-install",
+    dependencies=[pyspark_install],
     python_test_goals=[
         "pyspark.tests.test_import_spark",
         "pyspark.tests.test_install_spark",
     ],
 )
 
-pyspark_pandas = Module(
-    name="pyspark-pandas",
+pyspark_pandas = SourceModule(
+    name="pyspark-pandas-source",
     dependencies=[pyspark_core, pyspark_sql],
-    source_file_regexes=["python/pyspark/pandas/"],
+    source_file_regexes=_source_file_regexes("python/pyspark/pandas/"),
+)
+
+pyspark_pandas_test = PythonTestModule(
+    name="pyspark-pandas",
+    dependencies=[pyspark_pandas],
     python_test_goals=[
         # doctests
         "pyspark.pandas.accessors",
@@ -1117,10 +1414,9 @@ pyspark_pandas = Module(
     ],
 )
 
-pyspark_pandas_slow = Module(
+pyspark_pandas_slow_test = PythonTestModule(
     name="pyspark-pandas-slow",
-    dependencies=[pyspark_core, pyspark_sql],
-    source_file_regexes=["python/pyspark/pandas/"],
+    dependencies=[pyspark_pandas],
     python_test_goals=[
         # doctests
         "pyspark.pandas.frame",
@@ -1250,12 +1546,15 @@ pyspark_pandas_slow = Module(
     ],
 )
 
-pyspark_connect = Module(
-    name="pyspark-connect",
+pyspark_connect = SourceModule(
+    name="pyspark-connect-source",
     dependencies=[pyspark_sql, connect],
-    source_file_regexes=[
-        "python/pyspark/sql/connect",
-    ],
+    source_file_regexes=_source_file_regexes("python/pyspark/sql/connect"),
+)
+
+pyspark_connect_test = PythonTestModule(
+    name="pyspark-connect",
+    dependencies=[pyspark_connect, pyspark_sql_test],
     python_test_goals=[
         # sql doctests
         "pyspark.sql.connect.catalog",
@@ -1363,11 +1662,12 @@ pyspark_connect = Module(
     ],
 )
 
-pyspark_structured_streaming_connect = Module(
+pyspark_structured_streaming_connect_test = PythonTestModule(
     name="pyspark-structured-streaming-connect",
-    dependencies=[pyspark_connect, pyspark_structured_streaming],
-    source_file_regexes=[
-        "python/pyspark/sql/connect",
+    dependencies=[
+        pyspark_connect,
+        pyspark_structured_streaming,
+        pyspark_structured_streaming_test,
     ],
     python_test_goals=[
         # unittests
@@ -1379,19 +1679,24 @@ pyspark_structured_streaming_connect = Module(
         "pyspark.sql.tests.connect.streaming.test_parity_foreach_batch",
         "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_grouped_map_with_state",
         "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state",
-        "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state_state_variable",
+        "pyspark.sql.tests.connect.pandas.streaming."
+        "test_parity_pandas_transform_with_state_state_variable",
         "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state",
-        "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state_state_variable",
+        "pyspark.sql.tests.connect.pandas.streaming."
+        "test_parity_transform_with_state_state_variable",
     ],
 )
 
 
-pyspark_ml_connect = Module(
-    name="pyspark-ml-connect",
+pyspark_ml_connect = SourceModule(
+    name="pyspark-ml-connect-source",
     dependencies=[pyspark_connect, pyspark_ml],
-    source_file_regexes=[
-        "python/pyspark/ml/connect",
-    ],
+    source_file_regexes=_source_file_regexes("python/pyspark/ml/connect"),
+)
+
+pyspark_ml_connect_test = PythonTestModule(
+    name="pyspark-ml-connect",
+    dependencies=[pyspark_ml_connect, pyspark_ml_test],
     python_test_goals=[
         # ml doctests
         "pyspark.ml.connect.functions",
@@ -1423,12 +1728,9 @@ pyspark_ml_connect = Module(
 )
 
 
-pyspark_pandas_connect = Module(
+pyspark_pandas_connect_test = PythonTestModule(
     name="pyspark-pandas-connect",
-    dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
-    source_file_regexes=[
-        "python/pyspark/pandas",
-    ],
+    dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_test, pyspark_pandas_slow_test],
     python_test_goals=[
         # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.test_parity_arrow_interface",
@@ -1566,12 +1868,9 @@ pyspark_pandas_connect = Module(
     ],
 )
 
-pyspark_pandas_slow_connect = Module(
+pyspark_pandas_slow_connect_test = PythonTestModule(
     name="pyspark-pandas-slow-connect",
-    dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
-    source_file_regexes=[
-        "python/pyspark/pandas",
-    ],
+    dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_test, pyspark_pandas_slow_test],
     python_test_goals=[
         # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.indexes.test_parity_default",
@@ -1698,12 +1997,15 @@ pyspark_pandas_slow_connect = Module(
 )
 
 
-pyspark_errors = Module(
-    name="pyspark-errors",
+pyspark_errors = SourceModule(
+    name="pyspark-errors-source",
     dependencies=[pyspark_core],
-    source_file_regexes=[
-        "python/pyspark/errors",
-    ],
+    source_file_regexes=_source_file_regexes("python/pyspark/errors"),
+)
+
+pyspark_errors_test = PythonTestModule(
+    name="pyspark-errors",
+    dependencies=[pyspark_errors],
     python_test_goals=[
         # unittests
         "pyspark.errors.tests.test_connect_errors_conversion",
@@ -1713,10 +2015,15 @@ pyspark_errors = Module(
     ],
 )
 
-pyspark_logger = Module(
-    name="pyspark-logger",
+pyspark_logger = SourceModule(
+    name="pyspark-logger-source",
     dependencies=[],
-    source_file_regexes=["python/pyspark/logger"],
+    source_file_regexes=_source_file_regexes("python/pyspark/logger"),
+)
+
+pyspark_logger_test = PythonTestModule(
+    name="pyspark-logger",
+    dependencies=[pyspark_logger],
     python_test_goals=[
         # doctests
         "pyspark.logger.logger",
@@ -1726,10 +2033,15 @@ pyspark_logger = Module(
     ],
 )
 
-pyspark_pipelines = Module(
-    name="pyspark-pipelines",
+pyspark_pipelines = SourceModule(
+    name="pyspark-pipelines-source",
     dependencies=[pyspark_core, pyspark_sql, pyspark_connect],
-    source_file_regexes=["python/pyspark/pipelines"],
+    source_file_regexes=_source_file_regexes("python/pyspark/pipelines"),
+)
+
+pyspark_pipelines_test = PythonTestModule(
+    name="pyspark-pipelines",
+    dependencies=[pyspark_pipelines],
     python_test_goals=[
         "pyspark.pipelines.tests.test_add_pipeline_analysis_context",
         "pyspark.pipelines.tests.test_auto_cdc_flow",
@@ -1772,13 +2084,22 @@ build = Module(
     should_run_build_tests=True,
 )
 
-yarn = Module(
-    name="yarn",
+yarn = SourceModule(
+    name="yarn-source",
     dependencies=[],
-    source_file_regexes=[
+    source_file_regexes=_source_file_regexes(
         "resource-managers/yarn/",
         "common/network-yarn/",
-    ],
+    ),
+)
+
+yarn_test = TestModule(
+    name="yarn",
+    dependencies=[yarn],
+    test_file_regexes=_jvm_test_file_regexes(
+        "resource-managers/yarn/",
+        "common/network-yarn/",
+    ),
     build_profile_flags=["-Pyarn"],
     sbt_test_goals=[
         "yarn/test",
@@ -1787,18 +2108,30 @@ yarn = Module(
     test_tags=["org.apache.spark.tags.ExtendedYarnTest"],
 )
 
-kubernetes = Module(
-    name="kubernetes",
+kubernetes = SourceModule(
+    name="kubernetes-source",
     dependencies=[],
-    source_file_regexes=["resource-managers/kubernetes"],
+    source_file_regexes=_source_file_regexes("resource-managers/kubernetes"),
+)
+
+kubernetes_test = TestModule(
+    name="kubernetes",
+    dependencies=[kubernetes],
+    test_file_regexes=_jvm_test_file_regexes("resource-managers/kubernetes"),
     build_profile_flags=["-Pkubernetes", "-Pvolcano"],
     sbt_test_goals=["kubernetes/test"],
 )
 
-hadoop_cloud = Module(
-    name="hadoop-cloud",
+hadoop_cloud = SourceModule(
+    name="hadoop-cloud-source",
     dependencies=[],
-    source_file_regexes=["hadoop-cloud"],
+    source_file_regexes=_source_file_regexes("hadoop-cloud"),
+)
+
+hadoop_cloud_test = TestModule(
+    name="hadoop-cloud",
+    dependencies=[hadoop_cloud],
+    test_file_regexes=_jvm_test_file_regexes("hadoop-cloud"),
     build_profile_flags=["-Phadoop-cloud"],
     sbt_test_goals=["hadoop-cloud/test"],
 )
@@ -1812,11 +2145,17 @@ spark_ganglia_lgpl = Module(
     ],
 )
 
-docker_integration_tests = Module(
+docker_integration_tests = SourceModule(
+    name="docker-integration-tests-source",
+    dependencies=[spark_sql],
+    source_file_regexes=_source_file_regexes("connector/docker-integration-tests"),
+)
+
+docker_integration_tests_test = TestModule(
     name="docker-integration-tests",
-    dependencies=[sql],
+    dependencies=[docker_integration_tests, spark_sql_test],
     build_profile_flags=["-Pdocker-integration-tests"],
-    source_file_regexes=["connector/docker-integration-tests"],
+    test_file_regexes=_jvm_test_file_regexes("connector/docker-integration-tests"),
     sbt_test_goals=["docker-integration-tests/test"],
     environ=(
         None if "GITHUB_ACTIONS" not in os.environ else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"}
