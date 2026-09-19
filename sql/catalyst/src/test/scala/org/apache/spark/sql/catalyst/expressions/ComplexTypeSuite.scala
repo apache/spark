@@ -399,6 +399,92 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-59598: map lookup must not match a null key") {
+    // A map whose key array contains a null. `ArrayBasedMapBuilder` rejects null keys, but the
+    // file-format readers build `ArrayBasedMapData` directly and do not: see the "the parquet
+    // map may contains null or duplicated map keys" note in `ParquetRowConverter`. A lookup
+    // must never match such a key, whichever executor and code path is used.
+    def mapWithNullKey(keys: Array[Any], values: Array[Any]): ArrayBasedMapData =
+      new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values))
+
+    // Primitive keys are the dangerous case: a null slot read with a primitive getter (codegen)
+    // or unboxed by the natural ordering (interpreted) yields 0, so `m[0]` used to return the
+    // null key's value instead of null.
+    val intKeyMap = mapWithNullKey(Array(null, 1), Array(10, 20))
+    val intMapType = MapType(IntegerType, IntegerType)
+
+    // Non-foldable input -> LinearExecutor, regardless of threshold.
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "0") {
+      val mapRef = BoundReference(0, intMapType, nullable = true)
+      val row = create_row(intKeyMap)
+      assert(!GetMapValue(mapRef, Literal(0)).usesFoldableHashLookup)
+
+      checkEvaluation(GetMapValue(mapRef, Literal(0)), null, row)
+      checkEvaluation(ElementAt(mapRef, Literal(0)), null, row)
+      // Non-null keys in the same map still resolve, i.e. the scan skips the null slot rather
+      // than stopping at it.
+      checkEvaluation(GetMapValue(mapRef, Literal(1)), 20, row)
+      checkEvaluation(ElementAt(mapRef, Literal(1)), 20, row)
+    }
+
+    // Foldable input above the threshold -> PrebuiltHashExecutor. The generated probe reads a
+    // candidate key with a primitive getter, so a bucket built for a null key would also match
+    // a lookup of 0.
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "0") {
+      val foldable = Literal.create(intKeyMap, intMapType)
+      assert(GetMapValue(foldable, Literal(0)).usesFoldableHashLookup)
+
+      checkEvaluation(GetMapValue(foldable, Literal(0)), null)
+      checkEvaluation(ElementAt(foldable, Literal(0)), null)
+      checkEvaluation(GetMapValue(foldable, Literal(1)), 20)
+      checkEvaluation(ElementAt(foldable, Literal(1)), 20)
+    }
+
+    // The sharpest case: the map also holds a real entry for 0. Matching the null key does not
+    // merely invent a value, it returns one belonging to a different entry -- 10 instead of 99.
+    val zeroAlsoPresent = mapWithNullKey(Array(null, 0), Array(10, 99))
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "0") {
+      val mapRef = BoundReference(0, intMapType, nullable = true)
+      val row = create_row(zeroAlsoPresent)
+      checkEvaluation(GetMapValue(mapRef, Literal(0)), 99, row)
+      checkEvaluation(ElementAt(mapRef, Literal(0)), 99, row)
+
+      val foldable = Literal.create(zeroAlsoPresent, intMapType)
+      checkEvaluation(GetMapValue(foldable, Literal(0)), 99)
+      checkEvaluation(ElementAt(foldable, Literal(0)), 99)
+    }
+
+    // A primitive key type wider than Int, to cover a different java getter and default value.
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "0") {
+      val longKeyMap = mapWithNullKey(Array(null, 1L), Array(10L, 20L))
+      val mapRef = BoundReference(0, MapType(LongType, LongType), nullable = true)
+      val row = create_row(longKeyMap)
+      checkEvaluation(GetMapValue(mapRef, Literal(0L)), null, row)
+      checkEvaluation(GetMapValue(mapRef, Literal(1L)), 20L, row)
+    }
+
+    // Non-primitive keys: the interpreted ordering would compare against null and the generated
+    // code would call `equals` on a value read from a null slot.
+    val stringKeyMap = mapWithNullKey(
+      Array(null, UTF8String.fromString("a")),
+      Array(UTF8String.fromString("x"), UTF8String.fromString("y")))
+    val stringMapType = MapType(StringType, StringType)
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "0") {
+      val mapRef = BoundReference(0, stringMapType, nullable = true)
+      val row = create_row(stringKeyMap)
+      checkEvaluation(GetMapValue(mapRef, Literal("a")), "y", row)
+      checkEvaluation(GetMapValue(mapRef, Literal("missing")), null, row)
+      checkEvaluation(ElementAt(mapRef, Literal("a")), "y", row)
+      checkEvaluation(ElementAt(mapRef, Literal("missing")), null, row)
+
+      // Foldable object keys go through the hash executor, whose driver-side bucket build
+      // calls hashCode on each key and would fail outright on a null.
+      val foldable = Literal.create(stringKeyMap, stringMapType)
+      checkEvaluation(GetMapValue(foldable, Literal("a")), "y")
+      checkEvaluation(GetMapValue(foldable, Literal("missing")), null)
+    }
+  }
+
   test("GetMapValue - strategy choice for foldable maps") {
     // Build a foldable map literal large enough to clear the default threshold. The
     // strategy assertions here pair with the non-foldable test above: together they lock in
