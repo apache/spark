@@ -176,6 +176,17 @@ class DataFrameCreationTestsMixin:
         rounded = df.first().d
         self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
+    def test_decimal_round_half_up(self):
+        # Rescaling to the declared scale rounds HALF_UP, the same as CAST, on every path
+        df = self.spark.createDataFrame(
+            [(Decimal("1.005"),), (Decimal("1.025"),), (Decimal("-1.005"),), (Decimal("0.125"),)],
+            "d decimal(10, 2)",
+        )
+        self.assertEqual(
+            [r.d for r in df.collect()],
+            [Decimal("1.01"), Decimal("1.03"), Decimal("-1.01"), Decimal("0.13")],
+        )
+
     def test_invalid_argument_create_dataframe(self):
         with self.assertRaises(PySparkTypeError) as pe:
             self.spark.createDataFrame([(1, 2)], schema=123)

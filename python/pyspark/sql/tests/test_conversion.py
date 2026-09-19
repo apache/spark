@@ -622,6 +622,18 @@ class ConversionTests(unittest.TestCase):
         actual = ArrowTableToRowsConversion.convert(tbl, schema)
         self.assertEqual(actual[0], Row(x=None))
 
+    def test_decimal_rescale_rounds_half_up(self):
+        # Rescaling to the declared scale must round HALF_UP like Decimal.set and CAST on
+        # the JVM do, not HALF_EVEN, which is Python's default and turns 1.005 into 1.00.
+        schema = StructType([StructField("d", DecimalType(10, 2))])
+        values = ["1.005", "1.015", "1.025", "-1.005", "0.125", "2.5"]
+        tbl = LocalDataToArrowConversion.convert(
+            [(decimal.Decimal(v),) for v in values], schema, use_large_var_types=False
+        )
+        actual = [row.d for row in ArrowTableToRowsConversion.convert(tbl, schema)]
+        expected = [decimal.Decimal(v) for v in ["1.01", "1.02", "1.03", "-1.01", "0.13", "2.50"]]
+        self.assertEqual(actual, expected)
+
     def test_return_as_tuples(self):
         schema = StructType([StructField("x", IntegerType())])
         tbl = LocalDataToArrowConversion.convert([(1,)], schema, use_large_var_types=False)
