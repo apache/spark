@@ -1636,13 +1636,11 @@ class SparkConnectPlanner(
             DataType.equalsIgnoreCompatibleCollation(actualString, requestedString) =>
         requestedString
       case (StructType(actualFields), StructType(requestedFields)) =>
-        StructType(
-          actualFields.zip(requestedFields).map { case (actualField, requestedField) =>
-            actualField.copy(
-              name = requestedField.name,
-              dataType =
-                restoreRequestedLogicalType(actualField.dataType, requestedField.dataType))
-          })
+        StructType(actualFields.zip(requestedFields).map { case (actualField, requestedField) =>
+          actualField.copy(
+            name = requestedField.name,
+            dataType = restoreRequestedLogicalType(actualField.dataType, requestedField.dataType))
+        })
       case (ArrayType(actualElement, containsNull), ArrayType(requestedElement, _)) =>
         ArrayType(restoreRequestedLogicalType(actualElement, requestedElement), containsNull)
       case (

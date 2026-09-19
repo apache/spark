@@ -101,8 +101,7 @@ case class StructField(
     if (metadata.contains(DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY)) {
       throw new SparkIllegalArgumentException(
         errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-        messageParameters =
-          Map("jsonType" -> DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY))
+        messageParameters = Map("jsonType" -> DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY))
     }
     metadata.jsonValue match {
       case JObject(fields) =>
@@ -136,8 +135,7 @@ case class StructField(
   private lazy val charVarcharCollationMetadata: Map[String, String] =
     collectCollationMetadata(isCollatedCharVarchar)
 
-  private def collectCollationMetadata(
-      include: DataType => Boolean): Map[String, String] = {
+  private def collectCollationMetadata(include: DataType => Boolean): Map[String, String] = {
     val fieldToCollationMap = mutable.Map[String, String]()
 
     def visitRecursively(dt: DataType, path: String): Unit = dt match {

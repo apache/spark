@@ -378,8 +378,7 @@ object DataType {
             errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
             messageParameters = Map("jsonType" -> name))
         case (None, Some(collation)) =>
-          assertValidTypeForCharVarcharCollations(
-            fieldPath, name, charVarcharCollationsMap)
+          assertValidTypeForCharVarcharCollations(fieldPath, name, charVarcharCollationsMap)
           stringTypeWithCollation(name, collation)
         case (Some(collation), None) =>
           assertValidTypeForCollations(fieldPath, name, collationsMap)
@@ -409,9 +408,15 @@ object DataType {
       assertValidTypeForCollations(fieldPath, "map", collationsMap)
       assertValidTypeForCharVarcharCollations(fieldPath, "map", charVarcharCollationsMap)
       val keyType = parseDataType(
-        k, appendFieldToPath(fieldPath, "key"), collationsMap, charVarcharCollationsMap)
+        k,
+        appendFieldToPath(fieldPath, "key"),
+        collationsMap,
+        charVarcharCollationsMap)
       val valueType = parseDataType(
-        v, appendFieldToPath(fieldPath, "value"), collationsMap, charVarcharCollationsMap)
+        v,
+        appendFieldToPath(fieldPath, "value"),
+        collationsMap,
+        charVarcharCollationsMap)
       MapType(keyType, valueType, n)
 
     case JSortedObject(("fields", JArray(fields)), ("type", JString("struct"))) =>
@@ -475,7 +480,7 @@ object DataType {
         getCollationsMap(metadataFields, CHAR_VARCHAR_COLLATIONS_METADATA_KEY)
       val metadataWithoutCollations = JObject(metadataFields.filterNot { field =>
         field._1 == COLLATIONS_METADATA_KEY ||
-          field._1 == CHAR_VARCHAR_COLLATIONS_METADATA_KEY
+        field._1 == CHAR_VARCHAR_COLLATIONS_METADATA_KEY
       })
       StructField(
         name,
