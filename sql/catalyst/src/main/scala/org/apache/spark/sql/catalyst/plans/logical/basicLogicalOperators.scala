@@ -2440,6 +2440,14 @@ case class Deduplicate(
     keys: Seq[Attribute],
     child: LogicalPlan,
     dedupSpec: Option[DeduplicateSpec] = None) extends UnaryNode {
+  // Streaming deduplication filters late rows even when event time is not part of the key.
+  // A watermarked key already preserves event time; let unused alternatives be pruned.
+  override def references: AttributeSet = AttributeSet(keys) ++ AttributeSet(
+    if (child.isStreaming && !keys.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
+      child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey))
+    } else {
+      Seq.empty
+    })
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = {
     val base = child.output
