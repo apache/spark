@@ -117,7 +117,9 @@ case class CheckOverflow(
     dataType: DecimalType,
     nullOnOverflow: Boolean) extends UnaryExpression with SupportQueryContext {
 
-  override def nullable: Boolean = true
+  // When `nullOnOverflow` is false, an overflow throws instead of producing null, so the result is
+  // null only when the input is. When true, an overflow yields null regardless of the input.
+  override def nullable: Boolean = child.nullable || nullOnOverflow
 
   override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[Decimal].toPrecision(
@@ -130,11 +132,14 @@ case class CheckOverflow(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
     nullSafeCodeGen(ctx, ev, eval => {
+      // Mirror MakeDecimal above: `ev.isNull` is a literal when this expression is non-nullable
+      // (under `!nullOnOverflow` a non-null input never overflows to null -- it throws), so only
+      // re-derive it from the value when the expression is actually nullable.
+      val setIsNull = if (nullable) s"\n${ev.isNull} = ${ev.value} == null;" else ""
       // scalastyle:off line.size.limit
       s"""
          |${ev.value} = $eval.toPrecision(
-         |  ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
-         |${ev.isNull} = ${ev.value} == null;
+         |  ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);$setIsNull
        """.stripMargin
       // scalastyle:on line.size.limit
     })
