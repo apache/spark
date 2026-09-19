@@ -1047,6 +1047,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   private val timestampDiffMap = Map[String, (Temporal, Temporal) => Long](
+    "NANOSECOND" -> ChronoUnit.NANOS.between,
     "MICROSECOND" -> ChronoUnit.MICROS.between,
     "MILLISECOND" -> ChronoUnit.MILLIS.between,
     "SECOND" -> ChronoUnit.SECONDS.between,
@@ -1074,6 +1075,42 @@ object DateTimeUtils extends SparkDateTimeUtils {
     if (timestampDiffMap.contains(unitInUpperCase)) {
       val startLocalTs = getLocalDateTime(startTs, zoneId)
       val endLocalTs = getLocalDateTime(endTs, zoneId)
+      timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
+    } else {
+      throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPDIFF", unit)
+    }
+  }
+
+  /**
+   * Gets the difference between two nanosecond-precision timestamps, expressed in whole `unit`s
+   * (truncated toward zero), honoring the sub-microsecond fraction of each operand.
+   *
+   * Each operand is given as its `epochMicros` plus a `nanosWithinMicro` fraction in [0, 999]. The
+   * fraction is folded into a nanosecond-precision `LocalDateTime` before the difference is taken,
+   * so a fraction of up to a microsecond can move the truncated result across a unit boundary for
+   * every unit (not only NANOSECOND). A microsecond operand simply passes a zero fraction. The
+   * `NANOSECOND` unit is added to the shared unit map, so it is accepted here and by the
+   * microsecond-only [[timestampDiff]] (where both fractions are zero).
+   *
+   * @param unit The unit in which to express the difference.
+   * @param startMicros `epochMicros` of the timestamp subtracted from `end`.
+   * @param startFraction `nanosWithinMicro` in [0, 999] of the start timestamp.
+   * @param endMicros `epochMicros` of the timestamp from which `start` is subtracted.
+   * @param endFraction `nanosWithinMicro` in [0, 999] of the end timestamp.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return The truncated difference in the requested unit.
+   */
+  def timestampDiffNanos(
+      unit: String,
+      startMicros: Long,
+      startFraction: Int,
+      endMicros: Long,
+      endFraction: Int,
+      zoneId: ZoneId): Long = {
+    val unitInUpperCase = unit.toUpperCase(Locale.ROOT)
+    if (timestampDiffMap.contains(unitInUpperCase)) {
+      val startLocalTs = getLocalDateTime(startMicros, zoneId).plusNanos(startFraction.toLong)
+      val endLocalTs = getLocalDateTime(endMicros, zoneId).plusNanos(endFraction.toLong)
       timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
     } else {
       throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPDIFF", unit)
