@@ -3052,4 +3052,103 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       case None => fail(s"$metricName metric not found")
     }
   }
+
+  test("merge with a SQL variable in the merge condition") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+      Seq(1, 2).toDF("pk").createOrReplaceTempView("source")
+
+      withSessionVariable("target_dep") {
+        sql("DECLARE VARIABLE target_dep STRING DEFAULT 'hr'")
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk AND t.dep = target_dep
+             |WHEN MATCHED THEN UPDATE SET t.salary = 999
+             |""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, 999, "hr") :: Row(2, 200, "software") :: Nil)
+      }
+    }
+  }
+
+  test("merge with a SQL variable in matched and not-matched-by-source conditions") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+      Seq(1).toDF("pk").createOrReplaceTempView("source")
+
+      withSessionVariable("salary_threshold") {
+        sql("DECLARE VARIABLE salary_threshold INT DEFAULT 150")
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED AND t.salary < salary_threshold THEN UPDATE SET t.salary = 999
+             |WHEN NOT MATCHED BY SOURCE AND t.salary > salary_threshold THEN DELETE
+             |""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, 999, "hr") :: Nil)
+      }
+    }
+  }
+
+  test("merge with a SQL variable in the not-matched insert condition") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((2, 200, "software"), (3, 300, "hr"))
+        .toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      withSessionVariable("pk_threshold") {
+        sql("DECLARE VARIABLE pk_threshold INT DEFAULT 3")
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN NOT MATCHED AND s.pk < pk_threshold THEN
+             |  INSERT (pk, salary, dep) VALUES (s.pk, s.salary, s.dep)
+             |""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, 100, "hr") :: Row(2, 200, "software") :: Nil)
+      }
+    }
+  }
+
+  test("merge with a SQL variable in the not-matched insert-star condition") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((2, 200, "software"), (3, 300, "hr"))
+        .toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      withSessionVariable("pk_threshold") {
+        sql("DECLARE VARIABLE pk_threshold INT DEFAULT 3")
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN NOT MATCHED AND s.pk < pk_threshold THEN INSERT *
+             |""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, 100, "hr") :: Row(2, 200, "software") :: Nil)
+      }
+    }
+  }
+
 }
