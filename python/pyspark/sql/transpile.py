@@ -51,7 +51,7 @@ import sys
 import textwrap
 import threading
 import warnings
-from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional, Tuple, Union
 
 from pyspark.errors import UnsupportedOperationException
 from pyspark.sql.column import Column
@@ -839,6 +839,11 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
     return None
 
 
+def _positional_args(node: Union[ast.FunctionDef, ast.Lambda]) -> List[ast.arg]:
+    """Return positional-only and positional-or-keyword arguments in call order."""
+    return [*node.args.posonlyargs, *node.args.args]
+
+
 def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[str]) -> List[dict]:
     """Per-variant maps ``{public_param_index -> category}`` where category is
     one of ``"numeric"``/``"string"``/``"bool"``/``"binary"``.
@@ -850,7 +855,8 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     matrix small) while keeping every typed param pinned.
     """
     n = len(public_params)
-    public_args = function_ast.args.args[len(function_ast.args.args) - n :]
+    positional_args = _positional_args(function_ast)
+    public_args = positional_args[-n:] if n else []
     candidates: List[List[str]] = []
     untyped = 0
     for arg in public_args:
@@ -984,7 +990,7 @@ def _get_src_ast_from_func(func: Callable) -> Tuple[Optional[str], Optional[ast.
 
 def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
     """Return the positional argument names in order."""
-    return [arg.arg for arg in node.args.args]
+    return [arg.arg for arg in _positional_args(node)]
 
 
 def _get_function_from_ast(body: ast.AST, held_code: Any) -> Tuple[Optional[ast.FunctionDef], str]:
@@ -1040,7 +1046,7 @@ def _get_function_from_ast(body: ast.AST, held_code: Any) -> Tuple[Optional[ast.
         # be the UDF) from one that RETURNED the lambda we hold, as in the one-line
         # ``make_adder = lambda n: lambda x: x + n`` -- there the outer lambda is
         # located and the inner is held, and lowering the outer would be wrong.
-        located_args = [arg.arg for arg in stmt.args.args]
+        located_args = [arg.arg for arg in _positional_args(stmt)]
         if located_args != list(held_code.co_varnames[: held_code.co_argcount]):
             return None, (
                 "the lambda defined in the source read for this one takes different "
@@ -1084,7 +1090,7 @@ def _transpile_func(
     session: "SparkSession",
     func: Callable[..., Any],
     returnType: "DataTypeOrString",
-) -> Tuple[List[Column], List[str], List[str], List[List[str]]]:
+) -> Tuple[List[Column], List[str], List[str], List[str], List[List[str]]]:
     """
     An experimental internal function that attempts to transpile a callable function.
 
@@ -1096,6 +1102,8 @@ def _transpile_func(
     method or callable instance) -- needed so the caller can resolve named-argument
     invocations to positional order at call time, since the ``_udf_param_N``
     substitution in :class:`UserDefinedPythonFunction` is positional.
+    list of caller-facing positional-only parameter names -- named invocations of these
+    parameters must stay unresolved so the interpreted path raises Python's ``TypeError``.
     list of per-option input-type categories (``"numeric"`` / ``"string"`` per
     public param) -- the JVM picks the option whose categories match the bound
     column types, or falls back to the Python UDF when none match.
@@ -1126,6 +1134,7 @@ def _transpile_func(
                 ],
                 [],
                 [],
+                [],
             )
         # A functools.wraps-style decorator makes ``inspect.getsource`` return
         # the WRAPPED function's source (getsource follows ``__wrapped__``),
@@ -1147,22 +1156,21 @@ def _transpile_func(
                 ],
                 [],
                 [],
+                [],
             )
         # Not ``ast``: that name would shadow the module for this whole function.
         src, ast_info = _get_src_ast_from_func(func)
         if ast_info is None:
-            return ([], ["Error getting ast for function, cannot transpile"], [], [])
+            return ([], ["Error getting ast for function, cannot transpile"], [], [], [])
         # Get the lambda body and parameters
         function_ast, extraction_error = _get_function_from_ast(ast_info, _held_code(func))
         if function_ast is None:
-            return ([], [extraction_error], [], [])
-        # Default, variadic (``*args`` / ``**kwargs``), keyword-only, and
-        # positional-only parameters can't be represented by the positional
-        # ``_udf_param_N`` placeholder scheme: a call site may omit a
-        # defaulted argument, leaving the placeholder referencing a position
-        # the call never bound, and ``_get_parameter_list`` only reads
-        # ``args``. Fall back to interpreted Python rather than emit an
-        # invalid plan.
+            return ([], [extraction_error], [], [], [])
+        # Default, variadic (``*args`` / ``**kwargs``), and keyword-only parameters
+        # can't be represented by the positional ``_udf_param_N`` placeholder scheme:
+        # a call site may omit a defaulted argument, leaving the placeholder referencing
+        # a position the call never bound. Fall back to interpreted Python rather than
+        # emit an invalid plan.
         fn_args = function_ast.args
         if (
             fn_args.defaults
@@ -1170,14 +1178,14 @@ def _transpile_func(
             or fn_args.kwonlyargs
             or fn_args.vararg is not None
             or fn_args.kwarg is not None
-            or fn_args.posonlyargs
         ):
             return (
                 [],
                 [
-                    "functions with default, variadic, keyword-only, or "
-                    "positional-only arguments are not supported by the transpiler"
+                    "functions with default, variadic, or keyword-only arguments "
+                    "are not supported by the transpiler"
                 ],
+                [],
                 [],
                 [],
             )
@@ -1217,6 +1225,7 @@ def _transpile_func(
                     ],
                     [],
                     [],
+                    [],
                 )
             spoken_for = int(
                 inspect.isfunction(call_entry) or isinstance(call_entry, classmethod)
@@ -1226,11 +1235,21 @@ def _transpile_func(
             # prepends the class ON TOP of the method's own ``__self__`` -- or one with
             # no parameter to hold it. Python raises for whatever the call site passes,
             # so there is nothing correct to lower.
-            return ([], ["callable leaves no parameter for the call site to bind"], [], [])
+            return (
+                [],
+                ["callable leaves no parameter for the call site to bind"],
+                [],
+                [],
+                [],
+            )
         # Caller-facing params: callers match user-supplied kwargs against this,
         # and the receiver is not named at the call site. Everything downstream
         # indexes off THIS list, so the placeholder numbering needs no offset.
         public_params = params[spoken_for:]
+        positional_only_names = {arg.arg for arg in fn_args.posonlyargs}
+        public_positional_only_params = [
+            name for name in public_params if name in positional_only_names
+        ]
         transpiled: list[Column] = []
         input_categories: list[list[str]] = []
         errors = []
@@ -1253,9 +1272,15 @@ def _transpile_func(
                         )
                 except Exception as e:
                     errors.append(str(e))
-        return (transpiled, errors, public_params, input_categories)
+        return (
+            transpiled,
+            errors,
+            public_params,
+            public_positional_only_params,
+            input_categories,
+        )
     except Exception as e:
         # Don't re-raise: an inability to transpile must never break a
         # working UDF. The caller treats an empty ``transpiled`` list as a
         # silent fall-back to interpreted Python.
-        return ([], [str(e)], [], [])
+        return ([], [str(e)], [], [], [])
