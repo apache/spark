@@ -85,6 +85,59 @@ public class ByteArrayMethods {
     return true;
   }
 
+  /**
+   * Returns whether the {@code length}-byte region starting at {@code (base, offset)} contains
+   * the given byte.
+   *
+   * <p>This performs a word-at-a-time (SWAR) scan, testing eight bytes per iteration with the
+   * classic "a word contains a zero byte" test after broadcasting {@code target} across a word.
+   * The test is exact and never reports a false positive, so only the presence of a match is
+   * returned, not its position; this keeps the scan independent of byte order, since locating a
+   * matching byte within a word would depend on endianness. It is faster than a byte-at-a-time
+   * scan.
+   *
+   * @param base   the base object of the memory region, or {@code null} for off-heap memory
+   * @param offset the offset of the first byte to scan, relative to {@code base}
+   * @param length the number of bytes to scan; must not be negative
+   * @param target the byte value to search for
+   * @return {@code true} if any of the {@code length} bytes equals {@code target},
+   *         {@code false} otherwise
+   */
+  public static boolean containsByte(Object base, long offset, long length, byte target) {
+    long i = 0;
+    // Broadcast the target byte into all 8 lanes of a word.
+    final long pattern = (target & 0xffL) * 0x0101010101010101L;
+
+    // On platforms that require aligned access, advance byte-by-byte to an 8-byte boundary first.
+    if (!unaligned) {
+      while ((offset + i) % 8 != 0 && i < length) {
+        if (Platform.getByte(base, offset + i) == target) {
+          return true;
+        }
+        i += 1;
+      }
+    }
+    // Scan 8 bytes at a time. XOR maps a matching byte to 0x00; the sub-expression below is
+    // non-zero iff some byte of the word is zero (i.e. equal to the target). It is exact.
+    if (unaligned || (offset + i) % 8 == 0) {
+      while (i <= length - 8) {
+        final long word = Platform.getLong(base, offset + i) ^ pattern;
+        if (((word - 0x0101010101010101L) & ~word & 0x8080808080808080L) != 0) {
+          return true;
+        }
+        i += 8;
+      }
+    }
+    // Finish the remaining (unaligned tail or the whole thing on aligned-only platforms).
+    while (i < length) {
+      if (Platform.getByte(base, offset + i) == target) {
+        return true;
+      }
+      i += 1;
+    }
+    return false;
+  }
+
   public static boolean contains(byte[] arr, byte[] sub) {
     if (sub.length == 0) {
       return true;
