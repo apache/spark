@@ -1255,6 +1255,7 @@ pyspark_connect = Module(
     dependencies=[pyspark_sql, connect],
     source_file_regexes=[
         "python/pyspark/sql/connect",
+        "sbin/start-connect-server.sh",
     ],
     python_test_goals=[
         # sql doctests
