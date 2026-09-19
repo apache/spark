@@ -779,7 +779,7 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
   }
 
   private def isTime(value: String): Boolean = {
-    (allCatch opt timeFormatter.parse(value)).isDefined
+    timeFormatter.parseOptional(value).isDefined
   }
 
   /**
