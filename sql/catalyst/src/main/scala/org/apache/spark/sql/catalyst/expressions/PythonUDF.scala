@@ -17,17 +17,20 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TRANSPILED_PYTHON_UDF,
-  TreePattern}
+  TRANSPILED_UDF_PARAMETER, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Helper functions for [[PythonUDF]]
@@ -285,6 +288,109 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
 }
 
 
+/**
+ * Stands in for a `_udf_param_N` placeholder in a transpiled option: a reference to the call's
+ * `index`th argument (SPARK-58626).
+ *
+ * A reference and not a copy, so the argument stays put in [[TranspiledPythonUDF.arguments]] and
+ * `ConvertToCatalyst` decides per call whether to compute it once in a Project below the operator.
+ * [[substitute]] copies the argument to each use site only where repeating it is as cheap as a
+ * column read -- a bare column or a literal. An argument worth more than that, a draw or a regex,
+ * is either computed once or not transpiled at all: `ConvertToCatalyst` keeps the interpreted
+ * Python UDF, which evaluates its inputs once wherever it sits. `transpile.py` says so for UDF
+ * authors.
+ */
+case class TranspiledUDFParameter(
+    index: Int,
+    paramType: Option[DataType] = None,
+    paramNullable: Boolean = true)
+  extends LeafExpression with Unevaluable {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPILED_UDF_PARAMETER)
+
+  // Unresolved until ResolveTranspiledPythonUDFOptions reads the type off the bound argument. That
+  // keeps the whole TranspiledPythonUDF unresolved, which is what brings the analyzer back to
+  // coerce the option body once the types are in.
+  override lazy val resolved: Boolean = paramType.isDefined
+
+  override def dataType: DataType =
+    paramType.getOrElse(throw new UnresolvedException("dataType"))
+
+  override def nullable: Boolean = paramNullable
+}
+
+
+object TranspiledUDFParameter {
+
+  /**
+   * Every argument index an option reads, in tree order, one entry per read. Callers want both the
+   * set and the counts: a parameter read once is evaluated once wherever it sits, so how often it
+   * shows up is what decides whether a column buys anything.
+   */
+  def referencedIndexes(option: Expression): Seq[Int] = {
+    val indexes = mutable.ArrayBuffer.empty[Int]
+    mapRefs(option) { p => indexes += p.index; p }
+    indexes.toSeq
+  }
+
+  /**
+   * Points every reference in `option` at whatever `replacement` gives for its index.
+   *
+   * Never looks at what it splices in: an argument can hold an *enclosing* call's reference, and
+   * walking back into the replacement would find it, splice again, and run out of stack.
+   */
+  def substitute(option: Expression, replacement: Int => Expression): Expression =
+    mapRefs(option) { p =>
+      val substituted = replacement(p.index)
+      // We read a reference's type off its argument once, in analysis, and never look again, so a
+      // later rule retyping the argument would leave this stale with the body already coerced
+      // against the old type. Nothing does that today; shout if that changes. Nullability is NOT
+      // checked -- `sameType` ignores it, and `UpdateAttributeNullability` runs in a later batch
+      // and legitimately does change it. Harmless, since ConvertToCatalyst substitutes the real
+      // argument and the final plan takes its nullability from that.
+      if (Utils.isTesting && p.paramType.isDefined && substituted.resolved) {
+        assert(p.dataType.sameType(substituted.dataType),
+          s"Parameter ${p.index} was typed ${p.dataType} but its argument is " +
+            s"${substituted.dataType}")
+      }
+      substituted
+    }
+
+  /**
+   * Fills in each reference's type from the bound arguments, once those are resolved.
+   */
+  def resolveTypes(option: Expression, arguments: Seq[Expression]): Expression =
+    mapRefs(option) {
+      case p if p.paramType.isEmpty =>
+        // Only a hand-built option gets here out of range; the builder bounds-checks what it emits.
+        // Left untyped the node never resolves and CheckAnalysis blames an internal error, which
+        // tells nobody anything.
+        if (p.index < 0 || p.index >= arguments.length) {
+          throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(
+            p.index, arguments.length)
+        }
+        val arg = arguments(p.index)
+        p.copy(paramType = Some(arg.dataType), paramNullable = arg.nullable)
+      case p => p
+    }
+
+  /**
+   * Walks this call's references. A nested call's options are skipped -- those indexes count
+   * against *its* arguments -- and the walk continues through
+   * [[TranspiledPythonUDF.pythonUDFExpr]], whose children are in our index space and may hold
+   * our references.
+   */
+  private def mapRefs(
+      option: Expression)(f: TranspiledUDFParameter => Expression): Expression = option match {
+    case _ if !option.containsPattern(TRANSPILED_UDF_PARAMETER) => option
+    case p: TranspiledUDFParameter => f(p)
+    case nested: TranspiledPythonUDF =>
+      nested.withNewChildren(mapRefs(nested.pythonUDFExpr)(f) +: nested.transpiledOptions)
+    case other => other.mapChildren(mapRefs(_)(f))
+  }
+}
+
+
 case class TranspiledPythonUDF(
   name: String,
   pythonUDFExpr: Expression,
@@ -309,14 +415,25 @@ case class TranspiledPythonUDF(
     copy(pythonUDFExpr = newChildren.head, transpiledOptions = newChildren.tail.toList)
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPILED_PYTHON_UDF)
 
-  // True when every direct input to pythonUDFExpr is a plain PythonUDF (not a
-  // TranspiledPythonUDF). Used to decide whether to preserve the UDF batch pipeline
-  // rather than inserting a Catalyst node in the middle of a Python UDF chain.
+  /**
+   * The call's bound arguments, which a [[TranspiledUDFParameter]] refers to by position.
+   *
+   * Not `pythonUDFExpr.children`, which is the trap: `fromUDFExpr` wraps an aggregate UDF in an
+   * [[AggregateExpression]], whose children are the aggregate function and its filter. Read them
+   * off the wrapper and you type parameter 0 from the UDAF's return type, then substitute the whole
+   * aggregate function in for it.
+   */
+  def arguments: Seq[Expression] = pythonUDFExpr match {
+    case agg: AggregateExpression => agg.aggregateFunction.children
+    case other => other.children
+  }
+
+  // True when every argument is a plain PythonUDF (not a TranspiledPythonUDF). Used to decide
+  // whether to preserve the UDF batch pipeline rather than inserting a Catalyst node in the middle
+  // of a Python UDF chain. Reads `arguments`, not `pythonUDFExpr.children`: for an aggregate UDF
+  // the latter is the aggregate function and its filter, so this said false for every UDAF.
   def hasOnlyPythonUDFInputs: Boolean =
-    pythonUDFExpr.children.nonEmpty &&
-    pythonUDFExpr.children.forall {
-      _.isInstanceOf[PythonUDF]
-    }
+    arguments.nonEmpty && arguments.forall(_.isInstanceOf[PythonUDF])
 }
 
 /**
