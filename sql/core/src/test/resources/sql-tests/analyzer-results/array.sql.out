@@ -1021,3 +1021,39 @@ select trim_array(array(1, 2, 3), CAST(null AS INT))
 -- !query analysis
 Project [trim_array(array(1, 2, 3), cast(null as int)) AS trim_array(array(1, 2, 3), CAST(NULL AS INT))#x]
 +- OneRowRelation
+
+
+-- !query
+select array_union(
+  array(named_struct('a', -0.0D), named_struct('a', DOUBLE('NaN'))),
+  array(named_struct('a', 0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 1.0D)))
+-- !query analysis
+Project [array_union(array(named_struct(a, -0.0), named_struct(a, cast(NaN as double))), array(named_struct(a, 0.0), named_struct(a, cast(NaN as double)), named_struct(a, 1.0))) AS array_union(array(named_struct(a, -0.0), named_struct(a, NaN)), array(named_struct(a, 0.0), named_struct(a, NaN), named_struct(a, 1.0)))#x]
++- OneRowRelation
+
+
+-- !query
+select array_distinct(
+  array(named_struct('a', -0.0D), named_struct('a', 0.0D),
+    named_struct('a', DOUBLE('NaN')), named_struct('a', DOUBLE('NaN'))))
+-- !query analysis
+Project [array_distinct(array(named_struct(a, -0.0), named_struct(a, 0.0), named_struct(a, cast(NaN as double)), named_struct(a, cast(NaN as double)))) AS array_distinct(array(named_struct(a, -0.0), named_struct(a, 0.0), named_struct(a, NaN), named_struct(a, NaN)))#x]
++- OneRowRelation
+
+
+-- !query
+select array_except(
+  array(named_struct('a', -0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 1.0D)),
+  array(named_struct('a', 0.0D), named_struct('a', DOUBLE('NaN'))))
+-- !query analysis
+Project [array_except(array(named_struct(a, -0.0), named_struct(a, cast(NaN as double)), named_struct(a, 1.0)), array(named_struct(a, 0.0), named_struct(a, cast(NaN as double)))) AS array_except(array(named_struct(a, -0.0), named_struct(a, NaN), named_struct(a, 1.0)), array(named_struct(a, 0.0), named_struct(a, NaN)))#x]
++- OneRowRelation
+
+
+-- !query
+select array_intersect(
+  array(named_struct('a', -0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 1.0D)),
+  array(named_struct('a', 0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 2.0D)))
+-- !query analysis
+Project [array_intersect(array(named_struct(a, -0.0), named_struct(a, cast(NaN as double)), named_struct(a, 1.0)), array(named_struct(a, 0.0), named_struct(a, cast(NaN as double)), named_struct(a, 2.0))) AS array_intersect(array(named_struct(a, -0.0), named_struct(a, NaN), named_struct(a, 1.0)), array(named_struct(a, 0.0), named_struct(a, NaN), named_struct(a, 2.0)))#x]
++- OneRowRelation
