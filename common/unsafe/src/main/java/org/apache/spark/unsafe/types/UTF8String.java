@@ -1196,24 +1196,38 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return this;
     }
 
-    if (numBytes == 1) {
-      byte[] newBytes = new byte[times];
-      byte b = getByte(0);
-      Arrays.fill(newBytes, b);
-      return fromBytes(newBytes);
-    }
-
     byte[] newBytes = new byte[Math.multiplyExact(numBytes, times)];
-    copyMemory(this.base, this.offset, newBytes, BYTE_ARRAY_OFFSET, numBytes);
+    fillRepeated(newBytes, 0, this.base, this.offset, numBytes, times);
+    return UTF8String.fromBytes(newBytes);
+  }
 
+  /**
+   * Writes `count` back-to-back copies of the `patternNumBytes` bytes at
+   * `(patternBase, patternOffset)` into `data` starting at byte index `destPos`, using exponential
+   * doubling so the fill takes O(log count) copies rather than O(count). Returns the byte index
+   * just past the written region.
+   */
+  private static int fillRepeated(
+      byte[] data, int destPos, Object patternBase, long patternOffset, int patternNumBytes,
+      int count) {
+    if (count <= 0 || patternNumBytes == 0) {
+      return destPos;
+    }
+    if (patternNumBytes == 1) {
+      // Single-byte pattern (e.g. padding with a space or '0'): one Arrays.fill beats the loop.
+      int end = destPos + count;
+      Arrays.fill(data, destPos, end, Platform.getByte(patternBase, patternOffset));
+      return end;
+    }
+    copyMemory(patternBase, patternOffset, data, BYTE_ARRAY_OFFSET + destPos, patternNumBytes);
     int copied = 1;
-    while (copied < times) {
-      int toCopy = Math.min(copied, times - copied);
-      System.arraycopy(newBytes, 0, newBytes, copied * numBytes, numBytes * toCopy);
+    while (copied < count) {
+      int toCopy = Math.min(copied, count - copied);
+      System.arraycopy(data, destPos, data, destPos + copied * patternNumBytes,
+        patternNumBytes * toCopy);
       copied += toCopy;
     }
-
-    return UTF8String.fromBytes(newBytes);
+    return destPos + count * patternNumBytes;
   }
 
   /**
@@ -1501,13 +1515,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
       byte[] data = new byte[resultSize];
       copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET, this.numBytes);
-      int offset = this.numBytes;
-      int idx = 0;
-      while (idx < count) {
-        copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++ idx;
-        offset += pad.numBytes;
-      }
+      int offset = fillRepeated(data, this.numBytes, pad.base, pad.offset, pad.numBytes, count);
       copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
 
       return UTF8String.fromBytes(data);
@@ -1540,13 +1548,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
       byte[] data = new byte[resultSize];
 
-      int offset = 0;
-      int idx = 0;
-      while (idx < count) {
-        copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++ idx;
-        offset += pad.numBytes;
-      }
+      int offset = fillRepeated(data, 0, pad.base, pad.offset, pad.numBytes, count);
       copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
       offset += remain.numBytes;
       copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET + offset, numBytes());
