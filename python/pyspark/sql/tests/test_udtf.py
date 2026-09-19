@@ -152,9 +152,7 @@ class BaseUDTFTestsMixin:
         class DynamicUDTBackedCharUDTF:
             @staticmethod
             def analyze() -> AnalyzeResult:
-                return AnalyzeResult(
-                    StructType([StructField("nested", CharStorageUDT())])
-                )
+                return AnalyzeResult(StructType([StructField("nested", CharStorageUDT())]))
 
             def eval(self):
                 yield ({"value": "a"},)
