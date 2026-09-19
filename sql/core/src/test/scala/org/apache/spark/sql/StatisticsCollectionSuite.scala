@@ -642,6 +642,101 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-57812: describe column stats (min, max) for nanosecond timestamp columns") {
+    withDefaultTimeZone(UTC) {
+      val table = "nanos_stats_same_time_zone"
+      val ltzCol = "ltz_col"
+      val ntzCol = "ntz_col"
+      withTable(table) {
+        sql(s"CREATE TABLE $table ($ltzCol TIMESTAMP_LTZ(9), $ntzCol TIMESTAMP_NTZ(9)) " +
+          "USING parquet")
+        sql(s"INSERT INTO $table VALUES " +
+          "(TIMESTAMP_LTZ'2022-01-01 00:00:01.123456789', " +
+          "TIMESTAMP_NTZ'2022-01-01 00:00:01.123456789'), " +
+          "(TIMESTAMP_LTZ'2022-01-03 00:00:02.987654321', " +
+          "TIMESTAMP_NTZ'2022-01-03 00:00:02.987654321')")
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        // LTZ catalog storage is always UTC; DESC re-renders it in the session time zone
+        // (UTC here, per withDefaultTimeZone above).
+        checkDescTimestampColStats(
+          tableName = table,
+          timestampColumn = ltzCol,
+          expectedMinTimestamp = "2022-01-01 00:00:01.123456789 +0000",
+          expectedMaxTimestamp = "2022-01-03 00:00:02.987654321 +0000")
+        // NTZ is zone-independent, so DESC shows the stored wall-clock value with no offset.
+        checkDescTimestampColStats(
+          tableName = table,
+          timestampColumn = ntzCol,
+          expectedMinTimestamp = "2022-01-01 00:00:01.123456789",
+          expectedMaxTimestamp = "2022-01-03 00:00:02.987654321")
+
+        // Converting nanosecond-timestamp catalog stats to plan stats must not throw.
+        val catalogStats = getCatalogTable(table).stats.get.colStats
+        val ltzPlanStat = catalogStats(ltzCol).toPlanStat(ltzCol, TimestampLTZNanosType(9))
+        assert(ltzPlanStat.min.isDefined && ltzPlanStat.max.isDefined)
+        val ntzPlanStat = catalogStats(ntzCol).toPlanStat(ntzCol, TimestampNTZNanosType(9))
+        assert(ntzPlanStat.min.isDefined && ntzPlanStat.max.isDefined)
+      }
+    }
+  }
+
+  test("SPARK-57812: histogram collection is skipped, not crashed, for nanosecond timestamps") {
+    withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true") {
+      val table = "nanos_histogram_skip"
+      withTable(table) {
+        sql(s"CREATE TABLE $table (ltz TIMESTAMP_LTZ(9)) USING parquet")
+        sql(s"INSERT INTO $table VALUES " +
+          "(TIMESTAMP_LTZ'2022-01-01 00:00:01.123456789'), " +
+          "(TIMESTAMP_LTZ'2022-01-03 00:00:02.987654321')")
+        // ApproximatePercentile/ApproxCountDistinctForIntervals don't know TimestampNanosVal, so
+        // this must not attempt a histogram for `ltz`; basic stats are still collected.
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS ltz")
+
+        val colStat = getCatalogTable(table).stats.get.colStats("ltz")
+        assert(colStat.histogram.isEmpty)
+        assert(colStat.min.isDefined && colStat.max.isDefined)
+      }
+    }
+  }
+
+  test("SPARK-57812: CBO estimation does not crash on nanosecond timestamp predicates") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("nanos_cbo_t1", "nanos_cbo_t2") {
+        sql("CREATE TABLE nanos_cbo_t1(k1 TIMESTAMP_LTZ(9), k2 TIMESTAMP_LTZ(9), " +
+          "n TIMESTAMP_NTZ(9)) USING parquet")
+        sql("CREATE TABLE nanos_cbo_t2(k TIMESTAMP_LTZ(9)) USING parquet")
+        sql("INSERT INTO nanos_cbo_t1 VALUES " +
+          "(TIMESTAMP_LTZ'2022-01-01 00:00:00.123456789', TIMESTAMP_LTZ'2022-01-02 00:00:00.1', " +
+          "TIMESTAMP_NTZ'2022-01-01 00:00:00.123456789'), " +
+          "(TIMESTAMP_LTZ'2022-01-03 00:00:00.987654321', TIMESTAMP_LTZ'2022-01-04 00:00:00.1', " +
+          "TIMESTAMP_NTZ'2022-01-03 00:00:00.987654321')")
+        sql("INSERT INTO nanos_cbo_t2 VALUES " +
+          "(TIMESTAMP_LTZ'2022-01-01 00:00:00.123456789'), " +
+          "(TIMESTAMP_LTZ'2022-01-03 00:00:00.987654321')")
+        sql("ANALYZE TABLE nanos_cbo_t1 COMPUTE STATISTICS FOR COLUMNS k1, k2, n")
+        sql("ANALYZE TABLE nanos_cbo_t2 COMPUTE STATISTICS FOR COLUMNS k")
+
+        // Each predicate shape below used to throw scala.MatchError once ANALYZE could persist
+        // nanosecond timestamp stats: the join key (JoinEstimation), and the range/equality/
+        // IN-list/two-column predicates (FilterEstimation) all funnel through
+        // EstimationUtils.toDouble/fromDouble. .executedPlan forces the lazily-cached
+        // LogicalPlan.stats this predicate shape needs, the same way the join-based
+        // "Simple queries must be working, if CBO is turned on" test above does.
+        sql(
+          """
+            |SELECT t1.k1 FROM nanos_cbo_t1 t1
+            |JOIN nanos_cbo_t2 t2 ON t1.k1 = t2.k
+            |WHERE t1.k1 > TIMESTAMP_LTZ'2022-01-01 00:00:00.123456789'
+            |  AND t1.n = TIMESTAMP_NTZ'2022-01-03 00:00:00.987654321'
+            |  AND t1.k1 IN (TIMESTAMP_LTZ'2022-01-01 00:00:00.123456789',
+            |                TIMESTAMP_LTZ'2022-01-03 00:00:00.987654321')
+            |  AND t1.k2 > t1.k1
+          """.stripMargin).queryExecution.executedPlan
+      }
+    }
+  }
+
   private def getStatAttrNames(tableName: String): Set[String] = {
     val queryStats = spark.table(tableName).queryExecution.optimizedPlan.stats.attributeStats
     queryStats.map(_._1.name).toSet

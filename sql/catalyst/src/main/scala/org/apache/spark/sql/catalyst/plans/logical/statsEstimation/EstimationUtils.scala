@@ -23,6 +23,7 @@ import scala.math.BigDecimal.RoundingMode
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, EmptyRow, Expression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.{DecimalType, _}
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 object EstimationUtils {
 
@@ -135,8 +136,14 @@ object EstimationUtils {
    */
   def toDouble(value: Any, dataType: DataType): Double = {
     dataType match {
-      case _: NumericType | DateType | TimestampType => value.toString.toDouble
+      case _: NumericType | DateType | TimestampType | TimestampNTZType =>
+        value.toString.toDouble
       case BooleanType => if (value.asInstanceOf[Boolean]) 1 else 0
+      // TimestampNanosVal isn't a Long like the other datetime types, so it can't go through
+      // the toString/toDouble conversion above; approximate it by its epoch-microseconds
+      // component (dropping the sub-microsecond remainder, which is negligible for selectivity
+      // estimation purposes).
+      case _: AnyTimestampNanoType => value.asInstanceOf[TimestampNanosVal].epochMicros.toDouble
     }
   }
 
@@ -144,7 +151,8 @@ object EstimationUtils {
     dataType match {
       case BooleanType => double.toInt == 1
       case DateType => double.toInt
-      case TimestampType => double.toLong
+      case TimestampType | TimestampNTZType => double.toLong
+      case _: AnyTimestampNanoType => TimestampNanosVal.fromParts(double.toLong, 0.toShort)
       case ByteType => double.toByte
       case ShortType => double.toShort
       case IntegerType => double.toInt
