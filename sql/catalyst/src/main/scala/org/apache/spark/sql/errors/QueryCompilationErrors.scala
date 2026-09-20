@@ -2746,6 +2746,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         unsupportedSubqueryExpressions.map(_.sql).mkString(", ")))
   }
 
+  def nestedSubqueryReferencingOuterAndInnerQueryError(
+      unsupportedSubqueryExpressions: Seq[Expression]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "NESTED_SUBQUERY_REFERENCING_OUTER_AND_INNER_QUERY",
+      messageParameters = Map("subqueryExpression" ->
+        unsupportedSubqueryExpressions.map(_.sql).mkString(", ")))
+  }
+
+  def nestedInSubqueryWithUnknownResultError(
+      unsupportedSubqueryExpressions: Seq[Expression]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+        "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT",
+      messageParameters = Map("subqueryExpression" ->
+        unsupportedSubqueryExpressions.map(_.sql).mkString(", ")))
+  }
+
   def functionCannotProcessInputError(
       unbound: UnboundFunction,
       arguments: Seq[Expression],
