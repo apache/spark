@@ -1525,8 +1525,7 @@ class StructField(DataType):
             metadata = {
                 key: value
                 for key, value in metadata.items()
-                if key
-                not in (_COLLATIONS_METADATA_KEY, _CHAR_VARCHAR_COLLATIONS_METADATA_KEY)
+                if key not in (_COLLATIONS_METADATA_KEY, _CHAR_VARCHAR_COLLATIONS_METADATA_KEY)
             }
 
         return StructField(
@@ -1558,9 +1557,7 @@ class StructField(DataType):
         """Return field paths and collations for CHAR/VARCHAR types."""
         return self._getCollationMetadata(self._isCollatedCharVarchar)
 
-    def _getCollationMetadata(
-        self, include: Callable[[DataType], bool]
-    ) -> Dict[str, str]:
+    def _getCollationMetadata(self, include: Callable[[DataType], bool]) -> Dict[str, str]:
         def visitRecursively(dt: DataType, fieldPath: str) -> None:
             if isinstance(dt, ArrayType):
                 processDataType(dt.elementType, fieldPath + ".element")
@@ -2662,9 +2659,7 @@ def _parse_datatype_json_value(  # type: ignore[return]
     charVarcharCollationsMap: Optional[Dict[str, str]] = None,
 ) -> DataType:
     in_string = collationsMap is not None and fieldPath in collationsMap
-    in_char_varchar = (
-        charVarcharCollationsMap is not None and fieldPath in charVarcharCollationsMap
-    )
+    in_char_varchar = charVarcharCollationsMap is not None and fieldPath in charVarcharCollationsMap
     if in_string and in_char_varchar:
         raise PySparkTypeError(
             errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
@@ -2770,9 +2765,7 @@ def _parse_datatype_json_value(  # type: ignore[return]
             )
 
 
-def _parse_collation_metadata_map(
-    metadata: Optional[Dict[str, Any]], key: str
-) -> Dict[str, str]:
+def _parse_collation_metadata_map(metadata: Optional[Dict[str, Any]], key: str) -> Dict[str, str]:
     if not metadata or key not in metadata:
         return {}
 
@@ -2801,9 +2794,9 @@ def _assert_valid_type_for_char_varchar_collation(
 ) -> None:
     char_match = _LENGTH_CHAR.fullmatch(fieldType) if isinstance(fieldType, str) else None
     varchar_match = _LENGTH_VARCHAR.fullmatch(fieldType) if isinstance(fieldType, str) else None
-    is_uncollated_char_varchar = (
-        char_match is not None and char_match.group(2) is None
-    ) or (varchar_match is not None and varchar_match.group(2) is None)
+    is_uncollated_char_varchar = (char_match is not None and char_match.group(2) is None) or (
+        varchar_match is not None and varchar_match.group(2) is None
+    )
     if fieldPath in collationMap and not is_uncollated_char_varchar:
         raise PySparkTypeError(
             errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",

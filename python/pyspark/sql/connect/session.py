@@ -89,8 +89,8 @@ from pyspark.sql.profiler import Profile
 from pyspark.sql.session import SparkSession as PySparkSession
 from pyspark.sql.session import classproperty
 from pyspark.sql.types import (
-    AtomicType,
     ArrayType,
+    AtomicType,
     CharType,
     DataType,
     DayTimeIntervalType,

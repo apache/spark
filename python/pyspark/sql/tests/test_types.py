@@ -916,9 +916,7 @@ class TypesTestsMixin:
                         "type": data_type,
                         "nullable": True,
                         "metadata": {
-                            _CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {
-                                "c": metadata_collation
-                            },
+                            _CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {"c": metadata_collation},
                         },
                     }
                 ],
@@ -954,9 +952,7 @@ class TypesTestsMixin:
                     "type": "decimal(10,2)",
                     "nullable": True,
                     "metadata": {
-                        _CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {
-                            "d": "spark.UTF8_LCASE"
-                        },
+                        _CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {"d": "spark.UTF8_LCASE"},
                     },
                 }
             ],
@@ -991,9 +987,7 @@ class TypesTestsMixin:
                 raise AssertionError(f"unsupported pinned-reader type: {value}")
 
             if value["type"] == "array":
-                return ArrayType(
-                    preceding_read_type(value["elementType"]), value["containsNull"]
-                )
+                return ArrayType(preceding_read_type(value["elementType"]), value["containsNull"])
             if value["type"] == "map":
                 return MapType(
                     preceding_read_type(value["keyType"]),
