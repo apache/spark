@@ -279,15 +279,21 @@ object Client {
   }
 
   /**
-   * Environment variables to forward to the driver. Only Spark-related variables are forwarded,
-   * matching the REST submission client, unless `spark.standalone.submit.filterEnvironment` is
-   * disabled, in which case the full environment of the submitting process is forwarded.
+   * Environment variables to forward to the driver. Only variables whose name starts with
+   * `SPARK_` are forwarded, excluding `SPARK_ENV_LOADED`, `SPARK_HOME`, `SPARK_CONF_DIR`,
+   * `SPARK_LOCAL_IP` and `SPARK_LOCAL_HOSTNAME`. This is the set that reaches the driver through
+   * the REST submission gateway, where the client applies
+   * `RestSubmissionClient.filterSystemEnvironment` and `StandaloneRestServer` then drops
+   * `SPARK_LOCAL_(IP|HOSTNAME)`, since they describe the submitting host rather than the worker
+   * the driver runs on. If `spark.standalone.submit.filterEnvironment` is disabled, the full
+   * environment of the submitting process is forwarded instead.
    */
   private[deploy] def driverEnvironment(
       conf: SparkConf,
       env: Map[String, String]): Map[String, String] = {
     if (conf.get(config.STANDALONE_SUBMIT_FILTER_ENVIRONMENT)) {
       RestSubmissionClient.filterSystemEnvironment(env)
+        .filterNot { case (k, _) => k.matches("SPARK_LOCAL_(IP|HOSTNAME)") }
     } else {
       env
     }

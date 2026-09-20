@@ -26,7 +26,6 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.DeployMessages.RequestSubmitDriver
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.deploy.rest.RestSubmissionClient
 import org.apache.spark.internal.config.STANDALONE_SUBMIT_FILTER_ENVIRONMENT
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
 import org.apache.spark.util.ThreadUtils
@@ -86,14 +85,44 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
   test("SPARK-59404: forward only Spark-related environment variables to the driver") {
     // The submitting process always has non-Spark variables such as PATH, so forwarding
-    // sys.env unfiltered would fail the assertion below.
+    // sys.env unfiltered would fail the assertions below.
     assert(sys.env.keys.exists(!_.startsWith("SPARK_")))
-    val command = submittedCommand(new SparkConf())
-    command.environment should be (RestSubmissionClient.filterSystemEnvironment(sys.env))
+    val conf = new SparkConf()
+    val command = submittedCommand(conf)
+    command.environment should be (Client.driverEnvironment(conf, sys.env))
+    // Checks that do not depend on the filtering implementation.
+    command.environment.keys.forall(_.startsWith("SPARK_")) should be (true)
+    command.environment should not contain key ("PATH")
+    // CI exports SPARK_LOCAL_IP, which must not follow the driver to another host.
+    command.environment should not contain key ("SPARK_LOCAL_IP")
+    command.environment should not contain key ("SPARK_LOCAL_HOSTNAME")
   }
 
   test("SPARK-59404: forward the full environment when filtering is disabled") {
     val conf = new SparkConf().set(STANDALONE_SUBMIT_FILTER_ENVIRONMENT, false)
     submittedCommand(conf).environment should be (sys.env)
+  }
+
+  test("SPARK-59404: driver environment filtering rule") {
+    val forwarded = Map(
+      "SPARK_USER" -> "spark",
+      // Only SPARK_LOCAL_IP and SPARK_LOCAL_HOSTNAME are dropped, not every SPARK_LOCAL_* name.
+      "SPARK_LOCAL_DIRS" -> "/tmp/spark")
+    val dropped = Map(
+      "SPARK_ENV_LOADED" -> "1",
+      "SPARK_HOME" -> "/opt/spark",
+      "SPARK_CONF_DIR" -> "/opt/spark/conf",
+      "SPARK_LOCAL_IP" -> "10.0.0.1",
+      "SPARK_LOCAL_HOSTNAME" -> "submitter",
+      "PATH" -> "/usr/bin",
+      "JAVA_HOME" -> "/usr/lib/jvm/default",
+      "HADOOP_CONF_DIR" -> "/etc/hadoop/conf",
+      "LD_LIBRARY_PATH" -> "/usr/lib")
+    val env = forwarded ++ dropped
+
+    Client.driverEnvironment(new SparkConf(), env) should be (forwarded)
+
+    val unfiltered = new SparkConf().set(STANDALONE_SUBMIT_FILTER_ENVIRONMENT, false)
+    Client.driverEnvironment(unfiltered, env) should be (env)
   }
 }

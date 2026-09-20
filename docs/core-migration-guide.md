@@ -30,7 +30,7 @@ license: |
 
 ## Upgrading from Core 4.2 to 4.3
 
-- Since Spark 4.3, standalone deployments now only forward SPARK_* environment variables by default. If you need to forward additional environment variables set `spark.standalone.submit.filterEnvironment` to `false`.
+- Since Spark 4.3, when submitting to a standalone cluster in cluster mode without the REST gateway, Spark forwards to the driver only the environment variables whose name starts with `SPARK_`, excluding `SPARK_ENV_LOADED`, `SPARK_HOME`, `SPARK_CONF_DIR`, `SPARK_LOCAL_IP`, and `SPARK_LOCAL_HOSTNAME`, matching the REST submission gateway. Previously the full environment of the submitting process was forwarded, so variables such as `JAVA_HOME`, `HADOOP_CONF_DIR`, `YARN_CONF_DIR`, and `LD_LIBRARY_PATH` no longer reach the driver. To restore the legacy behavior, you can set `spark.standalone.submit.filterEnvironment` to `false`.
 
 - Since Spark 4.3, Spark compresses serialized RDD partitions by default. To restore the legacy behavior, you can set `spark.rdd.compress` to `false`.
 
