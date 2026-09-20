@@ -6838,6 +6838,28 @@ class KeyGroupedPartitioningSuite
           s"expected the grouping to stay:\n$plan")
         assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
       }
+
+      // The ordering derived from the partition keys satisfies the partial aggregate the way a
+      // declared one does, so the bail holds for it too.
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 2,
+          s"the derived ordering leaves the partial aggregate no sort to give up either:\n$plan")
+        // One sort, the one the grouping forced above itself, and the partial aggregate reads the
+        // scan directly.
+        val sorts = collect(plan) { case sort: SortExec => sort }
+        assert(sorts.size == 1 && !sorts.head.global, s"expected one local sort:\n$plan")
+        assert(unwrapWrappers(sorts.head.child).isInstanceOf[GroupPartitionsExec],
+          s"expected the sort to read the grouping:\n$plan")
+        assert(aggs.exists { agg =>
+          unwrapWrappers(agg.child).isInstanceOf[BatchScanExec]
+        }, s"expected the partial aggregate to read the scan, with no sort of its own:\n$plan")
+      }
     }
   }
 

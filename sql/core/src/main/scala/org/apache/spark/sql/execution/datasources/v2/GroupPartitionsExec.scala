@@ -406,21 +406,31 @@ case class GroupPartitionsExec(
   }
 
   /**
-   * This node reading `newChild`, with the key positions it projects moved to where the expressions
-   * they name sit there, or `None` when it may not be re-parented onto it. It is named for what it
-   * answers rather than for the node it returns, which is the node it is called on.
+   * A node over `newChild`, with the key positions this one projects moved to where the expressions
+   * they name sit there, or `None` when this one may not be rebuilt over it.
    *
    * `EnsureRequirements` computed `joinKeyPositions` against the child this node was planned for,
    * whose partitioning is that child's projected down to the positions the operator above keeps, so
    * the positions name a key space `newChild` need not share. The projected expressions are the
-   * planned child's own (`KeyedPartitioning.project` builds them that way), which makes moving them
-   * a lookup; a child that does not hold one is turned away.
+   * planned child's own, which makes moving them a lookup; a child that does not hold one is turned
+   * away. The projection keeps them so (`AliasAwareOutputExpression.projectKeyedPartitionings`):
+   * with no aliases it has nothing to trade them for, and a partial aggregate has none, its
+   * `resultExpressions` being `groupingAttributes ++ bufferAttributes`.
    *
-   * Moving them is all this does: what the operator above reads, the ordering it was planned
+   * The node comes back through the factory rather than `copy`: `grouping` and
+   * `plannedPartitioning` are decided for one child's partitioning, so a node handed another has to
+   * be decided again over it.
+   *
+   * Rebuilding is all this does: what the operator above reads, the ordering it was planned
    * against included, is the caller's to hold, since nothing here knows what that operator
    * requires.
    */
   def withKeyPositionsFor(newChild: SparkPlan): Option[GroupPartitionsExec] = {
+    // An aligned node's slot order comes from the parent distribution rather than the child, so the
+    // factory cannot re-decide it for `newChild`.
+    if (expectedKeyCount.isDefined) {
+      return None
+    }
     // The member of each child's partitioning this reads has to be the one `grouping` reads, since
     // the positions are only meaningful for that member. `representativeOf` answers as the lookup
     // there does: the first keyed member, nested collections included.
@@ -433,9 +443,12 @@ case class GroupPartitionsExec(
           return None
         }
         val positions = joinKeyPositions.fold(plannedInNewChild)(_.map(plannedInNewChild))
-        val regrouped = copy(
+        val regrouped = GroupPartitionsExec(
           child = newChild,
-          joinKeyPositions = Option.when(positions != newChildKp.expressions.indices)(positions))
+          joinKeyPositions = Option.when(positions != newChildKp.expressions.indices)(positions),
+          reducers = reducers,
+          distributePartitions = distributePartitions,
+          enableSortedMerge = enableSortedMerge)
         regrouped.copyTagsFrom(this)
         Some(regrouped)
       case _ => None
