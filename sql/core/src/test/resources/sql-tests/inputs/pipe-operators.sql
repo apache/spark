@@ -409,6 +409,44 @@ values (1, 2, 3) as t(a, b, c)
 |> set c = 30, a = 10
 |> select t.*;
 
+-- Repeated source columns keep every position in the qualified star.
+values (1, 2) as s(a, b)
+|> select a, a, b
+|> as t
+|> set b = 3
+|> select t.*;
+
+-- The retained source column survives the rules that rebuild the projection above SET:
+-- a filter, a sort, an aggregate, a join, a union and an enclosing subquery or CTE.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> where t.a = 1
+|> select a, t.a;
+
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> order by t.a
+|> select a, t.a;
+
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> aggregate sum(t.a) as original_sum group by a;
+
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> join (values (1, 20) as u(c, d)) on t.a = c
+|> select a, t.a, c;
+
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select a, t.a
+|> union all (values (1, 10) as t(a, b) |> set a = a + 1 |> select a, t.a);
+
+select * from (values (1, 10) as t(a, b) |> set a = a + 1 |> select a, t.a);
+
+with cte as (values (1, 10) as t(a, b) |> set a = a + 1 |> select a, t.a)
+select * from cte;
+
 -- SET operators: negative tests.
 ---------------------------------
 

@@ -1101,6 +1101,120 @@ Project [a#x, b#x, c#x]
 
 
 -- !query
+values (1, 2) as s(a, b)
+|> select a, a, b
+|> as t
+|> set b = 3
+|> select t.*
+-- !query analysis
+Project [a#x, a#x, b#x]
++- Project [a#x, a#x, 3 AS b#x, b#x]
+   +- SubqueryAlias t
+      +- Project [a#x, a#x, b#x]
+         +- SubqueryAlias s
+            +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> where t.a = 1
+|> select a, t.a
+-- !query analysis
+Project [a#x, a#x]
++- Filter (a#x = 1)
+   +- PipeOperator
+      +- Project [(a#x + 1) AS a#x, b#x, a#x]
+         +- SubqueryAlias t
+            +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> order by t.a
+|> select a, t.a
+-- !query analysis
+Project [a#x, a#x]
++- Sort [a#x ASC NULLS FIRST], true
+   +- PipeOperator
+      +- Project [(a#x + 1) AS a#x, b#x, a#x]
+         +- SubqueryAlias t
+            +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> aggregate sum(t.a) as original_sum group by a
+-- !query analysis
+Aggregate [a#x], [a#x, sum(a#x) AS original_sum#xL]
++- Project [(a#x + 1) AS a#x, b#x, a#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> join (values (1, 20) as u(c, d)) on t.a = c
+|> select a, t.a, c
+-- !query analysis
+Project [a#x, a#x, c#x]
++- Join Inner, (a#x = c#x)
+   :- Project [(a#x + 1) AS a#x, b#x, a#x]
+   :  +- SubqueryAlias t
+   :     +- LocalRelation [a#x, b#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- SubqueryAlias u
+         +- LocalRelation [c#x, d#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select a, t.a
+|> union all (values (1, 10) as t(a, b) |> set a = a + 1 |> select a, t.a)
+-- !query analysis
+Union false, false
+:- Project [a#x, a#x]
+:  +- Project [(a#x + 1) AS a#x, b#x, a#x]
+:     +- SubqueryAlias t
+:        +- LocalRelation [a#x, b#x]
++- Project [a#x, a#x]
+   +- Project [(a#x + 1) AS a#x, b#x, a#x]
+      +- SubqueryAlias t
+         +- LocalRelation [a#x, b#x]
+
+
+-- !query
+select * from (values (1, 10) as t(a, b) |> set a = a + 1 |> select a, t.a)
+-- !query analysis
+Project [a#x, a#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [a#x, a#x]
+      +- Project [(a#x + 1) AS a#x, b#x, a#x]
+         +- SubqueryAlias t
+            +- LocalRelation [a#x, b#x]
+
+
+-- !query
+with cte as (values (1, 10) as t(a, b) |> set a = a + 1 |> select a, t.a)
+select * from cte
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias cte
+:     +- Project [a#x, a#x]
+:        +- Project [(a#x + 1) AS a#x, b#x, a#x]
+:           +- SubqueryAlias t
+:              +- LocalRelation [a#x, b#x]
++- Project [a#x, a#x]
+   +- SubqueryAlias cte
+      +- CTERelationRef xxxx, true, [a#x, a#x], false, false, 1
+
+
+-- !query
 table t
 |> set z = 1
 -- !query analysis

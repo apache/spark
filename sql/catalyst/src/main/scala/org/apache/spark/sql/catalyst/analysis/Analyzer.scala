@@ -2094,11 +2094,12 @@ class Analyzer(
      * assignment. Retain the excluded attributes as hidden output instead, the same way USING joins
      * hide their duplicated join keys (SPARK-59146).
      *
-     * The hidden output holds the whole qualified source row in its original order, not just the
-     * excluded attributes, because a qualified star expands hidden output ahead of the visible
-     * output. Retaining only the excluded attributes would move them to the front, so that
-     * `VALUES (1, 2, 3) AS t(a, b, c) |> SET b = 20 |> SELECT t.*` returned `(b, a, c)`. Attributes
-     * that are also visible are emitted once by the star expansion, in their hidden position.
+     * The hidden output holds the whole qualified source row, with every position in its original
+     * order, not just the excluded attributes, because a qualified star expands hidden output
+     * ahead of the visible output. Retaining only the excluded attributes would move them to the
+     * front, so that `VALUES (1, 2, 3) AS t(a, b, c) |> SET b = 20 |> SELECT t.*` returned
+     * `(b, a, c)`. Attributes that are also visible are emitted once by the star expansion, in
+     * their hidden position.
      */
     private def retainExceptedColumnsAsHiddenOutput(original: Project, expanded: Project): Unit = {
       val retain = original.projectList.exists {
@@ -2108,11 +2109,12 @@ class Analyzer(
       if (retain) {
         val child = expanded.child
         if (child.output.exists(!expanded.outputSet.contains(_))) {
-          // The row a qualified star sees on the child: its qualified-only hidden output first,
-          // then its output. Only qualified attributes are reachable through a qualified star.
-          val sourceRow = (child.metadataOutput.filter(_.qualifiedAccessOnly) ++ child.output)
+          // The row a qualified star sees on the child, keeping every one of its positions. Only
+          // qualified attributes are reachable through a qualified star.
+          val sourceRow = UnresolvedStarBase
+            .mergeHiddenAndVisibleOutput(
+              child.metadataOutput.filter(_.qualifiedAccessOnly), child.output)
             .filter(_.qualifier.nonEmpty)
-            .distinctBy(_.exprId)
           val sourceRowIds = sourceRow.map(_.exprId).toSet
           // The rule forwards the original tags, such as the Spark Connect plan id, only onto a
           // node without tags, so copy them here before adding the hidden output tag.

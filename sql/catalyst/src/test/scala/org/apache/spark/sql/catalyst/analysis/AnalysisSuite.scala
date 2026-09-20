@@ -1911,6 +1911,31 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assert(analyzed.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(42L))
     assert(analyzed.getTagValue(Project.hiddenOutputTag).exists(_.map(_.name) == Seq("a")))
   }
+
+  test("SPARK-59146: a DataFrame column keeps a visible candidate of a hidden output visible") {
+    // Two plan nodes carry the same plan id, as the two sides of a Spark Connect self join do.
+    // On the left, `b` is visible and also hidden, the way pipe SET retains a source column it
+    // did not assign; on the right it is only visible. Both candidates are regular ones, so the
+    // reference is ambiguous. Treating the left one as hidden would instead silently resolve it
+    // to the right side.
+    val Seq(a, b) = testRelation2.output.take(2)
+    val set = Project(Seq(Alias(Literal("x"), "a")(), b), testRelation2)
+    set.setTagValue(Project.hiddenOutputTag, Seq(a, b).map(_.markAsQualifiedAccessOnly()))
+    set.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+
+    val otherRelation = LocalRelation(AttributeReference("b", StringType)())
+    val other = Project(otherRelation.output, otherRelation)
+    other.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+
+    val column = UnresolvedAttribute("b")
+    column.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+    val plan = Project(Seq(column), Join(set, other, Inner, None, JoinHint.NONE))
+
+    checkError(
+      exception = intercept[AnalysisException](getAnalyzer.execute(plan)),
+      condition = "AMBIGUOUS_COLUMN_REFERENCE",
+      parameters = Map("name" -> "\"b\""))
+  }
 }
 
 /**

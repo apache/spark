@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
@@ -584,15 +586,9 @@ trait UnresolvedStarBase extends Star with Unevaluable {
       // keep any restrictions that may break column resolution for normal attributes.
       // See SPARK-42084 for more details.
       .map(_.markAsAllowAnyAccess())
-    // Hidden output may also contain visible attributes to fix their position in the expansion,
-    // as the SQL pipe SET operator does to keep the original column order (SPARK-59146). Emit
-    // each such attribute once, at its hidden position, using the visible attribute itself.
-    val visibleById = parameters.childOperatorOutput.map(a => a.exprId -> a).toMap
-    val hiddenIds = hiddenOutput.map(_.exprId).toSet
-    val expandedAttributes =
-      (hiddenOutput.map(a => visibleById.getOrElse(a.exprId, a)) ++
-        parameters.childOperatorOutput.filterNot(a => hiddenIds.contains(a.exprId)))
-        .filter(matchedQualifier(_, target.get, parameters.resolver))
+    val expandedAttributes = UnresolvedStarBase
+      .mergeHiddenAndVisibleOutput(hiddenOutput, parameters.childOperatorOutput)
+      .filter(matchedQualifier(_, target.get, parameters.resolver))
 
     if (expandedAttributes.nonEmpty) return expandedAttributes
 
@@ -631,6 +627,34 @@ trait UnresolvedStarBase extends Star with Unevaluable {
   }
 
   override def toString: String = target.map(_.mkString("", ".", ".")).getOrElse("") + "*"
+}
+
+object UnresolvedStarBase {
+
+  /**
+   * Merges the hidden output of a plan with its visible output, in the order a qualified star
+   * expands them.
+   *
+   * Hidden output usually holds attributes that are not visible at all, such as the duplicated
+   * join keys of a USING join. It may also repeat an attribute that is visible, to pin that
+   * attribute's position in the expansion, as the SQL pipe SET operator does to keep the original
+   * column order of the row its table alias refers to (SPARK-59146).
+   *
+   * Every occurrence of the source row is therefore preserved: a hidden attribute consumes at
+   * most one visible occurrence, which is emitted in the hidden attribute's place, because a
+   * projection may repeat the same attribute. Visible attributes that no hidden attribute
+   * consumed keep their relative order, after the hidden output.
+   */
+  def mergeHiddenAndVisibleOutput(
+      hiddenOutput: Seq[Attribute],
+      visibleOutput: Seq[Attribute]): Seq[Attribute] = {
+    val unconsumed = visibleOutput.to(mutable.ArrayBuffer)
+    val merged = hiddenOutput.map { hidden =>
+      val visible = unconsumed.indexWhere(_.exprId == hidden.exprId)
+      if (visible >= 0) unconsumed.remove(visible) else hidden
+    }
+    merged ++ unconsumed.toSeq
+  }
 }
 
 /**
