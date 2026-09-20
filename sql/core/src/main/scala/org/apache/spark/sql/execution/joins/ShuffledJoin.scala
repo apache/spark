@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, JoinType, LeftAnti, LeftExistence, LeftOuter, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -172,5 +173,21 @@ object ShuffledJoin {
   def canDuplicateLeftSide(joinType: JoinType): Boolean = joinType match {
     case _: InnerLike | RightOuter => true
     case _ => false
+  }
+
+  /**
+   * The join type of the operators whose partially clustered alignment spreads one side against a
+   * repeater, and `None` for every other operator. `EnsureRequirements.checkKeyGroupCompatible` is
+   * the only producer of such a pair, and `ValidateRequirements` waives an ungrouped side only for
+   * the operators this names, so the two read one list rather than a copy each.
+   *
+   * A `SortMergeAsOfJoinExec` is a `ShuffledJoin` and builds none, which is why the kinds are named
+   * rather than read off the trait. The side that repeats is decided next to this, by
+   * `canDuplicateLeftSide` and `canDuplicateRightSide`.
+   */
+  def partiallyClusteredJoinType(plan: SparkPlan): Option[JoinType] = plan match {
+    case smj: SortMergeJoinExec => Some(smj.joinType)
+    case sj: ShuffledHashJoinExec => Some(sj.joinType)
+    case _ => None
   }
 }
