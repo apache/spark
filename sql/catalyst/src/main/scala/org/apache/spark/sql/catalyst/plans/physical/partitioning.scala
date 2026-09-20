@@ -116,8 +116,8 @@ case class ClusteredDistribution(
   /**
    * Checks if `expressions` match all `clustering` expressions in the same ordering.
    *
-   * `Partitioning` should call this to check its expressions when `requireAllClusterKeys`
-   * is set to true.
+   * This is the `requireAllClusterKeys` half on its own. A `Partitioning` whose whole test is the
+   * flag asks `matchesClusterKeys` instead, which composes this with the other half.
    */
   def areAllClusterKeysMatched(expressions: Seq[Expression]): Boolean =
     expressions.corresponds(clustering)(_.semanticEquals(_))
@@ -127,8 +127,11 @@ case class ClusteredDistribution(
    * exactly the cluster keys in the same order when `requireAllClusterKeys` is set, and otherwise
    * every expression naming one of them.
    *
-   * This is the whole of what `requireAllClusterKeys` governs, so a `satisfies0` reads it here
-   * rather than branching on the flag itself.
+   * This is the whole test for the five `satisfies0` implementations that ask it, so those read it
+   * rather than branching on the flag. It is not the whole of what the flag governs:
+   * `KeyedPartitioning` reads it in `keysSatisfy` and again in `mayProjectToClusterKeys`, where the
+   * other branch is about projecting keys down to the cluster keys rather than about naming them.
+   * Do not fold those into this.
    */
   def matchesClusterKeys(expressions: Seq[Expression]): Boolean =
     if (requireAllClusterKeys) areAllClusterKeysMatched(expressions)
