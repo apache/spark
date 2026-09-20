@@ -397,6 +397,15 @@ world'))"""))
       case DataTypeMismatch(sub, _) => assert(sub == "CANNOT_CONVERT_TO_JSON")
       case other => fail(s"expected DataTypeMismatch, got $other")
     }
+    // A spatial type nested as a MAP VALUE must still be rejected: the guard descends recursively
+    // into map values (unlike the top-level atomic case above), so this exercises that descent.
+    val badNested = JsonObjectExpr(
+      Seq((Literal("k"), Literal.create(null, MapType(StringType, GeometryType(4326))))),
+      Seq(false), JsonConstructorNullBehavior.Null, StringType)
+    badNested.checkInputDataTypes() match {
+      case DataTypeMismatch(sub, _) => assert(sub == "CANNOT_CONVERT_TO_JSON")
+      case other => fail(s"expected DataTypeMismatch for a nested spatial value, got $other")
+    }
     // A spatial type appearing only as a MAP KEY is fine: JacksonGenerator writes map keys via
     // toString, so the value-type guard must not over-reject it.
     val ok = JsonObjectExpr(
@@ -542,13 +551,9 @@ world'))"""))
 
   test("view default collation preserves an explicit collated RETURNING") {
     // Exercises the CREATE VIEW resolution path (in addition to the CTAS path above): the explicit
-    // RETURNING collation must survive the view's default collation. Pin the fixed-point analyzer:
-    // the single-pass resolver does not yet resolve a TimeZoneAware JSON constructor's timezone
-    // when re-resolving a view (a pre-existing gap independent of collation); the CTAS test above
-    // already exercises the single-pass path via the dual-run analyzer.
-    withSQLConf(
-        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
-        SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+    // RETURNING collation must survive the view's default collation. Runs under dual-run (the
+    // default) so the single-pass resolver's view re-resolution is exercised for parity.
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
       withView("v") {
         sql(
           """CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS

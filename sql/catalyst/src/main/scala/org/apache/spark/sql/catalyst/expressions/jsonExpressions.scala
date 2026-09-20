@@ -2330,9 +2330,10 @@ case class JsonTypeof(child: Expression)
  *
  * A flat, clause-free call routes through function resolution and is rebuilt by
  * `JsonObjectExpressionBuilder` (so a same-named routine can shadow the built-in `json_object`); a
- * clause-bearing or nested form is built directly from the grammar (see
- * `AstBuilder.visitJsonObject`). The user-facing reference lives in
- * `docs/sql-ref-syntax-qry-select-json-object.md`.
+ * clause-bearing call, or one lexically nested in the *value* position of an enclosing JSON
+ * constructor, is built directly from the grammar (see `AstBuilder.visitJsonObject`); a nested call
+ * in *key* position instead stays eligible for routine resolution and shadowing.
+ * The user-facing reference lives in `docs/sql-ref-syntax-qry-select-json-object.md`.
  */
 case class JsonObjectExpr(
     members: Seq[(Expression, Expression)],

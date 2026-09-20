@@ -37,8 +37,8 @@ members, the `{ NULL | ABSENT } ON NULL` clause, and a string-type `RETURNING`. 
 SQL/JSON clauses are not yet supported:
 
 * The value-level `FORMAT JSON` marker (which tags a string value as pre-formatted JSON to be
-  spliced in raw). A nested `JSON_OBJECT` is still spliced in as raw JSON; see the **value**
-  parameter below.
+  spliced in raw). A nested JSON constructor written directly in the `JSON_OBJECT(...)` value
+  position is still spliced in as raw JSON; see the **value** parameter below.
 * The `{ WITH | WITHOUT } UNIQUE KEYS` clause. Duplicate keys are kept in source order (the
   `WITHOUT UNIQUE KEYS` behavior); there is no option to reject them.
 * `RETURNING` to a non-string type, or with a binary/`FORMAT JSON` output clause. The result is
@@ -68,9 +68,11 @@ JSON_OBJECT ( [ key, value [, key, value] ... ]
 
     An expression producing the member value. Values may have different types and may be nested
     `JSON_OBJECT` constructors. `JSON_OBJECT()` with no members produces the empty object `{}`. A
-    nested JSON constructor is spliced in as raw JSON (e.g. `JSON_OBJECT('a' VALUE JSON_OBJECT('b'
-    VALUE 1))` produces `{"a":{"b":1}}`); an explicit value-level `FORMAT JSON` clause is not yet
-    supported.
+    nested JSON constructor written directly in the value position is spliced in as raw JSON (e.g.
+    `JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1))` produces `{"a":{"b":1}}`); an explicit
+    value-level `FORMAT JSON` clause is not yet supported. Raw splicing applies only to this direct
+    syntax: a qualified or otherwise routed call (e.g. `builtin.json_object('a', json_object('b',
+    1))`) currently quotes the nested result instead, producing `{"a":"{\"b\":1}"}`.
 
 * **{ NULL | ABSENT } ON NULL**
 
