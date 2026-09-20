@@ -1774,25 +1774,26 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val right = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyedPartitioning(Seq(days(aR), years(bR)), rightKeys))
 
-    // `pushPartValues` stays at its default (on), which is all the push branch needs. The first
-    // arm leaves `partition.filter` unset, so it exercises the shipped default and would fail if
-    // `createWithDefault(true)` were reverted; the second arm pins the off rollback.
-    val filterKey = SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key
-    Seq(1 -> Option.empty[String], 3 -> Some("false")).foreach { case (expected, filterOverride) =>
-      withSQLConf(filterOverride.map(filterKey -> _).toSeq: _*) {
-        val smj = SortMergeJoinExec(Seq(xL, yL), Seq(aR, bR), Inner, None, left, right)
-        val planned = EnsureRequirements.apply(smj)
+    // `pushPartValues` stays at its default (on), which is all the push branch needs.
+    def assertPairingPushesKeys(expected: Int, clue: String): Unit = {
+      val smj = SortMergeJoinExec(Seq(xL, yL), Seq(aR, bR), Inner, None, left, right)
+      val planned = EnsureRequirements.apply(smj)
 
-        // Without the pairing, the left's first member is taken and its `days(yL)` is matched
-        // against `days(aR)`, which names the other join key, so the join declines and both sides
-        // are shuffled onto the default partitioning.
-        assert(planned.collect { case s: ShuffleExchangeExec => s }.isEmpty,
-          "the second member pairs with the other side, so neither side is shuffled")
-        assert(groupPartitionsNodes(planned).map(_.expectedKeyCount) ===
-          Seq(Some(expected), Some(expected)),
-          if (filterOverride.isEmpty) "the unset default pushes the intersection of the key sets"
-          else "filtering off pushes the union of the key sets")
-      }
+      // Without the pairing, the left's first member is taken and its `days(yL)` is matched
+      // against `days(aR)`, which names the other join key, so the join declines and both sides
+      // are shuffled onto the default partitioning.
+      assert(planned.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+        "the second member pairs with the other side, so neither side is shuffled")
+      assert(groupPartitionsNodes(planned).map(_.expectedKeyCount) ===
+        Seq(Some(expected), Some(expected)), clue)
+    }
+
+    // The unset arm is what pins the shipped default: an explicit true would keep passing if
+    // `createWithDefault(true)` were reverted. It pushes the intersection of the two key sets;
+    // the pinned-off rollback arm pushes their union.
+    assertPairingPushesKeys(1, "the unset default pushes the intersection of the key sets")
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
+      assertPairingPushesKeys(3, "filtering off pushes the union of the key sets")
     }
   }
 

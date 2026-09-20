@@ -5365,27 +5365,32 @@ class KeyGroupedPartitioningSuite
     val purchases_partitions = Array(bucket(6, "item_id"), years("time"))
     createTable(purchases, purchasesColumns, purchases_partitions)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES (2, 10.0, cast('2021-01-01' as timestamp))")
-    withSQLConf(
-      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
-      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
-      // The explained key count is the union of both sides' reduced keys.
-      SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
-      val df = sql(
-        s"""
-           |${selectWithMergeJoinHint("i", "p")}
-           |*
-           |FROM testcat.ns.$items i
-           |JOIN testcat.ns.$purchases p ON p.item_id = i.id
-           |""".stripMargin)
-      val simpleAndExtendedKeyword =
-        "GroupPartitions JoinKeyPositions: [0] ExpectedPartitionKeys: 2 " +
-        "Reducers: [BucketReducer(2)] DistributePartitions: false SortedMerge: false"
-      val formattedKeyword =
-        "Arguments: JoinKeyPositions: [0], ExpectedPartitionKeys: 2, " +
-        "Reducers: [BucketReducer(2)], DistributePartitions: false, SortedMerge: false"
-      checkKeywordsExistsInExplain(df, SimpleMode, simpleAndExtendedKeyword)
-      checkKeywordsExistsInExplain(df, ExtendedMode, simpleAndExtendedKeyword)
-      checkKeywordsExistsInExplain(df, FormattedMode, formattedKeyword)
+    // (partition filter, explained key count): `items`'s bucket(4, 1) = 1 reduces to 1 % 2 = 1
+    // and `purchases`'s bucket(6, 2) = 2 reduces to 2 % 2 = 0. The two reduced key sets are
+    // disjoint, so the node explains their union without the filter and their empty
+    // intersection with it. Nothing else in the explained string depends on the setting.
+    Seq(2 -> false, 0 -> true).foreach { case (expectedKeys, filter) =>
+      withSQLConf(
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+        SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString) {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("i", "p")}
+             |*
+             |FROM testcat.ns.$items i
+             |JOIN testcat.ns.$purchases p ON p.item_id = i.id
+             |""".stripMargin)
+        val simpleAndExtendedKeyword =
+          s"GroupPartitions JoinKeyPositions: [0] ExpectedPartitionKeys: $expectedKeys " +
+          "Reducers: [BucketReducer(2)] DistributePartitions: false SortedMerge: false"
+        val formattedKeyword =
+          s"Arguments: JoinKeyPositions: [0], ExpectedPartitionKeys: $expectedKeys, " +
+          "Reducers: [BucketReducer(2)], DistributePartitions: false, SortedMerge: false"
+        checkKeywordsExistsInExplain(df, SimpleMode, simpleAndExtendedKeyword)
+        checkKeywordsExistsInExplain(df, ExtendedMode, simpleAndExtendedKeyword)
+        checkKeywordsExistsInExplain(df, FormattedMode, formattedKeyword)
+      }
     }
   }
 
