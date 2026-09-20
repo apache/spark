@@ -1936,8 +1936,11 @@ private[spark] class DAGScheduler(
    * stage.
    */
   private def submitWaitingPipelinedChildStages(runningParent: Stage): Unit = {
+    if (!isPipelinedProducer(runningParent)) {
+      return
+    }
     val pipelinedChildren = waitingStages.filter { child =>
-      child.parents.contains(runningParent) && isPipelinedProducer(runningParent)
+      child.parents.contains(runningParent)
     }.toArray
     // Remove them from waitingStages before resubmitting, or submitStage's `!waitingStages(stage)`
     // guard would treat them as already-scheduled and no-op (mirrors submitWaitingChildStages).

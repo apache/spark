@@ -6759,6 +6759,37 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   // Pipelined shuffle dependency: group formation + concurrent submission
   // ==========================================================================================
 
+  for (withShuffle <- Seq(false, true)) {
+    test(s"non-pipelined stage start skips waiting stages (withShuffle=$withShuffle)") {
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val finalRdd = if (withShuffle) {
+        val dep = new ShuffleDependency(producerRdd, new HashPartitioner(2))
+        new MyRDD(sc, 2, List(dep), tracker = mapOutputTracker)
+      } else {
+        producerRdd
+      }
+      val unrelatedWaitingStage = mock(classOf[Stage])
+      when(unrelatedWaitingStage.id).thenReturn(Int.MaxValue)
+      when(unrelatedWaitingStage.parents).thenReturn(Nil)
+      scheduler.waitingStages += unrelatedWaitingStage
+      try {
+        submit(finalRdd, Array(0, 1))
+        verify(unrelatedWaitingStage, never()).parents
+        assert(scheduler.waitingStages.contains(unrelatedWaitingStage))
+      } finally {
+        scheduler.waitingStages -= unrelatedWaitingStage
+      }
+
+      if (withShuffle) {
+        completeShuffleMapStageSuccessfully(taskSets(0).stageId, 0, 2)
+      }
+      val resultTaskSet = taskSets(if (withShuffle) 1 else 0)
+      completeAndCheckAnswer(
+        resultTaskSet, Seq((Success, 42), (Success, 43)), Map(0 -> 42, 1 -> 43))
+      assertDataStructuresEmpty()
+    }
+  }
+
   test("pipelined shuffle: consumer stage is submitted concurrently with its producer") {
     // producer (shuffle map) --[pipelined]--> consumer (result)
     val producerRdd = new MyRDD(sc, 2, Nil)
