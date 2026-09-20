@@ -100,7 +100,7 @@ private[spark] object UI {
       "(through either spark.shuffle.service.enabled or a ShuffleDataIO with reliable " +
       "storage), and the cluster manager can hold executors: Standalone, YARN, and " +
       "Kubernetes with spark.kubernetes.allocation.pods.allocator=direct.")
-    .version("4.3.0")
+    .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(true)
@@ -111,11 +111,11 @@ private[spark] object UI {
       "defaults to true when spark.master is yarn, because the YARN ResourceManager/AM " +
       "proxy does not forward POST requests (SPARK-6846), and to false everywhere else. " +
       "Either way the state-changing endpoints require the random per-UI CSRF token " +
-      "embedded in the links and forms the UI renders, and reject prefetch requests " +
+      "embedded in the forms the UI renders, and reject prefetch requests " +
       "(Purpose/Sec-Purpose/X-Moz headers) and HEAD requests, so forged cross-site " +
-      "requests and incidental link fetches cannot trigger them; prefetch rejection " +
+      "requests and incidental fetches cannot trigger them; prefetch rejection " +
       "relies on the prefetcher identifying itself via those headers.")
-    .version("4.4.0")
+    .version("4.3.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createOptional

@@ -1697,18 +1697,19 @@ Apart from these, the following properties are also available, and may be useful
     <code>yarn</code>, because the YARN ResourceManager/AM proxy does not forward POST
     requests, and refused everywhere else.
     Either way the state-changing endpoints require the random per-UI CSRF token embedded
-    in the links and forms the UI renders, and reject prefetch requests (identified by
+    in the forms the UI renders, and reject prefetch requests (identified by
     the Purpose, Sec-Purpose, or X-Moz headers) and HEAD requests, so forged cross-site
-    requests and incidental link fetches cannot trigger them. Scripted clients can read
-    the token from the jobs page before calling the endpoint. In GET mode the
-    token appears in the link URL, so it can be recorded in browser history and
-    server or proxy access logs; it is random per UI instance and grants nothing beyond
-    the UI's own state-changing endpoints. Prefetch rejection relies on the prefetcher
-    identifying itself via those headers; one that sends none of them is not detected.
-    In POST-only mode the kill controls on the jobs and stages pages and the hold/resume
-    control on the jobs page are rendered as POST forms.
+    requests and incidental fetches cannot trigger them. Scripted clients can read
+    the token from the jobs page before calling the endpoint. The kill controls on the
+    jobs and stages pages and the hold/resume control on the jobs page are the same forms
+    in both modes; only their method follows this setting. In GET mode the browser
+    submits the token in the URL's query string, so it can be recorded in browser history
+    and server or proxy access logs; it is random per UI instance and grants nothing
+    beyond the UI's own state-changing endpoints. Prefetch rejection relies on the
+    prefetcher identifying itself via those headers; one that sends none of them is not
+    detected.
   </td>
-  <td>4.4.0</td>
+  <td>4.3.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.holdEnabled</code></td>

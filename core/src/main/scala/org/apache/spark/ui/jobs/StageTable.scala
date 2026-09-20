@@ -227,28 +227,17 @@ private[ui] class StagePagedTable(
     val basePathUri = UIUtils.prependBaseUri(request, basePath)
 
     val killLink = if (killEnabled) {
-      val killMessage = s"Are you sure you want to kill stage ${s.stageId} ?"
-      if (actionsViaGetEnabled) {
-        // GET mode (spark.ui.actionsViaGetEnabled=true): a plain link, which also works
-        // through proxies that do not forward POST, such as the YARN ResourceManager/AM
-        // proxy (SPARK-6846). The endpoint requires the CSRF token and rejects prefetch
-        // requests (see SparkUI.initialize), and webui.js gates the click on the
-        // confirmation dialog.
-        <a href={s"$basePathUri/stages/stage/kill/?id=${s.stageId}&csrfToken=$csrfToken"}
-           role="button"
-           data-kill-message={killMessage}
-           class="btn btn-sm btn-outline-danger kill-link float-end">Kill</a>
-      } else {
-        // POST-only mode (spark.ui.actionsViaGetEnabled=false): submit the kill as a form,
-        // the same pattern the master UI uses for killing applications and drivers.
-        <form action={s"$basePathUri/stages/stage/kill/"} method="POST" class="d-inline float-end">
-          <input type="hidden" name="id" value={s.stageId.toString}/>
-          <input type="hidden" name="csrfToken" value={csrfToken}/>
-          <button type="submit"
-                  data-kill-message={killMessage}
-                  class="btn btn-sm btn-outline-danger kill-link">Kill</button>
-        </form>
-      }
+      // The same form the master UI uses for killing applications and drivers; only the
+      // method follows spark.ui.actionsViaGetEnabled, see UIUtils.actionFormMethod.
+      <form action={s"$basePathUri/stages/stage/kill/"}
+            method={UIUtils.actionFormMethod(actionsViaGetEnabled)}
+            class="d-inline float-end">
+        <input type="hidden" name="id" value={s.stageId.toString}/>
+        <input type="hidden" name="csrfToken" value={csrfToken}/>
+        <button type="submit"
+                data-kill-message={s"Are you sure you want to kill stage ${s.stageId} ?"}
+                class="btn btn-sm btn-outline-danger kill-link">Kill</button>
+      </form>
     } else {
       Seq.empty
     }
