@@ -279,7 +279,9 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
 
   test("DataSourceV2ScanRelation.computeStats matches column stats consistently with the " +
     "analyzer for case-folding-equal names") {
+    // scalastyle:off nonascii
     val longS = "\u017f"
+    // scalastyle:on nonascii
     val colAttr = AttributeReference(longS, IntegerType)()
     val output = Seq(colAttr)
     val scan = newStatsScan(

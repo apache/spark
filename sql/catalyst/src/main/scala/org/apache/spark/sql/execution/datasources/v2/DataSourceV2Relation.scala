@@ -580,6 +580,7 @@ object DataSourceV2Relation {
     val v2ColumnStats = Option(v2Statistics.columnStats()).getOrElse(EMPTY_V2_COLUMN_STATS)
     if (!v2ColumnStats.isEmpty) {
       val keys = v2ColumnStats.keySet()
+      val outputAttrs = AttributeSeq.fromNormalOutput(output)
       var keyed = Seq.empty[(Attribute, String, ColumnStat)]
       keys.forEach(key => {
         val colStat = v2ColumnStats.get(key)
@@ -609,7 +610,7 @@ object DataSourceV2Relation {
         val fieldNames = key.fieldNames
         if (fieldNames.length == 1) {
           val fieldName = fieldNames.head
-          val exprIds = AttributeSeq.fromNormalOutput(output)
+          val exprIds = outputAttrs
             .getCandidatesForResolution(Seq(fieldName), resolver)._1
             .map(_.exprId).toSet
           output.filter(attr => exprIds.contains(attr.exprId)) match {
