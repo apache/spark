@@ -6502,6 +6502,14 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     assert(r2.exists(isPositiveZero))
   }
 
+  test("SPARK-59602: array_distinct normalizes nested floating-point values") {
+    val result = Seq(Seq(Seq(-0.0d), Seq(0.0d))).toDF("a")
+      .select(array_distinct($"a")).head().getSeq[Seq[Double]](0)
+
+    assert(result.length == 1)
+    assert(isPositiveZero(result.head.head))
+  }
+
   test("SPARK-54918: array_distinct normalizes -0.0 to +0.0") {
     val r1 = Seq(Array(-0.0d, 0.0d)).toDF("a")
       .select(array_distinct($"a")).head().getSeq[Double](0)
