@@ -26,9 +26,9 @@ import java.util.concurrent.ThreadLocalRandom
 import org.apache.commons.lang3.mutable.MutableInt
 import org.apache.curator.test.TestingServer
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.deploy.{ApplicationDescription, Command, DeployTestUtils, DriverDescription, SparkCuratorUtil}
-import org.apache.spark.internal.config.Deploy.ZOOKEEPER_URL
+import org.apache.spark.internal.config.Deploy.{RECOVERY_SERIALIZATION_FILTER, ZOOKEEPER_URL}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcEndpoint, RpcEnv}
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
@@ -135,7 +135,7 @@ class PersistenceEngineSuite extends SparkFunSuite {
     }
   }
 
-  test("ZooKeeperPersistenceEngine skips classes outside the serialization filter allowlist") {
+  test("SPARK-59333: ZooKeeperPersistenceEngine skips classes rejected by the filter") {
     val conf = new SparkConf()
     val zkTestServer = new TestingServer(findFreePort(conf))
     try {
@@ -183,6 +183,25 @@ class PersistenceEngineSuite extends SparkFunSuite {
       }
     } finally {
       zkTestServer.stop()
+    }
+  }
+
+  test("SPARK-59333: recoverySerializationFilter rejects patterns that yield no filter") {
+    // ObjectInputFilter.Config.createFilter returns null for "" and ";", and a filter that
+    // matches nothing for blanks; either would otherwise silently disable the filtering.
+    Seq("", "  ", ";").foreach { pattern =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          new SparkConf().set(RECOVERY_SERIALIZATION_FILTER.key, pattern)
+            .get(RECOVERY_SERIALIZATION_FILTER)
+        },
+        condition = "INVALID_CONF_VALUE.REQUIREMENT",
+        parameters = Map(
+          "confName" -> RECOVERY_SERIALIZATION_FILTER.key,
+          "confValue" -> pattern,
+          "confRequirement" ->
+            "must be a non-empty JEP-290 filter pattern; use '*' to disable filtering.")
+      )
     }
   }
 

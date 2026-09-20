@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.master
 
-import java.io.{InvalidClassException, ObjectInputFilter}
+import java.io.ObjectInputFilter
 import java.nio.ByteBuffer
 
 import scala.jdk.CollectionConverters._
@@ -30,8 +30,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkCuratorUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Deploy._
-import org.apache.spark.serializer.{JavaDeserializationStream, JavaSerializer, Serializer}
-import org.apache.spark.util.{ByteBufferInputStream, Utils}
+import org.apache.spark.serializer.{JavaSerializerInstance, Serializer}
+import org.apache.spark.util.ByteBufferInputStream
 
 
 private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer: Serializer)
@@ -75,23 +75,22 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
 
   private def deserializeFromFile[T](filename: String)(implicit m: ClassTag[T]): Option[T] = {
     val fileData = zk.getData().forPath(workingDir + "/" + filename)
+    val recordingFilter = new RecordingFilter(serializationFilter)
     try {
-      val inputStream = new ByteBufferInputStream(ByteBuffer.wrap(fileData))
-      val in = serializer match {
-        case _: JavaSerializer =>
-          // A class rejected by the filter surfaces as InvalidClassException.
-          new JavaDeserializationStream(
-            inputStream, Utils.getContextOrSparkClassLoader, Some(serializationFilter))
-        case _ =>
-          serializer.newInstance().deserializeStream(inputStream)
-      }
-      try {
-        Some(in.readObject[T]())
-      } finally {
-        in.close()
+      serializer.newInstance() match {
+        case javaInstance: JavaSerializerInstance =>
+          val in = javaInstance.deserializeStream(
+            new ByteBufferInputStream(ByteBuffer.wrap(fileData)), recordingFilter)
+          try {
+            Some(in.readObject[T]())
+          } finally {
+            in.close()
+          }
+        case instance =>
+          Some(instance.deserialize[T](ByteBuffer.wrap(fileData)))
       }
     } catch {
-      case e: InvalidClassException if isFilterRejection(e) =>
+      case e: Exception if recordingFilter.rejected =>
         // Rejected by the serialization filter, not found corrupt. Skip the znode without
         // deleting it: an overly narrow filter pattern (e.g. "org.apache.spark.*", which
         // does not match subpackages) must not wipe the whole recovery state on failover.
@@ -105,8 +104,19 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
     }
   }
 
-  // The JDK reports a filter rejection only as an InvalidClassException whose message is
-  // "filter status: REJECTED"; there is no more specific exception type to match on.
-  private def isFilterRejection(e: InvalidClassException): Boolean =
-    e.getMessage != null && e.getMessage.contains("filter status: REJECTED")
+  // Records whether the recovery serialization filter rejected anything during a read, since
+  // the JDK reports a rejection only as a generic InvalidClassException. Only this filter's
+  // rejections are recorded: a znode rejected solely by a JVM-wide jdk.serialFilter is
+  // handled like any other unreadable znode.
+  private class RecordingFilter(delegate: ObjectInputFilter) extends ObjectInputFilter {
+    var rejected = false
+
+    override def checkInput(info: ObjectInputFilter.FilterInfo): ObjectInputFilter.Status = {
+      val status = delegate.checkInput(info)
+      if (status == ObjectInputFilter.Status.REJECTED) {
+        rejected = true
+      }
+      status
+    }
+  }
 }

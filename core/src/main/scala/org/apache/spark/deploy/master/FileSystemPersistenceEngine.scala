@@ -86,7 +86,7 @@ private[master] class FileSystemPersistenceEngine(
 
   // Unlike ZooKeeperPersistenceEngine, no recovery serialization filter is applied here:
   // the store is local to the master host; if it is corrupted, the master cannot trust
-  // itself anyways.
+  // itself anyway.
   private def deserializeFromFile[T](file: File)(implicit m: ClassTag[T]): T = {
     var fileIn: InputStream = new FileInputStream(file)
     codec.foreach { c => fileIn = c.compressedInputStream(new FileInputStream(file)) }

@@ -93,7 +93,7 @@ private[master] class RocksDBPersistenceEngine(
 
   // Unlike ZooKeeperPersistenceEngine, no recovery serialization filter is applied here:
   // the store is local to the master host; if it is corrupted, the master cannot trust
-  // itself anyways.
+  // itself anyway.
   override def read[T: ClassTag](name: String): Seq[T] = {
     val result = new ArrayBuffer[T]
     val iter = db.newIterator()

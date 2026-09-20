@@ -17,8 +17,6 @@
 
 package org.apache.spark.serializer
 
-import java.io.ObjectInputFilter
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class JavaSerializerSuite extends SparkFunSuite {
@@ -59,39 +57,6 @@ class JavaSerializerSuite extends SparkFunSuite {
 
     // check that serializer's loader is used to resolve proxied interface.
     assert(classesLoaded.exists(klass => klass.contains("MyInterface")))
-  }
-
-  test("JavaDeserializationStream filter composition preserves rejection by either filter") {
-    def filterInfo(clazz: Class[_], arrayLen: Long): ObjectInputFilter.FilterInfo =
-      new ObjectInputFilter.FilterInfo {
-        override def serialClass(): Class[_] = clazz
-        override def arrayLength(): Long = arrayLen
-        override def depth(): Long = 1
-        override def references(): Long = 0
-        override def streamBytes(): Long = 0
-      }
-
-    val allowAll = ObjectInputFilter.Config.createFilter("*")
-    val rejectAll = ObjectInputFilter.Config.createFilter("!*")
-    val maxOneElementArray = ObjectInputFilter.Config.createFilter("maxarray=1")
-    val stringsOnly = ObjectInputFilter.Config.createFilter("java.lang.String")
-
-    val byteArray = filterInfo(classOf[Array[Byte]], 2)
-    val string = filterInfo(classOf[String], -1)
-
-    import JavaDeserializationStream.composeFilters
-    import ObjectInputFilter.Status._
-    // A rejection by either the existing (e.g. JVM-wide) or the new filter rejects.
-    // Note the JDK's pattern filters apply limits like maxarray to array classes and
-    // match class patterns against the array's component type, so a byte[] (primitive
-    // component) is left undecided by class patterns.
-    assert(composeFilters(maxOneElementArray, allowAll).checkInput(byteArray) === REJECTED)
-    assert(composeFilters(allowAll, rejectAll).checkInput(string) === REJECTED)
-    // An allow by either filter allows when neither rejects.
-    assert(composeFilters(stringsOnly, allowAll).checkInput(string) === ALLOWED)
-    assert(composeFilters(maxOneElementArray, allowAll).checkInput(string) === ALLOWED)
-    // No decision by either filter stays undecided.
-    assert(composeFilters(stringsOnly, stringsOnly).checkInput(byteArray) === UNDECIDED)
   }
 }
 
