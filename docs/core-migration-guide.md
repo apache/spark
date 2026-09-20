@@ -24,6 +24,8 @@ license: |
 
 ## Upgrading from Core 4.2 to 4.3
 
+- Spark 4.3 adds pre-fetch filtering and CSRF tokens to side-effect causing Spark UI actions, _except for_ `/workers/kill` which is used by decomissioning, and requires POST requests for non-YARN deployments. You can re-enable GET request handling by setting `spark.ui.actionsViaGetEnabled=true`, however CSRF token validation remains even with GET requests enabled. If you have scripted actions outside of Spark to kill running jobs you will need to fetch the previous page and grab the CSRF token first.
+
 - Since Spark 4.3, Spark compresses serialized RDD partitions by default. To restore the legacy behavior, you can set `spark.rdd.compress` to `false`.
 
 - Since Spark 4.3, Spark executor pods connect to the driver via the driver pod IP directly instead of the driver's Kubernetes Service. To restore the legacy behavior, you can set `spark.kubernetes.executor.useDriverPodIP` to `false`.

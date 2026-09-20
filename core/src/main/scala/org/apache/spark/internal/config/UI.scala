@@ -100,7 +100,7 @@ private[spark] object UI {
       "(through either spark.shuffle.service.enabled or a ShuffleDataIO with reliable " +
       "storage), and the cluster manager can hold executors: Standalone, YARN, and " +
       "Kubernetes with spark.kubernetes.allocation.pods.allocator=direct.")
-    .version("4.4.0")
+    .version("4.3.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(true)
