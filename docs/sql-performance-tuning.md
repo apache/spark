@@ -692,7 +692,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.partition.filter.enabled</code></td>
       <td>true</td>
       <td>
-        When enabled, key groups that cannot produce output for the join type are not scanned at all, instead of being filled with empty partitions on the side that does not hold them. For example, an inner join only scans the key groups present on both sides. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true, together with either <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> or <code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code>.
+        When enabled, key groups that cannot produce output for the join type may be skipped, instead of being filled with empty partitions on the side that does not hold them. For example, an inner join may scan only the key groups present on both sides. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true, together with either <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> or <code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code>.
       </td>
       <td>4.0.0</td>
     </tr>
@@ -716,7 +716,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.preserveKeyOrderingOnCoalesce.enabled</code></td>
       <td>true</td>
       <td>
-        When enabled, <code>GroupPartitionsExec</code> reports sort orders over partition key expressions after coalescing several input partitions into one. The merged partitions share the same partition key value, so these orders still hold, while orders over other columns are lost by the concatenation. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+        When enabled, <code>GroupPartitionsExec</code> reports sort orders over partition key expressions after coalescing several input partitions into one. The merged partitions share the same partition key value, so these orders still hold, while orders over other columns are lost by the concatenation. No order is reported when the join reduced the partition keys onto a common key space (see <code>spark.sql.sources.v2.bucketing.allowCompatibleTransforms.enabled</code>), because the merged partitions then share only the reduced key. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
       </td>
       <td>4.2.0</td>
     </tr>
@@ -724,7 +724,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.preserveOrderingOnCoalesce.enabled</code></td>
       <td>false</td>
       <td>
-        When enabled, <code>GroupPartitionsExec</code> may preserve the child's full ordering through a sorted merge instead of concatenation, rather than only the orderings over partition key expressions that <code>spark.sql.sources.v2.bucketing.preserveKeyOrderingOnCoalesce.enabled</code> preserves. The sorted merge is selected only where a downstream ordering is otherwise unsatisfied and the merge is feasible, that is, the node coalesces partitions sharing a key, the child reports a non-empty ordering, and its subtree is <code>SafeForKWayMerge</code>; otherwise the node concatenates. Where it applies, it removes a downstream sort when data is both partitioned and sorted, but a sorted merge costs more than concatenation, especially when merging many partitions, and it gives up columnar execution for the merged plan. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+        When enabled, <code>GroupPartitionsExec</code> may preserve the child's full ordering through a sorted merge instead of concatenation, rather than only the orderings over partition key expressions that <code>spark.sql.sources.v2.bucketing.preserveKeyOrderingOnCoalesce.enabled</code> preserves. The sorted merge is selected only where a downstream ordering is otherwise unsatisfied and the merge is feasible, that is, the node coalesces partitions sharing a key, the child reports a non-empty ordering, and every operator below it is one Spark can drive from several partitions at once; otherwise the node concatenates. Where it applies, it removes a downstream sort when data is both partitioned and sorted, but a sorted merge costs more than concatenation, especially when merging many partitions, and it gives up columnar execution for the merged plan. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
       </td>
       <td>4.2.0</td>
     </tr>
