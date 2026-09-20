@@ -286,7 +286,7 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     val e = intercept[NoSuchElementException] {
       KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.")
     }
-    assert(e.getMessage.contains("csi.volumeName.options.driver"))
+    assert(e.getMessage.contains("csi.volumeName.options.driver is required for csi"))
   }
 
   test("SPARK-47003: Check emptyDir volume size") {

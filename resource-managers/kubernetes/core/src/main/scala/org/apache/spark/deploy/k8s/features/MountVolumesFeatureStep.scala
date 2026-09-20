@@ -142,7 +142,8 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
               .withReadOnly(spec.mountReadOnly)
               .withFsType(fsType.orNull)
               .withVolumeAttributes(attributes.asJava)
-              .withNodePublishSecretRef(nodePublishSecretName.map(new LocalObjectReference(_)).orNull)
+              .withNodePublishSecretRef(
+                nodePublishSecretName.map(new LocalObjectReference(_)).orNull)
             .endCsi()
       }
 

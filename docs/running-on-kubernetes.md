@@ -359,9 +359,9 @@ spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.options.clai
 And, a `csi` volume with volume name `data` can be specified using the following properties. `options.driver` is required; `options.fsType`, `options.nodePublishSecretName` (the name of a `Secret` in the pod's namespace) and any `options.volumeAttributes.*` are optional:
 
 ```
-spark.kubernetes.driver.volumes.csi.data.options.driver=file.csi.azure.com
+spark.kubernetes.driver.volumes.csi.data.options.driver=csi.example.com
 spark.kubernetes.driver.volumes.csi.data.options.fsType=ext4
-spark.kubernetes.driver.volumes.csi.data.options.nodePublishSecretName=azure-secret
+spark.kubernetes.driver.volumes.csi.data.options.nodePublishSecretName=csi-secret
 spark.kubernetes.driver.volumes.csi.data.options.volumeAttributes.shareName=<share-name>
 ```
 
