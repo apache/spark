@@ -97,15 +97,16 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
       aggregates: Seq[Expression],
       childOutput: Seq[Attribute],
       newAlias: (Expression, Option[String]) => Alias): LogicalPlan = {
+    val pivotColumnType = pivotColumn.dataType.asNullable
     val evalPivotValues = pivotValues.map { value =>
       val foldable = trimAliases(value).foldable
       if (!foldable) {
         throw QueryCompilationErrors.nonLiteralPivotValError(value)
       }
-      if (!Cast.canCast(value.dataType, pivotColumn.dataType)) {
+      if (!Cast.canCast(value.dataType, pivotColumnType)) {
         throw QueryCompilationErrors.pivotValDataTypeMismatchError(value, pivotColumn)
       }
-      Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
+      Cast(value, pivotColumnType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
     }
     val groupByExpressions = groupByExpressionsOpt.getOrElse {
       val pivotColumnAndAggregatesRefs = pivotColumn.references ++ AttributeSet(aggregates)
@@ -214,7 +215,7 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
     If(
       EqualNullSafe(
         pivotColumn,
-        Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone))
+        Cast(value, pivotColumn.dataType.asNullable, Some(conf.sessionLocalTimeZone))
       ),
       expression,
       Literal(null)
