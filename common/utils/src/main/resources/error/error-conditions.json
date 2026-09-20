@@ -9737,6 +9737,16 @@
           "Correlated scalar subqueries must be aggregated to return at most one row."
         ]
       },
+      "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT" : {
+        "message" : [
+          "The IN subquery <subqueryExpression> is nested in a correlated condition of another subquery, and its result can be unknown where it is not used as a predicate."
+        ]
+      },
+      "NESTED_SUBQUERY_REFERENCING_OUTER_AND_INNER_QUERY" : {
+        "message" : [
+          "The subquery <subqueryExpression> is nested in a correlated condition of another subquery, and references both the outer query and the subquery it is nested in."
+        ]
+      },
       "NON_CORRELATED_COLUMNS_IN_GROUP_BY" : {
         "message" : [
           "A GROUP BY clause in a scalar correlated subquery cannot contain non-correlated columns: <value>."

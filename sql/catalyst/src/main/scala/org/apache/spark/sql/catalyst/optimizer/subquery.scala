@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -419,58 +420,74 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       Seq[Attribute]) = {
     var newPlan = plan
     val introducedAttrs = ArrayBuffer.empty[Attribute]
+    // Builds the replacement of a sub-query expression under that expression's origin and with
+    // its tags, as TreeNode.transformDownWithPruning does for the nodes a rule replaces. Without
+    // it every node built below, the `exists` attribute and the join conditions included, would
+    // take the origin of the enclosing operator, and a runtime error raised from the rewritten
+    // condition would quote that operator rather than the sub-query fragment.
+    def replacing(sq: Expression)(replacement: => Expression): Expression = {
+      val newExpr = CurrentOrigin.withOrigin(sq.origin)(replacement)
+      newExpr.copyTagsFrom(sq)
+      newExpr
+    }
     def rewrite(expr: Expression): Expression = {
       if (!expr.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
         return expr
       }
       expr match {
         case sq @ Exists(sub, _, _, conditions, subHint) if canRewrite(sq) =>
-          val exists = AttributeReference("exists", BooleanType, nullable = false)()
-          val existenceJoin = ExistenceJoin(exists)
-          val newCondition = conditions.reduceLeftOption(And)
-          newPlan =
-            buildJoin(newPlan, rewriteDomainJoinsIfPresent(newPlan, sub, newCondition),
-              existenceJoin, newCondition, subHint)
-          introducedAttrs += exists
-          exists
+          replacing(sq) {
+            val exists = AttributeReference("exists", BooleanType, nullable = false)()
+            val existenceJoin = ExistenceJoin(exists)
+            val newCondition = conditions.reduceLeftOption(And)
+            newPlan =
+              buildJoin(newPlan, rewriteDomainJoinsIfPresent(newPlan, sub, newCondition),
+                existenceJoin, newCondition, subHint)
+            introducedAttrs += exists
+            exists
+          }
         case sq @ Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)))
             if canRewrite(sq) =>
-          val exists = AttributeReference("exists", BooleanType, nullable = false)()
-          // Deduplicate conflicting attributes if any.
-          val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
-          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
-          // To handle a null-aware predicate not-in-subquery in nested conditions
-          // (e.g., `v > 0 OR t1.id NOT IN (SELECT id FROM t2)`), we transform
-          // `inCondition` (t1.id=t2.id) into `(inCondition) OR ISNULL(inCondition)`.
-          //
-          // For example, `SELECT * FROM t1 WHERE v > 0 OR t1.id NOT IN (SELECT id FROM t2)`
-          // is transformed into a plan below;
-          // == Optimized Logical Plan ==
-          // Project [id#78, v#79]
-          // +- Filter ((v#79 > 0) OR NOT exists#83)
-          //   +- Join ExistenceJoin(exists#83), ((id#78 = id#80) OR isnull((id#78 = id#80)))
-          //     :- Relation[id#78,v#79] parquet
-          //     +- Relation[id#80] parquet
-          val nullAwareJoinConds = inConditions.map(c => Or(c, IsNull(c)))
-          val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
-          val joinHint = JoinHint(None, subHint)
-          newPlan = Join(newPlan,
-            rewriteDomainJoinsIfPresent(newPlan, newSub, Some(finalJoinCond)),
-            ExistenceJoin(exists), Some(finalJoinCond), joinHint)
-          introducedAttrs += exists
-          Not(exists)
+          replacing(sq) {
+            val exists = AttributeReference("exists", BooleanType, nullable = false)()
+            // Deduplicate conflicting attributes if any.
+            val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
+            val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
+            // To handle a null-aware predicate not-in-subquery in nested conditions
+            // (e.g., `v > 0 OR t1.id NOT IN (SELECT id FROM t2)`), we transform
+            // `inCondition` (t1.id=t2.id) into `(inCondition) OR ISNULL(inCondition)`.
+            //
+            // For example, `SELECT * FROM t1 WHERE v > 0 OR t1.id NOT IN (SELECT id FROM t2)`
+            // is transformed into a plan below;
+            // == Optimized Logical Plan ==
+            // Project [id#78, v#79]
+            // +- Filter ((v#79 > 0) OR NOT exists#83)
+            //   +- Join ExistenceJoin(exists#83), ((id#78 = id#80) OR isnull((id#78 = id#80)))
+            //     :- Relation[id#78,v#79] parquet
+            //     +- Relation[id#80] parquet
+            val nullAwareJoinConds = inConditions.map(c => Or(c, IsNull(c)))
+            val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
+            val joinHint = JoinHint(None, subHint)
+            newPlan = Join(newPlan,
+              rewriteDomainJoinsIfPresent(newPlan, newSub, Some(finalJoinCond)),
+              ExistenceJoin(exists), Some(finalJoinCond), joinHint)
+            introducedAttrs += exists
+            Not(exists)
+          }
         case sq @ InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))
             if canRewrite(sq) =>
-          val exists = AttributeReference("exists", BooleanType, nullable = false)()
-          // Deduplicate conflicting attributes if any.
-          val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
-          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
-          val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
-          val joinHint = JoinHint(None, subHint)
-          newPlan = Join(newPlan, rewriteDomainJoinsIfPresent(newPlan, newSub, newConditions),
-            ExistenceJoin(exists), newConditions, joinHint)
-          introducedAttrs += exists
-          exists
+          replacing(sq) {
+            val exists = AttributeReference("exists", BooleanType, nullable = false)()
+            // Deduplicate conflicting attributes if any.
+            val newSub = dedupSubqueryOnSelfJoin(newPlan, sub, Some(values))
+            val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
+            val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
+            val joinHint = JoinHint(None, subHint)
+            newPlan = Join(newPlan, rewriteDomainJoinsIfPresent(newPlan, newSub, newConditions),
+              ExistenceJoin(exists), newConditions, joinHint)
+            introducedAttrs += exists
+            exists
+          }
         // A sub-query that `canRewrite` declined is left as it is, children included.
         case sq @ (_: Exists | Not(_: InSubquery) | _: InSubquery) => sq
         case other => other.mapChildren(rewrite)
@@ -484,7 +501,59 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
    * Returns true if `e` references any of the attributes produced by `plan`.
    */
   private def referencesPlan(e: Expression, plan: LogicalPlan): Boolean = {
-    e.references.intersect(plan.outputSet).nonEmpty
+    // Iterates the references and probes the output set, which allocates nothing.
+    // AttributeSet.intersect materialises a set from its argument, so the operand order there
+    // would decide whether this walks the references or the whole output of `plan`.
+    e.references.exists(plan.outputSet.contains)
+  }
+
+  /**
+   * Returns true if `e` effectively references any of the attributes produced by `plan`, see
+   * [[effectiveReferences]].
+   */
+  private def effectivelyReferencesPlan(e: Expression, plan: LogicalPlan): Boolean = {
+    effectiveReferences(e).exists(plan.outputSet.contains)
+  }
+
+  /**
+   * Returns true if `e` effectively references an attribute that `plan` produces and `sharedWith`
+   * does not, see [[effectiveReferences]].
+   *
+   * An attribute that both plans produce is attributed to `sharedWith` rather than to `plan`.
+   * This matters when the outer and the sub-query plan share ExprIds, which a self-join can leave
+   * for the optimizer to deduplicate (SPARK-21835): the EXISTS arms classify against the raw
+   * sub-query plan, while the IN arms classify against the plan that
+   * `dedupSubqueryOnSelfJoin` has already separated from the outer plan. Without this a single
+   * shared attribute would satisfy both sides of the classification, so a nested sub-query that
+   * references only the sub-query it is nested in would be taken for one referencing both plans
+   * and rejected. A nested sub-query resolves in the scope of that sub-query, so a shared
+   * attribute is one of its own.
+   */
+  private def effectivelyReferencesPlanOnly(
+      e: Expression,
+      plan: LogicalPlan,
+      sharedWith: LogicalPlan): Boolean = {
+    effectiveReferences(e).exists { attr =>
+      plan.outputSet.contains(attr) && !sharedWith.outputSet.contains(attr)
+    }
+  }
+
+  /**
+   * The attributes that `e` references and can still evaluate. For an existential sub-query
+   * expression these are the ones of the values it compares and of the correlated condition that
+   * [[PullupCorrelatedPredicates]] hoisted into it, rather than the ones of `references`, which
+   * also include the outer attributes the pull-up retains for idempotency. Those outlive the
+   * condition that referenced them once BooleanSimplification has eliminated it, as in
+   * `a IN (SELECT col1 FROM t3 WHERE false AND col1 = c1)`, which keeps `c1` as an outer
+   * attribute of a sub-query that no longer reads it, and which must still be rewritten against
+   * the outer plan rather than treated as referencing the sub-query plan.
+   */
+  private def effectiveReferences(e: Expression): AttributeSet = e match {
+    case Exists(_, _, _, joinCond, _) => AttributeSet(joinCond.flatMap(_.references))
+    case Not(in: InSubquery) => effectiveReferences(in)
+    case InSubquery(values, ListQuery(_, _, _, _, joinCond, _)) =>
+      AttributeSet(values.flatMap(_.references) ++ joinCond.flatMap(_.references))
+    case _ => e.references
   }
 
   /**
@@ -505,13 +574,27 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
    * of the outer plan instead yields a join whose condition references an attribute that neither
    * of its children can produce (SPARK-59351).
    *
-   * A nested sub-query that references both plans cannot be rewritten into an existence join on
-   * either side, so it is left in the join condition, where both plans are in scope. This is only
-   * correct for an uncorrelated sub-query: the join condition of a correlated one is dropped when
-   * it is planned as an in-subquery filter, which would silently change the result, so it is
-   * reported as unsupported instead. Note that such a sub-query can be correlated only to the
-   * sub-query plan, as being correlated to the outer plan as well would require two levels of
-   * correlation, which the Analyzer rejects.
+   * A nested sub-query that references both plans can be rewritten into an existence join on
+   * neither side, so it is left in the join condition, where both plans are in scope. Leaving it
+   * there is only correct while it is uncorrelated: the join condition of a correlated one is
+   * dropped when it is planned as an in-subquery filter, which would silently change the result,
+   * so a correlated one is reported as unsupported instead. Note that such a sub-query can be
+   * correlated only to the sub-query plan, as being correlated to the outer plan as well would
+   * require two levels of correlation, which the Analyzer rejects.
+   *
+   * A sub-query left here is further subject to the rewrite of predicate sub-queries in join
+   * conditions, which rejects one referencing both plans under the default configuration; it
+   * survives only with
+   * `spark.sql.optimizer.decorrelatePredicateSubqueriesInJoinPredicate.enabled` disabled.
+   *
+   * An existence join yields only whether a row matched, so its `exists` attribute cannot tell
+   * FALSE from unknown, while `IN` is three-valued. The two are indistinguishable while the value
+   * only feeds a predicate, which is what a hoisted condition normally does, but not when it
+   * reaches something else, e.g. `(c1 IN (SELECT col1 FROM t3)) <=> false`, which is FALSE for a
+   * NULL that matches nothing and TRUE for the `exists` attribute. An IN sub-query whose row
+   * comparison can evaluate to unknown is therefore rejected in that position rather than
+   * rewritten. NOT IN is rewritten with a null-aware join condition of its own, which is equally
+   * two-valued, so it is rejected there too.
    *
    * Returns the rewritten condition along with the updated outer and sub-query plans.
    */
@@ -524,7 +607,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     // The sub-queries that do not reference the sub-query plan are rewritten against the outer
     // plan, as they only reference attributes of the outer plan, if any.
     val (newCond, newOuterPlan, _) = rewriteExistentialExprWithAttrs(
-      subCond.toSeq, outerPlan, e => !referencesPlan(e, subPlan))
+      subCond.toSeq, outerPlan, e => !effectivelyReferencesPlan(e, subPlan))
     (newCond, newOuterPlan, newSubPlan)
   }
 
@@ -540,29 +623,96 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       conditions: Seq[Expression],
       outerPlan: LogicalPlan,
       subPlan: LogicalPlan): (Option[Expression], LogicalPlan) = {
-    // A correlated sub-query referencing both plans has to stay in the join condition, where its
-    // own join condition is lost, so reject it rather than silently return a wrong result.
-    val unsupported = conditions.flatMap(_.collect {
+    // A sub-query left in the join condition loses its own join condition when it is planned
+    // there, so a correlated one would silently return a wrong result: reject it instead. Note
+    // that this walks the whole expression, including the join condition of a sub-query that the
+    // rewrite below declines to descend into. That is deliberate: a correlated sub-query hidden
+    // under a declined one would equally be planned without its join condition, or reach
+    // execution unevaluable, so it must be rejected even though nothing would have rewritten it.
+    val referencingBothPlans = conditions.flatMap(_.collect {
       case sq @ (_: Exists | _: InSubquery)
-        if isCorrelatedSubquery(sq) &&
-          referencesPlan(sq, subPlan) && referencesPlan(sq, outerPlan) => sq
+        if hasCorrelatedCondition(sq) && effectivelyReferencesPlan(sq, subPlan) &&
+          effectivelyReferencesPlanOnly(sq, outerPlan, subPlan) => sq
     })
-    if (unsupported.nonEmpty) {
-      throw QueryCompilationErrors.unsupportedCorrelatedSubqueryInJoinConditionError(unsupported)
+    if (referencingBothPlans.nonEmpty) {
+      throw QueryCompilationErrors.nestedSubqueryReferencingOuterAndInnerQueryError(
+        referencingBothPlans)
+    }
+    // An IN sub-query whose result can be unknown cannot be represented by the `exists` attribute
+    // of an existence join once that result is observable, see above.
+    val unknownResult = conditions
+      .flatMap(unknownSensitiveInSubqueries(_, inPredicate = true))
+      .filter(sq => effectivelyReferencesPlan(sq, subPlan) &&
+        !effectivelyReferencesPlanOnly(sq, outerPlan, subPlan))
+    if (unknownResult.nonEmpty) {
+      throw QueryCompilationErrors.nestedInSubqueryWithUnknownResultError(unknownResult)
     }
     val (newCond, newSubPlan, _) = rewriteExistentialExprWithAttrs(conditions, subPlan,
-      e => referencesPlan(e, subPlan) && !referencesPlan(e, outerPlan))
+      e => effectivelyReferencesPlan(e, subPlan) &&
+        !effectivelyReferencesPlanOnly(e, outerPlan, subPlan))
     (newCond, newSubPlan)
   }
 
   /**
-   * Returns true if `e` is an existential sub-query expression that is correlated. Note that the
-   * correlation of an [[InSubquery]] is carried by its list query, while its references also
-   * include those of the values on its left-hand side.
+   * Collects the IN sub-queries in `expr` whose result can be unknown and is not consumed by a
+   * predicate, so that rewriting them into an existence join, whose `exists` attribute is FALSE
+   * where IN is unknown, would be observable. See [[rewriteExistentialExprInJoinCondition]].
+   *
+   * `inPredicate` states whether the value of `expr` is only ever tested for being TRUE, which
+   * holds for the operands of AND, OR and NOT within a condition that ends up in a Filter or a
+   * join condition. Unknown and FALSE cannot be told apart there.
    */
-  private def isCorrelatedSubquery(e: Expression): Boolean = e match {
-    case exists: Exists => exists.isCorrelated
-    case InSubquery(_, listQuery) => listQuery.isCorrelated
+  private def unknownSensitiveInSubqueries(
+      expr: Expression,
+      inPredicate: Boolean): Seq[Expression] = expr match {
+    case And(left, right) =>
+      unknownSensitiveInSubqueries(left, inPredicate) ++
+        unknownSensitiveInSubqueries(right, inPredicate)
+    case Or(left, right) =>
+      unknownSensitiveInSubqueries(left, inPredicate) ++
+        unknownSensitiveInSubqueries(right, inPredicate)
+    // NOT IN is rewritten with a null-aware join condition, which is two-valued as well.
+    case Not(in: InSubquery) =>
+      if (!inPredicate && inSubqueryMayBeUnknown(in)) Seq(in) else Nil
+    case Not(child) => unknownSensitiveInSubqueries(child, inPredicate)
+    case in: InSubquery =>
+      if (!inPredicate && inSubqueryMayBeUnknown(in)) Seq(in) else Nil
+    // The join condition of a sub-query expression is a predicate, evaluated by the join that
+    // the sub-query is rewritten into.
+    case sq: SubqueryExpression =>
+      sq.children.flatMap(unknownSensitiveInSubqueries(_, inPredicate = true))
+    case other =>
+      other.children.flatMap(unknownSensitiveInSubqueries(_, inPredicate = false))
+  }
+
+  /**
+   * Returns true if `e` is a positive IN sub-query whose row comparison can evaluate to unknown,
+   * that is one that can return NULL rather than only TRUE or FALSE. An existence join cannot
+   * represent that third value, see [[rewriteExistentialExprInJoinCondition]]. NOT IN is excluded,
+   * as [[rewriteExistentialExprWithAttrs]] gives it a null-aware join condition of its own.
+   */
+  private def inSubqueryMayBeUnknown(e: Expression): Boolean = e match {
+    case InSubquery(values, listQuery) =>
+      values.zip(listQuery.plan.output).exists { case (v, o) => v.nullable || o.nullable }
+    case _ => false
+  }
+
+  /**
+   * Returns true if `e` is an existential sub-query expression that still carries a correlated
+   * condition, that is one that [[PullupCorrelatedPredicates]] hoisted into it and that would be
+   * lost were the sub-query left in a join condition.
+   *
+   * This is decided from that condition rather than from `isCorrelated`, which reports the outer
+   * attributes of the sub-query. The pull-up retains those for idempotency, so they outlive the
+   * condition that referenced them once BooleanSimplification has eliminated it, as in
+   * `a IN (SELECT col1 FROM t3 WHERE false AND col1 = c1)`, which keeps `c1` as an outer
+   * attribute while its condition is gone. Nothing is then lost by leaving the sub-query in the
+   * join condition. The same reasoning appears in `rewriteDomainJoinsIfPresent`, which relies on
+   * an eliminated condition leaving no domain join behind.
+   */
+  private def hasCorrelatedCondition(e: Expression): Boolean = e match {
+    case Exists(_, _, _, joinCond, _) => joinCond.nonEmpty
+    case InSubquery(_, ListQuery(_, _, _, _, joinCond, _)) => joinCond.nonEmpty
     case _ => false
   }
 }
