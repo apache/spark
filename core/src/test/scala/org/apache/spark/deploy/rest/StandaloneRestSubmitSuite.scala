@@ -447,6 +447,16 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
+  test("SPARK-59404: client does not send 'SPARK_LOCAL_(IP|HOSTNAME)' env vars by default") {
+    val environmentVariables = Map(
+      "SPARK_VAR" -> "1",
+      "SPARK_LOCAL_IP" -> "1",
+      "SPARK_LOCAL_HOSTNAME" -> "1",
+      "SPARK_LOCAL_DIRS" -> "1")
+    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    assert(filteredVariables == Map("SPARK_VAR" -> "1", "SPARK_LOCAL_DIRS" -> "1"))
+  }
+
   test("SPARK-49033: Support server-side environment variable replacement in REST Submission API") {
     val request = new CreateSubmissionRequest
     request.appResource = ""

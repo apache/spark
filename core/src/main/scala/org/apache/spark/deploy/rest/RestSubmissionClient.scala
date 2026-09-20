@@ -531,14 +531,22 @@ private[spark] object RestSubmissionClient {
   val supportedMasterPrefixes = Seq("spark://")
 
   // SPARK_HOME and SPARK_CONF_DIR are filtered out because they are usually wrong
-  // on the remote machine (SPARK-12345) (SPARK-25934)
-  private val EXCLUDED_SPARK_ENV_VARS = Set("SPARK_ENV_LOADED", "SPARK_HOME", "SPARK_CONF_DIR")
+  // on the remote machine (SPARK-12345) (SPARK-25934). SPARK_LOCAL_IP and SPARK_LOCAL_HOSTNAME
+  // describe the submitting host rather than the worker the driver runs on (SPARK-20025).
+  private val EXCLUDED_SPARK_ENV_VARS = Set(
+    "SPARK_ENV_LOADED",
+    "SPARK_HOME",
+    "SPARK_CONF_DIR",
+    "SPARK_LOCAL_IP",
+    "SPARK_LOCAL_HOSTNAME")
   private val REPORT_DRIVER_STATUS_INTERVAL = 1000
   private val REPORT_DRIVER_STATUS_MAX_TRIES = 10
   val PROTOCOL_VERSION = "v1"
 
   /**
-   * Filter non-spark environment variables from any environment.
+   * Filter non-spark environment variables from any environment. This is the single definition
+   * of which variables a standalone cluster mode submission forwards to the driver, shared by
+   * this client and the legacy RPC `Client`.
    */
   private[spark] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
     env.filter { case (k, _) =>
