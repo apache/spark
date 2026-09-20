@@ -18,10 +18,11 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, EqualTo, InSubquery, ListQuery, Not}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, EqualTo, InSubquery, ListQuery, Not}
 import org.apache.spark.sql.catalyst.optimizer.ReorderJoin
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, LogicalPlan}
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -466,6 +467,107 @@ class RewriteSelfJoinInequalityToAggregateSuite extends QueryTest with SharedSpa
 
       assertRuleNotFired(wrapped("CAST(arr AS ARRAY<TIMESTAMP>) IS NOT NULL"))
       assertRuleNotFired(wrapped("CAST(arr AS ARRAY<TIMESTAMP_NTZ>) IS NOT NULL"))
+    }
+  }
+
+  test("Complex-to-STRING casts with captured time zones are fail-closed (reviewer repro)") {
+    withTable("TZone") {
+      withTempView("SjView") {
+        // Reproduce the reported wrong-result case with two projections of the same Parquet
+        // leaf analyzed under different session time zones. Preconditions below verify that
+        // the casts capture different zoneIds, both sides share the same FileIndex, and the
+        // resulting plans still compare sameResult, so the test cannot pass because of an
+        // unrelated guard.
+        createTable(
+          "TZone",
+          "k INT, arr ARRAY<TIMESTAMP>, mp MAP<STRING, TIMESTAMP>, st STRUCT<x: TIMESTAMP>",
+          """  (1, ARRAY(TIMESTAMP'2024-06-15 12:00:00'),
+            |      MAP('a', TIMESTAMP'2024-06-15 12:00:00'),
+            |      NAMED_STRUCT('x', TIMESTAMP'2024-06-15 12:00:00'))""".stripMargin)
+        val basePlan = spark.table("TZone").queryExecution.analyzed
+
+        def findCast(p: LogicalPlan): Cast =
+          p.expressions.flatMap(_.collect { case c: Cast => c }).head
+        def findRelation(p: LogicalPlan): HadoopFsRelation =
+          p.collectFirst { case LogicalRelationWithTable(h: HadoopFsRelation, _) => h }.get
+
+        Seq("arr", "mp", "st").foreach { col =>
+          val leftPlan = withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+            Dataset.ofRows(spark, basePlan)
+              .selectExpr("k", s"CAST($col AS STRING) AS x")
+              .queryExecution.analyzed
+          }
+          val rightPlan = withSQLConf(
+              SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+            Dataset.ofRows(spark, basePlan)
+              .selectExpr("k", s"CAST($col AS STRING) AS x")
+              .queryExecution.analyzed
+          }
+
+          val leftCast = findCast(leftPlan)
+          val rightCast = findCast(rightPlan)
+          assert(leftCast.timeZoneId.contains("UTC"), s"$col: left zone ${leftCast.timeZoneId}")
+          assert(rightCast.timeZoneId.contains("America/Los_Angeles"),
+            s"$col: right zone ${rightCast.timeZoneId}")
+          assert(findRelation(leftPlan).location eq findRelation(rightPlan).location,
+            s"$col: left/right do not share the same FileIndex instance")
+          assert(leftPlan.sameResult(rightPlan), s"$col: leftPlan/rightPlan not sameResult")
+
+          val left = Dataset.ofRows(spark, leftPlan)
+          val right = Dataset.ofRows(spark, rightPlan)
+          left.join(right, left.col("k") === right.col("k") && left.col("x") =!= right.col("x"))
+            .select(left.col("k"))
+            .createOrReplaceTempView("SjView")
+
+          val sql = "SELECT k FROM TZone outer_t WHERE k IN (SELECT k FROM SjView)"
+
+          assertRuleNotFired(sql)
+          val on = withSQLConf(rewriteConf -> "true") { spark.sql(sql).collect().toSeq }
+          val off = withSQLConf(rewriteConf -> "false") { spark.sql(sql).collect().toSeq }
+          assert(on == Seq(Row(1)), s"$col: ON expected Seq(Row(1)), got $on")
+          assert(off == Seq(Row(1)), s"$col: OFF expected Seq(Row(1)), got $off")
+        }
+      }
+    }
+  }
+
+  test("Complex-to-STRING casts hiding a time-zone-sensitive leaf are fail-closed") {
+    withTable("TComplexStr") {
+      // Cast.needsTimeZone does not recurse through complex-to-string casts, although
+      // formatting a nested TIMESTAMP is zone-sensitive. Keep the cast in a filter so
+      // the neq type gate cannot mask the repeatability guard under test.
+      createTable(
+        "TComplexStr",
+        "k INT, v INT, arrTs ARRAY<TIMESTAMP>, mpTs MAP<STRING, TIMESTAMP>, " +
+          "stTs STRUCT<x: TIMESTAMP>, arrNtz ARRAY<TIMESTAMP_NTZ>",
+        """  (1, 10, ARRAY(TIMESTAMP'2024-01-01 00:00:00'),
+          |      MAP('a', TIMESTAMP'2024-01-01 00:00:00'),
+          |      NAMED_STRUCT('x', TIMESTAMP'2024-01-01 00:00:00'),
+          |      ARRAY(CAST(TIMESTAMP'2024-01-01 00:00:00' AS TIMESTAMP_NTZ))),
+          |  (1, 20, ARRAY(TIMESTAMP'2024-01-02 00:00:00'),
+          |      MAP('a', TIMESTAMP'2024-01-02 00:00:00'),
+          |      NAMED_STRUCT('x', TIMESTAMP'2024-01-02 00:00:00'),
+          |      ARRAY(CAST(TIMESTAMP'2024-01-02 00:00:00' AS TIMESTAMP_NTZ))),
+          |  (2, 30, ARRAY(TIMESTAMP'2024-01-03 00:00:00'),
+          |      MAP('a', TIMESTAMP'2024-01-03 00:00:00'),
+          |      NAMED_STRUCT('x', TIMESTAMP'2024-01-03 00:00:00'),
+          |      ARRAY(CAST(TIMESTAMP'2024-01-03 00:00:00' AS TIMESTAMP_NTZ)))"""
+          .stripMargin)
+
+      def wrapped(filterExpr: String): String =
+        s"""SELECT k FROM TComplexStr outer_t WHERE k IN (
+           |  SELECT s1.k FROM
+           |    (SELECT k, v FROM TComplexStr WHERE $filterExpr) s1
+           |    JOIN (SELECT k, v FROM TComplexStr WHERE $filterExpr) s2
+           |    ON s1.k = s2.k AND s1.v <> s2.v)""".stripMargin
+
+      // TIMESTAMP_NTZ formatting is not session-time-zone-sensitive, so this still fires --
+      // pins the exact boundary of the new guard against the rejected LTZ cases below.
+      assertRuleFired(wrapped("CAST(arrNtz AS STRING) IS NOT NULL"))
+
+      assertRuleNotFired(wrapped("CAST(arrTs AS STRING) IS NOT NULL"))
+      assertRuleNotFired(wrapped("CAST(mpTs AS STRING) IS NOT NULL"))
+      assertRuleNotFired(wrapped("CAST(stTs AS STRING) IS NOT NULL"))
     }
   }
 

@@ -530,6 +530,12 @@ object RewriteSelfJoinInequalityToAggregate extends Rule[LogicalPlan] with Predi
     // the session time zone, not the clock), which is a missed optimization, not a bug.
     case c: Cast if c.needsTimeZone =>
       false
+    // Cast.needsTimeZone only recurses for matching complex-to-complex casts. For
+    // complex-to-string casts, walk the source type tree explicitly so nested
+    // zone-sensitive values (for example TIMESTAMP) are rejected as well.
+    case c: Cast if c.dataType.isInstanceOf[StringType] &&
+        c.child.dataType.existsRecursively(Cast.needsTimeZone(_, c.dataType)) =>
+      false
     case _: Alias | _: Cast | _: Add | _: Subtract | _: Multiply | _: Divide | _: Remainder |
         _: And | _: Or | _: Not | _: EqualTo | _: EqualNullSafe | _: LessThan |
         _: LessThanOrEqual | _: GreaterThan | _: GreaterThanOrEqual | _: IsNull | _: IsNotNull =>
