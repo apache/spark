@@ -146,13 +146,18 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
   test("Aggregate: NAAJ pushdown follows the effective broadcast threshold") {
     val aggregate = testRelation.groupBy($"b")($"b")
     val equality = $"b" === $"d"
+    val smallRight = StatsTestPlan(
+      outputList = testRelation1.output,
+      rowCount = 5 * 1024 * 1024,
+      attributeStats = AttributeMap.empty,
+      size = Some(5 * 1024 * 1024))
     val originalQuery = aggregate.join(
-      testRelation1,
+      smallRight,
       joinType = LeftAnti,
       condition = Some(equality || IsNull(equality)))
     val pushedDownQuery = testRelation
       .join(
-        testRelation1,
+        smallRight,
         joinType = LeftAnti,
         condition = Some(equality || IsNull(equality)))
       .groupBy($"b")($"b")
