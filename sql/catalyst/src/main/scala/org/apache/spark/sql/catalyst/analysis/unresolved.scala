@@ -395,8 +395,9 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
  * arguments first, then look up the function by name and arguments, and return an expression that
  * can be evaluated to get the result of this function invocation.
  *
- * `boundOwner`, when set, is the fully-qualified candidate that direct-star preprocessing selected
- * as this call's owner; later resolution binds to exactly it instead of re-walking the SQL PATH
+ * `boundOwner`, when set, is the SQL PATH candidate that direct-star preprocessing selected as this
+ * call's owner (a relative persistent-catalog candidate stays relative until later resolution
+ * qualifies it); later resolution binds to exactly it instead of re-walking the SQL PATH
  * (see [[FunctionResolution.selectRoutedSqlJsonDirectStarOwner]]).
  */
 case class UnresolvedFunction(

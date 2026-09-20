@@ -128,7 +128,9 @@ class FunctionResolution(
 
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
-      sqlResolutionPathEntriesForAnalysis.map(_ ++ nameParts)
+      // Built lazily so an early-returning consumer (built-in hit, routed direct-star owner walk)
+      // skips concatenating the unused PATH suffix; consumers walk candidates in order.
+      sqlResolutionPathEntriesForAnalysis.to(LazyList).map(_ ++ nameParts)
     } else if (nameParts.size == 2 &&
         FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
       val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
