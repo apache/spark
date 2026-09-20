@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DynamicPru
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
+import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
@@ -263,11 +264,11 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
   }
 
   test("a partition value the runtime filter cannot evaluate fails the query") {
-    // Directory selection is the only evaluator of a filter over declared fully pushed attributes,
-    // so a directory it cannot evaluate has to fail the query: keeping it would return rows that
-    // nothing filters. The exposure is the same one a compile-time partition filter over the same
-    // column has, and it is why this path must not gain the eval-failure tolerance the iterative
-    // PartitionPredicate path has.
+    // The scan is the only evaluator of a filter over declared fully pushed attributes, so a
+    // partition value it cannot evaluate has to fail the query: keeping the file would return rows
+    // that nothing filters. The exposure is the same one a compile-time partition filter over the
+    // same column has, and it is why this path must not gain the eval-failure tolerance the
+    // iterative PartitionPredicate path has.
     withDppV2Conf {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         withTempDir { dir =>
@@ -287,6 +288,45 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
           assert(e.getCondition === "CAST_INVALID_INPUT",
             s"expected the failing cast to surface, got ${e.getCondition}")
         }
+      }
+    }
+  }
+
+  test("a subclass that narrows the file set in partitions keeps it under a runtime filter") {
+    // The runtime-filter path filters what `partitions` returned, so an override of it is honored.
+    // Listing the files again instead would hand the excluded ones back as soon as a filter fired,
+    // and with the filter declared fully pushed nothing above the scan would remove them.
+    withDppV2Conf {
+      withTempDir { dir =>
+        writeFactAndDim(dir)
+        val df = sql("SELECT f.id, f.part FROM fact f")
+        df.collect()
+        val scan = fileScanOf(df).asInstanceOf[ParquetScan]
+        // Keeps the files of one partition directory, which the second filter below does not
+        // select, and counts how often the scan asks for its partitions.
+        var partitionsCalls = 0
+        val narrowed = new ParquetScan(scan.sparkSession, scan.hadoopConf, scan.fileIndex,
+          scan.dataSchema, scan.readDataSchema, scan.readPartitionSchema, scan.pushedFilters,
+          scan.options, scan.pushedAggregate, scan.partitionFilters, scan.dataFilters,
+          scan.pushedVariantExtractions) {
+          override protected def partitions: Seq[FilePartition] = {
+            partitionsCalls += 1
+            super.partitions.map { part =>
+              part.copy(files = part.files.filter(_.partitionValues.getInt(0) == 3))
+            }.filter(_.files.nonEmpty)
+          }
+        }
+        val partAttr = AttributeReference("part", IntegerType)()
+        val kept = narrowed.planInputPartitionsWithRuntimeFilters(
+          Array(EqualTo(partAttr, Literal(3))))
+        assert(kept.flatMap(_.asInstanceOf[FilePartition].files.map(_.partitionValues.getInt(0)))
+          .distinct.toSeq === Seq(3))
+        // And a filter selecting a directory the override dropped comes back with nothing.
+        assert(narrowed.planInputPartitionsWithRuntimeFilters(
+          Array(EqualTo(partAttr, Literal(7)))).isEmpty)
+        // Both calls filtered one listing, which is what keeps the plan and the execution on one
+        // snapshot of the file index.
+        assert(partitionsCalls === 1, s"expected one listing, got $partitionsCalls")
       }
     }
   }
@@ -430,28 +470,29 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
 
   test("a runtime filter the scan cannot apply is rejected rather than silently dropped") {
     // Unreachable through SQL: PushDownUtils screens a filter against the attributes the scan
-    // declared before handing it over. Calling the scan directly is what pins the guard, and with
-    // it that the comparison is by exact name -- `PartitioningAwareFileIndex` drops a predicate
-    // whose references are not all partition columns instead of failing, and a fully pushed
-    // predicate dropped there would be evaluated nowhere.
+    // declared before handing it over. Calling the scan directly is what pins the guard, which has
+    // to fail rather than drop the filter, since a fully pushed predicate dropped here would be
+    // evaluated nowhere. The reference is matched the way the rest of the scan matches partition
+    // column names, so a mixed-case reference binds rather than being rejected.
     withDppV2Conf {
       withTempDir { dir =>
         writeFactAndDim(dir)
         val df = sql("SELECT f.id, f.part FROM fact f")
         df.collect()
         val scan = fileScanOf(df)
-        Seq(
-          AttributeReference("id", LongType)(),
-          AttributeReference("PART", IntegerType)()
-        ).foreach { attr =>
-          val e = intercept[SparkException] {
-            scan.planInputPartitionsWithRuntimeFilters(Array(EqualTo(attr, Literal(1))))
-          }
-          assert(e.getCondition === "INTERNAL_ERROR")
-          assert(
-            e.getMessage.contains("can only apply a runtime filter over its partition columns"),
-            s"unexpected message for ${attr.name}: ${e.getMessage}")
+        val e = intercept[SparkException] {
+          scan.planInputPartitionsWithRuntimeFilters(
+            Array(EqualTo(AttributeReference("id", LongType)(), Literal(1L))))
         }
+        assert(e.getCondition === "INTERNAL_ERROR")
+        assert(e.getMessage.contains("can only apply a runtime filter over its read partition"),
+          s"unexpected message: ${e.getMessage}")
+
+        val mixedCase = scan.planInputPartitionsWithRuntimeFilters(
+          Array(EqualTo(AttributeReference("PART", IntegerType)(), Literal(7))))
+        assert(mixedCase.flatMap(
+          _.asInstanceOf[FilePartition].files.map(_.partitionValues.getInt(0))).distinct.toSeq
+          === Seq(7))
       }
     }
   }
