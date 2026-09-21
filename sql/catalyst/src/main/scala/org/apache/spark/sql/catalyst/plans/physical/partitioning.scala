@@ -1991,17 +1991,18 @@ case class KeyedShuffleSpec(
     //    3.1 both sides have the same number of partition expressions
     //    3.2 for each pair of partition expressions at the same index, the corresponding
     //        partition keys must share overlapping positions in their respective clustering keys.
-    //    3.3 each pair of partition expressions at the same index must share the same transform
-    //        function. A pair the join would first reduce onto one key space does not count here,
-    //        see `areKeysCompatible`'s `allowReduce`.
+    //    3.3 each pair of partition expressions at the same index must describe one key space: two
+    //        bare references, the same transform function, or the two sides of one reduce. A pair
+    //        the join would first reduce onto one key space does not count, see
+    //        `areKeysCompatible`'s `allowReduce`.
     //  4. the partition values from both sides are following the same order.
     case otherSpec @ KeyedShuffleSpec(otherPartitioning, otherDistribution, _) =>
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == otherSpec.numPartitions &&
-          areKeysCompatible(otherSpec, allowReduce = false) &&
-          // The reason the types are asked as well as the rows is on `describesSameKeys`, so the
-          // next site comparing keys cannot forget the type clause.
-          partitioning.layout.describesSameKeys(otherPartitioning.layout)
+        areKeysCompatible(otherSpec, allowReduce = false) &&
+        // The reason the types are asked as well as the rows is on `describesSameKeys`, so the
+        // next site comparing keys cannot forget the type clause.
+        partitioning.layout.describesSameKeys(otherPartitioning.layout)
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
     case _ => false
@@ -2022,45 +2023,48 @@ case class KeyedShuffleSpec(
    *                    equal key rows can stand for different rows. A one-side reduce is where the
    *                    two come apart: `r(f1(x))` equals the other side's key by the [[Reducer]]
    *                    contract, but nothing says `r` leaves the keys it is applied to alone, so
-   *                    key `k` on the reducing side can belong with key `r(k)` on the other one. A
-   *                    modulo-style reducer, which is the shape a bucket count reduce takes, does
-   *                    leave a coinciding key alone, so it takes a connector reducer that reorders
-   *                    its key space to turn this into wrong rows rather than a dishonest answer.
+   *                    key `k` on the reducing side can belong with key `r(k)` on the other one.
    */
-  def areKeysCompatible(other: KeyedShuffleSpec, allowReduce: Boolean = true): Boolean = {
+  def areKeysCompatible(other: KeyedShuffleSpec, allowReduce: Boolean): Boolean = {
     val expressions = partitioning.expressions
     val otherExpressions = other.partitioning.expressions
+    // A side with unknown partition keys downgrades a lenient caller, for the reason on the block
+    // that reads this below: the comparison there has to happen in a single key space, and a pair
+    // the reduce admits holds raw values on one side and transform outputs on the other.
+    val unknownKeys = partitioning.mayContainUnknownPartitionKeys ||
+      other.partitioning.mayContainUnknownPartitionKeys
 
     expressions.length == otherExpressions.length && {
       val otherKeyPositions = other.keyPositions
       keyPositions.zip(otherKeyPositions).forall { case (left, right) =>
         left.intersect(right).nonEmpty
       }
-    } && expressions.zip(otherExpressions).forall {
-      case (l, r) => isExpressionCompatible(l, r, allowReduce)
+    } && expressions.zip(otherExpressions).forall { case (l, r) =>
+      isExpressionCompatible(l, r, allowReduce && !unknownKeys)
     } && {
-      // An unknown-keyed side co-locates only its declared keys, and the out-of-set routing is
-      // a deterministic hash, so it can pair only with a side whose keys are a subset of those
-      // declared keys (see `KeyedPartitioning.mayContainUnknownPartitionKeys`).
-      //
-      // The key comparison below must also happen in a single key space, which is what asking
-      // `isExpressionCompatible` with no reduce allowed requires. A pair the reduce admits holds
-      // raw values on one side and transform outputs on the other, so the subset test would
-      // compare unrelated values. That predicate's reduced-keys arm cannot fire here: a marked
-      // layout comes from `KeyedShuffleSpec.createPartitioning`, which runs behind
-      // `canCreatePartitioning` and so behind `expressionsDescribeKeys`, and a
-      // `GroupPartitionsExec` that reduces gives up the keyed claim rather than marking it.
+      // An unknown-keyed side co-locates only its declared keys, and the out-of-set routing is a
+      // deterministic hash, so it can pair only with a side whose keys are a subset of those
+      // declared keys (see `KeyedPartitioning.mayContainUnknownPartitionKeys`). Asking the shared
+      // predicate with no reduce allowed is what keeps that comparison in one key space, and it
+      // also widens what this path admits, from two `AttributeReference`s to two `LeafExpression`s:
+      // nothing new gets in, since `supportsExpressions` allows an `Attribute` or a
+      // `GetStructField` chain and the latter is not a leaf.
       //
       // Two unknown-keyed sides are compatible only when they agree on the declared keys *and*
       // their order: the out-of-set keys hash to the same-index partition on both sides, and a
       // `GroupPartitionsExec` regrouping re-labels each partition by that side's declared key, so
       // a differing declared order would push the out-of-set keys into different output
       // partitions and lose their matches.
-      if (partitioning.mayContainUnknownPartitionKeys ||
-          other.partitioning.mayContainUnknownPartitionKeys) {
-        expressions.zip(otherExpressions).forall {
-          case (l, r) => isExpressionCompatible(l, r, allowReduce = false)
-        } && {
+      if (unknownKeys) {
+        // Comparing the declared keys also asks that neither side's keys were reduced, since
+        // reduced keys are in a space neither expression describes. A marked layout never carries
+        // them: `canCreatePartitioning` requires `expressionsDescribeKeys` before
+        // `KeyedShuffleSpec.createPartitioning` can mark anything, a `GroupPartitionsExec` that
+        // reduces is not an identity regrouping and so gives the keyed claim up, and
+        // `ShuffledJoin.clearUnknownPartitionKeys` strips the marker a `PartitioningCollection`
+        // would otherwise OR onto a merged layout. Asked rather than asserted, so that a producer
+        // this misses costs a shuffle rather than the query.
+        partitioning.expressionsDescribeKeys && other.partitioning.expressionsDescribeKeys && {
           if (partitioning.mayContainUnknownPartitionKeys &&
               other.partitioning.mayContainUnknownPartitionKeys) {
             partitioning.partitionKeys == other.partitioning.partitionKeys
@@ -2095,13 +2099,13 @@ case class KeyedShuffleSpec(
         case _ => false
       }
     } else {
-      val canReduce = allowReduce && canReduceKeys
       (left, right) match {
         case (_: LeafExpression, _: LeafExpression) => true
         case (left: TransformExpression, right: TransformExpression) =>
-          if (canReduce) left.isCompatible(right) else left.isSameFunction(right)
+          if (allowReduce && canReduceKeys) left.isCompatible(right)
+          else left.isSameFunction(right)
         case (_: AttributeReference, _: TransformExpression) |
-             (_: TransformExpression, _: AttributeReference) => canReduce
+             (_: TransformExpression, _: AttributeReference) => allowReduce && canReduceKeys
         case _ => false
       }
     }

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, DirectShufflePartitionID, Expression, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.connector.catalog.functions.{Reducer, ReducibleFunction, ScalarFunction}
+import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
 
@@ -630,16 +630,19 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     val unknown12 = keyedSpec(Seq(1, 2), hasUnknown = true)
     // hasUnknown=true is still compatible with a subset (or equal) partner: every such key is
     // co-located on both sides.
-    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1))), "subset keys must be compatible")
-    assert(unknown12.areKeysCompatible(keyedSpec(Seq(2))), "another subset key must be compatible")
-    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1, 2))), "equal keys must be compatible")
-    assert(keyedSpec(Seq(1)).areKeysCompatible(unknown12),
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1)), allowReduce = true),
+      "subset keys must be compatible")
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(2)), allowReduce = true),
+      "another subset key must be compatible")
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1, 2)), allowReduce = true),
+      "equal keys must be compatible")
+    assert(keyedSpec(Seq(1)).areKeysCompatible(unknown12, allowReduce = true),
       "compatibility must be symmetric for a subset partner")
 
     // A larger partner's keys are not all covered by the declared keys.
-    assert(!unknown12.areKeysCompatible(keyedSpec(Seq(1, 2, 3))),
+    assert(!unknown12.areKeysCompatible(keyedSpec(Seq(1, 2, 3)), allowReduce = true),
       "a larger key set must not be compatible with an unknown-keyed partitioning")
-    assert(!keyedSpec(Seq(1, 2, 3)).areKeysCompatible(unknown12),
+    assert(!keyedSpec(Seq(1, 2, 3)).areKeysCompatible(unknown12, allowReduce = true),
       "an unknown-keyed partitioning cannot cover a larger partner's keys")
 
     // Both sides unknown with the same declared keys: `KeyGroupedPartitioner`'s out-of-set-key
@@ -647,15 +650,17 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // partition and stay compatible, but only when the declared key order also agrees, since a
     // GroupPartitionsExec regrouping re-labels partitions by each side's declared order. Different
     // declared keys or a different order are rejected.
-    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1, 2), hasUnknown = true)),
+    assert(unknown12.areKeysCompatible(keyedSpec(Seq(1, 2), hasUnknown = true), allowReduce = true),
       "two unknown-keyed partitionings with the same declared keys must be compatible")
-    assert(!unknown12.areKeysCompatible(keyedSpec(Seq(2, 1), hasUnknown = true)),
+    assert(!unknown12.areKeysCompatible(
+        keyedSpec(Seq(2, 1), hasUnknown = true), allowReduce = true),
       "two unknown-keyed partitionings must agree on the declared key order")
-    assert(!unknown12.areKeysCompatible(keyedSpec(Seq(1, 2, 3), hasUnknown = true)),
+    assert(!unknown12.areKeysCompatible(
+        keyedSpec(Seq(1, 2, 3), hasUnknown = true), allowReduce = true),
       "two unknown-keyed partitionings with different declared keys must not be compatible")
 
     // Without the marker, key sets are not compared, only the partition expressions are.
-    assert(keyedSpec(Seq(1, 2)).areKeysCompatible(keyedSpec(Seq(1, 2, 3))),
+    assert(keyedSpec(Seq(1, 2)).areKeysCompatible(keyedSpec(Seq(1, 2, 3)), allowReduce = true),
       "without unknown keys, different key sets remain expression-compatible")
   }
 
@@ -693,38 +698,33 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      assert(!keyedSpec(Seq(1), hasUnknown = true).areKeysCompatible(bucketSpec(Seq(0, 1))),
+      assert(!keyedSpec(Seq(1), hasUnknown = true).areKeysCompatible(
+          bucketSpec(Seq(0, 1)), allowReduce = true),
         "an unknown-keyed identity partitioning must not pair with a transform partitioning")
-      assert(!bucketSpec(Seq(0, 1)).areKeysCompatible(keyedSpec(Seq(1), hasUnknown = true)),
+      assert(!bucketSpec(Seq(0, 1)).areKeysCompatible(
+          keyedSpec(Seq(1), hasUnknown = true), allowReduce = true),
         "the incompatibility must be symmetric")
       assert(!keyedSpec(Seq(1), hasUnknown = true).areKeysCompatible(
-          bucketSpec(Seq(0, 1), hasUnknown = true)),
+          bucketSpec(Seq(0, 1), hasUnknown = true), allowReduce = true),
         "the identity-vs-transform pair must not pair even when both sides are unknown-keyed")
       // Two unmarked sides keep the pre-existing behavior: the pair stays admissible, and
       // `EnsureRequirements` computes reducers to reconcile the two key domains.
-      assert(keyedSpec(Seq(1)).areKeysCompatible(bucketSpec(Seq(0, 1))),
+      assert(keyedSpec(Seq(1)).areKeysCompatible(bucketSpec(Seq(0, 1)), allowReduce = true),
         "unmarked identity-vs-transform pairs remain admissible")
     }
   }
 
   test("isCompatibleWith: a pair whose keys a join would reduce is not compatible as it stands") {
-    // A stand-in for a connector transform that reorders its key space: its result type is its
-    // argument's type, and it is not the identity on values, say `a ^ 1`. The two sides can then
+    // `flip_low_bit` permutes its key space and keeps its argument's type, so the two sides can
     // report the same key list while a key stands for different rows on each, the identity side
-    // holding raw values and this one its outputs.
-    val flipFn = new ScalarFunction[Long] {
-      override def inputTypes(): Array[DataType] = Array(LongType)
-      override def resultType(): DataType = LongType
-      override def name(): String = "flip_low_bit"
-      override def canonicalName(): String = "test.flip_low_bit"
-    }
+    // holding raw values and this one its outputs. The same fixture the end-to-end test uses.
     val a = $"a".long
     val distribution = ClusteredDistribution(Seq(a))
     def spec(expression: Expression): KeyedShuffleSpec =
       KeyedShuffleSpec(
         KeyedPartitioning(Seq(expression), Seq(InternalRow(0L), InternalRow(1L))), distribution)
     val identity = spec(a)
-    val flip = spec(TransformExpression(flipFn, Seq(a)))
+    val flip = spec(TransformExpression(FlipLowBitFunction, Seq(a)))
     assert(identity.partitioning.layout.describesSameKeys(flip.partitioning.layout),
       "test setup: both sides report the same key rows at the same type, so a refusal below can " +
         "only come from the key spaces differing")
@@ -733,7 +733,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      assert(identity.areKeysCompatible(flip),
+      assert(identity.areKeysCompatible(flip, allowReduce = true),
         "the pair stays admissible, since `EnsureRequirements` reduces the identity side onto it")
       assert(!identity.isCompatibleWith(flip),
         "equal key rows in two key spaces are not compatible before that reduce runs")
@@ -744,7 +744,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       val bucketFn = new FakeBucket
       val bucket8 = TransformExpression(bucketFn, Seq(a), Some(8))
       val bucket4 = TransformExpression(bucketFn, Seq(a), Some(4))
-      assert(spec(bucket8).areKeysCompatible(spec(bucket4)),
+      assert(spec(bucket8).areKeysCompatible(spec(bucket4), allowReduce = true),
         "a reducer reconciles the two bucket counts, so the pair stays admissible")
       assert(!spec(bucket8).isCompatibleWith(spec(bucket4)),
         "two bucket counts are not lined up until that reducer has run")
@@ -820,18 +820,18 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      assert(!bucketSpec(4, true).areKeysCompatible(bucketSpec(8, true)),
+      assert(!bucketSpec(4, true).areKeysCompatible(bucketSpec(8, true), allowReduce = true),
         "two marked sides must agree on the exact function, not just a compatible one")
-      assert(!bucketSpec(4, true).areKeysCompatible(bucketSpec(8, false)),
+      assert(!bucketSpec(4, true).areKeysCompatible(bucketSpec(8, false), allowReduce = true),
         "a marked side must not pair across bucket counts")
-      assert(!bucketSpec(8, false).areKeysCompatible(bucketSpec(4, true)),
+      assert(!bucketSpec(8, false).areKeysCompatible(bucketSpec(4, true), allowReduce = true),
         "the refusal must be symmetric")
       // Unmarked, the compatible-transform relaxation still pairs them (pre-existing behavior).
-      assert(bucketSpec(4, false).areKeysCompatible(bucketSpec(8, false)),
+      assert(bucketSpec(4, false).areKeysCompatible(bucketSpec(8, false), allowReduce = true),
         "unmarked compatible transforms remain admissible")
       // Positive control: the same marked function with the same keys must stay compatible, so
       // the refusals above are the function difference's doing, not the marker path always false.
-      assert(bucketSpec(4, true).areKeysCompatible(bucketSpec(4, true)),
+      assert(bucketSpec(4, true).areKeysCompatible(bucketSpec(4, true), allowReduce = true),
         "identical marked functions remain compatible")
     }
   }
