@@ -20,6 +20,7 @@ import java.io.{FileOutputStream, InputStream}
 import java.net.URI
 import java.nio.file.{Files, Path, Paths}
 import java.util.UUID
+import java.util.concurrent.{Callable, Executors, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream}
 import java.util.zip.CRC32
 
@@ -30,6 +31,7 @@ import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 import com.google.rpc.ErrorInfo
+import io.grpc.Context
 import io.grpc.Status.Code
 import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
@@ -66,7 +68,8 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
   class TestAddArtifactsHandler(
       responseObserver: StreamObserver[AddArtifactsResponse],
       throwIfArtifactExists: Boolean = false,
-      resolvedMavenArtifacts: Map[URI, Seq[Artifact]] = Map.empty)
+      resolvedMavenArtifacts: Map[URI, Seq[Artifact]] = Map.empty,
+      resolutionDelayMs: Long = 0L)
       extends SparkConnectAddArtifactsHandler(responseObserver) {
 
     // Stop the staged artifacts from being automatically deleted
@@ -74,6 +77,8 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
     private val finalArtifacts = mutable.Buffer.empty[String]
     private val artifactChecksums: mutable.Map[String, Long] = mutable.Map.empty
+    private val artifactContents: mutable.Map[String, Array[Byte]] = mutable.Map.empty
+    private val resolutionTimeouts = mutable.Buffer.empty[(Int, Int)]
 
     // Record the artifacts that are sent out for final processing.
     override protected def addStagedArtifactToArtifactManager(artifact: StagedArtifact): Unit = {
@@ -89,6 +94,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
       finalArtifacts.append(artifact.name)
       artifactChecksums += (artifact.name -> artifact.getCrc)
+      artifactContents += (artifact.name -> Files.readAllBytes(artifact.stagedPath))
     }
 
     override protected def resolveMavenDependency(
@@ -96,12 +102,19 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
         connectTimeoutMs: Int,
         readTimeoutMs: Int,
         isCancelled: () => Boolean): Seq[Artifact] = {
+      resolutionTimeouts += ((connectTimeoutMs, readTimeoutMs))
+      if (resolutionDelayMs > 0) {
+        Thread.sleep(resolutionDelayMs)
+      }
       resolvedMavenArtifacts.getOrElse(
         uri,
         super.resolveMavenDependency(uri, connectTimeoutMs, readTimeoutMs, isCancelled))
     }
 
     def getFinalArtifacts: Seq[String] = finalArtifacts.toSeq
+    def getArtifactChecksum(name: String): Long = artifactChecksums(name)
+    def getArtifactContents(name: String): Array[Byte] = artifactContents(name)
+    def getResolutionTimeouts: Seq[(Int, Int)] = resolutionTimeouts.toSeq
     def stagingDirectory: Path = this.stagingDir
     def forceCleanUp(): Unit = super.cleanUpStagedArtifacts()
   }
@@ -386,7 +399,90 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
           "jars/resolved.jar",
           "jars/smallJar.jar"))
       assert(response.getArtifactsList.asScala.map(_.getName) == handler.getFinalArtifacts)
+      val resolvedBytes = Files.readAllBytes(inputFilePath.resolve("smallJar.jar"))
+      val resolvedCrc = new CRC32()
+      resolvedCrc.update(resolvedBytes)
+      assert(handler.getArtifactContents("jars/resolved.jar").sameElements(resolvedBytes))
+      assert(handler.getArtifactChecksum("jars/resolved.jar") == resolvedCrc.getValue)
+      assert(response.getArtifacts(1).getIsCrcSuccessful)
     } finally {
+      handler.forceCleanUp()
+    }
+  }
+
+  test("server-side Maven dependencies reject requested repositories") {
+    val error = Promise[Throwable]()
+    val observer = new StreamObserver[AddArtifactsResponse] {
+      override def onNext(value: AddArtifactsResponse): Unit = {}
+      override def onError(throwable: Throwable): Unit = error.success(throwable)
+      override def onCompleted(): Unit = {}
+    }
+    val handler = new TestAddArtifactsHandler(observer)
+    try {
+      val ivyUri = "ivy://my.connect.lib:mylib:0.1?repos=https://example.com/repository"
+      val request = AddArtifactsRequest
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setUserContext(proto.UserContext.newBuilder().setUserId("c1"))
+        .setBatch(
+          proto.AddArtifactsRequest.Batch
+            .newBuilder()
+            .addEntries(
+              proto.AddArtifactsRequest.ArtifactEntry
+                .newBuilder()
+                .setMavenDependency(
+                  proto.AddArtifactsRequest.MavenDependency.newBuilder().setUri(ivyUri))))
+        .build()
+
+      handler.onNext(request)
+      handler.onCompleted()
+
+      val failure = ThreadUtils.awaitResult(error.future, 5.seconds)
+      assert(failure.getMessage.contains("do not allow repositories"))
+      assert(handler.getFinalArtifacts.isEmpty)
+    } finally {
+      handler.forceCleanUp()
+    }
+  }
+
+  test("server-side Maven dependencies share the remaining RPC deadline") {
+    val firstUri = URI.create("ivy://my.connect.first:mylib:0.1")
+    val secondUri = URI.create("ivy://my.connect.second:mylib:0.1")
+    val promise = Promise[AddArtifactsResponse]()
+    val scheduler = Executors.newSingleThreadScheduledExecutor()
+    val context = Context.current().withDeadlineAfter(5, TimeUnit.SECONDS, scheduler)
+    val handler = context.call(new Callable[TestAddArtifactsHandler] {
+      override def call(): TestAddArtifactsHandler = new TestAddArtifactsHandler(
+        new DummyStreamObserver(promise),
+        resolvedMavenArtifacts = Map(firstUri -> Nil, secondUri -> Nil),
+        resolutionDelayMs = 100L)
+    })
+    try {
+      val batch = proto.AddArtifactsRequest.Batch.newBuilder()
+      Seq(firstUri, secondUri).foreach { uri =>
+        batch.addEntries(
+          proto.AddArtifactsRequest.ArtifactEntry
+            .newBuilder()
+            .setMavenDependency(
+              proto.AddArtifactsRequest.MavenDependency.newBuilder().setUri(uri.toString)))
+      }
+      handler.onNext(
+        AddArtifactsRequest
+          .newBuilder()
+          .setSessionId(sessionId)
+          .setUserContext(proto.UserContext.newBuilder().setUserId("c1"))
+          .setBatch(batch)
+          .build())
+      handler.onCompleted()
+      ThreadUtils.awaitResult(promise.future, 5.seconds)
+
+      val timeouts = handler.getResolutionTimeouts
+      assert(timeouts.size == 2)
+      assert(timeouts(1)._1 < timeouts.head._1)
+      assert(timeouts(1)._2 < timeouts.head._2)
+    } finally {
+      context.cancel(null)
+      scheduler.shutdownNow()
       handler.forceCleanUp()
     }
   }
@@ -497,6 +593,48 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
       assert(!summaries.head.getIsCrcSuccessful)
 
       assert(handler.getFinalArtifacts.isEmpty)
+    } finally {
+      handler.forceCleanUp()
+    }
+  }
+
+  test("CRC failure does not reserve an artifact path") {
+    val promise = Promise[AddArtifactsResponse]()
+    val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
+    try {
+      val name = "classes/smallClassFile.class"
+      val bytes = ByteString.copyFrom(
+        Files.readAllBytes(inputFilePath.resolve("smallClassFile.class")))
+      val crc = new CRC32()
+      crc.update(bytes.toByteArray)
+      def entry(checksum: Long): proto.AddArtifactsRequest.ArtifactEntry = {
+        val artifact = proto.AddArtifactsRequest.SingleChunkArtifact
+          .newBuilder()
+          .setName(name)
+          .setData(
+            proto.AddArtifactsRequest.ArtifactChunk
+              .newBuilder()
+              .setData(bytes)
+              .setCrc(checksum))
+        proto.AddArtifactsRequest.ArtifactEntry.newBuilder().setArtifact(artifact).build()
+      }
+      val request = AddArtifactsRequest
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setUserContext(proto.UserContext.newBuilder().setUserId("c1"))
+        .setBatch(
+          proto.AddArtifactsRequest.Batch
+            .newBuilder()
+            .addEntries(entry(crc.getValue + 1))
+            .addEntries(entry(crc.getValue)))
+        .build()
+
+      handler.onNext(request)
+      handler.onCompleted()
+
+      val summaries = ThreadUtils.awaitResult(promise.future, 5.seconds).getArtifactsList.asScala
+      assert(summaries.map(_.getIsCrcSuccessful) == Seq(false, true))
+      assert(handler.getFinalArtifacts == Seq(name))
     } finally {
       handler.forceCleanUp()
     }

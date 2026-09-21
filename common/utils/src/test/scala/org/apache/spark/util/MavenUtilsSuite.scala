@@ -21,9 +21,13 @@ import java.io.{File, OutputStream, PrintStream}
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
-import java.util.concurrent.CancellationException
+import java.util.concurrent.{CancellationException, CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{Await, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import org.apache.ivy.core.module.descriptor.MDArtifact
@@ -211,6 +215,90 @@ class MavenUtilsSuite
         resolverTimeoutMs,
         resolverTimeoutMs,
         isCancelled = () => true)
+    }
+  }
+
+  test("runtime dependency resolver honors cancellation while waiting for Ivy") {
+    val main = MavenCoordinate("my.runtime.waiting", "mylib", "0.1")
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val firstEnteredIvy = new CountDownLatch(1)
+      val releaseFirst = new CountDownLatch(1)
+      val blockingPrintStream = new PrintStream(noOpOutputStream) {
+        private val blocked = new AtomicBoolean(false)
+        override def println(line: String): Unit = {
+          if (blocked.compareAndSet(false, true)) {
+            firstEnteredIvy.countDown()
+            releaseFirst.await()
+          }
+        }
+      }
+      val firstSettings = MavenUtils.buildIvySettings(
+        Some(repo),
+        Some(Paths.get(tempIvyPath, "first").toString))
+      val first = Future {
+        MavenUtils.resolveMavenCoordinates(
+          main.toString,
+          firstSettings,
+          transitive = true,
+          isTest = true)(blockingPrintStream)
+      }
+
+      assert(firstEnteredIvy.await(5, TimeUnit.SECONDS))
+      val cancelled = new AtomicBoolean(false)
+      val cancellationChecks = new AtomicInteger(0)
+      val waitingForIvy = new CountDownLatch(1)
+      val resolver = new RuntimeDependencyResolver(
+        ivySettingsPath = None,
+        configuredRepositories = Seq(repo),
+        ivyPath = Some(Paths.get(tempIvyPath, "second").toString))
+      val second = Future {
+        resolver.resolve(
+          URI.create(s"ivy://${main.toString}"),
+          resolverTimeoutMs,
+          resolverTimeoutMs,
+          isCancelled = () => {
+            if (cancellationChecks.incrementAndGet() >= 5) {
+              waitingForIvy.countDown()
+            }
+            cancelled.get()
+          })
+      }
+
+      try {
+        assert(waitingForIvy.await(5, TimeUnit.SECONDS))
+        cancelled.set(true)
+        intercept[CancellationException] {
+          Await.result(second, 5.seconds)
+        }
+      } finally {
+        releaseFirst.countDown()
+      }
+      Await.result(first, 5.seconds)
+    }
+  }
+
+  test("runtime dependency resolver preserves the local Ivy repository") {
+    val main = MavenCoordinate("my.runtime.local", "mylib", "0.1")
+    val localIvyHome = Paths.get(tempIvyPath, "local-ivy")
+    val runtimeIvyPath = Paths.get(tempIvyPath, "runtime-ivy")
+    IvyTestUtils.withRepository(
+      main,
+      dependencies = None,
+      rootDir = Some(localIvyHome.resolve("local").toFile),
+      useIvyLayout = true) { _ =>
+      val resolver = new RuntimeDependencyResolver(
+        ivySettingsPath = None,
+        configuredRepositories = Nil,
+        ivyPath = Some(runtimeIvyPath.toString),
+        localIvyPath = Some(localIvyHome.toString))
+
+      val resolved = resolver.resolve(
+        URI.create(s"ivy://${main.toString}"),
+        resolverTimeoutMs,
+        resolverTimeoutMs)
+
+      assert(resolved.exists(_.getFileName.toString.contains("my.runtime.local_mylib-0.1")))
+      assert(resolved.forall(_.startsWith(runtimeIvyPath)))
     }
   }
 

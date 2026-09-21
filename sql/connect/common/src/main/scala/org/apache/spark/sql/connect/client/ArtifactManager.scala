@@ -73,7 +73,13 @@ class ArtifactManager(
     override def size: Long = artifact.size
   }
   private case class MavenDependency(uri: URI) extends ArtifactEntry {
-    override def size: Long = 0L
+    override lazy val size: Long = proto.AddArtifactsRequest.ArtifactEntry
+      .newBuilder()
+      .setMavenDependency(
+        proto.AddArtifactsRequest.MavenDependency.newBuilder().setUri(uri.toString))
+      .build()
+      .getSerializedSize
+      .toLong
   }
 
   /**
@@ -113,6 +119,9 @@ class ArtifactManager(
     val (_, _, repositories) = MavenUtils.parseQueryParams(uri)
     repositories.split(",").exists(_.trim.nonEmpty)
   }
+
+  private[client] def isServerSideMavenCandidate(uri: URI): Boolean =
+    uri.getScheme == "ivy" && !hasRequestedRepositories(uri)
 
   /**
    * Add a single artifact to the session.
@@ -397,7 +406,7 @@ class ArtifactManager(
         }
         addChunkedArtifact(artifact, stream)
       case entry =>
-        if (currentBatchSize + entry.size > CHUNK_SIZE) {
+        if (currentBatch.nonEmpty && currentBatchSize + entry.size > CHUNK_SIZE) {
           writeBatch()
         }
         addToBatch(entry)

@@ -19,8 +19,6 @@ package org.apache.spark.sql.connect.service
 import java.io.File
 import java.net.{URI, URISyntaxException}
 import java.nio.file.{Files, Path, Paths}
-import java.security.MessageDigest
-import java.util.Arrays
 import java.util.concurrent.TimeUnit
 import java.util.zip.{CheckedOutputStream, CRC32}
 
@@ -157,20 +155,20 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
 
   private def resolveMavenDependencies(
       dependencies: Seq[URI]): Map[URI, Seq[Artifact]] = {
-    val timeoutCapMs = Option(grpcContext.getDeadline)
-      .map(_.timeRemaining(TimeUnit.MILLISECONDS))
-      .map(math.min(_, Int.MaxValue.toLong))
-      .getOrElse(Int.MaxValue.toLong)
-      .toInt
-    if (timeoutCapMs <= 0) {
-      throw SparkException.internalError(
-        "AddArtifacts deadline expired before Maven resolution")
-    }
-    val connectTimeoutMs = math.min(
-      timeoutCapMs,
-      holder.artifactManager.ivyConnectTimeoutMs)
-    val readTimeoutMs = math.min(timeoutCapMs, holder.artifactManager.ivyReadTimeoutMs)
     dependencies.map { uri =>
+      val timeoutCapMs = Option(grpcContext.getDeadline)
+        .map(_.timeRemaining(TimeUnit.MILLISECONDS))
+        .map(math.min(_, Int.MaxValue.toLong))
+        .getOrElse(Int.MaxValue.toLong)
+        .toInt
+      if (timeoutCapMs <= 0) {
+        throw SparkException.internalError(
+          "AddArtifacts deadline expired before Maven resolution")
+      }
+      val connectTimeoutMs = math.min(
+        timeoutCapMs,
+        holder.artifactManager.ivyConnectTimeoutMs)
+      val readTimeoutMs = math.min(timeoutCapMs, holder.artifactManager.ivyReadTimeoutMs)
       uri -> resolveMavenDependency(
         uri,
         connectTimeoutMs,
@@ -188,49 +186,21 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     }
     val physicalPath = Files.createTempFile(stagingDir, "resolved-maven-", ".jar")
     val staged = new StagedArtifact(artifact.path.toString, Some(physicalPath))
-    staged.writeFrom(localFile)
-    staged.close()
-    staged
+    Utils.tryWithSafeFinally {
+      staged.writeFrom(localFile)
+      staged
+    }(staged.close())
   }
 
   private def prepareArtifacts(): Seq[StagedArtifact] = {
     val dependencies = pendingArtifacts.collect {
       case PendingMavenDependency(uri) => uri
     }.distinct.toSeq
-    if (dependencies.isEmpty) {
-      return pendingArtifacts.collect {
-        case PendingStagedArtifact(artifact) => artifact
-      }.toSeq
-    }
-
     val resolved = resolveMavenDependencies(dependencies)
-    val uniqueByPath = mutable.LinkedHashMap.empty[Path, StagedArtifact]
-    val result = mutable.Buffer.empty[StagedArtifact]
-    def addChecked(artifact: StagedArtifact): Unit = {
-      uniqueByPath.get(artifact.path) match {
-        case None =>
-          uniqueByPath.put(artifact.path, artifact)
-          result += artifact
-        case Some(existing) =>
-          val sameContent = Arrays.equals(existing.getDigest, artifact.getDigest) &&
-            existing.getSizeBytes == artifact.getSizeBytes &&
-            Utils.contentEquals(existing.stagedPath.toFile, artifact.stagedPath.toFile)
-          if (!sameContent) {
-            throw new SparkRuntimeException(
-              "ARTIFACT_ALREADY_EXISTS",
-              Map("normalizedRemoteRelativePath" -> artifact.path.toString))
-          }
-          result += artifact
-      }
-    }
-
-    pendingArtifacts.foreach {
-      case PendingStagedArtifact(artifact) => addChecked(artifact)
-      case PendingMavenDependency(uri) => resolved(uri).foreach { artifact =>
-          addChecked(stageResolvedArtifact(artifact))
-        }
-    }
-    result.toSeq
+    pendingArtifacts.flatMap {
+      case PendingStagedArtifact(artifact) => Seq(artifact)
+      case PendingMavenDependency(uri) => resolved(uri).map(stageResolvedArtifact)
+    }.toSeq
   }
 
   /**
@@ -241,7 +211,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   protected def flushStagedArtifacts(): Seq[ArtifactSummary] = {
     val failedArtifactExceptions = mutable.ListBuffer[SparkRuntimeException]()
 
-    // Resolve and validate the complete ordered batch before mutating session state.
+    // Resolve the complete ordered batch before mutating session state.
     val summaries = prepareArtifacts().map { artifact =>
       try {
         // We do not store artifacts that fail the CRC. The failure is reported in the artifact
@@ -367,8 +337,6 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     private val fileOut = Files.newOutputStream(stagedPath)
     private val checksumOut = new CheckedOutputStream(fileOut, new CRC32)
     private val overallChecksum = new CRC32()
-    private val digest = MessageDigest.getInstance("SHA-256")
-    private var contentDigest: Array[Byte] = _
 
     private val builder = ArtifactSummary.newBuilder().setName(name)
     private var artifactSummary: ArtifactSummary = _
@@ -382,13 +350,6 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
 
     def getCrc: Long = overallChecksum.getValue
 
-    def getDigest: Array[Byte] = {
-      require(contentDigest != null)
-      contentDigest.clone()
-    }
-
-    def getSizeBytes: Long = Files.size(stagedPath)
-
     def write(dataChunk: proto.AddArtifactsRequest.ArtifactChunk): Unit = {
       try dataChunk.getData.writeTo(checksumOut)
       catch {
@@ -399,7 +360,6 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
 
       val bytes = dataChunk.getData.toByteArray
       overallChecksum.update(bytes)
-      digest.update(bytes)
       updateCrc(checksumOut.getChecksum.getValue == dataChunk.getCrc)
       checksumOut.getChecksum.reset()
     }
@@ -412,7 +372,6 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
         while (read != -1) {
           checksumOut.write(buffer, 0, read)
           overallChecksum.update(buffer, 0, read)
-          digest.update(buffer, 0, read)
           read = in.read(buffer)
         }
         updateCrc(isSuccess = true)
@@ -424,7 +383,6 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     def close(): Unit = {
       if (artifactSummary == null) {
         checksumOut.close()
-        contentDigest = digest.digest()
         artifactSummary = builder
           .setName(name)
           .setIsCrcSuccessful(getCrcStatus.getOrElse(false))

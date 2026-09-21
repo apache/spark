@@ -3045,8 +3045,8 @@ package object config {
       .doc("Path to an Ivy settings file to customize resolution of jars specified " +
         "using spark.jars.packages or ivy:// URIs passed to SparkSession.addArtifact instead " +
         "of the built-in defaults, such as maven central. " +
-        "Additional repositories given by the command-line option --repositories " +
-        "or spark.jars.repositories will also be included. " +
+        "Additional repositories from spark.jars.repositories will also be included. " +
+        "The spark-submit --repositories option applies to submission-time resolution. " +
         "Useful for allowing Spark to resolve artifacts from behind a firewall " +
         "e.g. via an in-house artifact server like Artifactory. " +
         "Details on the settings file format can be found at Settings Files")
@@ -3056,8 +3056,8 @@ package object config {
 
   private[spark] val JAR_IVY_CONNECT_TIMEOUT =
     ConfigBuilder("spark.jars.ivyConnectTimeout")
-      .doc("Connection timeout for Ivy repository requests made during runtime dependency " +
-        "resolution. This must be set before the SparkContext starts.")
+      .doc("Connection timeout for Ivy repository requests made by " +
+        "SparkSession.addArtifact. This must be set before the SparkContext starts.")
       .version("4.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(
@@ -3067,7 +3067,7 @@ package object config {
 
   private[spark] val JAR_IVY_READ_TIMEOUT =
     ConfigBuilder("spark.jars.ivyReadTimeout")
-      .doc("Read timeout for Ivy repository requests made during runtime dependency resolution. " +
+      .doc("Read timeout for Ivy repository requests made by SparkSession.addArtifact. " +
         "This must be set before the SparkContext starts.")
       .version("4.4.0")
       .timeConf(TimeUnit.MILLISECONDS)

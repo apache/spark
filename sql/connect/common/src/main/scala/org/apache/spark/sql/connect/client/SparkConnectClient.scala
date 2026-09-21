@@ -614,7 +614,8 @@ private[sql] class SparkConnectClient(
    * Supports local .jar and .class files and Apache Ivy URIs.
    */
   def addArtifact(uri: URI): Unit = {
-    val serverSide = uri.getScheme == "ivy" && supportsServerSideMavenArtifacts
+    val serverSide = artifactManager.isServerSideMavenCandidate(uri) &&
+      supportsServerSideMavenArtifacts
     artifactManager.addArtifact(uri, serverSide)
   }
 
@@ -661,7 +662,8 @@ private[sql] class SparkConnectClient(
    * Supports local .jar and .class files and Apache Ivy URIs.
    */
   def addArtifacts(uri: Seq[URI]): Unit = {
-    val serverSide = uri.exists(_.getScheme == "ivy") && supportsServerSideMavenArtifacts
+    val serverSide = uri.exists(artifactManager.isServerSideMavenCandidate) &&
+      supportsServerSideMavenArtifacts
     artifactManager.addArtifacts(uri, serverSide)
   }
 
@@ -735,7 +737,7 @@ private final class SparkConnectOperationIdException(val operationId: String)
     extends RuntimeException(s"Spark Connect operation ID: $operationId", null, false, false)
 
 object SparkConnectClient {
-  private[client] val SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY =
+  private[connect] val SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY =
     "serverSideMavenArtifacts.v1"
 
   private[connect] val OPERATION_ID_HEADER = "spark-connect-operation-id"

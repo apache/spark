@@ -33,7 +33,7 @@ import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST, JAR_IVY_CONNECT_TIMEOUT, JAR_IVY_READ_TIMEOUT, JAR_IVY_SETTING_PATH, JAR_REPOSITORIES}
+import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST, JAR_IVY_CONNECT_TIMEOUT, JAR_IVY_READ_TIMEOUT, JAR_IVY_REPO_PATH, JAR_IVY_SETTING_PATH, JAR_REPOSITORIES}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -77,7 +77,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     new RuntimeDependencyResolver(
       ivySettingsPath = sparkConf.get(JAR_IVY_SETTING_PATH),
       configuredRepositories = sparkConf.get(JAR_REPOSITORIES),
-      ivyPath = Some(ivyPath))
+      ivyPath = Some(ivyPath),
+      localIvyPath = sparkConf.getOption(JAR_IVY_REPO_PATH.key))
   }
 
   private[sql] lazy val ivyConnectTimeoutMs: Int =

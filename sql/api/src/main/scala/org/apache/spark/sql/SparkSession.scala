@@ -565,7 +565,8 @@ abstract class SparkSession extends Serializable with Closeable {
    * Ivy URIs are resolved using `spark.jars.ivySettings` when it is configured. When using Spark
    * Connect, Ivy URIs with repositories in the `repos` query parameter, or sent to servers that do
    * not support server-side Maven resolution, are resolved by the client without the server's Ivy
-   * settings.
+   * settings. Otherwise, Ivy URIs are resolved by the server, which does not search Maven or Ivy
+   * repositories local to the client.
    *
    * @since 4.0.0
    */
@@ -579,7 +580,8 @@ abstract class SparkSession extends Serializable with Closeable {
    * Ivy URIs are resolved using `spark.jars.ivySettings` when it is configured. When using Spark
    * Connect, Ivy URIs with repositories in the `repos` query parameter, or sent to servers that do
    * not support server-side Maven resolution, are resolved by the client without the server's Ivy
-   * settings.
+   * settings. Otherwise, Ivy URIs are resolved by the server, which does not search Maven or Ivy
+   * repositories local to the client.
    *
    * @since 4.0.0
    */
@@ -634,7 +636,8 @@ abstract class SparkSession extends Serializable with Closeable {
    * Ivy URIs are resolved using `spark.jars.ivySettings` when it is configured. When using Spark
    * Connect, Ivy URIs with repositories in the `repos` query parameter, or sent to servers that do
    * not support server-side Maven resolution, are resolved by the client without the server's Ivy
-   * settings.
+   * settings. Otherwise, Ivy URIs are resolved by the server, which does not search Maven or Ivy
+   * repositories local to the client.
    *
    * @since 4.0.0
    */

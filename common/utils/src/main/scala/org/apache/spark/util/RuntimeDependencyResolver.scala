@@ -21,7 +21,6 @@ import java.io.PrintStream
 import java.net.URI
 import java.nio.file.{Path, Paths}
 import java.util.concurrent.CancellationException
-import java.util.concurrent.locks.ReentrantLock
 
 import org.apache.spark.util.ArrayImplicits._
 
@@ -29,7 +28,8 @@ import org.apache.spark.util.ArrayImplicits._
 private[spark] final class RuntimeDependencyResolver(
     ivySettingsPath: Option[String],
     configuredRepositories: Seq[String],
-    ivyPath: Option[String]) {
+    ivyPath: Option[String],
+    localIvyPath: Option[String] = None) {
   import RuntimeDependencyResolver._
 
   /** Resolve an ivy URI. Calls are serialized because Ivy mutates process-wide state. */
@@ -40,70 +40,62 @@ private[spark] final class RuntimeDependencyResolver(
       repositoryPolicy: RepositoryPolicy = AllowRequestedRepositories,
       isCancelled: () => Boolean = () => false): Seq[Path] = {
     checkCancelled(isCancelled)
-    try {
-      ivyLock.lockInterruptibly()
-    } catch {
-      case _: InterruptedException =>
-        Thread.currentThread().interrupt()
-        throw new CancellationException("Runtime Maven dependency resolution was cancelled")
+    require(uri.getScheme == "ivy", s"Expected an ivy URI, found: $uri")
+    val authority = Option(uri.getAuthority).getOrElse {
+      throw new IllegalArgumentException(
+        s"Invalid Ivy URI authority in uri $uri: Expected 'org:module:version', found null.")
+    }
+    if (authority.split(":").length != 3) {
+      throw new IllegalArgumentException(
+        s"Invalid Ivy URI authority in uri $uri: " +
+          s"Expected 'org:module:version', found $authority.")
     }
 
-    try {
-      require(uri.getScheme == "ivy", s"Expected an ivy URI, found: $uri")
-      val authority = Option(uri.getAuthority).getOrElse {
-        throw new IllegalArgumentException(
-          s"Invalid Ivy URI authority in uri $uri: Expected 'org:module:version', found null.")
-      }
-      if (authority.split(":").length != 3) {
-        throw new IllegalArgumentException(
-          s"Invalid Ivy URI authority in uri $uri: " +
-            s"Expected 'org:module:version', found $authority.")
-      }
+    checkCancelled(isCancelled)
+    val (transitive, exclusions, requestedRepositories) = MavenUtils.parseQueryParams(uri)
+    val requested = requestedRepositories
+      .split(",")
+      .map(_.trim)
+      .filter(_.nonEmpty)
+      .toImmutableArraySeq
+    val repositories = (configuredRepositories ++ repositoryPolicy.validate(requested))
+      .iterator
+      .map(_.trim)
+      .filter(_.nonEmpty)
+      .toSeq
+      .distinct
 
-      checkCancelled(isCancelled)
-      val (transitive, exclusions, requestedRepositories) = MavenUtils.parseQueryParams(uri)
-      val requested = requestedRepositories
-        .split(",")
-        .map(_.trim)
-        .filter(_.nonEmpty)
-        .toImmutableArraySeq
-      val repositories = (configuredRepositories ++ repositoryPolicy.validate(requested))
-        .iterator
-        .map(_.trim)
-        .filter(_.nonEmpty)
-        .toSeq
-        .distinct
-
-      implicit val printStream: PrintStream = System.err
-      val ivySettings = ivySettingsPath.filter(_.trim.nonEmpty) match {
-        case Some(path) =>
-          MavenUtils.loadIvySettings(path, repositoriesOption(repositories), ivyPath)
-        case None => MavenUtils.buildIvySettings(repositoriesOption(repositories), ivyPath)
-      }
-      MavenUtils.setResolverTimeouts(ivySettings, connectTimeoutMs, readTimeoutMs)
-
-      checkCancelled(isCancelled)
-      val exclusionsList = exclusions
-        .split(",")
-        .map(_.trim)
-        .filter(_.nonEmpty)
-        .toImmutableArraySeq
-      val result = MavenUtils.resolveMavenCoordinates(
-        authority,
-        ivySettings,
-        transitive = transitive,
-        exclusions = exclusionsList)
-      checkCancelled(isCancelled)
-      result.map(Paths.get(_))
-    } finally {
-      ivyLock.unlock()
+    implicit val printStream: PrintStream = System.err
+    val ivySettings = ivySettingsPath.filter(_.trim.nonEmpty) match {
+      case Some(path) =>
+        MavenUtils.loadIvySettings(path, repositoriesOption(repositories), localIvyPath)
+      case None => MavenUtils.buildIvySettings(repositoriesOption(repositories), localIvyPath)
     }
+    // Resolver roots retain the configured/default local Ivy directory, while cache metadata and
+    // retrieved jars are isolated in the runtime directory.
+    MavenUtils.processIvyPathArg(ivySettings, ivyPath)
+    MavenUtils.setResolverTimeouts(ivySettings, connectTimeoutMs, readTimeoutMs)
+
+    checkCancelled(isCancelled)
+    val exclusionsList = exclusions
+      .split(",")
+      .map(_.trim)
+      .filter(_.nonEmpty)
+      .toImmutableArraySeq
+    val result = MavenUtils.resolveMavenCoordinatesWithCancellation(
+      authority,
+      ivySettings,
+      noCacheIvySettings = None,
+      transitive = transitive,
+      exclusions = exclusionsList,
+      isTest = false,
+      isCancelled = isCancelled)
+    checkCancelled(isCancelled)
+    result.map(Paths.get(_))
   }
 }
 
 private[spark] object RuntimeDependencyResolver {
-  private val ivyLock = new ReentrantLock()
-
   trait RepositoryPolicy {
     def validate(requestedRepositories: Seq[String]): Seq[String]
   }

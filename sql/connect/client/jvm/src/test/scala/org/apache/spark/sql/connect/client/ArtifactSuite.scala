@@ -314,21 +314,35 @@ class ArtifactSuite extends ConnectFunSuite {
   test("Spark Connect resolves requested Maven repositories on the client") {
     val main = new MavenCoordinate("my.artifactsuite.clientcapability", "mylib", "0.1")
     IvyTestUtils.withRepository(main, None, None) { repo =>
-      service.serverCapabilities = Seq(
-        SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY)
+      service.errorToThrowOnAnalyze = Some(Status.UNAVAILABLE.asRuntimeException())
       client = new SparkConnectClient(Configuration(), channel)
 
       client.addArtifact(URI.create(s"ivy://${main.toString}?repos=$repo"))
 
+      assert(service.errorToThrowOnAnalyze.nonEmpty)
       val requests = service.getAndClearLatestAddArtifactRequests()
       assert(requests.size == 1)
       val batch = requests.head.getBatch
-      assert(batch.getEntriesCount == 1)
-      assert(batch.getEntries(0).hasArtifact)
+      assert(batch.getArtifactsCount == 1)
       assert(
-        batch.getEntries(0).getArtifact.getName.contains(
+        batch.getArtifacts(0).getName.contains(
           "my.artifactsuite.clientcapability_mylib-0.1"))
     }
+  }
+
+  test("large Maven entries do not produce empty batches") {
+    val largeUri = URI.create(s"ivy://org.example:${"a" * CHUNK_SIZE}:1.0")
+    val otherUri = URI.create("ivy://org.example:other:1.0")
+
+    artifactManager.addArtifacts(
+      Seq(largeUri, otherUri),
+      serverSideMavenArtifacts = true)
+
+    val requests = service.getAndClearLatestAddArtifactRequests()
+    assert(requests.size == 2)
+    assert(requests.forall(_.getBatch.getEntriesCount == 1))
+    assert(requests.head.getBatch.getEntries(0).getMavenDependency.getUri == largeUri.toString)
+    assert(requests(1).getBatch.getEntries(0).getMavenDependency.getUri == otherUri.toString)
   }
 
   test("Spark Connect falls back only when the Maven capability is absent") {

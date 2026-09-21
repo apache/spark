@@ -21,6 +21,8 @@ import java.io.{File, IOException, PrintStream}
 import java.net.URI
 import java.text.ParseException
 import java.util.UUID
+import java.util.concurrent.{CancellationException, TimeUnit}
+import java.util.concurrent.locks.ReentrantLock
 
 import scala.jdk.CollectionConverters._
 
@@ -43,6 +45,35 @@ import org.apache.spark.util.ArrayImplicits._
 /** Provides utility functions to be used inside SparkSubmit. */
 private[spark] object MavenUtils extends Logging {
   val JAR_IVY_SETTING_PATH_KEY: String = "spark.jars.ivySettings"
+
+  private val ivyLock = new ReentrantLock()
+  private val ivyLockPollIntervalMs = 100L
+
+  private def acquireIvyLock(isCancelled: () => Boolean): Unit = {
+    def checkCancelled(): Unit = {
+      if (isCancelled() || Thread.currentThread().isInterrupted) {
+        throw new CancellationException("Maven dependency resolution was cancelled")
+      }
+    }
+
+    checkCancelled()
+    try {
+      while (!ivyLock.tryLock(ivyLockPollIntervalMs, TimeUnit.MILLISECONDS)) {
+        checkCancelled()
+      }
+    } catch {
+      case _: InterruptedException =>
+        Thread.currentThread().interrupt()
+        throw new CancellationException("Maven dependency resolution was cancelled")
+    }
+    try {
+      checkCancelled()
+    } catch {
+      case e: Throwable =>
+        ivyLock.unlock()
+        throw e
+    }
+  }
 
   // Exposed for testing
   // var printStream = SparkSubmit.printStream
@@ -478,10 +509,31 @@ private[spark] object MavenUtils extends Logging {
       noCacheIvySettings: Option[IvySettings] = None,
       transitive: Boolean,
       exclusions: Seq[String] = Nil,
-      isTest: Boolean = false)(implicit printStream: PrintStream): Seq[String] = {
+      isTest: Boolean = false)(
+      implicit printStream: PrintStream): Seq[String] = {
+    resolveMavenCoordinatesWithCancellation(
+      coordinates,
+      ivySettings,
+      noCacheIvySettings,
+      transitive,
+      exclusions,
+      isTest,
+      () => false)
+  }
+
+  private[spark] def resolveMavenCoordinatesWithCancellation(
+      coordinates: String,
+      ivySettings: IvySettings,
+      noCacheIvySettings: Option[IvySettings],
+      transitive: Boolean,
+      exclusions: Seq[String],
+      isTest: Boolean,
+      isCancelled: () => Boolean)(
+      implicit printStream: PrintStream): Seq[String] = {
     if (coordinates == null || coordinates.trim.isEmpty) {
       Nil
     } else {
+      acquireIvyLock(isCancelled)
       val sysOut = System.out
       // Default configuration name for ivy
       val ivyConfName = "default"
@@ -574,6 +626,7 @@ private[spark] object MavenUtils extends Logging {
         if (md != null) {
           clearIvyResolutionFiles(md.getModuleRevisionId, ivySettings.getDefaultCache, ivyConfName)
         }
+        ivyLock.unlock()
       }
     }
   }
