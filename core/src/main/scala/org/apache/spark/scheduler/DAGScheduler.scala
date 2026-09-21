@@ -3918,7 +3918,8 @@ private[spark] class DAGScheduler(
           // external shuffle service, an ExecutorLost would NOT clean these, so this is the only
           // proactive channel). Safe for the pipelined shuffle itself: it registers no map outputs
           // in the tracker, so this can only strip regular/durable outputs.
-          unregisterOutputsOnFetchFailedExecutor(bmAddress, task)
+          val failedMapShuffleId = if (mapIndex != -1) Some(shuffleId) else None
+          unregisterOutputsOnFetchFailedExecutor(bmAddress, task, failedMapShuffleId)
           abortStage(failedStage,
             s"A pipelined group member failed with a fetch failure: $failureMessage", None)
         } else {
@@ -4619,7 +4620,7 @@ private[spark] class DAGScheduler(
   private def unregisterOutputsOnFetchFailedExecutor(
       bmAddress: BlockManagerId,
       task: Task[_],
-      failedShuffleId: Option[Int] = None): Unit = {
+      failedShuffleId: Option[Int]): Unit = {
     // TODO: mark the executor as failed only if there were lots of fetch failures on it
     if (bmAddress != null) {
       val externalShuffleServiceEnabled = env.blockManager.externalShuffleServiceEnabled
