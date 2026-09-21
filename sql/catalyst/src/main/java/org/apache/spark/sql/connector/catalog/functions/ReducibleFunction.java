@@ -98,7 +98,7 @@ public interface ReducibleFunction<I, O> {
    * @param otherParams literal parameters for the other function (may differ in length from
    *                    thisParams)
    * @return a reduction function if reducible, null otherwise
-   * @since 4.3.0
+   * @since 4.4.0
    */
   default Reducer<I, O> reducer(
           Literal<?>[] thisParams,
@@ -125,12 +125,12 @@ public interface ReducibleFunction<I, O> {
    * @param otherBucketFunction the other parameterized function
    * @param otherNumBuckets parameter for the other function
    * @return a reduction function if it is reducible, null if not
-   * @deprecated as of 4.3.0. Please override
+   * @deprecated as of 4.4.0. Please override
    *     {@link #reducer(Literal[], ReducibleFunction, Literal[])} instead.
    *     The new overload supports transforms with any number of parameters of any type
    *     (e.g. truncate width, multi-arg range buckets), not just a single int.
    */
-  @Deprecated(since = "4.3.0")
+  @Deprecated(since = "4.4.0")
   default Reducer<I, O> reducer(
       int thisNumBuckets,
       ReducibleFunction<?, ?> otherBucketFunction,
