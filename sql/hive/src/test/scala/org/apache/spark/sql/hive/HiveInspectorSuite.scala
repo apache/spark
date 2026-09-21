@@ -21,7 +21,7 @@ import java.util
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
 import org.apache.hadoop.hive.serde2.io.{DoubleWritable, HiveCharWritable, HiveVarcharWritable}
-import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, MapObjectInspector, ObjectInspector, ObjectInspectorFactory, PrimitiveObjectInspector, StructObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory, PrimitiveObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.hive.serde2.typeinfo.{CharTypeInfo, DecimalTypeInfo, VarcharTypeInfo}
@@ -503,22 +503,38 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
 
   test("SPARK-59277: Hive map unwrapper validates CHAR-padded key collisions") {
     withFirstClassCharVarchar(enabled = true) {
-      // Two distinct STRING keys that both pad to the same CHAR(2) value.
-      val mapType = MapType(CharType(2), StringType)
-      val inspector = toInspector(mapType).asInstanceOf[MapObjectInspector]
-      val javaMap = new java.util.HashMap[Any, Any]()
+      // Two distinct Java String keys that both pad to the same CHAR(2).
+      // Use a plain-string key inspector so the Java HashMap preserves both
+      // entries (HiveChar equality would deduplicate them before our code runs).
+      val keyOI = PrimitiveObjectInspectorFactory.javaStringObjectInspector
+      val valueOI = PrimitiveObjectInspectorFactory.javaStringObjectInspector
+      val mapOI = ObjectInspectorFactory.getStandardMapObjectInspector(keyOI, valueOI)
+      val javaMap = new java.util.LinkedHashMap[Any, Any]()
       javaMap.put("a", "v1")
       javaMap.put("a ", "v2")
-      val hiveMap = wrap(
-        ArrayBasedMapData(
-          Array[Any](UTF8String.fromString("a"), UTF8String.fromString("a ")),
-          Array[Any](UTF8String.fromString("v1"), UTF8String.fromString("v2"))),
-        inspector, mapType)
-      val unwrapper = unwrapperFor(inspector, mapType)
-      val result = unwrapper(hiveMap).asInstanceOf[MapData]
-      // Both keys pad to "a ", so the builder deduplicates to one entry.
-      assert(result.numElements() === 1)
-      assert(result.keyArray().getUTF8String(0) === UTF8String.fromString("a "))
+
+      val targetType = MapType(CharType(2), StringType)
+
+      // Default EXCEPTION policy: duplicate padded keys must throw.
+      val exceptionConf = new SQLConf
+      exceptionConf.setConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS, true)
+      exceptionConf.setConfString(SQLConf.MAP_KEY_DEDUP_POLICY.key, "EXCEPTION")
+      SQLConf.withExistingConf(exceptionConf) {
+        val unwrapper = unwrapperFor(mapOI, targetType)
+        intercept[SparkRuntimeException] { unwrapper(javaMap) }
+      }
+
+      // LAST_WIN policy: duplicate padded keys deduplicate to one entry.
+      val lastWinConf = new SQLConf
+      lastWinConf.setConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS, true)
+      lastWinConf.setConfString(SQLConf.MAP_KEY_DEDUP_POLICY.key, "LAST_WIN")
+      SQLConf.withExistingConf(lastWinConf) {
+        val unwrapper = unwrapperFor(mapOI, targetType)
+        val result = unwrapper(javaMap).asInstanceOf[MapData]
+        assert(result.numElements() === 1)
+        assert(result.keyArray().getUTF8String(0) ===
+          UTF8String.fromString("a "))
+      }
     }
   }
 
