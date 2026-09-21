@@ -1186,7 +1186,10 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>(value of spark.kubernetes.authenticate.driver.serviceAccountName)</code></td>
   <td>
     Service account that is used when running the executor pod.
-    If this parameter is not setup, the fallback logic will use the driver's service account.
+    If this parameter is not setup, the fallback logic will use the value of
+    <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>.
+    Both are ignored when the executor pod template already names a non-empty service account in
+    either <code>serviceAccount</code> or <code>serviceAccountName</code>.
   </td>
   <td>3.1.0</td>
 </tr>
@@ -1852,6 +1855,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>false</code></td>
   <td>
     If set to true, Spark will store the exit exception failed applications in the Kubernetes API server using the <code>spark.exit-exception</code> annotation.
+    Note that the annotation is visible to anyone who can get the driver pod. The parts of the exit exception matching
+    <code>spark.redaction.string.regex</code> are redacted.
   </td>
   <td>4.1.0</td>
 </tr>
@@ -2265,18 +2270,23 @@ See the below table for the full list of pod specifications that will be overwri
   <td>serviceAccount</td>
   <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
-    Spark will override <code>serviceAccount</code> with the value of the spark configuration for only
-    driver pods, and only if the spark configuration is specified and no driver credentials are
-    submitted for Spark to mount as a secret. Executor pods will remain unaffected.
+    For driver pods Spark will override <code>serviceAccount</code> with the value of
+    <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>, but only if that
+    configuration is set and no driver credentials are submitted for Spark to mount as a secret.
+    For executor pods Spark writes both fields with the same value: the account the template names,
+    if it names one in either field, and otherwise
+    <code>spark.kubernetes.authenticate.executor.serviceAccountName</code>, falling back to the
+    driver's. When the template names both fields, <code>serviceAccountName</code> is the one that
+    decides, as it is for Kubernetes itself. Spark warns when
+    <code>spark.kubernetes.authenticate.executor.serviceAccountName</code> named an account the
+    template displaced.
   </td>
 </tr>
 <tr>
   <td>serviceAccountName</td>
   <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
-    Spark will override <code>serviceAccountName</code> with the value of the spark configuration for only
-    driver pods, and only if the spark configuration is specified and no driver credentials are
-    submitted for Spark to mount as a secret. Executor pods will remain unaffected.
+    Same as <code>serviceAccount</code>.
   </td>
 </tr>
 <tr>

@@ -86,7 +86,7 @@ UNPIVOT (
 )
 -- !query analysis
 Project [course#x, year#x, earnings#x, sales#x]
-+- Filter isnotnull(coalesce(earnings#x, sales#x))
++- Filter (isnotnull(earnings#x) OR isnotnull(sales#x))
    +- Expand [[course#x, earnings2012_sales2012, earnings2012#x, sales2012#x], [course#x, earnings2013_sales2013, earnings2013#x, sales2013#x], [course#x, earnings2014_sales2014, earnings2014#x, sales2014#x]], [course#x, year#x, earnings#x, sales#x]
       +- SubqueryAlias courseearningsandsales
          +- View (`courseEarningsAndSales`, [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x])
@@ -119,7 +119,7 @@ UNPIVOT (
 )
 -- !query analysis
 Project [course#x, year#x, earnings#x, sales#x]
-+- Filter isnotnull(coalesce(earnings#x, sales#x))
++- Filter (isnotnull(earnings#x) OR isnotnull(sales#x))
    +- Expand [[course#x, 2012, earnings2012#x, sales2012#x], [course#x, 2013, earnings2013#x, sales2013#x], [course#x, 2014, earnings2014#x, sales2014#x]], [course#x, year#x, earnings#x, sales#x]
       +- SubqueryAlias courseearningsandsales
          +- View (`courseEarningsAndSales`, [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x])
@@ -127,3 +127,62 @@ Project [course#x, year#x, earnings#x, sales#x]
                +- Project [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x]
                   +- SubqueryAlias courseEarningsAndSales
                      +- LocalRelation [course#x, earnings2012#x, sales2012#x, earnings2013#x, sales2013#x, earnings2014#x, sales2014#x]
+
+
+-- !query
+create temporary view mixedTypeValues as select
+  1 as id,
+  cast('2026-01-01' as date) as date1, cast(null as int) as int1,
+  cast(null as date) as date2, 2 as int2,
+  cast(null as date) as date3, cast(null as int) as int3
+-- !query analysis
+CreateViewCommand `mixedTypeValues`, select
+  1 as id,
+  cast('2026-01-01' as date) as date1, cast(null as int) as int1,
+  cast(null as date) as date2, 2 as int2,
+  cast(null as date) as date3, cast(null as int) as int3, false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS id#x, cast(2026-01-01 as date) AS date1#x, cast(null as int) AS int1#x, cast(null as date) AS date2#x, 2 AS int2#x, cast(null as date) AS date3#x, cast(null as int) AS int3#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT * FROM mixedTypeValues
+UNPIVOT EXCLUDE NULLS (
+  (date_value, int_value) FOR kind IN (
+    (date1, int1) as date_only,
+    (date2, int2) as int_only,
+    (date3, int3) as all_null
+  )
+)
+ORDER BY kind
+-- !query analysis
+Sort [kind#x ASC NULLS FIRST], true
++- Project [id#x, kind#x, date_value#x, int_value#x]
+   +- Filter (isnotnull(date_value#x) OR isnotnull(int_value#x))
+      +- Expand [[id#x, date_only, date1#x, int1#x], [id#x, int_only, date2#x, int2#x], [id#x, all_null, date3#x, int3#x]], [id#x, kind#x, date_value#x, int_value#x]
+         +- SubqueryAlias mixedtypevalues
+            +- View (`mixedTypeValues`, [id#x, date1#x, int1#x, date2#x, int2#x, date3#x, int3#x])
+               +- Project [cast(id#x as int) AS id#x, cast(date1#x as date) AS date1#x, cast(int1#x as int) AS int1#x, cast(date2#x as date) AS date2#x, cast(int2#x as int) AS int2#x, cast(date3#x as date) AS date3#x, cast(int3#x as int) AS int3#x]
+                  +- Project [1 AS id#x, cast(2026-01-01 as date) AS date1#x, cast(null as int) AS int1#x, cast(null as date) AS date2#x, 2 AS int2#x, cast(null as date) AS date3#x, cast(null as int) AS int3#x]
+                     +- OneRowRelation
+
+
+-- !query
+SELECT * FROM mixedTypeValues
+UNPIVOT INCLUDE NULLS (
+  (date_value, int_value) FOR kind IN (
+    (date1, int1) as date_only,
+    (date2, int2) as int_only,
+    (date3, int3) as all_null
+  )
+)
+ORDER BY kind
+-- !query analysis
+Sort [kind#x ASC NULLS FIRST], true
++- Project [id#x, kind#x, date_value#x, int_value#x]
+   +- Expand [[id#x, date_only, date1#x, int1#x], [id#x, int_only, date2#x, int2#x], [id#x, all_null, date3#x, int3#x]], [id#x, kind#x, date_value#x, int_value#x]
+      +- SubqueryAlias mixedtypevalues
+         +- View (`mixedTypeValues`, [id#x, date1#x, int1#x, date2#x, int2#x, date3#x, int3#x])
+            +- Project [cast(id#x as int) AS id#x, cast(date1#x as date) AS date1#x, cast(int1#x as int) AS int1#x, cast(date2#x as date) AS date2#x, cast(int2#x as int) AS int2#x, cast(date3#x as date) AS date3#x, cast(int3#x as int) AS int3#x]
+               +- Project [1 AS id#x, cast(2026-01-01 as date) AS date1#x, cast(null as int) AS int1#x, cast(null as date) AS date2#x, 2 AS int2#x, cast(null as date) AS date3#x, cast(null as int) AS int3#x]
+                  +- OneRowRelation
