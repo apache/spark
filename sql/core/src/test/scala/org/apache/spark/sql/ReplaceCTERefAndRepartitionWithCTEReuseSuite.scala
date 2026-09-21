@@ -38,6 +38,19 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     )(f)
   }
 
+  /**
+   * Runs `text` with every CTE forced to materialize (`forceSkipInline = true`) so it opts into
+   * guaranteed CTE shuffle reuse. `forceSkipInline` has no SQL syntax, so tag the analyzed plan's
+   * CTE definitions and re-run the tagged plan.
+   */
+  private def sqlWithForcedCTEReuse(text: String): DataFrame = {
+    val analyzed = spark.sql(text).queryExecution.analyzed
+    val tagged = analyzed.transformWithSubqueries {
+      case d: CTERelationDef => d.copy(forceSkipInline = true)
+    }
+    classic.Dataset.ofRows(spark, tagged)
+  }
+
   // Runs the guaranteed-reuse pipeline (the three rules of the "Replace CTE with Repartition"
   // batch, in order) with the flag on, so tests can drive it on a hand-built plan.
   private def runReuseRules(plan: LogicalPlan): LogicalPlan = withSQLConf(
@@ -101,7 +114,7 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
 
   test("CTE with non-deterministic function produces CTEReuseRelation") {
     withCTEReuseEnabled {
-      val df = sql(
+      val df = sqlWithForcedCTEReuse(
         """WITH cte AS (SELECT id, rand() as r FROM range(100))
           |SELECT * FROM cte c1 JOIN cte c2 ON c1.id = c2.id
           |""".stripMargin)
@@ -115,7 +128,7 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
 
   test("CTE with multiple references produces shared CTEReuseRelation") {
     withCTEReuseEnabled {
-      val df = sql(
+      val df = sqlWithForcedCTEReuse(
         """WITH cte AS (SELECT id, rand() as r FROM range(100))
           |SELECT c1.id, c2.id, c3.id
           |FROM cte c1, cte c2, cte c3
@@ -132,7 +145,7 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
 
   test("multiple CTEs produce distinct CTEReuseRelation ids") {
     withCTEReuseEnabled {
-      val df = sql(
+      val df = sqlWithForcedCTEReuse(
         """WITH
           |  cte1 AS (SELECT id, rand() as r FROM range(100)),
           |  cte2 AS (SELECT id, rand() as r FROM range(200))
@@ -155,7 +168,7 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
       withTable("cte_t1") {
         sql("CREATE TABLE cte_t1 (a INT, b INT) USING parquet")
         sql("INSERT INTO cte_t1 VALUES (1, 2), (3, 4)")
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH cte AS (SELECT a, rand() as r FROM cte_t1)
             |SELECT * FROM cte c1
             |WHERE c1.a IN (SELECT a FROM cte c2 WHERE c2.r > 0.5)
@@ -285,14 +298,14 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     // Outer CTE body references an inner CTE; both are multi-referenced non-inlined CTEs.
     // After the rule, no CTERelationRef may remain (all resolved) and both cteIds appear.
     val innerBody = rel
-    val innerDef = CTERelationDef(innerBody)
+    val innerDef = CTERelationDef(innerBody, forceSkipInline = true)
     val innerRef1 =
       CTERelationRef(innerDef.id, _resolved = true, innerBody.output, isStreaming = false)
     val innerRef2 =
       CTERelationRef(innerDef.id, _resolved = true, innerBody.output, isStreaming = false)
     val outerBody = WithCTE(Union(Seq(innerRef1, innerRef2)), Seq(innerDef))
 
-    val outerDef = CTERelationDef(outerBody)
+    val outerDef = CTERelationDef(outerBody, forceSkipInline = true)
     val outerRef1 =
       CTERelationRef(outerDef.id, _resolved = true, outerBody.output, isStreaming = false)
     val outerRef2 =
@@ -386,7 +399,7 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
 
   test("CTEReuseRelation renders its sharedSubplan in the tree string") {
     withCTEReuseEnabled {
-      val df = sql(
+      val df = sqlWithForcedCTEReuse(
         """WITH cte AS (SELECT id, rand() as r FROM range(100))
           |SELECT c1.id FROM cte c1 JOIN cte c2 ON c1.id = c2.id
           |""".stripMargin)
