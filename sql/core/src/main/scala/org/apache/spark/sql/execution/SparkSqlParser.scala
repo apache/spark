@@ -1595,6 +1595,19 @@ class SparkSqlAstBuilder extends AstBuilder {
     ShowTablesJsonCommand(ns, Some(string(visitStringLit(ctx.pattern))), isExtended = true)
   }
 
+  /**
+   * Create a [[ShowViewsJsonCommand]] or [[ShowViews]] command.
+   */
+  override def visitShowViews(ctx: ShowViewsContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.JSON == null) return super.visitShowViews(ctx)
+    val ns = if (ctx.identifierReference() != null) {
+      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+    } else {
+      CurrentNamespace
+    }
+    ShowViewsJsonCommand(ns, Option(ctx.pattern).map(x => string(visitStringLit(x))))
+  }
+
   override def visitDescribeProcedure(
       ctx: DescribeProcedureContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference(), procIdentifier =>
