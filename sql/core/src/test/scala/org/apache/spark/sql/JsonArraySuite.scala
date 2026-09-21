@@ -342,25 +342,36 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     // as-is: reparse re-derives implicit FORMAT JSON.
     val spliced = JsonArray(
       Seq(inner), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
-    assert(spliced.sql == "JSON_ARRAY(JSON_ARRAY(1))")
+    // The outer splices, so it is on the direct grammar path already; the inner built-in renders a
+    // default `RETURNING STRING` so its own clause-free form would not reparse into a
+    // shadowing routine.
+    assert(spliced.sql == "JSON_ARRAY(JSON_ARRAY(1 RETURNING STRING))")
     // But a constructor inlined into a quoted (formatJson = false) position must be wrapped so
     // reparse keeps it quoted -- otherwise ["[1]"] would round-trip to [[1]].
     val quoted = JsonArray(
       Seq(inner), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
-    assert(quoted.sql == "JSON_ARRAY(CAST(JSON_ARRAY(1) AS STRING))")
+    assert(quoted.sql ==
+      "JSON_ARRAY(CAST(JSON_ARRAY(1 RETURNING STRING) AS STRING) RETURNING STRING)")
   }
 
   test("emitted SQL reparses and evaluates with raw-vs-quoted semantics preserved") {
-    // The .sql renderings above are round-trip contracts: reparsing and evaluating them must
+    // The .sql renderings above are round-trip contracts: reparsing and evaluating the actual
+    // emitted SQL -- including the default RETURNING STRING clauses it now carries -- must
     // reproduce the original splicing. A bare nested constructor stays spliced; a cast-neutralized
     // one stays quoted.
-    checkAnswer(sql("SELECT JSON_ARRAY(JSON_ARRAY(1))"), Row("[[1]]"))
-    checkAnswer(sql("SELECT JSON_ARRAY(CAST(JSON_ARRAY(1) AS STRING))"), Row("""["[1]"]"""))
-    // An explicit FORMAT JSON string literal round-trips through the emitted SQL too.
+    val inner = JsonArray(
+      Seq(Literal(1)), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
     val spliced = JsonArray(
+      Seq(inner), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
+    checkAnswer(sql(s"SELECT ${spliced.sql}"), Row("[[1]]"))
+    val quoted = JsonArray(
+      Seq(inner), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
+    checkAnswer(sql(s"SELECT ${quoted.sql}"), Row("""["[1]"]"""))
+    // An explicit FORMAT JSON string literal round-trips through the emitted SQL too.
+    val splicedLiteral = JsonArray(
       Seq(Literal("[1,2]")), Seq(true), Seq(true), JsonConstructorNullBehavior.Absent, StringType)
-    assert(spliced.sql == "JSON_ARRAY('[1,2]' FORMAT JSON)")
-    checkAnswer(sql(s"SELECT ${spliced.sql}"), Row("[[1,2]]"))
+    assert(splicedLiteral.sql == "JSON_ARRAY('[1,2]' FORMAT JSON)")
+    checkAnswer(sql(s"SELECT ${splicedLiteral.sql}"), Row("[[1,2]]"))
   }
 
   test("SQL forces FORMAT JSON for a spliced value whose child is not a bare constructor") {
@@ -386,24 +397,40 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     val keep = jsonQuery(JsonQueryQuotes.Keep)
     val splicedKeep = JsonArray(
       Seq(keep), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
-    assert(splicedKeep.sql == """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a'))""")
+    assert(splicedKeep.sql ==
+      """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' RETURNING STRING))""")
     // A KEEP QUOTES JSON_QUERY inlined into a quoted position must be neutralized with a cast so
     // reparse keeps it quoted rather than re-deriving implicit FORMAT JSON.
     val quotedKeep = JsonArray(
       Seq(keep), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
-    assert(quotedKeep.sql == """JSON_ARRAY(CAST(JSON_QUERY('{"a":{"x":1}}', '$.a') AS STRING))""")
+    assert(quotedKeep.sql ==
+      """JSON_ARRAY(CAST(JSON_QUERY('{"a":{"x":1}}', """ +
+        """'$.a' RETURNING STRING) AS STRING) RETURNING STRING)""")
     // OMIT QUOTES emits an ordinary string, so it is not implicit: in a quoted position it renders
     // as-is, and in a spliced position it must render an explicit FORMAT JSON (it does not
     // round-trip implicitly).
     val omit = jsonQuery(JsonQueryQuotes.Omit)
     val quotedOmit = JsonArray(
       Seq(omit), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
-    assert(quotedOmit.sql == """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' OMIT QUOTES))""")
+    assert(quotedOmit.sql ==
+      """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' OMIT QUOTES) RETURNING STRING)""")
     val splicedOmit = JsonArray(
       Seq(omit), Seq(true), Seq(true), JsonConstructorNullBehavior.Absent, StringType)
     assert(
       splicedOmit.sql ==
         """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' OMIT QUOTES) FORMAT JSON)""")
+    // Each emitted rendering (with the default RETURNING STRING it now carries) must reparse and
+    // evaluate the same as its clause-free equivalent, i.e. the added clause is semantically inert.
+    checkAnswer(sql(s"SELECT ${splicedKeep.sql}"),
+      sql("""SELECT JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a'))""").collect().toSeq)
+    checkAnswer(sql(s"SELECT ${quotedKeep.sql}"),
+      sql("""SELECT JSON_ARRAY(CAST(JSON_QUERY('{"a":{"x":1}}', '$.a') AS STRING))""")
+        .collect().toSeq)
+    checkAnswer(sql(s"SELECT ${quotedOmit.sql}"),
+      sql("""SELECT JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' OMIT QUOTES))""").collect().toSeq)
+    checkAnswer(sql(s"SELECT ${splicedOmit.sql}"),
+      sql("""SELECT JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' OMIT QUOTES) FORMAT JSON)""")
+        .collect().toSeq)
   }
 
   test("SQL preserves an explicit collated RETURNING on a spliced nested JSON_QUERY") {
@@ -431,7 +458,9 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     // The omitted default is the companion StringType (by reference) and renders no RETURNING.
     val default = JsonArray(
       Seq(Literal(1)), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
-    assert(default.sql == "JSON_ARRAY(1)")
+    // A clause-free built-in renders the default `RETURNING STRING` so its canonical SQL stays
+    // bound to the built-in on reparse.
+    assert(default.sql == "JSON_ARRAY(1 RETURNING STRING)")
   }
 
   test("a constant JSON_ARRAY is foldable unless it has an explicit FORMAT JSON") {
@@ -541,6 +570,74 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         sql("DROP TEMPORARY FUNCTION IF EXISTS json_exists")
       }
     }
+  }
+
+  test("SPARK-59685: default-clause JSON_ARRAY canonical SQL reparses to the built-in under a " +
+      "shadowing PATH") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_array(a INT) RETURNS STRING RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        // A built-in JSON_ARRAY whose only clause is the default RETURNING STRING: the clause makes
+        // it the built-in even under the shadow, but its canonical `sql` would drop the default.
+        val jsonArray = sql("SELECT json_array(1 RETURNING STRING)")
+          .queryExecution.analyzed.expressions
+          .flatMap(_.collect { case ja: JsonArray => ja }).head
+        // The rendering must reparse back to the built-in, not the same-named routine on the PATH.
+        val reparsed = sql(s"SELECT ${jsonArray.sql}")
+        assert(reparsed.queryExecution.analyzed.expressions
+          .exists(_.exists(_.isInstanceOf[JsonArray])),
+          s"canonical SQL bound the shadow instead of the built-in: ${jsonArray.sql}")
+        checkAnswer(reparsed, Row("[1]"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
+      }
+    }
+  }
+
+  test("SPARK-59685: zero-arg default JSON_ARRAY canonical SQL reparses to the built-in under a " +
+      "shadowing PATH") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_array() RETURNS STRING RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        // A zero-arg built-in JSON_ARRAY renders the distinct clause-only `JSON_ARRAY( RETURNING
+        // STRING)`: it has no values, so the default clause is its sole marker on reparse.
+        val jsonArray = sql("SELECT json_array(RETURNING STRING)")
+          .queryExecution.analyzed.expressions
+          .flatMap(_.collect { case ja: JsonArray => ja }).head
+        // The rendering must reparse back to the built-in, not the same-named routine on the PATH.
+        val reparsed = sql(s"SELECT ${jsonArray.sql}")
+        assert(reparsed.queryExecution.analyzed.expressions
+          .exists(_.exists(_.isInstanceOf[JsonArray])),
+          s"canonical SQL bound the shadow instead of the built-in: ${jsonArray.sql}")
+        checkAnswer(reparsed, Row("[]"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
+      }
+    }
+  }
+
+  test("SPARK-59685: a default JSON_ARRAY keeps a clean auto-generated column name") {
+    val name = sql("SELECT json_array(1)").schema.head.name
+    assert(!name.contains("RETURNING"), s"column name leaked the ownership clause: $name")
+  }
+
+  test("SPARK-59685: a nested JSON constructor keeps a clean auto-generated column name") {
+    // Children are rendered in place for display names, so a nested constructor neither leaks the
+    // round-trip RETURNING clause nor gains a synthetic FORMAT JSON that the outer would emit if
+    // the child were flattened to a plain attribute first.
+    val splicedArray = sql("SELECT json_array(json_array(1, 2), 3)").schema.head.name
+    assert(splicedArray === "JSON_ARRAY(JSON_ARRAY(1, 2), 3)", s"unexpected name: $splicedArray")
+    val nestedQuery = sql("""SELECT json_array(json_query('{"a":1}', '$.a'))""").schema.head.name
+    assert(!nestedQuery.contains("RETURNING") && !nestedQuery.contains("FORMAT JSON"),
+      s"nested name leaked a round-trip-only clause: $nestedQuery")
   }
 
   test("qualified plain JSON_ARRAY resolves to the built-in constructor") {
