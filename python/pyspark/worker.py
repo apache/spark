@@ -1656,26 +1656,94 @@ def _elementwise_udf_input_type(data_type, depth):
     return data_type
 
 
+def _elementwise_flatten_inputs(batch, input_column_indices, depth):
+    """Flatten element-wise UDF inputs and capture the first input's list shape.
+
+    Returns ``(flat_batch, list_lengths_by_level, large_list_by_level)``. ``flat_batch`` contains
+    one fully flattened leaf Array per selected input under a positional ``_N`` name.
+    ``list_lengths_by_level[k]`` contains the per-slot length at level ``k`` (0 is outermost), using
+    ``None`` for a null list. ``large_list_by_level[k]`` records whether that level uses
+    ``LargeListArray``.
+
+    Only the first selected input supplies shape metadata because
+    ``ExtractPythonUDFFromLambda`` aligns the other inputs to it. ``depth`` is 1 for a UDF in a
+    single lambda and greater for one lifted out of nested lambdas.
+    """
+    import pyarrow as pa
+    import pyarrow.compute as pc
+
+    assert input_column_indices
+    assert depth > 0
+
+    flat_inputs = []
+    list_lengths_by_level = []
+    large_list_by_level = []
+    for input_index, column_index in enumerate(input_column_indices):
+        current = batch.column(column_index)
+        for _ in range(depth):
+            if input_index == 0:
+                list_lengths_by_level.append(pc.list_value_length(current).to_pylist())
+                large_list_by_level.append(pa.types.is_large_list(current.type))
+            current = current.flatten()
+        flat_inputs.append(current)
+
+    return (
+        pa.RecordBatch.from_arrays(
+            flat_inputs, names=[f"_{index}" for index in range(len(flat_inputs))]
+        ),
+        list_lengths_by_level,
+        large_list_by_level,
+    )
+
+
+def _elementwise_renest_output(flat_values, list_lengths_by_level, large_list_by_level):
+    """Re-nest one element-wise UDF output using its first input's recorded shape.
+
+    Levels are rebuilt from innermost to outermost. A ``None`` length creates a null list and
+    consumes no flat values; zero creates an empty, non-null list. ``large_list_by_level`` preserves
+    each input level's int32 ``ListArray`` versus int64 ``LargeListArray`` offset width.
+    """
+    import pyarrow as pa
+
+    result = flat_values
+    for list_lengths, use_large_list in zip(
+        reversed(list_lengths_by_level), reversed(large_list_by_level)
+    ):
+        offsets = [0]
+        running = 0
+        nulls = []
+        for length in list_lengths:
+            nulls.append(length is None)
+            if length is not None:
+                running += length
+            offsets.append(running)
+        list_type = pa.LargeListArray if use_large_list else pa.ListArray
+        result = list_type.from_arrays(
+            pa.array(offsets, type=pa.int64() if use_large_list else pa.int32()),
+            result,
+            mask=pa.array(nulls, type=pa.bool_()),
+        )
+    return result
+
+
 def _elementwise_flat_batch_to_pandas_or_arrow_udf_inputs(
     flat_batch, input_schema, is_pandas, runner_conf
 ):
     """Adapt one flattened input batch to a pandas or Arrow element-wise UDF's inputs.
 
-    ``flat_batch`` contains the aligned leaf Arrays produced once per input batch by
-    ``ArrowBatchTransformer.flatten_elementwise_inputs``. The Arrow flavor receives those Arrays
-    unchanged. The pandas flavor converts the entire batch to Series / DataFrames using the leaf
-    ``input_schema`` and the same options as the ordinary scalar pandas UDF path.
+    ``flat_batch`` contains one aligned leaf Array per UDF argument. The Arrow flavor receives those
+    Arrays unchanged. The pandas flavor converts the entire batch to Series / DataFrames using the
+    leaf ``input_schema`` and the same options as the ordinary scalar pandas UDF path.
 
     The scalar pandas / Arrow UDFs and their iterator variants receive whole pandas Series /
     DataFrames or ``pa.Array`` objects. The row-at-a-time ``SQL_ARROW_ELEMENTWISE_UDF`` follows the
     same element-wise flatten/invoke/re-nest path, but converts the flat Arrays to Python values and
     invokes the function once per element tuple, so it does not use this adapter.
 
-    ``flatten_elementwise_inputs`` assigns positional ``_N`` field names only to form a
-    RecordBatch. Clear them from Series results so this batch wrapper does not expose new names to
-    user code; struct inputs remain DataFrames with their real child-field names. Shared by the
-    scalar and iterator element-wise worker paths that back Python UDFs in higher-order-function
-    lambdas.
+    Positional ``_N`` field names exist only to form the RecordBatch. Clear them from Series results
+    so this batch wrapper does not expose new names to user code; struct inputs remain DataFrames
+    with their real child-field names. Shared by the scalar and iterator element-wise worker paths
+    that back Python UDFs in higher-order-function lambdas.
     """
     if not is_pandas:
         return flat_batch.columns
@@ -1713,10 +1781,9 @@ def _elementwise_pandas_or_arrow_udf_output_to_flat_batch(
     ``SQL_ARROW_ELEMENTWISE_UDF`` shares their element-wise flattening and re-nesting, but collects
     ordinary Python result values and converts them with its Python-value converter instead.
 
-    Keep each UDF result as a one-column RecordBatch so the worker can pass it directly to
-    ``ArrowBatchTransformer.renest_elementwise_outputs``. The transformer extracts the flat Array,
-    rebuilds its list levels, and assembles the final output batch. Shared by the scalar and
-    iterator pandas / Arrow element-wise worker paths. See ``ExtractPythonUDFFromLambda``.
+    Keep each UDF result as a one-column RecordBatch so iterator paths can concatenate and slice
+    output chunks while retaining their schema. Shared by the scalar and iterator pandas / Arrow
+    element-wise worker paths. See ``ExtractPythonUDFFromLambda``.
     """
     import pyarrow as pa
 
@@ -2763,8 +2830,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     args_kwargs_offsets,
                     depth,
                     arg_converters,
-                    # The UDF returns one value per element, so its Arrow element type is the
-                    # declared return type rather than the surrounding array<R> operator type.
+                    # UDF returns one value per element; return type was pickled, unchanged. This is
+                    # per-element, so element type equals the declared return type.
                     to_arrow_type(
                         udf_return_type,
                         timezone="UTC",
@@ -2794,7 +2861,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 # fuse UDFs over differently shaped/nested arrays into one batch, so a single shared
                 # shape would misalign every UDF but the first. The rewrite always passes at least
                 # one array argument, so `offsets` is non-empty.
-                output_batches = []
+                output_arrays = []
                 for info in udf_infos:
                     (
                         wrapped_func,
@@ -2804,10 +2871,10 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         arrow_element_type,
                         result_conv,
                     ) = info
-                    flat_batch, shape_levels, is_large_levels = (
-                        ArrowBatchTransformer.flatten_elementwise_inputs(
-                            input_batch, offsets, depth
-                        )
+                    # Flatten each argument `depth` list levels to its leaves; the first argument's
+                    # per-level shapes drive the re-nest.
+                    flat_batch, list_lengths_by_level, large_list_by_level = (
+                        _elementwise_flatten_inputs(input_batch, offsets, depth)
                     )
                     columns = []
                     for column, conv in zip(flat_batch.columns, arg_converters):
@@ -2822,28 +2889,27 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     results = _evaluate_elementwise_udf(wrapped_func, rows)
                     verify_result_row_count(len(results), total_elements)
 
-                    # Convert the flat results before re-nesting them with this UDF's own shapes.
+                    # Convert results and re-nest to array<R> using that UDF's offsets.
                     converted = (
                         [result_conv(r) for r in results] if result_conv is not None else results
                     )
                     try:
                         flat_arr = pa.array(converted, type=arrow_element_type)
-                    # Broader than SQL_ARROW_BATCHED_UDF, which catches only ArrowInvalid: an
-                    # element-wise UDF commonly returns list/struct values whose mismatches surface
-                    # as ArrowTypeError, so both errors use the explicit cast fallback here.
+                    # Broader than the SQL_ARROW_BATCHED_UDF path above (which catches only
+                    # ArrowInvalid): the element-wise wrapper commonly returns list/struct-typed
+                    # elements, whose type mismatches surface as ArrowTypeError, so both are caught
+                    # before falling back to an explicit cast.
                     except (pa.lib.ArrowInvalid, pa.lib.ArrowTypeError):
                         flat_arr = pa.array(converted).cast(
                             target_type=arrow_element_type, safe=runner_conf.safecheck
                         )
-                    output_batches.append(
-                        (
-                            pa.RecordBatch.from_arrays([flat_arr], ["_0"]),
-                            shape_levels,
-                            is_large_levels,
+                    output_arrays.append(
+                        _elementwise_renest_output(
+                            flat_arr, list_lengths_by_level, large_list_by_level
                         )
                     )
 
-                yield ArrowBatchTransformer.renest_elementwise_outputs(output_batches, col_names)
+                yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 
         return func, ser
 
@@ -2915,7 +2981,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             for input_batch in data:
-                output_batches = []
+                output_arrays = []
                 for (
                     wrapped_func,
                     offsets,
@@ -2928,10 +2994,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     # pandas or Arrow function's input. Different UDFs in one operator may iterate
                     # differently shaped or differently nested arrays, so each flattens and
                     # re-nests by its own argument (the first argument's shapes drive the re-nest).
-                    flat_batch, shape_levels, is_large_levels = (
-                        ArrowBatchTransformer.flatten_elementwise_inputs(
-                            input_batch, offsets, depth
-                        )
+                    flat_batch, list_lengths_by_level, large_list_by_level = (
+                        _elementwise_flatten_inputs(input_batch, offsets, depth)
                     )
                     total_elements = flat_batch.num_rows
                     udf_inputs = _elementwise_flat_batch_to_pandas_or_arrow_udf_inputs(
@@ -2973,9 +3037,13 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     flat_output_batch = _elementwise_pandas_or_arrow_udf_output_to_flat_batch(
                         result, return_type, udf_output_schema, is_pandas, runner_conf
                     )
-                    output_batches.append((flat_output_batch, shape_levels, is_large_levels))
+                    output_arrays.append(
+                        _elementwise_renest_output(
+                            flat_output_batch.column(0), list_lengths_by_level, large_list_by_level
+                        )
+                    )
 
-                yield ArrowBatchTransformer.renest_elementwise_outputs(output_batches, col_names)
+                yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 
         return func, ser
 
@@ -3043,10 +3111,12 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 # Flatten each argument `depth` levels to its leaves; the first argument's per-level
                 # shapes re-nest this batch's rows. The user function sees the flat leaves as a
                 # pandas Series / DataFrame (pandas) or a pa.Array (Arrow), each with its leaf type.
-                flat_batch, shape_levels, is_large_levels = (
-                    ArrowBatchTransformer.flatten_elementwise_inputs(batch, args_offsets, depth)
+                flat_batch, list_lengths_by_level, large_list_by_level = (
+                    _elementwise_flatten_inputs(batch, args_offsets, depth)
                 )
-                pending_shapes.append((shape_levels, is_large_levels, flat_batch.num_rows))
+                pending_shapes.append(
+                    (list_lengths_by_level, large_list_by_level, flat_batch.num_rows)
+                )
                 num_input_elements += flat_batch.num_rows
                 udf_inputs = _elementwise_flat_batch_to_pandas_or_arrow_udf_inputs(
                     flat_batch, udf_input_schema, is_pandas, runner_conf
@@ -3088,7 +3158,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             def emit_ready():
                 nonlocal pending_chunks, pending_len
                 while pending_shapes:
-                    shape_levels, is_large_levels, needed = pending_shapes[0]
+                    list_lengths_by_level, large_list_by_level, needed = pending_shapes[0]
                     if needed > pending_len:
                         break
                     pending_shapes.popleft()
@@ -3100,9 +3170,10 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         remainder = combined.slice(needed)
                         pending_chunks = [remainder] if remainder.num_rows else []
                         pending_len -= needed
-                    yield ArrowBatchTransformer.renest_elementwise_outputs(
-                        [(flat_batch, shape_levels, is_large_levels)], ["_0"]
+                    nested = _elementwise_renest_output(
+                        flat_batch.column(0), list_lengths_by_level, large_list_by_level
                     )
+                    yield pa.RecordBatch.from_arrays([nested], ["_0"])
 
             def process_results():
                 nonlocal pending_chunks, pending_len, empty_schema, num_output_elements
