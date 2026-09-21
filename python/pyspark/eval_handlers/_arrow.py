@@ -18,8 +18,11 @@
 """Handlers for the Arrow-native UDF eval types (the UDF exchanges ``pa.Array`` /
 ``pa.RecordBatch`` values directly, without a pandas conversion).
 
-This module imports ``pyarrow`` at the top level, so the package ``__init__`` only
-imports it when pyarrow is available; callers must do the same.
+pyarrow is imported lazily (inside ``run`` and the type-checking block) so the module
+stays importable and its handlers register without pyarrow installed. Each handler
+calls ``require_minimum_pyarrow_version`` in ``__init__``, so a missing or too-old
+pyarrow surfaces a clear error when the handler runs rather than leaving the eval type
+unregistered.
 """
 
 from __future__ import annotations
@@ -27,8 +30,6 @@ from __future__ import annotations
 import itertools
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
-
-import pyarrow as pa
 
 from pyspark.eval_handlers._base import (
     BatchEvalTypeHandler,
@@ -45,18 +46,18 @@ from pyspark.eval_handlers.verification import (
 )
 from pyspark.sql.conversion import ArrowBatchTransformer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
+from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import StructField, StructType
 from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
-    # Annotation-only, so they are not imported at runtime. ``from __future__ import
-    # annotations`` keeps every annotation below an unevaluated name rather than a
-    # string literal.
+    import pyarrow as pa
+
     from pyspark.eval_handlers._typing import CoGroupedBatch, GroupedBatch
     from pyspark.worker_util import EvalConf, RunnerConf
 
 
-class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler[pa.RecordBatch]):
+class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
     """SQL_COGROUPED_MAP_ARROW_UDF (applyInArrow on a cogroup): the single UDF
     receives the two sides' value tables and returns one pa.Table, coerced to the
     declared schema."""
@@ -66,6 +67,7 @@ class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler[pa.RecordBatch]):
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
     ) -> None:
+        require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
         assert len(udfs) == 1, "One COGROUPED_MAP_ARROW UDF expected here."
         self._cogrouped_udf, arg_offsets, return_type, self._num_udf_args = udfs[0]
@@ -78,6 +80,8 @@ class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler[pa.RecordBatch]):
 
     def run(self, split_index: int, data: Iterator[CoGroupedBatch]) -> Iterator[pa.RecordBatch]:
         """Apply cogroupBy Arrow UDF."""
+        import pyarrow as pa
+
         select_columns = ArrowBatchTransformer.select_columns
 
         def table_from_batches(batches: list[pa.RecordBatch], cols: list[int]) -> pa.Table:
@@ -109,7 +113,7 @@ class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler[pa.RecordBatch]):
                 yield ArrowBatchTransformer.wrap_struct(batch)
 
 
-class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler[pa.RecordBatch]):
+class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     """SQL_GROUPED_MAP_ARROW_ITER_UDF: the single UDF receives each group as an
     iterator of RecordBatches and returns an iterator of RecordBatches, coerced
     to the declared schema."""
@@ -119,6 +123,7 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler[pa.RecordBatch]):
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
     ) -> None:
+        require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
         assert len(udfs) == 1, "One GROUPED_MAP_ARROW_ITER UDF expected here."
         self._grouped_udf, arg_offsets, return_type, self._num_udf_args = udfs[0]
@@ -134,6 +139,8 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler[pa.RecordBatch]):
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
         """Apply groupBy Arrow UDF (iterator variant)."""
+        import pyarrow as pa
+
         key_offsets = self._key_offsets
         value_offsets = self._value_offsets
         for group in data:
@@ -176,7 +183,7 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler[pa.RecordBatch]):
                 pass
 
 
-class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler[pa.RecordBatch]):
+class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     """SQL_GROUPED_MAP_ARROW_UDF (applyInArrow): the single UDF receives each
     group as one pa.Table and returns one pa.Table, coerced to the declared
     schema."""
@@ -186,6 +193,7 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler[pa.RecordBatch]):
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
     ) -> None:
+        require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
         assert len(udfs) == 1, "One GROUPED_MAP_ARROW UDF expected here."
         self._grouped_udf, arg_offsets, return_type, self._num_udf_args = udfs[0]
@@ -199,6 +207,8 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler[pa.RecordBatch]):
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
         """Apply groupBy Arrow UDF (non-iterator variant)."""
+        import pyarrow as pa
+
         key_offsets = self._key_offsets
         value_offsets = self._value_offsets
         for group in data:
@@ -240,7 +250,7 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler[pa.RecordBatch]):
                 yield ArrowBatchTransformer.wrap_struct(batch)
 
 
-class ArrowMapUDFHandler(BatchEvalTypeHandler[pa.RecordBatch]):
+class ArrowMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     """SQL_MAP_ARROW_ITER_UDF (mapInArrow): the single UDF receives the input
     RecordBatch stream and yields a RecordBatch stream, exchanged as flattened
     columns on the wire and wrapped back into a single struct column."""
@@ -250,11 +260,14 @@ class ArrowMapUDFHandler(BatchEvalTypeHandler[pa.RecordBatch]):
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
     ) -> None:
+        require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
         assert len(udfs) == 1, "One MAP_ARROW_ITER UDF expected here."
         self._udf_func = udfs[0][0]
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+        import pyarrow as pa
+
         # Pre-processing
         input_batches = map(ArrowBatchTransformer.flatten_struct, data)
 
@@ -280,7 +293,7 @@ class ArrowMapUDFHandler(BatchEvalTypeHandler[pa.RecordBatch]):
         yield from map(ArrowBatchTransformer.wrap_struct, verified_iter)
 
 
-class ArrowScalarIterUDFHandler(BatchEvalTypeHandler[pa.RecordBatch]):
+class ArrowScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     """SQL_SCALAR_ARROW_ITER_UDF: the UDF receives an iterator of the argument
     columns and yields an iterator of pa.Array; enforce the declared type on each
     result and verify the total row count matches the input."""
@@ -290,6 +303,7 @@ class ArrowScalarIterUDFHandler(BatchEvalTypeHandler[pa.RecordBatch]):
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
     ) -> None:
+        require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
         assert len(udfs) == 1, "One SCALAR_ARROW_ITER UDF expected here."
         self._udf_func, self._args_offsets, _, return_type = udfs[0]
@@ -298,6 +312,8 @@ class ArrowScalarIterUDFHandler(BatchEvalTypeHandler[pa.RecordBatch]):
         )
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+        import pyarrow as pa
+
         args_offsets = self._args_offsets
         num_input_rows = 0
 
@@ -334,7 +350,7 @@ class ArrowScalarIterUDFHandler(BatchEvalTypeHandler[pa.RecordBatch]):
         verify_iterator_exhausted(args_iter)
 
 
-class ArrowScalarUDFHandler(BatchEvalTypeHandler[pa.RecordBatch]):
+class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     """SQL_SCALAR_ARROW_UDF: invoke each UDF once per input RecordBatch, coerce
     the result to the declared schema, and check the row count."""
 
@@ -343,6 +359,7 @@ class ArrowScalarUDFHandler(BatchEvalTypeHandler[pa.RecordBatch]):
     def __init__(
         self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
     ) -> None:
+        require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
         self._col_names = ["_%d" % i for i in range(len(udfs))]
         self._combined_arrow_schema = to_arrow_schema(
@@ -352,6 +369,8 @@ class ArrowScalarUDFHandler(BatchEvalTypeHandler[pa.RecordBatch]):
         )
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+        import pyarrow as pa
+
         for batch in data:
             output_batch = pa.RecordBatch.from_arrays(
                 [
