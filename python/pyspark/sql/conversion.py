@@ -24,6 +24,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -181,7 +182,7 @@ class ArrowBatchTransformer:
         )
 
     @classmethod
-    def concat_batches(cls, batches: Sequence["pa.RecordBatch"]) -> "pa.RecordBatch":
+    def concat_batches(cls, batches: Iterable["pa.RecordBatch"]) -> "pa.RecordBatch":
         """Concatenate same-schema RecordBatches by row.
 
         A single batch is returned unchanged. PyArrow before 19.0.0 has no ``concat_batches``;
@@ -190,6 +191,7 @@ class ArrowBatchTransformer:
         """
         import pyarrow as pa
 
+        batches = tuple(batches)
         assert batches
         if len(batches) == 1:
             return batches[0]

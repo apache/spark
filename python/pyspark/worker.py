@@ -35,6 +35,7 @@ from typing import (
     Callable,
     Iterable,
     Optional,
+    Sequence,
     Tuple,
     Union,
 )
@@ -1644,7 +1645,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
         return mapper, ser
 
 
-def _elementwise_udf_input_type(data_type, depth):
+def _elementwise_udf_input_type(data_type: DataType, depth: int) -> DataType:
     """The element type ``depth`` ``ArrayType`` levels below ``data_type``.
 
     A lifted UDF's input arrives as ``array^depth<T>`` (one ``array`` level per enclosing higher-
@@ -1656,7 +1657,9 @@ def _elementwise_udf_input_type(data_type, depth):
     return data_type
 
 
-def _elementwise_flatten_inputs(batch, input_column_indices, depth):
+def _elementwise_flatten_inputs(
+    batch: "pa.RecordBatch", input_column_indices: Sequence[int], depth: int
+) -> tuple["pa.RecordBatch", list[list[Optional[int]]], list[bool]]:
     """Flatten element-wise UDF inputs and capture the first input's list shape.
 
     Returns ``(flat_batch, list_lengths_by_level, large_list_by_level)``. ``flat_batch`` contains
@@ -1696,7 +1699,11 @@ def _elementwise_flatten_inputs(batch, input_column_indices, depth):
     )
 
 
-def _elementwise_renest_output(flat_values, list_lengths_by_level, large_list_by_level):
+def _elementwise_renest_output(
+    flat_values: "pa.Array",
+    list_lengths_by_level: Sequence[Sequence[Optional[int]]],
+    large_list_by_level: Sequence[bool],
+) -> "pa.Array":
     """Re-nest one element-wise UDF output using its first input's recorded shape.
 
     Levels are rebuilt from innermost to outermost. A ``None`` length creates a null list and
@@ -1727,8 +1734,11 @@ def _elementwise_renest_output(flat_values, list_lengths_by_level, large_list_by
 
 
 def _elementwise_flat_batch_to_pandas_or_arrow_udf_inputs(
-    flat_batch, input_schema, is_pandas, runner_conf
-):
+    flat_batch: "pa.RecordBatch",
+    input_schema: StructType,
+    is_pandas: bool,
+    runner_conf: RunnerConf,
+) -> list[Union["pd.Series", "pd.DataFrame", "pa.Array"]]:
     """Adapt one flattened input batch to a pandas or Arrow element-wise UDF's inputs.
 
     ``flat_batch`` contains one aligned leaf Array per UDF argument. The Arrow flavor receives those
@@ -1767,8 +1777,12 @@ def _elementwise_flat_batch_to_pandas_or_arrow_udf_inputs(
 
 
 def _elementwise_pandas_or_arrow_udf_output_to_flat_batch(
-    output, return_type, output_schema, is_pandas, runner_conf
-):
+    output: Union["pd.Series", "pd.DataFrame", "pa.Array"],
+    return_type: DataType,
+    output_schema: "pa.Schema",
+    is_pandas: bool,
+    runner_conf: RunnerConf,
+) -> "pa.RecordBatch":
     """Convert one pandas or Arrow UDF result over flat elements to a one-column Arrow batch.
 
     ``output`` is a pandas Series / DataFrame (pandas flavor) or a ``pa.Array`` (Arrow flavor); the
