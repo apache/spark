@@ -43,18 +43,23 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
       new StructType()
         .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
         .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
+        .add(
+          Scd1BatchProcessor.versionMapFieldName,
+          Scd1VersionMap.mapType(LongType)
+        )
     )
 
   /** DataType for the CDC metadata column, where sequencing type is Long. */
   private val cdcMetadataColSchemaType: DataType = new StructType()
     .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
     .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
+    .add(Scd1BatchProcessor.versionMapFieldName, Scd1VersionMap.mapType(LongType))
 
   /**
    * Helper to construct a CDC metadata column row, following [[cdcMetadataColSchemaType]].
    */
   private def cdcMetadataRow(deleteSeq: Option[Long], upsertSeq: Option[Long]): Row =
-    Row(deleteSeq.getOrElse(null), upsertSeq.getOrElse(null))
+    Row(deleteSeq.getOrElse(null), upsertSeq.getOrElse(null), null)
 
   /** Build a microbatch [[DataFrame]] from explicit rows and an explicit schema. */
   private def microbatchOf(schema: StructType)(rows: Row*): DataFrame =
@@ -476,10 +481,10 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
     checkAnswer(
       df = extendMicrobatchRowsWithCdcMetadata(changeArgs, batch),
       expectedAnswer = Seq(
-        Row(1, 10L, false, Row(null, 10L)),
-        Row(2, 20L, true, Row(20L, null)),
-        Row(3, 30L, false, Row(null, 30L)),
-        Row(4, 40L, true, Row(40L, null))
+        Row(1, 10L, false, Row(null, 10L, null)),
+        Row(2, 20L, true, Row(20L, null, null)),
+        Row(3, 30L, false, Row(null, 30L, null)),
+        Row(4, 40L, true, Row(40L, null, null))
       )
     )
   }
@@ -503,7 +508,7 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
 
     checkAnswer(
       df = extendMicrobatchRowsWithCdcMetadata(changeArgs, batch),
-      expectedAnswer = Row(1, 10L, null, Row(null, 10L))
+      expectedAnswer = Row(1, 10L, null, Row(null, 10L, null))
     )
   }
 
@@ -529,8 +534,8 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
     checkAnswer(
       df = extendMicrobatchRowsWithCdcMetadata(changeArgs, batch),
       expectedAnswer = Seq(
-        Row(1, 10L, "a", Row(null, 10L)),
-        Row(2, 20L, "b", Row(null, 20L))
+        Row(1, 10L, "a", Row(null, 10L, null)),
+        Row(2, 20L, "b", Row(null, 20L, null))
       )
     )
   }
@@ -559,7 +564,7 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
       schema.fieldNames.toSeq :+ AutoCdcReservedNames.cdcMetadataColName)
   }
 
-  test("extendMicrobatchRowsWithCdcMetadata casts delete / upsert sequence fields to " +
+  test("extendMicrobatchRowsWithCdcMetadata casts CDC metadata clocks to " +
     "resolvedSequencingType") {
     val schema = new StructType()
       .add("id", IntegerType)
@@ -584,13 +589,14 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
       resultDf.schema(AutoCdcReservedNames.cdcMetadataColName).dataType.asInstanceOf[StructType]
     assert(columnNamesAndDataTypes(cdcMetadataDataType) == Seq(
       Scd1BatchProcessor.cdcDeleteSequenceFieldName -> LongType,
-      Scd1BatchProcessor.cdcUpsertSequenceFieldName -> LongType))
+      Scd1BatchProcessor.cdcUpsertSequenceFieldName -> LongType,
+      Scd1BatchProcessor.versionMapFieldName -> Scd1VersionMap.mapType(LongType)))
 
     // The cast must also succeed at runtime: upsertSequence is materialized as a Long value, not
     // an Int.
     checkAnswer(
       df = resultDf,
-      expectedAnswer = Row(1, 10, "a", Row(null, 10L))
+      expectedAnswer = Row(1, 10, "a", Row(null, 10L, null))
     )
   }
 
@@ -626,8 +632,8 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
   test("projectTargetColumnsOntoMicrobatch keeps every user column and the CDC metadata column " +
     "when columnSelection is None") {
     val batch = microbatchOf(microbatchWithCdcMetadataSchema)(
-      Row(1, "alice", 30, Row(null, 10L)),
-      Row(2, "bob", 25, Row(20L, null))
+      Row(1, "alice", 30, Row(null, 10L, null)),
+      Row(2, "bob", 25, Row(20L, null, null))
     )
 
     val changeArgs = ChangeArgs(
@@ -645,8 +651,8 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 30, Row(null, 10L)),
-        Row(2, "bob", 25, Row(20L, null))
+        Row(1, "alice", 30, Row(null, 10L, null)),
+        Row(2, "bob", 25, Row(20L, null, null))
       )
     )
   }
@@ -654,7 +660,7 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
   test("projectTargetColumnsOntoMicrobatch retains the CDC metadata column even when " +
     "IncludeColumns does not contain it") {
     val batch = microbatchOf(microbatchWithCdcMetadataSchema)(
-      Row(1, "alice", 30, Row(null, 10L))
+      Row(1, "alice", 30, Row(null, 10L, null))
     )
 
     val changeArgs = ChangeArgs(
@@ -674,13 +680,13 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
       Seq("id", "age", AutoCdcReservedNames.cdcMetadataColName))
     checkAnswer(
       df = result,
-      expectedAnswer = Row(1, 30, Row(null, 10L))
+      expectedAnswer = Row(1, 30, Row(null, 10L, null))
     )
   }
 
   test("projectTargetColumnsOntoMicrobatch respects exclude column") {
     val batch = microbatchOf(microbatchWithCdcMetadataSchema)(
-      Row(1, "alice", 30, Row(null, 10L))
+      Row(1, "alice", 30, Row(null, 10L, null))
     )
 
     val changeArgs = ChangeArgs(
@@ -702,13 +708,13 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
     )
     checkAnswer(
       df = result,
-      expectedAnswer = Row(1, "alice", Row(null, 10L))
+      expectedAnswer = Row(1, "alice", Row(null, 10L, null))
     )
   }
 
   test("projectTargetColumnsOntoMicrobatch preserves the microbatch schema order") {
     val batch = microbatchOf(microbatchWithCdcMetadataSchema)(
-      Row(1, "alice", 30, Row(null, 10L))
+      Row(1, "alice", 30, Row(null, 10L, null))
     )
 
     val changeArgs = ChangeArgs(
@@ -731,7 +737,7 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
 
     checkAnswer(
       df = result,
-      expectedAnswer = Row(1, 30, Row(null, 10L))
+      expectedAnswer = Row(1, 30, Row(null, 10L, null))
     )
   }
 
@@ -745,7 +751,7 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
       .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType)
 
     val batch = microbatchOf(schema)(
-      Row(1, "u-100", Row(null, 10L))
+      Row(1, "u-100", Row(null, 10L, null))
     )
 
     val changeArgs = ChangeArgs(
@@ -768,7 +774,7 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
       Seq("id", "user.id", AutoCdcReservedNames.cdcMetadataColName))
     checkAnswer(
       df = result,
-      expectedAnswer = Row(1, "u-100", Row(null, 10L))
+      expectedAnswer = Row(1, "u-100", Row(null, 10L, null))
     )
   }
 
@@ -776,7 +782,7 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
     "when SQLConf.CASE_SENSITIVE=false") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val batch = microbatchOf(microbatchWithCdcMetadataSchema)(
-        Row(1, "alice", 30, Row(null, 10L))
+        Row(1, "alice", 30, Row(null, 10L, null))
       )
 
       val changeArgs = ChangeArgs(
@@ -799,7 +805,7 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
         Seq("id", "age", AutoCdcReservedNames.cdcMetadataColName))
       checkAnswer(
         df = result,
-        expectedAnswer = Row(1, 30, Row(null, 10L))
+        expectedAnswer = Row(1, 30, Row(null, 10L, null))
       )
     }
   }
@@ -881,7 +887,7 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
 
     checkAnswer(
       df = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary),
-      expectedAnswer = Row(1, "tied-upsert", Row(null, 10L))
+      expectedAnswer = Row(1, "tied-upsert", Row(null, 10L, null))
     )
   }
 
@@ -906,8 +912,8 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
     checkAnswer(
       df = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary),
       expectedAnswer = Seq(
-        Row(1, "fresher-upsert", Row(null, 15L)),
-        Row(1, "fresher-delete", Row(20L, null))
+        Row(1, "fresher-upsert", Row(null, 15L, null)),
+        Row(1, "fresher-delete", Row(20L, null, null))
       )
     )
   }
@@ -933,7 +939,7 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
 
     checkAnswer(
       df = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary),
-      expectedAnswer = Row(1, "stays", Row(null, 5L))
+      expectedAnswer = Row(1, "stays", Row(null, 5L, null))
     )
   }
 
@@ -965,8 +971,8 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
     checkAnswer(
       df = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary),
       expectedAnswer = Seq(
-        Row("US", 1, Row(null, 5L)),
-        Row("US", 2, Row(null, 5L))
+        Row("US", 1, Row(null, 5L, null)),
+        Row("US", 2, Row(null, 5L, null))
       )
     )
   }
@@ -1019,8 +1025,8 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
     checkAnswer(
       df = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary),
       expectedAnswer = Seq(
-        Row(1, "kept-upsert", Row(null, 5L)),
-        Row(2, "kept-delete", Row(7L, null))
+        Row(1, "kept-upsert", Row(null, 5L, null)),
+        Row(2, "kept-delete", Row(7L, null, null))
       )
     )
   }
@@ -1048,7 +1054,7 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
 
     checkAnswer(
       df = applyTombstonesToMicrobatch(changeArgs, microbatch, auxiliary),
-      expectedAnswer = Row(1, "kept-upsert", Row(null, 5L))
+      expectedAnswer = Row(1, "kept-upsert", Row(null, 5L, null))
     )
   }
 
