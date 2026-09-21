@@ -32,4 +32,14 @@ class ShowViewsSuite extends command.ShowViewsSuiteBase with ViewCommandSuiteBas
       assert(ex.getCondition == "MISSING_CATALOG_ABILITY.VIEWS")
     }
   }
+
+  test("V2: SHOW VIEWS AS JSON on a non-ViewCatalog catalog fails") {
+    withSQLConf(
+      "spark.sql.catalog.no_view_show_cat" -> classOf[BasicInMemoryTableCatalog].getName) {
+      val ex = intercept[AnalysisException] {
+        sql("SHOW VIEWS IN no_view_show_cat.default AS JSON")
+      }
+      assert(ex.getCondition == "MISSING_CATALOG_ABILITY.VIEWS")
+    }
+  }
 }

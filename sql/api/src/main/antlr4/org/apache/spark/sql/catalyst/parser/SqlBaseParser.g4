@@ -376,7 +376,7 @@ statement
     | SHOW COLUMNS (FROM | IN) table=identifierReference
         ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW VIEWS ((FROM | IN) identifierReference)?
-        (LIKE? pattern=stringLit)?                                        #showViews
+        (LIKE? pattern=stringLit)? (AS JSON)?                             #showViews
     | SHOW PARTITIONS identifierReference partitionSpec? (AS JSON)?    #showPartitions
     | SHOW functionScope=simpleIdentifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
         (LIKE? (legacy=multipartIdentifier | pattern=stringLit))?      #showFunctions
