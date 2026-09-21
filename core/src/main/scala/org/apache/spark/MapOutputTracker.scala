@@ -71,6 +71,19 @@ private[spark] case class CleanupOutcome(metadataChanged: Boolean, preservedReli
 }
 
 /**
+ * Result of removing one `ShuffleStatus`'s outputs on a lost executor/host.
+ *
+ * @param metadataChanged whether any map or merge status of this shuffle was actually removed.
+ * @param mapPreservedReliable whether this shuffle's map output was reliably stored and therefore
+ *   deliberately kept, AND output was actually present on the target (so the cleanup really was
+ *   partial). It is false when the target held none of this shuffle's map output, since then
+ *   nothing was preserved.
+ */
+private[spark] case class ShuffleRemovalResult(
+    metadataChanged: Boolean,
+    mapPreservedReliable: Boolean)
+
+/**
  * Helper class used by the [[MapOutputTrackerMaster]] to perform bookkeeping for a single
  * ShuffleMapStage.
  *
@@ -394,25 +407,56 @@ private class ShuffleStatus(
   }
 
   /**
-   * Removes all shuffle outputs associated with this host, returning whether any map or merge
-   * status actually changed. Note that this will also remove outputs which are served by an
-   * external shuffle server (if one exists).
+   * Removes shuffle outputs associated with this host. Both this shuffle's map output and its
+   * host-local merge results on `host` are dropped, except that map output is preserved when
+   * `respectReliablyStored` is set and this shuffle is reliably stored (it lives off the host and
+   * survives). Merge results are always removed regardless of the reliability bit: a `MergeStatus`
+   * is physically located on its merger host, so one matching the lost `host` is genuinely gone,
+   * while an off-host merge result simply does not match the filter. Note that this will also
+   * remove outputs served by an external shuffle server (if one exists).
    */
-  def removeOutputsOnHost(host: String): Boolean = withWriteLock {
-    logDebug(s"Removing outputs for host ${host}")
-    val outputsChanged = removeOutputsByFilter(x => x.host == host)
-    val mergeChanged = removeMergeResultsByFilter(x => x.host == host)
-    outputsChanged || mergeChanged
-  }
+  def removeOutputsOnHost(host: String, respectReliablyStored: Boolean): ShuffleRemovalResult =
+    withWriteLock {
+      logDebug(s"Removing outputs for host ${host}")
+      val filter = (x: BlockManagerId) => x.host == host
+      val mergeChanged = removeMergeResultsByFilter(filter)
+      removeMapOutputsSelectively(filter, respectReliablyStored, mergeChanged)
+    }
 
   /**
-   * Removes all map outputs associated with the specified executor, returning whether any map
-   * status actually changed. Note that this will also remove outputs which are served by an
-   * external shuffle server (if one exists), as they are still registered with that execId.
+   * Removes all map outputs associated with the specified executor, preserving them when
+   * `respectReliablyStored` is set and this shuffle is reliably stored. Executor loss never
+   * touches merge results, whose locations carry the synthetic merger executor id rather than a
+   * real one. Note that this will also remove outputs served by an external shuffle server (if one
+   * exists), as they are still registered with that execId.
    */
-  def removeOutputsOnExecutor(execId: String): Boolean = withWriteLock {
-    logDebug(s"Removing outputs for execId ${execId}")
-    removeOutputsByFilter(x => x.executorId == execId)
+  def removeOutputsOnExecutor(
+      execId: String,
+      respectReliablyStored: Boolean): ShuffleRemovalResult = withWriteLock {
+      logDebug(s"Removing outputs for execId ${execId}")
+      removeMapOutputsSelectively(x => x.executorId == execId, respectReliablyStored,
+        alreadyChanged = false)
+    }
+
+  /**
+   * Shared map-output removal for the executor/host selective paths. When this shuffle is reliably
+   * stored and `respectReliablyStored` is set, its map output is kept; `mapPreservedReliable` is
+   * reported true only when a live map output actually matched `f`, so a target that held none of
+   * this shuffle's output does not count as a preservation (and thus does not make the cleanup
+   * partial). `alreadyChanged` folds in any merge removal the caller already performed.
+   */
+  private def removeMapOutputsSelectively(
+      f: BlockManagerId => Boolean,
+      respectReliablyStored: Boolean,
+      alreadyChanged: Boolean): ShuffleRemovalResult = withWriteLock {
+    if (respectReliablyStored && isReliablyStored) {
+      val preserved = mapStatuses.exists(s => s != null && f(s.location))
+      ShuffleRemovalResult(metadataChanged = alreadyChanged, mapPreservedReliable = preserved)
+    } else {
+      val mapChanged = removeOutputsByFilter(f)
+      ShuffleRemovalResult(metadataChanged = mapChanged || alreadyChanged,
+        mapPreservedReliable = false)
+    }
   }
 
   /**
@@ -1104,56 +1148,78 @@ private[spark] class MapOutputTrackerMaster(
     removeOutputsOnHost(host, respectReliablyStored = false)
 
   /**
-   * Removes shuffle outputs associated with this host, returning the aggregate cleanup outcome.
-   *
-   * When `respectReliablyStored` is true (executor/worker loss rather than a fetch failure),
-   * shuffles whose output is reliably stored off-executor are left intact, since losing the host
-   * does not lose their output.
-   */
-  def removeOutputsOnHost(host: String, respectReliablyStored: Boolean): CleanupOutcome = {
-    val outcome = removeSelectively(respectReliablyStored)(_.removeOutputsOnHost(host))
-    if (outcome.shouldBumpEpoch) incrementEpoch()
-    outcome
-  }
-
-  /**
    * Removes all map outputs associated with this executor. Note that this will also remove
    * outputs which are served by an external shuffle server (if one exists), as they are still
    * registered with this execId. Unconditional cleanup: every shuffle's output on the executor is
-   * dropped. See the two-argument overload for the selective variant.
+   * dropped. See the three-argument overload for the selective variant.
    */
   def removeOutputsOnExecutor(execId: String): Unit =
     removeOutputsOnExecutor(execId, respectReliablyStored = false)
 
   /**
-   * Removes map outputs associated with this executor, returning the aggregate cleanup outcome.
+   * Removes shuffle outputs associated with this host, returning the aggregate cleanup outcome.
    *
-   * When `respectReliablyStored` is true (executor loss rather than a fetch failure), shuffles
-   * whose output is reliably stored off-executor are left intact: losing the executor does not lose
-   * their output, so unregistering would force a needless map-stage recompute.
+   * When `respectReliablyStored` is true (executor/worker loss, or a FetchFailed) shuffles whose
+   * output is reliably stored off-host are left intact, since losing the host does not lose their
+   * output. `failedShuffleId`, set only on a FetchFailed, exempts that one shuffle from the
+   * preservation: its fetch just failed, so its correlated map output on this host is cleared
+   * together in one pass even when reliable, while other reliable shuffles survive. Host-local
+   * merge results on `host` are always removed regardless of reliability.
    */
-  def removeOutputsOnExecutor(execId: String, respectReliablyStored: Boolean): CleanupOutcome = {
-    val outcome = removeSelectively(respectReliablyStored)(_.removeOutputsOnExecutor(execId))
+  def removeOutputsOnHost(host: String, respectReliablyStored: Boolean): CleanupOutcome =
+    removeOutputsOnHost(host, respectReliablyStored, None)
+
+  def removeOutputsOnHost(
+      host: String,
+      respectReliablyStored: Boolean,
+      failedShuffleId: Option[Int]): CleanupOutcome = {
+    val outcome = removeSelectively(respectReliablyStored, failedShuffleId)(
+      (status, respect) => status.removeOutputsOnHost(host, respect))
     if (outcome.shouldBumpEpoch) incrementEpoch()
     outcome
   }
 
   /**
-   * Applies `remove` to each shuffle, skipping reliably-stored shuffles when
-   * `respectReliablyStored` is set. Aggregates the outcome: `metadataChanged` if any removal
-   * actually changed state, and `preservedReliable` if any (one or more) reliable shuffle was
-   * skipped. Does not bump the epoch; see `CleanupOutcome.shouldBumpEpoch`.
+   * Removes map outputs associated with this executor, returning the aggregate cleanup outcome.
+   *
+   * When `respectReliablyStored` is true (executor loss, or a FetchFailed) shuffles whose output
+   * is reliably stored off-executor are left intact: losing the executor does not lose their
+   * output, so unregistering would force a needless map-stage recompute. `failedShuffleId`, set
+   * only on a FetchFailed, exempts that one shuffle so its correlated map output on this executor
+   * is cleared together even when reliable, while other reliable shuffles survive.
    */
-  private def removeSelectively(respectReliablyStored: Boolean)(
-      remove: ShuffleStatus => Boolean): CleanupOutcome = {
+  def removeOutputsOnExecutor(execId: String, respectReliablyStored: Boolean): CleanupOutcome =
+    removeOutputsOnExecutor(execId, respectReliablyStored, None)
+
+  def removeOutputsOnExecutor(
+      execId: String,
+      respectReliablyStored: Boolean,
+      failedShuffleId: Option[Int]): CleanupOutcome = {
+    val outcome = removeSelectively(respectReliablyStored, failedShuffleId)(
+      (status, respect) => status.removeOutputsOnExecutor(execId, respect))
+    if (outcome.shouldBumpEpoch) incrementEpoch()
+    outcome
+  }
+
+  /**
+   * Applies `remove` to each shuffle and aggregates the per-shuffle results.
+   * `respectReliablyStored` is passed through per shuffle, except that `failedShuffleId` (the
+   * shuffle whose fetch failed) is always cleaned unconditionally so its correlated outputs on the
+   * lost target go together. `metadataChanged` is true if any removal actually changed state;
+   * `preservedReliable` is true if any reliable shuffle's present output was skipped. Does not bump
+   * the epoch; see `CleanupOutcome.shouldBumpEpoch`.
+   */
+  private def removeSelectively(
+      respectReliablyStored: Boolean,
+      failedShuffleId: Option[Int])(
+      remove: (ShuffleStatus, Boolean) => ShuffleRemovalResult): CleanupOutcome = {
     var metadataChanged = false
     var preservedReliable = false
-    shuffleStatuses.valuesIterator.foreach { status =>
-      if (respectReliablyStored && status.isReliablyStored) {
-        preservedReliable = true
-      } else if (remove(status)) {
-        metadataChanged = true
-      }
+    shuffleStatuses.foreach { case (shuffleId, status) =>
+      val respect = respectReliablyStored && !failedShuffleId.contains(shuffleId)
+      val result = remove(status, respect)
+      if (result.metadataChanged) metadataChanged = true
+      if (result.mapPreservedReliable) preservedReliable = true
     }
     CleanupOutcome(metadataChanged, preservedReliable)
   }
