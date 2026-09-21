@@ -214,6 +214,7 @@ abstract class InMemoryBaseTable(
     case _: ClusterByTransform =>
     case NamedTransform("truncate", Seq(_: NamedReference, _: V2Literal[_])) =>
     case NamedTransform("signed_zeros", Seq(_: NamedReference)) =>
+    case NamedTransform("flip_low_bit", Seq(_: NamedReference)) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -339,6 +340,13 @@ abstract class InMemoryBaseTable(
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (value: Long, LongType) =>
             if (value == 1L) -0.0d else if (value == 2L) 0.0d else value.toDouble
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
+      // the result should be consistent with FlipLowBitFunction defined at transformFunctions.scala
+      case NamedTransform("flip_low_bit", Seq(ref: NamedReference)) =>
+        extractor(ref.fieldNames, cleanedSchema, row) match {
+          case (value: Long, LongType) => value ^ 1L
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }

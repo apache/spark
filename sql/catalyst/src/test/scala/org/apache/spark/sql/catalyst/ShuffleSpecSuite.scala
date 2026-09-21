@@ -40,6 +40,33 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     override def canonicalName(): String = "test.bucket"
   }
 
+  /**
+   * A bucket-like reducible function: like the built-in `bucket`, a pair of the same function with
+   * coarser/finer bucket counts is compatible (a reducer exists) but not the same function. Local
+   * to the suite because catalyst has no BucketFunction.
+   */
+  private class FakeBucket extends ScalarFunction[java.lang.Long]
+      with ReducibleFunction[java.lang.Long, java.lang.Long] {
+    override def inputTypes(): Array[DataType] = Array(LongType)
+    override def resultType(): DataType = LongType
+    override def name(): String = "test.fakeBucket"
+    override def canonicalName(): String = name()
+    override def produceResult(input: InternalRow): java.lang.Long = input.getLong(0)
+    override def reducer(
+        thisNumBuckets: Int,
+        other: ReducibleFunction[_, _],
+        otherNumBuckets: Int): Reducer[java.lang.Long, java.lang.Long] =
+      if (other.isInstanceOf[FakeBucket] && thisNumBuckets != otherNumBuckets &&
+          thisNumBuckets % otherNumBuckets == 0) {
+        new Reducer[java.lang.Long, java.lang.Long] {
+          override def reduce(v: java.lang.Long): java.lang.Long = v % otherNumBuckets
+          override def resultType(): DataType = LongType
+        }
+      } else {
+        null
+      }
+  }
+
   test("SPARK-59289: createShuffleSpec keeps a member that only satisfies after a projection") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
@@ -680,6 +707,60 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("isCompatibleWith: a pair whose keys a join would reduce is not compatible as it stands") {
+    // A stand-in for a connector transform that reorders its key space: its result type is its
+    // argument's type, and it is not the identity on values, say `a ^ 1`. The two sides can then
+    // report the same key list while a key stands for different rows on each, the identity side
+    // holding raw values and this one its outputs.
+    val flipFn = new ScalarFunction[Long] {
+      override def inputTypes(): Array[DataType] = Array(LongType)
+      override def resultType(): DataType = LongType
+      override def name(): String = "flip_low_bit"
+      override def canonicalName(): String = "test.flip_low_bit"
+    }
+    val a = $"a".long
+    val distribution = ClusteredDistribution(Seq(a))
+    def spec(expression: Expression): KeyedShuffleSpec =
+      KeyedShuffleSpec(
+        KeyedPartitioning(Seq(expression), Seq(InternalRow(0L), InternalRow(1L))), distribution)
+    val identity = spec(a)
+    val flip = spec(TransformExpression(flipFn, Seq(a)))
+    assert(identity.partitioning.layout.describesSameKeys(flip.partitioning.layout),
+      "test setup: both sides report the same key rows at the same type, so a refusal below can " +
+        "only come from the key spaces differing")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(identity.areKeysCompatible(flip),
+        "the pair stays admissible, since `EnsureRequirements` reduces the identity side onto it")
+      assert(!identity.isCompatibleWith(flip),
+        "equal key rows in two key spaces are not compatible before that reduce runs")
+      assert(!flip.isCompatibleWith(identity), "the refusal must be symmetric")
+
+      // The same for two reducible transforms that differ in their bucket count: a reducer exists,
+      // so the pair is admitted for the reduce path, and the two key lists can still coincide.
+      val bucketFn = new FakeBucket
+      val bucket8 = TransformExpression(bucketFn, Seq(a), Some(8))
+      val bucket4 = TransformExpression(bucketFn, Seq(a), Some(4))
+      assert(spec(bucket8).areKeysCompatible(spec(bucket4)),
+        "a reducer reconciles the two bucket counts, so the pair stays admissible")
+      assert(!spec(bucket8).isCompatibleWith(spec(bucket4)),
+        "two bucket counts are not lined up until that reducer has run")
+      // Positive control: the same function is lined up as it stands, so the refusals above are the
+      // key spaces' doing rather than this path always answering false.
+      assert(spec(bucket8).isCompatibleWith(spec(bucket8)),
+        "one function over one key list is compatible with itself")
+
+      // A pair an earlier join reduced together is in one key space already, so it stays
+      // compatible. This is what keeps a chained storage-partitioned join from shuffling.
+      assert(spec(bucket8.reducedTogetherWith(bucket4))
+        .isCompatibleWith(spec(bucket4.reducedTogetherWith(bucket8))),
+        "two sides reduced together share one key space")
+    }
+  }
+
   test("createShuffleSpec: a marked narrowing projection yields an unusable spec") {
     val a = $"a".int
     val b = $"b".int
@@ -722,30 +803,6 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("areKeysCompatible: unknown keys require the same function, not just a compatible one") {
-    // A bucket-like reducible function: like the built-in `bucket`, a pair of the same function
-    // with coarser/finer bucket counts is compatible (a reducer exists) but not the same
-    // function. Local to the suite because catalyst has no BucketFunction.
-    class FakeBucket extends ScalarFunction[java.lang.Long]
-        with ReducibleFunction[java.lang.Long, java.lang.Long] {
-      override def inputTypes(): Array[DataType] = Array(LongType)
-      override def resultType(): DataType = LongType
-      override def name(): String = "test.fakeBucket"
-      override def canonicalName(): String = name()
-      override def produceResult(input: InternalRow): java.lang.Long = input.getLong(0)
-      override def reducer(
-          thisNumBuckets: Int,
-          other: ReducibleFunction[_, _],
-          otherNumBuckets: Int): Reducer[java.lang.Long, java.lang.Long] =
-        if (other.isInstanceOf[FakeBucket] && thisNumBuckets != otherNumBuckets &&
-            thisNumBuckets % otherNumBuckets == 0) {
-          new Reducer[java.lang.Long, java.lang.Long] {
-            override def reduce(v: java.lang.Long): java.lang.Long = v % otherNumBuckets
-            override def resultType(): DataType = LongType
-          }
-        } else {
-          null
-        }
-    }
     val fn = new FakeBucket
     val a = $"a".long
     def bucketSpec(numBuckets: Int, hasUnknown: Boolean): KeyedShuffleSpec =

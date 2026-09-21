@@ -1991,12 +1991,14 @@ case class KeyedShuffleSpec(
     //    3.1 both sides have the same number of partition expressions
     //    3.2 for each pair of partition expressions at the same index, the corresponding
     //        partition keys must share overlapping positions in their respective clustering keys.
-    //    3.3 each pair of partition expressions at the same index must share compatible
-    //        transform functions.
+    //    3.3 each pair of partition expressions at the same index must share the same transform
+    //        function. A pair the join would first reduce onto one key space does not count here,
+    //        see `areKeysCompatible`'s `allowReduce`.
     //  4. the partition values from both sides are following the same order.
     case otherSpec @ KeyedShuffleSpec(otherPartitioning, otherDistribution, _) =>
       distribution.clustering.length == otherDistribution.clustering.length &&
-        numPartitions == otherSpec.numPartitions && areKeysCompatible(otherSpec) &&
+        numPartitions == otherSpec.numPartitions &&
+          areKeysCompatible(otherSpec, allowReduce = false) &&
           // The reason the types are asked as well as the rows is on `describesSameKeys`, so the
           // next site comparing keys cannot forget the type clause.
           partitioning.layout.describesSameKeys(otherPartitioning.layout)
@@ -2005,9 +2007,27 @@ case class KeyedShuffleSpec(
     case _ => false
   }
 
-  // Whether the partition keys (i.e., partition expressions) are compatible between this and the
-  // `other` spec.
-  def areKeysCompatible(other: KeyedShuffleSpec): Boolean = {
+  /**
+   * Whether the partition keys (i.e., partition expressions) are compatible between this and the
+   * `other` spec.
+   *
+   * @param allowReduce whether a pair whose keys a join would first reduce onto one key space
+   *                    counts as compatible. `EnsureRequirements` runs that reduce when it pairs
+   *                    two children up, so it asks with `true`, and that is what admits an
+   *                    `AttributeReference` against a `TransformExpression`, or two different but
+   *                    reducible transforms, under `v2BucketingAllowCompatibleTransforms`.
+   *                    [[isCompatibleWith]] asks with `false`, because it answers whether the two
+   *                    sides are lined up *as they stand*. Until the reduce runs, one side's keys
+   *                    are raw column values, or the outputs of a different transform, so two
+   *                    equal key rows can stand for different rows. A one-side reduce is where the
+   *                    two come apart: `r(f1(x))` equals the other side's key by the [[Reducer]]
+   *                    contract, but nothing says `r` leaves the keys it is applied to alone, so
+   *                    key `k` on the reducing side can belong with key `r(k)` on the other one. A
+   *                    modulo-style reducer, which is the shape a bucket count reduce takes, does
+   *                    leave a coinciding key alone, so it takes a connector reducer that reorders
+   *                    its key space to turn this into wrong rows rather than a dishonest answer.
+   */
+  def areKeysCompatible(other: KeyedShuffleSpec, allowReduce: Boolean = true): Boolean = {
     val expressions = partitioning.expressions
     val otherExpressions = other.partitioning.expressions
 
@@ -2017,18 +2037,19 @@ case class KeyedShuffleSpec(
         left.intersect(right).nonEmpty
       }
     } && expressions.zip(otherExpressions).forall {
-      case (l, r) => isExpressionCompatible(l, r)
+      case (l, r) => isExpressionCompatible(l, r, allowReduce)
     } && {
       // An unknown-keyed side co-locates only its declared keys, and the out-of-set routing is
       // a deterministic hash, so it can pair only with a side whose keys are a subset of those
       // declared keys (see `KeyedPartitioning.mayContainUnknownPartitionKeys`).
       //
-      // The key comparison below must also happen in a single domain: `isExpressionCompatible`
-      // admits an `AttributeReference` against a `TransformExpression` (and two different-but-
-      // compatible transforms) when `v2BucketingAllowCompatibleTransforms` is on, and in those
-      // cases the two sides' `partitionKeys` hold raw values on one side and transform outputs on
-      // the other, so the subset test would compare unrelated values. Require the partition
-      // expressions to be the same function per position before comparing keys.
+      // The key comparison below must also happen in a single key space, which is what asking
+      // `isExpressionCompatible` with no reduce allowed requires. A pair the reduce admits holds
+      // raw values on one side and transform outputs on the other, so the subset test would
+      // compare unrelated values. That predicate's reduced-keys arm cannot fire here: a marked
+      // layout comes from `KeyedShuffleSpec.createPartitioning`, which runs behind
+      // `canCreatePartitioning` and so behind `expressionsDescribeKeys`, and a
+      // `GroupPartitionsExec` that reduces gives up the keyed claim rather than marking it.
       //
       // Two unknown-keyed sides are compatible only when they agree on the declared keys *and*
       // their order: the out-of-set keys hash to the same-index partition on both sides, and a
@@ -2038,9 +2059,7 @@ case class KeyedShuffleSpec(
       if (partitioning.mayContainUnknownPartitionKeys ||
           other.partitioning.mayContainUnknownPartitionKeys) {
         expressions.zip(otherExpressions).forall {
-          case (_: AttributeReference, _: AttributeReference) => true
-          case (l: TransformExpression, r: TransformExpression) => l.isSameFunction(r)
-          case _ => false
+          case (l, r) => isExpressionCompatible(l, r, allowReduce = false)
         } && {
           if (partitioning.mayContainUnknownPartitionKeys &&
               other.partitioning.mayContainUnknownPartitionKeys) {
@@ -2059,25 +2078,30 @@ case class KeyedShuffleSpec(
     }
   }
 
-  private def isExpressionCompatible(left: Expression, right: Expression): Boolean = {
+  private def isExpressionCompatible(
+      left: Expression,
+      right: Expression,
+      allowReduce: Boolean): Boolean = {
     if (TransformExpression.hasReducedKeys(left) || TransformExpression.hasReducedKeys(right)) {
       // Reduced keys are in a key space that neither transform names, so comparing the transforms
       // says nothing about whether the two sides are laid out the same way. The pair that was
       // reduced together is laid out the same way, since its two sides came out of one reduce onto
       // one key space. Anything else has to shuffle. That includes a pair that reduced onto the
       // same space through a different pairing, which nothing here can tell apart, and an identity
-      // side, which holds raw values.
+      // side, which holds raw values. `allowReduce` does not enter here: these keys are in one
+      // space already, and nothing reduces them again.
       (left, right) match {
         case (l: TransformExpression, r: TransformExpression) => l.hasSameReducedKeys(r)
         case _ => false
       }
     } else {
+      val canReduce = allowReduce && canReduceKeys
       (left, right) match {
         case (_: LeafExpression, _: LeafExpression) => true
         case (left: TransformExpression, right: TransformExpression) =>
-          if (canReduceKeys) left.isCompatible(right) else left.isSameFunction(right)
+          if (canReduce) left.isCompatible(right) else left.isSameFunction(right)
         case (_: AttributeReference, _: TransformExpression) |
-             (_: TransformExpression, _: AttributeReference) => canReduceKeys
+             (_: TransformExpression, _: AttributeReference) => canReduce
         case _ => false
       }
     }

@@ -278,6 +278,29 @@ object SignedZerosFunction extends ScalarFunction[Double] {
   }
 }
 
+object UnboundFlipLowBitFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.size == 1 && inputType.head.dataType == LongType) FlipLowBitFunction
+    else throw new UnsupportedOperationException("'flip_low_bit' only takes a long as input type")
+  }
+  override def description(): String = name()
+  override def name(): String = "flip_low_bit"
+}
+
+// A transform whose result type is its input type (LongType), and which is not the identity on
+// its inputs: it swaps each even value with the odd one above it. That makes it the smallest
+// transform whose partition keys can coincide with a raw column's values while the rows behind a
+// key differ. The result should be consistent with the "flip_low_bit" NamedTransform defined at
+// InMemoryBaseTable.scala.
+object FlipLowBitFunction extends ScalarFunction[Long] {
+  override def inputTypes(): Array[DataType] = Array(LongType)
+  override def resultType(): DataType = LongType
+  override def name(): String = "flip_low_bit"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Long = input.getLong(0) ^ 1L
+}
+
 object UnboundTruncateFunction extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = TruncateFunction
   override def description(): String = name()
