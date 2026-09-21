@@ -194,7 +194,7 @@ case class OrcPartitionReaderFactory(
         Utils.tryWithResource(createORCReader(filePath, conf)._1) { reader =>
           OrcUtils.createAggInternalRowFromFooter(
             reader, filePath.toString, dataSchema, partitionSchema, aggregation.get,
-            readDataSchema, file.partitionValues)
+            readDataSchema, file.partitionValues, isCaseSensitive, conf)
         }
       }
 
@@ -222,7 +222,7 @@ case class OrcPartitionReaderFactory(
         Utils.tryWithResource(createORCReader(filePath, conf)._1) { reader =>
           val row = OrcUtils.createAggInternalRowFromFooter(
             reader, filePath.toString, dataSchema, partitionSchema, aggregation.get,
-            readDataSchema, file.partitionValues)
+            readDataSchema, file.partitionValues, isCaseSensitive, conf)
           AggregatePushDownUtils.convertAggregatesRowToBatch(row, readDataSchema, offHeap = false)
         }
       }
