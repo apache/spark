@@ -155,15 +155,27 @@ class EquivalentExpressions(
   //   3. HigherOrderFunction: lambda functions operate in the context of local lambdas and can't
   //        be called outside of that scope, only always-evaluated arguments can be evaluated
   //        ahead of time.
+  // The caller has already applied `skipForShortcut`, so these cases are asked about the operand
+  // that the peel lands on rather than about the `And`/`Or` chain above it.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
+    // A `CommonExpressionRef` cannot be evaluated ahead of the `With` that binds it, for the same
+    // reason a `LambdaVariable` cannot be evaluated ahead of its loop. Do not descend, so that no
+    // subtree holding a reference -- nor a `CommonExpressionDef`, which is unevaluable -- becomes
+    // a candidate. The `With` itself may still be deduplicated as a whole, which is safe: it
+    // carries its own definitions and brings their slots into scope wherever it is generated.
+    case _: With => Nil
+    // Peeling here is redundant for safety: `updateExprTree` peels before it descends, so this
+    // method sees the peeled node either way. It stays because dropping it would pass
+    // `updateExprTree` the input itself rather than the operand its peel lands on.
     case c: ConditionalExpression => c.alwaysEvaluatedInputs.map(skipForShortcut)
     case h: HigherOrderFunction => h.alwaysEvaluatedArguments
-    case other => skipForShortcut(other).children
+    case other => other.children
   }
 
   // For some special expressions we cannot just recurse into all of its children, but we can
-  // recursively add the common expressions shared between all of its children.
+  // recursively add the common expressions shared between all of its children. As with
+  // `childrenToRecurse`, the caller has already applied `skipForShortcut`.
   private def commonChildrenToRecurse(expr: Expression): Seq[Seq[Expression]] = expr match {
     case _: CodegenFallback => Nil
     case c: ConditionalExpression => c.branchGroups
@@ -199,8 +211,14 @@ class EquivalentExpressions(
 
     if (!skip && !updateExprInMap(expr, map, useCount)) {
       val uc = useCount.sign
-      childrenToRecurse(expr).foreach(updateExprTree(_, map, uc))
-      commonChildrenToRecurse(expr).filter(_.nonEmpty).foreach(updateCommonExprs(_, map, uc))
+      // Peel first: which children may be recursed into is a question about the operand that is
+      // always evaluated, and `And`/`Or` are not `ConditionalExpression`s. Asking
+      // `childrenToRecurse` about the chain above that operand walks past its guards; asking
+      // `commonChildrenToRecurse` about the chain reaches no branch group at all.
+      val alwaysEvaluated = skipForShortcut(expr)
+      childrenToRecurse(alwaysEvaluated).foreach(updateExprTree(_, map, uc))
+      commonChildrenToRecurse(alwaysEvaluated).filter(_.nonEmpty)
+        .foreach(updateCommonExprs(_, map, uc))
     }
   }
 

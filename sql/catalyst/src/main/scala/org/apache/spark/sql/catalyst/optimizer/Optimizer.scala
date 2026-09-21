@@ -111,6 +111,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeJoinCondition,
         LimitPushDown,
         LimitPushDownThroughWindow,
+        RewriteSizeOfArrayStruct,
         ColumnPruning,
         GenerateOptimization,
         // Operator combine
@@ -355,7 +356,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView,
       EliminateSQLFunctionNode,
       ReplaceExpressions,
-      NormalizeFloatingNumbers,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
       // Put `InsertMapSortInAggregate` after `PullOutGroupingExpressions`,

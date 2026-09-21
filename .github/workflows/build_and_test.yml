@@ -97,7 +97,7 @@ jobs:
       image_pyspark_url_link: ${{ steps.infra-image-link.outputs.image_pyspark_url_link }}
     steps:
     - name: Bootstrap composite actions
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Checkout and sync Spark repository
       id: checkout
       uses: ./.github/actions/checkout-and-sync
@@ -355,7 +355,7 @@ jobs:
       SKIP_PACKAGING: true
     steps:
     - name: Bootstrap composite actions
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
       with:
@@ -387,12 +387,12 @@ jobs:
           ./dev/free_disk_space
         fi
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
     - name: Install Python 3.12
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       # We should install one Python that is higher than 3+ for SQL and Yarn because:
       # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
       # - Yarn has a Python specific test too, for example, YarnClusterSuite.
@@ -474,7 +474,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Bootstrap composite actions
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Checkout and sync Spark repository
         uses: ./.github/actions/checkout-and-sync
         with:
@@ -558,7 +558,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     steps:
     - name: Bootstrap composite actions
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
       with:
@@ -581,7 +581,7 @@ jobs:
         restore-keys: |
           coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -675,7 +675,7 @@ jobs:
       RUN_HYPOTHESIS_MAX_EXAMPLES: 50
     steps:
     - name: Bootstrap composite actions
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
       with:
@@ -705,7 +705,7 @@ jobs:
       shell: 'script -q -e -c "bash {0}"'
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ matrix.java }}
@@ -832,7 +832,7 @@ jobs:
       SKIP_PACKAGING: true
     steps:
     - name: Bootstrap composite actions
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
       with:
@@ -861,7 +861,7 @@ jobs:
       continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -906,7 +906,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Bootstrap composite actions
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
       with:
@@ -925,7 +925,7 @@ jobs:
         input: sql/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-4.0,subdir=sql/connect/common/src/main'
     - name: Install Python 3.12
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: '3.12'
     - name: Install dependencies for Python CodeGen check
@@ -951,7 +951,7 @@ jobs:
       image: ${{ needs.precondition.outputs.image_lint_url_link }}
     steps:
     - name: Bootstrap composite actions
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
       with:
@@ -987,7 +987,7 @@ jobs:
       continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1059,8 +1059,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-    - uses: actions/checkout@v6
-    - uses: actions/setup-java@v5
+    - uses: actions/checkout@v7
+    - uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: 25
@@ -1087,7 +1087,7 @@ jobs:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
     - name: Bootstrap composite actions
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
       with:
@@ -1123,7 +1123,7 @@ jobs:
       continue-on-error: true
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1176,7 +1176,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
     steps:
     - name: Bootstrap composite actions
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
       with:
@@ -1199,7 +1199,7 @@ jobs:
         restore-keys: |
           coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1219,7 +1219,7 @@ jobs:
         key: tpcds-${{ runner.os }}-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Checkout tpcds-kit repository
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         repository: databricks/tpcds-kit
         ref: 1b7fb7529edae091684201fab142d956d6afd881
@@ -1299,7 +1299,7 @@ jobs:
       SKIP_PACKAGING: true
     steps:
     - name: Bootstrap composite actions
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
       with:
@@ -1322,7 +1322,7 @@ jobs:
         restore-keys: |
           coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
@@ -1370,7 +1370,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Bootstrap composite actions
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Checkout and sync Spark repository
         uses: ./.github/actions/checkout-and-sync
         with:
@@ -1400,7 +1400,7 @@ jobs:
             ./dev/free_disk_space
           fi
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
@@ -1458,7 +1458,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Bootstrap composite actions
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Checkout and sync Spark repository
         uses: ./.github/actions/checkout-and-sync
         with:
@@ -1488,7 +1488,7 @@ jobs:
             ./dev/free_disk_space
           fi
       - name: Install Java ${{ inputs.java }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
@@ -1628,7 +1628,7 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Use Node.js
         uses: actions/setup-node@v6
         with:

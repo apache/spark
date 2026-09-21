@@ -127,10 +127,11 @@ class DeploymentPodsAllocator(
         "EXECID",
         applicationId,
         driverPod,
-        resourceProfileId)
+        resourceProfileId,
+        Option(secMgr.getSecretKey()),
+        secMgr.getEnvironmentForSslRpcPasswords)
       val resolvedExecutorSpec = executorBuilder.buildFromFeatures(
         executorConf,
-        secMgr,
         kubernetesClient,
         rpIdToResourceProfile(resourceProfileId))
       val executorPod = resolvedExecutorSpec.pod

@@ -194,6 +194,9 @@ abstract class InMemoryBaseTable(
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
 
+  private val simulatePartialColumnPruning = properties
+    .getOrDefault(InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING, "false").toBoolean
+
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
     .toBoolean
@@ -572,10 +575,21 @@ abstract class InMemoryBaseTable(
       // them by their logical (original) names, not their current names.
       val schemaNames = tableSchema.map(_.name).toSet
       val prunedFields = requiredSchema.filter {
-        case MetadataStructFieldWithLogicalName(f, name) => metadataColumnNames.contains(name)
+        case MetadataStructFieldWithLogicalName(_, name) => metadataColumnNames.contains(name)
         case f => schemaNames.contains(f.name)
       }
-      schema = StructType(prunedFields)
+      schema = if (simulatePartialColumnPruning) {
+        // Prune the metadata columns as required, but report every data column back from
+        // `Scan.readSchema()` regardless of what was required.
+        StructType(tableSchema ++ prunedFields.filter(isRequiredMetadataField))
+      } else {
+        StructType(prunedFields)
+      }
+    }
+
+    private def isRequiredMetadataField(field: StructField): Boolean = field match {
+      case MetadataStructFieldWithLogicalName(_, name) => metadataColumnNames.contains(name)
+      case _ => false
     }
 
     override def pushFilters(filters: Array[Filter]): Array[Filter] = {
@@ -761,11 +775,12 @@ abstract class InMemoryBaseTable(
               pred.eval(p.asInstanceOf[BufferedRows].partitionKey())
             } catch {
               // Keep the partition on eval failure, which is safe here because every predicate
-              // the fixture pushes evaluates cleanly. `PartitionPredicateImpl` fails open for a
-              // reason of its own: Spark keeps the post-scan `FilterExec` on that path, so
-              // failing open costs just a pruning opportunity. A scan declaring an attribute in
-              // `fullyPushedFilterAttributes()` stands alone as the evaluator, so keeping an
-              // unevaluated partition would return nonmatching rows.
+              // the fixture pushes evaluates cleanly. `PartitionPredicateImpl` keeps a partition
+              // it cannot evaluate only for a runtime filter, whose rows are filtered anyway, so
+              // it costs just a pruning opportunity; everywhere else it propagates, because Spark
+              // drops a filter the connector accepts. A scan declaring an attribute in
+              // `fullyPushedFilterAttributes()` likewise stands alone as the evaluator, so
+              // keeping an unevaluated partition would return nonmatching rows.
               case _: Exception => true
             }
           }
@@ -1057,6 +1072,13 @@ object InMemoryBaseTable {
 
   // SQL conf key that enables column ID assignment
   val ASSIGN_COLUMN_IDS = "spark.sql.test.inMemoryTable.assignColumnIds"
+
+  // Test table property that simulates a connector which accepts a required schema but only
+  // partially applies it: every data column is reported from Scan.readSchema() while the required
+  // metadata columns are still pruned. `SupportsPushDownRequiredColumns` permits partial pruning of
+  // data columns; dropping the required metadata columns is not permitted, since
+  // `SupportsMetadataColumns` makes the read schema the only channel that delivers them.
+  val SIMULATE_PARTIAL_COLUMN_PRUNING = "simulate-partial-column-pruning"
 
   /**
    * Assigns fresh IDs to any top-level column or nested struct field that does not already

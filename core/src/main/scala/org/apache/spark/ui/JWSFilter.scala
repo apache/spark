@@ -33,6 +33,13 @@ import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
  *   - spark.ui.filters=org.apache.spark.ui.JWSFilter
  *   - spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-YOUR-PROVIDED-KEY
  * }}}
+ * An optional parameter can require tokens to carry an expiration:
+ * {{{
+ *   - spark.org.apache.spark.ui.JWSFilter.param.requireExpiration=true
+ * }}}
+ * When set to {@code true}, a token without an {@code exp} claim is rejected (the default,
+ * {@code false}, accepts tokens with or without one). Tokens whose {@code exp} is in the past are
+ * always rejected regardless of this parameter.
  * The HTTP request should have {@code Authorization: Bearer <jws>} header.
  * {{{
  *   - <jws> is a string with three fields, '<header>.<payload>.<signature>'.
@@ -46,6 +53,10 @@ private class JWSFilter extends Filter {
 
   private var key: SecretKey = null
 
+  // When true, a token must carry an `exp` (expiration) claim. Default false preserves the
+  // previous behavior of accepting tokens with or without one.
+  private var requireExpiration: Boolean = false
+
   /**
    * Load and validate the configurtions:
    * - IllegalArgumentException will happen if the user didn't provide this argument
@@ -53,6 +64,7 @@ private class JWSFilter extends Filter {
    */
   override def init(config: FilterConfig): Unit = {
     key = Keys.hmacShaKeyFor(Decoders.BASE64URL.decode(config.getInitParameter("secretKey")));
+    requireExpiration = "true".equalsIgnoreCase(config.getInitParameter("requireExpiration"))
   }
 
   override def doFilter(req: ServletRequest, res: ServletResponse, chain: FilterChain): Unit = {
@@ -67,7 +79,12 @@ private class JWSFilter extends Filter {
           hres.sendError(HttpServletResponse.SC_FORBIDDEN, s"${AUTHORIZATION} header is missing.")
         case s"Bearer $token" =>
           val claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(token)
-          chain.doFilter(req, res)
+          if (requireExpiration && claims.getPayload.getExpiration == null) {
+            hres.sendError(HttpServletResponse.SC_FORBIDDEN,
+              s"${AUTHORIZATION} token does not carry a required expiration.")
+          } else {
+            chain.doFilter(req, res)
+          }
         case _ =>
           hres.sendError(HttpServletResponse.SC_FORBIDDEN, s"Malformed ${AUTHORIZATION} header.")
       }

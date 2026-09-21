@@ -34,10 +34,11 @@ provisioning service or daemon).
 ```
 udf/worker/
 ├── proto/                        -- protobuf message classes only (protobuf-java)
-│     worker_spec.proto           -- UDFWorkerSpecification protobuf
-│     udf_message.proto           -- UDF execution protocol messages (Init, UdfPayload, ...)
-│     udf_service.proto           -- UdfWorker gRPC service (Execute, Manage)
-│     common.proto                -- shared enums (UDFWorkerDataFormat, etc.)
+│   └── src/main/protobuf/org/apache/spark/udf/worker/
+│       worker_spec.proto         -- UDFWorkerSpecification protobuf
+│       udf_message.proto         -- UDF execution protocol messages (Init, UdfPayload, ...)
+│       udf_service.proto         -- UdfWorker gRPC service (Execute, Manage)
+│       common.proto              -- shared enums (UDFWorkerDataFormat, etc.)
 │
 ├── core/                         -- abstract interfaces
 │     WorkerDispatcher.scala      -- creates sessions, manages worker lifecycle
@@ -56,7 +57,7 @@ udf/worker/
       GrpcWorkerChannel.scala     -- owns a Netty gRPC channel and event loop
       GrpcWorkerSession.scala     -- one UDF execution over an Execute stream
       UnixDomainSocketTransport.scala -- selects native epoll/kqueue transport
-      (generated)                 -- UdfWorkerGrpc stubs from proto/udf_service.proto
+      (generated)                 -- UdfWorkerGrpc stubs from the UDF worker service proto
 ```
 
 The `core/` package defines abstract interfaces that are independent of how
@@ -67,7 +68,7 @@ obtaining workers from a provisioning service or daemon.
 
 The `grpc/` module owns the concrete direct dispatcher, channel and session
 implementations, native Unix-domain-socket transport selection, gRPC service-stub
-generation (from `proto/`'s `udf_service.proto`), and the gRPC runtime dependencies.
+generation (from the UDF worker service proto above), and the gRPC runtime dependencies.
 Keeping gRPC here means `proto/`, `core/`, and their consumers (`core`, `catalyst`,
 `sql/core`) carry no gRPC dependency on their classpath.
 
@@ -81,9 +82,10 @@ Engine -> Worker:  Init -> PayloadChunk* -> (DataRequest)* -> Finish (Cancel)?
 Worker -> Engine:          InitResponse  -> (DataResponse)* -> (ErrorResponse)? -> (FinishResponse | CancelResponse)
 ```
 
-See `udf/worker/proto/src/main/protobuf/udf_message.proto` for the complete
-message definitions, ordering invariants, and error contract, and
-`udf_service.proto` for the gRPC service.
+See `udf/worker/proto/src/main/protobuf/org/apache/spark/udf/worker/udf_message.proto`
+for the complete message definitions, ordering invariants, and error contract, and
+`udf/worker/proto/src/main/protobuf/org/apache/spark/udf/worker/udf_service.proto`
+for the gRPC service.
 
 ### Direct worker creation
 

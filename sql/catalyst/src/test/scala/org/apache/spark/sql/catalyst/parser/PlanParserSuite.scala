@@ -72,7 +72,7 @@ class PlanParserSuite extends AnalysisTest {
         } else {
           UnresolvedSubqueryColumnAliases(columnAliases, cte)
         }
-        (name, SubqueryAlias(name, subquery), None)
+        UnresolvedCTERelation(name, SubqueryAlias(name, subquery))
     }
     UnresolvedWith(plan, ctes, allowRecursion)
   }
@@ -195,6 +195,32 @@ class PlanParserSuite extends AnalysisTest {
         |/**/
         |*/
       """.stripMargin, plan)
+  }
+
+  test("SPARK-59536: nested bracketed comment containing a hint") {
+    val plan = OneRowRelation().select(Literal(1).as("col1"))
+    assertEqual("SELECT /* outer /*+ inner */ outer tail */ 1 AS col1", plan)
+    assertEqual(
+      "SELECT /* outer /*+ first */ between /*+ second */ outer tail */ 1 AS col1",
+      plan)
+    assertEqual(
+      "SELECT /* level one /* level two /*+ inner */ level two */ level one */ 1 AS col1",
+      plan)
+    assertEqual(
+      "SELECT /* outer /*+ inner */ outer tail */ /*+ HINT */ 1 AS col1",
+      UnresolvedHint("HINT", Seq.empty, plan))
+
+    Seq(
+      "SELECT 1 /* outer /*+ inner",
+      "SELECT /* outer /*+ inner */ outer tail 1 AS col1",
+      "SELECT /* outer /*+ inner outer tail */ 1 AS col1",
+      "/* SELECT /*+ HINT() 4; */ SELECT 1;"
+    ).foreach { query =>
+      checkError(
+        exception = parseException(query),
+        condition = "UNCLOSED_BRACKETED_COMMENT",
+        parameters = Map.empty)
+    }
   }
 
   test("unclosed bracketed comment one") {
@@ -1056,7 +1082,11 @@ class PlanParserSuite extends AnalysisTest {
           $"u.a",
           None,
           Inner).select(star()))
+    }
+  }
 
+  test("asof join - explicit left join type with on condition") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t left asof join u match_condition (t.a >= u.a) on t.b = u.b",
         AsOfJoin.fromMatchCondition(
@@ -1067,7 +1097,11 @@ class PlanParserSuite extends AnalysisTest {
           $"u.a",
           Some($"t.b" === $"u.b"),
           LeftOuter).select(star()))
+    }
+  }
 
+  test("asof join - using with a single join column") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t asof join u match_condition (t.a >= u.a) using (b)",
         AsOfJoin.fromMatchCondition(
@@ -1079,7 +1113,27 @@ class PlanParserSuite extends AnalysisTest {
           None,
           Inner,
           usingColumns = Some(Seq("b"))).select(star()))
+    }
+  }
 
+  test("asof join - using with multiple join columns") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      assertEqual(
+        "select * from t asof join u match_condition (t.a >= u.a) using (a, b)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          None,
+          Inner,
+          usingColumns = Some(Seq("a", "b"))).select(star()))
+    }
+  }
+
+  test("asof join - less than or equal match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       assertEqual(
         "select * from t asof join u match_condition (u.a <= t.a)",
         AsOfJoin.fromMatchCondition(
@@ -1088,6 +1142,84 @@ class PlanParserSuite extends AnalysisTest {
           $"u.a",
           LessThanOrEqualOp,
           $"t.a",
+          None,
+          Inner).select(star()))
+    }
+  }
+
+  test("asof join - greater than match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      assertEqual(
+        "select * from t asof join u match_condition (t.a > u.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOp,
+          $"u.a",
+          None,
+          Inner).select(star()))
+    }
+  }
+
+  test("asof join - less than match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      assertEqual(
+        "select * from t asof join u match_condition (t.a < u.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          LessThanOp,
+          $"u.a",
+          None,
+          Inner).select(star()))
+    }
+  }
+
+  test("asof join - explicit inner join type") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      assertEqual(
+        "select * from t inner asof join u match_condition (t.a >= u.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          None,
+          Inner).select(star()))
+    }
+  }
+
+  test("asof join - explicit left outer join type") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      assertEqual(
+        "select * from t left outer asof join u match_condition (t.a >= u.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          None,
+          LeftOuter).select(star()))
+    }
+  }
+
+  test("asof join - struct match condition") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      // A multi-column MATCH_CONDITION: `(a, b)` parses to a row constructor (CreateStruct),
+      // and the top-level comparison must still be extracted as the match operator so that
+      // STRUCT operands compare lexicographically (see the SQL reference for ASOF JOIN).
+      assertEqual(
+        "select * from t asof join u match_condition ((t.a, t.b) >= (u.a, u.b))",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          CreateStruct($"t.a" :: $"t.b" :: Nil),
+          GreaterThanOrEqualOp,
+          CreateStruct($"u.a" :: $"u.b" :: Nil),
           None,
           Inner).select(star()))
     }
@@ -1193,6 +1325,40 @@ class PlanParserSuite extends AnalysisTest {
             fragment = "asof join u match_condition (t.a >= u.a and t.b >= u.b)",
             start = 16,
             stop = 70)))
+    }
+  }
+
+  test("asof join - disjunction match condition rejected") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a >= u.a or t.b >= u.b)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "OR"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a >= u.a or t.b >= u.b)",
+            start = 16,
+            stop = 69)))
+    }
+  }
+
+  test("asof join - non-comparison match condition rejected") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      // A MATCH_CONDITION that is not a top-level comparison (here a bare column reference)
+      // is rejected, and the original expression text is echoed back as the operator.
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "t.a"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a)",
+            start = 16,
+            stop = 48)))
     }
   }
 
@@ -2023,6 +2189,45 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "WITH t(x) AS (SELECT c FROM a) SELECT * FROM t",
       cte(table("t").select(star()), false, "t" -> ((table("a").select($"c"), Seq("x")))))
+  }
+
+  test("CTE with materialization option") {
+    def cteWithOption(materialized: Option[Boolean]): UnresolvedWith = {
+      UnresolvedWith(
+        table("t").select(star()),
+        Seq(UnresolvedCTERelation(
+          "t", SubqueryAlias("t", table("a").select($"c")), materialized = materialized)))
+    }
+    assertEqual(
+      "WITH t AS MATERIALIZED (SELECT c FROM a) SELECT * FROM t",
+      cteWithOption(Some(true)))
+    assertEqual(
+      "WITH t AS NOT MATERIALIZED (SELECT c FROM a) SELECT * FROM t",
+      cteWithOption(Some(false)))
+    // AS is optional.
+    assertEqual(
+      "WITH t MATERIALIZED (SELECT c FROM a) SELECT * FROM t",
+      cteWithOption(Some(true)))
+    assertEqual(
+      "WITH t NOT MATERIALIZED (SELECT c FROM a) SELECT * FROM t",
+      cteWithOption(Some(false)))
+    // Combined with column aliases and recursion options.
+    assertEqual(
+      "WITH RECURSIVE r(x) MAX RECURSION LEVEL 5 AS MATERIALIZED (SELECT c FROM a) " +
+        "SELECT * FROM r",
+      UnresolvedWith(
+        table("r").select(star()),
+        Seq(UnresolvedCTERelation(
+          "r",
+          SubqueryAlias("r", UnresolvedSubqueryColumnAliases(Seq("x"), table("a").select($"c"))),
+          maxDepth = Some(5),
+          materialized = Some(true))),
+        allowRecursion = true))
+    // MATERIALIZED is a non-reserved keyword and can still be used as a CTE name.
+    assertEqual(
+      "WITH materialized AS (SELECT c FROM a) SELECT * FROM materialized",
+      cte(table("materialized").select(star()), false,
+        "materialized" -> ((table("a").select($"c"), Seq.empty))))
   }
 
   test("Recursive CTE") {

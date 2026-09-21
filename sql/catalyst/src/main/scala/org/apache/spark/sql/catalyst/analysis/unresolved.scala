@@ -394,6 +394,11 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
  * Represents an unresolved function that is being invoked. The analyzer will resolve the function
  * arguments first, then look up the function by name and arguments, and return an expression that
  * can be evaluated to get the result of this function invocation.
+ *
+ * `boundOwner`, when set, is the SQL PATH candidate that direct-star preprocessing selected as this
+ * call's owner (a relative persistent-catalog candidate stays relative until later resolution
+ * qualifies it); later resolution binds to exactly it instead of re-walking the SQL PATH
+ * (see [[FunctionResolution.selectRoutedSqlJsonDirectStarOwner]]).
  */
 case class UnresolvedFunction(
     nameParts: Seq[String],
@@ -402,7 +407,8 @@ case class UnresolvedFunction(
     filter: Option[Expression] = None,
     ignoreNulls: Option[Boolean] = None,
     orderingWithinGroup: Seq[SortOrder] = Seq.empty,
-    isInternal: Boolean = false)
+    isInternal: Boolean = false,
+    boundOwner: Option[Seq[String]] = None)
   extends Expression with Unevaluable {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -647,6 +653,8 @@ case class UnresolvedStarExceptOrReplace(
     replacements: Option[Seq[NamedExpression]])
   extends LeafExpression with UnresolvedStarBase {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR_EXCEPT_OR_REPLACE)
+
   /**
    * We expand the * EXCEPT by the following three steps:
    * 1. use the original .expandStar() to get top-level column list or struct expansion
@@ -796,6 +804,8 @@ case class UnresolvedStarWithColumns(
      explicitMetadata: Option[Seq[Metadata]] = None)
   extends UnresolvedStarBase {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR_WITH_COLUMNS)
+
   override def target: Option[Seq[String]] = None
   override def children: Seq[Expression] = exprs
 
@@ -857,6 +867,8 @@ case class UnresolvedStarWithColumnsRenames(
     newNames: Seq[String])
   extends LeafExpression with UnresolvedStarBase {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR_WITH_COLUMNS_RENAMES)
+
   override def target: Option[Seq[String]] = None
 
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = {
@@ -893,7 +905,10 @@ case class UnresolvedStarWithColumnsRenames(
  *              is a list of identifiers that is the path of the expansion.
  */
 case class UnresolvedStar(target: Option[Seq[String]])
-  extends LeafExpression with UnresolvedStarBase
+  extends LeafExpression with UnresolvedStarBase {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR)
+}
 
 /**
  * Represents all of the input attributes to a given relational operator, for example in
@@ -904,6 +919,9 @@ case class UnresolvedStar(target: Option[Seq[String]])
  */
 case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSensitive: Boolean)
   extends LeafExpression with Star with Unevaluable {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_REGEX)
+
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = {
     val pattern = if (caseSensitive) regexPattern else s"(?i)$regexPattern"
     table match {
@@ -964,6 +982,7 @@ case class MultiAlias(child: Expression, names: Seq[String])
  */
 case class ResolvedStar(expressions: Seq[NamedExpression])
   extends LeafExpression with Star with Unevaluable {
+  final override val nodePatterns: Seq[TreePattern] = Seq(RESOLVED_STAR)
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = expressions
   override def toString: String = expressions.mkString("ResolvedStar(", ", ", ")")
