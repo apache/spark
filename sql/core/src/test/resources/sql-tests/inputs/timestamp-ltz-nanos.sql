@@ -580,3 +580,15 @@ SELECT map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
 SELECT element_at(map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
            TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 'b'),
        TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC');
+
+-- SPARK-57833: timestampadd over TIMESTAMP_LTZ(p). Units of MICROSECOND or coarser keep the
+-- sub-microsecond fraction unchanged; the NANOSECOND unit adds whole nanoseconds and carries into
+-- the microsecond (a negative quantity borrows across the boundary). The result stays nanos-typed.
+SELECT timestampadd(SECOND, 5, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC');
+SELECT timestampadd(MICROSECOND, 2, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC');
+SELECT timestampadd(NANOSECOND, 300, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC');
+SELECT timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100 UTC');
+-- Carry into the microsecond: 200ns + 900ns = 1100ns -> +1us, 100ns.
+SELECT timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000200 UTC');
+-- NANOSECOND is rejected on a microsecond-precision timestamp (nanoseconds are unrepresentable).
+SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC');

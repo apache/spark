@@ -526,7 +526,7 @@ class JDBCSuite extends SharedSparkSession {
     ))
     // allowTimeZone = false: a bound carrying a zone offset is rejected rather than silently
     // shifted, so NTZ bounds stay zoneless.
-    val e = intercept[IllegalArgumentException] {
+    val e = intercept[SparkIllegalArgumentException] {
       JDBCRelation.columnPartition(
         schema,
         analysis.caseInsensitiveResolution,
@@ -537,8 +537,14 @@ class JDBCSuite extends SharedSparkSession {
           "numPartitions" -> "2",
           "partitionColumn" -> "PartitionColumn")))
     }
-    assert(e.getMessage.contains("Cannot parse the bound value"))
-    assert(e.getMessage.contains("2018-07-06 10:00:00+05:00"))
+    checkError(
+      exception = e,
+      condition = "INVALID_JDBC_PARTITION_BOUND",
+      sqlState = Some("42616"),
+      parameters = Map(
+        "option" -> "\"lowerBound\"",
+        "value" -> "\"2018-07-06 10:00:00+05:00\"",
+        "dataType" -> "\"TIMESTAMP_NTZ\""))
   }
 
   test("overflow of partition bound difference does not give negative stride") {
@@ -1895,15 +1901,43 @@ class JDBCSuite extends SharedSparkSession {
       "{ts '2018-07-06 06:00:00.0'}")
   }
 
-  test("SPARK-58876: Oracle TIMESTAMP stays microsecond TimestampNTZType under the nanos preview") {
-    val oracleDialect = JdbcDialects.get("jdbc:oracle")
-    // Even with the nanosecond timestamp preview enabled, the Oracle mapping is microsecond
-    // TimestampNTZType and does not engage that preview (no nanosecond type, no deferral).
-    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-      val md = new MetadataBuilder()
-        .putBoolean("preferTimestampNanos", value = true).putLong("scale", 9)
-      assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 0, md) ===
-        Some(TimestampNTZType))
+  test("SPARK-58876: Oracle TIMESTAMP(7-9) resolves to nanosecond NTZ under the nanos preview") {
+    // scale/preferTimestampNanos reach the dialect only as metadata getSchema stamps, so resolve a
+    // mocked Oracle TIMESTAMP column via getSchema for each (scale, option, preview) combination.
+    def resolve(scale: Int, preferNanos: Boolean, nanosEnabled: Boolean): StructField = {
+      val rsmd = mock(classOf[java.sql.ResultSetMetaData])
+      when(rsmd.getColumnCount).thenReturn(1)
+      when(rsmd.getColumnLabel(anyInt())).thenReturn("T")
+      when(rsmd.getColumnType(anyInt())).thenReturn(java.sql.Types.TIMESTAMP)
+      when(rsmd.getColumnTypeName(anyInt())).thenReturn("TIMESTAMP")
+      when(rsmd.getPrecision(anyInt())).thenReturn(0)
+      when(rsmd.getScale(anyInt())).thenReturn(scale)
+      when(rsmd.isSigned(anyInt())).thenReturn(false)
+      when(rsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNullable)
+      val rs = mock(classOf[ResultSet])
+      when(rs.getMetaData).thenReturn(rsmd)
+      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> nanosEnabled.toString) {
+        JdbcUtils.getSchema(mock(classOf[Connection]), rs, OracleDialect(),
+          preferTimestampNanos = preferNanos).fields.head
+      }
+    }
+    def marked(f: StructField): Boolean =
+      f.metadata.contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK)
+    // Sub-microsecond scales (7-9) widen to the nanosecond NTZ type only when both the read option
+    // and the preview are on; every coarser scale and either flag off stays microsecond NTZ.
+    (TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION).foreach { s =>
+      val f = resolve(s, preferNanos = true, nanosEnabled = true)
+      assert(f.dataType === TimestampNTZNanosType(s), s"scale=$s")
+      // The nanos NTZ getter is wall-clock by construction, so the marker must not be stamped.
+      assert(!marked(f), s"scale=$s")
+    }
+    // Microsecond NTZ results carry the wall-clock read marker.
+    Seq(
+      resolve(6, preferNanos = true, nanosEnabled = true),
+      resolve(9, preferNanos = false, nanosEnabled = true),
+      resolve(9, preferNanos = true, nanosEnabled = false)).foreach { f =>
+      assert(f.dataType === TimestampNTZType)
+      assert(marked(f))
     }
   }
 

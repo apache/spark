@@ -75,7 +75,8 @@ object RealTimeModeAllowlist extends Logging {
     // pipelined-shuffle consumer stage, keyed by the same columns the shuffle repartitions on.
     "org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreRestoreExec",
     "org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec",
-    "org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDeduplicateExec",
+    classOf[StreamingDeduplicateExec].getName,
+    classOf[StreamingDeduplicateWithinWatermarkExec].getName,
     classOf[EventTimeWatermarkExec].getName,
     classOf[TransformWithStateExec].getName,
     classOf[UpdateEventTimeColumnExec].getName

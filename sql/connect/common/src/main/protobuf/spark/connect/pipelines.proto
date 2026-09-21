@@ -196,6 +196,10 @@ message PipelineCommand {
       // Subset of columns excluded from ignoring null in updates.
       repeated Expression ignore_null_updates_except_column_list = 15;
 
+      // When true, ignore null updates on all columns of the target table. Mutually exclusive
+      // with ignore_null_updates_column_list and ignore_null_updates_except_column_list.
+      optional bool ignore_null_updates = 16;
+
     }
 
     // SCD Type for Auto CDC target tables.

@@ -1657,3 +1657,44 @@ SELECT element_at(map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
 -- !query analysis
 Project [element_at(map(2019-12-31 16:00:00.000000001, a, 2019-12-31 16:00:00.000000999, b), 2019-12-31 16:00:00.000000001, None, true) AS element_at(map(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', a, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999', b), TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001')#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(SECOND, 5, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC')
+-- !query analysis
+Project [timestampadd(SECOND, cast(5 as bigint), 2019-12-31 16:00:00.000000123, Some(America/Los_Angeles)) AS timestampadd(SECOND, 5, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000123')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(MICROSECOND, 2, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC')
+-- !query analysis
+Project [timestampadd(MICROSECOND, cast(2 as bigint), 2019-12-31 16:00:00.000000123, Some(America/Los_Angeles)) AS timestampadd(MICROSECOND, 2, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000123')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 300, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000123 UTC')
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(300 as bigint), 2019-12-31 16:00:00.000000123, Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 300, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000123')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100 UTC')
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(-300 as bigint), 2019-12-31 16:00:00.0000001, Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000100')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000200 UTC')
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(900 as bigint), 2019-12-31 16:00:00.0000002, Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000200')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
