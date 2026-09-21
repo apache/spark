@@ -974,6 +974,42 @@ class TypesTestsMixin:
         )
         self.assertRaises(PySparkTypeError, field.jsonValue)
 
+    def test_schema_rejects_malformed_char_varchar_collation_metadata(self):
+        from pyspark.sql.types import (
+            _CHAR_VARCHAR_COLLATIONS_METADATA_KEY,
+            _parse_datatype_json_string,
+        )
+
+        def schema_json(metadata_value):
+            return json.dumps(
+                {
+                    "type": "struct",
+                    "fields": [
+                        {
+                            "name": "c",
+                            "type": "char(4)",
+                            "nullable": True,
+                            "metadata": {
+                                _CHAR_VARCHAR_COLLATIONS_METADATA_KEY: metadata_value,
+                            },
+                        }
+                    ],
+                }
+            )
+
+        cases = [
+            ("caller", '"caller"'),
+            ({"c": 1}, "1"),
+        ]
+        for metadata_value, json_type in cases:
+            with self.assertRaises(PySparkTypeError) as pe:
+                _parse_datatype_json_string(schema_json(metadata_value))
+            self.check_error(
+                exception=pe.exception,
+                errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+                messageParameters={"jsonType": json_type},
+            )
+
     def test_preceding_reader_retains_unknown_char_varchar_collation_metadata(self):
         # Reduced independent reader copied from the relevant parser branches at base
         # 389de941f002a5c92e22dc3ed0f65af602a174db. It intentionally does not use any

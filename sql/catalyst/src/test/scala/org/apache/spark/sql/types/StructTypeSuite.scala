@@ -951,6 +951,35 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("jsonType" -> DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY))
   }
 
+  test("SPARK-59276: reject malformed CHAR/VARCHAR collation restoration maps") {
+    def schemaJson(metadataValue: String): String =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "c",
+         |      "type": "char(4)",
+         |      "nullable": true,
+         |      "metadata": {
+         |        "${DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY}": $metadataValue
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+    Seq(("\"caller\"", "\"caller\""), ("""{"c": 1}""", "1")).foreach {
+      case (metadataValue, jsonType) =>
+        checkError(
+          exception = intercept[SparkIllegalArgumentException] {
+            DataType.fromJson(schemaJson(metadataValue))
+          },
+          condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+          parameters = Map("jsonType" -> jsonType))
+    }
+  }
+
   test("simple struct with collations to json") {
     val simpleStruct = StructType(
       StructField("c1", StringType(UNICODE_COLLATION)) :: Nil)

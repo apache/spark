@@ -542,19 +542,36 @@ object DataType {
   private def getCollationsMap(
       metadataFields: List[JField],
       metadataKey: String): Map[String, String] = {
-    val collationsJsonOpt = metadataFields.find(_._1 == metadataKey).map(_._2)
-    collationsJsonOpt match {
+    val requireCompleteMap = metadataKey == CHAR_VARCHAR_COLLATIONS_METADATA_KEY
+    metadataFields.find(_._1 == metadataKey).map(_._2) match {
       case Some(JObject(fields)) =>
-        fields.collect { case (fieldPath, JString(collation)) =>
-          collation.split("\\.", 2) match {
-            case Array(provider: String, collationName: String) =>
-              CollationFactory.assertValidProvider(provider)
-              fieldPath -> collationName
-          }
-        }.toMap
-
+        val parsed = Map.newBuilder[String, String]
+        fields.foreach {
+          case (fieldPath, JString(collation)) =>
+            collation.split("\\.", 2) match {
+              case Array(provider, collationName) =>
+                CollationFactory.assertValidProvider(provider)
+                parsed += (fieldPath -> collationName)
+              case _ if requireCompleteMap =>
+                throw invalidCharVarcharCollationMetadata(JString(collation))
+              case _ =>
+            }
+          case (_, invalid) if requireCompleteMap =>
+            throw invalidCharVarcharCollationMetadata(invalid)
+          case _ =>
+        }
+        parsed.result()
+      case Some(invalid) if requireCompleteMap =>
+        throw invalidCharVarcharCollationMetadata(invalid)
       case _ => Map.empty
     }
+  }
+
+  private def invalidCharVarcharCollationMetadata(
+      invalid: JValue): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+      messageParameters = Map("jsonType" -> compact(render(invalid))))
   }
 
   private def stringTypeWithCollation(typeName: String, collationName: String): StringType = {

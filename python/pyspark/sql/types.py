@@ -2769,14 +2769,35 @@ def _parse_collation_metadata_map(metadata: Optional[Dict[str, Any]], key: str) 
     if not metadata or key not in metadata:
         return {}
 
-    parsed: Dict[str, str] = {}
-    for path, value in metadata[key].items():
+    raw = metadata[key]
+    if key == _CHAR_VARCHAR_COLLATIONS_METADATA_KEY:
+        if not isinstance(raw, dict):
+            raise _invalid_char_varchar_collation_metadata(raw)
+        parsed: Dict[str, str] = {}
+        for path, value in raw.items():
+            name_parts = value.split(".") if isinstance(value, str) else None
+            if name_parts is None or len(name_parts) != 2:
+                raise _invalid_char_varchar_collation_metadata(value)
+            provider, name = name_parts
+            _assert_valid_collation_provider(provider)
+            parsed[path] = name
+        return parsed
+
+    parsed = {}
+    for path, value in raw.items():
         nameParts = value.split(".")
         assert len(nameParts) == 2
         provider, name = nameParts[0], nameParts[1]
         _assert_valid_collation_provider(provider)
         parsed[path] = name
     return parsed
+
+
+def _invalid_char_varchar_collation_metadata(invalid: Any) -> PySparkTypeError:
+    return PySparkTypeError(
+        errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+        messageParameters={"jsonType": json.dumps(invalid, separators=(",", ":"))},
+    )
 
 
 def _assert_valid_type_for_collation(
