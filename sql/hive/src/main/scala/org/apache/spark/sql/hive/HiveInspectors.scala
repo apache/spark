@@ -971,25 +971,6 @@ private[hive] trait HiveInspectors {
         (value: Any, row: InternalRow, ordinal: Int) => row(ordinal) = unwrapper(value)
     }
 
-  /**
-   * Builds an in-place unwrapper using the target Catalyst `dataType` only when target-aware
-   * conversion is required. Other types retain the primitive setter fast paths.
-   */
-  def unwrapperFor(
-      field: HiveStructField,
-      dataType: DataType): (Any, InternalRow, Int) => Unit = {
-    val requiresTypedConversion = dataType.existsRecursively {
-      case _: CharType | _: VarcharType | _: AnyTimestampNanoType => true
-      case _ => false
-    }
-    if (requiresTypedConversion) {
-      val unwrapper = unwrapperFor(field.getFieldObjectInspector, dataType)
-      (value: Any, row: InternalRow, ordinal: Int) => row(ordinal) = unwrapper(value)
-    } else {
-      unwrapperFor(field)
-    }
-  }
-
   def wrap(a: Any, oi: ObjectInspector, dataType: DataType): AnyRef = {
     wrapperFor(oi, dataType)(a).asInstanceOf[AnyRef]
   }
@@ -1297,7 +1278,7 @@ private[hive] trait HiveInspectors {
         compatibleHiveReturnType(rk, ek) && compatibleHiveReturnType(rv, ev)
       case (rt: StructType, et: StructType) if rt.length == et.length =>
         rt.fields.zip(et.fields).forall { case (rf, ef) =>
-          compatibleHiveReturnType(rf.dataType, ef.dataType)
+          rf.name == ef.name && compatibleHiveReturnType(rf.dataType, ef.dataType)
         }
       case (rt, et) => rt.sameType(et)
     }
