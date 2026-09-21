@@ -189,6 +189,9 @@ private[pipelines] object Scd2VersionMap {
    * Returns whether the [[currentColumnValue]] was authored by the upsert event that derived this
    * row, according to the [[versionMap]].
    *
+   * Evaluating the returned expression raises `INTERNAL_ERROR` if a non-null value has an explicit
+   * authored entry, because that combination violates the version map contract.
+   *
    * @param versionMap Version map for the row, or null when the row has no authorship record.
    * @param currentColumnValue Current stored value for the leaf.
    * @param columnPath Raw leaf-name parts matching the key's canonical schema spelling.
@@ -235,7 +238,9 @@ private[pipelines] object Scd2VersionMap {
    * @param versionMap Version map for the row, or null when ignore-null authorship is not tracked.
    * @param currentColumnValue Current stored value for the leaf.
    * @param columnPath Raw leaf-name parts matching the key's canonical schema spelling.
-   * @param valueToInherit Value available from a preceding row, or null if none is available.
+   * @param valueToInherit Value the row would inherit from a preceding row. A null may represent
+   *   either a null value to inherit or the absence of a value to inherit; both cases are treated
+   *   identically by this method.
    * @return Whether to materialize an explicit unauthored entry for this leaf.
    */
   private[autocdc] def needsSchemaEvolutionEntry(
@@ -247,10 +252,12 @@ private[pipelines] object Scd2VersionMap {
     val isRetroactiveSchemaEvolution =
       currentColumnValue.isNull && entryValue(versionMap, columnPath).isNull
 
-    // If there's no non-null value to inherit yet, then there's no need to materialize an entry
-    // for the retroactively schema evolved column yet. It can remain in its current state (null
-    // data column and absent from version map), and be reconsidered for materialization on the
-    // next reconciliation.
+    // A null stored value with an absent entry unambiguously denotes an unauthored schema-evolved
+    // leaf. If no non-null value is available to inherit, the row remains null and the sparse map
+    // representation can remain unchanged. Once the row inherits a non-null value, however,
+    // isAuthored would interpret that value as authored if its entry remained absent. Materializing
+    // an explicit unauthored entry when inheritance occurs preserves authorship for subsequent
+    // reconciliations.
     val hasValueToInherit = valueToInherit.isNotNull
 
     isIgnoreNullOn && isRetroactiveSchemaEvolution && hasValueToInherit
