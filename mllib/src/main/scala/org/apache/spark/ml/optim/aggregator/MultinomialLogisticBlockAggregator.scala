@@ -120,7 +120,7 @@ private[ml] class MultinomialLogisticBlockAggregator(
       val offset = if (fitWithMean) marginOffset else intercept
       var j = 0
       while (j < numClasses) {
-        if (offset(j) != 0) java.util.Arrays.fill(arr, j * size, (j + 1) * size, offset(j))
+        java.util.Arrays.fill(arr, j * size, (j + 1) * size, offset(j))
         j += 1
       }
       BLAS.gemm(1.0, block.matrix, linear.transpose, 1.0, arr)

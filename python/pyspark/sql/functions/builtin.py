@@ -7667,6 +7667,10 @@ def count_min_sketch(
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
+
+        .. versionchanged:: 4.4.0
+            Supports the TIME type for the ``col`` argument. A TIME column is counted by its
+            nanoseconds-of-day, so look it up in the resulting sketch by that value.
     eps : :class:`~pyspark.sql.Column` or float
         relative error, must be positive
 
@@ -14254,11 +14258,15 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
     unit : literal string
         This indicates the units of datetime that you want to add.
         Supported options are (case insensitive): "YEAR", "QUARTER", "MONTH", "WEEK",
-        "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND" and "MICROSECOND".
+        "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND", "MICROSECOND" and "NANOSECOND".
+        "NANOSECOND" is only valid for nanosecond-precision timestamp inputs
+        (TIMESTAMP_NTZ(p) / TIMESTAMP_LTZ(p), p in [7, 9]); the result is floored to the
+        input's precision.
     quantity : :class:`~pyspark.sql.Column` or column name
         The number of units of time that you want to add.
     ts : :class:`~pyspark.sql.Column` or column name
-        A timestamp to which you want to add.
+        A timestamp to which you want to add. A nanosecond-precision timestamp keeps its
+        sub-microsecond fraction; units of MICROSECOND or coarser leave the fraction unchanged.
 
     Returns
     -------
@@ -14339,7 +14347,8 @@ def time_bucket(
         A day-time or year-month interval defining the bucket size. Must be positive
         and foldable.
     ts : :class:`~pyspark.sql.Column` or column name
-        A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+        A TIMESTAMP, TIMESTAMP_NTZ, or nanosecond-precision
+        (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p in [7, 9]) value to bucket.
     origin : :class:`~pyspark.sql.Column`, optional
         Alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as
         ``ts`` and must be foldable.
@@ -29983,10 +29992,13 @@ def hll_sketch_agg(
 
     .. versionadded:: 3.5.0
 
+    .. versionchanged:: 4.4.0
+        Supports the TIME type for the ``col`` argument.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        A column that evaluates to an integer, long, string, or binary.
+        A column that evaluates to an integer, long, time, string, or binary.
     lgConfigK : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of K, where K is the number of buckets or slots for the HllSketch.
         A column that evaluates to an integer.

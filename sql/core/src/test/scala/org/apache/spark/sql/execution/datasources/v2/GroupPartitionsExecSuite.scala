@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyedPartitioning, KeyReducer, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
-import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, Reducer}
+import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, Reducer, YearsFunctionWithToYearsReducerWithLongResult}
 import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class GroupPartitionsExecSuite extends SharedSparkSession {
 
@@ -46,7 +47,8 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
         expected: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
         distribute: Boolean = false,
         childCollapsed: Boolean = false): KeyedPartitioning = {
-      val childKp = KeyedPartitioning(Seq(exprA, exprB), keys).copy(isCollapsed = childCollapsed)
+      val childKp = KeyedPartitioning(Seq(exprA, exprB), keys)
+        .withLayout(_.copy(isCollapsed = childCollapsed))
       GroupPartitionsExec(DummySparkPlan(outputPartitioning = childKp), joinKeyPositions,
         expected, distributePartitions = distribute)
         .outputPartitioning.asInstanceOf[KeyedPartitioning]
@@ -97,6 +99,32 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
         assert(kp.expressions.head === reducedExpr, "the unreduced position keeps its marker")
         assert(!kp.expressionsDescribeKeys)
       case other => fail(s"Expected KeyedPartitioning, got $other")
+    }
+  }
+
+  test("SPARK-59285: a reduced key space's type reaches the reported partitioning with no key " +
+      "left") {
+    // A both-sides reduce is the shape whose reported expression does not produce the key type. The
+    // reduce lands on `LongType` while the `days` transform it marks stays `DateType`, so with no
+    // key row left there is nothing to read the type off, and the layout has to carry it.
+    // `EnsureRequirements` compares the two sides' key types, and a side whose partitions were all
+    // pruned is exactly the case that used to need an exception there (SPARK-59176).
+    val daysExpr = TransformExpression(DaysFunctionWithToYearsReducerWithLongResult, Seq(exprA))
+    val yearsExpr = TransformExpression(YearsFunctionWithToYearsReducerWithLongResult, Seq(exprA))
+    val markedExpr = daysExpr.reducedTogetherWith(yearsExpr)
+    val child = DummySparkPlan(outputPartitioning =
+      KeyedPartitioning(Seq(daysExpr), Seq(row(1), row(2))))
+    val reducers = Some(Seq(Some(KeyReducer(DaysToYearsReducerWithLongResult(), markedExpr))))
+
+    // With keys, where the key rows answer, and without, where only the mark can.
+    Seq(None, Some(Seq.empty[(InternalRowComparableWrapper, Int)])).foreach { expected =>
+      GroupPartitionsExec(child, expectedPartitionKeys = expected, reducers = reducers)
+        .outputPartitioning match {
+        case kp: KeyedPartitioning =>
+          assert(!kp.expressionsDescribeKeys, "test setup: the reported expression is marked")
+          assert(kp.keyDataTypes === Seq(LongType), "the keys hold what the reducer produced")
+        case other => fail(s"Expected KeyedPartitioning, got $other")
+      }
     }
   }
 
@@ -229,7 +257,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // unknown-key hash-routing relationship intact, so the marker rides the transform.
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2)))
-        .copy(mayContainUnknownPartitionKeys = true))
+        .withLayout(_.copy(mayContainUnknownPartitionKeys = true)))
     val out = GroupPartitionsExec(child)
       .outputPartitioning.asInstanceOf[KeyedPartitioning]
     assert(out.mayContainUnknownPartitionKeys, "the marker must survive identity grouping")
@@ -242,7 +270,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // Coalesce: keys [1, 2, 1] merge the two key-1 partitions.
     val coalesced = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(1)))
-        .copy(mayContainUnknownPartitionKeys = true))
+        .withLayout(_.copy(mayContainUnknownPartitionKeys = true)))
     GroupPartitionsExec(coalesced).outputPartitioning match {
       case u: UnknownPartitioning =>
         assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
@@ -252,7 +280,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // Reorder: keys [2, 1] sort to [1, 2], swapping partitions 0 and 1.
     val reordered = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(2), row(1)))
-        .copy(mayContainUnknownPartitionKeys = true))
+        .withLayout(_.copy(mayContainUnknownPartitionKeys = true)))
     GroupPartitionsExec(reordered).outputPartitioning match {
       case u: UnknownPartitioning =>
         assert(u.numPartitions === 2, "the give-up count must match the physical partitions")
@@ -269,7 +297,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // promise hash(key) % 2. The count check catches what the per-group check cannot.
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(3)))
-        .copy(mayContainUnknownPartitionKeys = true))
+        .withLayout(_.copy(mayContainUnknownPartitionKeys = true)))
     def keyOf(a: Int): InternalRowComparableWrapper =
       InternalRowComparableWrapper(row(a), Seq(exprA))
     val gpe = GroupPartitionsExec(child,
@@ -306,7 +334,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val partitionKeys = Seq(row(1), row(2), row(3))
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys)
-        .copy(mayContainUnknownPartitionKeys = true))
+        .withLayout(_.copy(mayContainUnknownPartitionKeys = true)))
     val gpe = GroupPartitionsExec(child, reducers = Some(Seq(Some(reducer))))
 
     assert(gpe.groupedPartitions.size === 2, "mod 2 collapses keys 1 and 3")
@@ -324,8 +352,8 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
   }
 
   test("SPARK-59050: a grouping that rewrites the declared keys drops the claim") {
-    // `identityGrouping` also asks whether the grouping rewrote the keys: the claim the node
-    // goes on to declare lives in the projected or reduced key space, while the child's
+    // `PartitionGrouping.isIdentity` also asks whether the grouping rewrote the keys. The keys the
+    // node goes on to declare live in the projected or reduced key space, while the child's
     // undeclared rows still sit at hash(originalKey) % numPartitions. A reducer slot, a
     // narrowing projection, or a reordering projection therefore gives up the claim even when
     // every group keeps its index and the count is unchanged. A conforming self-reducer cannot
@@ -334,7 +362,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // a marked layout, so these shapes are pinned here directly.
     val child = DummySparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA, exprB), Seq(row(1, 10), row(2, 20)))
-        .copy(mayContainUnknownPartitionKeys = true))
+        .withLayout(_.copy(mayContainUnknownPartitionKeys = true)))
 
     // Reducer slots: `Some(Seq(None, None))` leaves every key and every index unchanged.
     val reduced = GroupPartitionsExec(child, reducers = Some(Seq(None, None)))
@@ -612,13 +640,63 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(gpe.metrics("numEmptyPartitions").value === 0)
     assert(gpe.metrics("numPrunedPartitions").value === 0)
   }
+
+  test("SPARK-59289: the keyed claim goes when the child no longer reports what was planned") {
+    val childKp = KeyedPartitioning(Seq(exprA), Seq(row(1), row(1), row(2)))
+    val gpe = GroupPartitionsExec(DummySparkPlan(outputPartitioning = childKp))
+    assert(gpe.outputPartitioning.isInstanceOf[KeyedPartitioning],
+      "test setup: the node was planned over a keyed child and claims a keyed layout")
+    assert(gpe.outputPartitioning.numPartitions === 2, "test setup: the two 1s are grouped")
+
+    // A wrapper that passes the child's partitioning through keeps the claim, which is every
+    // rewrite the columnar and codegen rules perform.
+    val sameKp = gpe.withNewChildren(
+      Seq(DummySparkPlan(outputPartitioning = childKp))).asInstanceOf[GroupPartitionsExec]
+    assert(sameKp.outputPartitioning === gpe.outputPartitioning)
+
+    // An `AQEShuffleReadExec` over a keyed shuffle stage reports `UnknownPartitioning`, and a
+    // one-mapper-per-task local read reports the pre-shuffle partitioning. Either way the grouping
+    // indexes partitions the child no longer has, so the node stops claiming a keyed layout and
+    // `ValidateRequirements` refuses the plan, which is what makes AQE revert the rewrite.
+    Seq(
+      UnknownPartitioning(4),
+      KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(3))),
+      KeyedPartitioning(Seq(exprB), Seq(row(1), row(1), row(2)))
+    ).foreach { changed =>
+      val rebuilt = gpe.withNewChildren(
+        Seq(DummySparkPlan(outputPartitioning = changed))).asInstanceOf[GroupPartitionsExec]
+      assert(rebuilt.outputPartitioning === UnknownPartitioning(2),
+        s"a child reporting $changed invalidates the grouping, so the claim goes")
+      assert(rebuilt.plannedPartitioning === gpe.outputPartitioning,
+        "what it was planned to report is still carried, it is just no longer reported")
+
+      // Giving up the claim is only half of it. `ValidateRequirements` rejects such a plan, but
+      // `AdaptiveSparkPlanExec.optimizeQueryStage` validates an `AQEShuffleReadRule`'s result and
+      // nothing else, so execution refuses rather than coalescing the new child on the old indices.
+      // Both paths are checked, since each has its own call.
+      val e = intercept[SparkException](rebuilt.execute())
+      assert(e.getMessage.contains("no longer reports the partitioning it was planned over"))
+
+      val columnarPlanned = GroupPartitionsExec(
+        DummyLeafSparkPlan(outputPartitioning = childKp, supportsColumnar = true))
+      val columnarRebuilt = columnarPlanned.withNewChildren(Seq(
+        DummyLeafSparkPlan(outputPartitioning = changed, supportsColumnar = true)))
+        .asInstanceOf[GroupPartitionsExec]
+      assert(columnarRebuilt.supportsColumnar, "test setup: the columnar path is the one taken")
+      val ce = intercept[SparkException](columnarRebuilt.executeColumnar())
+      assert(ce.getMessage.contains("no longer reports the partitioning it was planned over"))
+    }
+  }
 }
 
 private case class DummyLeafSparkPlan(
     override val outputOrdering: Seq[SortOrder] = Nil,
-    override val outputPartitioning: Partitioning = UnknownPartitioning(0)
+    override val outputPartitioning: Partitioning = UnknownPartitioning(0),
+    override val supportsColumnar: Boolean = false
   ) extends LeafExecNode with SafeForKWayMerge {
   override protected def doExecute(): RDD[InternalRow] =
+    throw new UnsupportedOperationException
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
     throw new UnsupportedOperationException
   override def output: Seq[Attribute] = Seq.empty
 }
