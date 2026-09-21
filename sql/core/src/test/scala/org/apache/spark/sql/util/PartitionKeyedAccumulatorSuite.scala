@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.util
 
-import org.apache.spark.SparkFunSuite
+import java.util.Properties
+
+import org.apache.spark.{SparkFunSuite, TaskContext, TaskContextImpl}
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorV2, Utils}
 
 class PartitionKeyedAccumulatorSuite extends SparkFunSuite {
 
@@ -125,5 +129,47 @@ class PartitionKeyedAccumulatorSuite extends SparkFunSuite {
       case ((rows, bytes), (partitionRows, partitionBytes)) =>
         (rows + partitionRows, bytes + partitionBytes)
     }.contains((17L, 170L)))
+  }
+
+  test("SPARK-57547: accessors are null-safe while readObject publishes the accumulator") {
+    // `AccumulatorV2.readObject` registers `this` with the `TaskContext` before Java
+    // deserialization has read this subclass's fields, so the backing map is still unset at that
+    // point. The executor heartbeater reads every registered accumulator and calls `isZero` on it,
+    // which used to throw a NullPointerException there and kill the heartbeat thread. Stand in for
+    // that reader by probing the accumulator from `registerAccumulator`, which `readObject` calls
+    // at exactly that moment.
+    val acc = new PartitionKeyedAccumulator[Stats]
+    acc.metadata = AccumulatorMetadata(AccumulatorContext.newId(), None, countFailedValues = false)
+    AccumulatorContext.register(acc)
+
+    var probed = false
+    val taskContext = new TaskContextImpl(
+      stageId = 0,
+      stageAttemptNumber = 0,
+      partitionId = 0,
+      taskAttemptId = 0L,
+      attemptNumber = 0,
+      numPartitions = 1,
+      taskMemoryManager = null,
+      localProperties = new Properties,
+      metricsSystem = null,
+      taskMetrics = TaskMetrics.empty,
+      cpuAmount = BigDecimal(1)) {
+      private[spark] override def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
+        // The accessors the heartbeat path reaches. Neither may throw on a half-read instance.
+        assert(a.isZero)
+        assert(a.value.asInstanceOf[java.util.Map[_, _]].isEmpty)
+        probed = true
+      }
+    }
+
+    TaskContext.setTaskContext(taskContext)
+    try {
+      Utils.deserialize[PartitionKeyedAccumulator[Stats]](Utils.serialize(acc))
+    } finally {
+      TaskContext.unset()
+      AccumulatorContext.remove(acc.id)
+    }
+    assert(probed, "the accumulator was never registered, so the race was not exercised")
   }
 }
