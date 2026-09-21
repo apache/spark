@@ -151,12 +151,32 @@ class Scd2CoalesceIgnoredNullsSuite extends QueryTest with SharedSparkSession {
       Row(2, null, 20L, null, cdcMetadata(20L, emptyMap))
     )
 
+    val firstPass = coalesce(input, selection)
     checkAnswer(
-      coalesce(input, selection),
+      firstPass,
       Seq(
         Row(1, "source", 10L, null, cdcMetadata(10L, emptyMap)),
         Row(1, "source", 20L, null, cdcMetadata(20L, unauthoredMap)),
         Row(2, null, 20L, null, cdcMetadata(20L, emptyMap))
+      )
+    )
+
+    // On a later reconciliation, an authored row arrives before the previously inherited row.
+    // Its explicit false entry keeps the inherited non-null value unauthored, allowing the newer
+    // preceding value to replace it instead of treating the stored value as authoritative.
+    val previouslyInheritedRow = firstPass.filter(
+      F.col("id") === 1 &&
+        F.col(AutoCdcReservedNames.cdcMetadataColName)
+          .getField(Scd2BatchProcessor.recordStartAtFieldName) === 20L)
+    val newPrecedingRow = targetTableOf(schema)(
+      Row(1, "new-source", 15L, null, cdcMetadata(15L, emptyMap))
+    )
+
+    checkAnswer(
+      coalesce(newPrecedingRow.unionByName(previouslyInheritedRow), selection),
+      Seq(
+        Row(1, "new-source", 15L, null, cdcMetadata(15L, emptyMap)),
+        Row(1, "new-source", 20L, null, cdcMetadata(20L, unauthoredMap))
       )
     )
   }

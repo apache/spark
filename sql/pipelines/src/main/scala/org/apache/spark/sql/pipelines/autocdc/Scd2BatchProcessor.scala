@@ -1064,7 +1064,7 @@ case class Scd2BatchProcessor(
         ),
         isUpsertRepresentingRow = isUpsertRepresentingRow,
         isFirstRowInKeyWindow =
-          F.row_number().over(orderChronologicallyPerKeyWindow) === 1,
+          F.row_number().over(orderChronologicallyPerKeyWindow) === 1
       )
 
     // Only leaves in the active ignore-null selection participate in reconciliation. The
