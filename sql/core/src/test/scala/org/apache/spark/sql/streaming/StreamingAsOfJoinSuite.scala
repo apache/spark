@@ -43,7 +43,7 @@ class StreamingAsOfJoinSuite extends StreamTest {
       testCode: MemoryStream[(Timestamp, String, Int)] => Unit): Unit = {
     withTempView("streaming_trades", "static_quotes") {
       val input = MemoryStream[(Timestamp, String, Int)]
-      input.toDF("trade_time", "symbol", "quantity")
+      input.toDF().toDF("trade_time", "symbol", "quantity")
         .createOrReplaceTempView("streaming_trades")
       sql(
         """
