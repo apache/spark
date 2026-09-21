@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, Or, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -73,12 +73,19 @@ object PushDownUtils extends Logging {
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
+        def translateFilter(expression: Expression): Option[sources.Filter] = {
+          DataSourceStrategy.translateFilterWithMapping(expression, Some(translatedFilterToExpr),
+            nestedPredicatePushdownEnabled = true)
+        }
+
         for (filterExpr <- filters) {
-          val translated =
-            DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
-              nestedPredicatePushdownEnabled = true)
+          val translated = translateFilter(filterExpr)
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
+            if (filterExpr.deterministic) {
+              extractPushablePredicate(filterExpr, e => translateFilter(e).isDefined)
+                .flatMap(translateFilter).foreach(translatedFilters += _)
+            }
           } else {
             translatedFilters += translated.get
           }
@@ -105,12 +112,17 @@ object PushDownUtils extends Logging {
         val translatedFilters = mutable.ArrayBuffer.empty[Predicate]
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
+        def translateFilter(expression: Expression): Option[Predicate] = {
+          DataSourceV2Strategy.translateFilterV2WithMapping(
+            expression, Some(translatedFilterToExpr))
+        }
+
         for (filterExpr <- deterministicFilters) {
-          val translated =
-            DataSourceV2Strategy.translateFilterV2WithMapping(
-              filterExpr, Some(translatedFilterToExpr))
+          val translated = translateFilter(filterExpr)
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
+            extractPushablePredicate(filterExpr, e => translateFilter(e).isDefined)
+              .flatMap(translateFilter).foreach(translatedFilters += _)
           } else {
             translatedFilters += translated.get
           }
@@ -142,6 +154,28 @@ object PushDownUtils extends Logging {
         (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)
       case _ => (Left(Nil), filters)
     }
+  }
+
+  // Extract a necessary condition from a deterministic filter that cannot be fully translated.
+  // The caller must retain the original filter for post-scan evaluation. AND can use either
+  // child, but OR requires both children. Other expressions, including NOT, must translate whole.
+  private def extractPushablePredicate(
+      expression: Expression,
+      canTranslate: Expression => Boolean): Option[Expression] = expression match {
+    case And(left, right) =>
+      val l = extractPushablePredicate(left, canTranslate)
+      val r = extractPushablePredicate(right, canTranslate)
+      (l, r) match {
+        case (Some(a), Some(b)) => Some(And(a, b))
+        case _ => l.orElse(r)
+      }
+    case Or(left, right) =>
+      for {
+        l <- extractPushablePredicate(left, canTranslate)
+        r <- extractPushablePredicate(right, canTranslate)
+      } yield Or(l, r)
+    case other if canTranslate(other) => Some(other)
+    case _ => None
   }
 
   /**
