@@ -2828,8 +2828,7 @@ object AsOfJoin {
       rightSet: AttributeSet): Option[Boolean] = {
     val refs = expr.references
     if (refs.isEmpty) {
-      // Constant operand (literal, current_timestamp(), session variable): references no join
-      // input, so it binds to no side, and MATCH_CONDITION needs one operand bound to each side.
+      // Constant operand (literal, current_timestamp(), session variable): no join input.
       None
     } else if (refs.subsetOf(leftSet)) {
       Some(true)

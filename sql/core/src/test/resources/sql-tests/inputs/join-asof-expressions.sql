@@ -68,8 +68,7 @@ SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (jitter_ts(t.trade_time) >= q.quote_time)
   ON t.symbol = q.symbol;
 
--- FVT-ASOF-8-008: constant MATCH_CONDITION operand (literal or query-foldable) is rejected;
--- it references no join input. Covered by FVT-ASOF-3-024 to FVT-ASOF-3-026 in join-asof-errors.sql
+-- FVT-ASOF-8-008: constant MATCH_CONDITION operand, covered by FVT-ASOF-3-024..027 in join-asof-errors.sql
 
 -- FVT-ASOF-8-009: QUALIFY on ASOF — covered by FVT-ASOF-6-007
 
