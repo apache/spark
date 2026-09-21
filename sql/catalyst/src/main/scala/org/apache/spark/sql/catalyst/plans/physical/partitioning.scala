@@ -973,9 +973,10 @@ object KeyedPartitioning {
       KeyLayout(comparablePartitionKeys, factory.dataTypes, isGrouped, isCollapsed = false))
   }
 
-  // The key's arity is implicit in `HasPartitionKey` and read positionally downstream: a short key
-  // runs off the end as an opaque `ArrayIndexOutOfBoundsException`, while a long key's trailing
-  // fields are silently dropped by readers built over `expressions.length`, grouping too loosely.
+  // The key's arity is implicit in `HasPartitionKey` and read positionally downstream: a key wider
+  // than `expressions` raises an `ArrayIndexOutOfBoundsException` in the struct hash unless the
+  // scan reports one partition, and a narrower one silently groups too loosely until two keys tie
+  // on their leading fields and the ordering reads past its end.
   def checkPartitionKeyArity(
       expressions: Seq[Expression],
       partitionKeys: Seq[InternalRow]): Unit = {
