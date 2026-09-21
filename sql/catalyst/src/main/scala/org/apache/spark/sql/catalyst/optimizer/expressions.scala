@@ -568,6 +568,183 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
 
 /**
+ * Derives a pushable predicate over an integral column from a comparison involving ANSI addition
+ * or subtraction with a literal, in either operand order. The original comparison is retained to
+ * preserve overflow errors and exact evaluation semantics.
+ *
+ * Derivation is confined to the top-level conjuncts of a [[Filter]] condition, the only positions
+ * the V1 and V2 pushdown paths read.
+ */
+object DeriveIntegralComparisonPredicates extends Rule[LogicalPlan] {
+  private val derived = TreeNodeTag[Unit]("derived_integral_comparison_predicate")
+
+  private case class IntegralRange(min: BigInt, max: BigInt, literal: BigInt => Literal)
+
+  private def integralRange(dataType: DataType): Option[IntegralRange] = dataType match {
+    case ByteType => Some(IntegralRange(Byte.MinValue, Byte.MaxValue,
+      value => Literal(value.toByte)))
+    case ShortType => Some(IntegralRange(Short.MinValue, Short.MaxValue,
+      value => Literal(value.toShort)))
+    case IntegerType => Some(IntegralRange(Int.MinValue, Int.MaxValue,
+      value => Literal(value.toInt)))
+    case LongType => Some(IntegralRange(Long.MinValue, Long.MaxValue,
+      value => Literal(value.toLong)))
+    case _ => None
+  }
+
+  private def integralValue(literal: Literal): Option[BigInt] = literal.value match {
+    case value: Byte => Some(BigInt(value))
+    case value: Short => Some(BigInt(value))
+    case value: Int => Some(BigInt(value))
+    case value: Long => Some(BigInt(value))
+    case _ => None
+  }
+
+  private def flipped(comparison: BinaryComparison): BinaryComparison = comparison match {
+    case EqualTo(left, right) => EqualTo(right, left)
+    case LessThan(left, right) => GreaterThan(right, left)
+    case LessThanOrEqual(left, right) => GreaterThanOrEqual(right, left)
+    case GreaterThan(left, right) => LessThan(right, left)
+    case GreaterThanOrEqual(left, right) => LessThanOrEqual(right, left)
+  }
+
+  private def normalizedComparison(
+      comparison: BinaryComparison): Option[(Expression, Literal, BinaryComparison)] = {
+    comparison match {
+      case EqualTo(arithmetic, literal: Literal) => Some((arithmetic, literal, comparison))
+      case EqualTo(literal: Literal, arithmetic) =>
+        Some((arithmetic, literal, flipped(comparison)))
+      case LessThan(arithmetic, literal: Literal) => Some((arithmetic, literal, comparison))
+      case LessThan(literal: Literal, arithmetic) =>
+        Some((arithmetic, literal, flipped(comparison)))
+      case LessThanOrEqual(arithmetic, literal: Literal) =>
+        Some((arithmetic, literal, comparison))
+      case LessThanOrEqual(literal: Literal, arithmetic) =>
+        Some((arithmetic, literal, flipped(comparison)))
+      case GreaterThan(arithmetic, literal: Literal) => Some((arithmetic, literal, comparison))
+      case GreaterThan(literal: Literal, arithmetic) =>
+        Some((arithmetic, literal, flipped(comparison)))
+      case GreaterThanOrEqual(arithmetic, literal: Literal) =>
+        Some((arithmetic, literal, comparison))
+      case GreaterThanOrEqual(literal: Literal, arithmetic) =>
+        Some((arithmetic, literal, flipped(comparison)))
+      case _ => None
+    }
+  }
+
+  private def arithmeticOperand(
+      expression: Expression): Option[(Expression, Literal, BigInt, BigInt)] = expression match {
+    case add @ Add(operand, literal: Literal, _)
+        if add.evalMode == EvalMode.ANSI && operand.isInstanceOf[Attribute] =>
+      integralValue(literal).map((operand, literal, 1, _))
+    case add @ Add(literal: Literal, operand, _)
+        if add.evalMode == EvalMode.ANSI && operand.isInstanceOf[Attribute] =>
+      integralValue(literal).map((operand, literal, 1, _))
+    case subtract @ Subtract(operand, literal: Literal, _)
+        if subtract.evalMode == EvalMode.ANSI && operand.isInstanceOf[Attribute] =>
+      integralValue(literal).map(value => (operand, literal, 1, -value))
+    case subtract @ Subtract(literal: Literal, operand, _)
+        if subtract.evalMode == EvalMode.ANSI && operand.isInstanceOf[Attribute] =>
+      integralValue(literal).map((operand, literal, -1, _))
+    case _ => None
+  }
+
+  private def comparison(
+      template: BinaryComparison,
+      left: Expression,
+      right: Expression): BinaryComparison = template match {
+    case _: EqualTo => EqualTo(left, right)
+    case _: LessThan => LessThan(left, right)
+    case _: LessThanOrEqual => LessThanOrEqual(left, right)
+    case _: GreaterThan => GreaterThan(left, right)
+    case _: GreaterThanOrEqual => GreaterThanOrEqual(left, right)
+  }
+
+  private def comparisonOutsideRange(
+      template: BinaryComparison,
+      thresholdIsBelowRange: Boolean): Expression = template match {
+    case _: EqualTo => FalseLiteral
+    case _: LessThan | _: LessThanOrEqual => Literal(!thresholdIsBelowRange)
+    case _: GreaterThan | _: GreaterThanOrEqual => Literal(thresholdIsBelowRange)
+  }
+
+  private def derivedPredicate(comparisonExpression: BinaryComparison): Option[Expression] = {
+    val predicate = for {
+      (arithmetic, comparisonLiteral, normalized) <- normalizedComparison(comparisonExpression)
+      (operand, arithmeticLiteral, coefficient, delta) <- arithmeticOperand(arithmetic)
+      range <- integralRange(arithmetic.dataType)
+      comparisonValue <- integralValue(comparisonLiteral)
+      if operand.dataType == arithmetic.dataType
+      if arithmeticLiteral.dataType == arithmetic.dataType
+      if comparisonLiteral.dataType == arithmetic.dataType
+    } yield {
+      // Solving `coefficient * operand + delta` for the operand reverses the comparison when the
+      // operand is negated.
+      val effective = if (coefficient > 0) normalized else flipped(normalized)
+      val threshold = coefficient * (comparisonValue - delta)
+      val algebraic = if (threshold < range.min || threshold > range.max) {
+        comparisonOutsideRange(effective, threshold < range.min)
+      } else {
+        comparison(effective, operand, range.literal(threshold))
+      }
+      // A negated operand maps the range onto itself, so the shift that overflows for no operand
+      // is the one landing `min` on `max` rather than the one landing it on itself.
+      val pivot = if (coefficient > 0) BigInt(0) else range.min + range.max
+      val overflow: Option[BinaryComparison] = if (delta > pivot) {
+        val bound = range.literal(coefficient * (range.max - delta))
+        Some(if (coefficient > 0) GreaterThan(operand, bound) else LessThan(operand, bound))
+      } else if (delta < pivot) {
+        val bound = range.literal(coefficient * (range.min - delta))
+        Some(if (coefficient > 0) LessThan(operand, bound) else GreaterThan(operand, bound))
+      } else {
+        None
+      }
+      // An overflow leg pointing the way the effective comparison already points implies it, so
+      // that comparison alone matches every row the disjunction would, and leaves data sources
+      // one shape fewer to translate.
+      val redundant = (effective, overflow) match {
+        case (_: GreaterThan | _: GreaterThanOrEqual, Some(_: GreaterThan)) => true
+        case (_: LessThan | _: LessThanOrEqual, Some(_: LessThan)) => true
+        case _ => false
+      }
+      // Emitted in the shape `BooleanSimplification`, which runs earlier in the same rule set,
+      // would fold it into, so re-deriving cannot be triggered by a fold of this rule's output.
+      (algebraic, overflow) match {
+        case (TrueLiteral, _) => None
+        case (FalseLiteral, Some(overflowPredicate)) => Some(overflowPredicate)
+        case (_, Some(_)) if redundant => Some(algebraic)
+        case (_, Some(overflowPredicate)) => Some(Or(algebraic, overflowPredicate))
+        case (_, None) => Some(algebraic)
+      }
+    }
+    predicate.flatten
+  }
+
+  private def deriveInConjunction(condition: Expression): Expression = condition match {
+    case and @ And(left, right) =>
+      val newLeft = deriveInConjunction(left)
+      val newRight = deriveInConjunction(right)
+      if ((newLeft eq left) && (newRight eq right)) and else And(newLeft, newRight)
+    case original: BinaryComparison if original.getTagValue(derived).isEmpty =>
+      derivedPredicate(original).map { predicate =>
+        // The tag must go on a node this rule allocates: analyzed plans are retained and
+        // re-optimized, and tagging the matched instance would suppress the derivation the
+        // next time the same plan is optimized.
+        val retained = comparison(original, original.left, original.right)
+        retained.setTagValue(derived, ())
+        And(predicate, retained)
+      }.getOrElse(original)
+    case other => other
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(BINARY_COMPARISON), ruleId) {
+    case filter: Filter => filter.mapExpressions(deriveInConjunction)
+  }
+}
+
+
+/**
  * Simplifies binary comparisons with semantically-equal expressions:
  * 1) Replace '<=>' with 'true' literal.
  * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.

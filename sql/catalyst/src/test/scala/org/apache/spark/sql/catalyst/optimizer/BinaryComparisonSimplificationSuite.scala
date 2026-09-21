@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DoubleType, IntegerType, LongType, ShortType, StructField, StructType}
 
 class BinaryComparisonSimplificationSuite extends PlanTest {
 
@@ -42,8 +42,26 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
         NullPropagation,
         ConstantFolding,
         BooleanSimplification,
+        DeriveIntegralComparisonPredicates,
         SimplifyBinaryComparison,
         PruneFilters) :: Nil
+  }
+
+  // Mirrors the two batches that share `operatorOptimizationRuleSet` in the real optimizer.
+  object OptimizeAcrossBatches extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Operator Optimization before Inferring Filters", FixedPoint(50),
+        BooleanSimplification,
+        DeriveIntegralComparisonPredicates) ::
+      Batch("Operator Optimization after Inferring Filters", FixedPoint(50),
+        BooleanSimplification,
+        DeriveIntegralComparisonPredicates) :: Nil
+  }
+
+  object DeriveOnly extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Derive Integral Comparison Predicates", FixedPoint(50),
+        DeriveIntegralComparisonPredicates) :: Nil
   }
 
   private def checkCondition(rel: LocalRelation, input: Expression, expected: Expression): Unit =
@@ -53,6 +71,201 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
   val nonNullableRelation = LocalRelation($"a".int.withNullability(false))
   val boolRelation = LocalRelation($"a".boolean, $"b".boolean)
 
+  test("derive pruning predicates from ANSI integral arithmetic comparisons") {
+    val a = nonNullableRelation.output.head
+    val add = Add(a, Literal(10), EvalMode.ANSI)
+    val litFirstAdd = Add(Literal(10), a, EvalMode.ANSI)
+    val subtract = Subtract(a, Literal(10), EvalMode.ANSI)
+    val negated = Subtract(Literal(10), a, EvalMode.ANSI)
+    val negatedLow = Subtract(Literal(-10), a, EvalMode.ANSI)
+    val negatedZero = Subtract(Literal(0), a, EvalMode.ANSI)
+    val negatedPivot = Subtract(Literal(-1), a, EvalMode.ANSI)
+    val addOverflow = a > Literal(Int.MaxValue - 10)
+    val subtractOverflow = a < Literal(Int.MinValue + 10)
+    val negatedOverflow = a < Literal(-(Int.MaxValue - 10))
+    val negatedLowOverflow = a > Literal(-(Int.MinValue + 10))
+    val negatedZeroOverflow = a < Literal(-Int.MaxValue)
+
+    val cases = Seq[(Expression, Expression)](
+      (add < Literal(100), (a < Literal(90) || addOverflow) && add < Literal(100)),
+      (add <= Literal(100), (a <= Literal(90) || addOverflow) && add <= Literal(100)),
+      (add > Literal(100), a > Literal(90) && add > Literal(100)),
+      (add >= Literal(100), a >= Literal(90) && add >= Literal(100)),
+      (add === Literal(100), (a === Literal(90) || addOverflow) && add === Literal(100)),
+      (add < Literal(Int.MinValue), addOverflow && add < Literal(Int.MinValue)),
+      (add > Literal(Int.MaxValue), addOverflow && add > Literal(Int.MaxValue)),
+      (subtract < Literal(100), a < Literal(110) && subtract < Literal(100)),
+      (subtract <= Literal(100), a <= Literal(110) && subtract <= Literal(100)),
+      (subtract > Literal(100),
+        (a > Literal(110) || subtractOverflow) && subtract > Literal(100)),
+      (subtract < Literal(Int.MinValue),
+        subtractOverflow && subtract < Literal(Int.MinValue)),
+      (subtract > Literal(Int.MaxValue),
+        subtractOverflow && subtract > Literal(Int.MaxValue)),
+      (Literal(100) < add, a > Literal(90) && Literal(100) < add),
+      (litFirstAdd < Literal(100), (a < Literal(90) || addOverflow) && litFirstAdd < Literal(100)),
+      (add < Literal(100) && subtract > Literal(100),
+        (a < Literal(90) || addOverflow) && add < Literal(100) &&
+          (a > Literal(110) || subtractOverflow) && subtract > Literal(100)),
+      // Out-of-range thresholds hit the constant-fold branch (true folds are absorbed).
+      (subtract < Literal(Int.MaxValue), subtract < Literal(Int.MaxValue)),
+      (add > Literal(Int.MinValue), add > Literal(Int.MinValue)),
+      (add === Literal(Int.MinValue), addOverflow && add === Literal(Int.MinValue)),
+      // A literal-first subtract negates the column, reversing the derived comparison.
+      (negated < Literal(100), (a > Literal(-90) || negatedOverflow) && negated < Literal(100)),
+      (negated <= Literal(100),
+        (a >= Literal(-90) || negatedOverflow) && negated <= Literal(100)),
+      (negated > Literal(100), a < Literal(-90) && negated > Literal(100)),
+      (negated >= Literal(100), a <= Literal(-90) && negated >= Literal(100)),
+      (negated === Literal(100),
+        (a === Literal(-90) || negatedOverflow) && negated === Literal(100)),
+      (negatedLow < Literal(100), a > Literal(-110) && negatedLow < Literal(100)),
+      (negatedLow <= Literal(100), a >= Literal(-110) && negatedLow <= Literal(100)),
+      (negatedLow > Literal(100),
+        (a < Literal(-110) || negatedLowOverflow) && negatedLow > Literal(100)),
+      (negatedLow >= Literal(100),
+        (a <= Literal(-110) || negatedLowOverflow) && negatedLow >= Literal(100)),
+      (negatedLow === Literal(100),
+        (a === Literal(-110) || negatedLowOverflow) && negatedLow === Literal(100)),
+      // One step above the pivot, where a pivot of zero would drop the leg.
+      (negatedZero < Literal(100),
+        (a > Literal(-100) || negatedZeroOverflow) && negatedZero < Literal(100)),
+      (negatedZero <= Literal(100),
+        (a >= Literal(-100) || negatedZeroOverflow) && negatedZero <= Literal(100)),
+      (negatedZero === Literal(100),
+        (a === Literal(-100) || negatedZeroOverflow) && negatedZero === Literal(100)),
+      // At the pivot the arithmetic maps the range onto itself, so there is no leg to emit.
+      (negatedPivot < Literal(100), a > Literal(-101) && negatedPivot < Literal(100)),
+      (negatedPivot === Literal(100), a === Literal(-101) && negatedPivot === Literal(100)),
+      (negated < Literal(Int.MinValue), negatedOverflow && negated < Literal(Int.MinValue)),
+      (negated > Literal(Int.MinValue), negated > Literal(Int.MinValue)),
+      // Both the comparison and the subtract are literal-first, so the reversals compose.
+      (Literal(100) > negated, (a > Literal(-90) || negatedOverflow) && Literal(100) > negated),
+      (Literal(100) < negated, a < Literal(-90) && Literal(100) < negated))
+
+    cases.foreach { case (input, expected) =>
+      checkCondition(nonNullableRelation, input, expected)
+    }
+  }
+
+  test("do not derive pruning predicates when arithmetic is not checked integral arithmetic") {
+    val a = nonNullableRelation.output.head
+    val cases = Seq(
+      Add(a, Literal(10), EvalMode.LEGACY) > Literal(100),
+      Multiply(a, Literal(10), EvalMode.ANSI) > Literal(100),
+      Add(Cast(a, DoubleType), Literal(10.0), EvalMode.ANSI) > Literal(100.0),
+      Add(a, a, EvalMode.ANSI) > Literal(100))
+
+    cases.foreach { condition =>
+      checkCondition(nonNullableRelation, condition, condition)
+    }
+  }
+
+  test("do not derive pruning predicates when the operand is not a column") {
+    val a = nonNullableRelation.output.head
+    val nonColumnOperand = Add(a, Literal(1), EvalMode.ANSI)
+    val condition = Add(nonColumnOperand, Literal(10), EvalMode.ANSI) > Literal(100)
+    checkCondition(nonNullableRelation, condition, condition)
+  }
+
+  gridTest("derive pruning predicates across integral types")(
+      Seq[DataType](ByteType, ShortType, LongType)) { dataType =>
+    val relation = LocalRelation(AttributeReference("a", dataType, nullable = false)())
+    val col = relation.output.head
+    val (lit, overflowBound): (Long => Literal, Literal) = dataType match {
+      case ByteType => ((v: Long) => Literal(v.toByte), Literal((Byte.MaxValue - 10).toByte))
+      case ShortType => ((v: Long) => Literal(v.toShort), Literal((Short.MaxValue - 10).toShort))
+      case _ => ((v: Long) => Literal(v), Literal(Long.MaxValue - 10L))
+    }
+    val add = Add(col, lit(10), EvalMode.ANSI)
+    checkCondition(
+      relation,
+      add < lit(100),
+      (col < lit(90) || col > overflowBound) && add < lit(100))
+    checkCondition(relation, add > lit(100), col > lit(90) && add > lit(100))
+  }
+
+
+  test("derive pruning predicates when one analyzed plan is optimized twice") {
+    val a = nonNullableRelation.output.head
+    val add = Add(a, Literal(10), EvalMode.ANSI)
+    val plan = nonNullableRelation.where(add > Literal(100)).analyze
+    val expected = nonNullableRelation
+      .where(a > Literal(90) && add > Literal(100))
+      .analyze
+    // The same plan instance has to be optimized twice; a rebuilt plan derives either way.
+    comparePlans(Optimize.execute(plan), expected)
+    comparePlans(Optimize.execute(plan), expected)
+  }
+
+  test("retain a freshly built comparison and leave the analyzed plan untagged") {
+    val a = nonNullableRelation.output.head
+    val add = Add(a, Literal(10), EvalMode.ANSI)
+    val analyzed = nonNullableRelation.where(add > Literal(100)).analyze
+    val analyzedComparisons = analyzed.expressions.flatMap(_.collect {
+      case comparison: BinaryComparison => comparison
+    })
+    assert(analyzedComparisons.length == 1)
+
+    val optimized = Optimize.execute(analyzed)
+    val retainedComparisons = optimized.expressions.flatMap(_.collect {
+      case comparison: BinaryComparison if comparison.left.isInstanceOf[Add] => comparison
+    })
+    assert(retainedComparisons.length == 1)
+
+    // Plan shape alone does not discriminate here, because tags are not part of tree equality.
+    assert(!(retainedComparisons.head eq analyzedComparisons.head))
+    assert(analyzedComparisons.head.isTagsEmpty)
+    assert(!retainedComparisons.head.isTagsEmpty)
+  }
+
+  test("derive pruning predicates once across the batches sharing the rule") {
+    val a = nonNullableRelation.output.head
+    val add = Add(a, Literal(10), EvalMode.ANSI)
+    comparePlans(
+      OptimizeAcrossBatches.execute(nonNullableRelation.where(add > Literal(100)).analyze),
+      nonNullableRelation
+        .where(a > Literal(90) && add > Literal(100))
+        .analyze)
+  }
+
+  test("emit derived predicates in a shape the boolean simplifications leave alone") {
+    val a = nonNullableRelation.output.head
+    val add = Add(a, Literal(10), EvalMode.ANSI)
+    val subtract = Subtract(a, Literal(10), EvalMode.ANSI)
+    val addOverflow = a > Literal(Int.MaxValue - 10)
+    val subtractOverflow = a < Literal(Int.MinValue + 10)
+
+    val cases = Seq[(Expression, Expression)](
+      // The algebraic leg is always true, so nothing is derived at all.
+      (subtract < Literal(Int.MaxValue), subtract < Literal(Int.MaxValue)),
+      (add > Literal(Int.MinValue), add > Literal(Int.MinValue)),
+      // The algebraic leg is always false, so only the overflow leg is derived.
+      (add === Literal(Int.MinValue), addOverflow && add === Literal(Int.MinValue)),
+      (subtract > Literal(Int.MaxValue), subtractOverflow && subtract > Literal(Int.MaxValue)),
+      // The overflow leg is implied by the algebraic leg, so only the latter is derived.
+      (add > Literal(Int.MaxValue), addOverflow && add > Literal(Int.MaxValue)),
+      (subtract < Literal(Int.MinValue), subtractOverflow && subtract < Literal(Int.MinValue)))
+
+    cases.foreach { case (input, expected) =>
+      comparePlans(
+        DeriveOnly.execute(nonNullableRelation.where(input).analyze),
+        nonNullableRelation.where(expected).analyze)
+    }
+  }
+
+  test("do not derive pruning predicates outside the top-level conjuncts of a filter") {
+    val a = nonNullableRelation.output.head
+    val eligible = Add(a, Literal(10), EvalMode.ANSI) > Literal(100)
+
+    checkCondition(nonNullableRelation, eligible || a < Literal(0), eligible || a < Literal(0))
+
+    val projection = nonNullableRelation.select(Alias(eligible, "p")()).analyze
+    comparePlans(Optimize.execute(projection), projection)
+
+    val aggregate = nonNullableRelation.groupBy(eligible)(count(Literal(1))).analyze
+    comparePlans(Optimize.execute(aggregate), aggregate)
+  }
 
   test("Preserve nullable exprs when constraintPropagation is false") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {

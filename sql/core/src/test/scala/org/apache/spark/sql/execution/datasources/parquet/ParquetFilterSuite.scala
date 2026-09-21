@@ -39,7 +39,7 @@ import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
+import org.apache.spark.{SparkArithmeticException, SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -80,6 +80,7 @@ import org.apache.spark.util.ArrayImplicits._
  * within the test.
  */
 abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
+  import testImplicits.ColumnConstructorExt
   import testImplicits.toRichColumn
 
   protected def createParquetFilters(
@@ -2958,6 +2959,76 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
         |  optional int64 t(TIME(MICROS,true));
         |}""".stripMargin))
   }
+
+  test("derived predicate preserves ANSI integral overflow") {
+    withParquetDataFrame(Seq(Tuple1(Int.MaxValue))) { df =>
+      val predicate = Add(df("_1").expr, Literal(10), EvalMode.ANSI) > Literal(100)
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          df.filter(Column(predicate)).collect()
+        },
+        condition = "ARITHMETIC_OVERFLOW",
+        parameters = Map(
+          "message" -> "overflow",
+          "alternative" -> " Use 'try_add' to tolerate overflow and return NULL instead.",
+          "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
+        sqlState = "22003",
+        context = ExpectedContext("", -1, -1))
+    }
+  }
+
+  test("derived predicate for ANSI integral arithmetic reaches the reader") {
+    withParquetDataFrame((1 to 4).map(Tuple1(_))) { df =>
+      val predicate = Add(df("_1").expr, Literal(10), EvalMode.ANSI) > Literal(100)
+      val query = df.filter(Column(predicate))
+      // The scan description is the one pushed-filter report both file sources publish; the
+      // V1 `checkFilterPredicate` helper cannot serve here because it folds the conjuncts back
+      // into one `And`, which `selectFilters` refuses whole once one conjunct is untranslatable.
+      val pushedFilters = """PushedFilters: \[(.*?)\]"""
+        .r
+        .findAllMatchIn(query.queryExecution.explainString(ExplainMode.fromString("extended")))
+        .map(_.group(1).replaceAll("\\s", ""))
+        .toSeq
+      assert(pushedFilters.exists(_.contains("GreaterThan(_1,90)")),
+        s"Derived predicate was not pushed down: $pushedFilters")
+      checkAnswer(query, Seq.empty[Row])
+    }
+  }
+
+  test("derived predicate for a literal-first ANSI integral subtract is pushed reversed") {
+    withParquetDataFrame((1 to 4).map(Tuple1(_))) { df =>
+      val predicate = Subtract(Literal(10), df("_1").expr, EvalMode.ANSI) > Literal(5)
+      val query = df.filter(Column(predicate))
+      val pushedFilters = """PushedFilters: \[(.*?)\]"""
+        .r
+        .findAllMatchIn(query.queryExecution.explainString(ExplainMode.fromString("extended")))
+        .map(_.group(1).replaceAll("\\s", ""))
+        .toSeq
+      assert(pushedFilters.exists(_.contains("LessThan(_1,5)")),
+        s"Derived predicate was not pushed down reversed: $pushedFilters")
+      checkAnswer(query, (1 to 4).map(Row(_)))
+    }
+  }
+
+  test("disjunctive derived predicate for ANSI integral arithmetic reaches the reader") {
+    withParquetDataFrame((1 to 4).map(Tuple1(_))) { df =>
+      // The overflow leg points against the shifted comparison here, so it is not implied and the
+      // derived predicate stays a disjunction, which both pushdown paths translate only as a
+      // whole. Nothing but the pushed-filter report can show it arriving, because the retained
+      // original comparison keeps the answer right whether or not it does.
+      val predicate = Add(df("_1").expr, Literal(10), EvalMode.ANSI) < Literal(100)
+      val query = df.filter(Column(predicate))
+      val pushedFilters = """PushedFilters: \[(.*?)\]"""
+        .r
+        .findAllMatchIn(query.queryExecution.explainString(ExplainMode.fromString("extended")))
+        .map(_.group(1).replaceAll("\\s", ""))
+        .toSeq
+      val derived = s"Or(LessThan(_1,90),GreaterThan(_1,${Int.MaxValue - 10}))"
+      assert(pushedFilters.exists(_.contains(derived)),
+        s"Disjunctive derived predicate was not pushed down: $pushedFilters")
+      checkAnswer(query, (1 to 4).map(Row(_)))
+    }
+  }
 }
 
 @ExtendedSQLTest
@@ -3045,6 +3116,19 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
 @ExtendedSQLTest
 class ParquetV2FilterSuite extends ParquetFilterSuite {
   import testImplicits.ColumnConstructorExt
+  import testImplicits.toRichColumn
+
+  test("push down derived predicate for ANSI integral arithmetic") {
+    withParquetDataFrame((1 to 4).map(Tuple1(_))) { df =>
+      val predicate = Add(df("_1").expr, Literal(10), EvalMode.ANSI) > Literal(100)
+      checkFilterPredicate(
+        df,
+        predicate,
+        classOf[Gt[_]],
+        checkAnswer(_, _: Seq[Row]),
+        Seq.empty)
+    }
+  }
 
   // TODO: enable Parquet V2 write path after file source V2 writers are workable.
   override protected def sparkConf: SparkConf =
