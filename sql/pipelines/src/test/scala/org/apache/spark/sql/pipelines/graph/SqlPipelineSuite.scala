@@ -1375,9 +1375,9 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     }
   }
 
-  /** Build a target row's `_cdc_metadata` struct value (deleteSequence, upsertSequence). */
+  /** Build a target row's `_cdc_metadata` struct value. */
   private def cdcMeta(deleteSeq: Option[Long], upsertSeq: Option[Long]): Row =
-    Row(deleteSeq.orNull, upsertSeq.orNull)
+    Row(deleteSeq.orNull, upsertSeq.orNull, null)
 
   test("CREATE STREAMING TABLE FLOW AUTO CDC upserts rows into the target end-to-end") {
     withRowLevelAutoCdcCatalog {

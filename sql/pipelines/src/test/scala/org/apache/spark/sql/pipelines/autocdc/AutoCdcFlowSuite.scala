@@ -283,6 +283,9 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     val metaStruct = metaField.dataType.asInstanceOf[StructType]
     assert(metaStruct(Scd1BatchProcessor.cdcDeleteSequenceFieldName).nullable)
     assert(metaStruct(Scd1BatchProcessor.cdcUpsertSequenceFieldName).nullable)
+    val versionMapField = metaStruct(Scd1BatchProcessor.versionMapFieldName)
+    assert(versionMapField.nullable)
+    assert(versionMapField.dataType == Scd1VersionMap.mapType(LongType))
   }
 
   test("AutoCdcMergeFlow.schema is stable across reads") {
