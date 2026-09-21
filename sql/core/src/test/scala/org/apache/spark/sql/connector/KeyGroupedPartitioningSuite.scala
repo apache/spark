@@ -1394,6 +1394,40 @@ class KeyGroupedPartitioningSuite
       mixedKeyGroupPartitions(a2, dt2, o2).canonicalized)
   }
 
+  test("SPARK-59688: an identity side and a compatible transform whose reported keys coincide") {
+    withFunction(FlipLowBitFunction) {
+      // `flip_low_bit` maps 0 to 1 and 1 to 0, so with ids 0 and 1 in both tables the two scans
+      // report the same partition key list, [0, 1] of LongType, while the rows behind a key differ:
+      // the identity side's key 0 holds id 0, the transform side's holds id 1. The identity side's
+      // raw keys have to be reduced onto `flip_low_bit` before the partitions can be paired up.
+      val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+      createTable("t1", cols, Array(identity("id")))
+      sql("INSERT INTO testcat.ns.t1 VALUES (0, 'a'), (1, 'b')")
+
+      createTable("t2", cols, Array(Expressions.apply("flip_low_bit", Expressions.column("id"))))
+      sql("INSERT INTO testcat.ns.t2 VALUES (0, 'x'), (1, 'y')")
+
+      val df = sql(
+        "SELECT t1.id, t1.data, t2.data FROM testcat.ns.t1 JOIN testcat.ns.t2 ON t1.id = t2.id")
+
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        checkAnswer(df, Seq(Row(0L, "a", "x"), Row(1L, "b", "y")))
+        val plan = stripAQEPlan(df.queryExecution.executedPlan)
+        assert(collectShuffles(plan).isEmpty, "storage-partitioned join should not shuffle")
+        val groupPartitions = collectGroupPartitions(plan)
+        assert(groupPartitions.size == 2,
+          "both sides should be regrouped onto the merged partition keys")
+        assert(groupPartitions.count(_.reducers.exists(_.exists(_.isDefined))) == 1,
+          "and exactly one side should reduce, the identity one onto `flip_low_bit`")
+        // The join subtree, not the whole plan: `ValidateRequirements` walks children and a query
+        // stage is a leaf, so validating an AQE plan checks nothing.
+        val joins = collect(plan) { case smj: SortMergeJoinExec => smj }
+        assert(joins.size == 1, s"test setup: one join to validate:\n$plan")
+        assert(ValidateRequirements.validate(joins.head), "the plan that leaves must hold up")
+      }
+    }
+  }
+
   test("SPARK-59121: two sides reduced together are not reduced a second time") {
     withReducedTsJoinLegs(bothRows, row2021) {
       // Both inner joins reduce onto the year key space, and the two legs hold different key sets,
