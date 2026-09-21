@@ -21,26 +21,40 @@ import java.io.IOException;
 import java.util.Comparator;
 import java.util.PriorityQueue;
 
+import javax.annotation.Nullable;
+
 final class UnsafeSorterSpillMerger {
 
   private int numRecords = 0;
   private final PriorityQueue<UnsafeSorterIterator> priorityQueue;
 
+  /**
+   * @param recordComparator breaks ties between records whose key prefixes are equal, or
+   *     {@code null} when the key prefix is a total order (a single, non-null, prefix-sortable
+   *     sort key -- the same precondition the in-memory radix sort relies on). When {@code null},
+   *     equal prefixes are equal keys, so the record-level tie-break is unnecessary and skipped.
+   */
   UnsafeSorterSpillMerger(
-      RecordComparator recordComparator,
+      @Nullable RecordComparator recordComparator,
       PrefixComparator prefixComparator,
       int numSpills) {
-    Comparator<UnsafeSorterIterator> comparator = (left, right) -> {
-      int prefixComparisonResult =
+    Comparator<UnsafeSorterIterator> comparator;
+    if (recordComparator == null) {
+      comparator = (left, right) ->
         prefixComparator.compare(left.getKeyPrefix(), right.getKeyPrefix());
-      if (prefixComparisonResult == 0) {
-        return recordComparator.compare(
-          left.getBaseObject(), left.getBaseOffset(), left.getRecordLength(),
-          right.getBaseObject(), right.getBaseOffset(), right.getRecordLength());
-      } else {
-        return prefixComparisonResult;
-      }
-    };
+    } else {
+      comparator = (left, right) -> {
+        int prefixComparisonResult =
+          prefixComparator.compare(left.getKeyPrefix(), right.getKeyPrefix());
+        if (prefixComparisonResult == 0) {
+          return recordComparator.compare(
+            left.getBaseObject(), left.getBaseOffset(), left.getRecordLength(),
+            right.getBaseObject(), right.getBaseOffset(), right.getRecordLength());
+        } else {
+          return prefixComparisonResult;
+        }
+      };
+    }
     priorityQueue = new PriorityQueue<>(numSpills, comparator);
   }
 

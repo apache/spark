@@ -57,6 +57,16 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   @Nullable
   private final PrefixComparator prefixComparator;
 
+  // Whether the sort key is prefix-sortable (a single key whose prefix is a total order -- the
+  // condition that enables the in-memory radix sort).
+  private final boolean canUseRadixSort;
+
+  // Whether that sort key may be null. A null is encoded in the prefix as an in-range sentinel that
+  // can collide with a real value, so when the key is nullable the record comparator is still
+  // required to break prefix ties in the spill merge; only a non-null prefix-sortable key makes the
+  // prefix a total order over actual rows (see getSortedIterator / prepareBoundedMerge).
+  private final boolean keyNullable;
+
   /**
    * {@link RecordComparator} may probably keep the reference to the records they compared last
    * time, so we should not keep a {@link RecordComparator} instance inside
@@ -127,7 +137,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
       serializerManager, taskContext, recordComparatorSupplier, prefixComparator, initialSize,
         pageSizeBytes, numElementsForSpillThreshold, sizeInBytesForSpillThreshold,
-        spillMergeFactor, inMemorySorter, false /* ignored */);
+        spillMergeFactor, inMemorySorter, false /* ignored */, true /* keyNullable: ignored */);
     sorter.spill(Long.MAX_VALUE, sorter);
     taskContext.taskMetrics().incMemoryBytesSpilled(existingMemoryConsumption);
     sorter.totalSpillBytes += existingMemoryConsumption;
@@ -148,11 +158,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       int numElementsForSpillThreshold,
       long sizeInBytesForSpillThreshold,
       int spillMergeFactor,
-      boolean canUseRadixSort) {
+      boolean canUseRadixSort,
+      boolean keyNullable) {
     return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
       taskContext, recordComparatorSupplier, prefixComparator, initialSize, pageSizeBytes,
       numElementsForSpillThreshold, sizeInBytesForSpillThreshold, spillMergeFactor,
-      null, canUseRadixSort);
+      null, canUseRadixSort, keyNullable);
   }
 
   private UnsafeExternalSorter(
@@ -168,7 +179,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       long sizeInBytesForSpillThreshold,
       int spillMergeFactor,
       @Nullable UnsafeInMemorySorter existingInMemorySorter,
-      boolean canUseRadixSort) {
+      boolean canUseRadixSort,
+      boolean keyNullable) {
     super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
@@ -176,6 +188,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     this.taskContext = taskContext;
     this.recordComparatorSupplier = recordComparatorSupplier;
     this.prefixComparator = prefixComparator;
+    this.canUseRadixSort = canUseRadixSort;
+    this.keyNullable = keyNullable;
     this.spillMergeFactor = spillMergeFactor;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     // this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024
@@ -579,6 +593,18 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   }
 
   /**
+   * The record comparator the spill merge uses to break ties between records with equal key
+   * prefixes, or {@code null} when the prefix is a total order over actual rows -- a single,
+   * non-null, prefix-sortable key ({@code canUseRadixSort && !keyNullable}). In that case equal
+   * prefixes are equal keys, so the tie-break is skipped. A nullable key keeps the comparator
+   * because a null encodes to an in-range sentinel prefix that can collide with a real value.
+   */
+  @Nullable
+  private RecordComparator mergeTieBreakComparator() {
+    return (canUseRadixSort && !keyNullable) ? null : recordComparatorSupplier.get();
+  }
+
+  /**
    * Returns a sorted iterator. It is the caller's responsibility to call `cleanupResources()`
    * after consuming this iterator.
    */
@@ -601,7 +627,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       logger.info("Merging {} spill files in single round",
           MDC.of(LogKeys.NUM_SPILL_WRITERS, spillWriters.size()));
       final UnsafeSorterSpillMerger spillMerger = new UnsafeSorterSpillMerger(
-        recordComparatorSupplier.get(), prefixComparator, spillWriters.size());
+        mergeTieBreakComparator(), prefixComparator, spillWriters.size());
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
         spillMerger.addSpillIfNotEmpty(spillWriter.getReader(serializerManager));
       }
@@ -652,7 +678,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     // blocks.
     final UnsafeSorterBoundedSpillMerger merger = new UnsafeSorterBoundedSpillMerger(
         spillMergeFactor,
-        recordComparatorSupplier.get(),
+        mergeTieBreakComparator(),
         prefixComparator,
         blockManager,
         serializerManager,
