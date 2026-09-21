@@ -2171,6 +2171,11 @@ private[autocdc] object LeafInheritanceContext {
     // When the first row is an upsert, it supplies the baseline inheritance value for every leaf.
     // Even if it did not author a leaf itself, its stored value may have been coalesced from rows
     // preceding the affected window.
+    //
+    // If this first row is an existing upsert, it cannot itself be re-coalesced in this sweep:
+    // its predecessor is outside the affected window, so its stored value is the only safe
+    // carry-in. With an unchanged selection that value is already correct. After a selection
+    // change, correcting the anchor is deferred until reconciliation includes preceding history.
     val rowEstablishesCarryIn = rowInheritanceContext.isFirstUpsertRepresentingRow
     val rowUpdatesInheritanceChain =
       rowResetsInheritanceChain || rowContributesAuthoredValue || rowEstablishesCarryIn
