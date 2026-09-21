@@ -158,7 +158,11 @@ case class AdaptiveSparkPlanExec(
       // `RemoveRedundantSorts` runs after `OptimizeSkewedJoin` so that it can also clean up the
       // local sort left dangling right below the extra shuffle that skew join optimization may
       // insert between two joins.
-      RemoveRedundantSorts
+      RemoveRedundantSorts,
+      // Flips the final unmaterialized tail's exchanges to pipelined (SPARK-57399 pipelined
+      // channel, opt-in). Runs last so skew handling and sort cleanup have settled
+      // before placement is decided.
+      AQEEnablePipelinedShuffle
     ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
   }
 
@@ -837,6 +841,20 @@ case class AdaptiveSparkPlanExec(
    * 3) A list of the new query stages that have been created.
    */
   private def createNonResultQueryStages(plan: SparkPlan): CreateStageResult = plan match {
+    // A pipelined shuffle exchange must NOT be promoted to a query stage: a pipelined
+    // producer cannot materialize on its own (its consumer must be gang-scheduled with it;
+    // the DAGScheduler rejects a map-stage job over a pipelined dependency outright).
+    // Instead it stays inline and executes inside the final result job, whose shape the
+    // scheduler accepts as a fully-materialized regular prefix (the stages created below
+    // here) plus a pipelined suffix group. Recurse through it so child stages still
+    // materialize normally.
+    case s: ShuffleExchangeExec if s.pipelined =>
+      val result = createNonResultQueryStages(s.child)
+      CreateStageResult(
+        newPlan = s.withNewChildren(Seq(result.newPlan)),
+        allChildStagesMaterialized = result.allChildStagesMaterialized,
+        newStages = result.newStages)
+
     case e: Exchange =>
       // First have a quick check in the `stageCache` without having to traverse down the node.
       val reusedStage = if (conf.exchangeReuseEnabled) {

@@ -369,7 +369,7 @@ class GBTClassificationModel private[ml](
       }).apply(features)
     } else {
       udf((features: Vector) => {
-        val margin = GBTClassificationModel.margin(features, localRootNodes, localTreeWeights)
+        val margin = TreeEnsembleModel.predictRaw(features, localRootNodes, localTreeWeights)
         if (margin > 0.0) 1.0 else 0.0
       }).apply(features)
     }
@@ -380,13 +380,13 @@ class GBTClassificationModel private[ml](
     if (isDefined(thresholds)) {
       super.predict(features)
     } else {
-      if (margin(features) > 0.0) 1.0 else 0.0
+      if (TreeEnsembleModel.predictRaw(features, _trees, _treeWeights) > 0.0) 1.0 else 0.0
     }
   }
 
   @Since("3.0.0")
   override def predictRaw(features: Vector): Vector = {
-    val prediction: Double = margin(features)
+    val prediction = TreeEnsembleModel.predictRaw(features, _trees, _treeWeights)
     Vectors.dense(Array(-prediction, prediction))
   }
 
@@ -428,17 +428,6 @@ class GBTClassificationModel private[ml](
   lazy val featureImportances: Vector =
     TreeEnsembleModel.featureImportances(trees, numFeatures, perTreeNormalization = false)
 
-  /** Raw prediction for the positive class. */
-  private def margin(features: Vector): Double = {
-    var prediction = 0.0
-    var i = 0
-    while (i < _trees.length) {
-      prediction += _trees(i).rootNode.predictImpl(features).prediction * _treeWeights(i)
-      i += 1
-    }
-    prediction
-  }
-
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {
     new OldGBTModel(OldAlgo.Classification, _trees.map(_.toOld), _treeWeights)
@@ -466,24 +455,11 @@ class GBTClassificationModel private[ml](
 @Since("2.0.0")
 object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
 
-  private def margin(
-      features: Vector,
-      rootNodes: Array[Node],
-      treeWeights: Array[Double]): Double = {
-    var prediction = 0.0
-    var i = 0
-    while (i < rootNodes.length) {
-      prediction += rootNodes(i).predictImpl(features).prediction * treeWeights(i)
-      i += 1
-    }
-    prediction
-  }
-
   private def predictRaw(
       features: Vector,
       rootNodes: Array[Node],
       treeWeights: Array[Double]): Vector = {
-    val prediction = margin(features, rootNodes, treeWeights)
+    val prediction = TreeEnsembleModel.predictRaw(features, rootNodes, treeWeights)
     Vectors.dense(-prediction, prediction)
   }
 

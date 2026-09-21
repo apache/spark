@@ -668,6 +668,42 @@ Project [convert_timezone(America/Los_Angeles, UTC, cast(null as timestamp_ntz(9
 
 
 -- !query
+SELECT from_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', 'America/Los_Angeles')
+-- !query analysis
+Project [from_utc_timestamp(2015-07-24 00:00:00.123456789, America/Los_Angeles) AS from_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', America/Los_Angeles)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', 'America/Los_Angeles')
+-- !query analysis
+Project [to_utc_timestamp(2015-07-24 00:00:00.123456789, America/Los_Angeles) AS to_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', America/Los_Angeles)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(
+    to_utc_timestamp('2015-07-24 00:00:00.1234567' :: timestamp_ntz(7), 'America/Los_Angeles'))
+-- !query analysis
+Project [typeof(to_utc_timestamp(cast(2015-07-24 00:00:00.1234567 as timestamp_ntz(7)), America/Los_Angeles)) AS typeof(to_utc_timestamp(CAST(2015-07-24 00:00:00.1234567 AS TIMESTAMP_NTZ(7)), America/Los_Angeles))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT from_utc_timestamp(CAST(NULL AS timestamp_ntz(9)), 'America/Los_Angeles')
+-- !query analysis
+Project [from_utc_timestamp(cast(null as timestamp_ntz(9)), America/Los_Angeles) AS from_utc_timestamp(CAST(NULL AS TIMESTAMP_NTZ(9)), America/Los_Angeles)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', CAST(NULL AS STRING))
+-- !query analysis
+Project [to_utc_timestamp(2015-07-24 00:00:00.123456789, cast(null as string)) AS to_utc_timestamp(TIMESTAMP_NTZ '2015-07-24 00:00:00.123456789', CAST(NULL AS STRING))#x]
++- OneRowRelation
+
+
+-- !query
 SELECT max(c), min(c) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
@@ -1574,4 +1610,60 @@ SELECT element_at(map(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 'a',
        TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001')
 -- !query analysis
 Project [element_at(map(2020-01-01 00:00:00.000000001, a, 2020-01-01 00:00:00.000000999, b), 2020-01-01 00:00:00.000000001, None, true) AS element_at(map(TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', a, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', b), TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(SECOND, 5, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000123')
+-- !query analysis
+Project [timestampadd(SECOND, cast(5 as bigint), 2020-01-01 00:00:00.000000123, Some(America/Los_Angeles)) AS timestampadd(SECOND, 5, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000123')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(MICROSECOND, 2, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000123')
+-- !query analysis
+Project [timestampadd(MICROSECOND, cast(2 as bigint), 2020-01-01 00:00:00.000000123, Some(America/Los_Angeles)) AS timestampadd(MICROSECOND, 2, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000123')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 300, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000123')
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(300 as bigint), 2020-01-01 00:00:00.000000123, Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 300, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000123')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 900, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000200')
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(900 as bigint), 2020-01-01 00:00:00.0000002, Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 900, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000200')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, -300, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100')
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(-300 as bigint), 2020-01-01 00:00:00.0000001, Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, -300, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_NTZ '2020-01-01 00:00:00')
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(1 as bigint), 2020-01-01 00:00:00, Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 1, TIMESTAMP_NTZ '2020-01-01 00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 150, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7))
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(150 as bigint), cast(2020-01-01 00:00:00.0000001 as timestamp_ntz(7)), Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 150, CAST(2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestampadd(NANOSECOND, 50, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7))
+-- !query analysis
+Project [timestampadd(NANOSECOND, cast(50 as bigint), cast(2020-01-01 00:00:00.0000001 as timestamp_ntz(7)), Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 50, CAST(2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7)))#x]
 +- OneRowRelation

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, LeftAnti, LeftExistence, LeftOuter, LeftSingle, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, JoinType, LeftAnti, LeftExistence, LeftOuter, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -99,18 +99,33 @@ trait ShuffledJoin extends JoinCodegenSupport {
     // chain, and keyless inputs drop out of the `flatMap` rather than reading as unmarked. The
     // all-unmarked path must reach no `copy`: `transform`'s `fastEquals` would compare every
     // partition key.
-    val markers = partitionings.flatMap(PartitioningCollection.keyedMarkerOf)
+    val representatives = partitionings.map(PartitioningCollection.representativeOf)
+    val markers = representatives.flatten.map(_.mayContainUnknownPartitionKeys)
     if (markers.isEmpty || markers.forall(_ == markers.head)) {
       partitionings
     } else {
-      partitionings.map {
-        case partitioning: Partitioning with Expression
-            if PartitioningCollection.keyedMarkerOf(partitioning).contains(true) =>
+      // The whole input has to come out holding one layout object, not merely equal ones.
+      // `PartitioningCollection.fromPartitionings` returns a member untouched only where its layout
+      // is `eq` the canonical one, so a fresh copy here would make the unmarked side rebuild, and
+      // re-check the collection's invariant, on every `outputPartitioning` call.
+      //
+      // The guard above means an unmarked side exists, so its layout is the one to keep. The `eq`
+      // on the keys is what makes this free: the two sides share that reference wherever they were
+      // laid out on one another, which is the shape this arm is for, and where they do not the
+      // copy is used without walking the keys twice.
+      val unmarkedLayout = representatives.flatten
+        .find(!_.mayContainUnknownPartitionKeys).map(_.layout)
+      partitionings.zip(representatives).map {
+        case (partitioning: Partitioning with Expression, Some(representative))
+            if representative.mayContainUnknownPartitionKeys =>
+          val copied = representative.layout.copy(mayContainUnknownPartitionKeys = false)
+          val cleared = unmarkedLayout
+            .filter(l => (l.partitionKeys eq copied.partitionKeys) && l == copied)
+            .getOrElse(copied)
           partitioning.transform {
-            case k: KeyedPartitioning if k.mayContainUnknownPartitionKeys =>
-              k.copy(mayContainUnknownPartitionKeys = false)
+            case k: KeyedPartitioning => k.copy(layout = cleared)
           }.asInstanceOf[Partitioning]
-        case p => p
+        case (p, _) => p
       }
     }
   }
@@ -133,5 +148,29 @@ trait ShuffledJoin extends JoinCodegenSupport {
         throw new IllegalArgumentException(
           s"${getClass.getSimpleName} not take $x as the JoinType")
     }
+  }
+}
+
+object ShuffledJoin {
+  /**
+   * Whether replicating the right side over splits of the left cannot change the result. The
+   * right partition then reaches every left split, so no output row may come from a right row
+   * alone. Every join that drops unmatched right rows qualifies: its output is one row per left
+   * row or one per matching pair, and each left row still lands in exactly one split.
+   */
+  def canDuplicateRightSide(joinType: JoinType): Boolean = joinType match {
+    case _: InnerLike | LeftOuter | LeftSingle | LeftExistence(_) => true
+    case _ => false
+  }
+
+  /**
+   * Whether replicating the left side over splits of the right cannot change the result. Every
+   * output row must then be tied to one right row. The left-preserving joins are out for that
+   * reason, and so is LeftSemi: it drops unmatched left rows yet emits one row per left row, so
+   * a left row matching in two right splits would come out twice.
+   */
+  def canDuplicateLeftSide(joinType: JoinType): Boolean = joinType match {
+    case _: InnerLike | RightOuter => true
+    case _ => false
   }
 }

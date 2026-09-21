@@ -107,6 +107,22 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-59273: CHAR/VARCHAR columns") {
+    val schema = StructType(Seq(
+      StructField("c", CharType(3)),
+      StructField("v", VarcharType(3)),
+      StructField("a", ArrayType(CharType(3)))))
+    val rows = Seq(InternalRow(
+      UTF8String.fromString("a  "),
+      UTF8String.fromString("bc"),
+      new GenericArrayData(Seq(UTF8String.fromString("d  ")))))
+    val vectors = convertRows(rows, schema)
+
+    assert(vectors(0).getUTF8String(0).toString === "a  ")
+    assert(vectors(1).getUTF8String(0).toString === "bc")
+    assert(vectors(2).getArray(0).getUTF8String(0).toString === "d  ")
+  }
+
   test("non-nullable map column with null values") {
     val mapType = MapType(IntegerType, StringType, valueContainsNull = true)
     val schema = StructType(Seq(StructField("m", mapType, nullable = false)))
