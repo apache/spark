@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.{PrimitiveObjectI
 import org.apache.hadoop.hive.serde2.typeinfo.{CharTypeInfo, TypeInfo}
 import test.org.apache.spark.sql.MyDoubleAvg
 
-import org.apache.spark.SPARK_DOC_ROOT
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.expressions.Cast._
@@ -40,7 +40,7 @@ import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.HiveUDAFFunction
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CharType, VarcharType}
+import org.apache.spark.sql.types.{CharType, LongType, StringType, VarcharType}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -252,6 +252,41 @@ class HiveUDAFSuite extends QueryTest
           checkAnswer(aggregate, Row("def  "))
         }
       }
+    }
+  }
+
+  test("SPARK-59277: incompatible UDAF partial inspector triggers mismatch error") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // MockPartialStringFinalCharUDAF exposes STRING partial / CHAR(5) final.
+      // Feed LongType as the expected partial type to trigger the mismatch.
+      val udaf = HiveUDAFFunction(
+        "char_max",
+        HiveFunctionWrapper(classOf[MockPartialStringFinalCharUDAF].getName),
+        Seq(Literal("x")),
+        isUDAFBridgeRequired = false,
+        mutableAggBufferOffset = 0,
+        inputAggBufferOffset = 0,
+        partialResultDataType = LongType,
+        dataType = CharType(5))
+      intercept[SparkException] { udaf.serialize(null) }
+    }
+  }
+
+  test("SPARK-59277: incompatible UDAF final inspector triggers mismatch error") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // MockPartialStringFinalCharUDAF exposes CHAR(5) final.
+      // Feed VarcharType(5) as the expected final type: CHAR(5) vs VARCHAR(5)
+      // is incompatible (different bounded-string kind).
+      val udaf = HiveUDAFFunction(
+        "char_max",
+        HiveFunctionWrapper(classOf[MockPartialStringFinalCharUDAF].getName),
+        Seq(Literal("x")),
+        isUDAFBridgeRequired = false,
+        mutableAggBufferOffset = 0,
+        inputAggBufferOffset = 0,
+        partialResultDataType = StringType,
+        dataType = VarcharType(5))
+      intercept[SparkException] { udaf.serialize(null) }
     }
   }
 

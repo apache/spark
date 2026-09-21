@@ -903,10 +903,24 @@ private[hive] trait HiveInspectors {
       case (mi: MapObjectInspector, MapType(keyType, valueType, _)) =>
         val keyUnwrapper = unwrapperFor(mi.getMapKeyObjectInspector, keyType)
         val valueUnwrapper = unwrapperFor(mi.getMapValueObjectInspector, valueType)
+        val needsKeyValidation = CharVarcharUtils.hasCharVarchar(keyType)
         data: Any => {
           if (data != null) {
             val map = mi.getMap(data)
-            if (map == null) null else ArrayBasedMapData(map, keyUnwrapper, valueUnwrapper)
+            if (map == null) {
+              null
+            } else if (needsKeyValidation) {
+              val builder = new ArrayBasedMapBuilder(keyType, valueType)
+              val it = map.entrySet().iterator().asInstanceOf[
+                java.util.Iterator[java.util.Map.Entry[Any, Any]]]
+              while (it.hasNext) {
+                val e = it.next()
+                builder.put(keyUnwrapper(e.getKey), valueUnwrapper(e.getValue))
+              }
+              builder.build()
+            } else {
+              ArrayBasedMapData(map, keyUnwrapper, valueUnwrapper)
+            }
           } else {
             null
           }

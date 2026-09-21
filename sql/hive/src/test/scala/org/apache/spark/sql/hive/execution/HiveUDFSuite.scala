@@ -1126,6 +1126,37 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     }
   }
 
+  test("SPARK-59277: incompatible UDF runtime inspector triggers mismatch error") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // ReturnCharGenericUDF always returns CHAR(5), but we force VarcharType(5) as
+      // the captured analysis type. The runtime check must detect the mismatch.
+      val udf = HiveGenericUDF(
+        "return_char",
+        HiveFunctionWrapper(classOf[ReturnCharGenericUDF].getName),
+        Seq(Literal("x")),
+        VarcharType(5))
+      intercept[SparkException] { udf.eval(InternalRow.empty) }
+    }
+  }
+
+  test("SPARK-59277: incompatible UDTF runtime inspector triggers mismatch error") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // GenericUDTFExplode returns the element type of its input. Feeding it
+      // ARRAY<CHAR(5)> makes its runtime inspector return CHAR(5). We supply a
+      // captured schema claiming VARCHAR(5), so the check must fire.
+      val arrayType = ArrayType(CharType(5))
+      val values = new GenericArrayData(
+        Array[Any](UTF8String.fromString("abc  ")))
+      val schema = StructType(Seq(StructField("col", VarcharType(5))))
+      val udtf = HiveGenericUDTF(
+        "hive_explode",
+        HiveFunctionWrapper(classOf[GenericUDTFExplode].getName),
+        Seq(Literal(values, arrayType)),
+        schema)
+      intercept[SparkException] { udtf.eval(InternalRow.empty) }
+    }
+  }
+
   test("SPARK-58792: copied HiveGenericUDF nodes must not share a mutable GenericUDF") {
     val tsAttr = AttributeReference("ts", TimestampType, nullable = false)()
     val constTs = Literal(
