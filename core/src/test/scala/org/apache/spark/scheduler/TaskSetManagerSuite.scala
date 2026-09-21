@@ -792,17 +792,40 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-59138: task reruns on executor lost for an explicitly unreliable shuffle") {
-    sc = new SparkContext("local", "test")
+    // Globally reliable manager, but this shuffle falls back to local disk (registered
+    // isReliablyStored = false), so losing exec0 must rerun the map task. Guards TaskSetManager's
+    // own successful / Resubmitted bookkeeping, which DAGSchedulerSuite does not.
+    val conf = new SparkConf().set(config.SHUFFLE_IO_PLUGIN_CLASS.key,
+      classOf[TestShuffleDataIOWithReliableStorage].getName)
+      .set(config.LOCALITY_WAIT.key, "0")
+    sc = new SparkContext("local", "test", conf)
+    assert(sc.shuffleDriverComponents.supportsReliableStorage())
     sched = new FakeTaskScheduler(sc)
     val backend = mock(classOf[SchedulerBackend])
     doNothing().when(backend).reviveOffers()
     sched.initialize(backend)
 
+    var resubmittedTasks = 0
+    val dagScheduler = new FakeDAGScheduler(sc, sched) {
+      override def taskEnded(
+          task: Task[_],
+          reason: TaskEndReason,
+          result: Any,
+          accumUpdates: Seq[AccumulatorV2[_, _]],
+          metricPeaks: Array[Long],
+          taskInfo: TaskInfo): Unit = {
+        super.taskEnded(task, reason, result, accumUpdates, metricPeaks, taskInfo)
+        reason match {
+          case Resubmitted => resubmittedTasks += 1
+          case _ =>
+        }
+      }
+    }
+    sched.dagScheduler.stop()
+    sched.setDAGScheduler(dagScheduler)
+
     sched.addExecutor("exec0", "host0")
 
-    // Inverse of the reliably-stored case: resolved reliability is false (e.g. a local-disk
-    // fallback under a globally-reliable manager), so losing exec0 must rerun the map task. Guards
-    // TaskSetManager's own successful / Resubmitted bookkeeping, which DAGSchedulerSuite does not.
     val mapOutputTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     mapOutputTracker.registerShuffle(0, 2, 0, isReliablyStored = false)
 
@@ -821,28 +844,15 @@ class TaskSetManagerSuite
     assert(manager.successful(taskIndex))
 
     manager.executorLost("exec0", "host0", ExecutorDecommission())
+    // The map task is un-succeeded, a Resubmitted notification is sent to the DAGScheduler, and the
+    // now-pending task is re-offered on a replacement executor.
     assert(!manager.successful(taskIndex))
-
-    // Positive control: with the same shuffle re-registered as reliably stored, the identical
-    // executor loss preserves the task, so the rerun decision genuinely keys off the per-shuffle
-    // bit rather than always rerunning. (FakeTask task sets always report shuffleId 0.)
-    mapOutputTracker.unregisterShuffle(0)
-    mapOutputTracker.registerShuffle(0, 2, 0, isReliablyStored = true)
-    val reliableTaskSet = FakeTask.createShuffleMapTaskSet(2, 1, 0,
-      Seq(TaskLocation("host0", "exec0")), Seq(TaskLocation("host1", "exec1")))
-    sched.submitTasks(reliableTaskSet)
-    val reliableManager = sched.taskSetManagerForAttempt(1, 0).get
-    val reliableDesc = reliableManager.resourceOffer("exec0", "host0", PROCESS_LOCAL)._1
-    assert(reliableDesc.isDefined)
-    val reliableIndex = reliableDesc.get.index
-    val reliableId = reliableDesc.get.taskId
-    reliableManager.handleSuccessfulTask(reliableId, createTaskResult(reliableId.toInt))
-    mapOutputTracker.registerMapOutput(0, reliableIndex,
-      MapStatus(BlockManagerId("exec0", "host0", 8848), Array(1024), reliableId))
-    assert(reliableManager.successful(reliableIndex))
-
-    reliableManager.executorLost("exec0", "host0", ExecutorDecommission())
-    assert(reliableManager.successful(reliableIndex))
+    assert(resubmittedTasks === 1)
+    sched.addExecutor("exec2", "host2")
+    manager.executorAdded()
+    val replacementDesc = manager.resourceOffer("exec2", "host2", ANY)._1
+    assert(replacementDesc.isDefined)
+    assert(replacementDesc.get.index === taskIndex)
   }
 
   test("SPARK-32653: Decommissioned host should not be used to calculate locality levels") {
