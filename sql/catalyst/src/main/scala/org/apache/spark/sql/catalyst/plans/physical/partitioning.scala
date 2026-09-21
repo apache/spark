@@ -116,15 +116,26 @@ case class ClusteredDistribution(
   /**
    * Checks if `expressions` match all `clustering` expressions in the same ordering.
    *
-   * `Partitioning` should call this to check its expressions when `requireAllClusterKeys`
-   * is set to true.
+   * This is the `requireAllClusterKeys` half on its own. A `Partitioning` whose whole test is the
+   * flag asks `matchesClusterKeys` instead, which composes this with the other half.
    */
-  def areAllClusterKeysMatched(expressions: Seq[Expression]): Boolean = {
-    expressions.length == clustering.length &&
-      expressions.zip(clustering).forall {
-        case (l, r) => l.semanticEquals(r)
-      }
-  }
+  def areAllClusterKeysMatched(expressions: Seq[Expression]): Boolean =
+    expressions.corresponds(clustering)(_.semanticEquals(_))
+
+  /**
+   * Whether `expressions` are what this distribution asks a partitioning to be partitioned on:
+   * exactly the cluster keys in the same order when `requireAllClusterKeys` is set, and otherwise
+   * every expression naming one of them.
+   *
+   * This is the whole test for the five `satisfies0` implementations that ask it, so those read it
+   * rather than branching on the flag. It is not the whole of what the flag governs:
+   * `KeyedPartitioning` reads it in `keysSatisfy` and again in `mayProjectToClusterKeys`, where the
+   * other branch is about projecting keys down to the cluster keys rather than about naming them.
+   * Do not fold those into this.
+   */
+  def matchesClusterKeys(expressions: Seq[Expression]): Boolean =
+    if (requireAllClusterKeys) areAllClusterKeysMatched(expressions)
+    else expressions.forall(isClusterKey)
 
   /** Whether `e` is one of the cluster keys. */
   def isClusterKey(e: Expression): Boolean = clustering.exists(_.semanticEquals(e))
@@ -197,12 +208,8 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
     RangePartitioning(ordering, numPartitions)
   }
 
-  def areAllClusterKeysMatched(expressions: Seq[Expression]): Boolean = {
-    expressions.length == ordering.length &&
-      expressions.zip(ordering).forall {
-        case (x, o) => x.semanticEquals(o.child)
-      }
-  }
+  def areAllClusterKeysMatched(expressions: Seq[Expression]): Boolean =
+    expressions.corresponds(ordering)((e, o) => e.semanticEquals(o.child))
 }
 
 /**
@@ -299,17 +306,9 @@ trait HashPartitioningLike extends Expression with Partitioning with Unevaluable
     super.satisfies0(required) || {
       required match {
         case h: StatefulOpClusteredDistribution =>
-          expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
-            case (l, r) => l.semanticEquals(r)
-          }
-        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
-          if (requireAllClusterKeys) {
-            // Checks `HashPartitioning` is partitioned on exactly same clustering keys of
-            // `ClusteredDistribution`.
-            c.areAllClusterKeysMatched(expressions)
-          } else {
-            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-          }
+          expressions.corresponds(h.expressions)(_.semanticEquals(_))
+        case c: ClusteredDistribution =>
+          c.matchesClusterKeys(expressions)
         case _ => false
       }
     }
@@ -362,14 +361,8 @@ case class NullAwareHashPartitioning(expressions: Seq[Expression], numPartitions
       // Stateful operators require strict NULL-key co-location and therefore cannot consume
       // null-aware hash partitioning as a compatible clustered layout.
       required match {
-        case c @ ClusteredDistribution(
-            requiredClustering, requireAllClusterKeys, _, allowNullKeySpreading)
-            if allowNullKeySpreading =>
-          if (requireAllClusterKeys) {
-            c.areAllClusterKeysMatched(expressions)
-          } else {
-            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-          }
+        case c: ClusteredDistribution if c.allowNullKeySpreading =>
+          c.matchesClusterKeys(expressions)
         case _ => false
       }
     }
@@ -422,14 +415,8 @@ case class CoalescedNullAwareHashPartitioning(
       case _ => false
     }) || {
       required match {
-        case c @ ClusteredDistribution(
-            requiredClustering, requireAllClusterKeys, _, allowNullKeySpreading)
-            if allowNullKeySpreading =>
-          if (requireAllClusterKeys) {
-            c.areAllClusterKeysMatched(expressions)
-          } else {
-            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-          }
+        case c: ClusteredDistribution if c.allowNullKeySpreading =>
+          c.matchesClusterKeys(expressions)
         case _ => false
       }
     }
@@ -1267,15 +1254,8 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           //   `RangePartitioning(a, b, c)` satisfies `OrderedDistribution(a, b)`.
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
-        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
-          val expressions = ordering.map(_.child)
-          if (requireAllClusterKeys) {
-            // Checks `RangePartitioning` is partitioned on exactly same clustering keys of
-            // `ClusteredDistribution`.
-            c.areAllClusterKeysMatched(expressions)
-          } else {
-            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-          }
+        case c: ClusteredDistribution =>
+          c.matchesClusterKeys(ordering.map(_.child))
         case _ => false
       }
     }
@@ -1579,13 +1559,8 @@ case class ShufflePartitionIdPassThrough(
     super.satisfies0(required) || {
       required match {
         // TODO(SPARK-53428): Support Direct Passthrough Partitioning in the Streaming Joins
-        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
-          val partitioningExpressions = expr.child :: Nil
-          if (requireAllClusterKeys) {
-            c.areAllClusterKeysMatched(partitioningExpressions)
-          } else {
-            partitioningExpressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-          }
+        case c: ClusteredDistribution =>
+          c.matchesClusterKeys(expr.child :: Nil)
         case _ => false
       }
     }
