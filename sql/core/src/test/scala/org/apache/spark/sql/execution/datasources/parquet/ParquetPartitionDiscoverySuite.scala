@@ -1443,6 +1443,17 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
     assert(s"p_int=${ExternalCatalogUtils.DEFAULT_PARTITION_NAME}" === path)
   }
 
+  test("SPARK-51830: get path fragment of a non-numeric partition value " +
+    "when partition column validation is disabled") {
+    val spec = Map("p_int" -> "partition_value")
+    val schema = new StructType().add("p_int", "int")
+    assert("p_int=partition_value" ===
+      PartitioningUtils.getPathFragment(spec, schema, validatePartitionColumns = false))
+    intercept[NumberFormatException] {
+      PartitioningUtils.getPathFragment(spec, schema)
+    }
+  }
+
   test("read partitioned table - partition key included in Parquet file") {
     withTempDir { base =>
       for {

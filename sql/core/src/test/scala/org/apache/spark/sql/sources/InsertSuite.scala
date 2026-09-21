@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
+import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -3117,6 +3117,60 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         // The table path must survive a failed overwrite.
         assert(new java.io.File(tablePath).exists(),
           "Table path should not be permanently lost after a failed INSERT OVERWRITE")
+      }
+    }
+  }
+
+  test("SPARK-51830: dynamic partition insert into a table with a non-numeric partition value") {
+    // `spark.sql.legacy.skipTypeValidationOnAlterPartition` lets us register a partition whose
+    // value does not match the numeric type of the partition column
+    withSQLConf(SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION.key -> "true") {
+      withTable("t") {
+        sql("CREATE TABLE t(c1 int, p1 int) USING parquet PARTITIONED BY (p1)")
+        sql("ALTER TABLE t ADD PARTITION (p1 = 'legacy_value')")
+        val legacyLocation = new File(spark.sessionState.catalog
+          .getPartition(TableIdentifier("t"), Map("p1" -> "legacy_value")).location)
+        assert(legacyLocation.getName === "p1=legacy_value")
+
+        // A dynamic partition insert lists all the partitions of the table to collect the custom
+        // partition locations, which computes the default path of every existing partition.
+        intercept[NumberFormatException] {
+          sql("INSERT INTO t VALUES (1, 1)")
+        }
+
+        withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {
+          sql("INSERT INTO t VALUES (1, 1)")
+        }
+        val newLocation = new File(spark.sessionState.catalog
+          .getPartition(TableIdentifier("t"), Map("p1" -> "1")).location)
+        assert(newLocation.getParentFile === legacyLocation.getParentFile)
+        checkAnswer(spark.read.parquet(newLocation.getCanonicalPath), Row(1))
+      }
+    }
+  }
+
+  test("SPARK-51830: static partition insert with a non-numeric partition value") {
+    // The LEGACY store assignment policy keeps the non-numeric static partition value out of an
+    // ANSI cast, so the insert reaches the partition metadata refresh of the write command.
+    withSQLConf(
+      SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION.key -> "true",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.LEGACY.toString) {
+      withTable("t") {
+        sql("CREATE TABLE t(c1 int, p1 int) USING parquet PARTITIONED BY (p1)")
+
+        // Inserting no rows into a fully specified static partition registers the partition
+        // from its path fragment, which is computed from the static partition value.
+        intercept[NumberFormatException] {
+          sql("INSERT INTO t PARTITION (p1 = 'legacy_value') SELECT c1 FROM VALUES (1) t(c1)" +
+            " WHERE false")
+        }
+
+        withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {
+          sql("INSERT INTO t PARTITION (p1 = 'legacy_value') SELECT c1 FROM VALUES (1) t(c1)" +
+            " WHERE false")
+        }
+        assert(spark.sessionState.catalog.listPartitions(TableIdentifier("t")).map(_.spec) ===
+          Seq(Map("p1" -> "legacy_value")))
       }
     }
   }
