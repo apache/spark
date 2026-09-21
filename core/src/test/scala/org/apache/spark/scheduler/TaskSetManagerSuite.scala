@@ -822,6 +822,27 @@ class TaskSetManagerSuite
 
     manager.executorLost("exec0", "host0", ExecutorDecommission())
     assert(!manager.successful(taskIndex))
+
+    // Positive control: with the same shuffle re-registered as reliably stored, the identical
+    // executor loss preserves the task, so the rerun decision genuinely keys off the per-shuffle
+    // bit rather than always rerunning. (FakeTask task sets always report shuffleId 0.)
+    mapOutputTracker.unregisterShuffle(0)
+    mapOutputTracker.registerShuffle(0, 2, 0, isReliablyStored = true)
+    val reliableTaskSet = FakeTask.createShuffleMapTaskSet(2, 1, 0,
+      Seq(TaskLocation("host0", "exec0")), Seq(TaskLocation("host1", "exec1")))
+    sched.submitTasks(reliableTaskSet)
+    val reliableManager = sched.taskSetManagerForAttempt(1, 0).get
+    val reliableDesc = reliableManager.resourceOffer("exec0", "host0", PROCESS_LOCAL)._1
+    assert(reliableDesc.isDefined)
+    val reliableIndex = reliableDesc.get.index
+    val reliableId = reliableDesc.get.taskId
+    reliableManager.handleSuccessfulTask(reliableId, createTaskResult(reliableId.toInt))
+    mapOutputTracker.registerMapOutput(0, reliableIndex,
+      MapStatus(BlockManagerId("exec0", "host0", 8848), Array(1024), reliableId))
+    assert(reliableManager.successful(reliableIndex))
+
+    reliableManager.executorLost("exec0", "host0", ExecutorDecommission())
+    assert(reliableManager.successful(reliableIndex))
   }
 
   test("SPARK-32653: Decommissioned host should not be used to calculate locality levels") {

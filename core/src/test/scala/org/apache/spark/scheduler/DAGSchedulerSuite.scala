@@ -1252,14 +1252,18 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val reduceRdd = new MyRDD(sc, 1, List(failedDep, otherDep), tracker = mapOutputTracker)
     submit(reduceRdd, Array(0))
 
-    // Both failed-shuffle maps land on hostA; the unrelated shuffle's map is also on hostA.
+    // Put every map of both shuffles on hostA (the 1-task stage uses only the first entry). The
+    // failed shuffle's two hostA maps must both clear via the FetchFailed exemption; the unrelated
+    // reliable shuffle's hostA map stays registered.
     completeShuffleMapStageSuccessfully(0, 0, 1, hostNames = Seq("hostA", "hostA"))
-    completeShuffleMapStageSuccessfully(1, 0, 1, hostNames = Seq("hostA"))
+    completeShuffleMapStageSuccessfully(1, 0, 1, hostNames = Seq("hostA", "hostA"))
 
     complete(taskSets(2), Seq(
       (FetchFailed(makeBlockManagerId("hostA"), failedDep.shuffleId, 0L, 0, 0, "ignored"), null)))
 
     // The failed shuffle loses both hostA maps in one pass (it is exempted from preservation).
+    // getNumAvailableOutputs proves both are gone: the old per-map behavior would leave one.
+    assert(mapOutputTracker.getNumAvailableOutputs(failedDep.shuffleId) === 0)
     intercept[MetadataFetchFailedException] {
       mapOutputTracker.getMapSizesByExecutorId(failedDep.shuffleId, 0)
     }
