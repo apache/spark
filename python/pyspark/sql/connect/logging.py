@@ -33,7 +33,10 @@ _CONNECT_LOGGER_NAME = "pyspark.sql.connect"
 # inheriting the standard library root logger's WARNING instead of staying silent.
 _LOG_LEVEL_OFF = logging.CRITICAL + 1
 
-_handler: Optional[logging.Handler] = None
+# The one handler for the whole hierarchy. Child loggers propagate their records up to it.
+_HANDLER = logging.StreamHandler()
+_HANDLER.setFormatter(JSONFormatter())
+logging.getLogger(_CONNECT_LOGGER_NAME).addHandler(_HANDLER)
 
 
 def getLogger(name: Optional[str] = None) -> logging.Logger:
@@ -89,15 +92,7 @@ def configureLogging(level: Optional[str] = None) -> logging.Logger:
         Repeated calls no longer attach an additional handler, and a level set on the root
         Spark Connect logger before PySpark is imported is no longer overwritten.
     """
-    global _handler
-
     logger = logging.getLogger(_CONNECT_LOGGER_NAME)
-
-    if _handler is None:
-        _handler = logging.StreamHandler()
-        _handler.setFormatter(JSONFormatter())
-    if _handler not in logger.handlers:
-        logger.addHandler(_handler)
 
     if level is None:
         level = os.environ.get("SPARK_CONNECT_LOG_LEVEL")

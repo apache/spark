@@ -52,10 +52,6 @@ class ConnectLoggingTests(unittest.TestCase):
         ]:
             self._saved[logger.name] = (logger.level, logger.disabled, list(logger.handlers))
 
-        # Detach the handler owned by the module so that enabling a level in a test does not
-        # write to stderr. configureLogging reattaches it, which test_single_handler relies on.
-        logging.getLogger(CONNECT_ROOT).removeHandler(connect_logging._handler)
-
     def tearDown(self):
         for name, (level, disabled, handlers) in self._saved.items():
             logger = logging.getLogger(name)
@@ -78,8 +74,8 @@ class ConnectLoggingTests(unittest.TestCase):
         loggers = [logging.getLogger(name) for name in names]
         for logger in loggers:
             logger.addHandler(handler)
-        # Keep captured records off stderr, in case a preceding configureLogging reattached it.
-        logging.getLogger(CONNECT_ROOT).removeHandler(connect_logging._handler)
+        # Keep captured records off stderr. tearDown restores the handler list.
+        logging.getLogger(CONNECT_ROOT).removeHandler(connect_logging._HANDLER)
         try:
             yield buffer
         finally:
@@ -125,7 +121,7 @@ class ConnectLoggingTests(unittest.TestCase):
             with self.env_log_level():
                 connect_logging.configureLogging()
         handlers = logging.getLogger(CONNECT_ROOT).handlers
-        self.assertEqual(handlers.count(connect_logging._handler), 1)
+        self.assertEqual(handlers.count(connect_logging._HANDLER), 1)
 
     def test_env_var_sets_root_level(self):
         with self.env_log_level("debug"):
