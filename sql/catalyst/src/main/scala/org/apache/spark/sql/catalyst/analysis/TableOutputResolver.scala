@@ -157,7 +157,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         Nil,
         defaultValueFillMode,
         enforceFullOutput = true,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+        ansiStoreAssignmentCastCheck)
     } else {
       if (expected.size > query.output.size && !fillDefaultValue) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
@@ -198,7 +198,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       case (valueType, colType) if DataType.equalsIgnoreCompatibleNullability(valueType, colType) =>
         val canWriteExpr = canWrite(
           tableName, valueType, colType, byName = true, conf, addError, colPath,
-          ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+          ansiStoreAssignmentCastCheck)
         if (canWriteExpr) {
           val nullsHandled = checkNullability(value, col, conf, colPath)
           applyColumnMetadata(nullsHandled, col)
@@ -207,21 +207,18 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         }
       case (valueType: StructType, colType: StructType) =>
         val resolvedValue = resolveStructType(
-          tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue, enforceFullOutput = false,
-          ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+          tableName, value, valueType, col, colType, byName = true, conf, addError, colPath,
+          fillChildDefaultValue, enforceFullOutput = false, ansiStoreAssignmentCastCheck)
         resolvedValue.getOrElse(value)
       case (valueType: ArrayType, colType: ArrayType) =>
         val resolvedValue = resolveArrayType(
-          tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue, enforceFullOutput = false,
-          ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+          tableName, value, valueType, col, colType, byName = true, conf, addError, colPath,
+          fillChildDefaultValue, enforceFullOutput = false, ansiStoreAssignmentCastCheck)
         resolvedValue.getOrElse(value)
       case (valueType: MapType, colType: MapType) =>
         val resolvedValue = resolveMapType(
-          tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue, enforceFullOutput = false,
-          ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+          tableName, value, valueType, col, colType, byName = true, conf, addError, colPath,
+          fillChildDefaultValue, enforceFullOutput = false, ansiStoreAssignmentCastCheck)
         resolvedValue.getOrElse(value)
       case _ =>
         checkUpdate(
@@ -247,8 +244,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
     val canWriteValue = canWrite(
       tableName, value.dataType, attrTypeWithoutCharVarchar,
-      byName = true, conf, addError, colPath,
-      ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+      byName = true, conf, addError, colPath, ansiStoreAssignmentCastCheck)
 
     if (canWriteValue) {
       val nullCheckedValue = checkNullability(value, attr, conf, colPath)
@@ -377,8 +373,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
         DataTypeUtils.canWrite(
           tableName, valueType, expectedType, byName, conf.resolver, colPath.quoted,
-          conf.storeAssignmentPolicy, addError,
-          ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+          conf.storeAssignmentPolicy, addError, ansiStoreAssignmentCastCheck)
       case _ =>
         true
     }
@@ -445,21 +440,21 @@ object TableOutputResolver extends SQLConfHelper with Logging {
             resolveStructType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
               byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput,
-              ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+              ansiStoreAssignmentCastCheck)
           case (matchedType: ArrayType, expectedType: ArrayType) =>
             resolveArrayType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
               byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput,
-              ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+              ansiStoreAssignmentCastCheck)
           case (matchedType: MapType, expectedType: MapType) =>
             resolveMapType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
               byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput,
-              ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+              ansiStoreAssignmentCastCheck)
           case _ =>
             checkField(
               tableName, actualExpectedCol, matchedCol, byName = true, conf, addError, newColPath,
-              ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+              ansiStoreAssignmentCastCheck)
         }
       }
     }
@@ -556,20 +551,20 @@ object TableOutputResolver extends SQLConfHelper with Logging {
           resolveStructType(
             tableName, inputCol, inputType, expectedCol, expectedType,
             byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true,
-            ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+            ansiStoreAssignmentCastCheck)
         case (inputType: ArrayType, expectedType: ArrayType) =>
           resolveArrayType(
             tableName, inputCol, inputType, expectedCol, expectedType,
             byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true,
-            ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+            ansiStoreAssignmentCastCheck)
         case (inputType: MapType, expectedType: MapType) =>
           resolveMapType(
             tableName, inputCol, inputType, expectedCol, expectedType,
             byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true,
-            ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+            ansiStoreAssignmentCastCheck)
         case _ =>
           checkField(tableName, expectedCol, inputCol, byName = false, conf, addError, newColPath,
-            ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+            ansiStoreAssignmentCastCheck)
       }
     }
 
@@ -663,12 +658,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     // Generated columns cannot be nested, so the auto-filled set is always empty here.
     val (resolved, _) = if (byName) {
       reorderColumnsByName(tableName, fields, toAttributes(expectedType), conf, addError, colPath,
-        defaultValueMode, enforceFullOutput,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+        defaultValueMode, enforceFullOutput, ansiStoreAssignmentCastCheck)
     } else {
       resolveColumnsByPosition(
         tableName, fields, toAttributes(expectedType), conf, addError, colPath, fillDefaultValue,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+        ansiStoreAssignmentCastCheck)
     }
     if (resolved.length == expectedType.length) {
       val struct = CreateStruct(resolved)
@@ -709,12 +703,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val (res, _) = if (byName) {
       val defaultValueMode = if (fillDefaultValue) RECURSE else NONE
       reorderColumnsByName(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath,
-        defaultValueMode, enforceFullOutput,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+        defaultValueMode, enforceFullOutput, ansiStoreAssignmentCastCheck)
     } else {
       resolveColumnsByPosition(
         tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath, fillDefaultValue,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+        ansiStoreAssignmentCastCheck)
     }
     if (res.length == 1) {
       val castedArray =
@@ -755,12 +748,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     // Generated columns cannot be nested, so the auto-filled set is always empty here.
     val (resKey, _) = if (byName) {
       reorderColumnsByName(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath,
-        defaultValueFillMode, enforceFullOutput,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+        defaultValueFillMode, enforceFullOutput, ansiStoreAssignmentCastCheck)
     } else {
       resolveColumnsByPosition(
         tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath, fillDefaultValue,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+        ansiStoreAssignmentCastCheck)
     }
 
     val valueParam =
@@ -770,12 +762,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     // Generated columns cannot be nested, so the auto-filled set is always empty here.
     val (resValue, _) = if (byName) {
       reorderColumnsByName(tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath,
-        defaultValueFillMode, enforceFullOutput,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+        defaultValueFillMode, enforceFullOutput, ansiStoreAssignmentCastCheck)
     } else {
       resolveColumnsByPosition(
         tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath, fillDefaultValue,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+        ansiStoreAssignmentCastCheck)
     }
 
     if (resKey.length == 1 && resValue.length == 1) {
@@ -887,8 +878,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
     val canWriteExpr = canWrite(
       tableName, queryExpr.dataType, attrTypeWithoutCharVarchar,
-      byName, conf, addError, colPath,
-      ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+      byName, conf, addError, colPath, ansiStoreAssignmentCastCheck)
 
     if (canWriteExpr) {
       val prepared =

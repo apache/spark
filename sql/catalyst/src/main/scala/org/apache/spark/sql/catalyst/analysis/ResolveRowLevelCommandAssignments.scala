@@ -94,7 +94,7 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
   }
 
   private def validateStoreAssignmentPolicy(): Unit = {
-    // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
+    // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2
     if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
       throw QueryCompilationErrors.legacyStoreAssignmentPolicyError()
     }
@@ -146,13 +146,12 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     actions.map {
       case u @ UpdateAction(_, assignments, fromStar) =>
         u.copy(assignments = AssignmentUtils.alignUpdateAssignments(attrs, assignments,
-          fromStar, coerceNestedTypes,
-          ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck))
+          fromStar, coerceNestedTypes, ansiStoreAssignmentCastCheck))
       case d: DeleteAction =>
         d
       case i @ InsertAction(_, assignments) =>
         i.copy(assignments = AssignmentUtils.alignInsertAssignments(attrs, assignments,
-          coerceNestedTypes, ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck))
+          coerceNestedTypes, ansiStoreAssignmentCastCheck))
       case other =>
         throw new AnalysisException(
           errorClass = "_LEGACY_ERROR_TEMP_3052",

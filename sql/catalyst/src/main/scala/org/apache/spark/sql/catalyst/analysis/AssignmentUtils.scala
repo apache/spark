@@ -82,7 +82,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         colPath = Seq(attr.name),
         coerceNestedTypes,
         fromStar,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+        ansiStoreAssignmentCastCheck)
     }
 
     if (errors.nonEmpty) {
@@ -149,7 +149,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         val coerceMode = if (coerceNestedTypes) RECURSE else NONE
         TableOutputResolver.resolveUpdate(
           "", value, actualAttr, conf, err => errors += err, colPath, coerceMode,
-          ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+          ansiStoreAssignmentCastCheck)
       }
       Assignment(attr, resolvedValue)
     }
@@ -201,24 +201,22 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
           case _: StructType =>
             // Expand assignments to leaf fields (fixNullExpansion is applied inside)
             applyNestedFieldAssignments(col, colExpr, value, addError, colPath,
-              coerceNestedTypes, ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+              coerceNestedTypes, ansiStoreAssignmentCastCheck)
           case _ =>
             // For non-struct types, resolve directly
             val coerceMode = if (coerceNestedTypes) RECURSE else NONE
             TableOutputResolver.resolveUpdate("", value, col, conf, addError, colPath,
-              coerceMode,
-              ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+              coerceMode, ansiStoreAssignmentCastCheck)
         }
       } else {
         val value = exactAssignments.head.value
         val coerceMode = if (coerceNestedTypes) RECURSE else NONE
         TableOutputResolver.resolveUpdate("", value, col, conf, addError,
-          colPath, coerceMode,
-          ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+          colPath, coerceMode, ansiStoreAssignmentCastCheck)
       }
     } else {
       applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath, coerceNestedTypes,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+        ansiStoreAssignmentCastCheck)
     }
   }
 
@@ -292,14 +290,12 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
               // Field is a struct, recurse
               applyNestedFieldAssignments(fieldAttr, targetFieldExpr,
                 sourceFieldValue, addError, fieldPath, coerceNestedTypes,
-                ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+                ansiStoreAssignmentCastCheck)
             case _ =>
               // Field is not a struct, resolve with TableOutputResolver
               val coerceMode = if (coerceNestedTypes) RECURSE else NONE
-              TableOutputResolver.resolveUpdate(
-                "", sourceFieldValue, fieldAttr, conf, addError,
-                fieldPath, coerceMode,
-                ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck)
+              TableOutputResolver.resolveUpdate("", sourceFieldValue, fieldAttr, conf, addError,
+                fieldPath, coerceMode, ansiStoreAssignmentCastCheck)
           }
         }
         val namedStruct = toNamedStruct(structType, updatedFieldExprs)
