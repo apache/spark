@@ -700,7 +700,9 @@ case class EnsureRequirements(
     val agreeingPairs = for {
       l <- leftCandidates
       r <- rightCandidates
-      if l.areKeysCompatible(r)
+      // This is the one caller that runs the reduce, so it is the one that asks with the reduce
+      // allowed. See `areKeysCompatible`'s `allowReduce`.
+      if l.areKeysCompatible(r, allowReduce = true)
     } yield (l, r)
     val bestPair = agreeingPairs.maxByOption { case (l, r) => (rank(l, r), bothUnprojected(l, r)) }
     // No agreeing pair means no pairing can be planned at all: `isCompatibleWith` and the push
