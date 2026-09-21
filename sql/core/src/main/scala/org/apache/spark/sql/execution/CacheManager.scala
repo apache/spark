@@ -644,9 +644,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Refresh the given [[FileIndex]] if any of its root paths is a subdirectory
-   * of the `qualifiedPath`.
-   * @return whether the [[FileIndex]] is refreshed.
+   * Refresh the given [[FileIndex]] if one of its root paths is a subdirectory of
+   * `qualifiedPath` and either `includeTimeTravel` is true or the index is not an immutable
+   * time-travel snapshot.
+   * @return whether the [[FileIndex]] was refreshed.
    */
   private def refreshFileIndexIfNecessary(
       fileIndex: FileIndex,

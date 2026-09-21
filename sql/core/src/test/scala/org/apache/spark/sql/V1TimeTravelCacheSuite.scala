@@ -174,6 +174,44 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("write-driven recacheByPath includes a live V2 relation") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val options = CaseInsensitiveStringMap.empty()
+      val table = ParquetTable(
+        name = "live-table",
+        sparkSession = spark,
+        options = options,
+        paths = Seq(rootPath.toString),
+        userSpecifiedSchema = Some(tableSchema),
+        fallbackFileFormat = classOf[ParquetFileFormat])
+      assert(!table.fileIndex.isTimeTravel)
+
+      val relation = DataSourceV2Relation.create(
+        table,
+        catalog = None,
+        identifier = None,
+        options = options,
+        timeTravelSpec = None)
+      val df = ClassicDataset.ofRows(spark, relation).persist()
+      try {
+        df.count()
+        assertCacheLoading(df, expected = true)
+
+        val resourcePath = table.fileIndex.rootPaths.head
+        val fs = resourcePath.getFileSystem(spark.sessionState.newHadoopConf())
+        spark.sharedState.cacheManager.recacheByPath(
+          spark,
+          resourcePath,
+          fs,
+          includeTimeTravel = false)
+        assertCacheLoading(df, expected = false)
+      } finally {
+        df.unpersist(blocking = true)
+      }
+    }
+  }
+
   private def assertRecacheBehavior(
       relation: BaseRelation,
       includeTimeTravel: Boolean,
