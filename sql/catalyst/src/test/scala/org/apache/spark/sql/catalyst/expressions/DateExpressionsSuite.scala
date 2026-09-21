@@ -3055,6 +3055,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       TimestampDiff("SECOND", Literal.create(null, TimestampNTZNanosType(9)), ntz(sec, 0)), null)
     checkEvaluation(
       TimestampDiff("NANOSECOND", ntz(0, 1), Literal.create(null, TimestampNTZNanosType(9))), null)
+
+    // A NANOSECOND difference wider than ~292 years overflows a 64-bit nanosecond count. It is
+    // surfaced as DATETIME_OVERFLOW (matching the timestampadd side) rather than a raw
+    // ArithmeticException, on both the microsecond and the nanosecond-carrier code paths.
+    checkErrorInExpression[SparkArithmeticException](
+      TimestampDiff("NANOSECOND",
+        Literal(-5000000000000000L, TimestampType), Literal(5000000000000000L, TimestampType)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" -> "get the number of NANOSECOND between the two timestamps"))
+    checkErrorInExpression[SparkArithmeticException](
+      TimestampDiff("NANOSECOND", ntz(-5000000000000000L, 0), ntz(5000000000000000L, 0)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" -> "get the number of NANOSECOND between the two timestamps"))
   }
 
   /**

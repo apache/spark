@@ -1075,7 +1075,14 @@ object DateTimeUtils extends SparkDateTimeUtils {
     if (timestampDiffMap.contains(unitInUpperCase)) {
       val startLocalTs = getLocalDateTime(startTs, zoneId)
       val endLocalTs = getLocalDateTime(endTs, zoneId)
-      timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
+      try {
+        timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
+      } catch {
+        // NANOSECOND is the only unit whose count overflows a 64-bit long in the supported
+        // ~292-year range; surface DATETIME_OVERFLOW instead of a raw ArithmeticException.
+        case _: ArithmeticException =>
+          throw QueryExecutionErrors.timestampDiffOverflowError(unit)
+      }
     } else {
       throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPDIFF", unit)
     }
@@ -1108,12 +1115,19 @@ object DateTimeUtils extends SparkDateTimeUtils {
       endFraction: Int,
       zoneId: ZoneId): Long = {
     val unitInUpperCase = unit.toUpperCase(Locale.ROOT)
-    if (timestampDiffMap.contains(unitInUpperCase)) {
-      val startLocalTs = getLocalDateTime(startMicros, zoneId).plusNanos(startFraction.toLong)
-      val endLocalTs = getLocalDateTime(endMicros, zoneId).plusNanos(endFraction.toLong)
-      timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
-    } else {
-      throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPDIFF", unit)
+    timestampDiffMap.get(unitInUpperCase) match {
+      case Some(diff) =>
+        val startLocalTs = getLocalDateTime(startMicros, zoneId).plusNanos(startFraction.toLong)
+        val endLocalTs = getLocalDateTime(endMicros, zoneId).plusNanos(endFraction.toLong)
+        try {
+          diff(startLocalTs, endLocalTs)
+        } catch {
+          // The NANOSECOND count can overflow a 64-bit long past ~292 years.
+          case _: ArithmeticException =>
+            throw QueryExecutionErrors.timestampDiffOverflowError(unit)
+        }
+      case None =>
+        throw QueryExecutionErrors.invalidDatetimeUnitError("TIMESTAMPDIFF", unit)
     }
   }
 

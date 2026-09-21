@@ -5196,7 +5196,7 @@ case class TimestampDiff(
   // A nanosecond-precision operand is carried as a TimestampNanosVal object rather than a primitive
   // microsecond Long; when either operand is nanos, the difference is computed at full nanosecond
   // resolution so the sub-microsecond fraction participates in the truncated unit count.
-  private def isNanos: Boolean =
+  @transient private lazy val isNanos: Boolean =
     startTimestamp.dataType.isInstanceOf[AnyTimestampNanoType] ||
       endTimestamp.dataType.isInstanceOf[AnyTimestampNanoType]
 
