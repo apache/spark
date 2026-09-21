@@ -1687,6 +1687,13 @@ case class Logarithm(left: Expression, right: Expression)
  * @param mode rounding mode (e.g. HALF_UP, HALF_EVEN)
  * @param modeStr rounding mode string name (e.g. "ROUND_HALF_UP", "ROUND_HALF_EVEN")
  */
+object RoundBase {
+  // Beyond this magnitude a rounding scale cannot change the result for any Spark numeric type,
+  // since 1074 exceeds both the fractional digits of the smallest subnormal double and the
+  // integral digits of the largest finite double.
+  val MAX_SCALE: Int = 1100
+}
+
 abstract class RoundBase(child: Expression, scale: Expression,
     mode: BigDecimal.RoundingMode.Value, modeStr: String)
   extends BinaryExpression with Serializable with ImplicitCastInputTypes with SupportQueryContext {
@@ -1743,7 +1750,14 @@ abstract class RoundBase(child: Expression, scale: Expression,
   // avoid unnecessary `child` evaluation in both codegen and non-codegen eval
   // by checking if scaleV == null as well.
   private lazy val scaleV: Any = scale.eval(EmptyRow)
-  protected lazy val _scale: Int = scaleV.asInstanceOf[Int]
+  // The requested scale is clamped before it reaches `BigDecimal.setScale`, which throws for
+  // magnitudes beyond roughly 1e9. Clamping cannot change a result: no finite value has more
+  // than 309 integral digits, so every scale at or below `-MAX_SCALE` rounds to zero, and the
+  // exact decimal expansion of a finite double needs at most 1074 fractional digits, so every
+  // scale at or above `MAX_SCALE` leaves the value unchanged. It also keeps `-_scale` in
+  // `dataType` from overflowing for a scale of `Int.MinValue`.
+  protected lazy val _scale: Int =
+    math.max(-RoundBase.MAX_SCALE, math.min(RoundBase.MAX_SCALE, scaleV.asInstanceOf[Int]))
 
   override def initQueryContext(): Option[QueryContext] = {
     if (ansiEnabled) {
