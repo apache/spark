@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpe
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SchemaAlignmentConfig, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableContext, TableWritePrivilege, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableContext, TableWritePrivilege, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -62,7 +62,6 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.columns()).thenReturn(
       Array(Column.create("i", IntegerType), Column.create("s", StringType)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
-    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     t
   }
 
@@ -71,7 +70,6 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.columns()).thenReturn(
       Array(Column.create("s", StringType), Column.create("i", IntegerType)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
-    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     t
   }
 
@@ -80,7 +78,6 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.columns()).thenReturn(
       Array(Column.create("i", IntegerType), Column.create("x", StringType, false)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
-    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     when(t.name()).thenReturn("tab2")
     t
   }
@@ -98,7 +95,6 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.columns()).thenReturn(
       Array(Column.create("c1", CharType(5)), Column.create("c2", VarcharType(5))))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
-    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     t
   }
 
@@ -110,7 +106,6 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       Column.create("i", BooleanType, true, null, default1, null),
       Column.create("s", IntegerType, true, null, default2, null)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
-    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     t
   }
 
@@ -122,7 +117,6 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       Column.create("i", StringType),
       Column.create("e", StringType, true, null, default, null)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
-    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     t
   }
 
@@ -132,7 +126,6 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       Column.create("s", StringType),
       Column.create("default", StringType)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
-    when(t.schemaAlignmentConfig()).thenReturn(SchemaAlignmentConfig.DEFAULT)
     t
   }
 

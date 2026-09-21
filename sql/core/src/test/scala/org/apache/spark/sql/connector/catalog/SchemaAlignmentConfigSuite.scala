@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkThrowable
@@ -26,11 +26,13 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StringType, StructType}
 
 /**
- * A catalog that creates [[InMemoryRowLevelOperationTable]]s carrying a fixed
+ * A catalog that creates [[InMemoryRowLevelOperationTable]]s carrying the fixed
  * [[SchemaAlignmentConfig]] supplied by the concrete subclass.
  */
 abstract class SchemaAlignmentTestCatalog extends InMemoryRowLevelOperationTableCatalog {
@@ -52,11 +54,11 @@ abstract class SchemaAlignmentTestCatalog extends InMemoryRowLevelOperationTable
   }
 }
 
-/** A catalog whose tables opt into every [[SchemaAlignmentConfig]] relaxation. */
+/** A catalog whose tables defer the ANSI store-assignment cast check to runtime. */
 class RelaxedSchemaAlignmentCatalog extends SchemaAlignmentTestCatalog {
   override protected def tableConfig: SchemaAlignmentConfig = new SchemaAlignmentConfig {
-    override def allowLegacyStoreAssignmentPolicy(): Boolean = true
-    override def deferAnsiCastValidationToRuntime(): Boolean = true
+    override def ansiStoreAssignmentCastCheck(): AnsiStoreAssignmentCastCheck =
+      AnsiStoreAssignmentCastCheck.AT_RUNTIME
   }
 }
 
@@ -82,47 +84,11 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
       .set(s"spark.sql.catalog.$relaxed", classOf[RelaxedSchemaAlignmentCatalog].getName)
       .set(s"spark.sql.catalog.$strict", classOf[StrictSchemaAlignmentCatalog].getName)
 
-  private def withLegacyPolicy(f: => Unit): Unit =
-    withSQLConf(
-      SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.LEGACY.toString)(f)
-
   private def withAnsiPolicy(f: => Unit): Unit =
     withSQLConf(
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString)(f)
 
-  private def legacyRejected(f: => Unit): Unit =
-    checkError(
-      exception = intercept[AnalysisException](f),
-      condition = "_LEGACY_ERROR_TEMP_1000",
-      parameters = Map("configKey" -> SQLConf.STORE_ASSIGNMENT_POLICY.key))
-
-  test("allowLegacyStoreAssignmentPolicy: INSERT under LEGACY policy") {
-    withTable(s"$relaxed.t", s"$strict.t") {
-      sql(s"CREATE TABLE $relaxed.t (id INT) USING foo")
-      sql(s"CREATE TABLE $strict.t (id INT) USING foo")
-      withLegacyPolicy {
-        sql(s"INSERT INTO $relaxed.t VALUES (1)")
-        checkAnswer(sql(s"SELECT * FROM $relaxed.t"), Row(1))
-        legacyRejected(sql(s"INSERT INTO $strict.t VALUES (1)"))
-      }
-    }
-  }
-
-  test("allowLegacyStoreAssignmentPolicy: UPDATE under LEGACY policy") {
-    withTable(s"$relaxed.t", s"$strict.t") {
-      sql(s"CREATE TABLE $relaxed.t (id INT, data STRING) USING foo")
-      sql(s"CREATE TABLE $strict.t (id INT, data STRING) USING foo")
-      sql(s"INSERT INTO $relaxed.t VALUES (1, 'a')")
-      sql(s"INSERT INTO $strict.t VALUES (1, 'a')")
-      withLegacyPolicy {
-        sql(s"UPDATE $relaxed.t SET data = 'b' WHERE id = 1")
-        checkAnswer(sql(s"SELECT * FROM $relaxed.t"), Row(1, "b"))
-        legacyRejected(sql(s"UPDATE $strict.t SET data = 'b' WHERE id = 1"))
-      }
-    }
-  }
-
-  test("deferAnsiCastValidationToRuntime: INSERT of an ANSI-incompatible cast") {
+  test("AT_RUNTIME: INSERT of an ANSI-incompatible cast") {
     withTable(s"$relaxed.t", s"$strict.t") {
       sql(s"CREATE TABLE $relaxed.t (id INT) USING foo")
       sql(s"CREATE TABLE $strict.t (id INT) USING foo")
@@ -143,7 +109,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("deferAnsiCastValidationToRuntime: UPDATE with an ANSI-incompatible cast") {
+  test("AT_RUNTIME: UPDATE with an ANSI-incompatible cast") {
     withTable(s"$relaxed.t", s"$strict.t") {
       sql(s"CREATE TABLE $relaxed.t (id INT, data INT) USING foo")
       sql(s"CREATE TABLE $strict.t (id INT, data INT) USING foo")
@@ -166,26 +132,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("allowLegacyStoreAssignmentPolicy: MERGE under LEGACY policy") {
-    withTable(s"$relaxed.t", s"$strict.t") {
-      sql(s"CREATE TABLE $relaxed.t (id INT, data STRING) USING foo")
-      sql(s"CREATE TABLE $strict.t (id INT, data STRING) USING foo")
-      sql(s"INSERT INTO $relaxed.t VALUES (1, 'a')")
-      sql(s"INSERT INTO $strict.t VALUES (1, 'a')")
-      def merge(target: String): String =
-        s"""MERGE INTO $target t
-           |USING (SELECT 1 AS id, 'b' AS data) s
-           |ON t.id = s.id
-           |WHEN MATCHED THEN UPDATE SET t.data = s.data""".stripMargin
-      withLegacyPolicy {
-        sql(merge(s"$relaxed.t"))
-        checkAnswer(sql(s"SELECT * FROM $relaxed.t"), Row(1, "b"))
-        legacyRejected(sql(merge(s"$strict.t")))
-      }
-    }
-  }
-
-  test("deferAnsiCastValidationToRuntime: MERGE with an ANSI-incompatible cast") {
+  test("AT_RUNTIME: MERGE with an ANSI-incompatible cast") {
     withTable(s"$relaxed.t", s"$strict.t") {
       sql(s"CREATE TABLE $relaxed.t (id INT, data INT) USING foo")
       sql(s"CREATE TABLE $strict.t (id INT, data INT) USING foo")
@@ -211,7 +158,7 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("deferAnsiCastValidationToRuntime: structurally impossible casts are still rejected") {
+  test("AT_RUNTIME: structurally impossible casts are still rejected") {
     withTable(s"$relaxed.t") {
       sql(s"CREATE TABLE $relaxed.t (d DATE) USING foo")
       withAnsiPolicy {
@@ -220,6 +167,26 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
         intercept[AnalysisException] {
           sql(s"INSERT INTO $relaxed.t VALUES (true)")
         }
+      }
+    }
+  }
+
+  test("AT_RUNTIME: complex-to-string cast is deferred") {
+    withTable(s"$relaxed.t", s"$strict.t") {
+      sql(s"CREATE TABLE $relaxed.t (c STRING) USING foo")
+      sql(s"CREATE TABLE $strict.t (c STRING) USING foo")
+      withAnsiPolicy {
+        sql(s"INSERT INTO $relaxed.t VALUES (array(1, 2))")
+        checkAnswer(sql(s"SELECT * FROM $relaxed.t"), Row("[1, 2]"))
+        val strictInsert = s"INSERT INTO $strict.t VALUES (array(1, 2))"
+        checkError(
+          exception = intercept[AnalysisException](sql(strictInsert)),
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> s"`$strict`.`t`",
+            "colName" -> "`c`",
+            "srcType" -> "\"ARRAY<INT>\"",
+            "targetType" -> "\"STRING\""))
       }
     }
   }
@@ -249,8 +216,6 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     withTable(s"$relaxed.t", s"$strict.t") {
       sql(s"CREATE TABLE $relaxed.t (id INT) USING foo")
       sql(s"CREATE TABLE $strict.t (id INT) USING foo")
-      // A schema-evolving write reconstructs the table (adds the `data` column) via the catalog's
-      // alterTable; the config must survive that reconstruction.
       val evolving = spark.createDataFrame(
         java.util.Arrays.asList(Row(1, 5)),
         new StructType().add("id", IntegerType).add("data", IntegerType))
@@ -285,44 +250,21 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     result
   }
 
-  /**
-   * Append `source` by name into a fresh table with `targetSchema` on both the relaxed and the
-   * strict catalog, and assert both reject it at analysis with the same error condition. The point
-   * is that [[SchemaAlignmentConfig.deferAnsiCastValidationToRuntime]] relaxes only the atomic ANSI
-   * store-assignment cast; it must not relax structural checks, so both catalogs behave the same.
-   */
   private def assertBothReject(
-      targetSchema: StructType, source: DataFrame, condition: String): Unit =
+      targetSchema: StructType, source: DataFrame, errorClass: String): Unit =
     withAnsiPolicy {
       Seq(relaxed, strict).foreach { catalog =>
         appendByName(catalog, targetSchema, source) match {
           case Failure(error: SparkThrowable) =>
-            assert(error.getCondition == condition,
-              s"$catalog: expected $condition, got ${error.getCondition}")
+            assert(error.getCondition == errorClass,
+              s"$catalog: expected $errorClass, got ${error.getCondition}")
           case other =>
-            fail(s"$catalog: expected rejection with $condition, got $other")
+            fail(s"$catalog: expected rejection with $errorClass, got $other")
         }
       }
     }
 
-  /**
-   * Append `source` by name into a fresh table with `targetSchema` on both the relaxed and the
-   * strict catalog, and assert both accept it and store exactly `source`'s rows (round trip).
-   */
-  private def assertBothStore(targetSchema: StructType, source: DataFrame): Unit =
-    withAnsiPolicy {
-      val expected = source.collect().toSeq.map(_.toString).sorted
-      Seq(relaxed, strict).foreach { catalog =>
-        appendByName(catalog, targetSchema, source) match {
-          case Success(rows) =>
-            assert(rows.map(_.toString).sorted == expected, s"$catalog: got $rows")
-          case other =>
-            fail(s"$catalog: expected success storing $expected, got $other")
-        }
-      }
-    }
-
-  test("deferAnsiCastValidationToRuntime: renamed nested struct field is still rejected") {
+  test("AT_RUNTIME: renamed nested struct field is still rejected") {
     val target = new StructType()
       .add("s", new StructType().add("a", IntegerType).add("b", IntegerType))
     val source = spark.createDataFrame(
@@ -331,29 +273,4 @@ class SchemaAlignmentConfigSuite extends QueryTest with SharedSparkSession {
     assertBothReject(target, source, "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
   }
 
-  test("deferAnsiCastValidationToRuntime: nullable array element into non-null element type") {
-    val target = new StructType().add("a", ArrayType(IntegerType, containsNull = false))
-    val source = spark.createDataFrame(
-      java.util.Arrays.asList(Row(Seq(1, 2))),
-      new StructType().add("a", ArrayType(IntegerType, containsNull = true)))
-    assertBothStore(target, source)
-  }
-
-  test("deferAnsiCastValidationToRuntime: nullable map value into non-null value type") {
-    val target = new StructType()
-      .add("m", MapType(StringType, IntegerType, valueContainsNull = false))
-    val source = spark.createDataFrame(
-      java.util.Arrays.asList(Row(Map("k" -> 1))),
-      new StructType().add("m", MapType(StringType, IntegerType, valueContainsNull = true)))
-    assertBothStore(target, source)
-  }
-
-  test("deferAnsiCastValidationToRuntime: nullable child into non-null struct field") {
-    val target = new StructType()
-      .add("s", new StructType().add("a", IntegerType, nullable = false))
-    val source = spark.createDataFrame(
-      java.util.Arrays.asList(Row(Row(1))),
-      new StructType().add("s", new StructType().add("a", IntegerType, nullable = true)))
-    assertBothStore(target, source)
-  }
 }

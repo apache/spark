@@ -24,10 +24,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, In
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.SchemaAlignmentConfig
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
+import org.apache.spark.sql.internal.connector.ConfigurableSchemaAlignment
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
 
 /**
  * A rule that resolves assignments in row-level commands.
@@ -41,37 +42,37 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && u.rewritable && !u.aligned =>
-      val schemaAlignment = schemaAlignmentConfig(u.table)
-      validateStoreAssignmentPolicy(schemaAlignment)
+      validateStoreAssignmentPolicy()
       val newTable = cleanAttrMetadata(u.table)
       val newAssignments = AssignmentUtils.alignUpdateAssignments(u.table.output, u.assignments,
-        fromStar = false, coerceNestedTypes = false, schemaAlignment = schemaAlignment)
+        fromStar = false, coerceNestedTypes = false,
+        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck(u.table))
       u.copy(table = newTable, assignments = newAssignments)
 
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && !u.aligned =>
       resolveAssignments(u)
 
     case m: MergeIntoTable if m.rewritable && shouldAlignAssignments(m) && containsFinalSchema(m) =>
-      val schemaAlignment = schemaAlignmentConfig(m.targetTable)
-      validateStoreAssignmentPolicy(schemaAlignment)
+      validateStoreAssignmentPolicy()
       val coerceNestedTypes = conf.coerceMergeNestedTypes && m.withSchemaEvolution
+      val castCheck = ansiStoreAssignmentCastCheck(m.targetTable)
       m.copy(
         targetTable = cleanAttrMetadata(m.targetTable),
         matchedActions = alignActions(
           m.targetTable.output,
           m.matchedActions,
           coerceNestedTypes,
-          schemaAlignment),
+          castCheck),
         notMatchedActions = alignActions(
           m.targetTable.output,
           m.notMatchedActions,
           coerceNestedTypes,
-          schemaAlignment),
+          castCheck),
         notMatchedBySourceActions = alignActions(
           m.targetTable.output,
           m.notMatchedBySourceActions,
           coerceNestedTypes,
-          schemaAlignment))
+          castCheck))
 
     case m: MergeIntoTable if shouldAlignAssignments(m) && containsFinalSchema(m) =>
       resolveAssignments(m)
@@ -85,16 +86,16 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     !m.schemaEvolutionEnabled || (m.schemaEvolutionReady && m.pendingSchemaChanges.isEmpty)
   }
 
-  private def schemaAlignmentConfig(target: LogicalPlan): SchemaAlignmentConfig =
+  private def ansiStoreAssignmentCastCheck(target: LogicalPlan): AnsiStoreAssignmentCastCheck = {
     target.collectFirst {
-      case relation: DataSourceV2Relation => relation.table.schemaAlignmentConfig()
-    }.getOrElse(SchemaAlignmentConfig.DEFAULT)
+      case ExtractV2Table(table: ConfigurableSchemaAlignment) =>
+        table.schemaAlignmentConfig().ansiStoreAssignmentCastCheck()
+    }.getOrElse(AnsiStoreAssignmentCastCheck.AT_ANALYSIS)
+  }
 
-  private def validateStoreAssignmentPolicy(schemaAlignment: SchemaAlignmentConfig): Unit = {
-    // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2, unless the
-    // target table opts into it via its SchemaAlignmentConfig.
-    if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY &&
-        !schemaAlignment.allowLegacyStoreAssignmentPolicy()) {
+  private def validateStoreAssignmentPolicy(): Unit = {
+    // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
+    if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
       throw QueryCompilationErrors.legacyStoreAssignmentPolicyError()
     }
   }
@@ -141,16 +142,17 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
       attrs: Seq[Attribute],
       actions: Seq[MergeAction],
       coerceNestedTypes: Boolean,
-      schemaAlignment: SchemaAlignmentConfig): Seq[MergeAction] = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Seq[MergeAction] = {
     actions.map {
       case u @ UpdateAction(_, assignments, fromStar) =>
         u.copy(assignments = AssignmentUtils.alignUpdateAssignments(attrs, assignments,
-          fromStar, coerceNestedTypes, schemaAlignment = schemaAlignment))
+          fromStar, coerceNestedTypes,
+          ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck))
       case d: DeleteAction =>
         d
       case i @ InsertAction(_, assignments) =>
         i.copy(assignments = AssignmentUtils.alignInsertAssignments(attrs, assignments,
-          coerceNestedTypes, schemaAlignment = schemaAlignment))
+          coerceNestedTypes, ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck))
       case other =>
         throw new AnalysisException(
           errorClass = "_LEGACY_ERROR_TEMP_3052",
