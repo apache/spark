@@ -6390,8 +6390,9 @@ class KeyGroupedPartitioningSuite
   test("SPARK-50593: generalized identity is strictly more discriminating than " +
       "bucket-only identity") {
     // R1/R2: the widened TransformFunctionId(canonicalName, literalChildren) must separate
-    // truncate widths, which a bucket-only identity (numBucketsOpt) could not -- that is the whole
-    // point of this change -- while still separating every pair master's identity already did.
+    // truncate widths, which a bucket-only identity (a bare Option[Int] bucket count) could not
+    // -- that is the whole point of this change -- while still separating every pair master's
+    // identity already did.
     val a = attr("a")
     import org.apache.spark.sql.catalyst.expressions.Expression
     def truncate(e: Expression, width: Int): TransformExpression =

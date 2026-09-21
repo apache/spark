@@ -122,7 +122,8 @@ class TransformExpressionSuite extends SparkFunSuite {
     // (canonicalName, None) regardless of its literal parameter, so truncate(3)/truncate(5)
     // (lcm 15) and truncate(7)/truncate(11) (lcm 77) would both collapse to the same
     // TransformFunctionId pair and compare equal here -- two unrelated key spaces mistaken for
-    // one. The widened identity (literal params instead of numBucketsOpt) fixes that.
+    // one. The widened identity (literal params instead of an Option[Int] bucket count) fixes
+    // that.
     val fn = new NamedFunction("test.truncate")
     def truncate(width: Int): TransformExpression = bucket(fn, a, width)
 
