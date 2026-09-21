@@ -281,6 +281,17 @@ struct<ts:timestamp_ntz,matched_s:string>
 
 
 -- !query
+SELECT t.tm, r.s AS matched_s
+FROM VALUES (TIME '10:00:00') AS t(tm) ASOF JOIN
+     VALUES ('09:00:00'), ('10:00:00') AS r(s)
+  MATCH_CONDITION (t.tm >= r.s)
+-- !query schema
+struct<tm:time(6),matched_s:string>
+-- !query output
+10:00:00	10:00:00
+
+
+-- !query
 SELECT t.a, r.a AS matched_a
 FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
      VALUES (ARRAY(1, 2)), (ARRAY(1, 4)) AS r(a)

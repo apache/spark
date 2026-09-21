@@ -2856,7 +2856,8 @@ object AsOfJoin {
 
   /**
    * Sort-merge ASOF join sorts each side by these expressions (after equi-keys) so the
-   * right-side buffer is ordered consistently with MATCH_CONDITION lexicographic comparison.
+   * right-side buffer is ordered consistently with the MATCH_CONDITION comparison (scalar
+   * operands are already coerced to a common type; composites are handled case by case below).
    *
    * SQL tuple literals `(t.a, t.b)` are flattened to scalar leaves. Whole struct columns
    * (`t.k >= r.k`) sort by the struct value directly so nested struct shapes stay intact.

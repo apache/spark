@@ -158,6 +158,12 @@ FROM VALUES (TIMESTAMP_NTZ '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
      VALUES ('2026-06-29 09:00:00'), ('2026-06-29 10:00:00') AS r(s)
   MATCH_CONDITION (t.ts >= r.s);
 
+-- FVT-ASOF-4-016f: coercion TIME vs STRING (SPARK-59527), the string is cast to TIME
+SELECT t.tm, r.s AS matched_s
+FROM VALUES (TIME '10:00:00') AS t(tm) ASOF JOIN
+     VALUES ('09:00:00'), ('10:00:00') AS r(s)
+  MATCH_CONDITION (t.tm >= r.s);
+
 -- FVT-ASOF-4-017: ARRAY<INT> operand
 SELECT t.a, r.a AS matched_a
 FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN

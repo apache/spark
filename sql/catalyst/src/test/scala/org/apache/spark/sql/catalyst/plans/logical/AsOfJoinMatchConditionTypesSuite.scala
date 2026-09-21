@@ -55,8 +55,11 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     // BOOLEAN/BINARY vs STRING have a comparison common type, so ASOF accepts them like `>=`.
     assert(MatchConditionTypes.areOperandsCompatible(BooleanType, StringType))
     assert(MatchConditionTypes.areOperandsCompatible(StringType, BinaryType))
-    assert(MatchConditionTypes.stringComparisonCommonType(BooleanType, StringType).nonEmpty)
-    assert(MatchConditionTypes.stringComparisonCommonType(StringType, BinaryType).nonEmpty)
+    // Common type is the non-string type, so sort and comparison agree (not lexicographic).
+    assert(
+      MatchConditionTypes.stringComparisonCommonType(BooleanType, StringType).contains(BooleanType))
+    assert(
+      MatchConditionTypes.stringComparisonCommonType(StringType, BinaryType).contains(BinaryType))
   }
 
   test("scalar string vs interval is rejected, matching the comparison operator") {
@@ -72,6 +75,11 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     val leftStruct = StructType(StructField("f", DateType) :: Nil)
     val rightStruct = StructType(StructField("g", StringType) :: Nil)
     assert(!MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
+    // TIME is a DatetimeType, so a string vs TIME field is rejected like DATE, though the
+    // scalar TIME vs STRING pair above is accepted.
+    val leftTimeStruct = StructType(StructField("f", TimeType()) :: Nil)
+    val rightTimeStruct = StructType(StructField("g", StringType) :: Nil)
+    assert(!MatchConditionTypes.areOperandsCompatible(leftTimeStruct, rightTimeStruct))
   }
 
   test("array elements keep the strict rule: string vs numeric element is rejected") {
