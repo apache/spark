@@ -655,7 +655,8 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
   /**
    * While SPJ is active the scan's partitioning has to survive runtime filtering, so the
    * post-filter partitions still line up with the other side of the join: splits may be pruned,
-   * but the source may not drop a partition key, invent one, or grow a key's split count.
+   * but the source may not drop a partition key, invent one, grow a key's split count, or report a
+   * key of a different shape than the partitioning was built from.
    */
   test("data source that breaks the partitioning it reported -> rejected") {
     val partAttr = AttributeReference("part", IntegerType)()
@@ -680,6 +681,12 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       replanAfterFiltering(Seq(KeyedInputPartition(1), KeyedInputPartition(1)))
     }
     assert(splitsGrown.getMessage.contains("must not report new partitions for a given key"))
+
+    val wrongArity = intercept[SparkException] {
+      replanAfterFiltering(Seq(WideKeyedInputPartition(1, 99)))
+    }
+    assert(wrongArity.getMessage.contains("partition key with 2 field(s)"))
+    assert(wrongArity.getMessage.contains("1 partition expression(s)"))
   }
 
   // ---------------------------------------------------------------------------
@@ -851,6 +858,11 @@ private class NestedFilterAttributeScan extends SupportsRuntimeCatalystFiltering
 
 private case class KeyedInputPartition(key: Int) extends InputPartition with HasPartitionKey {
   override def partitionKey(): InternalRow = InternalRow(key)
+}
+
+private case class WideKeyedInputPartition(key: Int, extra: Int)
+  extends InputPartition with HasPartitionKey {
+  override def partitionKey(): InternalRow = InternalRow(key, extra)
 }
 
 /**

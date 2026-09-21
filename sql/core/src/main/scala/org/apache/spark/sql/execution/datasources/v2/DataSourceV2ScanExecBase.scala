@@ -109,8 +109,10 @@ trait DataSourceV2ScanExecBase
         // `PartitioningCollection.fromPartitionings` refuses them. See `KeyedPartitioning.apply`
         // for why this is the ordering to sort with.
         val keys = inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey())
-          .sorted(KeyedPartitioning.groupedKeyRowOrdering(exprs.map(_.dataType)))
-        Some(KeyedPartitioning(exprs, keys))
+        // Ahead of the sort, which reads every key at the declared positions.
+        KeyedPartitioning.checkPartitionKeyArity(exprs, keys)
+        val ordering = KeyedPartitioning.groupedKeyRowOrdering(exprs.map(_.dataType))
+        Some(KeyedPartitioning(exprs, keys.sorted(ordering)))
       case _ => None
     }
   }

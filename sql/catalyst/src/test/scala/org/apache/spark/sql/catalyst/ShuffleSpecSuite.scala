@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, DirectShufflePartitionID, Expression, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -1026,6 +1026,26 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // `flatten` would answer `Nil` instead, and the ranking's `max` over it throws a worse message.
     val e = intercept[IllegalArgumentException](ShuffleSpecCollection(Nil))
     assert(e.getMessage.contains("expected specs to be non-empty"))
+  }
+
+  test("SPARK-59642: a reported partition key of a different arity is rejected at construction") {
+    val expressions = Seq($"a".int, $"b".int)
+    val wellFormed = InternalRow(1, 1)
+
+    val tooWide = intercept[SparkException] {
+      KeyedPartitioning(expressions, Seq(wellFormed, InternalRow(2, 2, 99)))
+    }
+    assert(tooWide.getMessage.contains("partition key with 3 field(s)"))
+    assert(tooWide.getMessage.contains("2 partition expression(s)"))
+
+    val tooNarrow = intercept[SparkException] {
+      KeyedPartitioning(expressions, Seq(wellFormed, InternalRow(2)))
+    }
+    assert(tooNarrow.getMessage.contains("partition key with 1 field(s)"))
+    assert(tooNarrow.getMessage.contains("2 partition expression(s)"))
+
+    val partitioning = KeyedPartitioning(expressions, Seq(wellFormed, InternalRow(2, 2)))
+    assert(partitioning.numPartitions === 2)
   }
 
   test("SPARK-59256: flattening reaches the members of a nested collection") {

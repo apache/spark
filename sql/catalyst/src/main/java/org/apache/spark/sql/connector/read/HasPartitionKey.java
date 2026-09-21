@@ -36,7 +36,9 @@ import org.apache.spark.sql.catalyst.InternalRow;
  * <p>
  * It is implementor's responsibility to ensure that when an input partition implements this
  * interface, its records all have the same value for the partition keys. Spark doesn't check
- * this property.
+ * that the records agree. It does check the key's width: the row returned by
+ * {@link #partitionKey()} must hold one field per partition expression the scan reports through
+ * {@link SupportsReportPartitioning}, and Spark rejects a key of any other width.
  *
  * @see org.apache.spark.sql.connector.read.SupportsReportPartitioning
  * @see org.apache.spark.sql.connector.read.partitioning.Partitioning
