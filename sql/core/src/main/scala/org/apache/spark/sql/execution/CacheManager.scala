@@ -597,8 +597,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Tries to re-cache all the cache entries that contain `resourcePath` in one or more
-   * `HadoopFsRelation` node(s) as part of its logical plan.
+   * Tries to re-cache matching entries whose logical plans contain a file-backed relation under
+   * `resourcePath`. If `includeTimeTravel` is false, immutable time-travel relations are ignored
+   * when deciding whether an entry must be re-cached; another matching live relation in the same
+   * plan can still trigger re-caching.
    */
   def recacheByPath(
       spark: SparkSession,

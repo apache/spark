@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.classic.{Dataset => ClassicDataset}
@@ -29,9 +30,13 @@ import org.apache.spark.sql.execution.datasources.{
   LogicalRelation,
   PartitionDirectory}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
 
@@ -92,6 +97,81 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
       isTimeTravel = true,
       writeDriven = false,
       expectedToRecache = true)
+  }
+
+  test("V1 file write preserves a time travel cache and refreshes a live cache") {
+    withTempPath { path =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+        val dataPath = path.getCanonicalPath
+        spark.range(1).write.parquet(dataPath)
+
+        val pinnedIndex = new TestFileIndex(
+          isTimeTravel = true,
+          rootPaths = Seq(new Path(path.toURI)))
+        val pinned = ClassicDataset.ofRows(
+          spark,
+          LogicalRelation(newFileRelation(pinnedIndex), tableMetadata)).persist()
+        val live = spark.read.parquet(dataPath).persist()
+        try {
+          pinned.count()
+          checkAnswer(live, Row(0L))
+          assertCacheLoading(pinned, expected = true)
+          assertCacheLoading(live, expected = true)
+
+          spark.range(1, 2).write.mode("append").parquet(dataPath)
+
+          assertCacheLoading(pinned, expected = true)
+          assertCacheLoading(live, expected = false)
+          assert(pinnedIndex.refreshCount === 0)
+          checkAnswer(spark.read.parquet(dataPath), Seq(Row(0L), Row(1L)))
+          assertCacheLoading(live, expected = true)
+        } finally {
+          pinned.unpersist(blocking = true)
+          live.unpersist(blocking = true)
+        }
+      }
+    }
+  }
+
+  test("recacheByPath excludes a V2 time-travel relation only for write-driven refresh") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val options = CaseInsensitiveStringMap.empty()
+      val table = ParquetTable(
+        name = "time-travel-table",
+        sparkSession = spark,
+        options = options,
+        paths = Seq(rootPath.toString),
+        userSpecifiedSchema = Some(tableSchema),
+        fallbackFileFormat = classOf[ParquetFileFormat])
+      assert(!table.fileIndex.isTimeTravel)
+
+      val relation = DataSourceV2Relation.create(
+        table,
+        catalog = None,
+        identifier = None,
+        options = options,
+        timeTravelSpec = Some(AsOfVersion("v1")))
+      val df = ClassicDataset.ofRows(spark, relation).persist()
+      try {
+        df.count()
+        assertCacheLoading(df, expected = true)
+
+        val resourcePath = table.fileIndex.rootPaths.head
+        val fs = resourcePath.getFileSystem(spark.sessionState.newHadoopConf())
+        spark.sharedState.cacheManager.recacheByPath(
+          spark,
+          resourcePath,
+          fs,
+          includeTimeTravel = false)
+        assertCacheLoading(df, expected = true)
+
+        spark.sharedState.cacheManager.recacheByPath(spark, resourcePath, fs)
+        assertCacheLoading(df, expected = false)
+      } finally {
+        df.unpersist(blocking = true)
+      }
+    }
   }
 
   private def assertRecacheBehavior(
