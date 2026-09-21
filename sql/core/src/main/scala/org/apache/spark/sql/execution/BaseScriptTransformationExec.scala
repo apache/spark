@@ -31,10 +31,27 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute,
+  AttributeSet,
+  BoundReference,
+  Cast,
+  Expression,
+  GenericInternalRow,
+  JsonToStructs,
+  Literal,
+  StructsToJson,
+  UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{
+  ArrayBasedMapBuilder,
+  ArrayData,
+  CharVarcharUtils,
+  DateTimeUtils,
+  GenericArrayData,
+  IntervalUtils,
+  MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -201,7 +218,15 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   private lazy val outputFieldWriters: Seq[String => Any] = output.map { attr =>
     val converter = CatalystTypeConverters.createToCatalystConverter(attr.dataType)
     attr.dataType match {
-      case StringType => wrapperConvertException(data => data, converter)
+      case _: CharType | _: VarcharType =>
+        // First-class CHAR/VARCHAR must not use Hive LazySimpleSerDe's null-on-error path.
+        (data: String) =>
+          if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
+            null
+          } else {
+            converter(data)
+          }
+      case _: StringType => wrapperConvertException(data => data, converter)
       case BooleanType => wrapperConvertException(data => data.toBoolean, converter)
       case ByteType => wrapperConvertException(data => data.toByte, converter)
       case BinaryType =>
@@ -241,6 +266,29 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         data => IntervalUtils.microsToDuration(
           IntervalUtils.castStringToDTInterval(UTF8String.fromString(data), start, end)),
         converter)
+      case dt @ (_: ArrayType | _: MapType | _: StructType)
+          if CharVarcharUtils.hasCharVarchar(dt) =>
+        val physicalType = ScriptTransformationIOSchema.toUnboundedStringType(dt)
+        // JSON object keys are strings. Cast them to the declared map key type after parsing.
+        val jsonType = ScriptTransformationIOSchema.toJsonMapKeyType(physicalType)
+        val complexTypeFactory = JsonToStructs(
+          jsonType,
+          ioschema.outputSerdeProps.toMap,
+          Literal(null),
+          Some(conf.sessionLocalTimeZone))
+        val parsedToPhysical = if (jsonType.sameType(physicalType)) {
+          identity[Any] _
+        } else {
+          val restoreMapKeys = ScriptTransformationIOSchema.makeJsonMapKeyRestorer(
+            physicalType, Some(conf.sessionLocalTimeZone))
+          value: Any => restoreMapKeys(value)
+        }
+        val toScala = CatalystTypeConverters.createToScalaConverter(physicalType)
+        val parser = wrapperConvertException(
+          data => parsedToPhysical(
+            complexTypeFactory.nullSafeEval(UTF8String.fromString(data))),
+          identity)
+        data => converter(toScala(parser(data)))
       case _: ArrayType | _: MapType | _: StructType =>
         val complexTypeFactory = JsonToStructs(attr.dataType,
           ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
@@ -253,7 +301,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     }
   }
 
-  // Keep consistent with Hive `LazySimpleSerde`, when there is a type case error, return null
+  // Match Hive `LazySimpleSerDe`: return null when a type cast fails.
   private val wrapperConvertException: (String => Any, Any => Any) => String => Any =
     (f: String => Any, converter: Any => Any) =>
       (data: String) => converter {
@@ -376,6 +424,98 @@ case class ScriptTransformationIOSchema(
 }
 
 object ScriptTransformationIOSchema {
+  private[sql] def toUnboundedStringType(dataType: DataType): DataType = {
+    dataType.transformRecursively {
+      case c: CharType => c.toStringType
+      case v: VarcharType => v.toStringType
+    }
+  }
+
+  // JSON object keys are always strings. Rewrite every map key, including nested maps.
+  // `transformRecursively` would stop at the first matching MapType and skip children.
+  private[sql] def toJsonMapKeyType(dataType: DataType): DataType = dataType match {
+    case ArrayType(et, n) => ArrayType(toJsonMapKeyType(et), n)
+    case MapType(kt, vt, n) =>
+      val jsonKey = if (kt.isInstanceOf[StringType]) kt else StringType
+      MapType(jsonKey, toJsonMapKeyType(vt), n)
+    case StructType(fields) =>
+      StructType(fields.map(f => f.copy(dataType = toJsonMapKeyType(f.dataType))))
+    case other => other
+  }
+
+  /**
+   * Build a per-call map-key restorer that converts parsed JSON string keys
+   * back to the declared physical key type and validates the result through a
+   * fresh [[ArrayBasedMapBuilder]] on every invocation, so a failed key
+   * conversion or duplicate key cannot leave shared state dirty for the next row.
+   */
+  private[sql] def makeJsonMapKeyRestorer(
+      targetType: DataType,
+      timeZoneId: Option[String]): Any => Any = {
+    val jsonType = toJsonMapKeyType(targetType)
+
+    def make(jt: DataType, tt: DataType): Any => Any = (jt, tt) match {
+      case (ArrayType(jet, _), ArrayType(tet, _)) =>
+        val elem = make(jet, tet)
+        (input: Any) => {
+          val arr = input.asInstanceOf[ArrayData]
+          val n = arr.numElements()
+          val out = new Array[Any](n)
+          var i = 0
+          while (i < n) {
+            out(i) = if (arr.isNullAt(i)) null
+              else elem(arr.get(i, jet))
+            i += 1
+          }
+          new GenericArrayData(out)
+        }
+
+      case (MapType(jkt, jvt, _), MapType(tkt, tvt, _)) =>
+        val keyCast: Any => Any = if (jkt.sameType(tkt)) identity
+          else {
+            val c = Cast(BoundReference(0, jkt, nullable = false),
+              tkt, timeZoneId)
+            (k: Any) => c.eval(InternalRow(k))
+          }
+        val valRestore = make(jvt, tvt)
+        (input: Any) => {
+          val map = input.asInstanceOf[MapData]
+          val n = map.numElements()
+          val builder = new ArrayBasedMapBuilder(tkt, tvt)
+          var i = 0
+          while (i < n) {
+            val k = keyCast(map.keyArray().get(i, jkt))
+            val v = if (map.valueArray().isNullAt(i)) null
+              else valRestore(map.valueArray().get(i, jvt))
+            builder.put(k, v)
+            i += 1
+          }
+          builder.build()
+        }
+
+      case (js: StructType, ts: StructType) =>
+        val restorers = js.fields.zip(ts.fields).map {
+          case (jf, tf) => make(jf.dataType, tf.dataType)
+        }
+        (input: Any) => {
+          val row = input.asInstanceOf[InternalRow]
+          val out = new GenericInternalRow(ts.length)
+          var i = 0
+          while (i < ts.length) {
+            if (row.isNullAt(i)) out.setNullAt(i)
+            else out.update(i,
+              restorers(i)(row.get(i, js(i).dataType)))
+            i += 1
+          }
+          out
+        }
+
+      case _ => identity
+    }
+
+    make(jsonType, targetType)
+  }
+
   val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\u0001"),
     ("TOK_TABLEROWFORMATLINES", "\n"),
