@@ -784,9 +784,9 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(dict(options), {"versionAsOf": "2"})
 
         reader = DataFrameReader(self.connect)
-        df = reader.option("header", False).option("header", True).load(format="csv")
+        df = reader.option("header", False).option("HEADER", True).load(format="csv")
         options = df._plan.to_proto(self.connect).root.read.data_source.options
-        self.assertEqual(dict(options), {"header": "true"})
+        self.assertEqual(dict(options), {"HEADER": "true"})
 
     def test_relation_changes(self):
         reader = DataFrameReader(self.connect)

@@ -111,6 +111,7 @@ class DataFrameReader(OptionUtils):
     schema.__doc__ = PySparkDataFrameReader.schema.__doc__
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameReader":
+        # Remove case-insensitive matches so the latest spelling and value win.
         normalized_key = key.lower()
         for existing_key in list(self._options):
             if existing_key.lower() == normalized_key:
