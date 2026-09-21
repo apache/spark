@@ -330,34 +330,33 @@ class StreamingQueryListenerBus:
                 if listener not in self._listener_bus:
                     return
 
-                is_last_listener = len(self._listener_bus) == 1
-                execution_thread = None
-                if is_last_listener:
-                    cmd = pb2.StreamingQueryListenerBusCommand()
-                    cmd.remove_listener_bus_listener = True
-                    exec_cmd = pb2.Command()
-                    exec_cmd.streaming_query_listener_bus_command.CopyFrom(cmd)
-                    try:
-                        self._sqm._session.client.execute_command(exec_cmd)
-                    except Exception as e:
-                        warnings.warn(
-                            f"Failed to remove the listener because of exception: {e}\n"
-                            f"The listener is not removed, please remove it again."
-                        )
-                        return
-                    execution_thread = self._execution_thread
-                else:
+                if len(self._listener_bus) != 1:
                     self._listener_bus.remove(listener)
+                    return
 
-            if is_last_listener:
-                if execution_thread is not None:
-                    execution_thread.join()
-                with self._listeners_state_lock:
-                    if self._execution_thread is execution_thread:
-                        self._execution_thread = None
-                    # The event thread may have cleared the listener bus after an exception.
-                    if listener in self._listener_bus:
-                        self._listener_bus.remove(listener)
+                execution_thread = self._execution_thread
+
+            cmd = pb2.StreamingQueryListenerBusCommand()
+            cmd.remove_listener_bus_listener = True
+            exec_cmd = pb2.Command()
+            exec_cmd.streaming_query_listener_bus_command.CopyFrom(cmd)
+            try:
+                self._sqm._session.client.execute_command(exec_cmd)
+            except Exception as e:
+                warnings.warn(
+                    f"Failed to remove the listener because of exception: {e}\n"
+                    f"The listener is not removed, please remove it again."
+                )
+                return
+
+            if execution_thread is not None:
+                execution_thread.join()
+            with self._listeners_state_lock:
+                if self._execution_thread is execution_thread:
+                    self._execution_thread = None
+                # The event thread may have cleared the listener bus after an exception.
+                if listener in self._listener_bus:
+                    self._listener_bus.remove(listener)
 
     @staticmethod
     def _iter_listener_events(

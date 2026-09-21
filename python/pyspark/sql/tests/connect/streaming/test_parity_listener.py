@@ -100,13 +100,12 @@ class StreamingQueryListenerBusTests(unittest.TestCase):
         listener_bus = StreamingQueryListenerBus(sqm)
         listener_bus._listener_bus.append(listener)
 
-        # Reproduce the ordering that used to deadlock: removal holds _lock while
-        # requesting server-side shutdown, and the event thread starts dispatching a
-        # pending event that also needs _lock. If removal keeps _lock while joining the
-        # event thread, each thread waits for the other. After dispatch, keep the event
-        # thread alive long enough to verify that append waits for shutdown to finish.
+        # Reproduce the ordering that used to deadlock: removal requests server-side
+        # shutdown while the event thread dispatches a pending event. The request must
+        # not hold the listener state lock, which the event thread also needs. After
+        # dispatch, keep the event thread alive long enough to verify that append waits
+        # for shutdown to finish.
         remove_command_started = threading.Event()
-        event_dispatch_started = threading.Event()
         event_dispatched = threading.Event()
         event_thread_can_exit = threading.Event()
         removal_finished = threading.Event()
@@ -131,8 +130,8 @@ class StreamingQueryListenerBusTests(unittest.TestCase):
 
         def execute_command(_):
             remove_command_started.set()
-            if not event_dispatch_started.wait(5):
-                raise TimeoutError("event dispatch did not start")
+            if not event_dispatched.wait(5):
+                raise TimeoutError("pending event was not dispatched")
 
         client.execute_command.side_effect = execute_command
 
@@ -148,7 +147,6 @@ class StreamingQueryListenerBusTests(unittest.TestCase):
             try:
                 if not remove_command_started.wait(5):
                     raise TimeoutError("listener removal did not start")
-                event_dispatch_started.set()
                 listener_bus.post_to_all(event)
                 event_dispatched.set()
                 event_thread_can_exit.wait()
