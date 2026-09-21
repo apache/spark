@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, Star}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, NoSuchNamespaceException, Star}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, JsonArray, JsonConstructorNullBehavior, JsonQuery, JsonQueryBehavior, JsonQueryQuotes, JsonQueryWrapper, Literal, ResolvedCollation}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, Range}
@@ -814,6 +814,32 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59600: a routed JSON_ARRAY shadow dropped between preprocessing and resolution " +
+      "fails cleanly instead of resolving to the built-in") {
+    // Star preprocessing selects the persistent shadow (functionExists = true) and expands the
+    // direct star for it; by resolution time the shadow is gone (loadFunction throws). Binding the
+    // selected owner makes resolution fail on that candidate rather than falling through to the
+    // stock built-in, which -- with the star already expanded away -- would otherwise silently
+    // accept json_array(*). A deterministic stand-in for a concurrent DROP FUNCTION between phases.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      "spark.sql.catalog.vanishing_cat" -> classOf[VanishingShadowFunctionCatalog].getName) {
+      try {
+        sql("SET PATH = vanishing_cat.some_ns, system.builtin")
+        Seq(false, true).foreach { singlePass =>
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString) {
+            val e = intercept[AnalysisException] {
+              sql("SELECT json_array(*) FROM VALUES (1, 'x') AS t(a, b)").queryExecution.analyzed
+            }
+            assert(e.getCondition == "UNRESOLVED_ROUTINE", s"singlePass=$singlePass")
+          }
+        }
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
   test("default collation recurses into a nested JSON_ARRAY value") {
     // Col a (parser-built nested, direct grammar path) and col b (flat routed built-in) both
     // adopt the table default UTF8_LCASE collation.
@@ -1003,4 +1029,15 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
 class MissingNamespaceFunctionCatalog extends InMemoryCatalog {
   override def loadFunction(ident: Identifier): UnboundFunction =
     throw new NoSuchNamespaceException(ident.namespace)
+}
+
+/**
+ * A [[org.apache.spark.sql.connector.catalog.FunctionCatalog]] that reports a function as existing
+ * but fails to load it -- a deterministic stand-in for a shadow dropped between star preprocessing
+ * and routine resolution.
+ */
+class VanishingShadowFunctionCatalog extends InMemoryCatalog {
+  override def functionExists(ident: Identifier): Boolean = true
+  override def loadFunction(ident: Identifier): UnboundFunction =
+    throw new NoSuchFunctionException(ident)
 }
