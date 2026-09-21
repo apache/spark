@@ -2935,10 +2935,10 @@ object SQLConf {
   val WHOLESTAGE_UNION_CODEGEN_ENABLED =
     buildConf("spark.sql.codegen.wholeStage.union.enabled")
       .internal()
-      .doc("When both this conf and `spark.sql.codegen.wholeStage` are true, " +
-        "UnionExec participates in whole-stage codegen on its " +
-        "non-partitioning-aware path: the parent and all children fuse into " +
-        "a single WholeStageCodegenExec stage. The value is read when a UnionExec's " +
+      .doc("When both this conf and `spark.sql.codegen.wholeStage` are true, an eligible " +
+        "UnionExec on its non-partitioning-aware path takes part in whole-stage codegen. " +
+        "The union's other eligibility checks still apply, and a child that does not support " +
+        "codegen still ends the stage at an InputAdapter. The value is read when a UnionExec's " +
         "decision is fixed during physical preparation, so a change does not reach a " +
         "decision already taken.")
       .version("4.2.0")

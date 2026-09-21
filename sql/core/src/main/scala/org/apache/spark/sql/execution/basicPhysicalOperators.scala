@@ -1180,27 +1180,20 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     stampedDecisions.map(_.maxChildren)
       .getOrElse(conf.getConf(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN))
 
-  // Memoized per instance rather than stamped on the tag. Every term below the confs except
-  // `isPlainUnion` reads the children, and a tag outlives them: `SQLExecution` builds the initial
-  // `SparkPlanInfo` before execution, forcing `metrics` on every node it visits, so a rule that
-  // replaces a child after that would inherit an allowing answer and fuse a topology that
-  // `hasPartitionIndexDependentCodegen` or `supportsColumnar` rejects. The copy in the codegen
-  // shell still agrees with the gate: `InputAdapter` delegates `output` and `supportsColumnar` to
-  // its child, the other terms walk the subtree through it, and each of those is fixed for a given
-  // set of children. `isPlainUnion` is not, which is why it is stamped instead.
-  @transient private lazy val supportCodegenFailureReason: Option[String] = {
-    if (!unionCodegenEnabled) {
-      Some("union-codegen-disabled")
-    } else if (!isPlainUnion) {
-      Some("partitioning-aware")
-    } else if (children.exists(_.exists(_.isInstanceOf[UnionExec]))) {
+  // Memoized per instance rather than stamped on the tag. Every term here reads the children, and a
+  // tag outlives them: `SQLExecution` builds the initial `SparkPlanInfo` before execution, forcing
+  // `metrics` on every node it visits, so a rule that replaces a child after that would inherit an
+  // allowing answer and fuse a topology that `hasPartitionIndexDependentCodegen` or
+  // `supportsColumnar` rejects. The copy in the codegen shell still agrees with the gate:
+  // `InputAdapter` delegates `output` and `supportsColumnar` to its child, the other terms walk the
+  // subtree through it, and each of those is fixed for a given set of children.
+  @transient private lazy val childTopologyFailureReason: Option[String] = {
+    if (children.exists(_.exists(_.isInstanceOf[UnionExec]))) {
       Some("nested-union")
     } else if (children.exists(_.exists(UnionExec.isKnownMultiInputRDDCodegen))) {
       Some("multi-rdd-child")
     } else if (children.exists(UnionExec.hasPartitionIndexDependentCodegen)) {
       Some("partition-index-dependent-child")
-    } else if (children.size > maxCodegenChildren) {
-      Some("max-children-exceeded")
     } else if (supportsColumnar) {
       Some("columnar")
     } else if (children.exists(c =>
@@ -1208,6 +1201,25 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       Some("type-mismatch")
     } else {
       None
+    }
+  }
+
+  // The three preparation-scoped terms are recomputed per call, because memoizing them would let a
+  // read arriving before `stampDecisions` settle the gate on the live conf. The stamp can install
+  // the opposite value, and the gate would then keep the memoized answer while the copy
+  // `insertInputAdapter` builds, a fresh instance carrying the stamped tag, derives the other one.
+  // Nothing on Spark's own path reads a union that early: every barrier runs inside `preparations`,
+  // ahead of the `SparkPlanInfo` that forces `metrics`. A late extension hook can, and so can a
+  // caller inspecting `sparkPlan`.
+  private def supportCodegenFailureReason: Option[String] = {
+    if (!unionCodegenEnabled) {
+      Some("union-codegen-disabled")
+    } else if (!isPlainUnion) {
+      Some("partitioning-aware")
+    } else if (children.size > maxCodegenChildren) {
+      Some("max-children-exceeded")
+    } else {
+      childTopologyFailureReason
     }
   }
 
@@ -1223,11 +1235,15 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
-  // Registered only when fusion will actually run, so plans that fall back
-  // to `doExecute` (which never updates the metric) do not surface a
-  // 0-valued row count in the SQL UI. `doConsume` is the sole incrementer.
+  // Registered only when fusion will actually run, so plans that fall back to `doExecute` (which
+  // never updates the metric) do not surface a 0-valued row count in the SQL UI. `doConsume` is the
+  // sole incrementer. An unstamped node is the exception: its gate is still provisional, the stamp
+  // can land either way, and a map built without the metric would leave `doProduce` asking
+  // `metricTerm` for one that is not there. Registering it then costs an unused metric on a union
+  // an extension inspected and the stamp went on to reject; Spark's own force, the `SparkPlanInfo`
+  // `SQLExecution` builds, runs after every barrier, so ordinary fallback unions still omit it.
   override lazy val metrics: Map[String, SQLMetric] =
-    if (supportCodegenFailureReason.isEmpty) {
+    if (stampedDecisions.isEmpty || supportCodegenFailureReason.isEmpty) {
       Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
     } else {
       Map.empty
@@ -1431,10 +1447,11 @@ object UnionExec {
 
   /**
    * The `UNION_OUTPUT_PARTITIONING` value `isPlainUnion` answers from until the decision is
-   * stamped. See `snapshotOutputPartitioningConf`. Written before `EnsureRequirements` and read by
-   * the stamp after it, so both phases use one value, and written by the stamp itself for a node
-   * that pass never saw; travels onto rebuilt nodes the same way `DECISIONS` does, which is what
-   * carries it across the copies `EnsureRequirements` makes.
+   * stamped. See `snapshotOutputPartitioningConf`. `SnapshotUnionOutputPartitioningConf` writes the
+   * value before `EnsureRequirements`, and the stamp after it reads what that rule wrote, so both
+   * phases use one value; `stampDecisions` writes the value itself for a node that pass never saw.
+   * The tag travels onto rebuilt nodes the same way `DECISIONS` does, which is what carries it
+   * across the copies `EnsureRequirements` makes.
    */
   private val OUTPUT_PARTITIONING_CONF = TreeNodeTag[Boolean]("unionOutputPartitioningConf")
 

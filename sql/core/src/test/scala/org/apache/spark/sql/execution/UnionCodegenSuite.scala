@@ -23,7 +23,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioningLike, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
@@ -923,6 +923,36 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
+  test("SPARK-59122: a read before the barrier decides neither the gate nor the metric") {
+    // An extension hook can build a `UnionExec` and force `supportCodegen` or `metrics` on it
+    // before the barrier behind that hook stamps it. Memoizing the whole gate there settles it on
+    // the live conf, and the copy `insertInputAdapter` builds, a fresh instance carrying the
+    // stamped tag, derives the other answer: that disagreement is what `doProduce` used to hit as
+    // `key not found: numOutputRows`. The preparation-scoped terms are recomputed per call instead,
+    // and an unstamped node registers the metric, since either stamped outcome is still open.
+    // Nothing here is executed, so AQE does not enter into it: the children come from `sparkPlan`,
+    // and the union under test is built by hand.
+    val planned = rangeDF(100).union(rangeDF(100))
+      .queryExecution.sparkPlan.collect { case u: UnionExec => u }
+    assert(planned.size == 1)
+    val kids = planned.head.children
+
+    Seq(true, false).foreach { live =>
+      val union = UnionExec(kids)
+      withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> live.toString) {
+        assert(union.supportCodegen == live,
+          "an unstamped read answers from the live conf, or this case starts from nothing")
+        assert(union.metrics.contains("numOutputRows"),
+          "an unstamped union must register the metric: the stamp can still fuse it")
+      }
+      withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> (!live).toString) {
+        stampUnionDecisions(union)
+        assert(union.supportCodegen == !live,
+          s"the gate must answer from the stamp, not from the read taken with the conf $live")
+      }
+    }
+  }
+
   test("SPARK-59122: a partitioning-aware union follows its children's coalesced partition count") {
     // Only the decision is stamped, never the `Partitioning`. AQE coalescing changes the children's
     // `numPartitions` after the stamp, and `unionRDDs` hands whatever it reports to
@@ -1083,6 +1113,75 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         assert(!replacement.outputPartitioning.isInstanceOf[UnknownPartitioning],
           "the late barrier must stamp from the preparation's conf, not the value read now, got " +
             s"${replacement.outputPartitioning}")
+      }
+    }
+  }
+
+  test("SPARK-59122: the stamp takes the codegen decisions from the preparation's snapshot") {
+    // The case above pins this for `UNION_OUTPUT_PARTITIONING`. The two codegen fields ride in the
+    // same `UnionConfSnapshot` and need the same pin: a stamp that read them live would agree with
+    // the snapshot everywhere else in this suite, because the other cases flip the conf after
+    // stamping and so pin the gate rather than the stamp. Nothing here is executed, so AQE does not
+    // enter into it.
+    val df = rangeDF(100).union(rangeDF(100)).union(rangeDF(100))
+    val planned = df.queryExecution.sparkPlan.collect { case u: UnionExec => u }
+    assert(planned.size == 1 && planned.head.children.size == 3,
+      s"expected one union of three children, got ${planned.map(_.children.size)}")
+    val kids = planned.head.children
+
+    // What a preparation would carry to its barriers: fusion allowed, cap high enough for three.
+    val prepConf = withSQLConf(
+        SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN.key -> "3") {
+      UnionConfSnapshot(SQLConf.get)
+    }
+
+    Seq(
+      "enablement" -> (SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false"),
+      "the child cap" -> (SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN.key -> "2")
+    ).foreach { case (what, flipped) =>
+      val union = UnionExec(kids)
+      withSQLConf(flipped) {
+        new StampUnionDecisions(prepConf)(union)
+        assert(union.supportCodegen, s"the stamp must take $what from the snapshot")
+      }
+    }
+  }
+
+  test("SPARK-59122: a union fused under AQE keeps both codegen decisions through execution") {
+    // The AQE counterpart of the two "changes between planning and execution" cases above.
+    // `CollapseCodegenStages` runs after each stage is created, so the shell and the copy inside it
+    // are built while the query runs, with the flipped value below already in effect: a gate that
+    // reads either codegen conf live there would deny fusion, and the copy would come back with
+    // empty `metrics`. What this case does not pin is where the stamp took its values, because AQE
+    // stamps the union while it builds `initialPlan`, which is still inside the outer conf; the
+    // case above is what pins that. That AQE reads its `UnionConfSnapshot` once, at construction,
+    // rather than per re-planning round is visible only in the code, since reaching a per-stage
+    // barrier with an unstamped union takes an injected rule.
+    Seq(
+      SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false",
+      SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN.key -> "2").foreach { flipped =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        // Exchange children are not `CodegenSupport`, so `insertInputAdapter` wraps them and the
+        // union inside the shell is a `withNewChildren` copy rather than the instance the gate
+        // answered on. Three of them, so that a cap of two excludes this union; the cap cannot go
+        // below two.
+        val df = rangeDF(100).repartition(2)
+          .union(rangeDF(100).repartition(2))
+          .union(rangeDF(100).repartition(2))
+        // Constructing the wrapper is what reads AQE's snapshot, and it happens here, before the
+        // flipped value below. The stages that hold the union are created during `collect()`.
+        assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+        withSQLConf(flipped) {
+          assert(df.collect().length == 300)
+          val fused = fusedUnions(df)
+          assert(fused.size == 1,
+            s"the union must still fuse under AQE, got\n${df.queryExecution.executedPlan}")
+          // The cap iteration needs three children to say anything: at two, a cap of two admits it.
+          assert(fused.head.children.size == 3)
+          assert(fused.head.children.forall(_.isInstanceOf[InputAdapter]))
+          assert(fused.head.metrics("numOutputRows").value == 300)
+        }
       }
     }
   }
