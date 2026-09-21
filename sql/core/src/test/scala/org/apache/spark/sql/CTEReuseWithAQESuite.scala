@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.logical.CTEReuseRelation
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTEReuseRelation}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec
 import org.apache.spark.sql.execution.adaptive.CTEReuseQueryStageExec
@@ -80,6 +80,19 @@ class CTEReuseWithAQESuite
     }
   }
 
+  /**
+   * Runs `text` with every CTE forced to materialize (`forceSkipInline = true`) so it opts into
+   * guaranteed CTE shuffle reuse. `forceSkipInline` has no SQL syntax, so tag the analyzed plan's
+   * CTE definitions and re-run the tagged plan.
+   */
+  private def sqlWithForcedCTEReuse(text: String): DataFrame = {
+    val analyzed = spark.sql(text).queryExecution.analyzed
+    val tagged = analyzed.transformWithSubqueries {
+      case d: CTERelationDef => d.copy(forceSkipInline = true)
+    }
+    classic.Dataset.ofRows(spark, tagged)
+  }
+
   // -----------------------------------------------------------------
   // Metrics tests
   // -----------------------------------------------------------------
@@ -90,7 +103,7 @@ class CTEReuseWithAQESuite
         sql("CREATE TABLE metric_src (id INT) USING parquet")
         sql(
           "INSERT INTO metric_src VALUES (1), (2), (3), (4), (5)")
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH cte AS (
             |  SELECT id, rand() as r FROM metric_src
             |)
@@ -111,7 +124,7 @@ class CTEReuseWithAQESuite
       withTable("metric_empty_src") {
         sql("CREATE TABLE metric_empty_src (id INT) USING parquet")
         sql("INSERT INTO metric_empty_src VALUES (1), (2), (3)")
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH cte AS (
             |  SELECT id, rand() as r
             |  FROM metric_empty_src WHERE id > 100
@@ -143,7 +156,7 @@ class CTEReuseWithAQESuite
             "INSERT INTO cte_nonempty VALUES (1), (2), (3), (4), (5)")
           sql("CREATE TABLE join_side (id INT) USING parquet")
           sql("INSERT INTO join_side VALUES (1), (2), (3)")
-          val df = sql(
+          val df = sqlWithForcedCTEReuse(
             """WITH cte AS (
               |  SELECT id, rand() as r FROM cte_nonempty
               |)
@@ -200,7 +213,7 @@ class CTEReuseWithAQESuite
           """INSERT INTO items VALUES
             |(1, 'red'), (2, 'blue'), (3, 'red')""".stripMargin)
 
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH ssales AS (
             |  SELECT s.item_id, i.color,
             |    sum(s.amount) as total, rand() as r
@@ -242,7 +255,7 @@ class CTEReuseWithAQESuite
           """INSERT INTO products VALUES
             |(1, 'A'), (2, 'B'), (3, 'A')""".stripMargin)
 
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH agg AS (
             |  SELECT o.pid, p.cat,
             |    sum(o.qty) as total, rand() as r
@@ -333,7 +346,7 @@ class CTEReuseWithAQESuite
           // CTE A referenced twice (c1 + c3), CTE B twice (c2 + c4).
           // Join c1-c2 on a=b, then join with c3 on a=a, then join
           // with c4 on a=b. Forces 2+ AQE iterations.
-          val df = sql(
+          val df = sqlWithForcedCTEReuse(
             """WITH
               |  cte_a AS (
               |    SELECT a, ka, rand() as r FROM replan_a
@@ -380,7 +393,7 @@ class CTEReuseWithAQESuite
             |(1, 10), (2, 20), (3, 30),
             |(4, 40), (5, 50)""".stripMargin)
 
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH
             |  cte_inner AS (
             |    SELECT id, v, rand() as ri FROM nested_src
@@ -466,7 +479,7 @@ class CTEReuseWithAQESuite
         // aggregate (no GROUP BY -> AllTuples) sits DIRECTLY on a CTE ref: a join in
         // between would mask the behavior, since the join does not accept
         // LocalPartition either and would insert its own ENSURE_REQUIREMENTS shuffles.
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH cte AS (
             |  SELECT id, v, rand() as r FROM all_tuples_src
             |)
@@ -525,7 +538,7 @@ class CTEReuseWithAQESuite
              |JOIN cte_$numLevels c2 ON c1.id = c2.id
              |""".stripMargin
 
-        val df = sql(query)
+        val df = sqlWithForcedCTEReuse(query)
         df.collect()
 
         val aqe = df.queryExecution.executedPlan

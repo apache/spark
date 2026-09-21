@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.plans.logical.CTERelationDef
 import org.apache.spark.sql.execution.{BaseSubqueryExec, ReusedSubqueryExec}
 import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -88,13 +89,26 @@ class CTEReuseWithoutAQESuite
       case s: BaseSubqueryExec => s
     }.size
 
+  /**
+   * Runs `text` with every CTE forced to materialize (`forceSkipInline = true`) so it opts into
+   * guaranteed CTE shuffle reuse. `forceSkipInline` has no SQL syntax, so tag the analyzed plan's
+   * CTE definitions and re-run the tagged plan.
+   */
+  private def sqlWithForcedCTEReuse(text: String): DataFrame = {
+    val analyzed = spark.sql(text).queryExecution.analyzed
+    val tagged = analyzed.transformWithSubqueries {
+      case d: CTERelationDef => d.copy(forceSkipInline = true)
+    }
+    classic.Dataset.ofRows(spark, tagged)
+  }
+
   test("basic: 2-ref CTE join") {
     withCTEReuseNoAQE {
       withTable("cte_noaqe_src") {
         sql("CREATE TABLE cte_noaqe_src (id INT, v INT) USING parquet")
         sql("INSERT INTO cte_noaqe_src VALUES (1, 10), (2, 20), (3, 30)")
 
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH cte AS (
             |  SELECT id, v, rand() as r FROM cte_noaqe_src
             |)
@@ -127,7 +141,7 @@ class CTEReuseWithoutAQESuite
         sql("CREATE TABLE nested_noaqe (id INT, v INT) USING parquet")
         sql("INSERT INTO nested_noaqe VALUES (1, 10), (2, 20), (3, 30)")
 
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH
             |  cte_inner AS (
             |    SELECT id, v, rand() as ri FROM nested_noaqe
@@ -163,7 +177,7 @@ class CTEReuseWithoutAQESuite
           """INSERT INTO items_noaqe VALUES
             |(1, 'red'), (2, 'blue'), (3, 'red')""".stripMargin)
 
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH ssales AS (
             |  SELECT s.item_id, i.color,
             |    sum(s.amount) as total, rand() as r
@@ -207,7 +221,7 @@ class CTEReuseWithoutAQESuite
         // This tests nested CTEReuseExchange: cte_base inside cte_agg,
         // and cte_agg referenced both in the main query and a scalar
         // subquery.
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH
             |  cte_base AS (
             |    SELECT id, v, rand() as r FROM mix_src
@@ -255,7 +269,7 @@ class CTEReuseWithoutAQESuite
         // cte referenced in the main query and inside a scalar subquery. The scalar subquery
         // (SELECT avg(v) FROM cte) appears twice with identical text, so subquery reuse
         // (ReusedSubqueryExec) also fires -- exercising both CTE-shuffle reuse and subquery reuse.
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH cte AS (SELECT id, v, rand() as r FROM reuse_src)
             |SELECT id, v FROM cte
             |WHERE v > (SELECT avg(v) FROM cte)
@@ -276,7 +290,7 @@ class CTEReuseWithoutAQESuite
       withReuseSrc {
         // Two different scalar subqueries (avg vs max), each referencing the CTE. The subqueries
         // are NOT reused (different plans), but the CTE shuffle under them must still be reused.
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH cte AS (SELECT id, v, rand() as r FROM reuse_src)
             |SELECT id FROM reuse_src o
             |WHERE o.v > (SELECT avg(v) FROM cte)
@@ -295,7 +309,7 @@ class CTEReuseWithoutAQESuite
         // Two identical scalar subqueries referencing the CTE -> subquery reuse fires, and the
         // CTE shuffle is reused across them. This is the trickiest re-point case: a reused
         // subquery whose plan itself contains a reused CTE exchange.
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH cte AS (SELECT id, v, rand() as r FROM reuse_src)
             |SELECT id FROM reuse_src o
             |WHERE o.v > (SELECT avg(v) FROM cte)
@@ -316,7 +330,7 @@ class CTEReuseWithoutAQESuite
       withReuseSrc {
         // Nested CTEs (cte_outer references cte_inner) referenced in the main query and in
         // subqueries, combining the nested-CTE and subquery-scope cases.
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH
             |  cte_inner AS (SELECT id, v, rand() as ri FROM reuse_src),
             |  cte_outer AS (
@@ -348,7 +362,7 @@ class CTEReuseWithoutAQESuite
             sql("INSERT INTO big_side VALUES (1, 100), (2, 200), (3, 300)")
             // cte is broadcast into one join and shuffle-joined in another; the two consumers
             // impose different requirements above the shared shuffle, which must still be reused.
-            val df = sql(
+            val df = sqlWithForcedCTEReuse(
               """WITH cte AS (SELECT id, v, rand() as r FROM reuse_src)
                 |SELECT c1.id
                 |FROM cte c1 JOIN big_side b ON c1.id = b.id
@@ -368,7 +382,7 @@ class CTEReuseWithoutAQESuite
       withReuseSrc {
         // CTE body carries a REPARTITION(id) hint -> HashPartitioning partitioning on the
         // CTEReuseRelation, exercising the partitioning path (not just LocalPartition).
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH cte AS (
             |  SELECT /*+ REPARTITION(4, id) */ id, v, rand() as r FROM reuse_src
             |)
@@ -388,7 +402,7 @@ class CTEReuseWithoutAQESuite
   test("CTE referenced three times") {
     withCTEReuseNoAQE {
       withReuseSrc {
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH cte AS (SELECT id, v, rand() as r FROM reuse_src)
             |SELECT c1.id FROM cte c1
             |JOIN cte c2 ON c1.id = c2.id
@@ -418,7 +432,7 @@ class CTEReuseWithoutAQESuite
           // fallback: no reuse, the "reuse not applied" signal recorded, correct results.
           withSQLConf(
             "spark.sql.optimizer.failOnCTEReuseWithoutAQE.enabled" -> "false") {
-            val df = sql(
+            val df = sqlWithForcedCTEReuse(
               """WITH cte AS (SELECT id, v, rand() as r FROM reuse_src)
                 |SELECT c1.id, c2.v FROM cte c1 JOIN cte c2 ON c1.id = c2.id
                 |""".stripMargin)
@@ -444,7 +458,7 @@ class CTEReuseWithoutAQESuite
     withCTEReuseNoAQE {
       withReuseSrc {
         val refs = (1 to 5).map(_ => "SELECT id FROM cte").mkString(" UNION ALL ")
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           s"""WITH cte AS (SELECT id, v, rand() as r FROM reuse_src)
              |$refs
              |""".stripMargin)
@@ -466,7 +480,7 @@ class CTEReuseWithoutAQESuite
     withCTEReuseNoAQE {
       withReuseSrc {
         // Distinct body projections so the two CTEs cannot canonically collapse into one.
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH
             |  cte_a AS (SELECT id, v + 1 as a, rand() as ra FROM reuse_src),
             |  cte_b AS (SELECT id, v * 10 as b, rand() as rb FROM reuse_src)
@@ -497,7 +511,7 @@ class CTEReuseWithoutAQESuite
             sql("INSERT INTO smj_right_noaqe VALUES (1, 100), (2, 200), (3, 300)")
             // The materialized body is itself a shuffle join (extra ENSURE_REQUIREMENTS shuffles
             // inside the materialization); the outer CTE shuffle must still be reused across refs.
-            val df = sql(
+            val df = sqlWithForcedCTEReuse(
               """WITH cte AS (
                 |  SELECT s.id, s.v, r.w, rand() as rnd
                 |  FROM reuse_src s JOIN smj_right_noaqe r ON s.id = r.id2
@@ -528,7 +542,7 @@ class CTEReuseWithoutAQESuite
           sql("INSERT INTO dim_noaqe VALUES (1), (2), (3)")
           // The CTE body contains a scalar subquery `(SELECT max(m) FROM dim_noaqe)`. rand() keeps
           // the def non-deterministic so it materializes and both refs share it.
-          val df = sql(
+          val df = sqlWithForcedCTEReuse(
             """WITH cte AS (
               |  SELECT id, v, (SELECT max(m) FROM dim_noaqe) as mx, rand() as r FROM reuse_src
               |)
@@ -557,7 +571,7 @@ class CTEReuseWithoutAQESuite
       withReuseSrc {
         // cte_inner referenced twice in cte_mid; cte_mid referenced twice in cte_outer; cte_outer
         // referenced twice in the main query -> three distinct materializations, each reused.
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH
             |  cte_inner AS (SELECT id, v, rand() as ri FROM reuse_src),
             |  cte_mid AS (
@@ -596,7 +610,7 @@ class CTEReuseWithoutAQESuite
         // The CTE body has a scalar subquery whose own body has another scalar subquery
         // (two levels of subquery nesting buried in the materialized CTE body). Both must be
         // physically planned for execution to succeed.
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH cte AS (
             |  SELECT id, v,
             |    (SELECT max(a) + (SELECT max(b) FROM nsub_b) FROM nsub_a) as mx,
@@ -619,7 +633,7 @@ class CTEReuseWithoutAQESuite
         // cte_base is referenced in the main query AND inside a scalar subquery that sits in
         // cte_wrap's body -> cte_base is reused across the main scope and a subquery nested in
         // another CTE's materialized body.
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH
             |  cte_base AS (SELECT id, v, rand() as rb FROM reuse_src),
             |  cte_wrap AS (
@@ -639,7 +653,7 @@ class CTEReuseWithoutAQESuite
       withReuseSrc {
         // cte_inner is referenced inside cte_outer's body AND directly in the main query -> the
         // inner materialization is shared across the outer CTE's body scope and the main scope.
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH
             |  cte_inner AS (SELECT id, v, rand() as ri FROM reuse_src),
             |  cte_outer AS (
@@ -663,7 +677,7 @@ class CTEReuseWithoutAQESuite
           sql("INSERT INTO in_dim_noaqe VALUES (1), (2), (3)")
           // The CTE body carries an IN-subquery predicate (not a scalar subquery) -> exercises the
           // IN_SUBQUERY planning path inside the materialized body.
-          val df = sql(
+          val df = sqlWithForcedCTEReuse(
             """WITH cte AS (
               |  SELECT id, v, rand() as r FROM reuse_src WHERE id IN (SELECT k FROM in_dim_noaqe)
               |)
@@ -682,7 +696,7 @@ class CTEReuseWithoutAQESuite
       withReuseSrc {
         // cte is referenced in the main query (depth 0), in a scalar subquery (depth 1), and in a
         // subquery nested inside that subquery (depth 2). One materialization shared across all.
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH cte AS (SELECT id, v, rand() as r FROM reuse_src)
             |SELECT id FROM cte m
             |WHERE m.v > (
@@ -702,7 +716,7 @@ class CTEReuseWithoutAQESuite
       withReuseSrc {
         // Two independent nested chains (A_inner->A_outer, B_inner->B_outer) with distinct bodies,
         // unioned. Four distinct materializations, each reused -> no cross-chain collapse.
-        val df = sql(
+        val df = sqlWithForcedCTEReuse(
           """WITH
             |  a_inner AS (SELECT id, v + 1 as av, rand() as rai FROM reuse_src),
             |  a_outer AS (
@@ -745,7 +759,7 @@ class CTEReuseWithoutAQESuite
           // CTE-body's inner subquery. If UnwrapCTEReuseExchange did not run before PlanSubqueries
           // at every recursive level, the inner subquery would stay logical and crash with
           // "... cannot be cast to SparkPlan".
-          val df = sql(
+          val df = sqlWithForcedCTEReuse(
             """WITH cte AS (
               |  SELECT id, v, (SELECT max(m) FROM osq_dim) as mx, rand() as r FROM reuse_src
               |)

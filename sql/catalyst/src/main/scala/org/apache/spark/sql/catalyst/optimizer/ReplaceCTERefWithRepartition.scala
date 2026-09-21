@@ -82,13 +82,15 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
                 }
             }
           } else {
+            // Non-forceSkipInline CTEs keep the original OSS behavior: a plain repartition that is
+            // not sealed for guaranteed reuse (no repartitionId). Only forceSkipInline CTEs above
+            // opt into guaranteed CTE shuffle reuse.
             if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
               // If the CTE definition plan itself is a repartition operation or if it hosts a
               // merged scalar subquery, we do not need to add an extra repartition shuffle.
               inlined
             } else {
               RepartitionByExpression(Seq.empty, inlined, None)
-                .addRepartitionId(reassign = true)
             }
           }
         cteMap.put(cteDef.id, withRepartition)
