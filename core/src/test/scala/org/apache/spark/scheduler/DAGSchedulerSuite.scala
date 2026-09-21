@@ -805,7 +805,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // blockManagerMaster.removeExecutorAsync is not called again
     // but shuffle files are unregistered
     verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
-    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", true)
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", true, Some(shuffleId))
 
     // Shuffle files for hostA-exec should be lost
     assert(mapStatuses.count(_ != null) === 1)
@@ -817,7 +817,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(1), Seq(
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 1, 0, "ignored"), null)
     ))
-    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", true)
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", true, Some(shuffleId))
   }
 
   test("zero split job") {
@@ -1202,12 +1202,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       HashSet("hostA", "hostB"))
 
     // Same-epoch FetchFailed for hostA's (really gone) output: no epoch was stamped, so the
-    // epoch-gated cleanup proceeds instead of being skipped. Two calls total: the executor loss
-    // (which preserved the reliable shuffle) and this FetchFailed.
+    // epoch-gated cleanup proceeds instead of being skipped. The executor loss preserved the
+    // reliable shuffle (2-arg cleanup); this map-output FetchFailed exempts the failed shuffle.
     complete(taskSets(1), Seq(
       (Success, 42),
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 1, "ignored"), null)))
-    verify(mapOutputTracker, times(2)).removeOutputsOnExecutor("hostA-exec", true)
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", true)
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", true, Some(shuffleId))
   }
 
   test("SPARK-59138: same-epoch FetchFailed for a local shuffle preserves a reliable one") {
@@ -1234,6 +1235,37 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       (FetchFailed(makeBlockManagerId("hostA"), localDep.shuffleId, 0L, 0, 0, "ignored"), null)))
     assert(mapOutputTracker.getMapSizesByExecutorId(reliableDep.shuffleId, 0).map(_._1).toSet ===
       HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+  }
+
+  test("SPARK-59138: map-output FetchFailed clears the failed shuffle's co-located maps in one " +
+    "pass while an unrelated reliable shuffle on the same executor survives") {
+    // A FetchFailed against a reliably-stored map output is evidence that shuffle's output on the
+    // host is actually gone, so the failed shuffle is exempted from reliable preservation and all
+    // its maps on hostA clear together. A different reliable shuffle on hostA has no such evidence
+    // and stays registered.
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+
+    val failedRdd = new MyRDD(sc, 2, Nil)
+    val failedDep = new ReliablyStoredShuffleDependency(failedRdd, new HashPartitioner(1))
+    val otherRdd = new MyRDD(sc, 1, Nil)
+    val otherDep = new ReliablyStoredShuffleDependency(otherRdd, new HashPartitioner(1))
+    val reduceRdd = new MyRDD(sc, 1, List(failedDep, otherDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0))
+
+    // Both failed-shuffle maps land on hostA; the unrelated shuffle's map is also on hostA.
+    completeShuffleMapStageSuccessfully(0, 0, 1, hostNames = Seq("hostA", "hostA"))
+    completeShuffleMapStageSuccessfully(1, 0, 1, hostNames = Seq("hostA"))
+
+    complete(taskSets(2), Seq(
+      (FetchFailed(makeBlockManagerId("hostA"), failedDep.shuffleId, 0L, 0, 0, "ignored"), null)))
+
+    // The failed shuffle loses both hostA maps in one pass (it is exempted from preservation).
+    intercept[MetadataFetchFailedException] {
+      mapOutputTracker.getMapSizesByExecutorId(failedDep.shuffleId, 0)
+    }
+    // The unrelated reliable shuffle keeps hostA's output.
+    assert(mapOutputTracker.getMapSizesByExecutorId(otherDep.shuffleId, 0).map(_._1).toSet ===
+      HashSet(makeBlockManagerId("hostA")))
   }
 
   test("SPARK-28967 properties must be cloned before posting to listener bus for 0 partition") {
@@ -6318,7 +6350,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       .removeExecutorAsync(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
     verify(blockManagerMaster, times(1)).removeShufflePushMergerLocation("hostA")
     verify(mapOutputTracker,
-      times(1)).removeOutputsOnHost("hostA", true)
+      times(1)).removeOutputsOnHost("hostA", true, Some(shuffleId))
 
     // There should be no map statuses or merge statuses on the host
     val shuffleStatuses = mapOutputTracker.shuffleStatuses(shuffleId)

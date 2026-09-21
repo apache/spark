@@ -176,6 +176,63 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     rpcEnv.shutdown()
   }
 
+  test("SPARK-59138: host loss drops merge results but keeps reliably-stored map output") {
+    val pushConf = new SparkConf()
+    pushConf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
+    pushConf.set(IS_TESTING, true)
+    pushConf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster(pushConf)
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, pushConf))
+
+    val size = MapStatus.compressSize(1000L)
+    // Reliably-stored shuffle whose map output lives off-executor, but which also has a host-local
+    // push-merge result on the same host. Losing the host must keep the reliable map output while
+    // still dropping the merge result, whose merged chunks physically lived on that host.
+    tracker.registerShuffle(0, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES,
+      isReliablyStored = true)
+    tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("a", "hostA", 1000), Array(size), 5))
+    val bitmap = new RoaringBitmap()
+    bitmap.add(0)
+    tracker.registerMergeResult(0, 0, MergeStatus(BlockManagerId(
+      BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, "hostA", 1000), 0, bitmap, 1000L))
+    assert(tracker.getNumAvailableOutputs(0) === 1)
+    assert(tracker.getNumAvailableMergeResults(0) === 1)
+
+    tracker.removeOutputsOnHost("hostA", respectReliablyStored = true)
+    assert(tracker.getNumAvailableOutputs(0) === 1, "reliable map output must survive host loss")
+    assert(tracker.getNumAvailableMergeResults(0) === 0, "host-local merge result must be dropped")
+
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
+
+  test("SPARK-59138: mixed executor loss that removes local output bumps the epoch") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+
+    val size = MapStatus.compressSize(1000L)
+    tracker.registerShuffle(0, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+    tracker.registerShuffle(1, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES,
+      isReliablyStored = true)
+    tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("a", "hostA", 1000), Array(size), 5))
+    tracker.registerMapOutput(1, 0, MapStatus(BlockManagerId("a", "hostA", 1000), Array(size), 6))
+
+    // A cleanup that drops the local shuffle while preserving the reliable one changed metadata,
+    // so the epoch must advance even though a reliable shuffle was preserved.
+    val epochBefore = tracker.getEpoch
+    tracker.removeOutputsOnExecutor("a", respectReliablyStored = true)
+    assert(tracker.getNumAvailableOutputs(0) === 0)
+    assert(tracker.getNumAvailableOutputs(1) === 1)
+    assert(tracker.getEpoch > epochBefore)
+
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
+
   test("remote fetch") {
     val hostname = "localhost"
     val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
