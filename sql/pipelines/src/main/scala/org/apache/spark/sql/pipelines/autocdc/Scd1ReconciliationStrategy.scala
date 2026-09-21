@@ -30,8 +30,12 @@ private[pipelines] trait Scd1ReconciliationStrategy {
   /**
    * Resolves the CDC events for each key and removes events superseded by recorded tombstones.
    *
-   * @param batchDf A validated CDC microbatch containing the key columns and every column needed
-   *                to evaluate the sequencing, delete, and column-selection expressions.
+   * The sequencing expression must have an orderable data type, and every row must have non-null
+   * sequencing and key values. These invariants are required for per-key ordering and matching.
+   *
+   * @param validatedBatchDf A CDC microbatch satisfying the invariants above and containing the key
+   *                         columns and every column needed to evaluate the sequencing, delete, and
+   *                         column-selection expressions.
    * @param auxiliaryTableDf A snapshot of the auxiliary table containing at least the key columns
    *                         and the CDC metadata column.
    * @return A dataframe containing the selected user columns followed by the CDC metadata column.
@@ -39,7 +43,7 @@ private[pipelines] trait Scd1ReconciliationStrategy {
   def reconcileMicrobatch(
       changeArgs: ChangeArgs,
       resolvedSequencingType: DataType,
-      batchDf: DataFrame,
+      validatedBatchDf: DataFrame,
       auxiliaryTableDf: DataFrame): DataFrame
 
   /**
@@ -124,11 +128,11 @@ private[pipelines] object Scd1RowLevelReconciliation extends Scd1ReconciliationS
   override def reconcileMicrobatch(
       changeArgs: ChangeArgs,
       resolvedSequencingType: DataType,
-      batchDf: DataFrame,
+      validatedBatchDf: DataFrame,
       auxiliaryTableDf: DataFrame): DataFrame = {
     val deduplicated = deduplicateMicrobatch(
       changeArgs = changeArgs,
-      validatedMicrobatch = batchDf
+      validatedMicrobatch = validatedBatchDf
     )
     val withCdcMetadata = extendMicrobatchRowsWithCdcMetadata(
       changeArgs = changeArgs,

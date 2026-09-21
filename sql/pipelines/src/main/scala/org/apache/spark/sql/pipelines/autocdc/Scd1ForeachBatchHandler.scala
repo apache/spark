@@ -45,7 +45,7 @@ case class Scd1ForeachBatchHandler(
     ).validateMicrobatch()
 
     val reconciledMicrobatch = batchProcessor.reconcileMicrobatch(
-      batchDf = batchDf,
+      validatedBatchDf = batchDf,
       // Aux holds at most one row per currently-active tombstone (revived keys are GC'd
       // by mergeMicrobatchOntoAuxiliaryTable), so it generally stays small enough for a broadcast
       // join. Future optimizations: key-pruned reads, table format-aware clustering and tombstone

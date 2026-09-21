@@ -44,14 +44,14 @@ case class Scd1BatchProcessor(
     resolvedSequencingType: DataType,
     reconciliationStrategy: Scd1ReconciliationStrategy = Scd1RowLevelReconciliation) {
 
-  /** Reconciles a CDC microbatch into the form consumed by the table merges. */
+  /** Reconciles a validated CDC microbatch into the form consumed by the table merges. */
   private[autocdc] def reconcileMicrobatch(
-      batchDf: DataFrame,
+      validatedBatchDf: DataFrame,
       auxiliaryTableDf: DataFrame): DataFrame =
     reconciliationStrategy.reconcileMicrobatch(
       changeArgs = changeArgs,
       resolvedSequencingType = resolvedSequencingType,
-      batchDf = batchDf,
+      validatedBatchDf = validatedBatchDf,
       auxiliaryTableDf = auxiliaryTableDf
     )
 
