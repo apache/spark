@@ -89,8 +89,12 @@ class StreamingAsOfJoinSuite extends StreamTest {
           |""".stripMargin)
 
       testStream(joined)(
-        AddData(input, (timestamp("2026-06-29 09:59:59"), "GOOG", 30)),
-        CheckNewAnswer(Row(timestamp("2026-06-29 09:59:59"), "GOOG", 30, null)))
+        AddData(input,
+          (timestamp("2026-06-29 09:59:59"), "AAPL", 30),
+          (timestamp("2026-06-29 10:00:09"), "GOOG", 40)),
+        CheckNewAnswer(
+          Row(timestamp("2026-06-29 09:59:59"), "AAPL", 30, null),
+          Row(timestamp("2026-06-29 10:00:09"), "GOOG", 40, null)))
     }
   }
 }
