@@ -53,7 +53,11 @@ Most of this phase is already implemented. Two known gaps remain.
 - [x] Unit tests for plan shape: verify that `ExtractInProcessPythonUDFs` produces `InProcessEvalPython` logical nodes and that `InProcessArrowEvalExec` appears in the physical plan. Done in Phase 1 — `InProcessPythonUDFSuite.scala` contains `"plan contains InProcessArrowEvalExec"` and `"non-deterministic UDF is not collapsed"` tests that inspect the physical plan.
 - [x] Unit tests for config validation: verify that `InProcessPythonChecks` throws a clear `IllegalArgumentException` when `spark.executor.cores != spark.task.cpus`, and passes when they are equal. Done in Phase 1 — `InProcessPythonUDFSuite.scala` contains `"InProcessPythonChecks rejects multi-task executor config"` and `"InProcessPythonChecks passes when cores == task.cpus"` tests.
 - [x] Integration tests across all Arrow types: correctness and null-handling tests for each type group (numeric primitives, string/binary, temporal, nested). Done in Phase 1 — `test_inprocess_udf.py` covers `StringType`, `BinaryType`, `TimestampType`, `DateType`, `ArrayType`, `StructType` with null-handling assertions.
-- [x] Performance regression benchmark suite: formalize `benchmark_inprocess_udf.py` as a CI benchmark with noop sink (Scenarios A, B, D, E). Alert if in-process UDF time exceeds 1.2× baseline on any scenario. `_print_results` now returns a list of failure strings when `inprocess_udf median > 1.2 × pandas_udf median`; `main()` accumulates failures and exits non-zero if any are found, printing a clear `PERFORMANCE REGRESSION DETECTED` summary.
+- [x] ASV benchmark suite: `python/benchmarks/bench_inprocess_udf.py` compares
+  in-process UDFs with worker Arrow UDFs and a supplementary pandas baseline,
+  using a noop sink. See `python/benchmarks/README.md` for setup and execution.
+  The standalone scripts were removed and remain available in Git history.
+  The ASV benchmark does not impose a relative-speed pass/fail threshold.
 - [x] CI pipeline integration: register the integration and runtime contract suites in
   `pyspark-sql` and run them with `python/run-tests`. The existing default Python 3.12
   CI image installs JEP and cffi and requires integration tests with `INPROCESS_TESTS=1`.

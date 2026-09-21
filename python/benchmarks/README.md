@@ -140,6 +140,6 @@ the pandas conversion difference, but still measures the complete execution path
 including serialization and framework overhead, rather than IPC alone. The pandas baseline
 includes pandas/Arrow conversion costs, so the ratio is not an isolated measurement
 of IPC savings. ASV's process/setup lifecycle differs from the historical script;
-its results establish a new baseline. The original scripts under `python/integration`
-remain available for historical comparisons. No relative-speed pass/fail threshold
-is imposed by this benchmark.
+its results establish a new baseline. The original standalone scripts were removed;
+their earlier versions remain available in Git history for historical comparisons.
+No relative-speed pass/fail threshold is imposed by this benchmark.
