@@ -64,11 +64,11 @@ private[spark] class SparkKubernetesDiagnosticsSetter(clientProvider: Kubernetes
     // Skip it so that a submission failure (e.g. pod creation conflict) does not overwrite
     // the annotation of an existing driver pod with the same name.
     if (conf.get(SUBMIT_DEPLOY_MODE) != "cluster") {
-      val diagnostics = SparkStringUtils.abbreviate(
-        Utils.redact(conf.get(STRING_REDACTION_PATTERN), Utils.stringifyException(throwable)),
-        KUBERNETES_EXIT_EXCEPTION_MESSAGE_LIMIT_BYTES)
-      Utils.tryWithResource(clientProvider.create(conf)) { client =>
-        conf.get(KUBERNETES_DRIVER_POD_NAME).foreach { podName =>
+      conf.get(KUBERNETES_DRIVER_POD_NAME).foreach { podName =>
+        val diagnostics = SparkStringUtils.abbreviate(
+          Utils.redact(conf.get(STRING_REDACTION_PATTERN), Utils.stringifyException(throwable)),
+          KUBERNETES_EXIT_EXCEPTION_MESSAGE_LIMIT_BYTES)
+        Utils.tryWithResource(clientProvider.create(conf)) { client =>
           client.pods()
             .inNamespace(conf.get(KUBERNETES_NAMESPACE))
             .withName(podName)
