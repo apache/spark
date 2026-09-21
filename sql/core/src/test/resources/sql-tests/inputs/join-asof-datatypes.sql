@@ -105,6 +105,12 @@ ASOF JOIN (
 ) r
   MATCH_CONDITION (t.k >= r.k);
 
+-- FVT-ASOF-4-012a: whole STRUCT columns with different field names but same types
+SELECT r.k.y AS matched
+FROM VALUES (named_struct('a', 2, 'b', 5)) AS t(k)
+ASOF JOIN VALUES (named_struct('x', 1, 'y', 9)) AS r(k)
+  MATCH_CONDITION (t.k >= r.k);
+
 -- FVT-ASOF-4-013: coercion TINYINT vs BIGINT
 SELECT t.k, r.k AS matched_k
 FROM VALUES (CAST(10 AS TINYINT)) AS t(k) ASOF JOIN VALUES (CAST(5 AS BIGINT)) AS r(k)

@@ -2761,7 +2761,7 @@ object AsOfJoin {
             usesArrayOrderExpression(leftType, rightType)
           case _ =>
             TypeCoercion.findWiderTypeForTwo(leftType, rightType).isDefined ||
-              arePositionalStructsCompatible(leftType, rightType)
+              areStructsStructurallyEqual(leftType, rightType)
         }
       }
     }
@@ -2769,23 +2769,34 @@ object AsOfJoin {
     def usesArrayOrderExpression(leftType: DataType, rightType: DataType): Boolean =
       (leftType, rightType) match {
         case (ArrayType(leftElem, _), ArrayType(rightElem, _)) =>
-          // MATCH_CONDITION compares the two arrays with `>=`, which widens array elements only
-          // through findTightestCommonType (no string promotion, no decimal widening). Accept
-          // exactly what that comparison can compare: orderable elements that are already
-          // structurally equal (BinaryComparison ignores struct field names and nullability) or
-          // have a tightest common type. Otherwise the type check would pass but the `>=` would
-          // fail to resolve.
-          isValidOperandType(leftElem) && isValidOperandType(rightElem) &&
-            (DataType.equalsStructurally(leftElem, rightElem, ignoreNullability = true) ||
-              arrayElementCommonType(leftElem, rightElem).isDefined)
+          arrayOrderElementType(leftElem, rightElem).isDefined
         case _ => false
       }
 
     /**
-     * The element type the `>=` comparison coerces two array operands to, if any. Binary
-     * comparison widens array elements only through findTightestCommonType, ANSI-aware, so the
-     * type check and the order expression use this instead of the broader findWiderTypeForTwo
-     * (which would string-promote or decimal-widen elements the `>=` cannot).
+     * Element type a binary comparison uses for two array operands, or None when it cannot
+     * compare them. Elements compare element-wise, so they follow the same rule as top-level
+     * operands: orderable and either already structurally equal (field names and nullability
+     * ignored) or sharing a tightest common type.
+     * Example: array<int> vs array<bigint> gives Some(bigint); array<int> vs array<string> gives
+     * None, because that pair only string-promotes, which a comparison cannot do. Both the type
+     * check and the order expression read the element type from here, so the two cannot drift.
+     */
+    def arrayOrderElementType(leftElem: DataType, rightElem: DataType): Option[DataType] = {
+      if (!isValidOperandType(leftElem) || !isValidOperandType(rightElem)) {
+        None
+      } else if (DataType.equalsStructurally(leftElem, rightElem, ignoreNullability = true)) {
+        Some(leftElem)
+      } else {
+        arrayElementCommonType(leftElem, rightElem)
+      }
+    }
+
+    /**
+     * Tightest common type of two array elements, or None. A binary comparison widens array
+     * elements only through findTightestCommonType (ANSI-aware), so this uses it instead of the
+     * broader findWiderTypeForTwo, which would string-promote or decimal-widen elements the
+     * comparison cannot. Example: int and float widen to double under ANSI.
      */
     def arrayElementCommonType(leftElem: DataType, rightElem: DataType): Option[DataType] = {
       val coercion = if (SQLConf.get.ansiEnabled) AnsiTypeCoercion else TypeCoercion
@@ -2814,18 +2825,19 @@ object AsOfJoin {
       (isTemporal(leftType) && isString(rightType)) || (isString(leftType) && isTemporal(rightType))
     }
 
-    private def arePositionalStructsCompatible(
-        leftType: DataType,
-        rightType: DataType): Boolean = {
+    /**
+     * Two struct operands compare directly only when their field types already match by position
+     * (field names and nullability ignored). Coercible-but-unequal fields would need name-aligned
+     * coercion, which findWiderTypeForTwo covers for same-named structs; different-named structs
+     * have no such common type, so the `>=` the comparison builds rejects them. Requiring
+     * structural equality here keeps this type check in step with that `>=`.
+     */
+    private def areStructsStructurallyEqual(leftType: DataType, rightType: DataType): Boolean =
       (leftType, rightType) match {
-        case (leftStruct: StructType, rightStruct: StructType)
-            if usesStructDecomposition(leftType, rightType) =>
-          leftStruct.zip(rightStruct).forall { case (leftField, rightField) =>
-            areOperandsCompatible(leftField.dataType, rightField.dataType)
-          }
+        case (_: StructType, _: StructType) =>
+          DataType.equalsStructurally(leftType, rightType, ignoreNullability = true)
         case _ => false
       }
-    }
 
     private def containsEmptyStructType(dataType: DataType): Boolean = dataType match {
       case struct: StructType =>
@@ -3003,27 +3015,20 @@ object AsOfJoin {
       operator: MatchComparisonOperator): Expression = {
     val leftElementType = leftOperand.dataType.asInstanceOf[ArrayType].elementType
     val rightElementType = rightOperand.dataType.asInstanceOf[ArrayType].elementType
-    // The ZipWith lambda variables and both array inputs must share the element type the `>=`
-    // comparison coerces to. Coercible elements (e.g. INT vs BIGINT, or INT vs FLOAT which widens
-    // to DOUBLE under ANSI) widen to their tightest common type and both arrays are cast to it.
-    // Structurally equal elements (BinaryComparison ignores struct field names) need no cast and
-    // compare element-wise by ordinal.
-    val elementsStructurallyEqual =
-      DataType.equalsStructurally(leftElementType, rightElementType, ignoreNullability = true)
-    val (leftArray, rightArray, elementType) =
-      if (elementsStructurallyEqual) {
-        (leftOperand, rightOperand, leftElementType)
-      } else {
-        MatchConditionTypes.arrayElementCommonType(leftElementType, rightElementType) match {
-          case Some(widerElementType) =>
-            (castArrayElementType(leftOperand, widerElementType),
-              castArrayElementType(rightOperand, widerElementType),
-              widerElementType)
-          case None =>
-            // Unreachable: usesArrayOrderExpression already required a common element type here.
-            throw SparkException.internalError("MATCH_CONDITION array elements have no common type")
-        }
+    // Both array inputs and the ZipWith lambda variables must share the element type the binary
+    // comparison uses. arrayOrderElementType is the single source the type check also reads, so
+    // the two cannot disagree. castArrayElementType widens a coercible side (e.g. INT to BIGINT)
+    // and leaves a structurally equal side untouched.
+    val elementType =
+      MatchConditionTypes.arrayOrderElementType(leftElementType, rightElementType) match {
+        case Some(commonElementType) => commonElementType
+        case None =>
+          // Unreachable: usesArrayOrderExpression already required a common element type here.
+          throw SparkException.internalError(
+            "MATCH_CONDITION array elements have no common type")
       }
+    val leftArray = castArrayElementType(leftOperand, elementType)
+    val rightArray = castArrayElementType(rightOperand, elementType)
     elementType match {
       case struct: StructType =>
         val leftElement = NamedLambdaVariable("left_elem", struct, nullable = true)
@@ -3052,7 +3057,11 @@ object AsOfJoin {
   /** Cast an array operand to the given element type, keeping its own `containsNull`. */
   private def castArrayElementType(operand: Expression, elementType: DataType): Expression = {
     val arrayType = operand.dataType.asInstanceOf[ArrayType]
-    if (DataTypeUtils.sameType(arrayType.elementType, elementType)) {
+    // Skip the cast when the element already matches structurally, the rule the type check uses,
+    // so a structurally equal side keeps its own field names instead of being renamed by a cast.
+    val alreadyMatches =
+      DataType.equalsStructurally(arrayType.elementType, elementType, ignoreNullability = true)
+    if (alreadyMatches) {
       operand
     } else {
       Cast(operand, ArrayType(elementType, arrayType.containsNull))

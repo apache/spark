@@ -387,6 +387,31 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM VALUES (named_struct('a', 1)) AS t(s) ASOF JOIN
+     VALUES (named_struct('c', CAST(1 AS BIGINT))) AS r(s)
+  MATCH_CONDITION (t.s >= r.s)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "type1" : "\"STRUCT<a: INT NOT NULL>\"",
+    "type2" : "\"STRUCT<c: BIGINT NOT NULL>\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 151,
+    "fragment" : "ASOF JOIN\n     VALUES (named_struct('c', CAST(1 AS BIGINT))) AS r(s)\n  MATCH_CONDITION (t.s >= r.s)"
+  } ]
+}
+
+
+-- !query
 SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (t.trade_time + (q.quote_time - t.trade_time) >= q.quote_time)
   ON t.symbol = q.symbol

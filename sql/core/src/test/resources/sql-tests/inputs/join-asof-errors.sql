@@ -87,6 +87,12 @@ SELECT * FROM VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS t(s) ASOF JOIN
      VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS r(s)
   MATCH_CONDITION (t.s >= r.s);
 
+-- FVT-ASOF-3-013a: STRUCT operands with different field names and coercible types rejected
+-- (different names have no common type for the coercion the comparison needs)
+SELECT * FROM VALUES (named_struct('a', 1)) AS t(s) ASOF JOIN
+     VALUES (named_struct('c', CAST(1 AS BIGINT))) AS r(s)
+  MATCH_CONDITION (t.s >= r.s);
+
 -- FVT-ASOF-3-014: operand references both sides
 SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (t.trade_time + (q.quote_time - t.trade_time) >= q.quote_time)

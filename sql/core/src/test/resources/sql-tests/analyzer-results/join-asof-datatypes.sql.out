@@ -235,6 +235,20 @@ Project [k#x.tag AS tag#x, k#x.inner_seq AS inner_seq#x]
 
 
 -- !query
+SELECT r.k.y AS matched
+FROM VALUES (named_struct('a', 2, 'b', 5)) AS t(k)
+ASOF JOIN VALUES (named_struct('x', 1, 'y', 9)) AS r(k)
+  MATCH_CONDITION (t.k >= r.k)
+-- !query analysis
+Project [k#x.y AS matched#x]
++- AsOfJoin (named_struct(a, k#x.a, b, k#x.b) >= named_struct(x, k#x.x, y, k#x.y)), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [k#x]
+   +- SubqueryAlias r
+      +- LocalRelation [k#x]
+
+
+-- !query
 SELECT t.k, r.k AS matched_k
 FROM VALUES (CAST(10 AS TINYINT)) AS t(k) ASOF JOIN VALUES (CAST(5 AS BIGINT)) AS r(k)
   MATCH_CONDITION (t.k >= r.k)
