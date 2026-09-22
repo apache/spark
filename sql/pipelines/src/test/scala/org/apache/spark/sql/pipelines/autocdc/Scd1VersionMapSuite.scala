@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{functions => F, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.DataFrame
