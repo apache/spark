@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, ExpressionSet}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, ExpressionSet, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.{AliasAwareOutputExpression, AliasAwareQueryOutputOrdering}
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.trees.MultiTransform
@@ -90,6 +90,31 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   }
 
   /**
+   * Projects a partitioning expression through the output aliases.
+   *
+   * A [[TransformExpression]] is handled by retargeting its column slot only: its literal
+   * parameters (the bucket count, the truncate width) live in `children`, so a bare
+   * `projectExpression` would substitute one that happens to match an alias -- `SELECT data AS d,
+   * 2 AS w` over `truncate(data, 2)` yields `truncate(d, w)`, which drops `w` from the transform's
+   * identity, adds a second entry to `references`, and makes
+   * `KeyedPartitioning.supportsExpressions` reject the partitioning, silently losing SPJ. A
+   * `Literal` has no children, so `projectExpression`'s `containsChild.nonEmpty` fallback does not
+   * re-offer the original either. See `TransformExpression.rewriteColumnSlots`, which
+   * `KeyedShuffleSpec.createPartitioning` uses for the same reason.
+   */
+  private def projectPartitionExpression(expr: Expression): LazyList[Expression] = expr match {
+    case te: TransformExpression =>
+      TransformExpression.columnSlots(te) match {
+        // `KeyedPartitioning.supportsExpressions` admits exactly one column slot. Anything else
+        // (no column, or a shape that bypassed the gate) is not projectable here.
+        case Seq(col) =>
+          projectExpression(col).map(c => TransformExpression.rewriteColumnSlots(te)(_ => c))
+        case _ => LazyList.empty
+      }
+    case other => projectExpression(other)
+  }
+
+  /**
    * Projects all input [[KeyedPartitioning]]s through the current node's output expressions.
    *
    * For each expression position (0..N-1), collects the unique expressions at that position across
@@ -117,7 +142,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
         (0 until numPositions).map { i =>
           val seen = mutable.Set.empty[Expression]
           ExpressionSet(kps.map(_.expressions(i))).to(LazyList).flatMap { expr =>
-            projectExpression(expr).filter(e => seen.add(e.canonicalized))
+            projectPartitionExpression(expr).filter(e => seen.add(e.canonicalized))
           }
         }
       } else {

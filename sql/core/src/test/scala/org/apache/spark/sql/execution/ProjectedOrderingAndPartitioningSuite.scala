@@ -976,6 +976,41 @@ class ProjectedOrderingAndPartitioningSuite
     assert(shuffles.size == 1,
       s"Expected 1 shuffle but found ${shuffles.size}:\n$plan")
   }
+
+  test("SPARK-50593: alias projection must not substitute a transform's literal parameter") {
+    // `aliasMap` is built from ANY Alias child, so `32 AS w` maps Literal(32) -> w, and
+    // `projectExpression` matches on `aliasMap.contains(e.canonicalized)` for any expression. A
+    // Literal has no children, so the `containsChild.nonEmpty` fallback does not re-offer it: the
+    // substitution would be unconditional, turning bucket(32, id) into bucket(w, pk).
+    val id = AttributeReference("id", IntegerType)()
+    val bucketExpr = TransformExpression(BucketFunction, Seq(Literal(32), id))
+    val keys1d = Seq(InternalRow(0), InternalRow(1), InternalRow(2))
+    val child = DummyLeafExecWithPartitioning(
+      output = Seq(id),
+      partitioning = KeyedPartitioning(Seq(bucketExpr), keys1d))
+    val pk = Alias(id, "pk")()
+    val w = Alias(Literal(32), "w")()
+    val project = ProjectExec(Seq(pk, w), child)
+
+    project.outputPartitioning match {
+      case kp: KeyedPartitioning =>
+        kp.expressions.head match {
+          case te: TransformExpression =>
+            assert(te.children.head === Literal(32),
+              "the literal parameter must survive the projection, not become the alias `w`")
+            assert(te.references.size === 1,
+              "one reference only -- KeyedShuffleSpec.keyPositions asserts this")
+            assert(te.isSameFunction(bucketExpr),
+              "identity must be preserved, so SPJ is not silently lost")
+            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "pk",
+              "the column slot is still retargeted at the aliased attribute")
+          case other => fail(s"Expected TransformExpression, got $other")
+        }
+        assert(KeyedPartitioning.supportsExpressions(kp.expressions),
+          "the projected partitioning must still be SPJ-eligible")
+      case other => fail(s"Expected KeyedPartitioning, got $other")
+    }
+  }
 }
 
 private case class DummyLeafExecWithPartitioning(

@@ -400,6 +400,35 @@ case class TransformExpression(
 
 object TransformExpression {
   /**
+   * Rewrites `te`'s column slots with `rewriteColumn`, leaving its literal parameters untouched.
+   *
+   * Since literal parameters (the bucket count, the truncate width) live in `children` rather than
+   * in a field of their own, any path that rewrites a transform's children has to skip them. A
+   * parameter is not an aliasable value: substituting it changes what the transform computes, drops
+   * it out of `functionId`, adds a second entry to `references` (tripping
+   * `KeyedShuffleSpec.keyPositions`' single-reference assert), and makes
+   * `KeyedPartitioning.supportsExpressions` reject the partitioning outright -- so SPJ is silently
+   * lost. Every such path should go through here rather than reimplement the skip.
+   *
+   * Callers: `KeyedShuffleSpec.createPartitioning`, which retargets a transform at the other side's
+   * clustering key, and `PartitioningPreservingUnaryExecNode`, which retargets it at an aliased
+   * output attribute.
+   */
+  def rewriteColumnSlots(te: TransformExpression)(
+      rewriteColumn: Expression => Expression): TransformExpression =
+    te.copy(children = te.children.map {
+      case l: Literal => l
+      case c => rewriteColumn(c)
+    })
+
+  /**
+   * The column slots of `te` -- its children that are not literal parameters. For a partitioning
+   * expression admitted by `KeyedPartitioning.supportsExpressions` this holds exactly one element.
+   */
+  def columnSlots(te: TransformExpression): Seq[Expression] =
+    te.children.filterNot(_.isInstanceOf[Literal])
+
+  /**
    * Whether `e` is a bare column reference: an [[Attribute]] or a [[GetStructField]] chain
    * (struct-field access on a column). Shared by [[TransformExpression.isSameFunction]] and by
    * `KeyedPartitioning.supportsExpressions`, which both decide whether a transform's single

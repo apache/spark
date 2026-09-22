@@ -2227,13 +2227,9 @@ case class KeyedShuffleSpec(
 
     val newExpressions = partitioning.expressions.zip(keyPositions).map {
       case (te: TransformExpression, positionSet) =>
-        // Preserve literal parameters (e.g., numBuckets, truncate width)
-        // while replacing only column references with the new clustering expression
-        val newChildren = te.children.map {
-          case l: Literal => l  // Keep literals as-is
-          case _ => clustering(positionSet.head)  // Replace column references
-        }
-        te.copy(children = newChildren)
+        // Retarget the transform's column slot at the other side's clustering key. Literal
+        // parameters are preserved -- see `TransformExpression.rewriteColumnSlots`.
+        TransformExpression.rewriteColumnSlots(te)(_ => clustering(positionSet.head))
       case (_, positionSet) => clustering(positionSet.head)
     }
     // The shuffled side is laid out on this side's partitions, so it shares their layout, with one
