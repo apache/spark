@@ -3160,7 +3160,7 @@ public class CollationSupportSuite {
 
     if (trimString == null) {
       // Trim string is ASCII space.
-      result = CollationSupport.StringTrimLeft.exec(src);
+      result = CollationSupport.StringTrimLeft.exec(src, collationId);
     } else {
       // Trim string is specified.
       result = CollationSupport.StringTrimLeft.exec(src, trim, collationId);
@@ -3460,7 +3460,7 @@ public class CollationSupportSuite {
 
     if (trimString == null) {
       // Trim string is ASCII space.
-      result = CollationSupport.StringTrimRight.exec(src);
+      result = CollationSupport.StringTrimRight.exec(src, collationId);
     } else {
       // Trim string is specified.
       result = CollationSupport.StringTrimRight.exec(src, trim, collationId);

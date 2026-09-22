@@ -30,8 +30,16 @@ import java.util.regex.Pattern;
  */
 public final class CollationSupport {
 
-  private static final UTF8String DEFAULT_TRIM_STRING = UTF8String.fromString(" ");
-
+  /**
+   * Whether unary trim should use collation-aware (ICU) matching for the default ASCII-space
+   * trim string, rather than the binary implementation.
+   *
+   * Only case-insensitive ICU collations (CI, CI_AI) qualify: they compare at primary/secondary
+   * ICU strength, at which UCA treats many Unicode space separators (Zs, e.g. NBSP U+00A0) as
+   * equal to U+0020. Case-sensitive ICU collations stay binary because tertiary strength
+   * distinguishes those characters; non-ICU collations (UTF8_BINARY, UTF8_LCASE) are already
+   * excluded by isCaseInsensitive; and CS_AI is not a valid trim input collation.
+   */
   private static boolean useCollationAwareDefaultTrim(final int collationId) {
     return CollationFactory.isCaseInsensitive(collationId);
   }
@@ -509,12 +517,9 @@ public final class CollationSupport {
   }
 
   public static class StringTrim {
-    public static UTF8String exec(final UTF8String srcString) {
-      return execBinary(srcString);
-    }
     public static UTF8String exec(final UTF8String srcString, final int collationId) {
       return useCollationAwareDefaultTrim(collationId) ?
-        execICU(srcString, collationId) :
+        exec(srcString, UTF8String.SPACE_UTF8, collationId) :
         execBinary(srcString);
     }
     public static UTF8String exec(
@@ -574,7 +579,7 @@ public final class CollationSupport {
     public static UTF8String execICU(
         final UTF8String srcString,
         final int collationId) {
-      return execICU(srcString, DEFAULT_TRIM_STRING, collationId);
+      return execICU(srcString, UTF8String.SPACE_UTF8, collationId);
     }
     public static UTF8String execICU(
         final UTF8String srcString,
@@ -591,12 +596,9 @@ public final class CollationSupport {
   }
 
   public static class StringTrimLeft {
-    public static UTF8String exec(final UTF8String srcString) {
-      return execBinary(srcString);
-    }
     public static UTF8String exec(final UTF8String srcString, final int collationId) {
       return useCollationAwareDefaultTrim(collationId) ?
-        execICU(srcString, collationId) :
+        exec(srcString, UTF8String.SPACE_UTF8, collationId) :
         execBinary(srcString);
     }
     public static UTF8String exec(
@@ -651,7 +653,7 @@ public final class CollationSupport {
     public static UTF8String execICU(
         final UTF8String srcString,
         final int collationId) {
-      return execICU(srcString, DEFAULT_TRIM_STRING, collationId);
+      return execICU(srcString, UTF8String.SPACE_UTF8, collationId);
     }
     public static UTF8String execICU(
         final UTF8String srcString,
@@ -662,12 +664,9 @@ public final class CollationSupport {
   }
 
   public static class StringTrimRight {
-    public static UTF8String exec(final UTF8String srcString) {
-      return execBinary(srcString);
-    }
     public static UTF8String exec(final UTF8String srcString, final int collationId) {
       return useCollationAwareDefaultTrim(collationId) ?
-        execICU(srcString, collationId) :
+        exec(srcString, UTF8String.SPACE_UTF8, collationId) :
         execBinary(srcString);
     }
     public static UTF8String exec(
@@ -726,7 +725,7 @@ public final class CollationSupport {
     public static UTF8String execICU(
         final UTF8String srcString,
         final int collationId) {
-      return execICU(srcString, DEFAULT_TRIM_STRING, collationId);
+      return execICU(srcString, UTF8String.SPACE_UTF8, collationId);
     }
     public static UTF8String execICU(
         final UTF8String srcString,
