@@ -17,14 +17,20 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableInfo, WriteUpdate}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
-class GroupBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
+class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase {
+
+  override protected lazy val extraTableProps: java.util.Map[String, String] = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("column-update-cow", "true")
+    props
+  }
 
   private def createAndInitTableReplaceData(schemaString: String, jsonData: String): Unit = {
     val props = new java.util.HashMap[String, String]()
@@ -136,9 +142,7 @@ class GroupBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
   }
 
   test("column-update ReplaceData: dispatch verification -- UPDATE/COPY rows use writeUpdate") {
-    // Validates the runtime contract: when SupportsColumnUpdates is in play, UPDATE and COPY
-    // rows flow through DataWriter.writeUpdate(...) rather than DataWriter.write(...). The
-    // test connector tags log entries by which writer method was called, so we can assert
+    // The test connector tags log entries by which writer method was called, so we can assert
     // every row in the write log went through the narrow path.
     createAndInitTableReplaceData("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
       """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
@@ -156,10 +160,6 @@ class GroupBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
   }
 
   test("column-update ReplaceData: connector missing writeUpdate override is rejected") {
-    // A connector that mixes in SupportsColumnUpdates but never overrides
-    // DataWriter#writeUpdate falls through to the default implementation, which must throw
-    // DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED rather than silently forwarding narrow rows to
-    // write(...).
     createAndInitTableReplaceDataNoWriteUpdate("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
@@ -269,5 +269,52 @@ class GroupBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, Row(1, 2), "hr") :: Nil)
+  }
+
+  test("column-update ReplaceData: narrow scan widens for an unreferenced CHECK constraint" +
+    " column") {
+    createAndInitTableReplaceData("pk INT NOT NULL, id INT, dep STRING, extra INT",
+      """{ "pk": 1, "id": 1, "dep": "hr", "extra": 5 }
+        |{ "pk": 2, "id": 2, "dep": "software", "extra": 5 }
+        |""".stripMargin)
+    sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_extra CHECK (extra > 0)")
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
+
+    checkLastScanIncludes("extra")
+
+    val updateSchema = table.lastWriteInfo.updateSchema().get()
+    assert(!updateSchema.fieldNames.contains("extra"),
+      s"extra must not leak into the narrow update schema: $updateSchema")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, -1, "hr", 5) :: Row(2, 2, "software", 5) :: Nil)
+  }
+
+  test("column-update ReplaceData: CHECK constraint is still enforced on a narrow write") {
+    createAndInitTableReplaceData("pk INT NOT NULL, id INT, dep STRING, extra INT",
+      """{ "pk": 1, "id": 1, "dep": "hr", "extra": 5 }
+        |""".stripMargin)
+    sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_id CHECK (id > 0)")
+
+    val ex = intercept[SparkRuntimeException] {
+      sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
+    }
+    assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION",
+      s"expected CHECK_CONSTRAINT_VIOLATION but got: ${ex.getCondition}")
+  }
+
+  test("column-update ReplaceData: dynamic options reach the connector") {
+    createAndInitTableReplaceData("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |""".stripMargin)
+
+    checkRowLevelOperationOptions(
+      sql(s"UPDATE $tableNameAsString WITH " +
+        s"(`load-option` = 'load-value', `write-option` = 'write-value') " +
+        s"SET id = -1 WHERE pk = 1"),
+      "load-option" -> "load-value",
+      "write-option" -> "write-value")
   }
 }
