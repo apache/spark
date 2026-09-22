@@ -293,11 +293,23 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Private helper method to calculate the number of code points in the UTF-8 string. Counting
    * the code points is a linear time operation, as we need to scan the entire UTF-8 string.
    * Hence, this method should generally only be called once for non-empty UTF-8 strings.
+   *
+   * Because the scan reads every lead byte, it also caches ASCII-ness for free (see
+   * {@link #isFullAscii()}): any lead byte >= 0x80 (a multi-byte or invalid byte) is non-ASCII.
+   * The flag is only set when still UNKNOWN, preserving a value already computed elsewhere.
    */
   private int getNumChars() {
     int len = 0;
-    for (int i = 0; i < numBytes; i += numBytesForFirstByte(getByte(i))) {
+    boolean ascii = true;
+    int i = 0;
+    while (i < numBytes) {
+      byte b = getByte(i);
+      ascii &= b >= 0;
+      i += numBytesForFirstByte(b);
       len += 1;
+    }
+    if (isFullAscii == IsFullAscii.UNKNOWN) {
+      isFullAscii = ascii ? IsFullAscii.FULL_ASCII : IsFullAscii.NOT_ASCII;
     }
     return len;
   }
@@ -635,20 +647,28 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
 
-    int i = 0;
-    int c = 0;
-    while (i < numBytes && c < start) {
-      i += numBytesForFirstByte(getByte(i));
-      c += 1;
-    }
-
-    int j = i;
-    if (until == Integer.MAX_VALUE) {
-      i = numBytes;
+    int i;
+    int j;
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII fast-path: code point index == byte index, so locate directly. The scan below
+      // clamps a negative start to 0 and stops at numBytes; replicate that with min/max.
+      j = Math.max(start, 0);
+      i = (until == Integer.MAX_VALUE) ? numBytes : Math.min(until, numBytes);
     } else {
-      while (i < numBytes && c < until) {
+      i = 0;
+      int c = 0;
+      while (i < numBytes && c < start) {
         i += numBytesForFirstByte(getByte(i));
         c += 1;
+      }
+      j = i;
+      if (until == Integer.MAX_VALUE) {
+        i = numBytes;
+      } else {
+        while (i < numBytes && c < until) {
+          i += numBytesForFirstByte(getByte(i));
+          c += 1;
+        }
       }
     }
 
@@ -716,6 +736,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public int getChar(int charIndex) {
     Objects.checkIndex(charIndex, numChars());
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII: byte index == char index, and checkIndex guarantees it is in range.
+      return codePointFrom(charIndex);
+    }
     int charCount = 0, byteCount = 0;
     while (charCount < charIndex) {
       byteCount += numBytesForFirstByte(getByte(byteCount));
@@ -1376,6 +1400,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (charPos < 0) {
       return -1;
     }
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII: byte index == char index, clamped to the end of the string.
+      return Math.min(charPos, numBytes);
+    }
 
     int i = 0;
     int c = 0;
@@ -1387,6 +1415,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public int bytePosToChar(int bytePos) {
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII: char index == byte index, clamped to [0, numBytes].
+      return Math.max(0, Math.min(bytePos, numBytes));
+    }
     int i = 0;
     int c = 0;
     while (i < numBytes && i < bytePos) {
