@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, EqualNullSafe, Expression, If, Literal, MetadataAttribute, Not, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, EqualNullSafe, Expression, If, Literal, MetadataAttribute, Not, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, Filter, LogicalPlan, Project, ReplaceData, Union, UpdateTable, WriteDelta}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UPDATE_TABLE
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
+import org.apache.spark.sql.connector.catalog.constraints.{Check, Constraint}
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationTable, SupportsColumnUpdates, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -317,9 +318,19 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val originalRowIdValues = buildOriginalRowIdValues(rowIdAttrs, assignments)
     val operationType = Alias(Literal(UPDATE_OPERATION), OPERATION_COLUMN)()
 
+    // Columns present in the narrow scan for a reason other than the categories above (e.g. a
+    // CHECK constraint column pulled in by computeNarrowReadAttrs) must still survive into this
+    // plan's output, since ResolveTableConstraints re-validates constraints against it above
+    // this rewrite. They are excluded from the connector-visible write schema separately, by
+    // updateRowProjection selecting only connectorDataAttrs.
+    val connectorAttrIds = connectorDataAttrs.map(_.exprId).toSet
+    val carryAlongValues = plan.output.filterNot(a =>
+      metadataAttrSet.contains(a) || rowIdAttrSet.contains(a) ||
+        assignedKeyIds.contains(a.exprId) || connectorAttrIds.contains(a.exprId))
+
     Project(
       Seq(operationType) ++ assignedValues ++ connectorPassThroughValues ++
-        metadataValues ++ rowIdValues ++ originalRowIdValues,
+        metadataValues ++ rowIdValues ++ originalRowIdValues ++ carryAlongValues,
       plan)
   }
 
@@ -422,7 +433,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   /**
    * Computes the narrow set of data columns that must be present in the scan for a column-update
    * write: connector-declared attrs (`requiredDataAttributes()`), unioned with any table columns
-   * referenced by non-identity assignment RHS expressions and the operation condition.
+   * referenced by non-identity assignment RHS expressions, the operation condition, and the
+   * table's CHECK constraints.
    */
   private def computeNarrowReadAttrs(
       relation: DataSourceV2Relation,
@@ -438,7 +450,29 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val extraRefs = (cond.references.toSeq ++ nonIdentityRhsRefs)
       .collect { case a: AttributeReference => a }
       .filter(relationSet.contains)
-    dedupAttrs(connectorDataAttrs ++ extraRefs)
+    val checkConstraintAttrs = resolveCheckConstraintAttrs(relation)
+    dedupAttrs(connectorDataAttrs ++ extraRefs ++ checkConstraintAttrs)
+  }
+
+  /**
+   * Returns the relation attributes referenced by the table's CHECK constraints, so that
+   * narrowing does not drop a column `ResolveTableConstraints` needs later to re-validate the
+   * rewritten write query. Falls back to the full relation output whenever a constraint's
+   * condition cannot be resolved to a `Predicate` (see `Check#predicate()`).
+   */
+  private def resolveCheckConstraintAttrs(
+      relation: DataSourceV2Relation): Seq[AttributeReference] = {
+    val checks = Option(relation.table.constraints).getOrElse(Array.empty[Constraint]).collect {
+      case c: Check => c
+    }
+    if (checks.isEmpty) {
+      Nil
+    } else if (checks.exists(_.predicate() == null)) {
+      relation.output
+    } else {
+      val refs = checks.flatMap(_.predicate().references()).toSeq
+      V2ExpressionUtils.resolveRefs[AttributeReference](refs, relation)
+    }
   }
 
   /**
