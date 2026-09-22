@@ -134,42 +134,52 @@ class PartitionKeyedAccumulatorSuite extends SparkFunSuite {
   test("SPARK-57547: accessors are null-safe while readObject publishes the accumulator") {
     // `AccumulatorV2.readObject` registers `this` with the `TaskContext` before Java
     // deserialization has read this subclass's fields, so the backing map is still unset at that
-    // point. The executor heartbeater reads every registered accumulator and calls `isZero` on it,
-    // which used to throw a NullPointerException there and kill the heartbeat thread. Stand in for
-    // that reader by probing the accumulator from `registerAccumulator`, which `readObject` calls
-    // at exactly that moment.
-    val acc = new PartitionKeyedAccumulator[Stats]
-    acc.metadata = AccumulatorMetadata(AccumulatorContext.newId(), None, countFailedValues = false)
-    AccumulatorContext.register(acc)
+    // point. `isZero` is the accessor that hit this in production: the executor heartbeater calls
+    // it on every registered accumulator, where it threw a NullPointerException and killed the
+    // heartbeat thread. `value` is not on the heartbeat path in this window -- it is covered here
+    // as additional null-safety, since the driver reaches it later via `toInfoUpdate` should a
+    // half-read accumulator ever be shipped. Stand in for those readers by probing from
+    // `registerAccumulator`, which `readObject` calls at exactly that moment.
+    //
+    // Each accessor gets its own fresh deserialization: the first guarded call installs the map,
+    // so probing them together would let a regression in any later accessor pass unnoticed.
+    val probes = Seq[(String, PartitionKeyedAccumulator[Stats] => Unit)](
+      "isZero" -> (acc => assert(acc.isZero)),
+      "value" -> (acc => assert(acc.value.isEmpty)))
 
-    var probed = false
-    val taskContext = new TaskContextImpl(
-      stageId = 0,
-      stageAttemptNumber = 0,
-      partitionId = 0,
-      taskAttemptId = 0L,
-      attemptNumber = 0,
-      numPartitions = 1,
-      taskMemoryManager = null,
-      localProperties = new Properties,
-      metricsSystem = null,
-      taskMetrics = TaskMetrics.empty,
-      cpuAmount = BigDecimal(1)) {
-      private[spark] override def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
-        // The accessors the heartbeat path reaches. Neither may throw on a half-read instance.
-        assert(a.isZero)
-        assert(a.value.asInstanceOf[java.util.Map[_, _]].isEmpty)
-        probed = true
+    probes.foreach { case (accessor, probe) =>
+      val acc = new PartitionKeyedAccumulator[Stats]
+      acc.metadata =
+        AccumulatorMetadata(AccumulatorContext.newId(), None, countFailedValues = false)
+      AccumulatorContext.register(acc)
+
+      var probed = false
+      val taskContext = new TaskContextImpl(
+        stageId = 0,
+        stageAttemptNumber = 0,
+        partitionId = 0,
+        taskAttemptId = 0L,
+        attemptNumber = 0,
+        numPartitions = 1,
+        taskMemoryManager = null,
+        localProperties = new Properties,
+        metricsSystem = null,
+        taskMetrics = TaskMetrics.empty,
+        cpuAmount = BigDecimal(1)) {
+        private[spark] override def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
+          probe(a.asInstanceOf[PartitionKeyedAccumulator[Stats]])
+          probed = true
+        }
       }
-    }
 
-    TaskContext.setTaskContext(taskContext)
-    try {
-      Utils.deserialize[PartitionKeyedAccumulator[Stats]](Utils.serialize(acc))
-    } finally {
-      TaskContext.unset()
-      AccumulatorContext.remove(acc.id)
+      TaskContext.setTaskContext(taskContext)
+      try {
+        Utils.deserialize[PartitionKeyedAccumulator[Stats]](Utils.serialize(acc))
+      } finally {
+        TaskContext.unset()
+        AccumulatorContext.remove(acc.id)
+      }
+      assert(probed, s"$accessor was never probed, so the race was not exercised")
     }
-    assert(probed, "the accumulator was never registered, so the race was not exercised")
   }
 }

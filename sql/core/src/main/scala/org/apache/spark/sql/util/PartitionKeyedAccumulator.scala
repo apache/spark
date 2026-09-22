@@ -78,15 +78,19 @@ class PartitionKeyedAccumulator[T] extends AccumulatorV2[(Int, T), java.util.Map
     getOrCreate.put(v._1, v._2)
   }
 
-  override def merge(other: AccumulatorV2[(Int, T), java.util.Map[Int, T]]): Unit = synchronized {
-    other match {
-      case o: PartitionKeyedAccumulator[T] =>
-        // Last-write-wins per partition id: a partition recorded by more than one task replaces
-        // rather than accumulates, keeping any caller-derived aggregate exact.
-        getOrCreate.putAll(o.value)
-      case _ => throw new UnsupportedOperationException(
-        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
-    }
+  override def merge(other: AccumulatorV2[(Int, T), java.util.Map[Int, T]]): Unit = other match {
+    case o: PartitionKeyedAccumulator[T] =>
+      // Resolve the source map before taking our own monitor. Acquiring `o`'s monitor while
+      // holding ours would leave the two merge directions with opposite lock orders, so a
+      // concurrent `o.merge(this)` could deadlock against this call.
+      val source = o.value
+      // Last-write-wins per partition id: a partition recorded by more than one task replaces
+      // rather than accumulates, keeping any caller-derived aggregate exact.
+      synchronized {
+        getOrCreate.putAll(source)
+      }
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
   // A read-only VIEW over the live map -- no copy. Only the accumulator framework calls `value`
