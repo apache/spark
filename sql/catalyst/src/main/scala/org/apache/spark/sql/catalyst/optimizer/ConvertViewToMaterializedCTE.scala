@@ -59,27 +59,34 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!SQLConf.get.getConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE)) return plan
+    // FinishAnalysis re-runs the rule batch on Subquery roots and requires the result
+    // to stay a Subquery; the top-level pass already covers views inside subqueries.
+    if (plan.isInstanceOf[Subquery]) return plan
     val occurrences = plan.collectWithSubqueries { case v: View => v }
     if (occurrences.length < 2) return plan
 
-    // Group occurrences of the same view by their canonicalized body and captured SQL
-    // configs. Occurrences of one view differ only in renewed expression ids, which
-    // canonicalization normalizes away.
-    val qualifiedGroups = occurrences.groupBy(groupKey).values.filter(qualifies)
-    if (qualifiedGroups.isEmpty) return plan
-    // Match by identifier during the transform, not by the full group key: the key embeds
-    // the canonicalized body, and by the time an outer view is visited in the bottom-up
-    // traversal, nested views inside its body have already been rewritten into
-    // `CTERelationRef`s, so the body no longer canonicalizes to the key computed here.
-    // An identifier mapping to more than one qualified group would mean occurrences whose
-    // canonicalized bodies diverge; refuse conversion rather than rewrite all of them
-    // against whichever definition happens to be visited first.
-    val qualifiedIdentifiers = qualifiedGroups
-      .groupBy(g => groupKeyOf(g)._1)
-      .values
-      .filter(_.size == 1)
-      .map(_.head)
-      .map(groupKeyOf(_)._1)
+    // Admit an identifier only when every occurrence of it forms one qualifying group.
+    // Grouping is by identifier first because the rewrite below matches occurrences by
+    // identifier: an identifier carried by occurrences with divergent bodies (e.g. one
+    // occurrence resolved against a view definition that was replaced after another
+    // occurrence captured it), or whose occurrences fail qualification for any other
+    // reason, must not convert at all - otherwise the rewrite would rebind those
+    // occurrences against a definition their plan does not match, silently changing
+    // query results.
+    //
+    // Inner CTE definition ids are normalized before the bodies are compared: a view
+    // body is re-analyzed per occurrence, and the re-analysis re-substitutes the body's
+    // inner CTEs, minting a fresh `CTERelationDef` id each time (e.g. for a SQL view
+    // whose body has a WITH clause over a persistent table). The re-minted ids are the
+    // only difference between such occurrences' bodies, so the normalization lets them
+    // group together; bodies that differ in anything else still stay apart.
+    val qualifiedIdentifiers = occurrences
+      .groupBy(_.desc.identifier)
+      .collect {
+        case (identifier, occs)
+          if qualifies(occs) && occs.map(occ =>
+            normalizeCteIds(occ.child).canonicalized).distinct.length == 1 => identifier
+      }
       .toSet
     if (qualifiedIdentifiers.isEmpty) return plan
 
@@ -102,7 +109,8 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
               cteDef.id,
               _resolved = true,
               output = cteDef.output,
-              isStreaming = v.child.isStreaming)
+              isStreaming = false,
+              maxRows = cteDef.maxRows)
             Project(rebindingProjectList(v.output, cteDef.output), ref)
 
           case None =>
@@ -116,7 +124,8 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
               cteDef.id,
               _resolved = true,
               output = v.child.output,
-              isStreaming = v.child.isStreaming)
+              isStreaming = false,
+              maxRows = cteDef.maxRows)
         }
     }
 
@@ -127,19 +136,25 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
     }
   }
 
-  private type GroupKey = (TableIdentifier, LogicalPlan)
-
-  // Group by view identity, not by structural body fingerprint: the rule dedupes references
-  // of the SAME view, not distinct views with coincidentally equal bodies. Because the
-  // analyzer resolves each occurrence of one view through the same deterministic path, all
-  // occurrences share a canonically equal body and (db-qualified) identifier, so identity
-  // alone is sufficient and unambiguous. The canonicalized body is kept in the key as a
-  // precondition guard: if a future change ever made two occurrences of one view diverge
-  // structurally, we skip conversion instead of building a wrong shared definition.
-  private def groupKey(v: View): GroupKey =
-    (v.desc.identifier, v.child.canonicalized)
-
-  private def groupKeyOf(occs: Seq[View]): GroupKey = groupKey(occs.head)
+  // Group by view identity: the rule dedupes references of the SAME view, not distinct
+  // views with coincidentally equal bodies, and all occurrences of one view resolve
+  // through the same (db-qualified) identifier. The canonicalized body comparison is a
+  // precondition guard in the identifier admission above: if occurrences of one view
+  // ever diverge structurally, we skip conversion instead of building a wrong shared
+  // definition.
+  //
+  // Rewrites every inner CTE definition id and reference to an appearance ordinal, so
+  // that bodies differing only in re-minted inner CTE ids canonicalize equal. Same tree
+  // shapes are visited in the same order, so equal bodies map to equal ordinals, while
+  // genuinely different structures (e.g. two sibling identical CTEs) still produce
+  // distinct ordinals and stay distinguishable.
+  private def normalizeCteIds(plan: LogicalPlan): LogicalPlan = {
+    val ids = mutable.HashMap.empty[Long, Long]
+    plan.transformUpWithSubqueries {
+      case d: CTERelationDef => d.copy(id = ids.getOrElseUpdate(d.id, ids.size))
+      case r: CTERelationRef => r.copy(cteId = ids.getOrElseUpdate(r.cteId, ids.size))
+    }
+  }
 
   private def qualifies(occs: Seq[View]): Boolean = {
     val first = occs.head
@@ -147,9 +162,22 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
       v.resolved &&
         v.child.deterministic &&
         !v.child.isStreaming &&
+        !hasTopLevelSort(v.child) &&
         v.desc.viewSQLConfigs == first.desc.viewSQLConfigs &&
         schemasAlign(first, v)
     }
+  }
+
+  // The per-reference shuffle boundary is added above the definition, so a
+  // top-level ORDER BY in the view body would be destroyed by it.
+  private def hasTopLevelSort(plan: LogicalPlan): Boolean = plan match {
+    case _: Sort => true
+    case Project(_, child) => hasTopLevelSort(child)
+    case Filter(_, child) => hasTopLevelSort(child)
+    case SubqueryAlias(_, child) => hasTopLevelSort(child)
+    case GlobalLimit(_, child) => hasTopLevelSort(child)
+    case LocalLimit(_, child) => hasTopLevelSort(child)
+    case _ => false
   }
 
   /**
@@ -179,7 +207,8 @@ object ConvertViewToMaterializedCTE extends Rule[LogicalPlan] {
    * definitions: merged into an existing top-level `WithCTE`, spread onto command children
    * for plans implementing `CTEInChildren`, or wrapped around the plan otherwise. References
    * inside subquery expressions resolve against the top-level scope, as they do for regular
-   * user-written CTEs.
+   * user-written CTEs. The top-level pass is the only one that attaches definitions: apply
+   * returns early for `Subquery` roots, whose wrapper must be preserved for the caller.
    */
   private def attachDefs(plan: LogicalPlan, newDefs: Seq[CTERelationDef]): LogicalPlan =
     plan match {
