@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   // Attributes rather than this branch's `Literal`s, because the new tests below match partition
@@ -1482,6 +1482,59 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case k: KeyedPartitioning => k.expressions == Seq(iL) || k.expressions == Seq(iR)
         case _ => false
       }, "each side must end up grouped on its own cogroup key")
+    }
+  }
+
+  test("SPARK-59688: a cogroup does not pair two key spaces as they stand") {
+    val idL = AttributeReference("idL", LongType)()
+    val idR = AttributeReference("idR", LongType)()
+    // `flip_low_bit` permutes its key space, so the two sides report the same key list, [0, 1],
+    // while a key stands for different rows on each. A cogroup has no reduce branch:
+    // `checkKeyGroupCompatible` declines for anything that is not a `ShuffledJoin`, so
+    // `pickCoPartitionTarget` pairs the children on `isCompatibleWith` alone. Reading that pair as
+    // it stands would hand the user's function rows that do not belong together, and unlike a join
+    // there is no equi-predicate to drop them again.
+    val keys = Seq(InternalRow(0L), InternalRow(1L))
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(idL), keys))
+    val right = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(FlipLowBitFunction, Seq(idR))), keys))
+    assert(left.outputPartitioning.satisfies(ClusteredDistribution(Seq(idL))) &&
+      right.outputPartitioning.satisfies(ClusteredDistribution(Seq(idR))),
+      "test setup: each side answers its own clustering, so only the pairing is in question")
+
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(
+      Seq(idL), Seq(idR), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      val result = EnsureRequirements.apply(cogroup)
+      val shuffles = result.collect { case s: ShuffleExchangeExec => s }
+      assert(shuffles.size == 1,
+        s"one side must be laid out on the other rather than read as it stands:\n$result")
+      // Which side, and onto what: the transform side is the one laid out, on the identity side's
+      // keys, so the answer is not merely "something was shuffled".
+      assert(shuffles.head.outputPartitioning match {
+        case k: KeyedPartitioning => k.expressions == Seq(idR) && k.numPartitions == keys.size
+        case _ => false
+      }, s"the transform side must be laid out on the identity side's keys, got " +
+        s"${shuffles.head.outputPartitioning}\n$result")
+      assert(EnsureRequirements.apply(result) == result, "and the rule must be idempotent")
+
+      // Positive control: this path still pairs a side with one that holds the same key space, so
+      // the refusal above is the two key spaces' doing rather than the pairing always failing.
+      val sameSpace = cogroup.copy(left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+        Seq(TransformExpression(FlipLowBitFunction, Seq(idL))), keys)))
+      assert(EnsureRequirements.apply(sameSpace).collect {
+        case s: ShuffleExchangeExec => s
+      }.isEmpty, "two sides holding one key space must still be read as they stand")
     }
   }
 
