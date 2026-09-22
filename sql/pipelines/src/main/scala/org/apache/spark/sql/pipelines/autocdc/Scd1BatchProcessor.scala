@@ -235,8 +235,9 @@ object Scd1BatchProcessor {
         StructField(cdcDeleteSequenceFieldName, sequencingType, nullable = true),
         // The sequencing of the event if it represents an upsert, null otherwise.
         StructField(cdcUpsertSequenceFieldName, sequencingType, nullable = true),
-        // Per-leaf sequencing clocks. A null map means the row uses row-level reconciliation.
-        // A non-null map contains an entry for every non-key user-data leaf.
+        // On target rows, a null version map indicates row-level reconciliation; a non-null map
+        // indicates per-leaf reconciliation. Auxiliary-table tombstones always use a null map
+        // because they do not author user data.
         StructField(
           versionMapFieldName,
           Scd1VersionMap.mapType(sequencingType),
