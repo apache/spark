@@ -705,6 +705,21 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
       s"the snapshot pass between the two rules must have recorded the conf: $seen")
   }
 
+  test("SPARK-59122: a union an injected post planner strategy rule adds is recorded next") {
+    // These rules run before `ensureRequirements`, so a reader among them can still drop an
+    // exchange over a union another of them created, which makes this the injected list where the
+    // window costs wrong rows rather than a lost fusion.
+    val seen = ListBuffer.empty[Partitioning]
+    checkInjectedUnionIsStamped(
+      create { extensions =>
+        extensions.injectQueryPostPlannerStrategyRule(_ => WrapRootInUnion)
+        extensions.injectQueryPostPlannerStrategyRule(_ => ObserveUnionPartitioning(seen))
+      }, aqeEnabled = true)
+    assert(seen.nonEmpty, "the second post planner strategy rule must have seen the union")
+    assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
+      s"the snapshot pass between the two rules must have recorded the conf: $seen")
+  }
+
   test("SPARK-59122: the codegen conf is recorded for a prep rule after the one that added it") {
     // The same window, read through the codegen gate rather than the partitioning. The repartition
     // is what makes AQE engage at all; it is round-robin, so the union above it has nothing to pass

@@ -74,11 +74,15 @@ class StampUnionDecisions(snapshot: UnionConfSnapshot) extends Rule[SparkPlan] {
  *
  * The same gap opens between two injected rules: one can return a `UnionExec` of its own, which
  * carries no record yet, and a later one can plan requirements over it or ask its codegen gate.
- * [[SnapshotUnionPreparationConf.before]] closes that for the injected query-stage preparation
- * rules, the list where a consumer can still add or drop an exchange. Two windows stay open, both
- * behind a barrier that decides before execution: the injected columnar rules, which share one
- * `ApplyColumnarRulesAndInsertTransitions` and so cannot be interleaved from outside it, and the
- * injected query-stage optimizer rules, which run on a plan whose exchanges are already fixed.
+ * [[SnapshotUnionPreparationConf.before]] closes that for the two injected lists whose rules can
+ * still add or drop an exchange, the AQE post-planner-strategy rules and the query-stage
+ * preparation rules. Two windows stay open, and in neither can a reader add or drop an exchange.
+ * The injected columnar rules share one `ApplyColumnarRulesAndInsertTransitions`, so a pass cannot
+ * be listed between them from outside it. The injected query-stage optimizer rules run on a plan
+ * whose exchanges are fixed, and they are listed after the built-in ones, so what a live read there
+ * can still move is what the codegen gate answers, whose own barrier lands before
+ * `CollapseCodegenStages`, and, for an injected rule that is itself an `AQEShuffleReadRule`,
+ * whether `ValidateRequirements` keeps its rewrite.
  *
  * Only the confs are recorded, never a partitioning. `EnsureRequirements` has not inserted the
  * exchanges it adds yet, so a decision taken now would freeze plain on a union whose children only

@@ -251,7 +251,11 @@ case class AdaptiveSparkPlanExec(
   private def applyQueryPostPlannerStrategyRules(plan: SparkPlan): SparkPlan = {
     applyPhysicalRules(
       plan,
-      context.session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules,
+      // These rules run before `ensureRequirements`, so one of them can still add or drop an
+      // exchange over a `UnionExec` another just created. A snapshot pass ahead of each is what
+      // keeps that read off the live conf.
+      SnapshotUnionPreparationConf.before(
+        unionConf, context.session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules),
       "AQE Query Post Planner Strategy Rules"
     )
   }

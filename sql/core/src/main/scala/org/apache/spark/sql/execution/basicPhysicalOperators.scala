@@ -1094,10 +1094,10 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * Records the confs this node answers from until its decisions are stamped, read once per
    * preparation into a `UnionConfSnapshot` and passed in here. `SnapshotUnionPreparationConf` does
    * it ahead of `EnsureRequirements`, whose reads the following stamp has to agree with, and ahead
-   * of each injected rule, so a union an earlier one created is not read live by a later one;
-   * `stampDecisions` does it for a node no such pass saw. Only the confs, never a partitioning: the
-   * exchanges `EnsureRequirements` adds are not there yet, so a decision taken there would freeze
-   * plain on a union whose children only become co-partitioned in it.
+   * of the two injected lists that can still change an exchange; see that rule for the two windows
+   * it does not cover. `stampDecisions` does it for a node no such pass saw. Only the confs, never
+   * a partitioning: the exchanges `EnsureRequirements` adds are not there yet, so a decision taken
+   * there would freeze plain on a union whose children only become co-partitioned in it.
    */
   private[execution] def recordPreparationConf(snapshot: UnionConfSnapshot): Unit =
     if (preparationConf.isEmpty) {
@@ -1120,14 +1120,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       // for a union an injected rule added, and for one it rebuilt carrying tags of its own, which
       // is enough to stop `copyTagsFrom` from bringing this tag across.
       recordPreparationConf(snapshot)
-      // Every field from the record this node now carries, which is `snapshot` unless a pass had
-      // already recorded one. Reading some fields from the record and others from the argument
-      // would stamp half from each if the two ever differed.
-      val recorded = preparationConf.getOrElse(snapshot)
-      setTagValue(UnionExec.DECISIONS, UnionExec.Decisions(
-        plainUnion = isPlainUnion,
-        unionCodegenEnabled = recorded.codegenEnabled,
-        maxChildren = recorded.maxChildren))
+      setTagValue(UnionExec.DECISIONS, UnionExec.Decisions(plainUnion = isPlainUnion))
     }
 
   /**
@@ -1175,30 +1168,30 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       }
     }
 
-  // The confs the gate reads, stamped for the reason the plain-union decision is: `conf` is live,
-  // so the gate, `metrics` and the copy `insertInputAdapter` puts inside the codegen shell would
-  // otherwise be free to read different values. When a child is not `CodegenSupport` that copy is
-  // real and its first evaluation lands at execution, which is where reading the conf produced the
-  // failure described on `isPlainUnion`. Before the stamp they come from the preparation's snapshot
-  // where a pass recorded one, so a rule reading the gate on a union an earlier rule created gets
-  // the value that preparation will stamp rather than the live conf.
+  // The confs the gate reads, taken from the record rather than live for the reason the plain-union
+  // decision is stamped: `conf` is live, so the gate, `metrics` and the copy `insertInputAdapter`
+  // puts inside the codegen shell would otherwise be free to read different values. When a child is
+  // not `CodegenSupport` that copy is real and its first evaluation lands at execution, which is
+  // where reading the conf produced the failure described on `isPlainUnion`. A stamped node always
+  // carries a record, so these do not need a branch for the stamp.
   private def unionCodegenEnabled: Boolean =
-    stampedDecisions.map(_.unionCodegenEnabled)
-      .orElse(preparationConf.map(_.codegenEnabled))
+    preparationConf.map(_.codegenEnabled)
       .getOrElse(conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED))
 
   private def maxCodegenChildren: Int =
-    stampedDecisions.map(_.maxChildren)
-      .orElse(preparationConf.map(_.maxChildren))
+    preparationConf.map(_.maxChildren)
       .getOrElse(conf.getConf(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN))
 
   // Memoized per instance rather than stamped on the tag. Every term here reads the children, and a
   // tag outlives them: `SQLExecution` builds the initial `SparkPlanInfo` before execution, forcing
   // `metrics` on every node it visits, so a rule that replaces a child after that would inherit an
   // allowing answer and fuse a topology that `hasPartitionIndexDependentCodegen` or
-  // `supportsColumnar` rejects. The copy in the codegen shell still agrees with the gate:
-  // `InputAdapter` delegates `output` and `supportsColumnar` to its child, the other terms walk the
-  // subtree through it, and each of those is fixed for a given set of children.
+  // `supportsColumnar` rejects. That is a trade rather than a free win: a rule placed after
+  // `CollapseCodegenStages` that weakened a child would instead leave a stamped union with empty
+  // `metrics` inside a shell that still fuses, which `doProduce` reports as a missing
+  // `numOutputRows`. Nothing in the tree does that. The copy in the codegen shell agrees with the
+  // gate either way: `InputAdapter` delegates `output` and `supportsColumnar` to its child, the
+  // other terms walk the subtree through it, and each is fixed for a given set of children.
   @transient private lazy val childTopologyFailureReason: Option[String] = {
     if (children.exists(_.exists(_.isInstanceOf[UnionExec]))) {
       Some("nested-union")
@@ -1216,13 +1209,14 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
-  // The three preparation-scoped terms are recomputed per call, because memoizing them would let a
-  // read arriving before `stampDecisions` settle the gate on the live conf. The stamp can install
-  // the opposite value, and the gate would then keep the memoized answer while the copy
-  // `insertInputAdapter` builds, a fresh instance carrying the stamped tag, derives the other one.
-  // Nothing on Spark's own path reads a union that early: every barrier runs inside `preparations`,
-  // ahead of the `SparkPlanInfo` that forces `metrics`. A late extension hook can, and so can a
-  // caller inspecting `sparkPlan`.
+  // The three preparation-scoped terms are recomputed per call. `isPlainUnion` has to be: it
+  // derives `rawPartitioning` from the children, so a read before `stampDecisions` would otherwise
+  // settle the gate on children that move. The two conf terms have to be for a different reason: a
+  // node with no record answers live, and a pass can write the record afterwards, so a memoized
+  // answer would keep the live value while the copy `insertInputAdapter` builds, a fresh instance
+  // carrying that record, reads it. No Spark rule reads this gate before `CollapseCodegenStages`,
+  // which every barrier precedes; a late extension hook can, and so can a caller inspecting
+  // `sparkPlan`.
   private def supportCodegenFailureReason: Option[String] = {
     if (!unionCodegenEnabled) {
       Some("union-codegen-disabled")
@@ -1247,13 +1241,13 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     }
   }
 
-  // Registered only when fusion will actually run, so plans that fall back to `doExecute` (which
-  // never updates the metric) do not surface a 0-valued row count in the SQL UI. `doConsume` is the
-  // sole incrementer. An unstamped node is the exception: its gate is still provisional, the stamp
-  // can land either way, and a map built without the metric would leave `doProduce` asking
-  // `metricTerm` for one that is not there. Registering it then costs an unused metric on a union
-  // an extension inspected and the stamp went on to reject; Spark's own force, the `SparkPlanInfo`
-  // `SQLExecution` builds, runs after every barrier, so ordinary fallback unions still omit it.
+  // Registered only when this union's own codegen gate allows fusion, so a union the gate rejects
+  // does not surface a 0-valued row count in the SQL UI; `doConsume` is the sole incrementer, and
+  // `doExecute` never touches it. An unstamped node is the exception: its gate is provisional,
+  // because `isPlainUnion` derives from children that can still move, so the stamp can land either
+  // way and a map built without the metric would leave `doProduce` asking `metricTerm` for one that
+  // is not there. Registering it then costs an unused metric on a union an extension inspected and
+  // the stamp went on to reject.
   override lazy val metrics: Map[String, SQLMetric] =
     if (stampedDecisions.isEmpty || supportCodegenFailureReason.isEmpty) {
       Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -1438,14 +1432,13 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
 object UnionExec {
   /**
-   * What `StampUnionDecisions` fixes on a `UnionExec`: whether it is a plain concatenation, and the
-   * two confs the codegen gate reads. Everything else the gate asks is derived per instance, so a
-   * rule replacing a child cannot inherit an answer taken from the topology it replaced.
+   * What `StampUnionDecisions` fixes on a `UnionExec`: whether it is a plain concatenation. That is
+   * the one answer the confs alone do not give, since it also depends on the children. The confs
+   * themselves stay on `PREPARATION_CONF`, which a stamped node always carries. Everything else the
+   * gate asks is derived per instance, so a rule replacing a child cannot inherit an answer taken
+   * from the topology it replaced.
    */
-  private case class Decisions(
-      plainUnion: Boolean,
-      unionCodegenEnabled: Boolean,
-      maxChildren: Int)
+  private case class Decisions(plainUnion: Boolean)
 
   /**
    * The stamped decisions. See `isPlainUnion` and `stampDecisions`.
@@ -1458,12 +1451,12 @@ object UnionExec {
   private val DECISIONS = TreeNodeTag[Decisions]("unionDecisions")
 
   /**
-   * The [[UnionConfSnapshot]] this node answers from until its decisions are stamped. See
-   * `recordPreparationConf`. `SnapshotUnionPreparationConf` writes it before `EnsureRequirements`,
-   * and the stamp after it reads what that rule wrote, so both phases use one value; the same rule
-   * runs ahead of each injected rule, so a union one of them creates is not read live by a later
-   * one, and `stampDecisions` writes it itself for a node no such pass saw. The tag travels onto
-   * rebuilt nodes the same way `DECISIONS` does, which is what carries it across the copies
+   * The [[UnionConfSnapshot]] this node answers from, and the one a stamped node's codegen gate
+   * keeps answering from. See `recordPreparationConf`. `SnapshotUnionPreparationConf` writes it
+   * before `EnsureRequirements`, and the stamp after it reads what that rule wrote, so both phases
+   * use one value; the same rule runs ahead of the two injected lists that can still change an
+   * exchange, and `stampDecisions` writes it itself for a node no such pass saw. The tag travels
+   * onto rebuilt nodes the same way `DECISIONS` does, which is what carries it across the copies
    * `EnsureRequirements` makes.
    */
   private val PREPARATION_CONF = TreeNodeTag[UnionConfSnapshot]("unionPreparationConf")

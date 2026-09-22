@@ -38,7 +38,8 @@ import org.apache.spark.sql.types._
  */
 class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
-  // Union codegen fusion is off by default; turn it on for this suite.
+  // Pinned rather than inherited: these cases turn on which value the union was prepared with, so a
+  // change to the conf's default must not silently change what they exercise.
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key, "true")
 
@@ -824,9 +825,9 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         val copy = fusedUnions(planned)
         assert(copy.size == 1)
         // The copy this test needs: `insertInputAdapter` wrapped both children, so the shell holds
-        // a copy rather than the instance the gate answered on. This copy's reason is first forced
-        // by the `SparkPlanInfo` that `collect()` above builds, with the conf already off, so what
-        // it answers can only come from the stamp.
+        // a copy rather than the instance the gate answered on. The copy carries the record the
+        // preparation wrote, which is the only place its gate can get the conf from now that the
+        // live one says the opposite.
         assert(copy.head.children.forall(_.isInstanceOf[InputAdapter]))
         assert(copy.head.supportCodegen,
           "the copy in the shell must keep the decision it was planned with")
@@ -949,7 +950,8 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> (!live).toString) {
         stampUnionDecisions(union)
         assert(union.supportCodegen == !live,
-          s"the gate must answer from the stamp, not from the read taken with the conf $live")
+          s"the gate must answer from the barrier's snapshot, not from the read taken with the " +
+            s"conf $live")
       }
     }
   }
@@ -1023,10 +1025,10 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         assert(fresh.isPlainUnion, "the barrier must have decided the fresh node")
       }
 
-      // The other half. The conf a decision was stamped with is the part a second pass could move,
-      // so the node to watch is one whose gate the conf still answers: plain, and with its reason
-      // not yet forced. `fusedUnions` returns the copy inside the codegen shell, whose reason no
-      // preparation rule has asked for, so what it answers below comes from the stamp alone.
+      // The other half. The conf a barrier records is the part a second pass could move, so the
+      // node to watch is one whose gate the conf still answers: plain, and with its reason not yet
+      // forced. `fusedUnions` returns the copy inside the codegen shell, whose reason no
+      // preparation rule has asked for, so what it answers below comes from the recorded conf.
       val fused = withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true") {
         val df = rangeDF(100).repartition(2).union(rangeDF(100).repartition(2))
         val union = fusedUnions(df)
@@ -1118,12 +1120,11 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
-  test("SPARK-59122: the stamp takes the codegen decisions from the preparation's snapshot") {
-    // The case above pins this for `UNION_OUTPUT_PARTITIONING`. The two codegen fields ride in the
-    // same `UnionConfSnapshot` and need the same pin: a stamp that read them live would agree with
-    // the snapshot everywhere else in this suite, because the other cases flip the conf after
-    // stamping and so pin the gate rather than the stamp. Nothing here is executed, so AQE does not
-    // enter into it.
+  test("SPARK-59122: the barrier records the preparation's codegen confs for a fresh node") {
+    // The case above pins the same for `UNION_OUTPUT_PARTITIONING`. The codegen confs live on
+    // the record rather than on the stamped decision, so what needs pinning here is that a barrier
+    // reaching a union no snapshot pass saw records that preparation's values and not the ones the
+    // conf says by then. Nothing here is executed, so AQE does not enter into it.
     val df = rangeDF(100).union(rangeDF(100)).union(rangeDF(100))
     val planned = df.queryExecution.sparkPlan.collect { case u: UnionExec => u }
     assert(planned.size == 1 && planned.head.children.size == 3,
@@ -1144,7 +1145,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       val union = UnionExec(kids)
       withSQLConf(flipped) {
         new StampUnionDecisions(prepConf)(union)
-        assert(union.supportCodegen, s"the stamp must take $what from the snapshot")
+        assert(union.supportCodegen, s"the record must hold $what from the snapshot")
       }
     }
   }
@@ -1248,6 +1249,15 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         assert(union.supportCodegen, s"the record must answer $what, not the value read now")
       }
     }
+
+    // A record is not a decision: `isPlainUnion` still derives from the children, so an unstamped
+    // gate stays provisional and the metric has to be there whichever way the stamp lands. Recorded
+    // with fusion off, so the gate denies and only the unstamped term can register it.
+    val denied = UnionExec(kids)
+    new SnapshotUnionPreparationConf(prepConf.copy(codegenEnabled = false))(denied)
+    assert(!denied.supportCodegen, "this half needs the gate to deny, or it pins nothing")
+    assert(denied.metrics.contains("numOutputRows"),
+      "a recorded but unstamped union must register the metric even where its gate denies")
   }
 
   test("SPARK-56482: input_file_name child fuses (Nondeterministic but partition-index-free)") {
