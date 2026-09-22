@@ -3644,7 +3644,7 @@ They are typically set via the config file and command-line options with `--conf
   <td>
     (none)
   </td>
-  <td>Comma separated list of class names that must implement the <code>io.grpc.ServerInterceptor</code> interface</td>
+  <td>Comma separated list of class names that must implement the <code>io.grpc.ServerInterceptor</code> interface. When authentication is enabled these interceptors run after it, so they only see calls that have already been authenticated and cannot supply the <code>Authorization</code> header themselves.</td>
   <td>3.4.0</td>
 </tr>
 <tr>
