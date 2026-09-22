@@ -107,25 +107,32 @@ object HiveThriftServer2 extends Logging {
     }
   }
 
-  // Sessions are impersonated for metastore calls, but queries run as the service identity
-  // (SPARK-5159), so storage ACLs are checked against the wrong principal. Auth types that never
-  // establish a user identity have nothing to impersonate, so they are exempt.
+  // Sessions are impersonated on the driver (metastore calls, driver-side file system access),
+  // but executor-side data access runs as the service identity (SPARK-5159), so storage ACLs
+  // are checked against the wrong principal. NONE/NOSASL are exempt: they establish no verified
+  // identity (the client picks any username it likes, and doAs then impersonates that
+  // unverified name for metastore calls), so there is no security boundary to warn about --
+  // and Hive's out-of-the-box config (auth NONE, doAs true) must stay quiet. Unrecognized auth
+  // types are left alone too: HiveAuthFactory rejects them with its own "Unsupported
+  // authentication type" error, which points at the actual problem.
   private[thriftserver] def warnIfIneffectiveDoAs(hiveConf: HiveConf): Unit = {
     val authType = hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
-    val unverifiedAuthTypes = Seq(AuthTypes.NONE, AuthTypes.NOSASL).map(_.getAuthName)
-    // Constant on the left: authType is null when explicitly set empty, and this must not NPE.
-    val authVerifiesUser = !unverifiedAuthTypes.exists(_.equalsIgnoreCase(authType))
+    val verifyingAuthTypes =
+      AuthTypes.values().filterNot(Set(AuthTypes.NONE, AuthTypes.NOSASL)).map(_.getAuthName)
+    // getVar returns the default (NONE) when unset and "" when set empty, never null.
+    val authVerifiesUser = verifyingAuthTypes.exists(_.equalsIgnoreCase(authType))
     if (authVerifiesUser && hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS)) {
       logWarning(log"${MDC(CONFIG, ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname)} is set to true, " +
-        log"but the Spark Thrift Server impersonates the connecting user only for Hive " +
-        log"metastore calls: queries and the storage access they perform still run as the " +
-        log"server's own service identity, so storage permissions are checked against the " +
-        log"service principal rather than the connecting user (SPARK-5159). That can expose " +
-        log"data the connecting user is not authorized to read. Setting it to false silences " +
-        log"this, but note that it stops impersonating metastore calls too, so it is not a " +
-        log"no-op (and unsetting it does not help -- Hive's own default is true). Spark 5.0 " +
-        log"is expected to refuse to start on this configuration; set " +
-        log"spark.sql.hive.thriftServer.allowIneffectiveDoAs=true there to keep it running.")
+        log"but the Spark Thrift Server impersonates the connecting user only on the driver, " +
+        log"for Hive metastore calls and driver-side file system access: executor-side data " +
+        log"access still runs as the server's own service identity, so storage permissions " +
+        log"are checked against the service principal rather than the connecting user " +
+        log"(SPARK-5159). That can expose data the connecting user is not authorized to " +
+        log"read. Setting it to false silences this, but note that it stops impersonating " +
+        log"metastore calls too, so it is not a no-op (and unsetting it does not help -- " +
+        log"Hive's own default is true). Spark 5.0 is expected to refuse to start on this " +
+        log"configuration; set spark.sql.hive.thriftServer.allowIneffectiveDoAs=true there " +
+        log"to keep it running.")
     }
   }
 

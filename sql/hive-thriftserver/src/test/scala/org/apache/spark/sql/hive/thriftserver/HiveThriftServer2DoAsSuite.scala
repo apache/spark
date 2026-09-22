@@ -26,7 +26,7 @@ import org.apache.spark.SparkFunSuite
 
 /**
  * Tests for the SPARK-59118 startup warning: `hive.server2.enable.doAs` is accepted but
- * impersonation does not reach query execution. Spark 5.0 refuses to start instead.
+ * impersonation does not reach executor-side data access. Spark 5.0 refuses to start instead.
  */
 class HiveThriftServer2DoAsSuite extends SparkFunSuite {
 
@@ -61,6 +61,8 @@ class HiveThriftServer2DoAsSuite extends SparkFunSuite {
     val warnings = doAsWarnings(hiveConf("KERBEROS", doAs = true))
     assert(warnings.length == 1)
     assert(warnings.head.contains("SPARK-5159"))
+    // Auth type matching is case-insensitive.
+    assert(doAsWarnings(hiveConf("kerberos", doAs = true)).length == 1)
   }
 
   test("SPARK-59118 warn for every auth type that verifies the user") {
@@ -88,7 +90,12 @@ class HiveThriftServer2DoAsSuite extends SparkFunSuite {
     assert(doAsWarnings(new HiveConf()).isEmpty)
   }
 
-  test("SPARK-59118 an unrecognized auth type warns") {
-    assert(doAsWarnings(hiveConf("NOT_AN_AUTH_TYPE", doAs = true)).length == 1)
+  test("SPARK-59118 an unrecognized or empty auth type is left to Hive's own error") {
+    // HiveAuthFactory rejects these with "Unsupported authentication type", where the
+    // warning's advice would not help. getVar returns "" (never null) for an explicitly
+    // empty value, so this must not NPE.
+    Seq("NOT_AN_AUTH_TYPE", "").foreach { authType =>
+      assert(doAsWarnings(hiveConf(authType, doAs = true)).isEmpty, s"warned: $authType")
+    }
   }
 }
