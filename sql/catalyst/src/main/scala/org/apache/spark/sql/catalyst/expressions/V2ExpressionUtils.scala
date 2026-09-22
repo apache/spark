@@ -39,6 +39,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.connector.PartitionPredicateImpl
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.collection.Utils.sequenceToOption
 
 /**
  * A utility class that converts public connector expressions into Catalyst expressions.
@@ -46,14 +47,22 @@ import org.apache.spark.util.ArrayImplicits._
 object V2ExpressionUtils extends SQLConfHelper with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
+  /**
+   * Non-throwing counterpart to `resolveRef`. Callers that need to gracefully degrade when a
+   * reference cannot be resolved (e.g. `toCatalystOpt`/`toCatalystTransformOpt`, which a reported
+   * `KeyGroupedPartitioning` relies on to fall back to unknown partitioning instead of failing the
+   * query) must use this, not `resolveRef` -- calling the throwing form there defeats that
+   * fallback entirely.
+   */
+  def resolveRefOpt[T <: NamedExpression](ref: NamedReference, plan: LogicalPlan): Option[T] = {
+    plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver).map(_.asInstanceOf[T])
+  }
+
   def resolveRef[T <: NamedExpression](ref: NamedReference, plan: LogicalPlan): T = {
-    plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver) match {
-      case Some(namedExpr) =>
-        namedExpr.asInstanceOf[T]
-      case None =>
-        val name = ref.fieldNames.toImmutableArraySeq.quoted
-        val outputString = plan.output.map(_.name).mkString(",")
-        throw QueryCompilationErrors.cannotResolveAttributeError(name, outputString)
+    resolveRefOpt[T](ref, plan).getOrElse {
+      val name = ref.fieldNames.toImmutableArraySeq.quoted
+      val outputString = plan.output.map(_.name).mkString(",")
+      throw QueryCompilationErrors.cannotResolveAttributeError(name, outputString)
     }
   }
 
@@ -131,7 +140,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
           SortOrder(catalystChild, toCatalyst(direction), toCatalyst(nullOrdering), Seq.empty)
         }
       case ref: FieldReference =>
-        Some(resolveRef[NamedExpression](ref, query))
+        resolveRefOpt[NamedExpression](ref, query)
       case _ =>
         throw new AnalysisException(
           errorClass = "_LEGACY_ERROR_TEMP_3054",
@@ -144,25 +153,23 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       query: LogicalPlan,
       funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = trans match {
     case IdentityTransform(ref) =>
-      Some(resolveRef[NamedExpression](ref, query))
+      resolveRefOpt[NamedExpression](ref, query)
     case BucketTransform(numBuckets, refs, sorted)
         if sorted.isEmpty && refs.length == 1 && refs.forall(_.isInstanceOf[NamedReference]) =>
-      val resolvedRefs = refs.map(r => resolveRef[NamedExpression](r, query))
       // Create a dummy reference for `numBuckets` here and use that, together with `refs`, to
       // look up the V2 function.
       val numBucketsRef = AttributeReference("numBuckets", IntegerType, nullable = false)()
-      funCatalogOpt.flatMap { catalog =>
-        loadV2FunctionOpt(catalog, "bucket", Seq(numBucketsRef) ++ resolvedRefs).map { bound =>
-          TransformExpression(bound, resolvedRefs, Some(numBuckets))
-        }
-      }
+      for {
+        resolvedRefs <- sequenceToOption(refs.map(r => resolveRefOpt[NamedExpression](r, query)))
+        catalog <- funCatalogOpt
+        bound <- loadV2FunctionOpt(catalog, "bucket", Seq(numBucketsRef) ++ resolvedRefs)
+      } yield TransformExpression(bound, resolvedRefs, Some(numBuckets))
     case NamedTransform(name, args) =>
-      val catalystArgs = args.map(toCatalyst(_, query, funCatalogOpt))
-      funCatalogOpt.flatMap { catalog =>
-        loadV2FunctionOpt(catalog, name, catalystArgs).map { bound =>
-          TransformExpression(bound, catalystArgs)
-        }
-      }
+      for {
+        catalystArgs <- sequenceToOption(args.map(toCatalystOpt(_, query, funCatalogOpt)))
+        catalog <- funCatalogOpt
+        bound <- loadV2FunctionOpt(catalog, name, catalystArgs)
+      } yield TransformExpression(bound, catalystArgs)
   }
 
   private def loadV2FunctionOpt(
