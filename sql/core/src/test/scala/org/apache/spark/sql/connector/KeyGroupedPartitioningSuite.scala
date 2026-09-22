@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.{
   SparkPlan,
   UnionExec,
   WholeStageCodegenExec}
-import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
@@ -6563,8 +6563,8 @@ class KeyGroupedPartitioningSuite
     def aggregates(plan: SparkPlan): Seq[BaseAggregateExec] =
       collect(plan) { case agg: BaseAggregateExec => agg }
 
-    // The same pair planned as object-hash aggregates, whose answer is order-insensitive so the two
-    // plans can be compared.
+    // The same pair over a `collect_set`, whose answer is order-insensitive, so the two plans can
+    // be compared.
     val objectHashQuery =
       s"SELECT id, name, sort_array(collect_set(price)) FROM testcat.ns.$items GROUP BY id, name"
 
@@ -6595,14 +6595,16 @@ class KeyGroupedPartitioningSuite
           s"expected the grouping to read the scan:\n$plan")
         assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
 
+        // `ReplaceHashWithSortAgg` plans the combined aggregate sort-based once the regrouping
+        // reports an ordering that satisfies the grouping, which the ordering the source derives
+        // gives it, so the kind is the planner's to pick here.
         val objectHash = sql(objectHashQuery)
         checkAnswer(objectHash, objectHashExpected)
         val objectHashPlan = objectHash.queryExecution.executedPlan
         val objectHashAggs = aggregates(objectHashPlan)
         assert(objectHashAggs.size == 1 &&
-          objectHashAggs.head.isInstanceOf[ObjectHashAggregateExec] &&
           objectHashAggs.head.aggregateExpressions.forall(_.mode == Complete),
-          s"expected one combined object hash aggregate in complete mode:\n$objectHashPlan")
+          s"expected one combined aggregate in complete mode:\n$objectHashPlan")
         assert(unwrapWrappers(collectAllGroupPartitions(objectHashPlan).head.child)
           .isInstanceOf[BatchScanExec],
           s"expected the grouping to read the scan:\n$objectHashPlan")
@@ -6793,10 +6795,10 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-59564: combine adjacent sort aggregates across a GroupPartitionsExec") {
     // `max` over a string column cannot be planned as a hash aggregate, so the pair is a pair of
-    // SortAggregateExecs and each of them needs its input ordered by the grouping keys. The sort
-    // below the partial aggregate only gave the partial aggregate that ordering, and the sort the
-    // grouping forces above it orders the rows the combined aggregate reads by the same keys, so
-    // the sort below goes with the partial aggregate.
+    // SortAggregateExecs, each of which needs its input ordered by the grouping keys. The ordering
+    // the scan derives from its partition keys is that grouping, and the regrouping reports the key
+    // ordering it keeps, so neither aggregate holds a sort of its own and none lands between the
+    // pair: the fold takes the partial aggregate away and the regrouping reads the scan.
     val partitions = Array(identity("id"), identity("name"))
     createTable(items, itemsColumns, partitions)
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
@@ -6816,9 +6818,9 @@ class KeyGroupedPartitioningSuite
           s"expected a pair of sort aggregates:\n$plan")
         assert(collectAllGroupPartitions(plan).nonEmpty,
           s"the grouping is what makes the pair non-adjacent:\n$plan")
-        // Two sorts, one for the partial aggregate and one the final one reads.
-        assert(collect(plan) { case sort: SortExec => sort }.size == 2,
-          s"expected two sorts feeding the pair:\n$plan")
+        // The source orders both, so neither aggregate holds a sort.
+        assert(collect(plan) { case sort: SortExec => sort }.isEmpty,
+          s"expected no sort feeding the pair:\n$plan")
       }
 
       withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
@@ -6829,20 +6831,52 @@ class KeyGroupedPartitioningSuite
         assert(aggs.size == 1, s"expected one combined aggregate, got ${aggs.size}:\n$plan")
         assert(aggs.head.aggregateExpressions.forall(_.mode == Complete),
           s"expected the combined aggregate to be complete:\n$plan")
-        val sorts = collect(plan) { case sort: SortExec => sort }
-        assert(sorts.size == 1 && !sorts.head.global,
-          s"expected the sort above the grouping to be the one left:\n$plan")
-        assert(unwrapWrappers(sorts.head.child).isInstanceOf[GroupPartitionsExec],
-          s"expected the sort to read the grouping:\n$plan")
-        assert(collectAllGroupPartitions(plan).size == 1,
-          s"expected the grouping to stay:\n$plan")
+        assert(collect(plan) { case sort: SortExec => sort }.isEmpty,
+          s"expected no sort left in the pair:\n$plan")
+        val grouping = collectAllGroupPartitions(plan)
+        assert(grouping.size == 1, s"expected the grouping to stay:\n$plan")
+        assert(unwrapWrappers(grouping.head.child).isInstanceOf[BatchScanExec],
+          s"expected the grouping to read the scan:\n$plan")
         assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
       }
 
-      // The ordering derived from the partition keys satisfies the partial aggregate the way a
-      // declared one does, so the bail holds for it too.
+      // The sort handling is for the shape both orderings off leaves: the partial aggregate holds a
+      // sort of its own and the regrouping reports none, so the final aggregate needs one as well,
+      // and the fold takes the partial aggregate's sort with the aggregate.
       withSQLConf(
-          SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
+        withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+          val plan = sql(query).queryExecution.executedPlan
+          // Two sorts, one for the partial aggregate and one the final one reads.
+          assert(collect(plan) { case sort: SortExec => sort }.size == 2,
+            s"expected two sorts feeding the pair:\n$plan")
+        }
+
+        withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+          val df = sql(query)
+          checkAnswer(df, expected)
+          val plan = df.queryExecution.executedPlan
+          val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+          assert(aggs.size == 1, s"expected one combined aggregate, got ${aggs.size}:\n$plan")
+          assert(aggs.head.aggregateExpressions.forall(_.mode == Complete),
+            s"expected the combined aggregate to be complete:\n$plan")
+          val sorts = collect(plan) { case sort: SortExec => sort }
+          assert(sorts.size == 1 && !sorts.head.global,
+            s"expected the sort above the grouping to be the one left:\n$plan")
+          assert(unwrapWrappers(sorts.head.child).isInstanceOf[GroupPartitionsExec],
+            s"expected the sort to read the grouping:\n$plan")
+          assert(collectAllGroupPartitions(plan).size == 1,
+            s"expected the grouping to stay:\n$plan")
+          assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
+        }
+      }
+
+      // The bail's shape has a sort between the pair, which needs the regrouping not to report the
+      // ordering it kept: the derived ordering still leaves the partial aggregate no sort to give
+      // up, so the pair is left alone rather than handing the sort the whole scan.
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "false",
           SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
         val df = sql(query)
         checkAnswer(df, expected)
@@ -6866,8 +6900,9 @@ class KeyGroupedPartitioningSuite
   test("SPARK-59564: combine adjacent sort aggregates across a narrowed grouping") {
     // `max(cast(id as string))` cannot be planned as a hash aggregate, and keeps `id` in the scan's
     // output, so the grouping is handed the full keyed partitioning and the positions it projects
-    // have to be translated onto `name`. The sort feeding the partial aggregate goes with it, as in
-    // the sort test above.
+    // have to be translated onto `name`. The sort feeding the partial aggregate stays under it: the
+    // ordering the scan derives is `(id, name)`, which does not order `name`, while the regrouping
+    // reports the key ordering it kept, which does, so nothing lands between the pair.
     val partitions = Array(identity("id"), identity("name"))
     createTable(items, itemsColumns, partitions)
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
@@ -6888,9 +6923,9 @@ class KeyGroupedPartitioningSuite
           s"expected a pair of sort aggregates:\n$plan")
         assert(collectAllGroupPartitions(plan).nonEmpty,
           s"expected the grouping the pair is separated by:\n$plan")
-        // Two sorts, one for the partial aggregate and one the final one reads.
-        assert(collect(plan) { case sort: SortExec => sort }.size == 2,
-          s"expected two sorts feeding the pair:\n$plan")
+        // One sort, the one the partial aggregate reads.
+        assert(collect(plan) { case sort: SortExec => sort }.size == 1,
+          s"expected one sort feeding the pair:\n$plan")
       }
 
       withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
@@ -6905,12 +6940,13 @@ class KeyGroupedPartitioningSuite
         assert(grouping.size == 1, s"expected the grouping to stay, got ${grouping.size}:\n$plan")
         assert(grouping.head.joinKeyPositions == Some(Seq(1)),
           s"expected `name` translated to position 1 of the scan:\n$plan")
-        // The one sort left is the one the grouping forced above itself.
+        // The sort the partial aggregate read stays under the regrouping, which is what orders the
+        // rows the combined aggregate reads.
         val sorts = collect(plan) { case sort: SortExec => sort }
         assert(sorts.size == 1 && !sorts.head.global,
           s"expected one local sort:\n$plan")
-        assert(unwrapWrappers(sorts.head.child).isInstanceOf[GroupPartitionsExec],
-          s"expected the sort to read the grouping:\n$plan")
+        assert(unwrapWrappers(grouping.head.child).isInstanceOf[SortExec],
+          s"expected the sort to stay under the grouping:\n$plan")
         assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
       }
     }
@@ -6918,12 +6954,13 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-59564: keep the pair where the source already orders the aggregate's input") {
     // The source reports the ordering the sort aggregate needs, so the partial aggregate holds no
-    // sort of its own. A sort between the pair still lands there, because the grouping does not
-    // report the ordering it coalesced: removing the partial aggregate would then hand that sort
-    // the whole scan instead of the partial aggregate's output, which is the trade
+    // sort of its own. With the regrouping reporting no ordering, a sort still lands between the
+    // pair: removing the partial aggregate would then hand that sort the whole scan instead of the
+    // partial aggregate's output, which is the trade
     // `spark.sql.execution.pushDownLocalSort.throughCardinalityReducer` declines by default. The
-    // same pair over an unordered source keeps its own sort below the partial aggregate and is the
-    // shape the sort aggregate test above combines.
+    // grouping report is what the bail's shape needs, so it is turned off here; the same pair over
+    // an unordered source keeps its own sort below the partial aggregate and is the shape the sort
+    // aggregate test above combines.
     val partitions = Array(identity("id"), identity("name"))
     val orderedItems = "ordered_aggregate_items"
     createTable(orderedItems, itemsColumns, partitions,
@@ -6940,7 +6977,9 @@ class KeyGroupedPartitioningSuite
       s"SELECT id, name, max(cast(price as string)) FROM testcat.ns.$orderedItems GROUP BY id, name"
     val expected = Seq(Row(1L, "aa", "20.0"), Row(2L, "bb", "30.0"))
 
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
       withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
         checkAnswer(sql(query), expected)
       }

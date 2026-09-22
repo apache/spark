@@ -187,8 +187,8 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
 
   /**
    * Whether `aggregate` is a `Partial` one, which is the mode half of what a leaf has to be. The
-   * other half, that it is the partial of the aggregate being folded into, is what `detachAggregate`
-   * asks at the leaf.
+   * other half, that it is the partial of the aggregate being folded into, is what
+   * `detachAggregate` asks at the leaf.
    */
   private def isPartialAgg(aggregate: BaseAggregateExec): Boolean =
     aggregate.aggregateExpressions.forall(_.mode == Partial)
