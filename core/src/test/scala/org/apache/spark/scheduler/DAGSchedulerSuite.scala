@@ -1272,6 +1272,36 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       HashSet(makeBlockManagerId("hostA")))
   }
 
+  test("SPARK-59138: duplicate same-epoch FetchFailed for a local shuffle is fenced even when a " +
+    "reliable shuffle on the same executor was preserved") {
+    // Executor X holds local shuffle L and reliable shuffle R. The first FetchFailed for L clears
+    // L but preserves R. A later same-epoch FetchFailed for L (from another reducer task of the
+    // same attempt) must be fenced: preserving R must not reopen the executor fence for L, or the
+    // duplicate would bulk-delete L's freshly recomputed maps on the still-live executor.
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+
+    val reliableRdd = new MyRDD(sc, 2, Nil)
+    val reliableDep = new ReliablyStoredShuffleDependency(reliableRdd, new HashPartitioner(2))
+    val localRdd = new MyRDD(sc, 2, Nil)
+    val localDep = new ShuffleDependency(localRdd, new HashPartitioner(2))
+    val localShuffleId = localDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(reliableDep, localDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    completeShuffleMapStageSuccessfully(1, 0, 2)
+
+    // Two same-epoch FetchFailed events for the local shuffle from two reducer tasks of the same
+    // attempt. Only the first should reach the executor cleanup; the second is fenced.
+    runEvent(makeCompletionEvent(taskSets(2).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), localShuffleId, 0L, 0, 0, "ignored"), null))
+    runEvent(makeCompletionEvent(taskSets(2).tasks(1),
+      FetchFailed(makeBlockManagerId("hostA"), localShuffleId, 0L, 0, 1, "ignored"), null))
+
+    verify(mapOutputTracker, times(1))
+      .removeOutputsOnExecutor("hostA-exec", true, Some(localShuffleId))
+  }
+
   test("SPARK-28967 properties must be cloned before posting to listener bus for 0 partition") {
     val properties = new Properties()
     val func = (context: TaskContext, it: Iterator[(_)]) => 1

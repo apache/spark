@@ -50,7 +50,7 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  * Aggregate result of an executor/host cleanup on the `MapOutputTrackerMaster`.
  *
  * @param metadataChanged whether any map or merge status was actually removed. Drives the epoch
- *   bump and, in the DAGScheduler, whether a full-cleanup lost epoch is recorded.
+ *   bump.
  * @param preservedReliable whether a reliably-stored shuffle was skipped, so the cleanup was
  *   selective rather than complete.
  */
@@ -61,13 +61,6 @@ private[spark] case class CleanupOutcome(metadataChanged: Boolean, preservedReli
    * executor-failure epoch fencing relies on the epoch advancing.
    */
   def shouldBumpEpoch: Boolean = metadataChanged || !preservedReliable
-
-  /**
-   * Whether the executor was fully cleaned, so a later same-epoch FetchFailed for it is redundant.
-   * Any preserved reliable shuffle makes the cleanup partial: that output was assumed to survive
-   * but may actually be gone, so a FetchFailed for it must still be processed, not deduped away.
-   */
-  def isCompleteCleanup: Boolean = !preservedReliable
 }
 
 /**
