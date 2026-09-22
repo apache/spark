@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CharType, DataType, StringType, VarcharType}
+import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SparkErrorUtils
 
@@ -38,42 +38,27 @@ private[sql] object DuplicateMapKeyUtils {
   def unapply(exception: Throwable): Option[SparkRuntimeException] = cause(exception)
 
   /**
-   * Builds a parsed JSON/XML object as a map.
+   * Builds an XML map with a constrained CHAR/VARCHAR key type.
    *
    * CHAR/VARCHAR keys: exact serialized names keep the last value, then
    * `spark.sql.mapKeyDedupPolicy` applies to normalized keys. Failed values still
    * occupy a slot so collisions are visible.
    *
-   * Example: `from_json('{"a":1,"a ":2}', 'MAP<CHAR(2), INT>')` raises
+   * Example: parsing `a` and `a ` as CHAR(2) keys raises
    * DUPLICATED_MAP_KEY under EXCEPTION and keeps `a ` -> 2 under LAST_WIN.
-   * Exact `{"a":1,"a":2}` is last-wins regardless of policy.
-   *
-   * Ordinary STRING keys keep historical last-wins. When
-   * `collapseOrdinaryStringKeys` is true (XML), duplicates collapse via `Map`.
-   * When false (JSON), retained pairs are stored as parallel arrays.
+   * Exact repeated serialized names are last-wins regardless of policy.
    */
-  def buildParsedMap(
-      entries: Seq[(UTF8String, UTF8String, Option[Any])],
-      keyType: DataType,
-      valueType: DataType,
-      collapseOrdinaryStringKeys: Boolean): MapData = {
-    keyType match {
-      case _: CharType | _: VarcharType =>
-        buildMapWithLastRawKeyWins(entries, keyType, valueType)
-      case _ if collapseOrdinaryStringKeys =>
-        ArrayBasedMapData(
-          entries.flatMap { case (_, key, value) => value.map(key -> _) }.toMap)
-      case _ =>
-        val retained = entries.flatMap { case (_, key, value) => value.map(key -> _) }
-        ArrayBasedMapData(retained.map(_._1).toArray, retained.map(_._2).toArray)
-    }
-  }
-
-  private def buildMapWithLastRawKeyWins(
+  def buildConstrainedMap(
       entries: Seq[(UTF8String, UTF8String, Option[Any])],
       keyType: DataType,
       valueType: DataType): MapData = {
-    val indices = lastOccurrenceIndices(entries.map(_._1).toArray)
+    val lastEntries =
+      mutable.LinkedHashMap.empty[UTF8String, (UTF8String, Option[Any])]
+    entries.foreach { case (rawKey, normalizedKey, value) =>
+      lastEntries.remove(rawKey)
+      lastEntries.update(rawKey, (normalizedKey, value))
+    }
+
     if (SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY) ==
         SQLConf.MapKeyDedupPolicy.EXCEPTION) {
       val distinctKeys = keyType match {
@@ -82,24 +67,16 @@ private[sql] object DuplicateMapKeyUtils {
         case _ =>
           new java.util.TreeSet[Any](TypeUtils.getInterpretedOrdering(keyType))
       }
-      indices.foreach { index =>
-        val key = entries(index)._2
+      lastEntries.valuesIterator.foreach { case (key, _) =>
         if (!distinctKeys.add(key)) {
           throw QueryExecutionErrors.duplicateMapKeyFoundError(key)
         }
       }
     }
     val builder = new ArrayBasedMapBuilder(keyType, valueType)
-    indices.foreach { index =>
-      val (_, normalizedKey, value) = entries(index)
+    lastEntries.valuesIterator.foreach { case (normalizedKey, value) =>
       value.foreach(builder.put(normalizedKey, _))
     }
     builder.build()
-  }
-
-  private def lastOccurrenceIndices(rawKeys: Array[UTF8String]): Seq[Int] = {
-    val lastIndices = mutable.LinkedHashMap.empty[UTF8String, Int]
-    rawKeys.indices.foreach(index => lastIndices.update(rawKeys(index), index))
-    lastIndices.values.toSeq
   }
 }

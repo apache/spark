@@ -71,8 +71,6 @@ case class CsvToStructs(
 
   override def nullable: Boolean = child.nullable
 
-  override def nullIntolerant: Boolean = true
-
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(

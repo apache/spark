@@ -1890,8 +1890,6 @@ case class JsonToStructs(
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(JSON_TO_STRUCT)
 
-  override def nullIntolerant: Boolean = true
-
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(

@@ -78,7 +78,6 @@ case class XmlToStructs(
       timeZoneId = None)
 
   override def nullable: Boolean = true
-  override def nullIntolerant: Boolean = true
 
   // The XML input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions.

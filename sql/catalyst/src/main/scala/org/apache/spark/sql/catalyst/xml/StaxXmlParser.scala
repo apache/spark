@@ -16,12 +16,12 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
+import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader, StringWriter}
 import java.nio.charset.{Charset, MalformedInputException}
 import java.text.NumberFormat
 import java.util
 import java.util.Locale
-import javax.xml.stream.{XMLEventReader, XMLStreamException}
+import javax.xml.stream.{XMLEventReader, XMLOutputFactory, XMLStreamException}
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
@@ -41,7 +41,7 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
-import org.apache.spark.sql.catalyst.util.{BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, DuplicateMapKeyUtils, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, DuplicateMapKeyUtils, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -315,7 +315,9 @@ class StaxXmlParser(
         startElementName: String,
         attributes: Array[Attribute]): Any = dt match {
       case st: StructType => convertObject(parser, st)
-      case MapType(kt: StringType, vt, _) => convertMap(parser, kt, vt, attributes)
+      case MapType(StringType, vt, _) => convertMap(parser, vt, attributes)
+      case MapType(kt @ (_: CharType | _: VarcharType), vt, _) =>
+        convertConstrainedMap(parser, kt, vt, attributes)
       case ArrayType(st, _) => convertField(parser, st, startElementName)
       case VariantType =>
         StaxXmlParser.convertVariant(parser, attributes, options)
@@ -378,6 +380,35 @@ class StaxXmlParser(
    */
   private def convertMap(
       parser: XMLEventReader,
+      valueType: DataType,
+      attributes: Array[Attribute]): MapData = {
+    val kvPairs = ArrayBuffer.empty[(UTF8String, Any)]
+    attributes.foreach { attr =>
+      kvPairs += (UTF8String.fromString(options.attributePrefix + attr.getName.getLocalPart)
+        -> convertTo(attr.getValue, valueType))
+    }
+    var shouldStop = false
+    while (!shouldStop) {
+      parser.nextEvent match {
+        case e: StartElement =>
+          val key = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
+          kvPairs +=
+            (UTF8String.fromString(key) -> convertField(parser, valueType, key))
+        case c: Characters if !c.isWhiteSpace =>
+          // Create a value tag field for it
+          kvPairs +=
+            // TODO: We don't support an array value tags in map yet.
+            (UTF8String.fromString(options.valueTag) -> convertTo(c.getData, valueType))
+        case _: EndElement | _: EndDocument =>
+          shouldStop = true
+        case _ => // do nothing
+      }
+    }
+    ArrayBasedMapData(kvPairs.toMap)
+  }
+
+  private def convertConstrainedMap(
+      parser: XMLEventReader,
       keyType: DataType,
       valueType: DataType,
       attributes: Array[Attribute]): MapData = {
@@ -409,8 +440,9 @@ class StaxXmlParser(
       parser.nextEvent match {
         case e: StartElement =>
           val rawKey = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
+          val entryXml = consumeElement(parser, e)
           val value = try {
-            Some(convertField(parser, valueType, rawKey))
+            Some(convertIsolatedElement(entryXml, valueType, rawKey))
           } catch {
             case e: SparkUpgradeException => throw e
             case DuplicateMapKeyUtils(e) => throw e
@@ -436,10 +468,48 @@ class StaxXmlParser(
         case _ => // do nothing
       }
     }
-    val mapData = DuplicateMapKeyUtils.buildParsedMap(
-      kvPairs.toSeq, keyType, valueType, collapseOrdinaryStringKeys = true)
+    val mapData = DuplicateMapKeyUtils.buildConstrainedMap(
+      kvPairs.toSeq, keyType, valueType)
     badMapException.foreach(throw _)
     mapData
+  }
+
+  private def consumeElement(parser: XMLEventReader, start: StartElement): String = {
+    val output = new StringWriter()
+    val writer = XMLOutputFactory.newFactory().createXMLEventWriter(output)
+    try {
+      writer.add(start)
+      var depth = 1
+      while (depth > 0) {
+        val event = parser.nextEvent()
+        writer.add(event)
+        event match {
+          case _: StartElement => depth += 1
+          case _: EndElement => depth -= 1
+          case _ =>
+        }
+      }
+      writer.flush()
+      output.toString
+    } finally {
+      writer.close()
+    }
+  }
+
+  private def convertIsolatedElement(
+      xml: String,
+      valueType: DataType,
+      startElementName: String): Any = {
+    val parser = StaxXmlParserUtils.filteredReader(xml)
+    try {
+      while (!parser.peek().isStartElement) {
+        parser.nextEvent()
+      }
+      parser.nextEvent()
+      convertField(parser, valueType, startElementName)
+    } finally {
+      parser.close()
+    }
   }
 
   /**
