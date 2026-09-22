@@ -231,10 +231,9 @@ private[rest] class StandaloneSubmitRequestServlet(
       _.replace(s":$masterRestPort", s":$masterPort")).getOrElse(masterUrl)
     val appArgs = Option(request.appArgs).getOrElse(Array[String]())
     // Filter SPARK_LOCAL_(IP|HOSTNAME) environment variables from being set on the remote system.
-    // Since SPARK-59404, RestSubmissionClient.filterSystemEnvironment already drops these on the
-    // client side, so this filter is duplicated. It is kept for backward compatibility with
-    // older clients and with requests that do not come from RestSubmissionClient.
-    // TODO(SPARK-59669): Remove this duplicated filter in Spark 5.x.
+    // This is the server-side check: clients that do not go through RestSubmissionClient
+    // (including older spark-submit) can set these variables, and the Worker would pass them
+    // into the driver's process environment (SPARK-20025).
     // In addition, the placeholders are replaced into the values of environment variables.
     val environmentVariables =
       Option(request.environmentVariables).getOrElse(Map.empty[String, String])

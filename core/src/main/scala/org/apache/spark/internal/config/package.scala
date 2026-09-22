@@ -2838,8 +2838,10 @@ package object config {
         "Spark-related environment variables (i.e. SPARK_* excluding SPARK_ENV_LOADED, " +
         "SPARK_HOME, SPARK_CONF_DIR, SPARK_LOCAL_IP, and SPARK_LOCAL_HOSTNAME) to the driver, " +
         "matching the REST submission gateway. If set to false, the full environment of the " +
-        "submitting process is forwarded to the driver. This does not impact REST submissions " +
-        "unless they fall back.")
+        "submitting process is forwarded to the driver, except SPARK_LOCAL_IP and " +
+        "SPARK_LOCAL_HOSTNAME, which are never forwarded since they describe the submitting " +
+        "host rather than the worker the driver runs on. This does not impact REST " +
+        "submissions unless they fall back.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

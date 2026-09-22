@@ -87,7 +87,9 @@ class ClientSuite extends SparkFunSuite with Matchers {
     // The submitting process always has non-Spark variables such as PATH, so forwarding
     // sys.env unfiltered would fail the assertions below.
     assert(sys.env.keys.exists(!_.startsWith("SPARK_")))
-    val conf = new SparkConf()
+    // SparkConf(false): a leaked spark.* system property must not turn a failure in
+    // ClientEndpoint.onStart into System.exit, killing the whole test JVM.
+    val conf = new SparkConf(false)
     val command = submittedCommand(conf)
     command.environment should be (Client.driverEnvironment(conf, sys.env))
     // Checks that do not depend on the filtering implementation.
@@ -99,8 +101,10 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("SPARK-59404: forward the full environment when filtering is disabled") {
-    val conf = new SparkConf().set(STANDALONE_SUBMIT_FILTER_ENVIRONMENT, false)
-    submittedCommand(conf).environment should be (sys.env)
+    val conf = new SparkConf(false).set(STANDALONE_SUBMIT_FILTER_ENVIRONMENT, false)
+    // The escape hatch still never forwards SPARK_LOCAL_IP/HOSTNAME (SPARK-20025).
+    submittedCommand(conf).environment should be (
+      sys.env -- Seq("SPARK_LOCAL_IP", "SPARK_LOCAL_HOSTNAME"))
   }
 
   test("SPARK-59404: driver environment filtering rule") {
@@ -120,9 +124,11 @@ class ClientSuite extends SparkFunSuite with Matchers {
       "LD_LIBRARY_PATH" -> "/usr/lib")
     val env = forwarded ++ dropped
 
-    Client.driverEnvironment(new SparkConf(), env) should be (forwarded)
+    Client.driverEnvironment(new SparkConf(false), env) should be (forwarded)
 
-    val unfiltered = new SparkConf().set(STANDALONE_SUBMIT_FILTER_ENVIRONMENT, false)
-    Client.driverEnvironment(unfiltered, env) should be (env)
+    val unfiltered = new SparkConf(false).set(STANDALONE_SUBMIT_FILTER_ENVIRONMENT, false)
+    // The escape hatch forwards everything else, including SPARK_HOME and PATH.
+    Client.driverEnvironment(unfiltered, env) should be (
+      env -- Seq("SPARK_LOCAL_IP", "SPARK_LOCAL_HOSTNAME"))
   }
 }

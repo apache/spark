@@ -284,7 +284,8 @@ object Client {
    * `SPARK_LOCAL_IP` and `SPARK_LOCAL_HOSTNAME`. The rule is defined by
    * `RestSubmissionClient.filterSystemEnvironment`, so this matches the REST submission gateway.
    * If `spark.standalone.submit.filterEnvironment` is disabled, the full environment of the
-   * submitting process is forwarded instead.
+   * submitting process is forwarded instead, except `SPARK_LOCAL_IP` and `SPARK_LOCAL_HOSTNAME`
+   * (SPARK-20025).
    */
   private[deploy] def driverEnvironment(
       conf: SparkConf,
@@ -292,7 +293,7 @@ object Client {
     if (conf.get(config.STANDALONE_SUBMIT_FILTER_ENVIRONMENT)) {
       RestSubmissionClient.filterSystemEnvironment(env)
     } else {
-      env
+      env -- RestSubmissionClient.HOST_SPECIFIC_ENV_VARS
     }
   }
 }

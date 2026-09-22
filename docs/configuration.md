@@ -3058,7 +3058,10 @@ Apart from these, the following properties are also available, and may be useful
     <code>SPARK_ENV_LOADED</code>, <code>SPARK_HOME</code>, <code>SPARK_CONF_DIR</code>,
     <code>SPARK_LOCAL_IP</code>, and <code>SPARK_LOCAL_HOSTNAME</code>, matching the REST submission
     gateway. If set to <code>false</code>, the full environment of the submitting process is
-    forwarded to the driver. This does not impact REST submissions unless they fall back.
+    forwarded to the driver, except <code>SPARK_LOCAL_IP</code> and
+    <code>SPARK_LOCAL_HOSTNAME</code>, which are never forwarded since they describe the
+    submitting host rather than the worker the driver runs on. This does not impact REST
+    submissions unless they fall back.
   </td>
   <td>4.3.0</td>
 </tr>
