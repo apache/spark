@@ -99,6 +99,39 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
       expectedToRecache = true)
   }
 
+  test("write-driven recacheByPath rebuilds a mixed pinned and live V1 cache") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val pinnedIndex = new TestFileIndex(isTimeTravel = true, rootPaths = Seq(rootPath))
+      val liveIndex = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      val pinned = ClassicDataset.ofRows(
+        spark,
+        LogicalRelation(newFileRelation(pinnedIndex), tableMetadata))
+      val live = ClassicDataset.ofRows(
+        spark,
+        LogicalRelation(newFileRelation(liveIndex), tableMetadata))
+      // Keep the pinned child first to ensure traversal continues past it to the live child.
+      val compound = pinned.union(live).persist()
+      try {
+        compound.count()
+        assertCacheLoading(compound, expected = true)
+
+        val fs = rootPath.getFileSystem(spark.sessionState.newHadoopConf())
+        spark.sharedState.cacheManager.recacheByPath(
+          spark,
+          rootPath,
+          fs,
+          includeTimeTravel = false)
+
+        assertCacheLoading(compound, expected = false)
+        assert(pinnedIndex.refreshCount === 0)
+        assert(liveIndex.refreshCount === 1)
+      } finally {
+        compound.unpersist(blocking = true)
+      }
+    }
+  }
+
   test("V1 file write preserves a time travel cache and refreshes a live cache") {
     withTempPath { path =>
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
