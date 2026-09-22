@@ -1062,19 +1062,44 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("default trim uses collation-aware space matching") {
-    val unicodeCi = CollationFactory.collationNameToId("UNICODE_CI")
-    val unicode = CollationFactory.collationNameToId("UNICODE")
     val source = "\u00A0abc\u00A0"
-    val unicodeCiSource = Literal.create(source, StringType(unicodeCi))
-    val unicodeSource = Literal.create(source, StringType(unicode))
 
-    checkEvaluation(StringTrimLeft(unicodeCiSource), "abc\u00A0")
-    checkEvaluation(StringTrimRight(unicodeCiSource), "\u00A0abc")
-    checkEvaluation(StringTrim(unicodeCiSource), "abc")
+    // Case-insensitive ICU collations treat NBSP as equal to ASCII space, so the default
+    // (unary) trim removes it, matching the explicit two-argument form with a space trim string.
+    for (collationName <- Seq("UNICODE_CI", "UNICODE_CI_AI", "en_CI")) {
+      val collationId = CollationFactory.collationNameToId(collationName)
+      val src = Literal.create(source, StringType(collationId))
+      val space = Literal.create(" ", StringType(collationId))
 
-    checkEvaluation(StringTrimLeft(unicodeSource), source)
-    checkEvaluation(StringTrimRight(unicodeSource), source)
-    checkEvaluation(StringTrim(unicodeSource), source)
+      checkEvaluation(StringTrimLeft(src), "abc\u00A0")
+      checkEvaluation(StringTrimRight(src), "\u00A0abc")
+      checkEvaluation(StringTrim(src), "abc")
+
+      // The unary form matches the explicit two-argument form with a space trim string.
+      checkEvaluation(StringTrimLeft(src), StringTrimLeft(src, space).eval())
+      checkEvaluation(StringTrimRight(src), StringTrimRight(src, space).eval())
+      checkEvaluation(StringTrim(src), StringTrim(src, space).eval())
+
+      // Mixed padding of NBSP and ASCII space is fully trimmed.
+      val mixed = Literal.create("\u00A0 abc \u00A0", StringType(collationId))
+      checkEvaluation(StringTrim(mixed), "abc")
+
+      // A string consisting solely of space separators trims to empty.
+      val allSpaces = Literal.create("\u00A0 \u00A0", StringType(collationId))
+      checkEvaluation(StringTrimLeft(allSpaces), "")
+      checkEvaluation(StringTrimRight(allSpaces), "")
+      checkEvaluation(StringTrim(allSpaces), "")
+    }
+
+    // Case-sensitive collations keep the existing binary behavior: NBSP is preserved.
+    for (collationName <- Seq("UNICODE", "UTF8_BINARY", "UTF8_LCASE")) {
+      val collationId = CollationFactory.collationNameToId(collationName)
+      val src = Literal.create(source, StringType(collationId))
+
+      checkEvaluation(StringTrimLeft(src), source)
+      checkEvaluation(StringTrimRight(src), source)
+      checkEvaluation(StringTrim(src), source)
+    }
   }
 
   test("LTRIM") {
