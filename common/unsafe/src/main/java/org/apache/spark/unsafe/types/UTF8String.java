@@ -2162,18 +2162,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     for (j = 0, j_bytes = 0; j < m; j_bytes += num_bytes_j, j++) {
-      num_bytes_j = numBytesForFirstByte(t.getByte(j_bytes));
+      byte t_byte = t.getByte(j_bytes);
+      num_bytes_j = numBytesForFirstByte(t_byte);
       d[0] = j + 1;
 
-      for (i = 0, i_bytes = 0; i < n; i_bytes += numBytesForFirstByte(s.getByte(i_bytes)), i++) {
-        if (s.getByte(i_bytes) != t.getByte(j_bytes) ||
-              num_bytes_j != numBytesForFirstByte(s.getByte(i_bytes))) {
+      for (i = 0, i_bytes = 0; i < n; i++) {
+        byte s_byte = s.getByte(i_bytes);
+        int num_bytes_i = numBytesForFirstByte(s_byte);
+        if (s_byte != t_byte || num_bytes_j != num_bytes_i) {
           cost = 1;
         } else {
           cost = (ByteArrayMethods.arrayEquals(t.base, t.offset + j_bytes, s.base,
               s.offset + i_bytes, num_bytes_j)) ? 0 : 1;
         }
         d[i + 1] = Math.min(Math.min(d[i] + 1, p[i + 1] + 1), p[i] + cost);
+        i_bytes += num_bytes_i;
       }
 
       swap = p;
