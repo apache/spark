@@ -585,6 +585,8 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       GcmTransportCipher.DecryptionHandler decryptionHandler = cipher.getDecryptionHandler();
       AesGcmHkdfStreaming streaming = cipher.getAesGcmHkdfStreaming();
 
+      // remaining ciphertext length is Integer.MAX_VALUE + 1,
+      // which becomes Integer.MIN_VALUE when cast to int.
       long expectedLength = (long) GcmTransportCipher.LENGTH_HEADER_BYTES +
               streaming.getHeaderLength() + Integer.MAX_VALUE + 1L;
       StreamSegmentEncrypter encrypter = streaming.newStreamSegmentEncrypter(
