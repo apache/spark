@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
@@ -131,6 +133,22 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     val refs = operation.requiredDataAttributes
     if (refs.isEmpty) {
       throw QueryCompilationErrors.emptyRequiredDataAttributesError(operation.getClass.getName)
+    }
+    val nested = refs.filter(_.fieldNames.length != 1).map(_.describe()).toImmutableArraySeq
+    if (nested.nonEmpty) {
+      throw QueryCompilationErrors.nestedRequiredDataAttributeError(
+        operation.getClass.getName, nested)
+    }
+    val normalizedNames = refs.map { ref =>
+      val name = ref.fieldNames.head
+      if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+    }
+    val duplicates = normalizedNames.groupBy(identity).collect {
+      case (_, occurrences) if occurrences.length > 1 => occurrences.head
+    }.toSeq
+    if (duplicates.nonEmpty) {
+      throw QueryCompilationErrors.duplicateRequiredDataAttributeError(
+        operation.getClass.getName, duplicates)
     }
     val resolved = V2ExpressionUtils.resolveRefs[AttributeReference](
       refs.toImmutableArraySeq,

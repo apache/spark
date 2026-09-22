@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
  * (LogicalWriteInfo.updateSchema()) to contain only the declared columns rather than
  * the full table row.
  */
-class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
+class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
 
   override protected lazy val extraTableProps: java.util.Map[String, String] = {
     val props = new java.util.HashMap[String, String]()
@@ -39,7 +39,7 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     props
   }
 
-  test("column-update: rowSchema contains only the single assigned column") {
+  test("column-update: update schema contains a single assigned column") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
@@ -61,7 +61,7 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       ))))
   }
 
-  test("column-update: rowSchema contains multiple assigned columns") {
+  test("column-update: update schema contains multiple assigned columns") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
@@ -79,16 +79,15 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       ))))
   }
 
-  test("column-update: rowSchema is empty for a full identity update") {
+  test("column-update: update schema narrows to pk and dep for a full identity update") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |""".stripMargin)
 
     sql(s"UPDATE $tableNameAsString SET id = id, dep = dep WHERE pk = 1")
 
-    // All assignments are identity, so updatedColumns is empty -- the connector still declares
-    // pk (row lookup) and dep (write-side clustering key), so the narrow update schema is
-    // just [pk, dep].
+    // All assignments are identity, so updatedColumns is empty; pk and dep remain because the
+    // connector unconditionally declares them as base columns.
     checkLastWriteInfo(
       expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
       expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))),
@@ -132,7 +131,7 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       ))))
   }
 
-  test("column-update: rowSchema excludes identity assignments in a mixed UPDATE") {
+  test("column-update: update schema excludes identity assignments in a mixed UPDATE") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
         |{ "pk": 2, "id": 2, "dep": "software" }
@@ -179,7 +178,7 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       s"expected [s] in updatedColumns (root struct) but got: $updatedNames")
 
     // info.updateSchema() carries the narrow row layout; info.schema() is the full table.
-    // `dep` is present because the connector also declares it as the write-side clustering key.
+    // `dep` is present because the connector unconditionally declares it as a base column.
     val updateSchema = table.lastWriteInfo.updateSchema().get()
     assert(updateSchema.fieldNames.contains("s"),
       s"s must be in update schema: $updateSchema")
@@ -330,9 +329,6 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
 
   test("column-update: requiredDataAttributes resolves case-insensitively on the row-ID " +
     "column without adopting the declared spelling") {
-    // The connector declares `PK` (not `pk`); resolution must match case-insensitively but the
-    // narrow scan/write must still use the table's own column name, `pk`, not the connector's
-    // declared spelling -- otherwise column pruning can't find `PK` in the physical scan.
     createAndInitTableWithReqAttrs("PK,salary,dep", "pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
@@ -353,8 +349,6 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
 
   test("column-update: requiredDataAttributes resolves case-insensitively on an assigned " +
     "column without adopting the declared spelling") {
-    // Same as above, but the case mismatch is on `salary` (the assigned column) rather than
-    // the row-ID column.
     createAndInitTableWithReqAttrs("pk,SALARY,dep", "pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
@@ -396,6 +390,43 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     }
     assert(ex.getCondition == "COLUMN_UPDATE_EMPTY_REQUIRED_DATA_ATTRIBUTES",
       s"expected COLUMN_UPDATE_EMPTY_REQUIRED_DATA_ATTRIBUTES but got: ${ex.getCondition}")
+  }
+
+  test("column-update: nested requiredDataAttributes throws AnalysisException") {
+    createAndInitTableWithReqAttrs("pk,s.c1,dep",
+      "pk INT NOT NULL, s STRUCT<c1: INT, c2: INT>, dep STRING",
+      """{ "pk": 1, "s": { "c1": 1, "c2": 2 }, "dep": "hr" }
+        |""".stripMargin)
+
+    val ex = intercept[org.apache.spark.sql.AnalysisException] {
+      sql(s"UPDATE $tableNameAsString SET s.c1 = -1 WHERE pk = 1")
+    }
+    assert(ex.getCondition == "COLUMN_UPDATE_NESTED_REQUIRED_DATA_ATTRIBUTE",
+      s"expected COLUMN_UPDATE_NESTED_REQUIRED_DATA_ATTRIBUTE but got: ${ex.getCondition}")
+  }
+
+  test("column-update: duplicate requiredDataAttributes throws AnalysisException") {
+    createAndInitTableWithReqAttrs("pk,pk,salary", "pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |""".stripMargin)
+
+    val ex = intercept[org.apache.spark.sql.AnalysisException] {
+      sql(s"UPDATE $tableNameAsString SET salary = salary + 1 WHERE pk = 1")
+    }
+    assert(ex.getCondition == "COLUMN_UPDATE_DUPLICATE_REQUIRED_DATA_ATTRIBUTE",
+      s"expected COLUMN_UPDATE_DUPLICATE_REQUIRED_DATA_ATTRIBUTE but got: ${ex.getCondition}")
+  }
+
+  test("column-update: case-only duplicate requiredDataAttributes throws AnalysisException") {
+    createAndInitTableWithReqAttrs("pk,PK,salary", "pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |""".stripMargin)
+
+    val ex = intercept[org.apache.spark.sql.AnalysisException] {
+      sql(s"UPDATE $tableNameAsString SET salary = salary + 1 WHERE pk = 1")
+    }
+    assert(ex.getCondition == "COLUMN_UPDATE_DUPLICATE_REQUIRED_DATA_ATTRIBUTE",
+      s"expected COLUMN_UPDATE_DUPLICATE_REQUIRED_DATA_ATTRIBUTE but got: ${ex.getCondition}")
   }
 
   test("column-update: requiredDataAttributes throws AnalysisException for invalid column") {
@@ -623,9 +654,9 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
         |{ "pk": 2, "id": 2, "dep": "software", "extra": "y" }
         |""".stripMargin)
 
-    // requiredDataAttributes = [pk, id]; cond refs [pk] only; RHS is a literal.
-    // `dep` is scan-only declared (needed for scan-side partitioning resolution) so it must
-    // appear; `extra` is neither declared, scan-only, nor referenced, so it must not.
+    // requiredDataAttributes = [pk, dep, id] (dep is an unconditionally declared base column);
+    // cond refs [pk] only; RHS is a literal. `extra` is neither declared nor referenced, so it
+    // must not appear.
     sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
 
     checkLastScanIncludes("dep")
@@ -638,8 +669,8 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
         |{ "pk": 2, "id": 2, "dep": "software" }
         |""".stripMargin)
 
-    // requiredDataAttributes = [pk, id]; cond refs [dep].
-    // `dep` must appear even though the connector didn't declare it.
+    // requiredDataAttributes = [pk, dep, id] (dep is an unconditionally declared base column,
+    // and would appear regardless of the condition below).
     sql(s"UPDATE $tableNameAsString SET id = -1 WHERE dep = 'hr'")
 
     checkLastScanIncludes("dep")
@@ -651,10 +682,10 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
         |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "hr", "extra": "y" }
         |""".stripMargin)
 
-    // requiredDataAttributes = [pk, salary]; RHS `salary + bonus` references `bonus`.
-    // `bonus` must appear in the scan even though it's not declared as required. `dep` is
-    // scan-only declared (needed for scan-side partitioning resolution) so it also appears;
-    // `extra` is neither declared, scan-only, nor referenced, so it must not.
+    // requiredDataAttributes = [pk, dep, salary] (dep is an unconditionally declared base
+    // column); RHS `salary + bonus` references `bonus`. `bonus` must appear in the scan even
+    // though it's not declared as required. `extra` is neither declared nor referenced, so it
+    // must not.
     sql(s"UPDATE $tableNameAsString SET salary = salary + bonus WHERE pk = 1")
 
     checkLastScanIncludes("bonus", "salary", "dep")
@@ -680,5 +711,59 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       s"expected $expectedCondition but got: ${ex.getCondition}")
     assert(ex.getMessage.contains("id"),
       s"error message must name the missing column `id`: ${ex.getMessage}")
+  }
+
+  test("column-update: CHECK constraint column pulled in by the condition survives the" +
+    " write-row projection") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING, extra INT",
+      """{ "pk": 1, "id": 1, "dep": "hr", "extra": 5 }
+        |""".stripMargin)
+    sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_extra CHECK (extra > 0)")
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE extra > 3")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, -1, "hr", 5) :: Nil)
+  }
+
+  test("column-update: CHECK constraint column pulled in by the assignment RHS survives the" +
+    " write-row projection") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING, extra INT",
+      """{ "pk": 1, "id": 1, "dep": "hr", "extra": 5 }
+        |""".stripMargin)
+    sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_extra CHECK (extra > 0)")
+
+    sql(s"UPDATE $tableNameAsString SET id = extra + 1 WHERE pk = 1")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, 6, "hr", 5) :: Nil)
+  }
+
+  test("column-update: CHECK constraint is still enforced on a narrow delta write") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING, extra INT",
+      """{ "pk": 1, "id": 1, "dep": "hr", "extra": 5 }
+        |""".stripMargin)
+    sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_id CHECK (id > 0)")
+
+    val ex = intercept[org.apache.spark.SparkRuntimeException] {
+      sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
+    }
+    assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION",
+      s"expected CHECK_CONSTRAINT_VIOLATION but got: ${ex.getCondition}")
+  }
+
+  test("column-update: dynamic options reach the connector") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |""".stripMargin)
+
+    checkRowLevelOperationOptions(
+      sql(s"UPDATE $tableNameAsString WITH " +
+        s"(`load-option` = 'load-value', `write-option` = 'write-value') " +
+        s"SET id = -1 WHERE pk = 1"),
+      "load-option" -> "load-value",
+      "write-option" -> "write-value")
   }
 }

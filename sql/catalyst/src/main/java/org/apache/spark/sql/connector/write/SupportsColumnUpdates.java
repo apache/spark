@@ -38,20 +38,26 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * The returned columns become the schema of updated, copied, and reinserted rows, in declared
    * order. Implementations must include every column they want to receive (typically the columns
    * reported by {@link RowLevelOperationInfo#updatedColumns()} plus any columns needed for row
-   * lookup or routing, e.g. a primary key).
+   * lookup or routing, e.g. a primary key). The array must not be empty; an empty array is
+   * rejected with an analysis exception.
    * <p>
    * If any of the columns from {@link RowLevelOperationInfo#updatedColumns()} are
    * missing, an analysis exception is thrown.
    * <p>
+   * If this operation also mixes in {@link SupportsDelta} and represents updates as deletes and
+   * inserts ({@link SupportsDelta#representUpdateAsDeleteAndInsert()} returns {@code true}),
+   * every row-ID column ({@link SupportsDelta#rowId()}) must also be included here, unless it is
+   * itself a metadata column; otherwise an analysis exception is thrown, since the reinserted row
+   * would have no identity left for the connector to place it by.
+   * <p>
    * For updates on nested fields such as {@code SET t.s.c1 = -1} the connector should declare the
    * root struct column {@code s} rather than any nested field.
    * <p>
-   * This also covers columns needed only for planning, e.g. resolving the table's partitioning
-   * expressions against the scan output, or clustering keys returned from
-   * {@link RequiresDistributionAndOrdering#requiredDistribution()}. Such columns will appear in
-   * the row passed to {@link DataWriter#writeUpdate(Object, Object)} / {@link DeltaWriter#update}
-   * / {@link DeltaWriter#reinsert}; a connector that does not want to persist them should project
-   * them away itself before writing.
+   * Partition columns and any clustering keys returned from
+   * {@link RequiresDistributionAndOrdering#requiredDistribution()}, must be declared here too.
+   * Such columns will appear in the row passed to {@link DataWriter#writeUpdate(Object, Object)}
+   * / {@link DeltaWriter#update} / {@link DeltaWriter#reinsert}; a connector that does not want
+   * to persist them should project them away inside the connector before writing.
    */
   NamedReference[] requiredDataAttributes();
 }
