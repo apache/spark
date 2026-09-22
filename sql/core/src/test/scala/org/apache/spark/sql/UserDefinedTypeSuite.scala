@@ -287,6 +287,22 @@ class UserDefinedTypeSuite extends SharedSparkSession with ParquetTest
     assert(result.toSet === Set(FooWithDate(year, "FooFoo", 3), FooWithDate(year, "Foo", 1)))
   }
 
+  test("SPARK-59717: group by a UserDefinedType column backed by a primitive type") {
+    UDTRegistration.register(classOf[Year].getName, classOf[YearUDT].getName)
+
+    val y1 = Year.of(2024)
+    val y2 = Year.of(2025)
+    val df = Seq((y1, 1), (y2, 2), (y1, 3)).toDF("y", "v")
+    Seq("false", "true").foreach { vectorized =>
+      withSQLConf(
+        SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+        SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> vectorized) {
+        checkAnswer(df.groupBy("y").agg(sum("v")), Row(y1, 4L) :: Row(y2, 2L) :: Nil)
+        checkAnswer(df.select("y").distinct(), Row(y1) :: Row(y2) :: Nil)
+      }
+    }
+  }
+
   test("Test unwrap_udt function") {
     val unwrappedFeatures = pointsRDD.select(unwrap_udt(col("features")))
       .rdd.map { (row: Row) => row.getAs[Seq[Double]](0).toArray }
