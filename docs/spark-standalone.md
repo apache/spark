@@ -510,13 +510,16 @@ SPARK_WORKER_OPTS supports the following system properties:
     application id must appear as a path segment under one of the service's configured local
     directory roots). This keeps each application's shuffle and RDD blocks within its own
     directory scope at registration and cleanup time. Workers on this version always create
-    executor local directories as <code>&lt;root&gt;/&lt;appId&gt;/executor-*</code>, which satisfies the
+    executor local directories as <code>&lt;root&gt;/spark-*/&lt;appId&gt;</code>, which satisfies the
     check; that layout is additive and harmless while the check is disabled. For a rolling
     upgrade, first upgrade every Worker, then set this to true on the shuffle service: enabling
     it while executors launched by older Workers are still registering rejects their
-    registrations. This only affects standalone mode.
+    registrations. The check happens only at registration: with
+    <code>spark.shuffle.service.db.enabled</code>, registrations restored from the local
+    database when the service restarts are not re-validated, so registrations made before the
+    upgrade keep being served across restarts. This only affects standalone mode.
   </td>
-  <td>4.4.0</td>
+  <td>4.3.0</td>
 </tr>
 <tr>
   <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>
