@@ -580,7 +580,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
       return this
     }
-    val newNode = if (children.isEmpty) {
+    val newNode = if (this.isInstanceOf[LeafLike[_]]) {
       applyRule(this, rule)
     } else {
       val afterRuleOnChildren = mapChildren(_.transformUpWithPruning(cond, ruleId)(rule))
@@ -766,10 +766,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     val oldChildren = children
     if (oldChildren.isEmpty) return this
 
-    // Single pass, allocating nothing until `f` returns a distinct instance for some child.
-    // `newChildren` is built lazily at that point; `changed` records whether any change was
-    // material (`!fastEquals`). If no child changed materially we return `this` and drop the
-    // buffer -- an equal-but-distinct replacement alone does not require rebuilding the parent.
+    // Invoke `f` once per child and defer allocating the replacement buffer until `f` returns a
+    // distinct instance. Backfill the reference-equal prefix when that first happens. `changed`
+    // records whether any change was material (`!fastEquals`). If no child changed materially we
+    // return `this` and drop the buffer -- an equal-but-distinct replacement alone does not require
+    // rebuilding the parent.
     var newChildren: mutable.ArrayBuffer[BaseType] = null
     var changed = false
     var index = 0

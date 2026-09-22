@@ -53,6 +53,20 @@ case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFall
     copy(optKey = if (optKey.isDefined) Some(newChildren(0)) else None)
 }
 
+case class SpecializedUnary(child: Expression) extends Expression with CodegenFallback {
+  override def children: Seq[Expression] =
+    throw new IllegalStateException("children should not be materialized")
+  override def mapChildren(f: Expression => Expression): Expression = {
+    val newChild = f(child)
+    if (newChild fastEquals child) this else copy(child = newChild)
+  }
+  override def nullable: Boolean = child.nullable
+  override def dataType: DataType = child.dataType
+  override def eval(input: InternalRow): Any = child.eval(input)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = copy(child = newChildren.head)
+}
+
 case class ComplexPlan(exprs: Seq[Seq[Expression]])
   extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
   override def output: Seq[Attribute] = Nil
@@ -199,8 +213,8 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
   test("mapChildren returns the original node when every child is equal but a distinct copy") {
     val expression = Coalesce(Seq(Literal(1), Literal(2)))
-    // Return a fresh, structurally-equal (not reference-equal) copy for *every* child: this
-    // fills `equalCopies` yet must still return `this`, since no child materially changes.
+    // A fresh, structurally-equal copy for every child must still return `this`, since no child
+    // changes materially.
     val result = expression.mapChildren {
       case Literal(value: Int, dt) => Literal(value, dt)
       case other => other
@@ -230,25 +244,27 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val c1 = Literal(11)
     val c2 = Literal(12)
     val c3 = Literal(13)
-    val expression = Coalesce(Seq(c0, c1, c2, c3))
-    val copy0 = Literal(10)
-    val copy2 = Literal(12)
+    val c4 = Literal(14)
+    val expression = Coalesce(Seq(c0, c1, c2, c3, c4))
+    val copy1 = Literal(11)
+    val copy3 = Literal(13)
 
-    // Equal-but-distinct copies at non-adjacent indices 0 and 2, an unchanged same instance at 1,
-    // and a material change at 3. Exercises the replay loop's index bookkeeping across a gap.
+    // Keep a reference-equal prefix, retain non-adjacent equal copies, and change the last child.
     val result = expression.mapChildren {
-      case l if l eq c0 => copy0
-      case l if l eq c1 => c1
-      case l if l eq c2 => copy2
-      case l if l eq c3 => Literal(99)
+      case l if l eq c0 => c0
+      case l if l eq c1 => copy1
+      case l if l eq c2 => c2
+      case l if l eq c3 => copy3
+      case l if l eq c4 => Literal(99)
       case other => other
     }
 
     assert(result ne expression)
-    assert(result.children(0) eq copy0)
-    assert(result.children(1) eq c1)
-    assert(result.children(2) eq copy2)
-    assert(result.children(3) == Literal(99))
+    assert(result.children(0) eq c0)
+    assert(result.children(1) eq copy1)
+    assert(result.children(2) eq c2)
+    assert(result.children(3) eq copy3)
+    assert(result.children(4) == Literal(99))
   }
 
   test("preserves origin") {
@@ -265,11 +281,16 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("transform rules see node origins and restore the previous origin") {
-    val nodeOrigin = Origin(line = Some(1))
-    val previousOrigin = Origin(line = Some(2))
-    val expression = CurrentOrigin.withOrigin(nodeOrigin) {
-      Add(Literal(1), Literal(2))
+    val left = CurrentOrigin.withOrigin(Origin(line = Some(1))) {
+      Literal(1)
     }
+    val right = CurrentOrigin.withOrigin(Origin(line = Some(2))) {
+      Literal(2)
+    }
+    val expression = CurrentOrigin.withOrigin(Origin(line = Some(3))) {
+      Add(left, right)
+    }
+    val previousOrigin = Origin(line = Some(4))
     val visited = new ArrayBuffer[Expression]()
 
     CurrentOrigin.set(previousOrigin)
@@ -292,6 +313,11 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     } finally {
       CurrentOrigin.reset()
     }
+  }
+
+  test("transformUpWithPruning does not materialize specialized children") {
+    val expression = SpecializedUnary(Literal(1))
+    assert(expression.transformUp { case e => e } eq expression)
   }
 
   test("transformUpWithPruning preserves pruning and ineffective rule tracking") {
