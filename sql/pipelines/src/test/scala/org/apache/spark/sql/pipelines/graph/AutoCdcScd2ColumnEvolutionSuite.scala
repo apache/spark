@@ -60,7 +60,7 @@ class AutoCdcScd2ColumnEvolutionSuite
   import testImplicits._
 
   /** The SCD2 target's `_cdc_metadata` struct value for a given recordStartAt. */
-  private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt)
+  private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt, null)
 
   /** An explicit SCD2 `TRACK HISTORY ON (name)` selection, shared across the scenarios below. */
   private val trackName: Option[ColumnSelection] =

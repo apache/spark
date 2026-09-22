@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
+import java.util.IllegalFormatConversionException
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
@@ -853,6 +854,60 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(-10, IntegerType)), "__park SQL")
     checkEvaluation(Overlay(Literal("Spark SQL"), Literal("__"),
       Literal.create(-10, IntegerType), Literal.create(4, IntegerType)), "__rk SQL")
+    // SPARK-58713: `pos - 1` and `pos + len` must not overflow the int range. Before the
+    // fix each of these duplicated the input around the replacement.
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MaxValue, IntegerType), Literal.create(5, IntegerType)), "Spark SQL_")
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MaxValue, IntegerType)), "Spark SQL_")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MaxValue - 2, IntegerType), Literal.create(10, IntegerType)),
+      "Spark SQL_")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MinValue, IntegerType), Literal.create(1, IntegerType)), "_Spark SQL")
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MinValue, IntegerType)), "_Spark SQL")
+    // SPARK-58713: with a zero length the tail starts at `Int.MinValue` itself. `substringSQL`
+    // only treats an end offset of exactly `Int.MaxValue` as the rest of the input, so without
+    // clamping the tail position this dropped the last character and disagreed with the binary
+    // overload below.
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MinValue, IntegerType), Literal.create(0, IntegerType)), "_Spark SQL")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(Int.MinValue + 1, IntegerType), Literal.create(0, IntegerType)), "_Spark SQL")
+    // The tail position is clamped in characters, so a multi-byte input keeps every character,
+    // and an empty input has no tail to keep.
+    // scalastyle:off nonascii
+    checkEvaluation(Overlay(Literal("caf\u00e9 SQL"), Literal("_"),
+      Literal.create(Int.MinValue, IntegerType), Literal.create(0, IntegerType)), "_caf\u00e9 SQL")
+    // scalastyle:on nonascii
+    checkEvaluation(Overlay(Literal(""), Literal("_"),
+      Literal.create(Int.MinValue, IntegerType), Literal.create(0, IntegerType)), "_")
+  }
+
+  test("SPARK-58713: overlay position arithmetic is collation-independent") {
+    // `Overlay` builds its result from character positions and `substringSQL`, and never
+    // consults the collation - `CollationSupport` defines no collation-aware overlay - so
+    // the clamped out-of-range positions fixed above produce the same result under every
+    // collation. The mixed case of the expected values also shows nothing is case folded.
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach { collation =>
+      val st = StringType(collation)
+      val input = Literal.create("Spark SQL", st)
+      val replace = Literal.create("_", st)
+      checkEvaluation(Overlay(input, replace,
+        Literal.create(Int.MaxValue, IntegerType), Literal.create(5, IntegerType)),
+        "Spark SQL_")
+      checkEvaluation(new Overlay(input, replace,
+        Literal.create(Int.MaxValue, IntegerType)), "Spark SQL_")
+      checkEvaluation(Overlay(input, replace,
+        Literal.create(Int.MaxValue - 2, IntegerType), Literal.create(10, IntegerType)),
+        "Spark SQL_")
+      checkEvaluation(Overlay(input, replace,
+        Literal.create(Int.MinValue, IntegerType), Literal.create(1, IntegerType)),
+        "_Spark SQL")
+      checkEvaluation(new Overlay(input, replace,
+        Literal.create(Int.MinValue, IntegerType)), "_Spark SQL")
+    }
   }
 
   test("overlay for byte array") {
@@ -891,6 +946,25 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(-10, IntegerType)), Array[Byte](-1, -1, 2, 3, 4, 5, 6, 7, 8, 9))
     checkEvaluation(Overlay(input, Literal(Array[Byte](-1, -1)), Literal.create(-10, IntegerType),
       Literal.create(4, IntegerType)), Array[Byte](-1, -1, 4, 5, 6, 7, 8, 9))
+    // SPARK-58713: `pos - 1` and `pos + len` must not overflow the int range. Before the
+    // fix each of these duplicated the input around the replacement.
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(Int.MaxValue, IntegerType), Literal.create(5, IntegerType)),
+      Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(Int.MaxValue, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(Int.MaxValue - 2, IntegerType), Literal.create(10, IntegerType)),
+      Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(Int.MinValue, IntegerType), Literal.create(1, IntegerType)),
+      Array[Byte](-1, 1, 2, 3, 4, 5, 6, 7, 8, 9))
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(Int.MinValue, IntegerType)), Array[Byte](-1, 1, 2, 3, 4, 5, 6, 7, 8, 9))
+    // SPARK-58713: the zero-length case must agree with the string overload above.
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(Int.MinValue, IntegerType), Literal.create(0, IntegerType)),
+      Array[Byte](-1, 1, 2, 3, 4, 5, 6, 7, 8, 9))
   }
 
   test("Check Overlay.checkInputDataTypes results") {
@@ -1065,6 +1139,63 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(FormatString(Literal("\"quote"), Literal("\"quote")) :: Nil)
+  }
+
+  test("FormatString with decimal arguments") {
+    checkEvaluation(FormatString(Literal("%f"), Literal(Decimal("1.5"))), "1.500000")
+    checkEvaluation(FormatString(Literal("%.2f"), Literal(Decimal("1234.5"))), "1234.50")
+    checkEvaluation(FormatString(Literal("%,.2f"), Literal(Decimal("1234.5"))), "1,234.50")
+    checkEvaluation(FormatString(Literal("%e"), Literal(Decimal("1.5"))), "1.500000e+00")
+    checkEvaluation(FormatString(Literal("%g"), Literal(Decimal("1.5"))), "1.50000")
+
+    // %a is not supported for decimals: Formatter accepts it only for float and double.
+    checkExceptionInExpression[IllegalFormatConversionException](
+      FormatString(Literal("%a"), Literal(Decimal("1.5"))), "a != java.math.BigDecimal")
+
+    // Not routed through a double, so digits beyond double precision survive.
+    checkEvaluation(
+      FormatString(Literal("%.20f"), Literal(Decimal("0.10000000000000000001"))),
+      "0.10000000000000000001")
+
+    // %s is unchanged, because Decimal.toString already delegates to the same BigDecimal string.
+    checkEvaluation(FormatString(Literal("%s"), Literal(Decimal(12, 18, 10))), "1.2E-9")
+
+    // %h hashes whatever object reaches Formatter, so it pins the conversion down: this is
+    // java.math.BigDecimal.hashCode (31 * unscaledValue + scale, scale sensitive), not
+    // Decimal.hashCode, which follows Double hashing and would print 3fc00000 here.
+    checkEvaluation(FormatString(Literal("%h"), Literal(Decimal("1.50"))), "122c")
+
+    checkEvaluation(
+      FormatString(Literal("%f"), Literal.create(null, DecimalType(10, 2))), "null")
+
+    checkExceptionInExpression[IllegalFormatConversionException](
+      FormatString(Literal("%f"), Literal(1)), "f != java.lang.Integer")
+  }
+
+  test("FormatString with a decimal-backed UDT argument") {
+    // The generated row accessors use the UDT's underlying sqlType, so codegen sees a Decimal
+    // just like interpreted evaluation does. Both paths must convert it.
+    val udt = new DecimalWrapperUDT
+    val arg = Literal.create(udt.serialize(DecimalWrapper(Decimal("1.5"))), udt)
+    checkEvaluation(FormatString(Literal("%f"), arg), "1.500000")
+    checkEvaluation(FormatString(Literal("%s"), arg), "1.5")
+    checkEvaluation(FormatString(Literal("%f"), Literal.create(null, udt)), "null")
+  }
+
+  test("FormatString with an object-typed decimal argument") {
+    val arg = Literal.fromObject(Decimal("1.5"))
+    assert(arg.dataType === ObjectType(classOf[Decimal]))
+    checkEvaluation(FormatString(Literal("%f"), arg), "1.500000")
+    checkEvaluation(FormatString(Literal("%s"), arg), "1.5")
+  }
+
+  test("FormatString with a decimal under a broader object type") {
+    val objType = ObjectType(classOf[Object])
+    val ref = BoundReference(0, objType, nullable = true)
+    checkEvaluation(FormatString(Literal("%f"), ref), "1.500000", create_row(Decimal("1.5")))
+    checkEvaluation(FormatString(Literal("%s"), ref), "1.5", create_row(Decimal("1.5")))
+    checkEvaluation(FormatString(Literal("%s"), ref), "abc", create_row("abc"))
+    checkEvaluation(FormatString(Literal("%f"), ref), "null", create_row(null))
   }
 
   test("SPARK-22603: FormatString should not generate codes beyond 64KB") {
@@ -2420,4 +2551,18 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "functionName" -> "`normalize`",
         "form" -> "'NFE'"))
   }
+}
+
+private case class DecimalWrapper(d: Decimal)
+
+private class DecimalWrapperUDT extends UserDefinedType[DecimalWrapper] {
+  override def sqlType: DataType = DecimalType(10, 2)
+
+  override def serialize(obj: DecimalWrapper): Any = obj.d
+
+  override def deserialize(datum: Any): DecimalWrapper = datum match {
+    case d: Decimal => DecimalWrapper(d)
+  }
+
+  override def userClass: Class[DecimalWrapper] = classOf[DecimalWrapper]
 }

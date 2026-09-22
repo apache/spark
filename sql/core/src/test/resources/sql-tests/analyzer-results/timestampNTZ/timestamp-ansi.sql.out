@@ -1185,6 +1185,13 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+select timestampdiff(NANOSECOND, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 01:02:04')
+-- !query analysis
+Project [timestampdiff(NANOSECOND, cast(2022-02-14 01:02:03 as timestamp), cast(2022-02-14 01:02:04 as timestamp), Some(America/Los_Angeles)) AS timestampdiff(NANOSECOND, TIMESTAMP_NTZ '2022-02-14 01:02:03', TIMESTAMP_NTZ '2022-02-14 01:02:04')#xL]
++- OneRowRelation
+
+
+-- !query
 select timediff(QUARTER, timestamp'2023-08-10 01:02:03', timestamp'2022-01-14 01:02:03')
 -- !query analysis
 Project [timestampdiff(QUARTER, cast(2023-08-10 01:02:03 as timestamp), cast(2022-01-14 01:02:03 as timestamp), Some(America/Los_Angeles)) AS timestampdiff(QUARTER, TIMESTAMP_NTZ '2023-08-10 01:02:03', TIMESTAMP_NTZ '2022-01-14 01:02:03')#xL]

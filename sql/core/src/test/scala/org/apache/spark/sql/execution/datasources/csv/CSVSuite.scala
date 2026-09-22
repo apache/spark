@@ -868,6 +868,80 @@ abstract class CSVSuite
     }
   }
 
+  test("treatNullAsEmptyString write option wins over " +
+    "spark.sql.legacy.nullValueWrittenAsQuotedEmptyStringCsv for both values") {
+    // The written bytes are what a downstream consumer relies on to tell null from an actual
+    // empty string. Note Spark's own default CSV reader cannot distinguish them: it maps both a
+    // bare token and a quoted "" back to null (nullSafeDatum treats datum == nullValue ("") as
+    // null), so we assert on the raw file text rather than a read round trip.
+    // The option must win regardless of the session-level legacy config, so a single write can
+    // differentiate null from an actual empty string without changing the session default.
+    Seq("true", "false").foreach { confVal =>
+      withSQLConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key -> confVal) {
+        // treatNullAsEmptyString = false: null is a bare unquoted token, empty string stays "".
+        withTempPath { path =>
+          Seq(("Tesla", null: String, ""))
+            .toDF("make", "comment", "blank")
+            .write
+            .option("treatNullAsEmptyString", "false")
+            .csv(path.getCanonicalPath)
+          checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
+        }
+        // treatNullAsEmptyString = true: null is written as the (quoted) empty value, so it is
+        // no longer distinguishable from an actual empty string.
+        withTempPath { path =>
+          Seq(("Tesla", null: String, ""))
+            .toDF("make", "comment", "blank")
+            .write
+            .option("treatNullAsEmptyString", "true")
+            .csv(path.getCanonicalPath)
+          checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,\"\",\"\""))
+        }
+      }
+    }
+  }
+
+  test("treatNullAsEmptyString is a no-op when a non-empty nullValue is set") {
+    // A non-empty nullValue is written verbatim, so the option has no observable effect,
+    // matching how the SQL config it overrides composes with nullValue.
+    Seq("true", "false").foreach { optVal =>
+      withTempPath { path =>
+        Seq(("Tesla", null: String, ""))
+          .toDF("make", "comment", "blank")
+          .write
+          .option("nullValue", "NULL")
+          .option("treatNullAsEmptyString", optVal)
+          .csv(path.getCanonicalPath)
+        checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,NULL,\"\""))
+      }
+    }
+  }
+
+  test("treatNullAsEmptyString handles null and invalid values") {
+    // An explicit null value behaves as if the option were absent (session config decides).
+    withTempPath { path =>
+      Seq(("Tesla", null: String, ""))
+        .toDF("make", "comment", "blank")
+        .write
+        .option("treatNullAsEmptyString", null)
+        .csv(path.getCanonicalPath)
+      checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
+    }
+    // A non-boolean value raises a structured error naming the option.
+    checkError(
+      exception = intercept[SparkException] {
+        withTempPath { path =>
+          Seq(("Tesla", null: String, ""))
+            .toDF("make", "comment", "blank")
+            .write
+            .option("treatNullAsEmptyString", "yes")
+            .csv(path.getCanonicalPath)
+        }
+      },
+      condition = "_LEGACY_ERROR_TEMP_2147",
+      parameters = Map("paramName" -> "treatNullAsEmptyString"))
+  }
+
   test("save csv with compression codec option") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
@@ -3095,6 +3169,41 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-58946: reject empty or non-letter file extensions") {
+    Seq("", "ab1", "a/b").foreach { ext =>
+      withTempPath { path =>
+        checkError(
+          exception = intercept[SparkIllegalArgumentException] {
+            spark.range(1).write.option("extension", ext).csv(path.getAbsolutePath)
+          },
+          condition = "INVALID_PARAMETER_VALUE.EXTENSION",
+          parameters = Map(
+            "functionName" -> "`csv`",
+            "parameter" -> "`extension`",
+            "invalidValue" -> s"`$ext`"))
+      }
+    }
+  }
+
+  test("SPARK-58946: allow alphabetic file extensions of arbitrary length") {
+    Seq("a", "abcd").foreach { ext =>
+      withTempPath { path =>
+        val input = Seq(
+          "1423-11-12T23:41:00",
+          "1765-03-28",
+          "2016-01-28T20:00:00"
+        ).toDF().repartition(1)
+        input.write.option("extension", ext).csv(path.getAbsolutePath)
+
+        val files = Files.list(path.toPath)
+          .iterator().asScala.map(_.getFileName.toString)
+          .toList.filter(_.endsWith(s".$ext"))
+
+        assert(files.size == 1)
+      }
+    }
+  }
+
   test("SPARK-50616: We can write with a tsv file extension") {
     withTempPath { path =>
       val input = Seq(
@@ -3342,7 +3451,7 @@ abstract class CSVSuite
   }
 
   test("validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 43)
+    assert(CSVOptions.getAllOptions.size == 44)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3372,6 +3481,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("inputBufferSize"))
     assert(CSVOptions.isValidOption("columnNameOfCorruptRecord"))
     assert(CSVOptions.isValidOption("nullValue"))
+    assert(CSVOptions.isValidOption("treatNullAsEmptyString"))
     assert(CSVOptions.isValidOption("nanValue"))
     assert(CSVOptions.isValidOption("positiveInf"))
     assert(CSVOptions.isValidOption("negativeInf"))

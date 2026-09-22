@@ -162,6 +162,23 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         "operand2" -> "\"symbol\""))
   }
 
+  test("MATCH_CONDITION rejects a literal even when a same-side column is present") {
+    setupTradeQuoteViews()
+    // `'AAPL'` references no join input, so no operand binds to the left side and it is rejected.
+    val sqlText =
+      """
+        |SELECT count(*)
+        |FROM trades t ASOF JOIN quotes q
+        |  MATCH_CONDITION (q.symbol >= 'AAPL')
+        |  ON t.symbol = q.symbol
+        |""".stripMargin
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+      sqlState = Some("42K0E"),
+      parameters = Map("operand1" -> "\"symbol\"", "operand2" -> "\"AAPL\""))
+  }
+
   test("MATCH_CONDITION rejects non-deterministic expressions") {
     setupTradeQuoteViews()
     val sqlText =
@@ -246,13 +263,14 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         "operand2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
   }
 
-  test("MATCH_CONDITION rejects two constant operands (neither references a join input)") {
+  test("MATCH_CONDITION rejects two literal operands (neither references a join input)") {
     setupTradeQuoteViews()
+    // Both operands are literals that reference no join input, so neither binds to a side.
     val sqlText =
       """
         |SELECT count(*)
         |FROM trades t ASOF JOIN quotes q
-        |  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:01' >= TIMESTAMP '2026-06-29 10:00:00')
+        |  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:00' >= TIMESTAMP '2026-06-29 09:00:00')
         |  ON t.symbol = q.symbol
         |""".stripMargin
     checkError(
@@ -260,8 +278,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
       parameters = Map(
-        "operand1" -> "\"TIMESTAMP '2026-06-29 10:00:01'\"",
-        "operand2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
+        "operand1" -> "\"TIMESTAMP '2026-06-29 10:00:00'\"",
+        "operand2" -> "\"TIMESTAMP '2026-06-29 09:00:00'\""))
   }
 
   test("MATCH_CONDITION rejects a constant operand under the single-pass analyzer") {
@@ -376,6 +394,36 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
     assert(asOfJoin.asOfCondition.resolved)
     assert(asOfJoin.leftSortExprs.nonEmpty)
     assert(asOfJoin.rightSortExprs.nonEmpty)
+  }
+
+  test("ARRAY<STRUCT> MATCH_CONDITION with mismatched element names and types is rejected") {
+    // ASOF operand validation accepts these (fields compared positionally, names ignored), the
+    // failure is the generic comparison check, since array elements are not name-realigned.
+    val sqlText =
+      """
+        |SELECT r.a
+        |FROM VALUES (ARRAY(named_struct('x', CAST(5 AS INT)))) AS t(a)
+        |ASOF JOIN (
+        |  SELECT * FROM VALUES (ARRAY(named_struct('y', CAST(5 AS BIGINT)))) AS r(a)
+        |) r
+        |  MATCH_CONDITION (t.a >= r.a)
+        |""".stripMargin
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+      sqlState = Some("42K09"),
+      parameters = Map(
+        "left" -> "\"ARRAY<STRUCT<x: INT NOT NULL>>\"",
+        "right" -> "\"ARRAY<STRUCT<y: BIGINT NOT NULL>>\"",
+        "sqlExpr" -> "\"(a >= a)\""),
+      queryContext = Array(
+        ExpectedContext(
+          fragment = """ASOF JOIN (
+                     |  SELECT * FROM VALUES (ARRAY(named_struct('y', CAST(5 AS BIGINT)))) AS r(a)
+                     |) r
+                     |  MATCH_CONDITION (t.a >= r.a)""".stripMargin,
+          start = 75,
+          stop = 197)))
   }
 
   test("MATCH_CONDITION accepts nested STRUCT column operands") {

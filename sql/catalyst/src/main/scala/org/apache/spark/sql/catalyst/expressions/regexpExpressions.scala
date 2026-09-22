@@ -829,9 +829,8 @@ object RegExpExtractBase {
   // generated Java is a single call rather than an inline match/group block.
   def extract(matcher: Matcher, idx: Int, prettyName: String): UTF8String = {
     if (matcher.find()) {
-      val mr = matcher.toMatchResult
-      checkGroupIndex(prettyName, mr.groupCount, idx)
-      val group = mr.group(idx)
+      checkGroupIndex(prettyName, matcher.groupCount, idx)
+      val group = matcher.group(idx)
       // Pattern matched, but it's an optional group
       if (group == null) UTF8String.EMPTY_UTF8 else UTF8String.fromString(group)
     } else {
@@ -843,9 +842,8 @@ object RegExpExtractBase {
   def extractAll(matcher: Matcher, idx: Int, prettyName: String): GenericArrayData = {
     val matchResults = new ArrayBuffer[UTF8String]()
     while (matcher.find()) {
-      val mr = matcher.toMatchResult
-      checkGroupIndex(prettyName, mr.groupCount, idx)
-      val group = mr.group(idx)
+      checkGroupIndex(prettyName, matcher.groupCount, idx)
+      val group = matcher.group(idx)
       // Pattern matched, but it's an optional group
       if (group == null) {
         matchResults += UTF8String.EMPTY_UTF8
@@ -1173,7 +1171,7 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
       val source = s.toString
       val m = getLastMatcher(source, r)
       if (m.find) {
-        source.codePointCount(0, m.toMatchResult.start()) + 1
+        source.codePointCount(0, m.start()) + 1
       } else {
         0
       }
@@ -1202,7 +1200,7 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
         collationId)}
          |  if ($matcher.find()) {
          |    String $source = $subject.toString();
-         |    ${ev.value} = $source.codePointCount(0, $matcher.toMatchResult().start()) + 1;
+         |    ${ev.value} = $source.codePointCount(0, $matcher.start()) + 1;
          |  } else {
          |    ${ev.value} = 0;
          |  }

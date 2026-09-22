@@ -193,6 +193,19 @@ object JdbcUtils extends Logging with SQLConfHelper {
     if (isTimestampNTZ) TimestampNTZNanosType(precision) else TimestampLTZNanosType(precision)
   }
 
+  // When nanosecond timestamps are requested (and the preview feature is enabled), a driver
+  // TIMESTAMP that reports a sub-microsecond fractional-second scale (7-9) is mapped to the
+  // nanosecond-capable type. Otherwise the historical microsecond mapping is preserved.
+  def resolveTimestampType(
+      isTimestampNTZ: Boolean, scale: Int, preferTimestampNanos: Boolean): DataType = {
+    if (preferTimestampNanos &&
+      scale >= TimestampNTZNanosType.MIN_PRECISION &&
+      scale <= TimestampNTZNanosType.MAX_PRECISION &&
+      conf.timestampNanosTypesEnabled) {
+      getTimestampNanosType(isTimestampNTZ, scale)
+    } else getTimestampType(isTimestampNTZ)
+  }
+
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
    * the JdbcDialect class corresponding to your database driver returns null.
@@ -251,15 +264,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         TimeType(timePrecision)
       } else getTimestampType(isTimestampNTZ)
     case java.sql.Types.TIMESTAMP =>
-      // When nanosecond timestamps are requested (and the preview feature is enabled), a driver
-      // TIMESTAMP that reports a sub-microsecond fractional-second scale (7-9) is mapped to the
-      // nanosecond-capable type. Otherwise the historical microsecond mapping is preserved.
-      if (preferTimestampNanos &&
-        scale >= TimestampNTZNanosType.MIN_PRECISION &&
-        scale <= TimestampNTZNanosType.MAX_PRECISION &&
-        conf.timestampNanosTypesEnabled) {
-        getTimestampNanosType(isTimestampNTZ, scale)
-      } else getTimestampType(isTimestampNTZ)
+      resolveTimestampType(isTimestampNTZ, scale, preferTimestampNanos)
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
     case java.sql.Types.VARCHAR

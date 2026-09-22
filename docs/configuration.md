@@ -909,7 +909,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Regex to decide which parts of strings produced by Spark contain sensitive information.
     When this regex matches a string part, that string part is replaced by a dummy value.
-    This is currently used to redact the output of SQL explain commands.
+    This is currently used to redact the output of SQL explain commands and the exit exception annotation on Kubernetes.
   </td>
   <td>2.2.0</td>
 </tr>
@@ -3786,6 +3786,10 @@ Command types in proto.</td>
 
 Please refer to the [Security](security.html) page for available options on how to secure different
 Spark subsystems.
+
+For OIDC credential propagation (obtaining and distributing short-lived, identity-derived
+credentials to executors), the `spark.security.oidc.*` configuration keys are documented under
+[OIDC Credential Propagation](security.html#oidc-credential-propagation).
 
 
 ### Spark SQL
