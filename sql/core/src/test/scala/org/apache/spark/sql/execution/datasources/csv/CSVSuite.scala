@@ -1597,6 +1597,44 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-59629: columnNameOfCorruptRecord honors spark.sql.caseSensitive") {
+    val schema = new StructType().add("a", IntegerType).add("b", DateType)
+    val columnNameOfCorruptRecord = "_unparsed"
+    // The schema declares the corrupt record field in a different case to the option value.
+    val schemaWithCorrField =
+      schema.add(columnNameOfCorruptRecord.toUpperCase(Locale.ROOT), StringType)
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq("0,2013-111_11 12:13:14", "1,1983-08-04").toDF("value").write.text(path)
+
+      def read(): DataFrame = spark
+        .read
+        .option("mode", "PERMISSIVE")
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .schema(schemaWithCorrField)
+        .csv(path)
+
+      // Case-insensitive resolution is the default, so the malformed record is captured even
+      // though the schema spells the field `_UNPARSED`.
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        checkAnswer(read(),
+          Row(0, null, "0,2013-111_11 12:13:14") ::
+          Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
+          Nil)
+      }
+
+      // Under case-sensitive resolution the names genuinely differ, so `_UNPARSED` stays an
+      // ordinary data column and no record is captured in it.
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        checkAnswer(read(),
+          Row(0, null, null) ::
+          Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
+          Nil)
+      }
+    }
+  }
+
   test("Enabling/disabling ignoreCorruptFiles/ignoreMissingFiles") {
     withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
