@@ -180,6 +180,7 @@ abstract class HashMapGenerator(
         hashLong(s"CollationFactory.fetchCollation(${st.collationId})" +
           s".hashFunction.applyAsLong($input)")
       case CalendarIntervalType => hashInt(s"$input.hashCode()")
+      case udt: UserDefinedType[_] => genComputeHash(ctx, input, udt.sqlType, result)
     }
   }
 }
