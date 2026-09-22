@@ -952,8 +952,8 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         field.jsonValue
       },
-      condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-      parameters = Map("jsonType" -> DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY))
+      condition = "INVALID_CHAR_VARCHAR_COLLATION_METADATA.RESERVED_METADATA_KEY",
+      parameters = Map("metadataKey" -> DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY))
   }
 
   test("SPARK-59276: reject malformed CHAR/VARCHAR collation restoration maps") {

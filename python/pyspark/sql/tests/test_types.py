@@ -984,7 +984,13 @@ class TypesTestsMixin:
             CharType(4, "UTF8_LCASE"),
             metadata={_CHAR_VARCHAR_COLLATIONS_METADATA_KEY: {"caller": "value"}},
         )
-        self.assertRaises(PySparkTypeError, field.jsonValue)
+        with self.assertRaises(PySparkTypeError) as pe:
+            field.jsonValue()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="INVALID_CHAR_VARCHAR_COLLATION_METADATA.RESERVED_METADATA_KEY",
+            messageParameters={"metadataKey": _CHAR_VARCHAR_COLLATIONS_METADATA_KEY},
+        )
 
     def test_schema_rejects_malformed_char_varchar_collation_metadata(self):
         from pyspark.sql.types import (

@@ -1470,8 +1470,8 @@ class StructField(DataType):
     def jsonValue(self) -> Dict[str, Any]:
         if _CHAR_VARCHAR_COLLATIONS_METADATA_KEY in self.metadata:
             raise PySparkTypeError(
-                errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-                messageParameters={"jsonType": _CHAR_VARCHAR_COLLATIONS_METADATA_KEY},
+                errorClass="INVALID_CHAR_VARCHAR_COLLATION_METADATA.RESERVED_METADATA_KEY",
+                messageParameters={"metadataKey": _CHAR_VARCHAR_COLLATIONS_METADATA_KEY},
             )
         string_metadata = self.getCollationMetadata()
         char_varchar_metadata = self.getCharVarcharCollationMetadata()
