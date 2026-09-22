@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
-import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, UnwrapCastInBinaryComparison}
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
@@ -1123,6 +1123,36 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     // the cast is not unwrapped when it is lossy, the filter is pushed as it was
     val lossy = EqualTo(Cast($"clong".long, DoubleType), Literal(1.0d))
     testTranslateScalarSubqueryFilter(lossy, DataSourceV2Strategy.translateFilterV2(lossy))
+  }
+
+  test("SPARK-59317: translate a scalar subquery filter on a cast column below a conjunction") {
+    val other = GreaterThan($"cint".int, Literal(0))
+    val otherPredicate = new Predicate(">",
+      Array(FieldReference("cint"), LiteralValue(0, IntegerType)))
+    // the comparisons a value out of the column range reduces to are translated the same below a
+    // conjunction as they are on their own: no row can match the equality, and every non-null row
+    // is below the value
+    testTranslateScalarSubqueryFilter(
+      And(EqualTo(Cast($"cint".int, LongType), Literal(Int.MaxValue + 1L)), other),
+      Some(new V2And(new AlwaysFalse(), otherPredicate)))
+    testTranslateScalarSubqueryFilter(
+      And(LessThan(Cast($"cint".int, LongType), Literal(Int.MaxValue + 1L)), other),
+      Some(new V2And(new Predicate("IS_NOT_NULL", Array(FieldReference("cint"))), otherPredicate)))
+  }
+
+  test("SPARK-59317: translate a negated scalar subquery filter on a cast column") {
+    // a filter drops the rows a comparison returns null for like the ones it returns false for,
+    // which is what lets the equality above be translated to `AlwaysFalse`. A `Not` tells the two
+    // apart, so below one the cast is unwrapped the way the optimizer rule does.
+    val negated = Not(EqualTo(Cast($"cint".int, LongType), Literal(Int.MaxValue + 1L)))
+    val translated = DataSourceV2Strategy.translateScalarSubqueryFilterV2(negated)
+    assert(translated.isDefined)
+    assert(!translated.contains(new V2Not(new AlwaysFalse())),
+      "A negated equality no row can match must not be translated to NOT(FALSE)")
+    assertResult(translated) {
+      DataSourceV2Strategy.translateFilterV2(
+        UnwrapCastInBinaryComparison.unwrapCastInExpression(negated))
+    }
   }
 
   private def testTranslateScalarSubqueryFilter(

@@ -108,9 +108,6 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
   /**
    * Unwraps the cast of every binary comparison, `In` and `InSet` of the given expression,
    * leaving the ones whose cast can't be unwrapped as they are.
-   *
-   * Besides the rule, this is also used at runtime to unwrap the cast of a scalar subquery
-   * filter, whose value is only known once its subquery has been evaluated.
    */
   private[sql] def unwrapCastInExpression(
       expr: Expression,
@@ -120,7 +117,33 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     }
   }
 
-  private def unwrapCast(exp: Expression): Option[Expression] = exp match {
+  /**
+   * Unwraps the casts of the given filter, with the comparisons that a value out of the column's
+   * range reduces to returned in a form a data source can express: `FalseLiteral` when no row can
+   * match, and `IsNotNull` when every non-null row matches. The rule returns them as
+   * `and(isnull(col), null)` and `or(isnotnull(col), null)`, which have no source predicate of
+   * their own. The two forms are interchangeable here because a filter only has to tell the rows
+   * it keeps from the ones it drops, and a null result drops the row just like a false one does.
+   *
+   * That equivalence is the filter's and not the expression's, and a `Not` tells the two forms
+   * apart, so the subtrees below one are unwrapped the way the rule does.
+   *
+   * Besides the rule, this is used at runtime to unwrap the cast of a scalar subquery filter,
+   * whose value is only known once its subquery has been evaluated.
+   */
+  private[sql] def unwrapCastInFilter(filter: Expression): Expression = filter match {
+    case And(left, right) => And(unwrapCastInFilter(left), unwrapCastInFilter(right))
+    case Or(left, right) => Or(unwrapCastInFilter(left), unwrapCastInFilter(right))
+    case e @ (BinaryComparison(_, _) | In(_, _) | InSet(_, _)) =>
+      // unwrap the children first, the way the rule's bottom-up traversal does
+      val unwrapped = e.mapChildren(unwrapCastInExpression(_))
+      unwrapCast(unwrapped, filterSemantics = true).getOrElse(unwrapped)
+    case other => unwrapCastInExpression(other)
+  }
+
+  private def unwrapCast(
+      exp: Expression,
+      filterSemantics: Boolean = false): Option[Expression] = exp match {
     // Not a canonical form. In this case we first canonicalize the expression by swapping the
     // literal and cast side, then process the result and swap the literal and cast again to
     // restore the original order.
@@ -135,14 +158,14 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case _ => e
       }
 
-      unwrapCast(swap(exp)).map(swap)
+      unwrapCast(swap(exp), filterSemantics).map(swap)
 
     // In case both sides have numeric type, optimize the comparison by removing casts or
     // moving cast to the literal side.
     case be @ BinaryComparison(
       Cast(fromExp, toType: NumericType, _, _), Literal(value, literalType))
         if canImplicitlyCast(fromExp, toType, literalType) && value != null =>
-      Some(simplifyNumericComparison(be, fromExp, toType, value))
+      Some(simplifyNumericComparison(be, fromExp, toType, value, filterSemantics))
 
     case be @ BinaryComparison(
       Cast(fromExp, _, timeZoneId, evalMode), date @ Literal(value, DateType))
@@ -153,7 +176,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       Cast(fromExp, _, timeZoneId, evalMode), ts @ Literal(value, _))
         if fromExp.dataType == DateType && AnyTimestampType.acceptsType(ts.dataType) &&
           value != null =>
-      Some(unwrapTimestampToDate(be, fromExp, ts, timeZoneId, evalMode))
+      Some(unwrapTimestampToDate(be, fromExp, ts, timeZoneId, evalMode, filterSemantics))
 
     // Timestamp/Timestamp_NTZ -> Timestamp_NTZ/Timestamp
     case be @ BinaryComparison(
@@ -183,7 +206,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       val (nullList, canCastList) = castLiterals(fromExp.dataType, toType, list)
       if (nullList.isEmpty && canCastList.isEmpty) {
         // only have cannot cast to fromExp.dataType literals
-        Some(falseIfNotNull(fromExp))
+        Some(falseIfNotNull(fromExp, filterSemantics))
       } else {
         // cast null value to fromExp.dataType, to make sure the new return list is in the same
         // data type.
@@ -194,7 +217,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     case inSet: InSet =>
       unwrapCastInSet(inSet).map {
         // only have cannot cast to fromExp.dataType literals
-        case (fromExp, values) if values.isEmpty => falseIfNotNull(fromExp)
+        case (fromExp, values) if values.isEmpty => falseIfNotNull(fromExp, filterSemantics)
         case (fromExp, values) => InSet(fromExp, values)
       }
 
@@ -211,7 +234,8 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       exp: BinaryComparison,
       fromExp: Expression,
       toType: NumericType,
-      value: Any): Expression = {
+      value: Any,
+      filterSemantics: Boolean): Expression = {
 
     val fromType = fromExp.dataType
     val ordering = PhysicalDataType.ordering(toType)
@@ -229,9 +253,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         return if (maxCmp > 0) {
           exp match {
             case EqualTo(_, _) | GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
-              falseIfNotNull(fromExp)
+              falseIfNotNull(fromExp, filterSemantics)
             case LessThan(_, _) | LessThanOrEqual(_, _) =>
-              trueIfNotNull(fromExp)
+              trueIfNotNull(fromExp, filterSemantics)
             // make sure the expression is evaluated if it is non-deterministic
             case EqualNullSafe(_, _) if exp.deterministic =>
               FalseLiteral
@@ -240,9 +264,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         } else if (maxCmp == 0) {
           exp match {
             case GreaterThan(_, _) =>
-              falseIfNotNull(fromExp)
+              falseIfNotNull(fromExp, filterSemantics)
             case LessThanOrEqual(_, _) =>
-              trueIfNotNull(fromExp)
+              trueIfNotNull(fromExp, filterSemantics)
             case LessThan(_, _) =>
               Not(EqualTo(fromExp, Literal(max, fromType)))
             case GreaterThanOrEqual(_, _) | EqualTo(_, _) =>
@@ -254,9 +278,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         } else if (minCmp < 0) {
           exp match {
             case GreaterThan(_, _) | GreaterThanOrEqual(_, _) =>
-              trueIfNotNull(fromExp)
+              trueIfNotNull(fromExp, filterSemantics)
             case LessThan(_, _) | LessThanOrEqual(_, _) | EqualTo(_, _) =>
-              falseIfNotNull(fromExp)
+              falseIfNotNull(fromExp, filterSemantics)
             // make sure the expression is evaluated if it is non-deterministic
             case EqualNullSafe(_, _) if exp.deterministic =>
               FalseLiteral
@@ -265,9 +289,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         } else { // minCmp == 0
           exp match {
             case LessThan(_, _) =>
-              falseIfNotNull(fromExp)
+              falseIfNotNull(fromExp, filterSemantics)
             case GreaterThanOrEqual(_, _) =>
-              trueIfNotNull(fromExp)
+              trueIfNotNull(fromExp, filterSemantics)
             case GreaterThan(_, _) =>
               Not(EqualTo(fromExp, Literal(min, fromType)))
             case LessThanOrEqual(_, _) | EqualTo(_, _) =>
@@ -306,7 +330,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     } else if (cmp < 0) {
       // This means the literal value is rounded up after casting to `fromType`
       exp match {
-        case EqualTo(_, _) => falseIfNotNull(fromExp)
+        case EqualTo(_, _) => falseIfNotNull(fromExp, filterSemantics)
         case EqualNullSafe(_, _) if fromExp.deterministic => FalseLiteral
         case GreaterThan(_, _) | GreaterThanOrEqual(_, _) => GreaterThanOrEqual(fromExp, lit)
         case LessThan(_, _) | LessThanOrEqual(_, _) => LessThan(fromExp, lit)
@@ -315,7 +339,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     } else {
       // This means the literal value is rounded down after casting to `fromType`
       exp match {
-        case EqualTo(_, _) => falseIfNotNull(fromExp)
+        case EqualTo(_, _) => falseIfNotNull(fromExp, filterSemantics)
         case EqualNullSafe(_, _) => FalseLiteral
         case GreaterThan(_, _) | GreaterThanOrEqual(_, _) => GreaterThan(fromExp, lit)
         case LessThan(_, _) | LessThanOrEqual(_, _) => LessThanOrEqual(fromExp, lit)
@@ -360,7 +384,8 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       fromExp: Expression,
       ts: Literal,
       tz: Option[String],
-      evalMode: EvalMode.Value): Expression = {
+      evalMode: EvalMode.Value,
+      filterSemantics: Boolean): Expression = {
     assert(fromExp.dataType == DateType)
     val floorDate = Literal(Cast(ts, DateType, tz, evalMode).eval(), DateType)
     val timePartsAllZero =
@@ -401,7 +426,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         } else {
           // if the timestamp has non-zero time part, then we always get false unless the date is
           // null, in which case the result is also null.
-          falseIfNotNull(fromExp)
+          falseIfNotNull(fromExp, filterSemantics)
         }
       case _: EqualNullSafe =>
         if (timePartsAllZero) {
@@ -524,10 +549,26 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
   }
 
   /**
+   * The same, with the `false` a filter keeps no row by when `filterSemantics` holds, as a
+   * filter drops the rows `e` is null for just like the ones it returns false for.
+   */
+  private def falseIfNotNull(e: Expression, filterSemantics: Boolean): Expression = {
+    if (filterSemantics) FalseLiteral else falseIfNotNull(e)
+  }
+
+  /**
    * Wraps input expression `e` with `if(isnull(e), null, true)`. The if-clause is represented
    * using `or(isnotnull(e), null)` which is semantically equivalent by applying 3-valued logic.
    */
   private[optimizer] def trueIfNotNull(e: Expression): Expression = {
     Or(IsNotNull(e), Literal(null, BooleanType))
+  }
+
+  /**
+   * The same, with the `isnotnull(e)` a filter keeps the same rows by when `filterSemantics`
+   * holds, as a filter drops the rows `e` is null for instead of returning them as null.
+   */
+  private def trueIfNotNull(e: Expression, filterSemantics: Boolean): Expression = {
+    if (filterSemantics) IsNotNull(e) else trueIfNotNull(e)
   }
 }
