@@ -251,6 +251,9 @@ private[spark] class ApplicationInfo(
   // to avoid silently dropping it from the serialized (redacted) form.
   private[deploy] def redactedCopy(conf: SparkConf): ApplicationInfo = {
     val redactedDesc = desc.copy(command = desc.command.redactedCopy(conf))
-    new ApplicationInfo(startTime, id, redactedDesc, submitDate, driver, defaultCores)
+    val copy = new ApplicationInfo(startTime, id, redactedDesc, submitDate, driver, defaultCores)
+    // Non-transient; a fresh instance would otherwise leave this at 0.
+    copy._retryCount = _retryCount
+    copy
   }
 }
