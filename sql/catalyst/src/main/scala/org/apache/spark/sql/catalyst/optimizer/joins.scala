@@ -439,25 +439,29 @@ trait JoinSelectionHelper extends Logging {
         if (noShufflePlannedBefore) getBroadcastBuildSide(join, hintOnly = false, conf) else None
       }
     // `JoinSelection` always builds from the right for this shape. A dedicated threshold that
-    // admits the right side takes precedence over join hints. The automatic threshold is only
-    // used as a floor when regular planning would also broadcast the right side; a left-only
-    // broadcast hint makes the fallback broadcast the left side instead.
+    // admits the right side takes precedence over join hints. Otherwise, use the automatic
+    // threshold as a floor only when regular planning selects a right-side broadcast by hint or
+    // size. A left-only broadcast hint or a right-only no-broadcast-and-replication hint makes the
+    // fallback build the left side instead. This decision also controls aggregate pushdown.
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) =>
       val dedicatedThreshold = conf.nullAwareAntiJoinBroadcastThreshold
       val canBroadcast = if (dedicatedThreshold < 0) {
         true
       } else {
-        val fallbackBuildsRight =
-          !hintToBroadcastLeft(j.hint) || hintToBroadcastRight(j.hint)
+        val rightBroadcastHint = hintToBroadcastRight(j.hint)
         val automaticBroadcastDisabled = conf.autoBroadcastJoinThreshold < 0 &&
           conf.getConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD).forall(_ < 0)
-        if (dedicatedThreshold == 0 && automaticBroadcastDisabled) {
+        if (dedicatedThreshold == 0 && automaticBroadcastDisabled && !rightBroadcastHint) {
           // Avoid potentially expensive statistics computation when the configurations alone
           // determine the result. Both automatic thresholds must be disabled because selecting
           // between them requires reading `stats.isRuntime`.
           false
         } else {
-          (fallbackBuildsRight && canBroadcastBySize(j.right, conf)) ||
+          val rightBroadcastSelectedByHintOrSize =
+            !hintToNotBroadcastAndReplicateRight(j.hint) &&
+              (rightBroadcastHint ||
+                (!hintToBroadcastLeft(j.hint) && canBroadcastBySize(j.right, conf)))
+          rightBroadcastSelectedByHintOrSize ||
             (dedicatedThreshold > 0 && {
               val rightSize = j.right.stats.sizeInBytes
               rightSize >= 0 && rightSize <= dedicatedThreshold

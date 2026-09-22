@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, EqualTo, IsNull, Or}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LeafNode, LogicalPlan, NO_BROADCAST_HASH, SHUFFLE_HASH, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LeafNode, LogicalPlan, NO_BROADCAST_AND_REPLICATION, NO_BROADCAST_HASH, SHUFFLE_HASH, Statistics}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
 
@@ -46,6 +46,8 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
   }
 
   private val hintBroadcast = Some(HintInfo(Some(BROADCAST)))
+  private val hintNotToBroadcastAndReplicate =
+    Some(HintInfo(Some(NO_BROADCAST_AND_REPLICATION)))
   private val hintNotToBroadcast = Some(HintInfo(Some(NO_BROADCAST_HASH)))
   private val hintShuffleHash = Some(HintInfo(Some(SHUFFLE_HASH)))
 
@@ -210,6 +212,9 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     val largeRight = right.copy(
       rowCount = 20 * 1024 * 1024,
       size = Some(20 * 1024 * 1024))
+    val overDedicatedThresholdRight = right.copy(
+      rowCount = 21 * 1024 * 1024,
+      size = Some(21 * 1024 * 1024))
     val emptyRight = right.copy(rowCount = 0, size = Some(0))
 
     withSQLConf(
@@ -223,6 +228,15 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
         nullAwareAntiJoin(autoThresholdRight).copy(
           hint = JoinHint(hintBroadcast, None)), SQLConf.get).isEmpty)
       assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoin(autoThresholdRight).copy(
+          hint = JoinHint(hintBroadcast, hintBroadcast)), SQLConf.get) === Some(BuildRight))
+      assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoin(largeRight).copy(
+          hint = JoinHint(None, hintBroadcast)), SQLConf.get) === Some(BuildRight))
+      assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoin().copy(
+          hint = JoinHint(None, hintNotToBroadcastAndReplicate)), SQLConf.get).isEmpty)
+      assert(getBroadcastHashJoinBuildSide(
         nullAwareAntiJoin(largeRight), SQLConf.get).isEmpty)
     }
 
@@ -235,6 +249,8 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       assert(getBroadcastHashJoinBuildSide(
         nullAwareAntiJoin(largeRight).copy(
           hint = JoinHint(hintBroadcast, None)), SQLConf.get) === Some(BuildRight))
+      assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoin(overDedicatedThresholdRight), SQLConf.get).isEmpty)
     }
 
     withSQLConf(
@@ -338,6 +354,15 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       assert(getBroadcastHashJoinBuildSide(
         nullAwareAntiJoinWithoutStats.copy(
           hint = JoinHint(hintBroadcast, None)), SQLConf.get).isEmpty)
+    }
+
+    withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
+      assert(getBroadcastHashJoinBuildSide(
+        nullAwareAntiJoinWithoutStats.copy(
+          hint = JoinHint(None, hintBroadcast)), SQLConf.get) === Some(BuildRight))
     }
   }
 

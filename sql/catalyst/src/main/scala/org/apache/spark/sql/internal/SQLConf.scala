@@ -7453,21 +7453,22 @@ object SQLConf {
         "optimization. This configuration takes effect only when " +
         "spark.sql.optimizeNullAwareAntiJoin is enabled. A negative value allows the " +
         "optimization regardless of the estimated size. For a nonnegative value, the " +
-        "optimization is also allowed when regular join planning would broadcast the right " +
-        "side. A broadcast hint only on the left prevents this automatic-threshold floor from " +
-        "applying. " +
-        "For join selection, regular planning uses " +
+        "optimization is also allowed when regular join planning selects the right side for " +
+        "broadcast by an explicit broadcast hint or the applicable automatic threshold. A " +
+        "broadcast hint only on the left, or a hint that prevents broadcasting and replicating " +
+        "the right side, prevents this floor from applying. For join selection, regular planning " +
+        "uses " +
         "spark.sql.adaptive.autoBroadcastJoinThreshold for runtime statistics when it is set, " +
         "and spark.sql.autoBroadcastJoinThreshold otherwise. The same eligibility decision " +
         "controls whether a null-aware anti join can be pushed below an aggregate; this " +
         "pushdown runs before adaptive execution and therefore uses estimated statistics and " +
         "spark.sql.autoBroadcastJoinThreshold. Moving the join below the aggregate may increase " +
         "the number of left-side rows it evaluates. Thus, zero does not disable the optimization " +
-        "by itself: the right side must also be ineligible for automatic broadcasting. When " +
-        "neither threshold admits the right side, Spark falls back to regular join planning. " +
-        "The fallback may still broadcast the right side with a nested-loop representation " +
-        "that runs in O(M * N) time. Join hints do not override a negative dedicated threshold " +
-        "or a positive dedicated threshold that admits the right side. Set " +
+        "by itself: regular planning must also not select a right-side broadcast by hint or " +
+        "size. Otherwise, Spark falls back to regular join planning. The fallback may still be " +
+        "forced to broadcast the right side with a nested-loop representation that runs in " +
+        "O(M * N) time. Join hints do not override a negative dedicated threshold or a positive " +
+        "dedicated threshold that admits the right side. Set " +
         "spark.sql.optimizeNullAwareAntiJoin to false to disable the optimization without " +
         "changing automatic broadcast thresholds.")
       .version("4.2.1")
