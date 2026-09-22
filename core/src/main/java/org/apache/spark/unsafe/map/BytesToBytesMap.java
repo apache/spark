@@ -334,7 +334,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
           final MemoryBlock nextPage;
           if (destructive) {
             if (currentPage != null) {
-              assert dataPages.peekFirst() == currentPage;
+              assert(dataPages.peekFirst() == currentPage);
               dataPages.removeFirst();
               pageToFree = currentPage;
             }
