@@ -220,20 +220,36 @@ private[pipelines] object Scd1LeafLevelReconciliation extends Scd1Reconciliation
     throw new NotImplementedError("SCD1 leaf-level reconciliation is not implemented")
 
   /**
-   * Aligns selected microbatch rows to the persisted target schema without adding rows.
+   * Aligns microbatch rows with the persisted target schema without adding target rows.
    *
-   * The target provides field order and spelling. Missing source fields, including nested fields,
-   * are filled with nulls.
+   * Matching fields use the target's order and spelling. Target fields missing from the microbatch,
+   * including nested fields, are filled with nulls. Microbatch-only fields are retained after the
+   * target fields.
+   *
+   * @param microbatchDf The microbatch rows to align.
+   * @param targetTableDf A target-table snapshot whose schema provides the canonical field order
+   *                      and spelling. Its rows are ignored.
+   * @return The microbatch rows aligned with the target schema, with microbatch-only fields
+   *         retained and no rows added from the target.
    */
   private[autocdc] def alignMicrobatchToTargetSchema(
-      projectedDf: DataFrame,
+      microbatchDf: DataFrame,
       targetTableDf: DataFrame): DataFrame =
-    targetTableDf.limit(0).unionByName(projectedDf, allowMissingColumns = true)
+    targetTableDf.limit(0).unionByName(microbatchDf, allowMissingColumns = true)
 
   /**
-   * Populates the version map for upsert rows after column selection and target-schema alignment.
+   * Populates the version map for upsert rows, if ignore-null is being used.
    *
-   * When ignore-null is disabled, the input is returned unchanged. Delete rows retain a null map.
+   * The caller must supply rows whose schema already reflects target column selection and
+   * target-schema alignment.
+   *
+   * @param changeArgs The CDC configuration providing keys and the ignore-null selection.
+   * @param resolvedSequencingType The resolved type of the sequencing expression and version-map
+   *                               values.
+   * @param alignedDf Microbatch rows already target-selected and target-schema-aligned, with the
+   *                  canonical CDC metadata column populated.
+   * @return `alignedDf` unchanged when ignore-null is disabled; otherwise, the same rows but with
+   *         version maps populated for upsert rows.
    */
   private[autocdc] def extendMicrobatchRowsWithVersionMap(
       changeArgs: ChangeArgs,
