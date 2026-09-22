@@ -212,10 +212,15 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
       expression: Expression,
       pivotColumn: Expression,
       value: Expression) = {
+    val valueType = if (Cast.canCast(value.dataType, pivotColumn.dataType)) {
+      pivotColumn.dataType
+    } else {
+      pivotColumn.dataType.asNullable
+    }
     If(
       EqualNullSafe(
         pivotColumn,
-        Cast(value, pivotColumn.dataType.asNullable, Some(conf.sessionLocalTimeZone))
+        Cast(value, valueType, Some(conf.sessionLocalTimeZone))
       ),
       expression,
       Literal(null)
