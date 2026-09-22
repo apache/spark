@@ -111,6 +111,15 @@ FROM VALUES (named_struct('a', 2, 'b', 5)) AS t(k)
 ASOF JOIN VALUES (named_struct('x', 1, 'y', 9)) AS r(k)
   MATCH_CONDITION (t.k >= r.k);
 
+-- FVT-ASOF-4-012b: whole STRUCT columns with same field name and coercible field types
+-- (field a widens INT to BIGINT by name; closest match is a = 1)
+SELECT r.k.a AS matched
+FROM VALUES (named_struct('a', 3)) AS t(k)
+ASOF JOIN VALUES
+    (named_struct('a', CAST(1 AS BIGINT))),
+    (named_struct('a', CAST(4 AS BIGINT))) AS r(k)
+  MATCH_CONDITION (t.k >= r.k);
+
 -- FVT-ASOF-4-013: coercion TINYINT vs BIGINT
 SELECT t.k, r.k AS matched_k
 FROM VALUES (CAST(10 AS TINYINT)) AS t(k) ASOF JOIN VALUES (CAST(5 AS BIGINT)) AS r(k)

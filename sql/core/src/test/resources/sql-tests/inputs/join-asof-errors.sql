@@ -82,6 +82,11 @@ SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (t.trade_time >= q.symbol)
   ON t.symbol = q.symbol;
 
+-- FVT-ASOF-3-012a: scalar STRING vs INTERVAL rejected
+-- (STRING has no common type with INTERVAL, so the comparison's `>=` cannot resolve the pair)
+SELECT * FROM VALUES ('x') AS t(s) ASOF JOIN VALUES (INTERVAL '1' YEAR) AS r(i)
+  MATCH_CONDITION (t.s >= r.i);
+
 -- FVT-ASOF-3-013: STRUCT with non-orderable field rejected
 SELECT * FROM VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS t(s) ASOF JOIN
      VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS r(s)
@@ -91,6 +96,12 @@ SELECT * FROM VALUES (named_struct('a', 1, 'm', MAP('a', 1))) AS t(s) ASOF JOIN
 -- (different names have no common type for the coercion the comparison needs)
 SELECT * FROM VALUES (named_struct('a', 1)) AS t(s) ASOF JOIN
      VALUES (named_struct('c', CAST(1 AS BIGINT))) AS r(s)
+  MATCH_CONDITION (t.s >= r.s);
+
+-- FVT-ASOF-3-013b: STRUCT operands with same field name but only string-promotable types rejected
+-- (INT vs STRING has no tightest common type, so the comparison cannot widen the field)
+SELECT * FROM VALUES (named_struct('a', 1)) AS t(s) ASOF JOIN
+     VALUES (named_struct('a', CAST('x' AS STRING))) AS r(s)
   MATCH_CONDITION (t.s >= r.s);
 
 -- FVT-ASOF-3-014: operand references both sides

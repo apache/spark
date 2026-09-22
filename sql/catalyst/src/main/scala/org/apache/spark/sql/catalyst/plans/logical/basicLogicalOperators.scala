@@ -2759,9 +2759,12 @@ object AsOfJoin {
         (leftType, rightType) match {
           case (ArrayType(_, _), ArrayType(_, _)) =>
             usesArrayOrderExpression(leftType, rightType)
+          case (_: StructType, _: StructType) =>
+            // Struct `>=` widens fields only via findTightestCommonType, like array elements.
+            comparisonCommonType(leftType, rightType).isDefined
           case _ =>
-            TypeCoercion.findWiderTypeForTwo(leftType, rightType).isDefined ||
-              areStructsStructurallyEqual(leftType, rightType)
+            // Scalars may also string-promote (e.g. INT vs STRING), which the comparison performs.
+            TypeCoercion.findWiderTypeForTwo(leftType, rightType).isDefined
         }
       }
     }
@@ -2769,38 +2772,38 @@ object AsOfJoin {
     def usesArrayOrderExpression(leftType: DataType, rightType: DataType): Boolean =
       (leftType, rightType) match {
         case (ArrayType(leftElem, _), ArrayType(rightElem, _)) =>
-          arrayOrderElementType(leftElem, rightElem).isDefined
+          comparisonCommonType(leftElem, rightElem).isDefined
         case _ => false
       }
 
     /**
-     * Element type a binary comparison uses for two array operands, or None when it cannot
-     * compare them. Elements compare element-wise, so they follow the same rule as top-level
-     * operands: orderable and either already structurally equal (field names and nullability
-     * ignored) or sharing a tightest common type.
-     * Example: array<int> vs array<bigint> gives Some(bigint); array<int> vs array<string> gives
-     * None, because that pair only string-promotes, which a comparison cannot do. Both the type
-     * check and the order expression read the element type from here, so the two cannot drift.
+     * Type a binary comparison uses to compare two orderable operands, or None when it cannot
+     * compare them. The `>=` the join builds accepts operands that are already structurally equal
+     * (field names and nullability ignored) or that share a tightest common type; it does not
+     * string-promote or decimal-widen. Whole struct operands and array elements read this, and the
+     * array order expression casts to it, so the type check and the executable `>=` cannot drift.
+     * Example: int vs bigint gives Some(bigint); int vs string gives None (that pair only
+     * string-promotes, which a comparison cannot do); struct<a:int> vs struct<a:string> likewise.
      */
-    def arrayOrderElementType(leftElem: DataType, rightElem: DataType): Option[DataType] = {
-      if (!isValidOperandType(leftElem) || !isValidOperandType(rightElem)) {
+    def comparisonCommonType(left: DataType, right: DataType): Option[DataType] = {
+      if (!isValidOperandType(left) || !isValidOperandType(right)) {
         None
-      } else if (DataType.equalsStructurally(leftElem, rightElem, ignoreNullability = true)) {
-        Some(leftElem)
+      } else if (DataType.equalsStructurally(left, right, ignoreNullability = true)) {
+        Some(left)
       } else {
-        arrayElementCommonType(leftElem, rightElem)
+        tightestCommonType(left, right)
       }
     }
 
     /**
-     * Tightest common type of two array elements, or None. A binary comparison widens array
-     * elements only through findTightestCommonType (ANSI-aware), so this uses it instead of the
-     * broader findWiderTypeForTwo, which would string-promote or decimal-widen elements the
-     * comparison cannot. Example: int and float widen to double under ANSI.
+     * Tightest common type of two operands, or None. A binary comparison widens only through
+     * findTightestCommonType (ANSI-aware), not the broader findWiderTypeForTwo, which would
+     * string-promote or decimal-widen types the comparison cannot. Example: int and float widen
+     * to double under ANSI.
      */
-    def arrayElementCommonType(leftElem: DataType, rightElem: DataType): Option[DataType] = {
+    def tightestCommonType(left: DataType, right: DataType): Option[DataType] = {
       val coercion = if (SQLConf.get.ansiEnabled) AnsiTypeCoercion else TypeCoercion
-      coercion.findTightestCommonType(leftElem, rightElem)
+      coercion.findTightestCommonType(left, right)
     }
 
     /** Positional struct operands with the same field count (names may differ). */
@@ -2819,25 +2822,17 @@ object AsOfJoin {
         case _ => false
       }
 
+    /**
+     * Reject a STRING operand paired with a date/time or interval operand. ASOF does not order a
+     * string against a date/time, and STRING vs INTERVAL has no common type, so the `>=` cannot
+     * resolve. Rejecting up front gives the clear ASOF error instead of failing deeper in analysis.
+     */
     private def isStringTemporalMismatch(leftType: DataType, rightType: DataType): Boolean = {
       def isString(dataType: DataType): Boolean = dataType.isInstanceOf[StringType]
-      def isTemporal(dataType: DataType): Boolean = dataType.isInstanceOf[DatetimeType]
+      def isTemporal(dataType: DataType): Boolean =
+        dataType.isInstanceOf[DatetimeType] || dataType.isInstanceOf[AnsiIntervalType]
       (isTemporal(leftType) && isString(rightType)) || (isString(leftType) && isTemporal(rightType))
     }
-
-    /**
-     * Two struct operands compare directly only when their field types already match by position
-     * (field names and nullability ignored). Coercible-but-unequal fields would need name-aligned
-     * coercion, which findWiderTypeForTwo covers for same-named structs; different-named structs
-     * have no such common type, so the `>=` the comparison builds rejects them. Requiring
-     * structural equality here keeps this type check in step with that `>=`.
-     */
-    private def areStructsStructurallyEqual(leftType: DataType, rightType: DataType): Boolean =
-      (leftType, rightType) match {
-        case (_: StructType, _: StructType) =>
-          DataType.equalsStructurally(leftType, rightType, ignoreNullability = true)
-        case _ => false
-      }
 
     private def containsEmptyStructType(dataType: DataType): Boolean = dataType match {
       case struct: StructType =>
@@ -3016,11 +3011,11 @@ object AsOfJoin {
     val leftElementType = leftOperand.dataType.asInstanceOf[ArrayType].elementType
     val rightElementType = rightOperand.dataType.asInstanceOf[ArrayType].elementType
     // Both array inputs and the ZipWith lambda variables must share the element type the binary
-    // comparison uses. arrayOrderElementType is the single source the type check also reads, so
+    // comparison uses. comparisonCommonType is the single source the type check also reads, so
     // the two cannot disagree. castArrayElementType widens a coercible side (e.g. INT to BIGINT)
     // and leaves a structurally equal side untouched.
     val elementType =
-      MatchConditionTypes.arrayOrderElementType(leftElementType, rightElementType) match {
+      MatchConditionTypes.comparisonCommonType(leftElementType, rightElementType) match {
         case Some(commonElementType) => commonElementType
         case None =>
           // Unreachable: usesArrayOrderExpression already required a common element type here.

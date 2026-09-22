@@ -195,6 +195,19 @@ struct<matched:int>
 
 
 -- !query
+SELECT r.k.a AS matched
+FROM VALUES (named_struct('a', 3)) AS t(k)
+ASOF JOIN VALUES
+    (named_struct('a', CAST(1 AS BIGINT))),
+    (named_struct('a', CAST(4 AS BIGINT))) AS r(k)
+  MATCH_CONDITION (t.k >= r.k)
+-- !query schema
+struct<matched:bigint>
+-- !query output
+1
+
+
+-- !query
 SELECT t.k, r.k AS matched_k
 FROM VALUES (CAST(10 AS TINYINT)) AS t(k) ASOF JOIN VALUES (CAST(5 AS BIGINT)) AS r(k)
   MATCH_CONDITION (t.k >= r.k)

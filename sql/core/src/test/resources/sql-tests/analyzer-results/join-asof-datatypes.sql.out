@@ -249,6 +249,22 @@ Project [k#x.y AS matched#x]
 
 
 -- !query
+SELECT r.k.a AS matched
+FROM VALUES (named_struct('a', 3)) AS t(k)
+ASOF JOIN VALUES
+    (named_struct('a', CAST(1 AS BIGINT))),
+    (named_struct('a', CAST(4 AS BIGINT))) AS r(k)
+  MATCH_CONDITION (t.k >= r.k)
+-- !query analysis
+Project [k#x.a AS matched#xL]
++- AsOfJoin (cast(named_struct(a, k#x.a) as struct<a:bigint>) >= named_struct(a, k#x.a)), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [k#x]
+   +- SubqueryAlias r
+      +- LocalRelation [k#x]
+
+
+-- !query
 SELECT t.k, r.k AS matched_k
 FROM VALUES (CAST(10 AS TINYINT)) AS t(k) ASOF JOIN VALUES (CAST(5 AS BIGINT)) AS r(k)
   MATCH_CONDITION (t.k >= r.k)

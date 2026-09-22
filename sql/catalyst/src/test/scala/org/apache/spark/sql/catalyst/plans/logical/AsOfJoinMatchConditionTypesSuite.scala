@@ -35,6 +35,16 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(!MatchConditionTypes.areOperandsCompatible(DateType, StringType))
   }
 
+  test("string and interval types are incompatible") {
+    // SPARK-59528: STRING string-promotes to any atomic type, so findWiderTypeForTwo accepts STRING
+    // vs INTERVAL, but the `>=` cannot coerce that pair (no common type) and would fail later with
+    // BINARY_OP_DIFF_TYPES. Reject up front. Fails if the string/interval guard is dropped.
+    assert(!MatchConditionTypes.areOperandsCompatible(StringType, YearMonthIntervalType()))
+    assert(!MatchConditionTypes.areOperandsCompatible(DayTimeIntervalType(), StringType))
+    // The guard is narrow: STRING still pairs with a numeric type, which the comparison promotes.
+    assert(MatchConditionTypes.areOperandsCompatible(StringType, LongType))
+  }
+
   test("orderable scalars with no common type are incompatible") {
     // Both are individually valid, orderable operands ...
     assert(MatchConditionTypes.isValidOperandType(TimestampType))
@@ -82,6 +92,21 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     val leftStruct = StructType(StructField("a", IntegerType) :: Nil)
     val rightStruct = StructType(StructField("a", LongType) :: Nil)
     assert(MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
+  }
+
+  test("struct operands whose fields only string-promote or decimal-widen are rejected") {
+    // Same field name, but a field pair the `>=` cannot widen: findTightestCommonType is None for
+    // INT vs STRING (string promotion only) and for two different decimals (decimal widening only).
+    // findWiderTypeForTwo would accept both by name, so the type check would pass and analysis then
+    // throw BINARY_OP_DIFF_TYPES. Fails if the struct arm used findWiderTypeForTwo instead of the
+    // tightest-common-type rule the array element path uses.
+    val intStruct = StructType(StructField("a", IntegerType) :: Nil)
+    val stringStruct = StructType(StructField("a", StringType) :: Nil)
+    assert(!MatchConditionTypes.areOperandsCompatible(intStruct, stringStruct))
+
+    val decimalStruct = StructType(StructField("a", DecimalType(10, 2)) :: Nil)
+    val widerDecimalStruct = StructType(StructField("a", DecimalType(20, 5)) :: Nil)
+    assert(!MatchConditionTypes.areOperandsCompatible(decimalStruct, widerDecimalStruct))
   }
 
   test("array operands with identical element types are compatible") {
