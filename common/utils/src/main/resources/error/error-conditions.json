@@ -1236,9 +1236,21 @@
     ],
     "sqlState" : "22003"
   },
+  "COLUMN_UPDATE_DUPLICATE_REQUIRED_DATA_ATTRIBUTE" : {
+    "message" : [
+      "Connector <connector> mixes in `SupportsColumnUpdates` but declared duplicate column(s) <duplicateAttributes> in `requiredDataAttributes()`. Each column must be declared at most once."
+    ],
+    "sqlState" : "42000"
+  },
   "COLUMN_UPDATE_EMPTY_REQUIRED_DATA_ATTRIBUTES" : {
     "message" : [
       "Connector <connector> mixes in `SupportsColumnUpdates` but returned an empty array from `requiredDataAttributes()`. Connectors that opt into column-level updates must declare at least one required data attribute."
+    ],
+    "sqlState" : "42000"
+  },
+  "COLUMN_UPDATE_NESTED_REQUIRED_DATA_ATTRIBUTE" : {
+    "message" : [
+      "Connector <connector> mixes in `SupportsColumnUpdates` but declared nested field(s) <nestedAttributes> in `requiredDataAttributes()`. Declare the root struct column instead of a nested field."
     ],
     "sqlState" : "42000"
   },

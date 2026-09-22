@@ -21,6 +21,7 @@ import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
@@ -147,28 +148,34 @@ class InMemoryRowLevelOperationTable private (
       info: RowLevelOperationInfo): RowLevelOperationBuilder = {
     lastUpdatedColumns = info.updatedColumns()
     if (properties.getOrDefault(COLUMN_UPDATE, "false") == "true") {
-      () => new DeltaBasedColumnUpdateOperation(info.command, info.updatedColumns().toSeq)
+      () => new DeltaBasedColumnUpdateOperation(
+        info.command, info.updatedColumns().toSeq, info.options)
     } else if (properties.containsKey(COLUMN_UPDATE_REQ_ATTRS)) {
       val reqCols = properties.get(COLUMN_UPDATE_REQ_ATTRS).split(",").map(_.trim)
-      () => new DeltaBasedColumnUpdateOperationWithReqAttrs(info.command, reqCols)
+      () => new DeltaBasedColumnUpdateOperationWithReqAttrs(info.command, reqCols, info.options)
     } else if (properties.getOrDefault(COLUMN_UPDATE_EMPTY_REQ_ATTRS, "false") == "true") {
       // Test-only: returns an empty requiredDataAttributes() so we can verify Spark rejects it.
-      () => new DeltaBasedColumnUpdateOperationWithReqAttrs(info.command, Array.empty)
+      () => new DeltaBasedColumnUpdateOperationWithReqAttrs(
+        info.command, Array.empty, info.options)
     } else if (properties.getOrDefault(COLUMN_UPDATE_FROM_INFO, "false") == "true") {
-      () => new DeltaBasedColumnUpdateOperationFromInfo(info.command, info.updatedColumns().toSeq)
+      () => new DeltaBasedColumnUpdateOperationFromInfo(
+        info.command, info.updatedColumns().toSeq, info.options)
     } else if (properties.getOrDefault(COLUMN_UPDATE_COW, "false") == "true") {
-      () => new PartitionBasedColumnUpdateOperation(info.command, info.updatedColumns().toSeq)
+      () => new PartitionBasedColumnUpdateOperation(
+        info.command, info.updatedColumns().toSeq, info.options)
     } else if (properties.getOrDefault(COLUMN_UPDATE_COW_NO_WRITE_UPDATE, "false") == "true") {
       () => new PartitionBasedColumnUpdateOperationNoWriteUpdate(
-        info.command, info.updatedColumns().toSeq)
+        info.command, info.updatedColumns().toSeq, info.options)
     } else if (properties.getOrDefault(COLUMN_UPDATE_SPLIT, "false") == "true") {
-      () => new DeltaBasedColumnUpdateSplitOperation(info.command, info.updatedColumns().toSeq)
+      () => new DeltaBasedColumnUpdateSplitOperation(
+        info.command, info.updatedColumns().toSeq, info.options)
     } else if (properties.containsKey(COLUMN_UPDATE_SPLIT_REQ_ATTRS)) {
       val reqCols = properties.get(COLUMN_UPDATE_SPLIT_REQ_ATTRS).split(",").map(_.trim)
-      () => new DeltaBasedColumnUpdateSplitOperationWithReqAttrs(info.command, reqCols)
+      () => new DeltaBasedColumnUpdateSplitOperationWithReqAttrs(
+        info.command, reqCols, info.options)
     } else if (properties.getOrDefault(COLUMN_UPDATE_SPLIT_MISSING_ROW_ID, "false") == "true") {
       () => new DeltaBasedColumnUpdateSplitMissingRowIdOperation(
-        info.command, info.updatedColumns().toSeq)
+        info.command, info.updatedColumns().toSeq, info.options)
     } else if (properties.getOrDefault(SUPPORTS_DELTAS, "false") == "true") {
       () => DeltaBasedOperation(info.command, info.options)
     } else {
@@ -299,13 +306,14 @@ class InMemoryRowLevelOperationTable private (
 
   // A delta-based operation that supports column-level updates: Spark sends only the
   // declared + assigned columns in the row projection instead of the full row schema. The base
-  // class composes its required-attrs set as `pk` (the row-lookup key) and `dep` (the write-side
-  // clustering key, see `clusterColumnRef`) plus whatever columns Spark reports as being
+  // class composes its required-attrs set as `pk` (the row-lookup key) and `dep` (an
+  // unconditionally declared base column) plus whatever columns Spark reports as being
   // assigned via `RowLevelOperationInfo#updatedColumns()`.
   class DeltaBasedColumnUpdateOperation(
       command: Command,
-      updatedCols: Seq[NamedReference] = Nil)
-      extends DeltaBasedOperation(command, CaseInsensitiveStringMap.empty())
+      updatedCols: Seq[NamedReference] = Nil,
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      extends DeltaBasedOperation(command, options)
         with SupportsColumnUpdates {
     override def representUpdateAsDeleteAndInsert(): Boolean = false
     override def requiredDataAttributes(): Array[NamedReference] = {
@@ -375,7 +383,13 @@ class InMemoryRowLevelOperationTable private (
                           val fullRow = new GenericInternalRow(schema.length)
                           baseRow.foreach { base =>
                             for (i <- schema.fields.indices) {
-                              fullRow.update(i, base.get(i, schema.fields(i).dataType))
+                              val field = schema.fields(i)
+                              val value = if (i < base.numFields) {
+                                base.get(i, field.dataType)
+                              } else {
+                                ResolveDefaultColumns.getExistenceDefaultValue(field)
+                              }
+                              fullRow.update(i, value)
                             }
                           }
                           schema.fields.zipWithIndex.foreach { case (field, i) =>
@@ -405,21 +419,26 @@ class InMemoryRowLevelOperationTable private (
     }
   }
 
-  class DeltaBasedColumnUpdateOperationWithReqAttrs(command: Command, reqCols: Array[String])
-      extends DeltaBasedColumnUpdateOperation(command) {
+  class DeltaBasedColumnUpdateOperationWithReqAttrs(
+      command: Command,
+      reqCols: Array[String],
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      extends DeltaBasedColumnUpdateOperation(command, options = options) {
     override def requiredDataAttributes(): Array[NamedReference] = reqCols.map(FieldReference(_))
   }
 
   class DeltaBasedColumnUpdateOperationFromInfo(
       command: Command,
-      updatedCols: Seq[NamedReference])
-      extends DeltaBasedColumnUpdateOperation(command, updatedCols) {
+      updatedCols: Seq[NamedReference],
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      extends DeltaBasedColumnUpdateOperation(command, updatedCols, options) {
   }
 
   class DeltaBasedColumnUpdateSplitOperation(
       command: Command,
-      updatedCols: Seq[NamedReference] = Nil)
-      extends DeltaBasedColumnUpdateOperation(command, updatedCols) {
+      updatedCols: Seq[NamedReference] = Nil,
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      extends DeltaBasedColumnUpdateOperation(command, updatedCols, options) {
     override def representUpdateAsDeleteAndInsert(): Boolean = true
 
     override def newWriteBuilder(info: LogicalWriteInfo): DeltaWriteBuilder = {
@@ -474,7 +493,13 @@ class InMemoryRowLevelOperationTable private (
                           val fullRow = new GenericInternalRow(schema.length)
                           baseRow.foreach { base =>
                             for (i <- schema.fields.indices) {
-                              fullRow.update(i, base.get(i, schema.fields(i).dataType))
+                              val field = schema.fields(i)
+                              val value = if (i < base.numFields) {
+                                base.get(i, field.dataType)
+                              } else {
+                                ResolveDefaultColumns.getExistenceDefaultValue(field)
+                              }
+                              fullRow.update(i, value)
                             }
                           }
                           schema.fields.zipWithIndex.foreach { case (field, i) =>
@@ -502,8 +527,11 @@ class InMemoryRowLevelOperationTable private (
 
   // Test-only: a split-update fixture with a fully explicit requiredDataAttributes(), to
   // exercise row-ID reassignment when the declaration covers every table column.
-  class DeltaBasedColumnUpdateSplitOperationWithReqAttrs(command: Command, reqCols: Array[String])
-      extends DeltaBasedColumnUpdateSplitOperation(command) {
+  class DeltaBasedColumnUpdateSplitOperationWithReqAttrs(
+      command: Command,
+      reqCols: Array[String],
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      extends DeltaBasedColumnUpdateSplitOperation(command, options = options) {
     override def requiredDataAttributes(): Array[NamedReference] = reqCols.map(FieldReference(_))
   }
 
@@ -511,15 +539,17 @@ class InMemoryRowLevelOperationTable private (
   // column, to exercise the guard that rejects an undeclared row ID for the REINSERT path.
   class DeltaBasedColumnUpdateSplitMissingRowIdOperation(
       command: Command,
-      updatedCols: Seq[NamedReference] = Nil)
-      extends DeltaBasedColumnUpdateSplitOperation(command, updatedCols) {
+      updatedCols: Seq[NamedReference] = Nil,
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      extends DeltaBasedColumnUpdateSplitOperation(command, updatedCols, options) {
     override def requiredDataAttributes(): Array[NamedReference] = updatedCols.toArray
   }
 
   class PartitionBasedColumnUpdateOperation(
       command: Command,
-      updatedCols: Seq[NamedReference] = Nil)
-      extends RowLevelOperation with SupportsColumnUpdates {
+      updatedCols: Seq[NamedReference] = Nil,
+      override val options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      extends RowLevelOperation with SupportsColumnUpdates with RowLevelOperationWithOptions {
     var configuredScan: InMemoryBatchScan = _
 
     override def command(): Command = command
@@ -581,8 +611,9 @@ class InMemoryRowLevelOperationTable private (
   // that throws DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED.
   class PartitionBasedColumnUpdateOperationNoWriteUpdate(
       command: Command,
-      updatedCols: Seq[NamedReference] = Nil)
-      extends PartitionBasedColumnUpdateOperation(command, updatedCols) {
+      updatedCols: Seq[NamedReference] = Nil,
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      extends PartitionBasedColumnUpdateOperation(command, updatedCols, options) {
 
     override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
       lastWriteInfo = info
@@ -647,7 +678,13 @@ class InMemoryRowLevelOperationTable private (
             val fullRow = new GenericInternalRow(schema.length)
             origRow.foreach { base =>
               for (i <- schema.fields.indices) {
-                fullRow.update(i, base.get(i, schema.fields(i).dataType))
+                val field = schema.fields(i)
+                val value = if (i < base.numFields) {
+                  base.get(i, field.dataType)
+                } else {
+                  ResolveDefaultColumns.getExistenceDefaultValue(field)
+                }
+                fullRow.update(i, value)
               }
             }
             schema.fields.zipWithIndex.foreach { case (field, i) =>

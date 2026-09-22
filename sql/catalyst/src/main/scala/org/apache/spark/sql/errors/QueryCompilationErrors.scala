@@ -4628,6 +4628,26 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("connector" -> connectorClass))
   }
 
+  def duplicateRequiredDataAttributeError(
+      connectorClass: String,
+      duplicateAttributes: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMN_UPDATE_DUPLICATE_REQUIRED_DATA_ATTRIBUTE",
+      messageParameters = Map(
+        "connector" -> connectorClass,
+        "duplicateAttributes" -> duplicateAttributes.mkString("[", ", ", "]")))
+  }
+
+  def nestedRequiredDataAttributeError(
+      connectorClass: String,
+      nestedAttributes: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMN_UPDATE_NESTED_REQUIRED_DATA_ATTRIBUTE",
+      messageParameters = Map(
+        "connector" -> connectorClass,
+        "nestedAttributes" -> nestedAttributes.mkString("[", ", ", "]")))
+  }
+
   def requiredDataAttributesMissingUpdatedColumnsError(
       connectorClass: String,
       missingColumns: Seq[String]): Throwable = {
