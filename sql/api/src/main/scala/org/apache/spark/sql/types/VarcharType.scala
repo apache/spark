@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  *
  * A standalone collated `VarcharType` writes its collation inline in JSON and therefore requires
  * a current reader. Within a [[StructField]], schema JSON stores the collation in field metadata
- * and emits an uncollated `varchar(n)` type so preceding readers can still read the schema.
+ * and emits an uncollated `varchar(n)` type so older readers can still read the schema.
  *
  * @param length
  *   The maximum length of the varchar string (must be non-negative)

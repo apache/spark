@@ -19,6 +19,7 @@ package org.apache.spark.sql.types
 
 import java.util.Locale
 
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
@@ -368,7 +369,28 @@ object DataType {
       json: JValue,
       fieldPath: String,
       collationsMap: Map[String, String],
-      charVarcharCollationsMap: Map[String, String] = Map.empty): DataType = json match {
+      charVarcharCollationsMap: Map[String, String] = Map.empty): DataType = {
+    val remainingCharVarcharPaths = mutable.Set.from(charVarcharCollationsMap.keySet)
+    val parsedType = parseDataType(
+      json,
+      fieldPath,
+      collationsMap,
+      charVarcharCollationsMap,
+      remainingCharVarcharPaths)
+    if (remainingCharVarcharPaths.nonEmpty) {
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+        messageParameters = Map("jsonType" -> remainingCharVarcharPaths.min))
+    }
+    parsedType
+  }
+
+  private def parseDataType(
+      json: JValue,
+      fieldPath: String,
+      collationsMap: Map[String, String],
+      charVarcharCollationsMap: Map[String, String],
+      remainingCharVarcharPaths: mutable.Set[String]): DataType = json match {
     case JString(name) =>
       val stringCollation = collationsMap.get(fieldPath)
       val charVarcharCollation = charVarcharCollationsMap.get(fieldPath)
@@ -379,6 +401,7 @@ object DataType {
             messageParameters = Map("jsonType" -> name))
         case (None, Some(collation)) =>
           assertValidTypeForCharVarcharCollations(fieldPath, name, charVarcharCollationsMap)
+          remainingCharVarcharPaths.remove(fieldPath)
           stringTypeWithCollation(name, collation)
         case (Some(collation), None) =>
           assertValidTypeForCollations(fieldPath, name, collationsMap)
@@ -397,7 +420,8 @@ object DataType {
         t,
         appendFieldToPath(fieldPath, "element"),
         collationsMap,
-        charVarcharCollationsMap)
+        charVarcharCollationsMap,
+        remainingCharVarcharPaths)
       ArrayType(elementType, n)
 
     case JSortedObject(
@@ -411,12 +435,14 @@ object DataType {
         k,
         appendFieldToPath(fieldPath, "key"),
         collationsMap,
-        charVarcharCollationsMap)
+        charVarcharCollationsMap,
+        remainingCharVarcharPaths)
       val valueType = parseDataType(
         v,
         appendFieldToPath(fieldPath, "value"),
         collationsMap,
-        charVarcharCollationsMap)
+        charVarcharCollationsMap,
+        remainingCharVarcharPaths)
       MapType(keyType, valueType, n)
 
     case JSortedObject(("fields", JArray(fields)), ("type", JString("struct"))) =>
@@ -549,6 +575,9 @@ object DataType {
         fields.foreach {
           case (fieldPath, JString(collation)) =>
             collation.split("\\.", 2) match {
+              case Array(provider, collationName)
+                  if requireCompleteMap && (provider.isEmpty || collationName.isEmpty) =>
+                throw invalidCharVarcharCollationMetadata(JString(collation))
               case Array(provider, collationName) =>
                 CollationFactory.assertValidProvider(provider)
                 parsed += (fieldPath -> collationName)

@@ -1000,6 +1000,9 @@ class TypesTestsMixin:
         cases = [
             ("caller", '"caller"'),
             ({"c": 1}, "1"),
+            ({"c": "spark."}, '"spark."'),
+            ({"c": ".UTF8_LCASE"}, '".UTF8_LCASE"'),
+            ({"c": "spark.UTF8_LCASE", "typo": "spark.UTF8_LCASE"}, "typo"),
         ]
         for metadata_value, json_type in cases:
             with self.assertRaises(PySparkTypeError) as pe:

@@ -39,6 +39,7 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Set,
     Tuple,
     Type,
     TypeVar,
@@ -326,10 +327,10 @@ class StringType(AtomicType):
 class CharType(AtomicType):
     """Char data type.
 
-    A standalone collated ``CharType`` writes its collation inline in JSON. A preceding Python
+    A standalone collated ``CharType`` writes its collation inline in JSON. An older Python
     reader may accept only the ``char(n)`` prefix and silently drop the collation; a current reader
     is required to preserve it. Within a ``StructField``, schema JSON stores the collation in field
-    metadata and emits an uncollated ``char(n)`` type so preceding readers can still read it.
+    metadata and emits an uncollated ``char(n)`` type so older readers can still read it.
 
     Parameters
     ----------
@@ -366,10 +367,10 @@ class CharType(AtomicType):
 class VarcharType(AtomicType):
     """Varchar data type.
 
-    A standalone collated ``VarcharType`` writes its collation inline in JSON. A preceding Python
+    A standalone collated ``VarcharType`` writes its collation inline in JSON. An older Python
     reader may accept only the ``varchar(n)`` prefix and silently drop the collation; a current
     reader is required to preserve it. Within a ``StructField``, schema JSON stores the collation
-    in field metadata and emits an uncollated ``varchar(n)`` type so preceding readers can still
+    in field metadata and emits an uncollated ``varchar(n)`` type so older readers can still
     read it.
 
     Parameters
@@ -1213,12 +1214,14 @@ class ArrayType(DataType):
         fieldPath: str = "",
         collationsMap: Optional[Dict[str, str]] = None,
         charVarcharCollationsMap: Optional[Dict[str, str]] = None,
+        remainingCharVarcharPaths: Optional[Set[str]] = None,
     ) -> "ArrayType":
         elementType = _parse_datatype_json_value(
             json["elementType"],
             "element" if fieldPath == "" else fieldPath + ".element",
             collationsMap,
             charVarcharCollationsMap,
+            remainingCharVarcharPaths,
         )
         return ArrayType(elementType, json["containsNull"])
 
@@ -1357,18 +1360,21 @@ class MapType(DataType):
         fieldPath: str = "",
         collationsMap: Optional[Dict[str, str]] = None,
         charVarcharCollationsMap: Optional[Dict[str, str]] = None,
+        remainingCharVarcharPaths: Optional[Set[str]] = None,
     ) -> "MapType":
         keyType = _parse_datatype_json_value(
             json["keyType"],
             "key" if fieldPath == "" else fieldPath + ".key",
             collationsMap,
             charVarcharCollationsMap,
+            remainingCharVarcharPaths,
         )
         valueType = _parse_datatype_json_value(
             json["valueType"],
             "value" if fieldPath == "" else fieldPath + ".value",
             collationsMap,
             charVarcharCollationsMap,
+            remainingCharVarcharPaths,
         )
         return MapType(
             keyType,
@@ -1528,11 +1534,19 @@ class StructField(DataType):
                 if key not in (_COLLATIONS_METADATA_KEY, _CHAR_VARCHAR_COLLATIONS_METADATA_KEY)
             }
 
+        remaining: Set[str] = set(charVarcharCollationsMap)
+        parsed_type = _parse_datatype_json_value(
+            json["type"], json["name"], collationsMap, charVarcharCollationsMap, remaining
+        )
+        if remaining:
+            raise PySparkTypeError(
+                errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+                messageParameters={"jsonType": min(remaining)},
+            )
+
         return StructField(
             json["name"],
-            _parse_datatype_json_value(
-                json["type"], json["name"], collationsMap, charVarcharCollationsMap
-            ),
+            parsed_type,
             json.get("nullable", True),
             metadata,
         )
@@ -2657,6 +2671,7 @@ def _parse_datatype_json_value(  # type: ignore[return]
     fieldPath: str = "",
     collationsMap: Optional[Dict[str, str]] = None,
     charVarcharCollationsMap: Optional[Dict[str, str]] = None,
+    remainingCharVarcharPaths: Optional[Set[str]] = None,
 ) -> DataType:
     in_string = collationsMap is not None and fieldPath in collationsMap
     in_char_varchar = charVarcharCollationsMap is not None and fieldPath in charVarcharCollationsMap
@@ -2711,12 +2726,16 @@ def _parse_datatype_json_value(  # type: ignore[return]
             if in_char_varchar:
                 assert charVarcharCollationsMap is not None
                 collation = charVarcharCollationsMap[fieldPath]
+                if remainingCharVarcharPaths is not None:
+                    remainingCharVarcharPaths.discard(fieldPath)
             return CharType(int(m.group(1)), collation)
         elif m := _LENGTH_VARCHAR.fullmatch(json_value):
             collation = m.group(2)
             if in_char_varchar:
                 assert charVarcharCollationsMap is not None
                 collation = charVarcharCollationsMap[fieldPath]
+                if remainingCharVarcharPaths is not None:
+                    remainingCharVarcharPaths.discard(fieldPath)
             return VarcharType(int(m.group(1)), collation)
         elif _GEOMETRY.match(json_value):
             return GeometryType._from_crs(GeometryType.DEFAULT_CRS)
@@ -2749,11 +2768,19 @@ def _parse_datatype_json_value(  # type: ignore[return]
             complex_type = _all_complex_types[tpe]
             if complex_type is ArrayType:
                 return ArrayType.fromJson(
-                    json_value, fieldPath, collationsMap, charVarcharCollationsMap
+                    json_value,
+                    fieldPath,
+                    collationsMap,
+                    charVarcharCollationsMap,
+                    remainingCharVarcharPaths,
                 )
             elif complex_type is MapType:
                 return MapType.fromJson(
-                    json_value, fieldPath, collationsMap, charVarcharCollationsMap
+                    json_value,
+                    fieldPath,
+                    collationsMap,
+                    charVarcharCollationsMap,
+                    remainingCharVarcharPaths,
                 )
             return StructType.fromJson(json_value)
         elif tpe == "udt":
@@ -2779,6 +2806,8 @@ def _parse_collation_metadata_map(metadata: Optional[Dict[str, Any]], key: str) 
             if name_parts is None or len(name_parts) != 2:
                 raise _invalid_char_varchar_collation_metadata(value)
             provider, name = name_parts
+            if not provider or not name:
+                raise _invalid_char_varchar_collation_metadata(value)
             _assert_valid_collation_provider(provider)
             parsed[path] = name
         return parsed

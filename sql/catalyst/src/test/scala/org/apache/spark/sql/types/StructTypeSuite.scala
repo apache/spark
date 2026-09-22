@@ -969,7 +969,13 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
          |}
          |""".stripMargin
 
-    Seq(("\"caller\"", "\"caller\""), ("""{"c": 1}""", "1")).foreach {
+    Seq(
+      ("\"caller\"", "\"caller\""),
+      ("""{"c": 1}""", "1"),
+      ("""{"c": "spark."}""", "\"spark.\""),
+      ("""{"c": ".UTF8_LCASE"}""", "\".UTF8_LCASE\""),
+      ("""{"c": "spark.UTF8_LCASE", "typo": "spark.UTF8_LCASE"}""", "typo")
+    ).foreach {
       case (metadataValue, jsonType) =>
         checkError(
           exception = intercept[SparkIllegalArgumentException] {
