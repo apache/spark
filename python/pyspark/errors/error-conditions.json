@@ -395,6 +395,23 @@
       "Invalid call to `<func_name>` on unresolved object."
     ]
   },
+  "INVALID_CHAR_VARCHAR_COLLATION_METADATA": {
+    "message": [
+      "Invalid CHAR/VARCHAR collation metadata."
+    ],
+    "sub_class": {
+      "INVALID_VALUE": {
+        "message": [
+          "The value <value> must be a provider-qualified, non-empty collation name."
+        ]
+      },
+      "UNRECOGNIZED_PATH": {
+        "message": [
+          "The field path <fieldPath> does not identify an uncollated CHAR/VARCHAR type."
+        ]
+      }
+    }
+  },
   "INVALID_CONNECT_URL": {
     "message": [
       "Invalid URL for Spark Connect: <detail>"

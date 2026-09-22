@@ -140,11 +140,11 @@ case class StructField(
 
     def visitRecursively(dt: DataType, path: String): Unit = dt match {
       case at: ArrayType =>
-        processDataType(at.elementType, path + ".element")
+        processDataType(at.elementType, DataType.appendFieldToPath(path, "element"))
 
       case mt: MapType =>
-        processDataType(mt.keyType, path + ".key")
-        processDataType(mt.valueType, path + ".value")
+        processDataType(mt.keyType, DataType.appendFieldToPath(path, "key"))
+        processDataType(mt.valueType, DataType.appendFieldToPath(path, "value"))
 
       case st: StringType if include(st) =>
         fieldToCollationMap(path) = schemaCollationValue(st)

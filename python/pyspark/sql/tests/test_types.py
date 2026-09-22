@@ -693,6 +693,18 @@ class TypesTestsMixin:
                     )
                 ]
             ),
+            StructType([StructField("", ArrayType(CharType(4, "UTF8_LCASE")))]),
+            StructType(
+                [
+                    StructField(
+                        "",
+                        MapType(
+                            CharType(4, "UTF8_BINARY"),
+                            VarcharType(6, "UNICODE_CI"),
+                        ),
+                    )
+                ]
+            ),
         ]
         for data_type in data_types:
             self.assertEqual(data_type, _parse_datatype_json_string(data_type.json()))
@@ -998,19 +1010,39 @@ class TypesTestsMixin:
             )
 
         cases = [
-            ("caller", '"caller"'),
-            ({"c": 1}, "1"),
-            ({"c": "spark."}, '"spark."'),
-            ({"c": ".UTF8_LCASE"}, '".UTF8_LCASE"'),
-            ({"c": "spark.UTF8_LCASE", "typo": "spark.UTF8_LCASE"}, "typo"),
+            (
+                "caller",
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+                {"value": '"caller"'},
+            ),
+            (
+                {"c": 1},
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+                {"value": "1"},
+            ),
+            (
+                {"c": "spark."},
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+                {"value": '"spark."'},
+            ),
+            (
+                {"c": ".UTF8_LCASE"},
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+                {"value": '".UTF8_LCASE"'},
+            ),
+            (
+                {"c": "spark.UTF8_LCASE", "typo": "spark.UTF8_LCASE"},
+                "INVALID_CHAR_VARCHAR_COLLATION_METADATA.UNRECOGNIZED_PATH",
+                {"fieldPath": "typo"},
+            ),
         ]
-        for metadata_value, json_type in cases:
+        for metadata_value, error_class, message_parameters in cases:
             with self.assertRaises(PySparkTypeError) as pe:
                 _parse_datatype_json_string(schema_json(metadata_value))
             self.check_error(
                 exception=pe.exception,
-                errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-                messageParameters={"jsonType": json_type},
+                errorClass=error_class,
+                messageParameters=message_parameters,
             )
 
     def test_preceding_reader_retains_unknown_char_varchar_collation_metadata(self):

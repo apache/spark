@@ -1218,7 +1218,7 @@ class ArrayType(DataType):
     ) -> "ArrayType":
         elementType = _parse_datatype_json_value(
             json["elementType"],
-            "element" if fieldPath == "" else fieldPath + ".element",
+            _append_field_to_path(fieldPath, "element"),
             collationsMap,
             charVarcharCollationsMap,
             remainingCharVarcharPaths,
@@ -1364,14 +1364,14 @@ class MapType(DataType):
     ) -> "MapType":
         keyType = _parse_datatype_json_value(
             json["keyType"],
-            "key" if fieldPath == "" else fieldPath + ".key",
+            _append_field_to_path(fieldPath, "key"),
             collationsMap,
             charVarcharCollationsMap,
             remainingCharVarcharPaths,
         )
         valueType = _parse_datatype_json_value(
             json["valueType"],
-            "value" if fieldPath == "" else fieldPath + ".value",
+            _append_field_to_path(fieldPath, "value"),
             collationsMap,
             charVarcharCollationsMap,
             remainingCharVarcharPaths,
@@ -1540,8 +1540,8 @@ class StructField(DataType):
         )
         if remaining:
             raise PySparkTypeError(
-                errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-                messageParameters={"jsonType": min(remaining)},
+                errorClass="INVALID_CHAR_VARCHAR_COLLATION_METADATA.UNRECOGNIZED_PATH",
+                messageParameters={"fieldPath": min(remaining)},
             )
 
         return StructField(
@@ -1574,10 +1574,10 @@ class StructField(DataType):
     def _getCollationMetadata(self, include: Callable[[DataType], bool]) -> Dict[str, str]:
         def visitRecursively(dt: DataType, fieldPath: str) -> None:
             if isinstance(dt, ArrayType):
-                processDataType(dt.elementType, fieldPath + ".element")
+                processDataType(dt.elementType, _append_field_to_path(fieldPath, "element"))
             elif isinstance(dt, MapType):
-                processDataType(dt.keyType, fieldPath + ".key")
-                processDataType(dt.valueType, fieldPath + ".value")
+                processDataType(dt.keyType, _append_field_to_path(fieldPath, "key"))
+                processDataType(dt.valueType, _append_field_to_path(fieldPath, "value"))
             elif include(dt):
                 collationMetadata[fieldPath] = self.schemaCollationValue(dt)
 
@@ -2666,6 +2666,10 @@ def _parse_parameterized_timestamp_type(precision: int, ntz: bool) -> DataType:
     return TimestampNTZNanosType(precision) if ntz else TimestampLTZNanosType(precision)
 
 
+def _append_field_to_path(base_path: str, field_name: str) -> str:
+    return field_name if not base_path else f"{base_path}.{field_name}"
+
+
 def _parse_datatype_json_value(  # type: ignore[return]
     json_value: Union[dict, str],
     fieldPath: str = "",
@@ -2824,8 +2828,8 @@ def _parse_collation_metadata_map(metadata: Optional[Dict[str, Any]], key: str) 
 
 def _invalid_char_varchar_collation_metadata(invalid: Any) -> PySparkTypeError:
     return PySparkTypeError(
-        errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-        messageParameters={"jsonType": json.dumps(invalid, separators=(",", ":"))},
+        errorClass="INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+        messageParameters={"value": json.dumps(invalid, separators=(",", ":"))},
     )
 
 

@@ -732,6 +732,11 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       StructType(
         StructField(
           "mixed",
+          MapType(CharType(4, "UTF8_BINARY"), VarcharType(6, "UNICODE_CI"))) :: Nil),
+      StructType(StructField("", ArrayType(CharType(4, "UTF8_LCASE"))) :: Nil),
+      StructType(
+        StructField(
+          "",
           MapType(CharType(4, "UTF8_BINARY"), VarcharType(6, "UNICODE_CI"))) :: Nil))
 
     dataTypes.foreach { dataType =>
@@ -970,19 +975,34 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
          |""".stripMargin
 
     Seq(
-      ("\"caller\"", "\"caller\""),
-      ("""{"c": 1}""", "1"),
-      ("""{"c": "spark."}""", "\"spark.\""),
-      ("""{"c": ".UTF8_LCASE"}""", "\".UTF8_LCASE\""),
-      ("""{"c": "spark.UTF8_LCASE", "typo": "spark.UTF8_LCASE"}""", "typo")
+      (
+        "\"caller\"",
+        "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+        Map("value" -> "\"caller\"")),
+      (
+        """{"c": 1}""",
+        "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+        Map("value" -> "1")),
+      (
+        """{"c": "spark."}""",
+        "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+        Map("value" -> "\"spark.\"")),
+      (
+        """{"c": ".UTF8_LCASE"}""",
+        "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+        Map("value" -> "\".UTF8_LCASE\"")),
+      (
+        """{"c": "spark.UTF8_LCASE", "typo": "spark.UTF8_LCASE"}""",
+        "INVALID_CHAR_VARCHAR_COLLATION_METADATA.UNRECOGNIZED_PATH",
+        Map("fieldPath" -> "typo"))
     ).foreach {
-      case (metadataValue, jsonType) =>
+      case (metadataValue, condition, parameters) =>
         checkError(
           exception = intercept[SparkIllegalArgumentException] {
             DataType.fromJson(schemaJson(metadataValue))
           },
-          condition = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-          parameters = Map("jsonType" -> jsonType))
+          condition = condition,
+          parameters = parameters)
     }
   }
 

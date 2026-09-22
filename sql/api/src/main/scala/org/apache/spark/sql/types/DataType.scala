@@ -379,8 +379,8 @@ object DataType {
       remainingCharVarcharPaths)
     if (remainingCharVarcharPaths.nonEmpty) {
       throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-        messageParameters = Map("jsonType" -> remainingCharVarcharPaths.min))
+        errorClass = "INVALID_CHAR_VARCHAR_COLLATION_METADATA.UNRECOGNIZED_PATH",
+        messageParameters = Map("fieldPath" -> remainingCharVarcharPaths.min))
     }
     parsedType
   }
@@ -558,7 +558,7 @@ object DataType {
   /**
    * Appends a field name to a given path, using a dot separator if the path is not empty.
    */
-  private def appendFieldToPath(basePath: String, fieldName: String): String = {
+  private[sql] def appendFieldToPath(basePath: String, fieldName: String): String = {
     if (basePath.isEmpty) fieldName else s"$basePath.$fieldName"
   }
 
@@ -599,8 +599,8 @@ object DataType {
   private def invalidCharVarcharCollationMetadata(
       invalid: JValue): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
-      messageParameters = Map("jsonType" -> compact(render(invalid))))
+      errorClass = "INVALID_CHAR_VARCHAR_COLLATION_METADATA.INVALID_VALUE",
+      messageParameters = Map("value" -> compact(render(invalid))))
   }
 
   private def stringTypeWithCollation(typeName: String, collationName: String): StringType = {
