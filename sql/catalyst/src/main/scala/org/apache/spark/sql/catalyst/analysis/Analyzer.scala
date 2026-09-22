@@ -2748,7 +2748,7 @@ class Analyzer(
   object ResolveSQLFunctions extends Rule[LogicalPlan] {
 
     private def hasSQLFunctionExpression(exprs: Seq[Expression]): Boolean = {
-      exprs.exists(_.find(_.isInstanceOf[SQLFunctionExpression]).nonEmpty)
+      exprs.exists(_.exists(_.isInstanceOf[SQLFunctionExpression]))
     }
 
     /**
