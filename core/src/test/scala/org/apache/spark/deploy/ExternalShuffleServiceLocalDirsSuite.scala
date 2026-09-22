@@ -65,9 +65,10 @@ class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite {
     val root = new File(Utils.getConfiguredLocalDirs(sparkConf).head)
     val appId = s"app-${UUID.randomUUID()}"
     val otherAppId = s"app-${UUID.randomUUID()}"
-    // The layout the patched Worker creates: <root>/<appId>/executor-*.
-    val appScoped = new File(new File(root, appId), "executor-1")
-    val otherAppScoped = new File(new File(root, otherAppId), "executor-1")
+    // The layout the patched Worker creates: <root>/spark-*/<appId>.
+    val workerRoot = new File(root, s"spark-${UUID.randomUUID()}")
+    val appScoped = new File(workerRoot, appId)
+    val otherAppScoped = new File(workerRoot, otherAppId)
     // The pre-upgrade Worker layout: directly under a root, no appId segment.
     val unscoped = new File(root, s"blockmgr-${UUID.randomUUID()}")
     assert(appScoped.mkdirs() && otherAppScoped.mkdirs() && unscoped.mkdirs())
@@ -92,8 +93,7 @@ class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite {
         handler.validateLocalDirs(Array("/etc"), appId)
       }
     } finally {
-      Utils.deleteRecursively(new File(root, appId))
-      Utils.deleteRecursively(new File(root, otherAppId))
+      Utils.deleteRecursively(workerRoot)
       Utils.deleteRecursively(unscoped)
     }
   }
