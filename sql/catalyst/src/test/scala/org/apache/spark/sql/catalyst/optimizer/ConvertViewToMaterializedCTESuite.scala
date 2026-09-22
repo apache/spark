@@ -234,6 +234,112 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
     }
   }
 
+  test("does not convert a qualifying pair plus a divergent singleton") {
+    withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+      // Three references to the same view: two resolved against one body and a third
+      // against a replaced one (reachable by capturing `spark.table("v")` before
+      // `CREATE OR REPLACE TEMP VIEW v`). The pair qualifies on its own, but admitting
+      // the identifier would rebind the singleton to the pair's definition and return
+      // the old body's rows for it, so the identifier must be refused entirely.
+      val a1 = attr("a", 100)
+      val a2 = attr("a", 200)
+      val a3 = attr("a", 300)
+      def bodyWithOne(a: AttributeReference): LogicalPlan =
+        Project(Seq(a.as("x")), LocalRelation(Seq(a)))
+      def bodyWithTwo(a: AttributeReference): LogicalPlan =
+        Project(Seq(a.as("x"), a.as("y")), LocalRelation(Seq(a)))
+      val left = Join(
+        tempView("v", bodyWithOne(a1)), tempView("v", bodyWithOne(a2)),
+        Inner, None, JoinHint(None, None))
+      val query = Join(left, tempView("v", bodyWithTwo(a3)), Inner, None, JoinHint(None, None))
+      comparePlans(Optimize.execute(query), query)
+    }
+  }
+
+  test("does not convert a deterministic pair plus a non-deterministic pair") {
+    withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+      // Degenerate scenario the analyzer cannot produce today: two qualifying
+      // deterministic occurrences and two non-qualifying non-deterministic ones share
+      // one identifier. Rewriting all four against the deterministic definition would
+      // drop `rand` from the plan, so nothing converts.
+      val a1 = attr("a", 100)
+      val a2 = attr("a", 200)
+      val a3 = attr("a", 300)
+      val a4 = attr("a", 400)
+      val left = Join(
+        tempView("v", LocalRelation(Seq(a1))),
+        tempView("v", LocalRelation(Seq(a2))), Inner, None, JoinHint(None, None))
+      val right = Join(
+        tempView("v", LocalRelation(Seq(a3)).select(rand(0).as("r"))),
+        tempView("v", LocalRelation(Seq(a4)).select(rand(0).as("r"))),
+        Inner, None, JoinHint(None, None))
+      val query = Join(left, right, Inner, None, JoinHint(None, None))
+      comparePlans(Optimize.execute(query), query)
+    }
+  }
+
+  test("does not convert views whose body has a top-level ORDER BY") {
+    withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+      // The per-reference shuffle boundary is added above the definition, so a
+      // top-level ORDER BY in the view body would be destroyed by it, changing what
+      // an outer LIMIT sees. Skip such views, also when the ORDER BY is wrapped in
+      // order-preserving nodes (Project, Filter, LIMIT).
+      val a1 = attr("a", 100)
+      val a2 = attr("a", 200)
+      def sortBody(a: AttributeReference): LogicalPlan =
+        Project(Seq(a), Sort(Seq(a.asc), global = true, LocalRelation(Seq(a))))
+      val v1 = tempView("v", sortBody(a1))
+      val v2 = tempView("v", sortBody(a2))
+      val query = Join(v1, v2, Inner, None, JoinHint(None, None))
+      comparePlans(Optimize.execute(query), query)
+
+      def limitSortBody(a: AttributeReference): LogicalPlan =
+        GlobalLimit(Literal(5), LocalLimit(Literal(5), sortBody(a)))
+      val v3 = tempView("v", limitSortBody(a1))
+      val v4 = tempView("v", limitSortBody(a2))
+      comparePlans(Optimize.execute(Join(v3, v4, Inner, None, JoinHint(None, None))),
+        Join(v3, v4, Inner, None, JoinHint(None, None)))
+    }
+  }
+
+  test("converts views whose body has a non-top-level ORDER BY") {
+    withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+      // A Sort nested under an order-destroying operator (a join here) is not
+      // observable across the added shuffle, so the view still converts.
+      val a1 = attr("a", 100)
+      val b1 = attr("b", 101)
+      val a2 = attr("a", 200)
+      val b2 = attr("b", 201)
+      def body(a: AttributeReference, b: AttributeReference): LogicalPlan =
+        Join(
+          Project(Seq(a), Sort(Seq(a.asc), global = true, LocalRelation(Seq(a)))),
+          LocalRelation(Seq(b)), Inner, None, JoinHint(None, None))
+      val query = Join(
+        tempView("v", body(a1, b1)), tempView("v", body(a2, b2)),
+        Inner, None, JoinHint(None, None))
+      val WithCTE(_, cteDefs) = Optimize.execute(query)
+      assert(cteDefs.length == 1)
+    }
+  }
+
+  test("propagates the definition's maxRows to references") {
+    withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+      // Like every other CTERelationRef creation site (CTESubstitution,
+      // ResolveWithCTE, the unified resolver), the references must carry the
+      // definition's maxRows; dropping it degrades row-count-aware rewrites
+      // (scalar-subquery folding, redundant-Limit removal) to no-ops.
+      val (v1, v2) = sameViewTwice("v", () => OneRowRelation())
+      val query = Join(v1, v2, Inner, None, JoinHint(None, None))
+      val optimized = Optimize.execute(query)
+      val WithCTE(_, cteDefs) = optimized
+      assert(cteDefs.length == 1)
+      assert(cteDefs.head.maxRows == Some(1))
+      val refs = optimized.collectWithSubqueries { case r: CTERelationRef => r }
+      assert(refs.length == 2)
+      assert(refs.forall(_.maxRows == Some(1)))
+    }
+  }
+
   test("converts views referenced inside scalar subqueries") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
       val (v1, v2, _) = sameViewTwice(
@@ -290,11 +396,37 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
   test("converts a view whose body contains a surviving deterministic inner CTE") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-      // Both occurrences share the same inner CTE definition id, mirroring how the
-      // analyzer duplicates a view body while keeping its inner CTE ids intact.
+      // Both occurrences share the same inner CTE definition id, as when the view
+      // stores an analyzed plan (e.g. a DataFrame-backed temp view). For occurrences
+      // whose inner CTE ids are re-minted per re-analysis, see the test below.
       val (v1, v2) = sameViewTwice(
         "v", () => nestedCteBody(987654321L, deterministic = true))
       val query = Join(v1, v2, Inner, None, JoinHint(None, None))
+
+      val optimized = Optimize.execute(query)
+
+      val WithCTE(mainPlan, cteDefs) = optimized
+      assert(cteDefs.length == 1)
+      assert(cteDefs.head.forceSkipInline)
+      // The converted definition wraps the inner WithCTE of the view body.
+      assert(cteDefs.head.child.isInstanceOf[WithCTE])
+      val refs = mainPlan.collect { case r: CTERelationRef => r }
+      assert(refs.length == 2)
+      assert(optimized.output == query.output)
+    }
+  }
+
+  test("converts occurrences whose bodies differ only in inner CTE definition ids") {
+    withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+      // A SQL view's body is re-analyzed per occurrence, and that re-analysis
+      // re-substitutes the body's inner CTEs, minting a fresh `CTERelationDef` id each
+      // time (e.g. for a view whose body has a WITH clause over a persistent table).
+      // The rule normalizes inner CTE ids before grouping, so the structurally
+      // identical bodies collapse into one qualifying group and convert.
+      val query = Join(
+        tempView("v", nestedCteBody(1L, deterministic = true)),
+        tempView("v", nestedCteBody(2L, deterministic = true)),
+        Inner, None, JoinHint(None, None))
 
       val optimized = Optimize.execute(query)
 
@@ -370,6 +502,22 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
     comparePlans(Optimize.execute(query), query)
   }
 
+  test("does not convert a Subquery-rooted plan") {
+    withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+      // FinishAnalysis re-runs the whole rule batch on every Subquery root and
+      // destructures the result back into a Subquery (`val Subquery(newPlan, _) =
+      // apply(Subquery.fromExpression(s))`), so the rule must never change the root
+      // type of a Subquery-rooted plan: attaching definitions would wrap it in
+      // WithCTE and break the caller's destructuring. The top-level pass covers
+      // views inside subqueries, so such a pass must stay a no-op.
+      val (v1, v2, _) = sameViewTwice(
+        "v", Seq(attr("a", 100), attr("b", 101)),
+        (as: Seq[AttributeReference]) => simpleBody(as(0), as(1)))
+      val query = Subquery(Join(v1, v2, Inner, None, JoinHint(None, None)), correlated = false)
+      comparePlans(Optimize.execute(query), query)
+    }
+  }
+
   test("does not convert distinct views even with identical bodies") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
       // The rule dedupes references of the SAME view, identified by its catalog identifier,
@@ -386,13 +534,39 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
     }
   }
 
-  test("is idempotent") {
+  test("is idempotent over converted plans") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
       val base = Seq(attr("a", 100), attr("b", 101))
       val (v1, v2, renewed) = sameViewTwice(
         "v", base, (as: Seq[AttributeReference]) => simpleBody(as(0), as(1)))
       val query = Join(v1, v2, Inner, Some(base(0) === renewed(0)), JoinHint(None, None))
       val once = Optimize.execute(query)
+      // Pass 1 consumed every View occurrence, so a second pass short-circuits on
+      // the occurrence guard; make that mechanism explicit instead of implicit.
+      assert(once.collectWithSubqueries { case _: View => true }.isEmpty)
+      val twice = Optimize.execute(once)
+      comparePlans(twice, once)
+    }
+  }
+
+  test("re-execution keeps a declined plan declined") {
+    withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+      // Unlike converted plans, a declined plan keeps its View occurrences, so a
+      // second pass genuinely re-evaluates them and must decline identically.
+      val a1 = attr("a", 100)
+      val a2 = attr("a", 200)
+      val a3 = attr("a", 300)
+      def bodyWithOne(a: AttributeReference): LogicalPlan =
+        Project(Seq(a.as("x")), LocalRelation(Seq(a)))
+      def bodyWithTwo(a: AttributeReference): LogicalPlan =
+        Project(Seq(a.as("x"), a.as("y")), LocalRelation(Seq(a)))
+      val left = Join(
+        tempView("v", bodyWithOne(a1)), tempView("v", bodyWithOne(a2)),
+        Inner, None, JoinHint(None, None))
+      val query = Join(left, tempView("v", bodyWithTwo(a3)), Inner, None, JoinHint(None, None))
+      val once = Optimize.execute(query)
+      assert(once.collectWithSubqueries { case _: View => true }.length == 3)
+      comparePlans(once, query)
       val twice = Optimize.execute(once)
       comparePlans(twice, once)
     }
