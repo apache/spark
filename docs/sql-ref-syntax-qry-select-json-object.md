@@ -67,12 +67,18 @@ JSON_OBJECT ( [ key, value [, key, value] ... ]
 * **value**
 
     An expression producing the member value. Values may have different types and may be nested
-    `JSON_OBJECT` constructors. `JSON_OBJECT()` with no members produces the empty object `{}`. A
-    nested JSON constructor written directly in the value position is spliced in as raw JSON (e.g.
-    `JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1))` produces `{"a":{"b":1}}`); an explicit
-    value-level `FORMAT JSON` clause is not yet supported. Raw splicing applies only to this direct
-    syntax: a qualified or otherwise routed call (e.g. `builtin.json_object('a', json_object('b',
-    1))`) currently quotes the nested result instead, producing `{"a":"{\"b\":1}"}`.
+    JSON constructors. `JSON_OBJECT()` with no members produces the empty object `{}`. A value that
+    is itself JSON text written directly in the value position is spliced in as raw JSON rather than
+    quoted as a string. This covers a nested `JSON_OBJECT` or `JSON_ARRAY` (e.g.
+    `JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1))` produces `{"a":{"b":1}}`), and a nested
+    `JSON_QUERY` under the default `KEEP QUOTES`, which returns JSON text (e.g.
+    `JSON_OBJECT('a' VALUE JSON_QUERY('{"o":{"x":1}}', '$.o'))` produces `{"a":{"x":1}}`). A
+    `JSON_QUERY` with `OMIT QUOTES` returns an ordinary string, so it is quoted like any other value
+    (e.g. `JSON_OBJECT('n' VALUE JSON_QUERY('{"n":"Ada"}', '$.n' OMIT QUOTES))` produces
+    `{"n":"Ada"}`). An explicit value-level `FORMAT JSON` clause is not yet supported. Raw splicing
+    applies only to this direct syntax: a qualified or otherwise routed call (e.g.
+    `builtin.json_object('a', json_object('b', 1))`) currently quotes the nested result instead,
+    producing `{"a":"{\"b\":1}"}`.
 
 * **{ NULL | ABSENT } ON NULL**
 
