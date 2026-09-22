@@ -95,7 +95,8 @@ case class CollectFrequentItems(
       if (map.size < size) {
         map += key -> count
       } else {
-        val minCount = if (map.values.isEmpty) 0 else map.values.min
+        // Non-empty here: this branch runs only when map.size >= size, and size > 0.
+        val minCount = map.values.min
         val remainder = count - minCount
         if (remainder >= 0) {
           map += key -> count // something will get kicked out, so we can add this

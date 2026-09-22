@@ -2117,43 +2117,52 @@ class Analyzer(
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
         case f: UnresolvedFunction if containsStar(f.arguments) =>
-          // A routed SQL/JSON function (json_array(*)) forbids a direct star argument -- a bare `*`
-          // or a qualified `t.*` -- so reject it rather than expand below. A star nested in another
-          // expression (json_array(array(*))) is expanded bottom-up before we get here, so only a
-          // direct star reaches this guard.
-          if (functionResolution.resolvesToStarDisallowedSqlJsonFunction(f.nameParts)) {
-            throw QueryCompilationErrors.invalidStarUsageError(
-              s"expression `${f.prettyName}`", extractStar(f.arguments))
-          }
-          // The count owner probe can hit an external functionExists lookup on a persistent-first
-          // PATH, so compute it once (lazily, after the cheap star-shape check) and reuse it for
-          // the count(*) rewrite and the count(tbl.*) guard, as `FunctionResolverUtils` does.
-          lazy val resolvesToCountBuiltin = matchesFunctionName(f.nameParts, "count")
-          if (!f.isDistinct && isCountStarExpansionAllowed(f.arguments) && resolvesToCountBuiltin) {
-            // Transform COUNT(*) into COUNT(1).
-            // We do not normalize the name to "count"; we keep the original name parts
-            // (e.g. builtin.count, system.builtin.count) so that resolution still sees
-            // the same qualification.
-            f.copy(arguments = Seq(Literal(1)))
-          } else {
-            // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*)
-            // will be expanded while count(*) will be converted to count(1). They will produce
-            // different results and confuse users if there are any null values. For
-            // count(t1.*, t2.*), it is still allowed, since it's well-defined in spark.
-            if (!conf.allowStarWithSingleTableIdentifierInCount &&
-                resolvesToCountBuiltin &&
-                f.arguments.length == 1) {
-              f.arguments.foreach {
-                case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
-                  throw QueryCompilationErrors
-                    .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
-                case _ => // do nothing
+          // Only a direct star (bare `*` or qualified `t.*`) reaches here: a star nested in another
+          // expression (json_array(array(*))) is expanded bottom-up first. For a routed SQL/JSON
+          // call, resolve the owner once and bind a shadow so `ResolveFunctions` cannot later fall
+          // through to the stock built-in after the star is expanded away.
+          functionResolution.selectRoutedSqlJsonDirectStarOwner(f.nameParts) match {
+            case RoutedSqlJsonStarOwner.RejectStockBuiltin =>
+              throw QueryCompilationErrors.invalidStarUsageError(
+                s"expression `${f.prettyName}`", extractStar(f.arguments))
+            case RoutedSqlJsonStarOwner.BindShadowOwner(candidate) =>
+              f.copy(
+                arguments = f.arguments.flatMap {
+                  case s: Star => expand(s, child)
+                  case o => o :: Nil
+                },
+                boundOwner = Some(candidate))
+            case RoutedSqlJsonStarOwner.NoBinding =>
+              // The count owner probe can hit an external functionExists lookup on a
+              // persistent-first PATH, so compute it once (lazily) and reuse it for the count(*)
+              // rewrite and the count(tbl.*) guard, as `FunctionResolverUtils` does.
+              lazy val resolvesToCountBuiltin = matchesFunctionName(f.nameParts, "count")
+              if (!f.isDistinct && isCountStarExpansionAllowed(f.arguments) &&
+                  resolvesToCountBuiltin) {
+                // Transform COUNT(*) into COUNT(1).
+                // We do not normalize the name to "count"; we keep the original name parts
+                // (e.g. builtin.count, system.builtin.count) so that resolution still sees
+                // the same qualification.
+                f.copy(arguments = Seq(Literal(1)))
+              } else {
+                // SPECIAL CASE: block count(tblName.*). In spark count(tblName.*) is expanded while
+                // count(*) is converted to count(1); they produce different results and confuse
+                // users when there are null values. count(t1.*, t2.*) stays allowed (well-defined).
+                if (!conf.allowStarWithSingleTableIdentifierInCount &&
+                    resolvesToCountBuiltin &&
+                    f.arguments.length == 1) {
+                  f.arguments.foreach {
+                    case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
+                      throw QueryCompilationErrors
+                        .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
+                    case _ => // do nothing
+                  }
+                }
+                f.copy(arguments = f.arguments.flatMap {
+                  case s: Star => expand(s, child)
+                  case o => o :: Nil
+                })
               }
-            }
-            f.copy(arguments = f.arguments.flatMap {
-              case s: Star => expand(s, child)
-              case o => o :: Nil
-            })
           }
         case c: CreateNamedStruct if containsStar(c.valExprs) =>
           val newChildren = c.children.grouped(2).flatMap {
@@ -2312,7 +2321,7 @@ class Analyzer(
       val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
-        case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
+        case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _, _) =>
           // For builtin/temp functions, we can do a quick check without catalog lookup
           val quickCheck = if (nameParts.size == 1 ||
               FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
@@ -2499,7 +2508,7 @@ class Analyzer(
         q.transformExpressionsUpWithPruning(
           _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR),
           ruleId) {
-          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _)
+          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _, _)
               if functionResolution.hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
             functionResolution.resolveFunction(u) match {
               case func: HigherOrderFunction => func
@@ -2739,7 +2748,7 @@ class Analyzer(
   object ResolveSQLFunctions extends Rule[LogicalPlan] {
 
     private def hasSQLFunctionExpression(exprs: Seq[Expression]): Boolean = {
-      exprs.exists(_.find(_.isInstanceOf[SQLFunctionExpression]).nonEmpty)
+      exprs.exists(_.exists(_.isInstanceOf[SQLFunctionExpression]))
     }
 
     /**

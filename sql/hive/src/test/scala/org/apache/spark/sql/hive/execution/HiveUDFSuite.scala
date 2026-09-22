@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{DataInput, DataOutput, File, PrintWriter}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInput, DataOutput, File}
+import java.io.{ObjectInputStream, ObjectOutputStream, PrintWriter}
 import java.sql.{Date, Timestamp}
 import java.util.{ArrayList, Arrays, Properties}
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.common.`type`.HiveChar
 import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.udf.{UDAFPercentile, UDFType}
@@ -31,23 +33,27 @@ import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.{
+  HiveCharObjectInspector,
+  PrimitiveObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
 import org.apache.hadoop.io.{LongWritable, Writable}
 
-import org.apache.spark.{SparkException, SparkFiles, TestUtils}
+import org.apache.spark.{SparkException, SparkFiles, SparkRuntimeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, CodegenObjectFactoryMode, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.{call_function, max}
-import org.apache.spark.sql.hive.HiveGenericUDF
+import org.apache.spark.sql.hive.{HiveGenericUDF, HiveGenericUDTF}
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{TimestampType, TimeType}
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 case class Fields(f1: Int, f2: Int, f3: Int, f4: Int, f5: Int)
@@ -892,6 +898,265 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     hiveContext.reset()
   }
 
+  test("SPARK-59277: Hive UDF and UDTF support first-class CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withUserDefinedFunction(
+          "hive_simple_concat" -> true,
+          "hive_char_padded" -> true,
+          "hive_upper" -> true,
+          "hive_explode" -> true) {
+        sql(s"CREATE TEMPORARY FUNCTION hive_simple_concat AS " +
+          s"'${classOf[UDFStringString].getName}'")
+        sql(s"CREATE TEMPORARY FUNCTION hive_char_padded AS " +
+          s"'${classOf[InspectCharGenericUDF].getName}'")
+        sql(s"CREATE TEMPORARY FUNCTION hive_upper AS '${classOf[GenericUDFUpper].getName}'")
+        sql(s"CREATE TEMPORARY FUNCTION hive_explode AS '${classOf[GenericUDTFExplode].getName}'")
+
+        val simple = sql(
+          """SELECT hive_simple_concat(
+            |  CAST('A' AS CHAR(3)),
+            |  CAST('b' AS VARCHAR(2))) AS value""".stripMargin)
+        assert(simple.schema.head.dataType === StringType)
+        // Hive's simple-UDF conversion from CHAR to a Java String strips trailing spaces.
+        checkAnswer(simple, Row("A b"))
+
+        // A GenericUDF reading the HiveChar directly observes the padded CHAR value.
+        checkAnswer(
+          sql("SELECT hive_char_padded(CAST('A' AS CHAR(3)))"),
+          Row("A  "))
+
+        val scalar = sql(
+          "SELECT hive_upper(CAST('Ab' AS CHAR(5) COLLATE UTF8_LCASE)) AS value")
+        assert(scalar.schema.head.dataType === CharType(5))
+        checkAnswer(scalar, Row("AB   "))
+
+        val table = sql(
+          """SELECT value
+            |FROM (
+            |  SELECT array(CAST('abc' AS VARCHAR(7) COLLATE UNICODE_CI)) AS values
+            |) input
+            |LATERAL VIEW hive_explode(values) exploded AS value
+            |""".stripMargin)
+        assert(table.schema.head.dataType === VarcharType(7))
+        checkAnswer(table, Row("abc"))
+      }
+    }
+  }
+
+  test("SPARK-59277: Hive UDF supports preserved CHAR without standard semantics") {
+    withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      withUserDefinedFunction("hive_upper" -> true) {
+        sql(s"CREATE TEMPORARY FUNCTION hive_upper AS '${classOf[GenericUDFUpper].getName}'")
+
+        val result = sql("SELECT hive_upper(CAST('Ab' AS CHAR(5))) AS value")
+        assert(result.schema.head.dataType === CharType(5))
+        checkAnswer(result, Row("AB   "))
+      }
+    }
+  }
+
+  test("SPARK-59277: persisted views use their captured Hive conversion types") {
+    withUserDefinedFunction(
+        "hive_upper" -> false,
+        "hive_max" -> false,
+        "hive_explode" -> false) {
+      withView("first_class_hive_view", "first_class_hive_udtf_view", "legacy_hive_view") {
+        sql(s"CREATE FUNCTION hive_upper AS '${classOf[GenericUDFUpper].getName}'")
+        sql(s"CREATE FUNCTION hive_max AS '${classOf[GenericUDAFMax].getName}'")
+        sql(s"CREATE FUNCTION hive_explode AS '${classOf[GenericUDTFExplode].getName}'")
+        val query =
+          """SELECT
+            |  hive_upper(CAST('Ab' AS CHAR(5))) AS scalar_value,
+            |  hive_max(CAST('cd' AS CHAR(4))) AS aggregate_value""".stripMargin
+        val udtfQuery =
+          """SELECT value
+            |FROM (
+            |  SELECT array(CAST('xy' AS CHAR(5))) AS values
+            |) input
+            |LATERAL VIEW hive_explode(values) exploded AS value
+            |""".stripMargin
+
+        withSQLConf(
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+          sql(s"CREATE VIEW first_class_hive_view AS $query")
+          sql(s"CREATE VIEW first_class_hive_udtf_view AS $udtfQuery")
+        }
+        withSQLConf(
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+            SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+          val result = sql("SELECT * FROM first_class_hive_view")
+          assert(result.schema.map(_.dataType) === Seq(StringType, StringType))
+          checkAnswer(result, Row("AB   ", "cd  "))
+
+          val udtfResult = sql("SELECT * FROM first_class_hive_udtf_view")
+          assert(udtfResult.schema.head.dataType === StringType)
+          checkAnswer(udtfResult, Row("xy   "))
+        }
+
+        withSQLConf(
+            SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+          sql(s"CREATE VIEW legacy_hive_view AS $query")
+        }
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+          val result = sql("SELECT * FROM legacy_hive_view")
+          assert(result.schema.map(_.dataType) === Seq(StringType, StringType))
+          checkAnswer(result, Row("AB", "cd"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-59277: HiveGenericUDF Java serialization preserves its Catalyst type") {
+    def serialize(expression: HiveGenericUDF): Array[Byte] = {
+      val bytes = new ByteArrayOutputStream()
+      val output = new ObjectOutputStream(bytes)
+      try {
+        output.writeObject(expression)
+      } finally {
+        output.close()
+      }
+      bytes.toByteArray
+    }
+
+    def deserialize(bytes: Array[Byte]): HiveGenericUDF = {
+      val input = new ObjectInputStream(new ByteArrayInputStream(bytes))
+      try {
+        input.readObject().asInstanceOf[HiveGenericUDF]
+      } finally {
+        input.close()
+      }
+    }
+
+    val inferredBytes = withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val expression = HiveGenericUDF(
+        "return_char",
+        HiveFunctionWrapper(classOf[ReturnCharGenericUDF].getName),
+        Seq(Literal("ab")))
+      assert(expression.dataType === CharType(5))
+      val copied = expression.withNewChildren(Seq(Literal("cd"))).asInstanceOf[HiveGenericUDF]
+      assert(copied.dataType === CharType(5))
+      serialize(expression)
+    }
+
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+      val expression = deserialize(inferredBytes)
+      assert(expression.dataType === CharType(5))
+      assert(expression.eval(InternalRow.empty) === UTF8String.fromString("ab   "))
+    }
+
+    val (charBytes, varcharBytes) = withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false") {
+      def resolvedExpression(value: String, dataType: DataType) = {
+        val expression = HiveGenericUDF(
+          "return_string",
+          HiveFunctionWrapper(classOf[ReturnStringGenericUDF].getName),
+          Seq(Literal(value)),
+          dataType)
+        assert(expression.dataType === dataType)
+        serialize(expression)
+      }
+      (
+        resolvedExpression("ab", CharType(5)),
+        resolvedExpression("abcd", VarcharType(3)))
+    }
+
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val charExpression = deserialize(charBytes)
+      assert(charExpression.dataType === CharType(5))
+      assert(charExpression.eval(InternalRow.empty) === UTF8String.fromString("ab   "))
+
+      val varcharExpression = deserialize(varcharBytes)
+      assert(varcharExpression.dataType === VarcharType(3))
+      val exception = intercept[SparkException] {
+        varcharExpression.eval(InternalRow.empty)
+      }
+      checkError(
+        exception = exception.getCause.asInstanceOf[SparkRuntimeException],
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+    }
+  }
+
+  test("SPARK-59277: HiveGenericUDF keeps analysis type after child constantness changes") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val attr = AttributeReference("value", CharType(5))()
+      val original = HiveGenericUDF(
+        "hive_upper",
+        HiveFunctionWrapper(classOf[GenericUDFUpper].getName),
+        Seq(Literal.create(UTF8String.fromString("Ab"), CharType(5))))
+      assert(original.dataType === CharType(5))
+      val copied = original.withNewChildren(Seq(attr)).asInstanceOf[HiveGenericUDF]
+      assert(copied.dataType === CharType(5))
+      val bound = BindReferences.bindReference(copied, Seq(attr))
+      assert(bound.eval(InternalRow(UTF8String.fromString("Ab   "))) ===
+        UTF8String.fromString("AB   "))
+    }
+  }
+
+  test("SPARK-59277: HiveGenericUDTF keeps analysis schema after child constantness changes") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val arrayType = ArrayType(VarcharType(7))
+      val values = new GenericArrayData(Array[Any](UTF8String.fromString("abc")))
+      val original = HiveGenericUDTF(
+        "hive_explode",
+        HiveFunctionWrapper(classOf[GenericUDTFExplode].getName),
+        Seq(Literal(values, arrayType)))
+      assert(original.elementSchema.head.dataType === VarcharType(7))
+      val attr = AttributeReference("values", arrayType)()
+      val copied = original.withNewChildren(Seq(attr)).asInstanceOf[HiveGenericUDTF]
+      assert(copied.elementSchema === original.elementSchema)
+      val bound = BindReferences.bindReference(copied, Seq(attr))
+        .asInstanceOf[HiveGenericUDTF]
+      val rows = bound.eval(InternalRow(values)).iterator.toSeq
+      assert(rows.map(_.get(0, VarcharType(7))) === Seq(UTF8String.fromString("abc")))
+    }
+  }
+
+  test("SPARK-59277: incompatible UDF runtime inspector triggers mismatch error") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // ReturnCharGenericUDF always returns CHAR(5), but we force VarcharType(5) as
+      // the captured analysis type. The runtime check must detect the mismatch.
+      val udf = HiveGenericUDF(
+        "return_char",
+        HiveFunctionWrapper(classOf[ReturnCharGenericUDF].getName),
+        Seq(Literal("x")),
+        VarcharType(5))
+      intercept[SparkException] { udf.eval(InternalRow.empty) }
+    }
+  }
+
+  test("SPARK-59277: incompatible UDTF runtime inspector triggers mismatch error") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // GenericUDTFExplode returns the element type of its input. Feeding it
+      // ARRAY<CHAR(5)> makes its runtime inspector return CHAR(5). We supply a
+      // captured schema claiming VARCHAR(5), so the check must fire.
+      val arrayType = ArrayType(CharType(5))
+      val values = new GenericArrayData(
+        Array[Any](UTF8String.fromString("abc  ")))
+      val schema = StructType(Seq(StructField("col", VarcharType(5))))
+      val udtf = HiveGenericUDTF(
+        "hive_explode",
+        HiveFunctionWrapper(classOf[GenericUDTFExplode].getName),
+        Seq(Literal(values, arrayType)),
+        schema)
+      intercept[SparkException] { udtf.eval(InternalRow.empty) }
+    }
+  }
+
   test("SPARK-58792: copied HiveGenericUDF nodes must not share a mutable GenericUDF") {
     val tsAttr = AttributeReference("ts", TimestampType, nullable = false)()
     val constTs = Literal(
@@ -1023,6 +1288,41 @@ class PairUDF extends GenericUDF {
   }
 
   override def getDisplayString(p1: Array[String]): String = ""
+}
+
+class ReturnCharGenericUDF extends GenericUDF {
+  override def initialize(arguments: Array[ObjectInspector]): ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(
+      TypeInfoFactory.getCharTypeInfo(5))
+
+  override def evaluate(arguments: Array[DeferredObject]): AnyRef =
+    new HiveChar(arguments(0).get.toString, 5)
+
+  override def getDisplayString(children: Array[String]): String = "return_char"
+}
+
+class ReturnStringGenericUDF extends GenericUDF {
+  override def initialize(arguments: Array[ObjectInspector]): ObjectInspector =
+    PrimitiveObjectInspectorFactory.javaStringObjectInspector
+
+  override def evaluate(arguments: Array[DeferredObject]): AnyRef =
+    arguments(0).get.toString
+
+  override def getDisplayString(children: Array[String]): String = "return_string"
+}
+
+class InspectCharGenericUDF extends GenericUDF {
+  private var inspector: HiveCharObjectInspector = _
+
+  override def initialize(arguments: Array[ObjectInspector]): ObjectInspector = {
+    inspector = arguments(0).asInstanceOf[HiveCharObjectInspector]
+    PrimitiveObjectInspectorFactory.javaStringObjectInspector
+  }
+
+  override def evaluate(arguments: Array[DeferredObject]): AnyRef =
+    inspector.getPrimitiveJavaObject(arguments(0).get).getPaddedValue
+
+  override def getDisplayString(children: Array[String]): String = "inspect_char"
 }
 
 @UDFType(stateful = true)

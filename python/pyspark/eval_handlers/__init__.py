@@ -22,7 +22,10 @@ import time, so handlers must be defined in this package rather than by user cod
 Each eval type handled here is an ``EvalTypeHandler`` subclass (in ``_base``) that
 declares its ``eval_type`` and self-registers at class definition, which
 ``read_udfs`` looks up via ``get_eval_type_handler``. Importing this package
-imports the concrete handler submodules (``_arrow``) so they register.
+imports the concrete handler submodules so they register.
+
+``_arrow`` imports pyarrow lazily, so it registers its handlers without pyarrow
+installed and defers the pyarrow check to when a handler runs.
 """
 
 from pyspark.eval_handlers import _arrow  # noqa: F401  # registers handlers on import
