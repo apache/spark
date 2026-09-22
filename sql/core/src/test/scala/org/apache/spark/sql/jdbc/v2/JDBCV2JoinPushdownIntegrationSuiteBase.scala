@@ -313,15 +313,16 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       |JOIN $catalogAndNamespace.$casedJoinTableName1 $tableOptions b ON a.id = b.id + 1
       |""".stripMargin
 
-    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
-      sql(sqlQuery).collect().toSeq
-    }
-    assert(rows.nonEmpty)
+    val expectedRows = for {
+      (leftId, _, _) <- table1Data
+      (rightId, _, _) <- table1Data
+      if leftId == rightId + 1
+    } yield Row(leftId, rightId)
 
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
       checkJoinNotPushed(df)
-      checkAnswer(df, rows)
+      checkAnswer(df, expectedRows)
     }
   }
 
@@ -505,19 +506,19 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
   test("Join pushdown preserves aliases in partially pushed averages") {
     assume(supportsAggregatePushdown, "Aggregate pushdown is not supported")
-    val id = caseConvert("id")
     def sqlPartitionedQuery(numPartitions: Int): String = {
+      val idCol = caseConvert("id")
       // numPartitions alone is valid and selects the partial aggregate path when greater than 1.
       val tableOptions = s"WITH ('numPartitions' '$numPartitions')"
       // Some databases return an integer for AVG over integer input, so use decimal input.
       s"""
-        |SELECT avg(CAST(b.$id AS DECIMAL(10, 2)))
+        |SELECT avg(CAST(b.$idCol AS DECIMAL(10, 2)))
         |FROM $catalogAndNamespace.$casedJoinTableName1 $tableOptions a
-        |JOIN $catalogAndNamespace.$casedJoinTableName1 $tableOptions b ON a.$id = b.$id + 1
+        |JOIN $catalogAndNamespace.$casedJoinTableName1 $tableOptions b ON a.$idCol = b.$idCol + 1
         |""".stripMargin
     }
 
-    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+    val rowsWithJoinPushdown = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val completeAgg = sql(sqlPartitionedQuery(numPartitions = 1))
       checkJoinPushed(completeAgg)
       checkAggregateRemoved(completeAgg, pushed = true)
@@ -535,7 +536,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       val df = sql(sqlPartitionedQuery(numPartitions = 2))
       checkJoinNotPushed(df)
       checkAggregateRemoved(df, pushed = false)
-      checkAnswer(df, rows)
+      checkAnswer(df, rowsWithJoinPushdown)
     }
   }
 
