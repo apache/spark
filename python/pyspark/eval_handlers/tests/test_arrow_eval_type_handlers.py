@@ -58,7 +58,7 @@ class _RunnerConf:
     # Read by the window-agg handler via ``get``; overridden per instance for the bounded case.
     window_bound_types = "unbounded"
 
-    def get(self, key, default="", *, lower_str=True):
+    def get(self, key, default=""):
         return getattr(self, key, default)
 
 
