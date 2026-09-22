@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.plans.physical
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.annotation.tailrec
 import scala.collection.immutable.BitSet
 import scala.collection.mutable
 
@@ -1105,19 +1104,15 @@ object KeyedPartitioning {
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
     def isSupportedTransform(transform: TransformExpression): Boolean = {
-      transform.children.size == 1 && isReference(transform.children.head)
-    }
-
-    @tailrec
-    def isReference(e: Expression): Boolean = e match {
-      case _: Attribute => true
-      case g: GetStructField => isReference(g.child)
-      case _ => false
+      // Should only consider column references, not literals.
+      val nonLiteralChildren = transform.children.filterNot(_.isInstanceOf[Literal])
+      // We need exactly one column reference per transform.
+      nonLiteralChildren.size == 1 && TransformExpression.isColumnRef(nonLiteralChildren.head)
     }
 
     expressions.forall {
       case t: TransformExpression if isSupportedTransform(t) => true
-      case e: Expression if isReference(e) => true
+      case e: Expression if TransformExpression.isColumnRef(e) => true
       case _ => false
     }
   }
@@ -2051,8 +2046,15 @@ case class KeyedShuffleSpec(
         case (_: LeafExpression, _: LeafExpression) => true
         case (left: TransformExpression, right: TransformExpression) =>
           if (canReduceKeys) left.isCompatible(right) else left.isSameFunction(right)
-        case (_: AttributeReference, _: TransformExpression) |
-             (_: TransformExpression, _: AttributeReference) => canReduceKeys
+        // Identity transform on one side, arbitrary transform on the other. Retargeting `t` at
+        // `col` and checking `argsMatchInputTypes` must agree with the reducer built below
+        // (`reducersBothWays`), since `EnsureRequirements` cannot otherwise tell a mismatched-type
+        // pair from a matched one -- both keep the identity side's declared data type -- so a gate
+        // that admits what the reducer refuses would keep raw keys and mis-join.
+        case (col: AttributeReference, t: TransformExpression) =>
+          canReduceKeys && t.withReference(col).argsMatchInputTypes
+        case (t: TransformExpression, col: AttributeReference) =>
+          canReduceKeys && t.withReference(col).argsMatchInputTypes
         case _ => false
       }
     }
@@ -2138,13 +2140,26 @@ case class KeyedShuffleSpec(
       // Identity transform on this side, arbitrary transform on the other side: create a reducer
       // that applies the other's transform to the raw identity values. Each partition expression
       // is guaranteed to have exactly one leaf child (asserted in keyPositions), which
-      // `IdentityReducer` binds to ordinal 0.
+      // `IdentityReducer` binds to ordinal 0. Retargeting `t` at `a` and checking
+      // `argsMatchInputTypes` must agree with `isExpressionCompatible`'s gate above: evaluating a
+      // type-mismatched substituted transform (e.g. a narrower column at a wider declared slot)
+      // would throw at reduce time instead of falling back to a shuffle.
       case (a: AttributeReference, t: TransformExpression) =>
-        (Some(KeyReducer(IdentityReducer(t.withReference(a)), t)), None)
+        val retargeted = t.withReference(a)
+        if (retargeted.argsMatchInputTypes) {
+          (Some(KeyReducer(IdentityReducer(retargeted), t)), None)
+        } else {
+          (None, None)
+        }
 
       // Symmetric: identity transform on the other side.
       case (t: TransformExpression, a: AttributeReference) =>
-        (None, Some(KeyReducer(IdentityReducer(t.withReference(a)), t)))
+        val retargeted = t.withReference(a)
+        if (retargeted.argsMatchInputTypes) {
+          (None, Some(KeyReducer(IdentityReducer(retargeted), t)))
+        } else {
+          (None, None)
+        }
 
       case (_, _) => (None, None)
     }
@@ -2184,7 +2199,13 @@ case class KeyedShuffleSpec(
 
     val newExpressions = partitioning.expressions.zip(keyPositions).map {
       case (te: TransformExpression, positionSet) =>
-        te.copy(children = te.children.map(_ => clustering(positionSet.head)))
+        // Preserve literal parameters (e.g., numBuckets, truncate width)
+        // while replacing only column references with the new clustering expression
+        val newChildren = te.children.map {
+          case l: Literal => l  // Keep literals as-is
+          case _ => clustering(positionSet.head)  // Replace column references
+        }
+        te.copy(children = newChildren)
       case (_, positionSet) => clustering(positionSet.head)
     }
     // The shuffled side is laid out on this side's partitions, so it shares their layout, with one

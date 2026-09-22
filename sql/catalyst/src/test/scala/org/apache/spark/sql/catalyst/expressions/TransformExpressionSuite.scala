@@ -45,7 +45,7 @@ class TransformExpressionSuite extends SparkFunSuite {
   private val b = AttributeReference("b", IntegerType)()
 
   private def bucket(function: BoundFunction, child: Expression, numBuckets: Int = 4) =
-    TransformExpression(function, Seq(child), Some(numBuckets))
+    TransformExpression(function, Seq(Literal(numBuckets), child))
 
   test("SPARK-58769: expression equality follows the function's own equals") {
     // Spark does not derive transform identity itself -- it defers to the connector, because only
@@ -115,5 +115,24 @@ class TransformExpressionSuite extends SparkFunSuite {
     // The marker rides on the expression, so it survives the attribute rewrites a projection and
     // `GroupPartitionsExec` apply to a reported partitioning.
     assert(left.hasSameReducedKeys(left.withReference(b)))
+  }
+
+  test("SPARK-50593: hasSameReducedKeys discriminates non-bucket (truncate-style) reductions") {
+    // On master's bucket-only identity, every non-bucket transform's functionId is
+    // (canonicalName, None) regardless of its literal parameter, so truncate(3)/truncate(5)
+    // (lcm 15) and truncate(7)/truncate(11) (lcm 77) would both collapse to the same
+    // TransformFunctionId pair and compare equal here -- two unrelated key spaces mistaken for
+    // one. The widened identity (literal params instead of numBucketsOpt) fixes that.
+    val fn = new NamedFunction("test.truncate")
+    def truncate(width: Int): TransformExpression = bucket(fn, a, width)
+
+    val trunc3x5 = truncate(3).reducedTogetherWith(truncate(5))
+    val trunc5x3 = truncate(5).reducedTogetherWith(truncate(3))
+    val trunc7x11 = truncate(7).reducedTogetherWith(truncate(11))
+
+    assert(trunc3x5.hasSameReducedKeys(trunc5x3), "the two sides of one reduce share their space")
+    assert(!trunc3x5.hasSameReducedKeys(trunc7x11),
+      "different truncate widths must reduce onto different key spaces")
+    assert(!trunc7x11.hasSameReducedKeys(trunc3x5), "and symmetrically")
   }
 }
