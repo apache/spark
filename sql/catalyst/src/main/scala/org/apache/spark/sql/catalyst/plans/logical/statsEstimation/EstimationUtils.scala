@@ -139,13 +139,16 @@ object EstimationUtils {
       case _: NumericType | DateType | TimestampType | TimestampNTZType =>
         value.toString.toDouble
       // TimestampNanosVal isn't a Long like the other datetime types, so it can't go through
-      // the toString/toDouble conversion above. Encode the epoch-microseconds component as the
-      // integral part and the sub-microsecond remainder (always in [0, 999]) as a fractional
-      // part, so distinct nanosecond values compare and round-trip correctly through
-      // fromDouble instead of collapsing to the same Double.
-      case _: AnyTimestampNanoType =>
-        val v = value.asInstanceOf[TimestampNanosVal]
-        v.epochMicros.toDouble + v.nanosWithinMicro.toDouble / 1000.0
+      // the toString/toDouble conversion above; use its epochMicros component, giving this
+      // estimation path the same microsecond resolution (and the same |epochMicros| <= 2^53
+      // exactness domain, ~1970 +/- 285 years) as the TimestampType/TimestampNTZType case
+      // above. A Double's 52-bit mantissa cannot also hold a distinguishable sub-microsecond
+      // fraction at realistic (i.e. any post-1970) timestamp magnitudes, so nanosWithinMicro is
+      // dropped here: distinct nanosecond values within the same microsecond are indistinguishable
+      // to CBO estimation and compare equal. This does not affect the persisted catalog
+      // statistic, which keeps full nanosecond precision (see CatalogColumnStat); true
+      // nanosecond-resolution CBO estimation is tracked separately in SPARK-57839.
+      case _: AnyTimestampNanoType => value.asInstanceOf[TimestampNanosVal].epochMicros.toDouble
       case BooleanType => if (value.asInstanceOf[Boolean]) 1 else 0
     }
   }
@@ -156,12 +159,9 @@ object EstimationUtils {
       case DateType => double.toInt
       case TimestampType | TimestampNTZType => double.toLong
       case _: AnyTimestampNanoType =>
-        // Inverse of the toDouble encoding above: floor (not truncate, to handle pre-1970
-        // epochMicros correctly) to recover the integral microseconds, then round the
-        // remaining fraction back to a nanosWithinMicro in [0, 999].
-        val epochMicros = math.floor(double).toLong
-        val nanosWithinMicro = math.round((double - epochMicros) * 1000).toShort
-        TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro)
+        // Inverse of the toDouble encoding above. nanosWithinMicro isn't recoverable (toDouble
+        // never encoded it), so this always reconstructs a value truncated to the microsecond.
+        TimestampNanosVal.fromParts(double.toLong, 0.toShort)
       case ByteType => double.toByte
       case ShortType => double.toShort
       case IntegerType => double.toInt

@@ -27,28 +27,62 @@ class EstimationUtilsSuite extends SparkFunSuite {
   private val nanosTypes: Seq[DataType] =
     Seq(TimestampLTZNanosType(9), TimestampNTZNanosType(9))
 
-  test("SPARK-57812: toDouble/fromDouble distinguish nanosecond values sharing an epochMicros") {
+  // 2022-01-01 00:00:00 UTC, in epoch microseconds: a magnitude representative of real-world
+  // data, unlike the epoch-adjacent values used below, where a Double happens to have more
+  // spare precision than this conversion actually promises.
+  private val realisticEpochMicros = 1640995200000000L
+
+  test("SPARK-57812: toDouble/fromDouble round-trip nanosecond timestamps at microsecond " +
+    "resolution") {
     nanosTypes.foreach { dataType =>
-      val low = TimestampNanosVal.fromParts(100L, 5.toShort)
-      val high = TimestampNanosVal.fromParts(100L, 900.toShort)
-
-      // Both values share the same epochMicros; only an epochMicros-only projection would
-      // collapse them to the same Double, which previously broke ordering/tie-breaking
-      // (e.g. IN-list min/max, join-key interval intersection) for CBO estimation.
-      val lowAsDouble = EstimationUtils.toDouble(low, dataType)
-      val highAsDouble = EstimationUtils.toDouble(high, dataType)
-      assert(lowAsDouble < highAsDouble)
-
-      assert(EstimationUtils.fromDouble(lowAsDouble, dataType) === low)
-      assert(EstimationUtils.fromDouble(highAsDouble, dataType) === high)
+      val value = TimestampNanosVal.fromParts(100L, 5.toShort)
+      val truncated = TimestampNanosVal.fromParts(100L, 0.toShort)
+      val roundTripped = EstimationUtils.fromDouble(EstimationUtils.toDouble(value, dataType),
+        dataType)
+      assert(roundTripped === truncated)
     }
   }
 
-  test("SPARK-57812: toDouble/fromDouble round-trip pre-1970 nanosecond timestamps") {
+  test("SPARK-57812: toDouble collapses distinct nanosecond values sharing an epochMicros, " +
+    "at realistic timestamp magnitudes") {
+    // This is the resolution the conversion actually provides -- see the comment on
+    // EstimationUtils.toDouble's AnyTimestampNanoType case. A Double's 52-bit mantissa cannot
+    // also hold a distinguishable sub-microsecond fraction once epochMicros grows past 2^43
+    // (~1970-04-12), which covers every realistic (i.e. non-epoch-adjacent) timestamp, so two
+    // values sharing an epochMicros are indistinguishable to CBO estimation by design.
+    nanosTypes.foreach { dataType =>
+      val low = TimestampNanosVal.fromParts(realisticEpochMicros, 1.toShort)
+      val high = TimestampNanosVal.fromParts(realisticEpochMicros, 999.toShort)
+      assert(EstimationUtils.toDouble(low, dataType) === EstimationUtils.toDouble(high, dataType))
+
+      val truncated = TimestampNanosVal.fromParts(realisticEpochMicros, 0.toShort)
+      val roundTripped = EstimationUtils.fromDouble(EstimationUtils.toDouble(low, dataType),
+        dataType)
+      assert(roundTripped === truncated)
+    }
+  }
+
+  test("SPARK-57812: toDouble is monotone across distinct epochMicros at realistic magnitudes") {
+    // Ordering across microseconds -- rather than precision within one -- is what CBO
+    // range/IN-list estimation relies on, and this holds regardless of the resolution
+    // limitation documented above.
+    nanosTypes.foreach { dataType =>
+      val earlier = TimestampNanosVal.fromParts(realisticEpochMicros, 999.toShort)
+      val later = TimestampNanosVal.fromParts(realisticEpochMicros + 1, 0.toShort)
+      val earlierAsDouble = EstimationUtils.toDouble(earlier, dataType)
+      val laterAsDouble = EstimationUtils.toDouble(later, dataType)
+      assert(earlierAsDouble < laterAsDouble)
+    }
+  }
+
+  test("SPARK-57812: toDouble/fromDouble round-trip pre-1970 nanosecond timestamps at " +
+    "microsecond resolution") {
     nanosTypes.foreach { dataType =>
       val value = TimestampNanosVal.fromParts(-100L, 500.toShort)
-      assert(
-        EstimationUtils.fromDouble(EstimationUtils.toDouble(value, dataType), dataType) === value)
+      val truncated = TimestampNanosVal.fromParts(-100L, 0.toShort)
+      val roundTripped = EstimationUtils.fromDouble(EstimationUtils.toDouble(value, dataType),
+        dataType)
+      assert(roundTripped === truncated)
     }
   }
 }
