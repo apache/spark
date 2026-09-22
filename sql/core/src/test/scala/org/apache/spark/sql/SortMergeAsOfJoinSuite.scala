@@ -838,7 +838,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         StructField("grp", StringType) ::
           StructField("ts", IntegerType) ::
           StructField("right_val", StringType) :: Nil)
-      // Values of differing lengths so a partially copied match shows up in the answer.
+      // Values of differing lengths so a clobbered match stands out in the answer.
       val bestVal = "b" * 40
       val left = spark.createDataFrame(
         List(Row("A", 8), Row("B", 8)).asJava, leftSchema)
