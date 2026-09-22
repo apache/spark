@@ -63,6 +63,10 @@ ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.14t -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
+COPY --from=root pyproject.toml ./pyproject.toml
+
+RUN python3.14 -m pip install -U pip
+
 # TODO: Add connect packages when grpcio supports Python 3.14 free threaded
 RUN python3.14 -m pip install --group ml_torch --index-url https://download.pytorch.org/whl/cpu && \
     python3.14 -m pip install --group ci_classic_standard && \
