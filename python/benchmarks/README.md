@@ -105,10 +105,14 @@ Activate a Python environment containing `asv`, `jep>=4.3.1`, `pyarrow`, `pandas
 `cloudpickle`. JEP must be built for that Python installation and the selected JDK.
 Install these dependencies in a venv (for example, `python -m venv .venv` and
 `source .venv/bin/activate`). From the Spark checkout root, configure the driver
-before ASV launches any JVM:
+before ASV launches any JVM. Set `ARROW_C_DATA_JAR` to an external `arrow-c-data`
+JAR matching the Arrow Java version in the Spark build; it is a provided dependency
+and is not included in the assembly:
 
 ```bash
 export SPARK_HOME="$PWD"
+export ARROW_C_DATA_JAR=/absolute/path/to/arrow-c-data.jar
+test -f "$ARROW_C_DATA_JAR" || exit 1
 export PYSPARK_PYTHON="$(command -v python)"
 export PYSPARK_DRIVER_PYTHON="$PYSPARK_PYTHON"
 JEP_DIR="$(python -c 'import importlib.util; print(next(iter(importlib.util.find_spec("jep").submodule_search_locations)))')"
@@ -116,7 +120,7 @@ JEP_JARS=("$JEP_DIR"/jep-*.jar)
 export PYTHONPATH="$(dirname "$JEP_DIR")${PYTHONPATH:+:$PYTHONPATH}"
 PY4J_ZIPS=("$SPARK_HOME"/python/lib/py4j-*-src.zip)
 export ASV_PYTHONPATH="$SPARK_HOME/python:${PY4J_ZIPS[0]}:$PYTHONPATH"
-export PYSPARK_SUBMIT_ARGS="--driver-memory 8g --driver-class-path ${JEP_JARS[0]} --driver-java-options \"-Djava.library.path=$JEP_DIR -XX:MaxDirectMemorySize=8g\" pyspark-shell"
+export PYSPARK_SUBMIT_ARGS="--driver-memory 8g --driver-class-path ${JEP_JARS[0]}:$ARROW_C_DATA_JAR --driver-java-options \"-Djava.library.path=$JEP_DIR -XX:MaxDirectMemorySize=8g\" pyspark-shell"
 ./python/asv run --python=same --launch-method=spawn --quick --dry-run --show-stderr \
   -b 'bench_inprocess_udf.InProcessUDFTimeBench'
 ```

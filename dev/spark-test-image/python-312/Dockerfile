@@ -72,5 +72,15 @@ RUN python3.12 -m pip install --group ml_torch --index-url https://download.pyto
 # headers and a JDK when building its JNI library; no separate test job is needed.
 RUN JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")" \
     python3.12 -m pip install --no-cache-dir "jep==4.3.1" cffi
+# Keep the provided CDI dependency outside Spark's distribution JAR directory.
+# Read its version from this checkout, just as the Spark build does.
+COPY --from=root pom.xml /tmp/spark-pom.xml
+RUN ARROW_VERSION="$(python3.12 -c 'import xml.etree.ElementTree as E; print(E.parse("/tmp/spark-pom.xml").findtext("{*}properties/{*}arrow.version"))')" && \
+    mkdir -p /opt/spark-test-jars && \
+    curl --fail --location --retry 3 \
+      "https://repo.maven.apache.org/maven2/org/apache/arrow/arrow-c-data/${ARROW_VERSION}/arrow-c-data-${ARROW_VERSION}.jar" \
+      --output /opt/spark-test-jars/arrow-c-data.jar && \
+    rm /tmp/spark-pom.xml
+ENV ARROW_C_DATA_JAR=/opt/spark-test-jars/arrow-c-data.jar
 # Missing or broken JEP must fail this CI image's tests instead of skipping them.
 ENV INPROCESS_TESTS=1

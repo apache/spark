@@ -78,6 +78,12 @@ for both input and output buffer transfer. Row-to-Arrow conversion still copies 
 pip install "jep>=4.3.1" pyarrow cloudpickle
 ```
 
+JEP and `org.apache.arrow:arrow-c-data` are provided dependencies and are not
+bundled with Spark. Supply their JARs on the driver/executor classpaths before
+starting Spark, and make the JEP native library available. Use an `arrow-c-data`
+version matching Spark's Arrow Java version. Installing the Python packages alone
+does not supply the Arrow Java CDI JAR.
+
 ### 2. Register the plugin
 
 ```python
@@ -190,7 +196,8 @@ def add_noise(x):
 | Requirement | Detail |
 |---|---|
 | Python | 3.8+ |
-| jep | 4.x (`pip install jep`) |
+| jep | 4.3.1+ (`pip install jep`) |
+| `arrow-c-data` JAR | Provided separately; match Spark's Arrow Java version |
 | PyArrow | 12+ |
 | cloudpickle | 2.x (already a PySpark dependency) |
 | `spark.executor.cores == spark.task.cpus` | Enforced at query planning time (see below) |

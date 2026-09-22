@@ -18,9 +18,10 @@
 """End-to-end tests for in-process Python UDFs.
 
 Run with python/run-tests like other SQL tests. JEP paths are discovered from the
-selected Python environment before the Spark JVM starts. Set INPROCESS_TESTS=1
+selected Python environment before the Spark JVM starts. ARROW_C_DATA_JAR must
+point to the provided Arrow CDI JAR. Set INPROCESS_TESTS=1
 to require the suite (missing dependencies then fail), or 0 to disable it.
-Otherwise, the suite runs when JEP and PyArrow are available.
+Otherwise, the suite runs when JEP, PyArrow and the CDI JAR are available.
 """
 
 import contextlib
@@ -36,13 +37,18 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 _jep_spec = find_spec("jep")
+_cdi_jar = os.environ.get("ARROW_C_DATA_JAR")
 _test_mode = os.environ.get("INPROCESS_TESTS")
 _run_inprocess = _test_mode == "1" or (
-    _test_mode != "0" and _jep_spec is not None and find_spec("pyarrow") is not None
+    _test_mode != "0"
+    and _jep_spec is not None
+    and find_spec("pyarrow") is not None
+    and _cdi_jar is not None
+    and Path(_cdi_jar).is_file()
 )
 
 
-@unittest.skipUnless(_run_inprocess, "In-process UDF tests require JEP and PyArrow")
+@unittest.skipUnless(_run_inprocess, "Requires JEP, PyArrow and ARROW_C_DATA_JAR")
 class InProcessUDFTests(ReusedSQLTestCase):
     """
     End-to-end tests for @inprocess_udf that require jep + CPython + PyArrow.
@@ -60,7 +66,7 @@ class InProcessUDFTests(ReusedSQLTestCase):
         return (
             super()
             .conf()
-            .set("spark.driver.extraClassPath", str(cls.jep_jar))
+            .set("spark.driver.extraClassPath", os.pathsep.join([str(cls.jep_jar), cls.cdi_jar]))
             .set("spark.driver.extraLibraryPath", str(cls.jep_dir))
             .set("spark.inprocess.python.sitePackages", cls.site_packages)
             .set("spark.plugins", "org.apache.spark.sql.execution.python.InProcessPythonPlugin")
@@ -76,6 +82,9 @@ class InProcessUDFTests(ReusedSQLTestCase):
         if len(jars) != 1:
             raise RuntimeError(f"Expected one JEP JAR in {cls.jep_dir}, found {len(jars)}")
         cls.jep_jar = jars[0]
+        if not _cdi_jar or not Path(_cdi_jar).is_file():
+            raise RuntimeError("Set ARROW_C_DATA_JAR to the provided Arrow CDI JAR")
+        cls.cdi_jar = str(Path(_cdi_jar).resolve())
         cls.site_packages = tempfile.mkdtemp()
         with open(os.path.join(cls.site_packages, "_inprocess_test_helper.py"), "w") as f:
             f.write("MAGIC = 99\n")
