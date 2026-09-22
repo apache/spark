@@ -2698,6 +2698,12 @@ class AstBuilder extends DataTypeAstBuilder
     if (!conf.sqlAsOfJoinEnabled) {
       throw QueryParsingErrors.sqlAsOfJoinDisabled(SQLConf.SQL_ASOF_JOIN_ENABLED.key, ctx)
     }
+    // The grammar accepts an ASOF join without MATCH_CONDITION so that leaving it out is reported
+    // here by name, rather than as a generic syntax error or, where ASOF can be read as the alias
+    // of the left relation, as a plain inner join (SPARK-59628).
+    if (criteria.matchExpr == null) {
+      throw QueryParsingErrors.sqlAsOfJoinMatchConditionMissing(ctx)
+    }
     val joinType = Option(ctx.asofJoinType) match {
       case None => Inner
       case Some(jt) if jt.LEFT != null => LeftOuter

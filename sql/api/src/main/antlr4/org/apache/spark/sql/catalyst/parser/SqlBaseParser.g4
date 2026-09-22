@@ -80,6 +80,16 @@ options { tokenVocab = SqlBaseLexer; }
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
   }
+
+  /**
+   * Checks whether the next two tokens start an ASOF join, i.e. ASOF followed by JOIN.
+   * ASOF is a non-reserved keyword, so without this check a table alias would consume it and
+   * `FROM t ASOF JOIN u ON t.a = u.a` would silently parse as a plain inner join of `t AS asof`
+   * with `u`. An alias spelled ASOF is still allowed when written explicitly, as in `t AS asof`.
+   */
+  public boolean isAsofJoinAhead() {
+    return _input.LA(1) == ASOF && _input.LA(2) == JOIN;
+  }
 }
 
 compoundOrSingleStatement
@@ -1135,8 +1145,11 @@ joinPostfix
     | nearestByClause
     ;
 
+// MATCH_CONDITION is required for an ASOF join, but it is optional here so that omitting it
+// reaches the AST builder, which reports that it is missing, instead of failing as a generic
+// syntax error.
 asofJoinCriteria
-    : MATCH_CONDITION LEFT_PAREN matchExpr=booleanExpression RIGHT_PAREN
+    : ( MATCH_CONDITION LEFT_PAREN matchExpr=booleanExpression RIGHT_PAREN )?
       ( ON onExpr=booleanExpression | USING identifierList )?
     ;
 
@@ -1305,7 +1318,7 @@ tableFunctionCallWithTrailingClauses
     ;
 
 tableAlias
-    : (AS? strictIdentifier identifierList?)?
+    : ({!isAsofJoinAhead()}? AS? strictIdentifier identifierList?)?
     ;
 
 rowFormat
