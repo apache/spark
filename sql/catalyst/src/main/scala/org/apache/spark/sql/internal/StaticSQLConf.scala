@@ -150,13 +150,14 @@ object StaticSQLConf {
   val HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS =
     buildStaticConf("spark.sql.hive.thriftServer.allowIneffectiveDoAs")
       .doc("With hive.server2.enable.doAs=true the Spark Thrift Server impersonates the " +
-        "connecting user for Hive metastore calls, but it executes queries and accesses " +
-        "storage as its own service identity (SPARK-5159), so storage-level permissions are " +
-        "checked against the privileged service principal instead of the impersonated user. " +
-        "Because that can silently grant users access to data they could not read with their " +
-        "own credentials, the server refuses to start when hive.server2.enable.doAs=true and " +
-        "hive.server2.authentication verifies user identities (anything other than " +
-        "NONE/NOSASL), unless this option is set to true to acknowledge the limitation.")
+        "connecting user for Hive metastore calls and driver-side file system access, but " +
+        "executor-side data access still runs as the server's own service identity " +
+        "(SPARK-5159), so storage-level permissions are checked against the privileged " +
+        "service principal instead of the impersonated user. Because that can silently " +
+        "grant users access to data they could not read with their own credentials, the " +
+        "server refuses to start when hive.server2.enable.doAs=true and " +
+        "hive.server2.authentication verifies user identities (any recognized type other " +
+        "than NONE/NOSASL), unless this option is set to true to acknowledge the limitation.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

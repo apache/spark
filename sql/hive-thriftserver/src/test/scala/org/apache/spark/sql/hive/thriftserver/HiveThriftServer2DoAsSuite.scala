@@ -21,15 +21,16 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.auth.HiveAuthFactory.AuthTypes
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.internal.StaticSQLConf
-import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Tests for the SPARK-59118 startup guard: the Thrift Server refuses to start when
- * `hive.server2.enable.doAs` is on but impersonation does not reach query execution.
+ * `hive.server2.enable.doAs` is on but impersonation does not reach executor-side data
+ * access. The `init()` wiring is covered by SparkExecuteStatementOperationSuite so this
+ * suite stays a plain SparkFunSuite.
  */
-class HiveThriftServer2DoAsSuite extends QueryTest with SharedSparkSession {
+class HiveThriftServer2DoAsSuite extends SparkFunSuite {
 
   private def hiveConf(authType: String, doAs: Boolean): HiveConf = {
     val conf = new HiveConf()
@@ -42,22 +43,34 @@ class HiveThriftServer2DoAsSuite extends QueryTest with SharedSparkSession {
     HiveThriftServer2.failIfIneffectiveDoAs(conf, allowIneffectiveDoAs)
   }
 
+  private def checkRefused(conf: HiveConf): SparkException = {
+    val e = intercept[SparkException](check(conf))
+    checkError(
+      e,
+      condition = "HIVE_THRIFT_SERVER_INEFFECTIVE_DOAS",
+      sqlState = Some("42616"),
+      parameters = Map(
+        "doAsConf" -> ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname,
+        "allowIneffectiveDoAsConf" ->
+          StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key))
+    e
+  }
+
   // The auth types that establish a user identity worth impersonating.
   private val verifyingAuthTypes =
     AuthTypes.values().filterNot(Set(AuthTypes.NONE, AuthTypes.NOSASL)).map(_.getAuthName)
 
   test("SPARK-5159 / SPARK-59118 refuse to start when doAs is enabled but not enforced") {
-    val e = intercept[IllegalArgumentException](check(hiveConf("KERBEROS", doAs = true)))
-    assert(e.getMessage.contains(ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname))
-    assert(e.getMessage.contains(StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key))
-    assert(e.getMessage.contains("SPARK-5159"))
+    assert(checkRefused(hiveConf("KERBEROS", doAs = true)).getMessage.contains("SPARK-5159"))
+    // Auth type matching is case-insensitive.
+    checkRefused(hiveConf("kerberos", doAs = true))
   }
 
   test("SPARK-59118 refuse to start for every auth type that verifies the user") {
     // Guards against a new AuthTypes value silently landing on the permissive side.
     assert(verifyingAuthTypes.nonEmpty)
     verifyingAuthTypes.foreach { authType =>
-      intercept[IllegalArgumentException](check(hiveConf(authType, doAs = true)))
+      checkRefused(hiveConf(authType, doAs = true))
     }
   }
 
@@ -82,15 +95,12 @@ class HiveThriftServer2DoAsSuite extends QueryTest with SharedSparkSession {
     check(hiveConf("KERBEROS", doAs = true), allowIneffectiveDoAs = true)
   }
 
-  test("SPARK-59118 an unrecognized auth type fails closed") {
-    intercept[IllegalArgumentException](check(hiveConf("NOT_AN_AUTH_TYPE", doAs = true)))
-  }
-
-  test("SPARK-59118 init refuses to start the server") {
-    // The guard is only worth anything if init() actually calls it.
-    val e = intercept[IllegalArgumentException] {
-      new HiveThriftServer2(spark).init(hiveConf("KERBEROS", doAs = true))
+  test("SPARK-59118 an unrecognized or empty auth type is left to Hive's own error") {
+    // HiveAuthFactory rejects these with "Unsupported authentication type", where the guard's
+    // advice would not help. getVar returns "" (never null) for an explicitly empty value,
+    // so this must not NPE.
+    Seq("NOT_AN_AUTH_TYPE", "").foreach { authType =>
+      check(hiveConf(authType, doAs = true))
     }
-    assert(e.getMessage.contains("SPARK-5159"))
   }
 }

@@ -106,31 +106,28 @@ object HiveThriftServer2 extends Logging {
     }
   }
 
-  // Sessions are impersonated for metastore calls, but queries run as the service identity
-  // (SPARK-5159), so storage ACLs are checked against the wrong principal. Refuse rather than
-  // look like we enforce something we do not. Auth types that never establish a user identity
-  // have nothing to impersonate, so they are exempt.
+  // Sessions are impersonated on the driver (metastore calls, driver-side file system access),
+  // but executor-side data access runs as the service identity (SPARK-5159), so storage ACLs
+  // are checked against the wrong principal. Refuse rather than look like we enforce something
+  // we do not. NONE/NOSASL are exempt: they establish no verified identity (the client picks
+  // any username it likes, and doAs then impersonates that unverified name for metastore
+  // calls), so there is no security boundary for this guard to protect -- and Hive's
+  // out-of-the-box config (auth NONE, doAs true) must still start. Unrecognized auth types are
+  // left alone too: HiveAuthFactory rejects them with its own "Unsupported authentication
+  // type" error, which points at the actual problem.
   private[thriftserver] def failIfIneffectiveDoAs(
       hiveConf: HiveConf,
       allowIneffectiveDoAs: Boolean): Unit = {
     val authType = hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
-    val unverifiedAuthTypes = Seq(AuthTypes.NONE, AuthTypes.NOSASL).map(_.getAuthName)
-    // Constant on the left: authType is null when explicitly set empty, and this must not NPE.
-    val authVerifiesUser = !unverifiedAuthTypes.exists(_.equalsIgnoreCase(authType))
+    val verifyingAuthTypes =
+      AuthTypes.values().filterNot(Set(AuthTypes.NONE, AuthTypes.NOSASL)).map(_.getAuthName)
+    // getVar returns the default (NONE) when unset and "" when set empty, never null.
+    val authVerifiesUser = verifyingAuthTypes.exists(_.equalsIgnoreCase(authType))
     if (authVerifiesUser && hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
         !allowIneffectiveDoAs) {
-      throw new IllegalArgumentException(
-        s"${ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname} is set to true, but the Spark Thrift " +
-        "Server impersonates the connecting user only for Hive metastore calls: queries and " +
-        "the storage access they perform still run as the server's own service identity, so " +
-        "storage permissions are checked against the service principal rather than the " +
-        "connecting user (SPARK-5159). That can expose data the connecting user is not " +
-        s"authorized to read. To start anyway, set " +
-        s"${StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key}=true; it is a static " +
-        "conf, so it must be set before the SparkSession is created. Setting " +
-        s"${ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname} to false also starts the server, but " +
-        "note that it stops impersonating metastore calls too, so it is not a no-op (and " +
-        "unsetting it does not help -- Hive's own default is true).")
+      throw HiveThriftServerErrors.ineffectiveDoAsError(
+        ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname,
+        StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key)
     }
   }
 
