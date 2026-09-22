@@ -20,13 +20,13 @@ import org.apache.spark.SparkFunSuite
 
 class SQLQueryTestHelperSuite extends SparkFunSuite with SQLQueryTestHelper {
 
-  test("getSparkSettings: single key=value") {
-    val result = getSparkSettings(Array("--SET spark.sql.foo=1"))
+  test("getSparkSettings: single key=value with spaces around the separator") {
+    val result = getSparkSettings(Array("--SET spark.sql.foo = 1"))
     assert(result.toSeq === Seq("spark.sql.foo" -> "1"))
   }
 
-  test("getSparkSettings: multiple key=value pairs in one --SET") {
-    val result = getSparkSettings(Array("--SET spark.sql.foo=1,spark.sql.bar=2"))
+  test("getSparkSettings: multiple key=value pairs with spaces in one --SET") {
+    val result = getSparkSettings(Array("--SET spark.sql.foo = 1, spark.sql.bar = 2"))
     assert(result.toSeq === Seq("spark.sql.foo" -> "1", "spark.sql.bar" -> "2"))
   }
 
@@ -45,12 +45,12 @@ class SQLQueryTestHelperSuite extends SparkFunSuite with SQLQueryTestHelper {
     assert(result.toSeq === Seq("spark.sql.optimizer.excludedRules" -> excludedRules))
   }
 
-  test("getSparkSettings: mixed settings with a comma-containing value") {
+  test("getSparkSettings: mixed settings with a comma-containing value and spaces") {
     val excludedRules =
       "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation," +
         "org.apache.spark.sql.catalyst.optimizer.ConstantFolding"
     val result = getSparkSettings(
-      Array(s"--SET spark.sql.optimizer.excludedRules=$excludedRules,spark.sql.foo=1"))
+      Array(s"--SET spark.sql.optimizer.excludedRules = $excludedRules, spark.sql.foo = 1"))
     assert(result.toSeq === Seq(
       "spark.sql.optimizer.excludedRules" -> excludedRules,
       "spark.sql.foo" -> "1"))
