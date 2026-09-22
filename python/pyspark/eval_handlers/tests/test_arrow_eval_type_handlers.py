@@ -36,11 +36,14 @@ if have_pyarrow:
 
     from pyspark.eval_handlers._arrow import (
         ArrowCoGroupedMapUDFHandler,
+        ArrowGroupedAggIterUDFHandler,
+        ArrowGroupedAggUDFHandler,
         ArrowGroupedMapIterUDFHandler,
         ArrowGroupedMapUDFHandler,
         ArrowMapUDFHandler,
         ArrowScalarIterUDFHandler,
         ArrowScalarUDFHandler,
+        ArrowWindowAggUDFHandler,
     )
     from pyspark.sql.conversion import ArrowBatchTransformer
 
@@ -52,6 +55,11 @@ class _RunnerConf:
     use_large_var_types = False
     assign_cols_by_name = True
     map_in_batch_legacy_accept_any_iterable = False
+    # Read by the window-agg handler via ``get``; overridden per instance for the bounded case.
+    window_bound_types = "unbounded"
+
+    def get(self, key, default="", *, lower_str=True):
+        return getattr(self, key, default)
 
 
 def _batch(**columns):
@@ -120,7 +128,7 @@ _RETURN_TYPE = StructType([StructField("v", LongType())])
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowEvalTypeHandlerRegistrationTests(unittest.TestCase):
     def test_arrow_eval_types_are_registered(self):
-        # Every migrated Arrow map/iter eval type dispatches to its handler by lookup.
+        # Every migrated Arrow eval type dispatches to its handler by lookup.
         for eval_type, handler_cls in (
             (PythonEvalType.SQL_SCALAR_ARROW_UDF, ArrowScalarUDFHandler),
             (PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF, ArrowScalarIterUDFHandler),
@@ -128,6 +136,9 @@ class ArrowEvalTypeHandlerRegistrationTests(unittest.TestCase):
             (PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF, ArrowGroupedMapUDFHandler),
             (PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF, ArrowGroupedMapIterUDFHandler),
             (PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF, ArrowCoGroupedMapUDFHandler),
+            (PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF, ArrowGroupedAggUDFHandler),
+            (PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF, ArrowGroupedAggIterUDFHandler),
+            (PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF, ArrowWindowAggUDFHandler),
         ):
             self.assertIs(get_eval_type_handler(eval_type), handler_cls)
 
@@ -253,6 +264,65 @@ class ArrowCoGroupedMapUDFHandlerTests(unittest.TestCase):
         handler = _grouped_handler(ArrowCoGroupedMapUDFHandler, cogrouped_udf, _COGROUP_OFFSETS, 3)
         out = list(handler.run(0, _one_cogroup(_batch(k=[5], v=[10]), _batch(k=[5], v=[20]))))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [35])
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowGroupedAggUDFHandlerTests(unittest.TestCase):
+    # Grouped-agg batches arrive un-wrapped (flat columns); the UDF reads columns by offset and
+    # returns one scalar, emitted as a single-row batch per group.
+    def test_reduces_group_to_one_row(self):
+        def sum_udf(col):
+            return sum(c.as_py() for c in col)
+
+        handler = ArrowGroupedAggUDFHandler(
+            udfs=[(sum_udf, [0], {}, LongType())], runner_conf=_RunnerConf(), eval_conf=None
+        )
+        out = list(handler.run(0, _one_group(_batch(v=[1, 2, 3]), _batch(v=[4]))))
+        self.assertEqual(out[0].column("_0").to_pylist(), [10])
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowGroupedAggIterUDFHandlerTests(unittest.TestCase):
+    # The UDF receives the group's input columns as an iterator and returns one scalar.
+    def test_reduces_group_to_one_row(self):
+        def sum_iter_udf(col_iter):
+            return sum(c.as_py() for col in col_iter for c in col)
+
+        handler = ArrowGroupedAggIterUDFHandler(
+            udfs=[(sum_iter_udf, [0], {}, LongType())], runner_conf=_RunnerConf(), eval_conf=None
+        )
+        out = list(handler.run(0, _one_group(_batch(v=[10]), _batch(v=[20]))))
+        self.assertEqual(out[0].column("_0").to_pylist(), [30])
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowWindowAggUDFHandlerTests(unittest.TestCase):
+    # One output value per input row over the UDF's window frame.
+    def test_unbounded_frame_repeats_one_value(self):
+        def sum_udf(col):
+            return sum(c.as_py() for c in col)
+
+        conf = _RunnerConf()
+        conf.window_bound_types = "unbounded"
+        handler = ArrowWindowAggUDFHandler(
+            udfs=[(sum_udf, [0], {}, LongType())], runner_conf=conf, eval_conf=None
+        )
+        out = list(handler.run(0, _one_group(_batch(v=[1, 2, 3]))))
+        self.assertEqual(out[0].column("_0").to_pylist(), [6, 6, 6])
+
+    def test_bounded_frame_slices_per_row(self):
+        # args_offsets = [begin_col, end_col, *value_cols]; each row's frame is ``[begin, end)``.
+        def sum_udf(col):
+            return sum(c.as_py() for c in col)
+
+        conf = _RunnerConf()
+        conf.window_bound_types = "bounded"
+        handler = ArrowWindowAggUDFHandler(
+            udfs=[(sum_udf, [0, 1, 2], {}, LongType())], runner_conf=conf, eval_conf=None
+        )
+        # Row 0 frame [0, 1) -> [10]; row 1 frame [0, 2) -> [10, 20].
+        out = list(handler.run(0, _one_group(_batch(begin=[0, 0], end=[1, 2], v=[10, 20]))))
+        self.assertEqual(out[0].column("_0").to_pylist(), [10, 30])
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
