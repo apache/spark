@@ -354,8 +354,7 @@ class ArrowWindowAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     ) -> None:
         require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
-        window_bound_types_str = runner_conf.get("window_bound_types")
-        self._window_bound_types = [t.strip().lower() for t in window_bound_types_str.split(",")]
+        self._window_bound_types = runner_conf.window_bound_types
         self._col_names = ["_%d" % i for i in range(len(udfs))]
         self._return_schema = to_arrow_schema(
             StructType([StructField(n, rt) for n, (_, _, _, rt) in zip(self._col_names, udfs)]),

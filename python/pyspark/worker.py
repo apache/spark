@@ -2118,8 +2118,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # ``zero``) and produces the value with ``finish``, one output value per input row. A window
         # has no shuffle, so the intermediate buffer never leaves the worker (unlike the two-stage
         # groupBy path); ``merge`` is not used here.
-        window_bound_types_str = runner_conf.get("window_bound_types")
-        window_bound_types = [t.strip().lower() for t in window_bound_types_str.split(",")]
+        window_bound_types = runner_conf.window_bound_types
 
         col_names = ["_%d" % i for i in range(len(udfs))]
         return_schema = to_arrow_schema(
@@ -2207,8 +2206,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         import pandas as pd
         import pyarrow as pa
 
-        window_bound_types_str = runner_conf.get("window_bound_types")
-        window_bound_types = [t.strip().lower() for t in window_bound_types_str.split(",")]
+        window_bound_types = runner_conf.window_bound_types
 
         col_names = ["_%d" % i for i in range(len(udfs))]
         output_schema = StructType(

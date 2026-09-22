@@ -55,11 +55,8 @@ class _RunnerConf:
     use_large_var_types = False
     assign_cols_by_name = True
     map_in_batch_legacy_accept_any_iterable = False
-    # Read by the window-agg handler via ``get``; overridden per instance for the bounded case.
-    window_bound_types = "unbounded"
-
-    def get(self, key, default=""):
-        return getattr(self, key, default)
+    # One bound type per window UDF; the bounded test overrides this per instance.
+    window_bound_types = ["unbounded"]
 
 
 def _batch(**columns):
@@ -303,7 +300,7 @@ class ArrowWindowAggUDFHandlerTests(unittest.TestCase):
             return sum(c.as_py() for c in col)
 
         conf = _RunnerConf()
-        conf.window_bound_types = "unbounded"
+        conf.window_bound_types = ["unbounded"]
         handler = ArrowWindowAggUDFHandler(
             udfs=[(sum_udf, [0], {}, LongType())], runner_conf=conf, eval_conf=None
         )
@@ -316,7 +313,7 @@ class ArrowWindowAggUDFHandlerTests(unittest.TestCase):
             return sum(c.as_py() for c in col)
 
         conf = _RunnerConf()
-        conf.window_bound_types = "bounded"
+        conf.window_bound_types = ["bounded"]
         handler = ArrowWindowAggUDFHandler(
             udfs=[(sum_udf, [0, 1, 2], {}, LongType())], runner_conf=conf, eval_conf=None
         )
