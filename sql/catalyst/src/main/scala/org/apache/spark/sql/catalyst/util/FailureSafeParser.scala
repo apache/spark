@@ -59,8 +59,6 @@ class FailureSafeParser[IN](
     try {
       rawParser.apply(input).iterator.map(row => toResultRow(Some(row), () => null))
     } catch {
-      // Duplicate map keys are governed by mapKeyDedupPolicy, not the parse mode.
-      case DuplicateMapKeyUtils(e) => throw e
       case e: BadRecordException => mode match {
         case PermissiveMode =>
           val partialResults = e.partialResults()

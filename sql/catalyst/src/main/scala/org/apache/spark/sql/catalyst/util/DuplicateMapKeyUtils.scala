@@ -46,7 +46,7 @@ private[sql] object DuplicateMapKeyUtils {
    *
    * Example: parsing `a` and `a ` as CHAR(2) keys raises
    * DUPLICATED_MAP_KEY under EXCEPTION and keeps `a ` -> 2 under LAST_WIN.
-   * Exact repeated serialized names are last-wins regardless of policy.
+   * Exact repeated serialized names use last-wins behavior regardless of policy.
    */
   def buildConstrainedMap(
       entries: Seq[(UTF8String, UTF8String, Option[Any])],

@@ -166,6 +166,7 @@ class StaxXmlParser(
       // ValidatorUtil.newValidator throws this when the JAXP implementation cannot
       // disable external access; that is an environment error, not a bad record.
       case e: UnsupportedOperationException => throw e
+      case DuplicateMapKeyUtils(e) => throw e
       case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
               | _: SAXException) =>
         // XML parser currently doesn't support partial results for corrupted records.
@@ -397,7 +398,7 @@ class StaxXmlParser(
         case c: Characters if !c.isWhiteSpace =>
           // Create a value tag field for it
           kvPairs +=
-            // TODO: We don't support an array value tags in map yet.
+            // TODO: We don't support array value tags in maps yet.
             (UTF8String.fromString(options.valueTag) -> convertTo(c.getData, valueType))
         case _: EndElement | _: EndDocument =>
           shouldStop = true
@@ -453,7 +454,7 @@ class StaxXmlParser(
           appendPair(rawKey, value)
         case c: Characters if !c.isWhiteSpace =>
           // Create a value tag field for it
-          // TODO: We don't support an array value tags in map yet.
+          // TODO: We don't support array value tags in maps yet.
           val value = try {
             Some(convertTo(c.getData, valueType))
           } catch {

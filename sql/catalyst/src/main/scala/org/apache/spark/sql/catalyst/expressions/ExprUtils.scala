@@ -261,7 +261,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   }
 }
 
-private[expressions] trait SupportTrimmedCharInput extends UnaryExpression {
+private[sql] trait SupportTrimmedCharInput extends UnaryExpression {
 
   // Keep this type-based so the effective input does not change if SQLConf changes after analysis.
   // A first-class CharType child already establishes that CHAR semantics apply.

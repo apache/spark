@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
   ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, InSet, Literal, ScalarSubquery,
-  StringRPad, StringToMap, Upper
+  StringRPad, StringToMap, SupportTrimmedCharInput, Upper
 }
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
@@ -1037,8 +1037,19 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
   }
 
   private def assertDuplicateMapKey(query: String, expectedKey: String = "a "): Unit = {
+    assertDuplicateMapKeyError(sql(query).collect(), expectedKey)
+  }
+
+  private def assertDuplicateMapKeyError(body: => Any, expectedKey: String = "a "): Unit = {
+    val error = intercept[Exception] { body }
+    val duplicateError = Iterator.iterate[Throwable](error)(_.getCause)
+      .takeWhile(_ != null)
+      .collectFirst {
+        case e: SparkRuntimeException if e.getCondition == "DUPLICATED_MAP_KEY" => e
+      }
+      .getOrElse(fail("expected DUPLICATED_MAP_KEY cause", error))
     checkError(
-      exception = intercept[SparkRuntimeException] { sql(query).collect() },
+      exception = duplicateError,
       condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> expectedKey,
@@ -2429,6 +2440,36 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
   test("SPARK-59274: from_json/csv/xml honor CHAR/VARCHAR under standardSemantics") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      def checkTrimmedCharInput(query: String, charType: CharType): DataFrame = {
+        val df = sql(query)
+        val inputTypes = df.queryExecution.analyzed.expressions.flatMap(_.collect {
+          case e: SupportTrimmedCharInput => e.child.dataType
+        })
+        assert(inputTypes === Seq(charType), df.queryExecution.analyzed)
+        df
+      }
+
+      checkAnswer(
+        checkTrimmedCharInput(
+          """SELECT from_json(CAST('{"a":1}' AS CHAR(12)), 'a INT')""",
+          CharType(12)),
+        Row(Row(1)))
+      checkAnswer(
+        checkTrimmedCharInput(
+          """SELECT from_csv(
+            |  CAST('1' AS CHAR(3)),
+            |  '_c0 INT',
+            |  map('delimiter', ' ', 'mode', 'FAILFAST'))""".stripMargin,
+          CharType(3)),
+        Row(Row(1)))
+      checkAnswer(
+        checkTrimmedCharInput(
+          """SELECT from_xml(
+            |  CAST('<ROW><a>1</a></ROW>' AS CHAR(30)),
+            |  'a INT')""".stripMargin,
+          CharType(30)),
+        Row(Row(1)))
+
       val jsonChar = sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
       val jsonCharType = jsonChar.schema.head.dataType.asInstanceOf[StructType]
       assert(jsonCharType.head.dataType === CharType(5))
@@ -2633,6 +2674,23 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assertDuplicateMapKey(ignoreCorruptXmlQuery)
       checkAnswer(sql(badXmlKeyThenSiblingQuery), Row(2))
 
+      withTempPath { path =>
+        Seq("<ROW><m><a>1</a>2</m></ROW>").toDS().write.text(path.getCanonicalPath)
+        def readXmlMap(): DataFrame = spark.read
+          .option("rowTag", "ROW")
+          .option("valueTag", "a ")
+          .option("ignoreCorruptFiles", "true")
+          .schema("m MAP<CHAR(2), INT>")
+          .xml(path.getCanonicalPath)
+
+        assertDuplicateMapKeyError(readXmlMap().collect())
+
+        withSQLConf(
+            SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+          checkAnswer(readXmlMap(), Row(Map("a " -> 2)))
+        }
+      }
+
       withSQLConf(
           SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
         checkAnswer(sql(xmlQuery), Row(Map("a " -> 9)))
@@ -2682,7 +2740,8 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
       withSQLConf(
           SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
-        // The failed map remains null, but its complete element was consumed and tail is parsed.
+        // The failed map remains null, but its complete element is consumed and the `tail` field
+        // is parsed.
         (overflowQueries :+ nestedFailureQuery).foreach { query =>
           checkAnswer(sql(query), Row(Row(null, 9)))
         }
