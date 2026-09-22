@@ -233,6 +233,32 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     rpcEnv.shutdown()
   }
 
+  test("SPARK-59138: restrictToFailedShuffle cleans only the failed shuffle, leaving co-located " +
+    "outputs intact") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+
+    val size = MapStatus.compressSize(1000L)
+    // Reliable shuffle 0 (the failed one) and local shuffle 1, both with a map on hostA-exec.
+    tracker.registerShuffle(0, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES,
+      isReliablyStored = true)
+    tracker.registerShuffle(1, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+    tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("a", "hostA", 1000), Array(size), 5))
+    tracker.registerMapOutput(1, 0, MapStatus(BlockManagerId("a", "hostA", 1000), Array(size), 6))
+
+    // A bypass-only cleanup for the failed reliable shuffle must clear only shuffle 0; the
+    // co-located local shuffle 1's (possibly recomputed) output must survive.
+    tracker.removeOutputsOnExecutor("a", respectReliablyStored = true, Some(0),
+      restrictToFailedShuffle = true)
+    assert(tracker.getNumAvailableOutputs(0) === 0)
+    assert(tracker.getNumAvailableOutputs(1) === 1, "co-located shuffle must not be swept")
+
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
+
   test("remote fetch") {
     val hostname = "localhost"
     val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))

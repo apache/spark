@@ -4684,8 +4684,8 @@ private[spark] class DAGScheduler(
    *   outputs on the host
    * @param maybeEpoch (optional) the epoch during which the failure was caught (this prevents
    *   reprocessing for follow-on fetch failures)
-   * @param ignoreShuffleFileLostEpoch if true, bypass the shuffleFileLostEpoch gate and remove
-   *   outputs unconditionally (used for merged-chunk fetch failures and host decommission)
+   * @param ignoreShuffleFileLostEpoch if true, bypass the shuffleFileLostEpoch gate (reliability
+   *   filtering still applies). Set from host-decommission state by the FetchFailed caller.
    * @param respectReliablyStored if true, preserve shuffles whose output is reliably stored
    *   off-executor; only non-reliable output is removed. Set on executor/worker loss and on a
    *   FetchFailed, whose evidence is specific to the already-unregistered failed map.
@@ -4723,18 +4723,20 @@ private[spark] class DAGScheduler(
       clearCacheLocs()
     }
     if (fileLost) {
-      // ignoreShuffleFileLostEpoch (merged-chunk failure) removes everything past the gate. A
-      // FetchFailed for a reliably-stored shuffle is exempt once per epoch: the executor loss
-      // preserved it, so the executor fence would otherwise skip clearing it now proven gone.
-      val reliableFetchFailedBypass = failedShuffleId.exists { id =>
+      // ignoreShuffleFileLostEpoch (set from host-decommission state) bypasses the fence, but
+      // reliability filtering still applies. A FetchFailed for a reliably-stored shuffle is exempt
+      // once per epoch even when the executor fence rejects it: the executor loss preserved that
+      // shuffle, so its cleanup must still run when it is proven gone.
+      val passesExecutorFence = ignoreShuffleFileLostEpoch ||
+        !shuffleFileLostEpoch.contains(execId) ||
+        shuffleFileLostEpoch(execId) < currentEpoch
+      val reliableFetchFailedBypass = !passesExecutorFence && failedShuffleId.exists { id =>
         mapOutputTracker.isReliablyStored(id) &&
           reliableShuffleFileLostEpoch.get((execId, id)).forall(_ < currentEpoch)
       }
-      val shouldRemove = ignoreShuffleFileLostEpoch ||
-        reliableFetchFailedBypass ||
-        !shuffleFileLostEpoch.contains(execId) ||
-        shuffleFileLostEpoch(execId) < currentEpoch
-      if (shouldRemove) {
+      if (passesExecutorFence || reliableFetchFailedBypass) {
+        // A bypass-only admission touches just the failed shuffle: only it is proven gone, so
+        // co-located shuffles (their freshly recomputed maps) must not be swept.
         hostToUnregisterOutputs match {
           case Some(host) =>
             logInfo(log"Shuffle files lost for host: ${MDC(HOST, host)} (epoch " +
@@ -4742,7 +4744,8 @@ private[spark] class DAGScheduler(
             failedShuffleId match {
               case None => mapOutputTracker.removeOutputsOnHost(host, respectReliablyStored)
               case failed =>
-                mapOutputTracker.removeOutputsOnHost(host, respectReliablyStored, failed)
+                mapOutputTracker.removeOutputsOnHost(host, respectReliablyStored, failed,
+                  restrictToFailedShuffle = reliableFetchFailedBypass)
             }
           case None =>
             logInfo(log"Shuffle files lost for executor: ${MDC(EXECUTOR_ID, execId)} " +
@@ -4750,15 +4753,23 @@ private[spark] class DAGScheduler(
             failedShuffleId match {
               case None => mapOutputTracker.removeOutputsOnExecutor(execId, respectReliablyStored)
               case failed =>
-                mapOutputTracker.removeOutputsOnExecutor(execId, respectReliablyStored, failed)
+                mapOutputTracker.removeOutputsOnExecutor(execId, respectReliablyStored, failed,
+                  restrictToFailedShuffle = reliableFetchFailedBypass)
             }
         }
-        // Stamp the executor fence on every real cleanup to dedup same-epoch duplicates; also stamp
-        // the per-shuffle fence so a bypassed reliable shuffle's own duplicates are deduped. Match
-        // prior behavior: don't stamp under ignoreShuffleFileLostEpoch.
+        // A genuine executor-wide cleanup advances the executor fence (monotonically) to dedup
+        // same-epoch duplicates. A bypass-only admission must not move it (it did not clean the
+        // executor); it only records the per-shuffle fence so that shuffle's own duplicates are
+        // deduped. Both stamps are monotonic. Match prior behavior: skip under ignore.
         if (!ignoreShuffleFileLostEpoch) {
-          shuffleFileLostEpoch(execId) = currentEpoch
-          failedShuffleId.foreach(id => reliableShuffleFileLostEpoch((execId, id)) = currentEpoch)
+          if (passesExecutorFence) {
+            shuffleFileLostEpoch(execId) = currentEpoch
+          }
+          failedShuffleId.foreach { id =>
+            val key = (execId, id)
+            val prev = reliableShuffleFileLostEpoch.getOrElse(key, Long.MinValue)
+            reliableShuffleFileLostEpoch(key) = math.max(prev, currentEpoch)
+          }
         }
       }
     }

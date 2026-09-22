@@ -1153,8 +1153,10 @@ private[spark] class MapOutputTrackerMaster(
   def removeOutputsOnHost(
       host: String,
       respectReliablyStored: Boolean,
-      failedShuffleId: Option[Int]): CleanupOutcome = {
-    val outcome = removeSelectively(respectReliablyStored, failedShuffleId)(
+      failedShuffleId: Option[Int],
+      restrictToFailedShuffle: Boolean = false): CleanupOutcome = {
+    val outcome = removeSelectively(
+      respectReliablyStored, failedShuffleId, restrictToFailedShuffle)(
       (status, respect) => status.removeOutputsOnHost(host, respect))
     if (outcome.shouldBumpEpoch) incrementEpoch()
     outcome
@@ -1171,8 +1173,10 @@ private[spark] class MapOutputTrackerMaster(
   def removeOutputsOnExecutor(
       execId: String,
       respectReliablyStored: Boolean,
-      failedShuffleId: Option[Int]): CleanupOutcome = {
-    val outcome = removeSelectively(respectReliablyStored, failedShuffleId)(
+      failedShuffleId: Option[Int],
+      restrictToFailedShuffle: Boolean = false): CleanupOutcome = {
+    val outcome = removeSelectively(
+      respectReliablyStored, failedShuffleId, restrictToFailedShuffle)(
       (status, respect) => status.removeOutputsOnExecutor(execId, respect))
     if (outcome.shouldBumpEpoch) incrementEpoch()
     outcome
@@ -1180,20 +1184,27 @@ private[spark] class MapOutputTrackerMaster(
 
   /**
    * Applies `remove` to each shuffle and aggregates the results. `respectReliablyStored` is passed
-   * per shuffle, except `failedShuffleId` is always cleaned unconditionally. Does not bump the
-   * epoch; see `CleanupOutcome.shouldBumpEpoch`.
+   * per shuffle, except `failedShuffleId` is always cleaned unconditionally. With
+   * `restrictToFailedShuffle`, only `failedShuffleId` is touched and all other shuffles are left
+   * intact (used when a reliable-shuffle FetchFailed bypasses the executor fence: only that shuffle
+   * is proven gone). Does not bump the epoch; see `CleanupOutcome.shouldBumpEpoch`.
    */
   private def removeSelectively(
       respectReliablyStored: Boolean,
-      failedShuffleId: Option[Int])(
+      failedShuffleId: Option[Int],
+      restrictToFailedShuffle: Boolean = false)(
       remove: (ShuffleStatus, Boolean) => ShuffleRemovalResult): CleanupOutcome = {
+    require(!restrictToFailedShuffle || failedShuffleId.isDefined,
+      "restrictToFailedShuffle requires a failedShuffleId to restrict to")
     var metadataChanged = false
     var preservedReliable = false
     shuffleStatuses.foreach { case (shuffleId, status) =>
-      val respect = respectReliablyStored && !failedShuffleId.contains(shuffleId)
-      val result = remove(status, respect)
-      if (result.metadataChanged) metadataChanged = true
-      if (result.mapPreservedReliable) preservedReliable = true
+      if (!restrictToFailedShuffle || failedShuffleId.contains(shuffleId)) {
+        val respect = respectReliablyStored && !failedShuffleId.contains(shuffleId)
+        val result = remove(status, respect)
+        if (result.metadataChanged) metadataChanged = true
+        if (result.mapPreservedReliable) preservedReliable = true
+      }
     }
     CleanupOutcome(metadataChanged, preservedReliable)
   }

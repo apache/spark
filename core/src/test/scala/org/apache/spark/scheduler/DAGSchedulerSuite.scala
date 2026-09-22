@@ -805,7 +805,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // blockManagerMaster.removeExecutorAsync is not called again
     // but shuffle files are unregistered
     verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
-    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", true, Some(shuffleId))
+    verify(mapOutputTracker, times(1))
+      .removeOutputsOnExecutor("hostA-exec", true, Some(shuffleId), false)
 
     // Shuffle files for hostA-exec should be lost
     assert(mapStatuses.count(_ != null) === 1)
@@ -817,7 +818,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(1), Seq(
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 1, 0, "ignored"), null)
     ))
-    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", true, Some(shuffleId))
+    verify(mapOutputTracker, times(1))
+      .removeOutputsOnExecutor("hostA-exec", true, Some(shuffleId), false)
   }
 
   test("zero split job") {
@@ -1185,8 +1187,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-59138: same-epoch FetchFailed after selective executor-loss cleanup is not skipped") {
-    // A selective cleanup preserves reliable outputs, so it must not stamp shuffleFileLostEpoch;
-    // a same-epoch FetchFailed for a preserved-but-gone output must still trigger real removal.
+    // Executor loss preserves the reliable shuffle (no output removed) but stamps the executor
+    // fence. A same-epoch map-output FetchFailed for a preserved-but-gone output takes the
+    // reliable bypass, so its cleanup runs instead of being skipped by the fence.
     conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
 
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
@@ -1201,14 +1204,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
       HashSet("hostA", "hostB"))
 
-    // Same-epoch FetchFailed for hostA's (really gone) output: no epoch was stamped, so the
-    // epoch-gated cleanup proceeds instead of being skipped. The executor loss preserved the
-    // reliable shuffle (2-arg cleanup); this map-output FetchFailed exempts the failed shuffle.
+    // Same-epoch FetchFailed for hostA's (really gone) output. The executor fence rejects it, but
+    // the reliable bypass admits it and restricts cleanup to the failed shuffle.
     complete(taskSets(1), Seq(
       (Success, 42),
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 1, "ignored"), null)))
     verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", true)
-    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec", true, Some(shuffleId))
+    verify(mapOutputTracker, times(1))
+      .removeOutputsOnExecutor("hostA-exec", true, Some(shuffleId), true)
   }
 
   test("SPARK-59138: same-epoch FetchFailed for a local shuffle preserves a reliable one") {
@@ -1274,10 +1277,99 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("SPARK-59138: duplicate same-epoch FetchFailed for a local shuffle is fenced even when a " +
     "reliable shuffle on the same executor was preserved") {
-    // Executor X holds local shuffle L and reliable shuffle R. The first FetchFailed for L clears
-    // L but preserves R. A later same-epoch FetchFailed for L (from another reducer task of the
-    // same attempt) must be fenced: preserving R must not reopen the executor fence for L, or the
-    // duplicate would bulk-delete L's freshly recomputed maps on the still-live executor.
+    // Executor X holds local L (2 maps on hostA) and reliable R. A FetchFailed for L clears both
+    // maps and preserves R; a real retry re-registers L's map 0 while map 1 stays pending. A
+    // delayed same-epoch FetchFailed for L's still-missing map 1 must be fenced, or it bulk-deletes
+    // L's recomputed map 0. Assert both the single cleanup call and map 0's survival.
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+
+    val reliableRdd = new MyRDD(sc, 2, Nil)
+    val reliableDep = new ReliablyStoredShuffleDependency(reliableRdd, new HashPartitioner(2))
+    val localRdd = new MyRDD(sc, 2, Nil)
+    val localDep = new ShuffleDependency(localRdd, new HashPartitioner(2))
+    val localShuffleId = localDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(reliableDep, localDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+
+    val localStageId = scheduler.shuffleIdToMapStage(localShuffleId).id
+    completeShuffleMapStageSuccessfully(scheduler.shuffleIdToMapStage(reliableDep.shuffleId).id,
+      0, 2)
+    completeShuffleMapStageSuccessfully(localStageId, 0, 2, hostNames = Seq("hostA", "hostA"))
+
+    // First FetchFailed for L clears both hostA maps and stamps the executor fence; L resubmits.
+    runEvent(makeCompletionEvent(taskSets(2).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), localShuffleId, 0L, 0, 0, "ignored"), null))
+    assert(mapOutputTracker.getNumAvailableOutputs(localShuffleId) === 0)
+    scheduler.resubmitFailedStages()
+
+    // Retry re-registers L's map 0 on the still-live hostA; map 1 stays pending.
+    val retry = taskSets.last
+    assert(retry.stageId === localStageId)
+    runEvent(makeCompletionEvent(retry.tasks(0), Success,
+      makeMapStatus("hostA", reduceRdd.partitions.length)))
+    assert(mapOutputTracker.getNumAvailableOutputs(localShuffleId) === 1)
+
+    // Delayed same-epoch duplicate FetchFailed for L's still-missing map 1 must be fenced: no
+    // second cleanup, and map 0 survives.
+    runEvent(makeCompletionEvent(taskSets(2).tasks(1),
+      FetchFailed(makeBlockManagerId("hostA"), localShuffleId, 1L, 1, 1, "ignored"), null))
+
+    verify(mapOutputTracker, times(1))
+      .removeOutputsOnExecutor("hostA-exec", true, Some(localShuffleId), false)
+    assert(mapOutputTracker.getNumAvailableOutputs(localShuffleId) === 1)
+  }
+
+  test("SPARK-59138: a reliable-shuffle FetchFailed bypass cleans only the failed shuffle, " +
+    "leaving a co-located shuffle's recomputed output intact") {
+    // hostA-exec holds local L (2 maps on hostA) and reliable R (2 maps on hostA). A FetchFailed
+    // for L clears both its hostA maps; a real retry re-registers L's map 0 while map 1 stays
+    // pending, so the reducer attempt has not restarted. A delayed original FetchFailed for R
+    // bypasses the fence but is restricted to R: both R maps clear while L's recomputed map lives.
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
+
+    val reliableRdd = new MyRDD(sc, 2, Nil)
+    val reliableDep = new ReliablyStoredShuffleDependency(reliableRdd, new HashPartitioner(2))
+    val localRdd = new MyRDD(sc, 2, Nil)
+    val localDep = new ShuffleDependency(localRdd, new HashPartitioner(2))
+    val reduceRdd = new MyRDD(sc, 2, List(reliableDep, localDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+
+    val reliableStageId = scheduler.shuffleIdToMapStage(reliableDep.shuffleId).id
+    val localStageId = scheduler.shuffleIdToMapStage(localDep.shuffleId).id
+    completeShuffleMapStageSuccessfully(reliableStageId, 0, 2, hostNames = Seq("hostA", "hostA"))
+    completeShuffleMapStageSuccessfully(localStageId, 0, 2, hostNames = Seq("hostA", "hostA"))
+    assert(mapOutputTracker.getNumAvailableOutputs(reliableDep.shuffleId) === 2)
+
+    // FetchFailed for L's map 0 clears both its hostA maps and stamps the executor fence; L's map
+    // stage resubmits both maps.
+    runEvent(makeCompletionEvent(taskSets(2).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), localDep.shuffleId, 0L, 0, 0, "ignored"), null))
+    assert(mapOutputTracker.getNumAvailableOutputs(localDep.shuffleId) === 0)
+    scheduler.resubmitFailedStages()
+
+    // A real retry task re-registers L's map 0 on the still-live hostA; map 1 stays pending, so the
+    // map stage is incomplete and the reducer attempt has not restarted.
+    val retry = taskSets.last
+    assert(retry.stageId === localStageId)
+    runEvent(makeCompletionEvent(retry.tasks(0), Success,
+      makeMapStatus("hostA", reduceRdd.partitions.length)))
+    assert(mapOutputTracker.getNumAvailableOutputs(localDep.shuffleId) === 1)
+
+    // Delayed original-attempt FetchFailed for R bypasses the executor fence, restricted to R.
+    taskSets(2).tasks(1).epoch = 0
+    runEvent(makeCompletionEvent(taskSets(2).tasks(1),
+      FetchFailed(makeBlockManagerId("hostA"), reliableDep.shuffleId, 0L, 0, 1, "ignored"), null))
+
+    // Both R maps on hostA are cleared; L's recomputed map survives.
+    assert(mapOutputTracker.getNumAvailableOutputs(reliableDep.shuffleId) === 0)
+    assert(mapOutputTracker.getNumAvailableOutputs(localDep.shuffleId) === 1)
+  }
+
+  test("SPARK-59138: an older reliable-shuffle FetchFailed bypass does not lower the executor " +
+    "fence, so a later same-epoch duplicate stays fenced") {
+    // A genuine executor-wide cleanup for local L stamps the executor fence at a high epoch E2. A
+    // later but older (epoch E1 < E2) reliable-shuffle FetchFailed bypasses the fence, yet must not
+    // move it backward to E1. Otherwise a duplicate L failure at E2 would pass the bulk gate again.
     conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "false")
 
     val reliableRdd = new MyRDD(sc, 2, Nil)
@@ -1291,15 +1383,25 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     completeShuffleMapStageSuccessfully(0, 0, 2)
     completeShuffleMapStageSuccessfully(1, 0, 2)
 
-    // Two same-epoch FetchFailed events for the local shuffle from two reducer tasks of the same
-    // attempt. Only the first should reach the executor cleanup; the second is fenced.
+    // Genuine executor-wide failure for L at epoch E2 stamps the fence at E2.
+    taskSets(2).tasks(0).epoch = 100
     runEvent(makeCompletionEvent(taskSets(2).tasks(0),
       FetchFailed(makeBlockManagerId("hostA"), localShuffleId, 0L, 0, 0, "ignored"), null))
+
+    // Older reliable failure for R at epoch E1 < E2 bypasses the fence but must not lower it.
+    taskSets(2).tasks(1).epoch = 50
     runEvent(makeCompletionEvent(taskSets(2).tasks(1),
-      FetchFailed(makeBlockManagerId("hostA"), localShuffleId, 0L, 0, 1, "ignored"), null))
+      FetchFailed(makeBlockManagerId("hostA"), reliableDep.shuffleId, 0L, 0, 1, "ignored"), null))
+
+    // Duplicate L failure at E2: the fence is still E2, so it stays fenced (no second cleanup).
+    taskSets(2).tasks(0).epoch = 100
+    runEvent(makeCompletionEvent(taskSets(2).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), localShuffleId, 0L, 0, 0, "ignored"), null))
 
     verify(mapOutputTracker, times(1))
-      .removeOutputsOnExecutor("hostA-exec", true, Some(localShuffleId))
+      .removeOutputsOnExecutor("hostA-exec", true, Some(localShuffleId), false)
+    verify(mapOutputTracker, times(1))
+      .removeOutputsOnExecutor("hostA-exec", true, Some(reliableDep.shuffleId), true)
   }
 
   test("SPARK-28967 properties must be cloned before posting to listener bus for 0 partition") {
@@ -6384,7 +6486,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       .removeExecutorAsync(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
     verify(blockManagerMaster, times(1)).removeShufflePushMergerLocation("hostA")
     verify(mapOutputTracker,
-      times(1)).removeOutputsOnHost("hostA", true, Some(shuffleId))
+      times(1)).removeOutputsOnHost("hostA", true, Some(shuffleId), false)
 
     // There should be no map statuses or merge statuses on the host
     val shuffleStatuses = mapOutputTracker.shuffleStatuses(shuffleId)
