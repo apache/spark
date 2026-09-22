@@ -1366,18 +1366,27 @@ class QueryExecutionErrorsSuite
   test("Elements exceed limit for flatten()") {
     val array = new ColumnarArray(
       new ConstantColumnVector(Int.MaxValue, BooleanType), 0, Int.MaxValue)
+    val expr = Flatten(CreateArray(Seq(Literal.create(array, ArrayType(BooleanType)))))
 
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        Flatten(CreateArray(Seq(Literal.create(array, ArrayType(BooleanType))))).eval(EmptyRow)
-      },
-      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
-      parameters = Map(
-        "numberOfElements" -> Int.MaxValue.toString,
-        "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
-        "functionName" -> toSQLId("flatten")
+    // SPARK-59375: the generated code has to reject the length as well. Interpreted evaluation
+    // has always checked it, but codegen used to reach `ArrayData.allocateArrayData` and fail
+    // there with an internal error instead.
+    Seq(
+      () => expr.eval(EmptyRow),
+      () => GenerateUnsafeProjection.generate(Seq(expr)).apply(EmptyRow)
+    ).foreach { evaluate =>
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          evaluate()
+        },
+        condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+        parameters = Map(
+          "numberOfElements" -> Int.MaxValue.toString,
+          "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString,
+          "functionName" -> toSQLId("flatten")
+        )
       )
-    )
+    }
   }
 
   test("Elements exceed limit for array_repeat()") {
