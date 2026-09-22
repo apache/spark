@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.sql.types.{DataType, MapType, StringType}
+import org.apache.spark.sql.{functions => F, Column}
+import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.util.QuotingUtils
+import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType}
 
 /**
  * Per-leaf sequencing clocks for SCD1 reconciliation.
@@ -55,4 +58,46 @@ private[pipelines] object Scd1VersionMap {
    */
   def mapType(sequencingType: DataType): MapType =
     MapType(StringType, sequencingType, valueContainsNull = true)
+
+  /**
+   * Builds the version map for one ingested upsert, independently of other events for its key.
+   *
+   * Every leaf column in `schema` receives an entry. A leaf receives a null clock when it is
+   * selected by `ignoreNullSelection` and its value is null; every other leaf receives
+   * `upsertSequence`.
+   *
+   * @param schema The schema whose leaf columns receive version-map entries.
+   * @param ignoreNullSelection The selection identifying leaves whose null values are unauthored.
+   * @param upsertSequence The upsert event's non-null sequencing value.
+   * @param sequencingType The data type of `upsertSequence`.
+   * @param resolver The resolver used for column-name matching.
+   */
+  def buildVersionMap(
+      schema: StructType,
+      ignoreNullSelection: ColumnSelection,
+      upsertSequence: Column,
+      sequencingType: DataType,
+      resolver: Resolver): Column = {
+    val ignoreNullSchema = ColumnSelection.applyToSchema(
+      schemaName = "ignoreNullSelection",
+      schema = schema,
+      columnSelection = Some(ignoreNullSelection),
+      resolver = resolver
+    )
+    val ignoreNullLeafPaths =
+      AutoCdcSchemaUtils.flattenStructFieldPaths(ignoreNullSchema).toSet
+
+    val keyValueColumns = AutoCdcSchemaUtils.flattenStructFieldPaths(schema).flatMap { path =>
+      val versionMapKey = QuotingUtils.quoteNameParts(path)
+      val leafSequence =
+        if (ignoreNullLeafPaths.contains(path)) {
+          F.when(F.col(versionMapKey).isNotNull, upsertSequence)
+        } else {
+          upsertSequence
+        }
+      Seq(F.lit(versionMapKey), leafSequence)
+    }
+
+    F.map(keyValueColumns: _*).cast(mapType(sequencingType))
+  }
 }

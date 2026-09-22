@@ -208,3 +208,64 @@ private[pipelines] object Scd1RowLevelReconciliation extends Scd1ReconciliationS
     )
   }
 }
+
+/** Leaf-level SCD1 reconciliation. */
+private[pipelines] object Scd1LeafLevelReconciliation extends Scd1ReconciliationStrategy {
+
+  override def reconcileMicrobatch(
+      changeArgs: ChangeArgs,
+      resolvedSequencingType: DataType,
+      batchDf: DataFrame,
+      auxiliaryTableDf: DataFrame): DataFrame =
+    throw new NotImplementedError("SCD1 leaf-level reconciliation is not implemented")
+
+  /**
+   * Aligns selected microbatch rows to the persisted target schema without adding rows.
+   *
+   * The target provides field order and spelling. Missing source fields, including nested fields,
+   * are filled with nulls.
+   */
+  private[autocdc] def alignMicrobatchToTargetSchema(
+      projectedDf: DataFrame,
+      targetTableDf: DataFrame): DataFrame =
+    targetTableDf.limit(0).unionByName(projectedDf, allowMissingColumns = true)
+
+  /**
+   * Populates the version map for upsert rows after column selection and target-schema alignment.
+   *
+   * When ignore-null is disabled, the input is returned unchanged. Delete rows retain a null map.
+   */
+  private[autocdc] def extendMicrobatchRowsWithVersionMap(
+      changeArgs: ChangeArgs,
+      resolvedSequencingType: DataType,
+      alignedDf: DataFrame): DataFrame =
+    changeArgs.ignoreNullSelection match {
+      case None => alignedDf
+      case Some(ignoreNullSelection) =>
+        val resolver = alignedDf.sparkSession.sessionState.conf.resolver
+        val cdcMetadataCol = F.col(AutoCdcReservedNames.cdcMetadataColName)
+        val upsertSequence = Scd1BatchProcessor.upsertSequenceOf(cdcMetadataCol)
+        val versionMap = F.when(
+          upsertSequence.isNotNull,
+          Scd1VersionMap.buildVersionMap(
+            schema = AutoCdcSchemaUtils.excludeColumns(
+              schema = alignedDf.schema,
+              // Keys and CDC metadata columns are not eligible for optional authorship. Drop them
+              // from the user schema that the version map will be constructed from.
+              columnNamesToExclude =
+                changeArgs.keys.map(_.name) :+ AutoCdcReservedNames.cdcMetadataColName,
+              resolver = resolver
+            ),
+            ignoreNullSelection = ignoreNullSelection,
+            upsertSequence = upsertSequence,
+            sequencingType = resolvedSequencingType,
+            resolver = resolver
+          )
+        )
+
+        alignedDf.withColumn(
+          AutoCdcReservedNames.cdcMetadataColName,
+          cdcMetadataCol.withField(Scd1BatchProcessor.versionMapFieldName, versionMap)
+        )
+    }
+}
