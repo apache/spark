@@ -593,6 +593,8 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
 
+      // ConstantFolding precedes BooleanSimplification in the operator optimization batches,
+      // so foldable bounds such as 2 + 2 can be matched as literals.
       expression match {
         case GreaterThan(a: AttributeReference, l: Literal) => range(a, l, true, false)
         case GreaterThanOrEqual(a: AttributeReference, l: Literal) => range(a, l, true, true)

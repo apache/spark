@@ -34,7 +34,8 @@ class IntegralRangeQuerySuite extends QueryTest with SharedSparkSession {
       for {
         aqe <- Seq(false, true)
         condition <- Seq("a > 5 AND a > 0", "a > 1 OR a > 2",
-          "a > 1 OR (a > 2 AND a < 4)", "5 >= a AND a < 5")
+          "a > 1 OR (a > 2 AND a < 4)", "5 >= a AND a < 5",
+          "a > (2 + 2) AND a > (1 - 1)", "a > (1 + 1) OR a > (2 * 2)")
         sqlText <- Seq(s"SELECT a FROM ranges WHERE $condition",
           s"SELECT $condition AS result FROM ranges")
       } {
