@@ -470,6 +470,10 @@ object OffsetSeqMetadataV2 {
       batchWatermarkMs: Long,
       batchTimestampMs: Long,
       sessionConf: RuntimeConfig): OffsetSeqMetadataV2 = {
-    OffsetSeqMetadataV2(batchWatermarkMs, batchTimestampMs, OffsetSeqMetadata.confsForOffsetLog(sessionConf))
+    OffsetSeqMetadataV2(
+      batchWatermarkMs,
+      batchTimestampMs,
+      OffsetSeqMetadata.confsForOffsetLog(sessionConf)
+    )
   }
 }
