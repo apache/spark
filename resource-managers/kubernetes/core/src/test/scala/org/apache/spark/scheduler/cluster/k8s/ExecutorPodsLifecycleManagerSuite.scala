@@ -133,6 +133,27 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     verify(namedExecutorPods(failedPod.getMetadata.getName)).delete()
   }
 
+  gridTest("Failures survive later snapshots in the same batch")(Seq(false, true)) { relist =>
+    val failed = failedExecutorWithoutDeletion(1)
+    snapshotsStore.updatePod(failed)
+    val resource = kubernetesClient.pods().inNamespace("default")
+      .withName(failed.getMetadata.getName)
+    when(resource.get()).thenReturn(failed)
+    if (relist) {
+      snapshotsStore.replaceSnapshot(Seq(runningExecutor(2)))
+    } else {
+      snapshotsStore.updatePod(new PodBuilder(failed).editMetadata()
+        .withDeletionTimestamp("2026-01-01T00:00:00Z").endMetadata().build())
+    }
+    snapshotsStore.notifySubscribers()
+    assert(eventHandlerUnderTest.getNumExecutorsFailed == 1)
+    verify(schedulerBackend).doRemoveExecutor("1",
+      ExecutorExited(1, exitCausedByApp = true, exitReasonMessage(1, failed, 1)))
+    snapshotsStore.updatePod(runningExecutor(3))
+    snapshotsStore.notifySubscribers()
+    verify(resource).delete()
+  }
+
   test("Don't remove executors twice from Spark but remove from K8s repeatedly.") {
     val failedPod = failedExecutorWithoutDeletion(1)
     val mockPodResource = mock(classOf[PodResource])
@@ -140,12 +161,13 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     when(mockPodResource.get()).thenReturn(failedPod)
     snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
-    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.updatePod(runningExecutor(2))
     snapshotsStore.notifySubscribers()
     val msg = exitReasonMessage(1, failedPod, 1)
     val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
     verify(schedulerBackend, times(1)).doRemoveExecutor("1", expectedLossReason)
     verify(namedExecutorPods(failedPod.getMetadata.getName), times(2)).delete()
+    assert(eventHandlerUnderTest.getNumExecutorsFailed == 1)
   }
 
   test("Don't remove executors twice from Spark and K8s.") {
@@ -186,17 +208,18 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
 
   test("When the scheduler backend lists executor ids that aren't present in the cluster," +
     " remove those executors from Spark.") {
-      when(schedulerBackend.getExecutorsWithRegistrationTs()).thenReturn(Map("1" -> 7L))
+    when(schedulerBackend.getExecutorsWithRegistrationTs())
+      .thenReturn(Map("1" -> 7L, "2" -> 7L))
     val missingPodDelta =
       eventHandlerUnderTest.conf.get(Config.KUBERNETES_EXECUTOR_MISSING_POD_DETECT_DELTA)
     snapshotsStore.clock.advance(missingPodDelta + 7)
-    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
+    snapshotsStore.replaceSnapshot(Seq(runningExecutor(2)))
     snapshotsStore.notifySubscribers()
     verify(schedulerBackend, never()).doRemoveExecutor(any(), any())
 
     // 1 more millisecond and the accepted delta is over so the missing POD will be detected
     snapshotsStore.clock.advance(1)
-    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
+    snapshotsStore.replaceSnapshot(Seq(runningExecutor(2)))
     snapshotsStore.notifySubscribers()
     val msg = "The executor with ID 1 (registered at 7 ms) was not found in the cluster at " +
       "the polling time (30008 ms) which is after the accepted detect delta time (30000 ms) " +
@@ -204,6 +227,8 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
       "been deleted but the driver missed the deletion event. Marking this executor as failed."
     val expectedLossReason = ExecutorExited(-1, exitCausedByApp = false, msg)
     verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
+    // Healthy executors are absent from the lifecycle index but are not missing.
+    verify(schedulerBackend, never()).doRemoveExecutor(org.mockito.ArgumentMatchers.eq("2"), any())
   }
 
   test("Keep executor pods in k8s if configured.") {
@@ -220,6 +245,15 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     verify(namedExecutorPods(failedPod.getMetadata.getName))
       .patch(any[PatchContext], patchCaptor.capture())
     assert(patchCaptor.getValue.getMetadata.getLabels.get(SPARK_EXECUTOR_INACTIVE_LABEL) === "true")
+
+    snapshotsStore.updatePod(new PodBuilder(failedPod).editMetadata()
+      .addToLabels(SPARK_EXECUTOR_INACTIVE_LABEL, "true").endMetadata().build())
+    snapshotsStore.notifySubscribers()
+    val resource = namedExecutorPods(failedPod.getMetadata.getName)
+    verify(resource).patch(any[PatchContext], any[Pod])
+    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.notifySubscribers()
+    verify(resource, times(2)).patch(any[PatchContext], any[Pod])
   }
 
   test("SPARK-49804: Use the exit code of executor container always") {
