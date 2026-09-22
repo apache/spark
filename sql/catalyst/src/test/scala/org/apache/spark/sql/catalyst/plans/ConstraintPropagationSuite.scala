@@ -56,6 +56,21 @@ class ConstraintPropagationSuite extends PlanTest {
     Cast(expr, dataType, Option(TimeZone.getDefault().getID))
   }
 
+  test("from_json/csv/xml propagate null constraints") {
+    val input = $"input".string
+    val relation = LocalRelation(input)
+    val schema = new StructType().add("value", StringType)
+    val expressions = Seq(
+      CsvToStructs(schema, Map.empty, input),
+      JsonToStructs(schema, Map.empty, input),
+      XmlToStructs(schema, Map.empty, input))
+
+    expressions.foreach { expression =>
+      val constraints = relation.where(IsNotNull(expression)).constraints
+      assert(constraints.contains(IsNotNull(input)), expression)
+    }
+  }
+
   test("propagating constraints in filters") {
     val tr = LocalRelation($"a".int, $"b".string, $"c".int)
 

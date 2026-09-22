@@ -415,6 +415,7 @@ class StaxXmlParser(
       attributes: Array[Attribute]): MapData = {
     val kvPairs = ArrayBuffer.empty[(UTF8String, UTF8String, Option[Any])]
     var badMapException: Option[Throwable] = None
+    lazy val outputFactory = XMLOutputFactory.newFactory()
     def mapKey(raw: String): UTF8String = {
       CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(raw), keyType)
     }
@@ -441,7 +442,7 @@ class StaxXmlParser(
       parser.nextEvent match {
         case e: StartElement =>
           val rawKey = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          val entryXml = consumeElement(parser, e)
+          val entryXml = consumeElement(parser, e, outputFactory)
           val value = try {
             Some(convertIsolatedElement(entryXml, valueType, rawKey))
           } catch {
@@ -475,9 +476,12 @@ class StaxXmlParser(
     mapData
   }
 
-  private def consumeElement(parser: XMLEventReader, start: StartElement): String = {
+  private def consumeElement(
+      parser: XMLEventReader,
+      start: StartElement,
+      outputFactory: XMLOutputFactory): String = {
     val output = new StringWriter()
-    val writer = XMLOutputFactory.newFactory().createXMLEventWriter(output)
+    val writer = outputFactory.createXMLEventWriter(output)
     try {
       writer.add(start)
       var depth = 1

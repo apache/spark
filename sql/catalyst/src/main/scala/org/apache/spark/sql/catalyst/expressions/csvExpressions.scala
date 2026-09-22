@@ -70,6 +70,7 @@ case class CsvToStructs(
   with SupportTrimmedCharInput {
 
   override def nullable: Boolean = child.nullable
+  override def nullIntolerant: Boolean = true
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
@@ -112,10 +113,8 @@ case class CsvToStructs(
   override def stateful: Boolean = true
 
   override def nullSafeEval(input: Any): Any = {
-    evaluator.evaluate(input.asInstanceOf[UTF8String])
+    evaluator.evaluate(trimStringInput(input.asInstanceOf[UTF8String]))
   }
-
-  override def eval(input: InternalRow): Any = evalStringInput(input)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)

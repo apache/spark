@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.{DecimalFormat, DecimalFormatSymbols, ParsePosition}
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -271,8 +270,8 @@ private[sql] trait SupportTrimmedCharInput extends UnaryExpression {
     case _ => child
   }
 
-  protected final def evalStringInput(input: InternalRow): Any = {
-    val value = stringInput.eval(input)
-    if (value == null) null else nullSafeEval(value)
+  protected final def trimStringInput(value: UTF8String): UTF8String = child.dataType match {
+    case _: CharType => value.trimRight()
+    case _ => value
   }
 }

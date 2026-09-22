@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
@@ -78,6 +77,7 @@ case class XmlToStructs(
       timeZoneId = None)
 
   override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
 
   // The XML input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions.
@@ -115,13 +115,13 @@ case class XmlToStructs(
     copy(timeZoneId = Option(timeZoneId))
   }
 
-  override def nullSafeEval(xml: Any): Any = evaluator.evaluate(xml.asInstanceOf[UTF8String])
-
-  override def eval(input: InternalRow): Any = evalStringInput(input)
+  override def nullSafeEval(xml: Any): Any = {
+    evaluator.evaluate(trimStringInput(xml.asInstanceOf[UTF8String]))
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
-    val inputEval = stringInput.genCode(ctx)
+    val inputEval = child.genCode(ctx)
     // nullSafeEval returns an InternalRow for struct output and a VariantVal for variant output.
     // The variant result can be null (e.g. a malformed record rescued under PERMISSIVE mode), so
     // cast to the actual output type and null-check the result.

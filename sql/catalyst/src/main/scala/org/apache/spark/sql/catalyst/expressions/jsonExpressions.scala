@@ -1887,6 +1887,7 @@ case class JsonToStructs(
   private val nullableSchema: DataType = schema.asNullable
 
   override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(JSON_TO_STRUCT)
 
@@ -1938,9 +1939,9 @@ case class JsonToStructs(
     options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys)
   override def stateful: Boolean = true
 
-  override def nullSafeEval(json: Any): Any = evaluator.evaluate(json.asInstanceOf[UTF8String])
-
-  override def eval(input: InternalRow): Any = evalStringInput(input)
+  override def nullSafeEval(json: Any): Any = {
+    evaluator.evaluate(trimStringInput(json.asInstanceOf[UTF8String]))
+  }
 
   override def inputTypes: Seq[AbstractDataType] =
     StringTypeWithCollation(supportsTrimCollation = true) :: Nil
