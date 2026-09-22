@@ -145,6 +145,10 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
         assert(collectDppFilters(optimized).nonEmpty,
           "expected DPP on right-side partitioned fact, got plan:\n" +
             optimized.treeString)
+        checkAnswer(df, (0 until 10).map(i => Row(i * 10 + 7)))
+        val numOutputRows = factScanOf(df).metrics("numOutputRows").value
+        assert(numOutputRows === 10,
+          s"expected the fact scan to read only partition 7, got $numOutputRows rows")
       }
     }
   }
@@ -210,10 +214,12 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
             |ON f.part = d.dim_id WHERE d.dim_val = 7""".stripMargin)
         assert(df.collect().isEmpty)
         val factScan = factScanOf(df)
-        // The row count alone would also hold for a scan that never ran; this is what pins the
-        // zero-partition DataSourceRDD.
         assert(factScan.filteredPartitions.flatten.isEmpty,
           s"expected no input partition, got ${factScan.filteredPartitions.flatten.size}")
+        // What the assertion above does not see: BatchScanExec turning an empty partition set into
+        // an RDD with one empty partition still satisfies it.
+        assert(factScan.inputRDD.partitions.isEmpty,
+          s"expected an RDD with no partition, got ${factScan.inputRDD.partitions.length}")
         val numOutputRows = factScan.metrics("numOutputRows").value
         assert(numOutputRows == 0,
           s"expected the fact scan to read nothing, got $numOutputRows rows")
@@ -264,11 +270,12 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
   }
 
   test("a partition value the runtime filter cannot evaluate fails the query") {
-    // The scan is the only evaluator of a filter over declared fully pushed attributes, so a
-    // partition value it cannot evaluate has to fail the query: keeping the file would return rows
-    // that nothing filters. The exposure is the same one a compile-time partition filter over the
-    // same column has, and it is why this path must not gain the eval-failure tolerance the
-    // iterative PartitionPredicate path has.
+    // A partition value the filter cannot be evaluated against has to fail the query: keeping the
+    // file would return rows that nothing filters, since the filter is declared fully pushed. What
+    // this pins is that the failure is not swallowed. The exposure is the same one a compile-time
+    // partition filter over the same column has, and it is why this path must not gain the
+    // eval-failure tolerance the iterative PartitionPredicate path has. That no FilterExec is left
+    // above the scan is pinned separately.
     withDppV2Conf {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         withTempDir { dir =>
@@ -428,10 +435,11 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
   }
 
   test("a runtime filter is ANDed with the compile-time partition filters, not substituted") {
-    // `buildPartitions` gets `partitionFilters ++ expressions`. Both halves are the scan's only
-    // evaluator: FileScanBuilder.pushFilters returns just the data filters as post-scan filters,
-    // and a partition-column runtime filter is declared fully pushed, so dropping either half
-    // returns rows that nothing filters out.
+    // The two halves are applied in different places: `partitions` puts `partitionFilters` through
+    // `fileIndex.listFiles`, and `planInputPartitionsWithRuntimeFilters` filters what that planned.
+    // Both are the scan's only evaluator: FileScanBuilder.pushFilters returns just the data filters
+    // as post-scan filters, and a partition-column runtime filter is declared fully pushed, so
+    // dropping either half returns rows that nothing filters out.
     withDppV2Conf {
       withTempDir { dir =>
         writeFactAndDim(dir)
@@ -525,6 +533,71 @@ abstract class DataSourceV2FileSourceDPPSuiteBase extends QueryTest
               s"$numOutputRows")
           assert(collect(df.queryExecution.executedPlan) { case f: FilterExec => f }.isEmpty,
             "expected the partition filter to be fully pushed, leaving no FilterExec")
+        }
+      }
+    }
+  }
+
+  test("runtime pruning packs the surviving files for their own size") {
+    // `partitions` sized its bins for the whole file set, so handing those bins back with files
+    // removed leaves a heavily pruned scan running the few tasks the unpruned set needed. Selecting
+    // the same partitions at compile time packs for the pruned set, so the two layouts must agree.
+    withDppV2Conf {
+      withSQLConf(
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "1g",
+        SQLConf.FILES_MIN_PARTITION_NUM.key -> "3",
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
+        withTempDir { dir =>
+          writeFactAndDim(dir)
+          val expected = (0 until 10).flatMap(i => Seq(Row(i * 10 + 8, 8), Row(i * 10 + 9, 9)))
+          // min(dim_id) over dim_val > 7 is 8, so this keeps partitions 8 and 9.
+          val runtime = sql(
+            """SELECT f.id, f.part FROM fact f
+              |WHERE f.part >= (SELECT min(dim_id) FROM dim WHERE dim_val > 7)""".stripMargin)
+          checkAnswer(runtime, expected)
+          val compileTime = sql("SELECT f.id, f.part FROM fact f WHERE f.part >= 8")
+          checkAnswer(compileTime, expected)
+          // What gives the comparison teeth: the whole file set packs two or more of the surviving
+          // files into one bin, so handing those bins back with the other files removed cannot
+          // produce as many partitions as packing the survivors does. That needs the fixture to
+          // write more than one file per partition directory, and this is the assertion that fails
+          // if it stops doing so.
+          val unpruned = sql("SELECT f.id, f.part FROM fact f")
+          unpruned.collect()
+          val unprunedPartitions = factScanOf(unpruned).filteredPartitions.flatten
+            .map(_.asInstanceOf[FilePartition])
+          val binsHoldingSurvivors =
+            unprunedPartitions.count(_.files.exists(_.partitionValues.getInt(0) >= 8))
+          val survivorsWhenUnpruned =
+            unprunedPartitions.flatMap(_.files).count(_.partitionValues.getInt(0) >= 8)
+          assert(binsHoldingSurvivors < survivorsWhenUnpruned,
+            s"expected the whole set to pack $survivorsWhenUnpruned surviving files into fewer " +
+              s"than $survivorsWhenUnpruned bins, got $binsHoldingSurvivors")
+          val compileTimePartitions = factScanOf(compileTime).filteredPartitions.flatten
+            .map(_.asInstanceOf[FilePartition])
+          val runtimePartitions = factScanOf(runtime).filteredPartitions.flatten
+            .map(_.asInstanceOf[FilePartition])
+          val runtimeFiles = runtimePartitions.flatMap(_.files).size
+          // The teeth above were measured on the unpruned scan; this is what ties them to this arm.
+          assert(runtimeFiles === survivorsWhenUnpruned,
+            s"expected this arm to read the $survivorsWhenUnpruned files the unpruned packing " +
+              s"held, got $runtimeFiles")
+          // Both arms must see the same files: the runtime path cannot re-split, so a compile-time
+          // maxSplitBytes below one file's length would cut that arm's files finer and the counts
+          // would differ for a reason this test is not about.
+          assert(runtimeFiles === compileTimePartitions.flatMap(_.files).size,
+            s"expected both arms to read $runtimeFiles files, got " +
+              s"${compileTimePartitions.flatMap(_.files).size} at compile time")
+          // The two arms pack from differently ordered input: `partitions` sorts within a partition
+          // directory, this path sorts the survivors globally, and Next Fit Decreasing is sensitive
+          // to that. What makes the counts comparable is that under this conf no two surviving
+          // files fit in one bin, so both arms give one partition per file whatever the order.
+          assert(runtimePartitions.size === runtimeFiles,
+            s"expected one partition per surviving file, got ${runtimePartitions.size} " +
+              s"for $runtimeFiles files")
+          assert(runtimePartitions.size === compileTimePartitions.size,
+            "expected the runtime-pruned scan to be packed like the compile-time one " +
+              s"(${compileTimePartitions.size} partitions), got ${runtimePartitions.size}")
         }
       }
     }

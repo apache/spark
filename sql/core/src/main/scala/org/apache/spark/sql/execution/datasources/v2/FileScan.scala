@@ -217,11 +217,14 @@ trait FileScan extends Scan
   override def fullyPushedFilterAttributes(): Array[NamedReference] = filterAttributes()
 
   /**
-   * Drops the files whose partition values do not satisfy `expressions` from the partitions
-   * `partitions` planned, and with them the partitions left empty.
+   * Plans the files whose partition values satisfy `expressions`, taken from what `partitions`
+   * planned and bin-packed again for the surviving set.
    *
    * Filtering what was planned rather than listing the files again keeps one listing per scan, and
-   * keeps whatever a subclass did in `partitions`: the files it excluded are not reachable here.
+   * the files a subclass excluded in `partitions` stay excluded. How the survivors group into
+   * partitions is decided here again, for their own size. Where each file was cut into splits is
+   * not: `partitions` cut them for the whole set it listed, before these filters existed.
+   *
    * A partition value is fixed within a file, so every row of every partition returned satisfies
    * the expressions even though one partition can still hold files from several partition
    * directories.
@@ -245,10 +248,17 @@ trait FileScan extends Scan
       case a: Attribute => BoundReference(fieldIndex(normalizeName(a.name)), a.dataType, a.nullable)
     }
     val predicate = Predicate.createInterpreted(bound)
-    plannedPartitions.flatMap { part =>
-      val kept = part.files.filter(file => predicate.eval(file.partitionValues))
-      if (kept.isEmpty) None else Some(part.copy(files = kept))
-    }.toArray
+    val keptFiles = plannedPartitions
+      .flatMap(_.files.filter(file => predicate.eval(file.partitionValues)))
+      .sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+    // Pack the survivors instead of handing back the planned partitions with files removed:
+    // `partitions` sized those bins for the whole file set, so a scan that pruned most of its files
+    // would run the same few tasks over a fraction of the data. V1 packs the pruned set the same
+    // way, from `dynamicallySelectedPartitions`.
+    val openCostInBytes = conf.filesOpenCostInBytes
+    val maxSplitBytes = FilePartition.maxSplitBytes(
+      sparkSession, keptFiles.map(_.length + openCostInBytes).sum)
+    FilePartition.getFilePartitions(sparkSession, keptFiles, maxSplitBytes).toArray
   }
 
   override def estimateStatistics(): Statistics = {

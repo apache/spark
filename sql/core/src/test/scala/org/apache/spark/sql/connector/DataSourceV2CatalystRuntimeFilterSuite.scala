@@ -475,6 +475,22 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       }
       assert(e.getMessage.contains("A scan must not implement both SupportsRuntimeV2Filtering " +
         "and SupportsRuntimeCatalystFiltering"))
+
+      // and the execution-time path rejects it too, which is what lets replanWithRuntimeFilters
+      // route a dual scan to pushRuntimeFilters instead of rejecting it a second time itself.
+      val partAttr = AttributeReference("part", IntegerType)()
+      val replanned = intercept[SparkException] {
+        PushDownUtils.replanWithRuntimeFilters(
+          new BothRuntimeFilteringInterfacesScan,
+          Seq(EqualTo(partAttr, Literal(1))),
+          new InMemoryTable("t", Array(Column.create("part", IntegerType)),
+            Array.empty[Transform], java.util.Collections.emptyMap[String, String]),
+          Seq(partAttr),
+          keyedPartitioning = None,
+          originalPartitions = Seq.empty)
+      }
+      assert(replanned.getMessage.contains("A scan must not implement both " +
+        "SupportsRuntimeV2Filtering and SupportsRuntimeCatalystFiltering"))
     }
   }
 
