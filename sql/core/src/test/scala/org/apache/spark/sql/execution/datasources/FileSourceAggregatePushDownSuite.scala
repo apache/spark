@@ -800,6 +800,29 @@ class ParquetV2AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
     }
   }
 
+  test("SPARK-59609: aggregate push-down resolves the column case-insensitively") {
+    Seq("false", "true").foreach { enableVectorizedReader =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        // Physical column is `value`, but the read schema names it `VALUE`.
+        spark.sql("SELECT 1 AS id, 10 AS value")
+          .union(spark.sql("SELECT 2 AS id, 20 AS value"))
+          .coalesce(1).write.parquet(path)
+        withTempView("t") {
+          spark.read.schema("id INT, VALUE INT").parquet(path).createOrReplaceTempView("t")
+          withSQLConf(
+            SQLConf.CASE_SENSITIVE.key -> "false",
+            aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            checkAnswer(
+              sql("SELECT COUNT(VALUE), MIN(VALUE), MAX(VALUE) FROM t"),
+              Row(2, 10, 20))
+          }
+        }
+      }
+    }
+  }
+
   // The error originates in the executor-side partition reader, so it may be wrapped in a
   // higher-level exception. Walk the cause chain to find the structured Spark exception.
   private def interceptAggPushDownError(query: String): SparkUnsupportedOperationException = {

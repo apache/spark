@@ -37,6 +37,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONFIG}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
@@ -249,11 +250,11 @@ object ParquetUtils extends Logging {
   private[sql] def createAggInternalRowFromFooter(
       footer: ParquetMetadata,
       filePath: String,
-      dataSchema: StructType,
       partitionSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType,
       partitionValues: InternalRow,
+      isCaseSensitive: Boolean,
       datetimeRebaseSpec: RebaseSpec): InternalRow = {
     // if there are group by columns, we will build result row first,
     // and then append group by columns values (partition columns values) to the result row.
@@ -261,7 +262,7 @@ object ParquetUtils extends Logging {
       AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggSchema, aggregation)
 
     val (primitiveTypes, values) = getPushedDownAggResult(
-      footer, filePath, partitionSchema, aggregation, schemaWithoutGroupBy)
+      footer, filePath, partitionSchema, aggregation, schemaWithoutGroupBy, isCaseSensitive)
 
     val builder = Types.buildMessage
     primitiveTypes.foreach(t => builder.addField(t))
@@ -328,13 +329,16 @@ object ParquetUtils extends Logging {
       filePath: String,
       partitionSchema: StructType,
       aggregation: Aggregation,
-      aggSchema: StructType)
+      aggSchema: StructType,
+      isCaseSensitive: Boolean)
   : (Array[PrimitiveType], Array[Any]) = {
     val footerFileMetaData = footer.getFileMetaData
     // Resolve by name in the file's own schema; a positional lookup breaks under mergeSchema.
     val fileSchema = footerFileMetaData.getSchema
+    val resolver = if (isCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
     def fileFieldIndex(colName: String): Int =
-      if (fileSchema.containsField(colName)) fileSchema.getFieldIndex(colName) else -1
+      (0 until fileSchema.getFieldCount)
+        .indexWhere(i => resolver(fileSchema.getFieldName(i), colName))
     val blocks = footer.getBlocks
     val primitiveTypeBuilder = mutable.ArrayBuilder.make[PrimitiveType]
     val valuesBuilder = mutable.ArrayBuilder.make[Any]
