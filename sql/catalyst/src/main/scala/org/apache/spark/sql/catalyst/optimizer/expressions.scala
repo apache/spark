@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, Stack}
 import scala.util.control.NonFatal
 
@@ -635,6 +636,28 @@ object SimplifyConditionals extends Rule[LogicalPlan] {
     case _ => false
   }
 
+  private def removeDuplicateConditions(e: CaseWhen): CaseWhen = {
+    if (e.branches.lengthCompare(1) <= 0) {
+      e
+    } else {
+      val seen = mutable.HashSet.empty[Expression]
+      // A repeated deterministic condition cannot match after its first occurrence.
+      val branches = e.branches.filter { case (condition, _) =>
+        if (!condition.deterministic) {
+          true
+        } else {
+          val isFirstOccurrence = seen.add(condition.canonicalized)
+          isFirstOccurrence
+        }
+      }
+      if (branches.length == e.branches.length) {
+        e
+      } else {
+        e.copy(branches = branches)
+      }
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(IF, CASE_WHEN), ruleId) {
     case q: LogicalPlan => q transformExpressionsUp {
@@ -697,14 +720,16 @@ object SimplifyConditionals extends Rule[LogicalPlan] {
         if (i == 0) {
           elseValue
         } else {
-          e.copy(
+          removeDuplicateConditions(e.copy(
             branches = branches.take(i).map(branch => (branch._1, elseValue)),
-            elseValue = elseOpt.filterNot(_.semanticEquals(Literal(null, e.dataType))))
+            elseValue = elseOpt.filterNot(_.semanticEquals(Literal(null, e.dataType)))))
         }
 
       case e @ CaseWhen(_, elseOpt)
           if elseOpt.exists(_.semanticEquals(Literal(null, e.dataType))) =>
         e.copy(elseValue = None)
+
+      case e: CaseWhen => removeDuplicateConditions(e)
     }
   }
 }
