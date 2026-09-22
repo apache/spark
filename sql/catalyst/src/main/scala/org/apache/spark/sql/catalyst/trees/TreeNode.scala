@@ -766,12 +766,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     val oldChildren = children
     if (oldChildren.isEmpty) return this
 
-    // Invoke `f` once per child and defer allocating the replacement buffer until `f` returns a
+    // Invoke `f` once per child and defer allocating the replacement array until `f` returns a
     // distinct instance. Backfill the reference-equal prefix when that first happens. `changed`
     // records whether any change was material (`!fastEquals`). If no child changed materially we
-    // return `this` and drop the buffer -- an equal-but-distinct replacement alone does not require
+    // return `this` and drop the array -- an equal-but-distinct replacement alone does not require
     // rebuilding the parent.
-    var newChildren: mutable.ArrayBuffer[BaseType] = null
+    var newChildren: Array[BaseType] = null
     var changed = false
     var index = 0
     val childIterator = oldChildren.iterator
@@ -780,20 +780,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       val newChild = f(oldChild)
       if (oldChild ne newChild) {
         if (newChildren eq null) {
-          // First child `f` replaced with a distinct instance: start buffering. Every child
-          // before it was reference-equal, so backfill those originals unchanged.
-          newChildren = new mutable.ArrayBuffer[BaseType](oldChildren.size)
+          // First distinct replacement: allocate the result array and backfill the
+          // reference-equal prefix.
+          newChildren = new Array[TreeNode[_]](oldChildren.size).asInstanceOf[Array[BaseType]]
           val originalIterator = oldChildren.iterator
           var priorIndex = 0
           while (priorIndex < index) {
-            newChildren += originalIterator.next()
+            newChildren(priorIndex) = originalIterator.next()
             priorIndex += 1
           }
         }
         if (!oldChild.fastEquals(newChild)) changed = true
-        newChildren += newChild
+        newChildren(index) = newChild
       } else if (newChildren ne null) {
-        newChildren += oldChild
+        newChildren(index) = oldChild
       }
       index += 1
     }
@@ -806,7 +806,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       // arity traits do) rather than `withNewChildren`, whose size-assert and `childrenFastEquals`
       // recheck are redundant here.
       CurrentOrigin.withOrigin(origin) {
-        val res = withNewChildrenInternal(newChildren.toIndexedSeq)
+        val res = withNewChildrenInternal(newChildren.toImmutableArraySeq)
         res.copyTagsFrom(this)
         res
       }
