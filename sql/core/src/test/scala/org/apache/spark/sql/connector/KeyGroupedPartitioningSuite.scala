@@ -6385,8 +6385,7 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-50593: isSameFunction compares literal params only, ignoring non-literal " +
-      "children (gated by supportsExpressions before it ever matters)") {
+  test("SPARK-50593: isSameFunction is a structural per-position walk, not a literal bag") {
     import org.apache.spark.sql.catalyst.expressions.{Add, Expression, GetStructField}
     val a = attr("a")
     val b = attr("b")
@@ -6395,27 +6394,27 @@ class KeyGroupedPartitioningSuite
     def years(e: Expression): TransformExpression = TransformExpression(YearsFunction, Seq(e))
     def days(e: Expression): TransformExpression = TransformExpression(DaysFunction, Seq(e))
 
-    // Column identity is ignored: only the function name and the literal params make up identity.
+    // Column identity is ignored -- it is reconciled separately, via keyPositions.
     assert(bucket(4, a).isSameFunction(bucket(4, b)))
     assert(!bucket(4, a).isSameFunction(bucket(2, b)))
 
-    // A non-literal child's own shape -- a nested transform, or a value-changing expression like
-    // `a + 1` -- plays no part in identity either; only literal children do. This is safe:
-    // `KeyedPartitioning.supportsExpressions` requires the single non-literal child to be a bare
-    // column reference (or a GetStructField chain) before a TransformExpression ever reaches
-    // `isSameFunction`/`isCompatible` in planning, so a nested transform or a value-changing slot
-    // like these is rejected upstream of identity, not by it.
-    assert(bucket(4, years(a)).isSameFunction(bucket(4, days(a))),
-      "nested-transform content does not affect identity -- supportsExpressions rejects this " +
-        "shape before identity would ever be consulted on it")
+    // Nested transforms recurse. An earlier revision compared only the literal values, which made
+    // these two the same function because both literal lists are just [4]; raised by peter-toth on
+    // the PR. `supportsExpressions` does reject nested shapes for SPJ planning, but identity is
+    // consulted elsewhere (isCompatible, ValidateRequirements), so it must be honest on its own.
+    assert(!bucket(4, years(a)).isSameFunction(bucket(4, days(a))),
+      "a different nested transform is a different function")
+    assert(bucket(4, years(a)).isSameFunction(bucket(4, years(b))),
+      "the same nested transform over a different column is still the same function")
     assert(!bucket(4, years(a)).isSameFunction(bucket(2, years(a))), "the literal still matters")
 
+    // A value-changing slot is not comparable, so never "the same" -- not even against an
+    // identical one.
     val add = bucket(4, Add(a, Literal(1)))
-    assert(add.isSameFunction(bucket(4, Add(b, Literal(1)))),
-      "a value-changing slot's content also does not affect identity, for the same reason")
+    assert(!add.isSameFunction(bucket(4, Add(b, Literal(1)))),
+      "a non-reference slot is not a shape identity can affirm")
 
-    // Struct-field column references are still recognized as gate-admitted shapes; identity treats
-    // them the same as any other non-literal child (ignored).
+    // A GetStructField chain IS a column reference, so it is ignored like any other column slot.
     val s = AttributeReference("s", StructType(Seq(StructField("f", IntegerType))))()
     val sf = GetStructField(s, 0)
     assert(bucket(4, sf).isSameFunction(bucket(4, sf)))

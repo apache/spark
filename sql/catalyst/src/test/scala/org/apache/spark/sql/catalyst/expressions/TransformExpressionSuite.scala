@@ -136,4 +136,52 @@ class TransformExpressionSuite extends SparkFunSuite {
       "different truncate widths must reduce onto different key spaces")
     assert(!trunc7x11.hasSameReducedKeys(trunc3x5), "and symmetrically")
   }
+  test("SPARK-50593: transform identity is per-argument-position, not a bag of literals") {
+    // `KeyedPartitioning.supportsExpressions` requires one *column* child, not one child, so a
+    // multi-argument transform reaches identity comparison. If identity collected only the literal
+    // values and dropped their positions, `truncate(col, 2)` and `truncate(2, col)` would share a
+    // TransformFunctionId: `isSameFunction` would answer true, `isCompatible` would short-circuit
+    // on it, and `sameArgumentLayout` -- the guard that exists for exactly this -- would never run,
+    // because it only executes inside `reducer`. The pair would then be treated as lined up as it
+    // stands and joined with no reduce, pairing partitions that do not hold the same rows.
+    val fn = new NamedFunction("test.truncate")
+    val colThenLit = TransformExpression(fn, Seq(a, Literal(2)))
+    val litThenCol = TransformExpression(fn, Seq(Literal(2), b))
+
+    assert(colThenLit.functionId != litThenCol.functionId,
+      "a literal in a different argument position is a different identity")
+    assert(!colThenLit.isSameFunction(litThenCol),
+      "differing argument layouts are not the same function")
+    assert(!litThenCol.isSameFunction(colThenLit), "and symmetrically")
+    assert(!colThenLit.isCompatible(litThenCol),
+      "isCompatible must not short-circuit two differing layouts into compatible")
+
+    // Same layout, different column: still the same function -- column identity is reconciled
+    // separately, through `keyPositions`.
+    assert(colThenLit.isSameFunction(TransformExpression(fn, Seq(b, Literal(2)))))
+    // Same layout, different literal: still distinguished.
+    assert(!colThenLit.isSameFunction(TransformExpression(fn, Seq(a, Literal(3)))))
+    // A zero-argument transform is unaffected.
+    val days = new NamedFunction("test.days")
+    assert(TransformExpression(days, Seq(a)).isSameFunction(TransformExpression(days, Seq(b))))
+
+    // Nested transforms recurse: same outer function and literal, different inner function, is NOT
+    // the same. Raised by peter-toth on the PR; a flat comparison of the literal values misses it
+    // because both sides' literal list is just [4].
+    val years = new NamedFunction("test.years")
+    val outer = new NamedFunction("test.bucket")
+    val overYears = TransformExpression(outer, Seq(Literal(4), TransformExpression(years, Seq(a))))
+    val overDays = TransformExpression(outer, Seq(Literal(4), TransformExpression(days, Seq(a))))
+    assert(!overYears.isSameFunction(overDays), "nested transforms must be compared recursively")
+    assert(overYears.isSameFunction(
+      TransformExpression(outer, Seq(Literal(4), TransformExpression(years, Seq(b))))),
+      "the same nested function over a different column is still the same function")
+
+    // A non-reference slot is never "the same", even against an identical one: `c + 1` is not a
+    // partition transform argument SPJ can reason about.
+    val plusOne = TransformExpression(outer, Seq(Literal(4), Add(a, Literal(1))))
+    assert(!plusOne.isSameFunction(TransformExpression(outer, Seq(Literal(4), Add(a, Literal(1))))),
+      "a non-reference slot is not comparable, so not the same function")
+  }
+
 }

@@ -30,17 +30,25 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, MapType, StructType, UserDefinedType}
 
 /**
- * The identity of a partition transform function. It holds the two values
- * [[TransformExpression]] compares in `isSameFunction`, and it carries no exprIds, so an
- * expression can hold one in a plain field and expression equality still answers the same after
- * canonicalization.
+ * The identity of a reduced key space, stored in [[TransformExpression.reducedWith]] and compared
+ * by `hasSameReducedKeys`. It is NOT the "same function" test -- that is
+ * [[TransformExpression.isSameFunction]], a structural per-position walk that also recurses into
+ * nested transforms. This type exists because `reducedWith` has to *store* an identity in a
+ * field, which a structural predicate cannot express.
  *
  * @param canonicalName the transform function's canonical name
- * @param params the transform's literal parameters (e.g. the bucket count for `bucket`, or the
- *               width for `truncate`), in argument order. Empty for a transform with none (e.g.
- *               `days`, `years`).
+ * @param argSlots one entry per argument, in order: `Some(literal)` for a literal parameter (e.g.
+ *                 the bucket count for `bucket`, or the width for `truncate`), `None` for any
+ *                 other slot. Positions are part of the identity, so `truncate(id, 2)` and
+ *                 `truncate(2, store_id)` are different key spaces.
+ *
+ *                 Known coarseness: a nested transform maps to `None`, so
+ *                 `bucket(4, years(c))` and `bucket(4, days(c))` share an identity here. That is
+ *                 unreachable for SPJ -- `KeyedPartitioning.supportsExpressions` requires the
+ *                 single non-literal child to be a column reference, which rejects nested
+ *                 transforms -- and `isSameFunction` distinguishes them regardless.
  */
-case class TransformFunctionId(canonicalName: String, params: Seq[Literal])
+case class TransformFunctionId(canonicalName: String, argSlots: Seq[Option[Literal]])
 
 /**
  * Represents a partition transform expression, for instance, `bucket`, `days`, `years`, etc.
@@ -70,15 +78,22 @@ case class TransformExpression(
   /**
    * Extract literal children (constant parameters) from this transform. These are constant
    * arguments like the bucket count in `bucket(n, col)` or the width in `truncate(col, width)`.
-   * Compared, in order, when checking whether two transforms have the same identity
-   * (`functionId`).
+   * Positions are dropped, so this is for handing parameters to a connector reducer, NOT for
+   * identity -- see [[functionId]] and [[TransformFunctionId.argSlots]].
    */
   private lazy val literalChildren: Seq[Literal] =
     children.collect { case l: Literal => l }
 
-  /** The identity of this expression's transform function. */
+  /**
+   * The identity of this expression's transform function: its canonical name plus the per-argument
+   * shape, so a literal in a different argument position is a different identity. See
+   * [[TransformFunctionId.argSlots]] for why the positions matter.
+   */
   lazy val functionId: TransformFunctionId =
-    TransformFunctionId(function.canonicalName(), literalChildren)
+    TransformFunctionId(function.canonicalName(), children.map {
+      case l: Literal => Some(l)
+      case _ => None
+    })
 
   /**
    * Whether this [[TransformExpression]] has the same semantics as `other`. For instance,
@@ -92,10 +107,36 @@ case class TransformExpression(
    * It compares the transforms only. A caller that compares partition keys has to consult
    * `reducedWith` as well, since a reduced key space is not the one its transform names.
    *
+   * Two transforms are the same when they have the same function name, the same arity, and each
+   * pair of corresponding children matches:
+   *   - literal arguments must be equal (e.g. numBuckets for bucket, width for truncate), so that
+   *     `bucket(32, c)` is not the same as `bucket(16, c)`;
+   *   - nested transform arguments must recursively be the same function, so that
+   *     `bucket(4, years(c))` is not the same as `bucket(4, days(c))`;
+   *   - everything else must be a plain column reference on both sides. Column identity is
+   *     intentionally ignored (it is reconciled separately, via `keyPositions`), but a
+   *     non-reference slot such as `c + 1` or `cast(c)`, or a literal-vs-reference mismatch, is
+   *     treated as not the same.
+   *
+   * The walk is per position, not a set of literal values. Comparing only the values would make
+   * `truncate(id, 2)` and `truncate(2, store_id)` the same function; `isCompatible` short-circuits
+   * on this method, so `sameArgumentLayout` -- which guards exactly that, but only inside `reducer`
+   * -- would never run, and the pair would be paired as-is with no reduce.
+   *
    * @param other the transform expression to compare to
    * @return true if this and `other` has the same semantics w.r.t to transform, false otherwise.
    */
-  def isSameFunction(other: TransformExpression): Boolean = functionId == other.functionId
+  def isSameFunction(other: TransformExpression): Boolean =
+    function.canonicalName() == other.function.canonicalName() &&
+      children.length == other.children.length &&
+      children.zip(other.children).forall {
+        case (l1: Literal, l2: Literal) => l1 == l2
+        case (t1: TransformExpression, t2: TransformExpression) => t1.isSameFunction(t2)
+        // Any other pair must be a plain column reference on both sides. Column identity is
+        // ignored (reconciled separately via keyPositions); a non-reference slot (Add, Cast, ...)
+        // or a literal/transform-vs-reference mismatch is "not the same".
+        case (c1, c2) => TransformExpression.isColumnRef(c1) && TransformExpression.isColumnRef(c2)
+      }
 
   /**
    * Whether this [[TransformExpression]]'s function is compatible with the `other`
