@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.{
   SparkPlan,
   UnionExec,
   WholeStageCodegenExec}
-import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
@@ -6960,6 +6960,57 @@ class KeyGroupedPartitioningSuite
         assert(collect(plan) { case agg: BaseAggregateExec => agg }.exists { agg =>
           unwrapWrappers(agg.child).isInstanceOf[BatchScanExec]
         }, s"expected the partial aggregate to read the scan, with no sort of its own:\n$plan")
+      }
+    }
+  }
+
+  test("SPARK-59564: keep the sort below the partial aggregate where no sort is crossed") {
+    // A hash pair needs no ordering above it, so no sort lands between the aggregates and the one
+    // the partial aggregate reads is the only one in the pair. Folding takes that aggregate away
+    // and leaves the sort where it is, under the regrouping.
+    //
+    // `SORT BY` in the subquery is that sort. It survives the optimizer because a `sum` over a
+    // float is order sensitive, and the aggregate is a hash aggregate, so nothing above the pair
+    // asks for an ordering and none is inserted between them.
+    val partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'aa', 20.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', 30.0, cast('2020-01-01' as timestamp))")
+
+    val query = s"SELECT id, name, sum(price) FROM " +
+      s"(SELECT * FROM testcat.ns.$items SORT BY price) GROUP BY id, name"
+    val expected = Seq(Row(1L, "aa", 30.0d), Row(2L, "bb", 30.0d))
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        val plan = sql(query).queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 2 && aggs.forall(_.isInstanceOf[HashAggregateExec]),
+          s"expected a pair of hash aggregates:\n$plan")
+        assert(collectAllGroupPartitions(plan).nonEmpty,
+          s"the grouping is what makes the pair non-adjacent:\n$plan")
+        // One sort, the one the partial aggregate reads.
+        assert(collect(plan) { case sort: SortExec => sort }.size == 1,
+          s"expected one sort feeding the partial aggregate:\n$plan")
+      }
+
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val aggs = collect(plan) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 1, s"expected one combined aggregate, got ${aggs.size}:\n$plan")
+        assert(aggs.head.aggregateExpressions.forall(_.mode == Complete),
+          s"expected the combined aggregate to be complete:\n$plan")
+        val sorts = collect(plan) { case sort: SortExec => sort }
+        assert(sorts.size == 1 && !sorts.head.global, s"expected one local sort:\n$plan")
+        val grouping = collectAllGroupPartitions(plan)
+        assert(grouping.size == 1, s"expected the grouping to stay, got ${grouping.size}:\n$plan")
+        assert(unwrapWrappers(grouping.head.child).isInstanceOf[SortExec],
+          s"expected the sort to stay under the grouping:\n$plan")
+        assert(ValidateRequirements.validate(plan), s"the combined plan has to hold up:\n$plan")
       }
     }
   }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Final, Partial, PartialMerge}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -61,7 +62,7 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
 
     plan.transformDown {
       case finalAgg: HashAggregateExec =>
-        detachAggregate(finalAgg.child, hasUpperSort = false) match {
+        detachAggregate(finalAgg.child, finalAgg, hasUpperSort = false) match {
           case Some((partialAgg: HashAggregateExec, child)) =>
             combinedAggregate(partialAgg, finalAgg)
               .map(combineHashAggregates(partialAgg, finalAgg, _, child))
@@ -70,8 +71,8 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
         }
 
       case finalAgg: SortAggregateExec =>
-        detachAggregate(finalAgg.child, hasUpperSort = false) match {
-          case Some((partialAgg: SortAggregateExec, child)) if isPartialAgg(partialAgg, finalAgg) =>
+        detachAggregate(finalAgg.child, finalAgg, hasUpperSort = false) match {
+          case Some((partialAgg: SortAggregateExec, child)) if isPartialAgg(partialAgg) =>
             finalAgg.copy(
               groupingExpressions = partialAgg.groupingExpressions,
               aggregateExpressions = partialAgg.aggregateExpressions.map(_.copy(mode = Complete)),
@@ -81,9 +82,8 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
         }
 
       case finalAgg: ObjectHashAggregateExec =>
-        detachAggregate(finalAgg.child, hasUpperSort = false) match {
-          case Some((partialAgg: ObjectHashAggregateExec, child))
-              if isPartialAgg(partialAgg, finalAgg) =>
+        detachAggregate(finalAgg.child, finalAgg, hasUpperSort = false) match {
+          case Some((partialAgg: ObjectHashAggregateExec, child)) if isPartialAgg(partialAgg) =>
             finalAgg.copy(
               groupingExpressions = partialAgg.groupingExpressions,
               aggregateExpressions = partialAgg.aggregateExpressions.map(_.copy(mode = Complete)),
@@ -109,29 +109,40 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
    *
    * @param hasUpperSort whether a local sort has been crossed above `plan`, which is what makes the
    *                     sort below the aggregate dead.
+   * @param finalAgg the aggregate this chain is folded into. The leaf is checked against it before
+   *                 the chain is rebuilt -- rebuilding re-decides the grouping over the new child,
+   *                 which walks that child's partitions -- and that check is the pair's
+   *                 compatibility, so the callers ask the leaf only for its mode.
    */
   private def detachAggregate(
       plan: SparkPlan,
-      hasUpperSort: Boolean): Option[(BaseAggregateExec, SparkPlan)] = plan match {
-    case aggregate: BaseAggregateExec =>
+      finalAgg: BaseAggregateExec,
+      hasUpperSort: Boolean)
+      : Option[(BaseAggregateExec, SparkPlan)] = plan match {
+    case aggregate: BaseAggregateExec if isCompatibleAggregates(aggregate, finalAgg) =>
       if (!hasUpperSort) {
         Some((aggregate, aggregate.child))
       } else {
         aggregate.child match {
-          case sort: SortExec if !sort.global => Some((aggregate, sort.child))
+          // The crossed sort orders these rows the way the aggregate requires, so this one only
+          // ever served the aggregate being taken away. That holds while it is the sort this
+          // aggregate was planned against, which is what its required ordering names.
+          case sort: SortExec if !sort.global &&
+              SortOrder.orderingSatisfies(sort.sortOrder, aggregate.requiredChildOrdering.head) =>
+            Some((aggregate, sort.child))
           case _ => None
         }
       }
 
     case group: GroupPartitionsExec =>
-      detachAggregate(group.child, hasUpperSort) match {
+      detachAggregate(group.child, finalAgg, hasUpperSort) match {
         case Some((aggregate, child)) =>
           group.withKeyPositionsFor(child).map(regrouped => (aggregate, regrouped))
         case _ => None
       }
 
     case sort: SortExec if !sort.global =>
-      detachAggregate(sort.child, hasUpperSort = true) match {
+      detachAggregate(sort.child, finalAgg, hasUpperSort = true) match {
         case Some((aggregate, child)) =>
           Some((aggregate, sort.withNewChildren(Seq(child))))
         case _ => None
@@ -159,9 +170,7 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
   private def combinedAggregate(
       partialAgg: HashAggregateExec,
       finalAgg: HashAggregateExec): Option[CombinedAggregate] = {
-    if (!isCompatibleAggregates(partialAgg, finalAgg)) {
-      None
-    } else if (partialAgg.aggregateExpressions.forall(_.mode == Partial)) {
+    if (isPartialAgg(partialAgg)) {
       Some(CombinedAggregate(
         partialAgg.aggregateExpressions.map(_.copy(mode = Complete)),
         initialInputBufferOffset = 0))
@@ -177,14 +186,12 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
   }
 
   /**
-   * Check if `partialAgg` is the partial aggregate of `finalAgg`.
+   * Whether `aggregate` is a `Partial` one, which is the mode half of what a leaf has to be. The
+   * other half, that it is the partial of the aggregate being folded into, is what `detachAggregate`
+   * asks at the leaf.
    */
-  private def isPartialAgg(
-      partialAgg: BaseAggregateExec,
-      finalAgg: BaseAggregateExec): Boolean = {
-    partialAgg.aggregateExpressions.forall(_.mode == Partial) &&
-      isCompatibleAggregates(partialAgg, finalAgg)
-  }
+  private def isPartialAgg(aggregate: BaseAggregateExec): Boolean =
+    aggregate.aggregateExpressions.forall(_.mode == Partial)
 
   private def isCompatibleAggregates(
       partialAgg: BaseAggregateExec,

@@ -431,10 +431,18 @@ case class GroupPartitionsExec(
     if (expectedKeyCount.isDefined) {
       return None
     }
+    // `grouping` indexes the partitions of the child this node was decided for, and the positions
+    // below name keys in that child's space. A child that no longer reports it is what
+    // `outputPartitioning` gives up the claim for and `checkChildStillMatches` refuses at
+    // execution, so there is nothing here to move them into: they would be read against a key
+    // space this node was not decided for.
+    if (child.outputPartitioning != childPartitioning) {
+      return None
+    }
     // The member of each child's partitioning this reads has to be the one `grouping` reads, since
     // the positions are only meaningful for that member. `representativeOf` answers as the lookup
     // there does: the first keyed member, nested collections included.
-    val childKeyed = PartitioningCollection.representativeOf(child.outputPartitioning)
+    val childKeyed = PartitioningCollection.representativeOf(childPartitioning)
     val newChildKeyed = PartitioningCollection.representativeOf(newChild.outputPartitioning)
     (childKeyed, newChildKeyed) match {
       case (Some(childKp), Some(newChildKp)) =>
