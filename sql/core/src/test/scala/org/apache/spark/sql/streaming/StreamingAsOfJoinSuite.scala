@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 
@@ -91,10 +91,49 @@ class StreamingAsOfJoinSuite extends StreamTest {
       testStream(joined)(
         AddData(input,
           (timestamp("2026-06-29 09:59:59"), "AAPL", 30),
-          (timestamp("2026-06-29 10:00:09"), "GOOG", 40)),
+          (timestamp("2026-06-29 10:00:09"), "GOOG", 40),
+          (timestamp("2026-06-29 10:00:11"), "AAPL", 200)),
         CheckNewAnswer(
           Row(timestamp("2026-06-29 09:59:59"), "AAPL", 30, null),
-          Row(timestamp("2026-06-29 10:00:09"), "GOOG", 40, null)))
+          Row(timestamp("2026-06-29 10:00:09"), "GOOG", 40, null),
+          Row(timestamp("2026-06-29 10:00:11"), "AAPL", 200, 18015)))
+    }
+  }
+
+  Seq("INNER", "LEFT").foreach { joinType =>
+    Seq(false, true).foreach { isLeftStreaming =>
+      val inputType = if (isLeftStreaming) "stream-stream" else "static-stream"
+
+      test(s"$inputType $joinType ASOF join is not supported") {
+        withTempView("trades", "quotes") {
+          val quotesInput = MemoryStream[(Timestamp, String, Int)]
+          quotesInput.toDF().toDF("quote_time", "symbol", "bid_price")
+            .createOrReplaceTempView("quotes")
+
+          if (isLeftStreaming) {
+            val tradesInput = MemoryStream[(Timestamp, String, Int)]
+            tradesInput.toDF().toDF("trade_time", "symbol", "quantity")
+              .createOrReplaceTempView("trades")
+          } else {
+            Seq((timestamp("2026-06-29 10:00:05"), "AAPL", 100))
+              .toDF("trade_time", "symbol", "quantity")
+              .createOrReplaceTempView("trades")
+          }
+
+          val joined = sql(
+            s"""
+               |SELECT t.trade_time, t.symbol, t.quantity, q.bid_price
+               |FROM trades t $joinType ASOF JOIN quotes q
+               |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+               |  ON t.symbol = q.symbol
+               |""".stripMargin)
+          val error = intercept[AnalysisException] {
+            joined.writeStream.format("noop").start()
+          }
+          assert(error.getMessage.contains(
+            "ASOF join with a streaming DataFrame/Dataset on the right is not supported"))
+        }
+      }
     }
   }
 }
