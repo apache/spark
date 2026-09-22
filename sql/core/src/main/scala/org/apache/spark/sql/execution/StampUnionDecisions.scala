@@ -62,30 +62,49 @@ class StampUnionDecisions(snapshot: UnionConfSnapshot) extends Rule[SparkPlan] {
 }
 
 /**
- * Records on each [[UnionExec]] the `UNION_OUTPUT_PARTITIONING` value it answers from, before
- * `EnsureRequirements` asks it what it reports.
+ * Records the preparation's [[UnionConfSnapshot]] on each [[UnionExec]], so that every reader ahead
+ * of a barrier answers from the same values the barrier will stamp.
  *
- * Without this, the two phases sample the conf separately: `EnsureRequirements` reads what the
- * union reports under the value then, and [[StampUnionDecisions]] freezes the decision under the
- * value one rule later. `conf` is the live session conf, so another thread turning it off in that
- * window would let a parent drop an exchange over a concrete partitioning and then have the union
- * concatenate, which puts one group in two partitions.
+ * Without this, each phase samples the confs separately: `EnsureRequirements` reads what a union
+ * reports under the value then, and [[StampUnionDecisions]] freezes the decision under the value
+ * one rule later. `conf` is the live session conf, so another thread turning
+ * `UNION_OUTPUT_PARTITIONING` off in that window would let a parent drop an exchange over a
+ * concrete partitioning and then have the union concatenate, which puts one group in two
+ * partitions.
  *
- * Only the conf is recorded, never a partitioning. `EnsureRequirements` has not inserted the
+ * The same gap opens between two injected rules: one can return a `UnionExec` of its own, which
+ * carries no record yet, and a later one can plan requirements over it or ask its codegen gate.
+ * [[SnapshotUnionPreparationConf.before]] closes that for the injected query-stage preparation
+ * rules, the list where a consumer can still add or drop an exchange. Two windows stay open, both
+ * behind a barrier that decides before execution: the injected columnar rules, which share one
+ * `ApplyColumnarRulesAndInsertTransitions` and so cannot be interleaved from outside it, and the
+ * injected query-stage optimizer rules, which run on a plan whose exchanges are already fixed.
+ *
+ * Only the confs are recorded, never a partitioning. `EnsureRequirements` has not inserted the
  * exchanges it adds yet, so a decision taken now would freeze plain on a union whose children only
  * become co-partitioned there, which is why the decision itself waits for the barrier behind it.
  *
- * The value comes from the preparation's [[UnionConfSnapshot]], so every union in it answers from
- * the same read. Writing the tag in place is safe for the reason given on [[StampUnionDecisions]].
+ * Writing the tag in place is safe for the reason given on [[StampUnionDecisions]].
  */
-class SnapshotUnionOutputPartitioningConf(snapshot: UnionConfSnapshot) extends Rule[SparkPlan] {
+class SnapshotUnionPreparationConf(snapshot: UnionConfSnapshot) extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = {
     plan.foreach {
-      case u: UnionExec => u.snapshotOutputPartitioningConf(snapshot.outputPartitioning)
+      case u: UnionExec => u.recordPreparationConf(snapshot)
       case _ =>
     }
     plan
   }
+}
+
+object SnapshotUnionPreparationConf {
+  /**
+   * `rules` with a snapshot pass ahead of each of them, so a `UnionExec` one rule creates carries
+   * the preparation's confs before the next rule reads them. Ahead of rather than behind, so that a
+   * union left by the rules listed before `rules` is covered too. `rules` is empty unless an
+   * extension injected something, so this adds no pass to an ordinary preparation.
+   */
+  def before(snapshot: UnionConfSnapshot, rules: Seq[Rule[SparkPlan]]): Seq[Rule[SparkPlan]] =
+    rules.flatMap(rule => Seq(new SnapshotUnionPreparationConf(snapshot), rule))
 }
 
 /**

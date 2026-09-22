@@ -5327,7 +5327,7 @@ class AdaptiveQueryExecSuite
   test("SPARK-59122: query stage preparation keeps the union barriers around EnsureRequirements") {
     // `EnsureRequirements` asks a `UnionExec` what it reports, and `StampUnionDecisions` freezes
     // that answer so every rule below it and the execution read what the exchanges were planned
-    // against. `SnapshotUnionOutputPartitioningConf` has to run first, or the value the stamp reads
+    // against. `SnapshotUnionPreparationConf` has to run first, or the value the stamp reads
     // is whatever `conf` says by then rather than the one `EnsureRequirements` saw. The two sit
     // next to `EnsureRequirements` with nothing in between, and nothing at the list itself says the
     // three have to stay contiguous: an injected rule cannot land between them, since those are
@@ -5345,7 +5345,7 @@ class AdaptiveQueryExecSuite
       }
       assert(aqe.isDefined, s"expected an AdaptiveSparkPlanExec:\n${df.queryExecution}")
       val rules = aqe.get.queryStagePreparationRules
-      val snapshot = rules.indexWhere(_.isInstanceOf[SnapshotUnionOutputPartitioningConf])
+      val snapshot = rules.indexWhere(_.isInstanceOf[SnapshotUnionPreparationConf])
       val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
       // Both barriers, not the first one: the list ends with a second `StampUnionDecisions` for a
       // union an injected prep rule created, and asking only for the first index would let that one

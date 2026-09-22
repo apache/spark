@@ -2938,9 +2938,9 @@ object SQLConf {
       .doc("When both this conf and `spark.sql.codegen.wholeStage` are true, an eligible " +
         "UnionExec on its non-partitioning-aware path takes part in whole-stage codegen. " +
         "The union's other eligibility checks still apply, and a child that does not support " +
-        "codegen still ends the stage at an InputAdapter. The value is read when a UnionExec's " +
-        "decision is fixed during physical preparation, so a change does not reach a " +
-        "decision already taken.")
+        "codegen still ends the stage at an InputAdapter. The value is captured once for the " +
+        "plan a physical preparation prepares, before its rule sequence, and every UnionExec " +
+        "decision taken in that sequence comes from that capture.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -2955,9 +2955,9 @@ object SQLConf {
         "bytecode size, constant pool growth, JIT compilation time) rather " +
         "than the JVM per-method bytecode limit. Unions with more children " +
         "fall back to per-child codegen stages. Only effective when " +
-        s"`${WHOLESTAGE_UNION_CODEGEN_ENABLED.key}` is true. The value is read when a " +
-        "UnionExec's decision is fixed during physical preparation, so a change does not " +
-        "reach a decision already taken.")
+        s"`${WHOLESTAGE_UNION_CODEGEN_ENABLED.key}` is true. The value is captured once for the " +
+        "plan a physical preparation prepares, before its rule sequence, and every UnionExec " +
+        "decision taken in that sequence comes from that capture.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf
@@ -8182,8 +8182,9 @@ object SQLConf {
       .internal()
       .doc("When set to true, the output partitioning of UnionExec will be the same as the " +
         "input partitioning if its children have same partitioning. Otherwise, it will be a " +
-        "default partitioning. The value is read during physical preparation, so a change does " +
-        "not reach a decision already taken.")
+        "default partitioning. The value is captured once for the plan a physical preparation " +
+        "prepares, before its rule sequence, and every UnionExec decision taken in that sequence " +
+        "comes from that capture.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)

@@ -981,7 +981,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * The SPARK-52921 candidate partitioning derived from the children, which `outputPartitioning`
    * reports when the decision says this union is not a plain concatenation. That decision comes out
    * plain on either of two grounds: `UNION_OUTPUT_PARTITIONING` being off, which is taken from the
-   * record `SnapshotUnionOutputPartitioningConf` writes rather than read here, or this coming back
+   * record `SnapshotUnionPreparationConf` writes rather than read here, or this coming back
    * `UnknownPartitioning`. Under that conf the candidate can still be concrete while the union
    * reports unknown.
    */
@@ -1057,7 +1057,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * for `numOutputRows`. A fresh copy inherits the answer instead, since `withNewChildren` ends in
    * `copyTagsFrom`.
    *
-   * `UNION_OUTPUT_PARTITIONING` is taken from `snapshotOutputPartitioningConf`, recorded before
+   * `UNION_OUTPUT_PARTITIONING` is taken from `recordPreparationConf`, recorded before
    * `EnsureRequirements`, so the value the exchanges are planned against is the value execution
    * uses. Reading it live here would leave one rule between the two: `conf` is live, and another
    * thread setting it in that window would let a parent drop an exchange over a concrete
@@ -1083,21 +1083,25 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   private def stampedDecisions: Option[UnionExec.Decisions] =
     getTagValue(UnionExec.DECISIONS)
 
+  private def preparationConf: Option[UnionConfSnapshot] =
+    getTagValue(UnionExec.PREPARATION_CONF)
+
   private def outputPartitioningEnabled: Boolean =
-    getTagValue(UnionExec.OUTPUT_PARTITIONING_CONF)
+    preparationConf.map(_.outputPartitioning)
       .getOrElse(conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING))
 
   /**
-   * Records the conf `isPlainUnion` answers from, read once per preparation into a
-   * `UnionConfSnapshot` and passed in here. `SnapshotUnionOutputPartitioningConf` does it ahead of
-   * `EnsureRequirements`, whose reads the following stamp has to agree with, and `stampDecisions`
-   * does it for a node that pass never saw. Only the conf, never a partitioning: the exchanges
-   * `EnsureRequirements` adds are not there yet, so a decision taken there would freeze plain on a
-   * union whose children only become co-partitioned in it.
+   * Records the confs this node answers from until its decisions are stamped, read once per
+   * preparation into a `UnionConfSnapshot` and passed in here. `SnapshotUnionPreparationConf` does
+   * it ahead of `EnsureRequirements`, whose reads the following stamp has to agree with, and ahead
+   * of each injected rule, so a union an earlier one created is not read live by a later one;
+   * `stampDecisions` does it for a node no such pass saw. Only the confs, never a partitioning: the
+   * exchanges `EnsureRequirements` adds are not there yet, so a decision taken there would freeze
+   * plain on a union whose children only become co-partitioned in it.
    */
-  private[execution] def snapshotOutputPartitioningConf(enabled: Boolean): Unit =
-    if (getTagValue(UnionExec.OUTPUT_PARTITIONING_CONF).isEmpty) {
-      setTagValue(UnionExec.OUTPUT_PARTITIONING_CONF, enabled)
+  private[execution] def recordPreparationConf(snapshot: UnionConfSnapshot): Unit =
+    if (preparationConf.isEmpty) {
+      setTagValue(UnionExec.PREPARATION_CONF, snapshot)
     }
 
   /**
@@ -1115,11 +1119,15 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       // than the live conf, so a late barrier cannot decide from a conf changed since. Reachable
       // for a union an injected rule added, and for one it rebuilt carrying tags of its own, which
       // is enough to stop `copyTagsFrom` from bringing this tag across.
-      snapshotOutputPartitioningConf(snapshot.outputPartitioning)
+      recordPreparationConf(snapshot)
+      // Every field from the record this node now carries, which is `snapshot` unless a pass had
+      // already recorded one. Reading some fields from the record and others from the argument
+      // would stamp half from each if the two ever differed.
+      val recorded = preparationConf.getOrElse(snapshot)
       setTagValue(UnionExec.DECISIONS, UnionExec.Decisions(
         plainUnion = isPlainUnion,
-        unionCodegenEnabled = snapshot.codegenEnabled,
-        maxChildren = snapshot.maxChildren))
+        unionCodegenEnabled = recorded.codegenEnabled,
+        maxChildren = recorded.maxChildren))
     }
 
   /**
@@ -1171,13 +1179,17 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   // so the gate, `metrics` and the copy `insertInputAdapter` puts inside the codegen shell would
   // otherwise be free to read different values. When a child is not `CodegenSupport` that copy is
   // real and its first evaluation lands at execution, which is where reading the conf produced the
-  // failure described on `isPlainUnion`.
+  // failure described on `isPlainUnion`. Before the stamp they come from the preparation's snapshot
+  // where a pass recorded one, so a rule reading the gate on a union an earlier rule created gets
+  // the value that preparation will stamp rather than the live conf.
   private def unionCodegenEnabled: Boolean =
     stampedDecisions.map(_.unionCodegenEnabled)
+      .orElse(preparationConf.map(_.codegenEnabled))
       .getOrElse(conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED))
 
   private def maxCodegenChildren: Int =
     stampedDecisions.map(_.maxChildren)
+      .orElse(preparationConf.map(_.maxChildren))
       .getOrElse(conf.getConf(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN))
 
   // Memoized per instance rather than stamped on the tag. Every term here reads the children, and a
@@ -1446,14 +1458,15 @@ object UnionExec {
   private val DECISIONS = TreeNodeTag[Decisions]("unionDecisions")
 
   /**
-   * The `UNION_OUTPUT_PARTITIONING` value `isPlainUnion` answers from until the decision is
-   * stamped. See `snapshotOutputPartitioningConf`. `SnapshotUnionOutputPartitioningConf` writes the
-   * value before `EnsureRequirements`, and the stamp after it reads what that rule wrote, so both
-   * phases use one value; `stampDecisions` writes the value itself for a node that pass never saw.
-   * The tag travels onto rebuilt nodes the same way `DECISIONS` does, which is what carries it
-   * across the copies `EnsureRequirements` makes.
+   * The [[UnionConfSnapshot]] this node answers from until its decisions are stamped. See
+   * `recordPreparationConf`. `SnapshotUnionPreparationConf` writes it before `EnsureRequirements`,
+   * and the stamp after it reads what that rule wrote, so both phases use one value; the same rule
+   * runs ahead of each injected rule, so a union one of them creates is not read live by a later
+   * one, and `stampDecisions` writes it itself for a node no such pass saw. The tag travels onto
+   * rebuilt nodes the same way `DECISIONS` does, which is what carries it across the copies
+   * `EnsureRequirements` makes.
    */
-  private val OUTPUT_PARTITIONING_CONF = TreeNodeTag[Boolean]("unionOutputPartitioningConf")
+  private val PREPARATION_CONF = TreeNodeTag[UnionConfSnapshot]("unionPreparationConf")
 
   /**
    * Codegen operators that return more than one RDD from `inputRDDs()`.

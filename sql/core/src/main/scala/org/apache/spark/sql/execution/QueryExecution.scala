@@ -832,7 +832,7 @@ object QueryExecution {
       // Must run before `EnsureRequirements`, which asks a `UnionExec` what it reports: it
       // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
       // decision under the same value the exchanges were planned against.
-      new SnapshotUnionOutputPartitioningConf(unionConf),
+      new SnapshotUnionPreparationConf(unionConf),
       EnsureRequirements(),
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
       // the answer to fix is the one the exchanges around it were planned against.

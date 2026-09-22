@@ -623,10 +623,10 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
    * Prepares a plan whose `UnionExec` was made by an injected rule, then turns
    * `UNION_OUTPUT_PARTITIONING` off and reads that node again. A union the `StampUnionDecisions`
    * barrier following the hook reached keeps answering from the decision it was prepared with; one
-   * no barrier reached has no decision to answer from, so this read derives one from the conf as it
-   * is now and comes back `UnknownPartitioning`. `UnionCodegenSuite` covers the stamping itself by
-   * calling the rule directly, so it stays green if one of the post-hook listings is dropped; these
-   * pin the post-hook stamping in each pipeline.
+   * that reached no barrier and no snapshot pass has nothing to answer from, so this read derives
+   * an answer from the conf as it is now and comes back `UnknownPartitioning`. `UnionCodegenSuite`
+   * covers the stamping itself by calling the rule directly, so it stays green if one of the
+   * post-hook listings is dropped; these pin the post-hook stamping in each pipeline.
    */
   private def checkInjectedUnionIsStamped(
       extensions: Seq[SparkSessionExtensionsProvider], aqeEnabled: Boolean): Unit = {
@@ -686,6 +686,44 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
     // barrier, so it needs no case of its own.
     checkInjectedUnionIsStamped(
       create(_.injectColumnar(_ => WrapRootInUnionColumnarRule)), aqeEnabled = true)
+  }
+
+  test("SPARK-59122: a union one injected prep rule adds is recorded before the next one reads") {
+    // The barrier sits after the whole injected list, so between two of them a fresh union used to
+    // have no record and answered live. A rule planning requirements over it could then elide an
+    // exchange over a concrete partitioning while the barrier stamped the preparation's value and
+    // execution concatenated, which puts one group in two partitions.
+    // `SnapshotUnionPreparationConf.before` lists a snapshot pass ahead of each injected rule.
+    val seen = ListBuffer.empty[Partitioning]
+    checkInjectedUnionIsStamped(
+      create { extensions =>
+        extensions.injectQueryStagePrepRule(_ => WrapRootInUnion)
+        extensions.injectQueryStagePrepRule(_ => ObserveUnionPartitioning(seen))
+      }, aqeEnabled = true)
+    assert(seen.nonEmpty, "the second prep rule must have seen the union")
+    assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
+      s"the snapshot pass between the two rules must have recorded the conf: $seen")
+  }
+
+  test("SPARK-59122: the codegen conf is recorded for a prep rule after the one that added it") {
+    // The same window, read through the codegen gate rather than the partitioning. The repartition
+    // is what makes AQE engage at all; it is round-robin, so the union above it has nothing to pass
+    // through and stays plain, which leaves its gate turning on the codegen confs. Only enablement
+    // is observable here: a one-child union is under any legal `maxChildren`, which cannot go below
+    // two, so `UnionCodegenSuite` pins that field on a union of three.
+    val seen = ListBuffer.empty[Boolean]
+    withSession(create { extensions =>
+      extensions.injectQueryStagePrepRule(_ => WrapRootInUnion)
+      extensions.injectQueryStagePrepRule(_ => ObserveUnionSupportCodegen(seen))
+    }) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      val df = session.range(0, 20, 1, 2).repartition(2).selectExpr("id + 1 AS w")
+      assert(df.collect().map(_.getLong(0)).sorted.toSeq == (1L to 20L).toSeq,
+        "the injected union must not drop or duplicate rows")
+      assert(seen.nonEmpty, "the second prep rule must have seen the union")
+      assert(seen.forall(identity),
+        s"the snapshot pass between the two rules must have recorded the codegen conf: $seen")
+    }
   }
 
   test("custom aggregate hint") {
@@ -1476,11 +1514,11 @@ object WrapRootInUnionColumnarRule extends ColumnarRule {
 }
 
 /**
- * Records what each `UnionExec` reports while the AQE stage optimizers run, which is after the
- * barrier at the end of the query stage preparation rules and before the one in
- * `postStageCreationRules`. Reads it with `UNION_OUTPUT_PARTITIONING` turned off: the union an
- * injected prep rule adds carries no recorded conf of its own, so a concrete answer can only come
- * from a decision stamped earlier. Puts the conf back, so nothing downstream sees the flip.
+ * Records what each `UnionExec` reports, with `UNION_OUTPUT_PARTITIONING` turned off: a concrete
+ * answer can then only come from a decision stamped earlier, or from the conf a snapshot pass
+ * recorded. Injected as a stage-optimizer rule it runs after the barrier at the end of the query
+ * stage preparation rules; injected as a prep rule it runs among them. Puts the conf back, so
+ * nothing downstream sees the flip.
  */
 case class ObserveUnionPartitioning(seen: ListBuffer[Partitioning]) extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = {
@@ -1490,6 +1528,26 @@ case class ObserveUnionPartitioning(seen: ListBuffer[Partitioning]) extends Rule
         u.conf.setConf(SQLConf.UNION_OUTPUT_PARTITIONING, false)
         try seen += u.outputPartitioning
         finally u.conf.setConf(SQLConf.UNION_OUTPUT_PARTITIONING, enabled)
+      case _ =>
+    }
+    plan
+  }
+}
+
+/**
+ * Records whether each `UnionExec` says it supports codegen, read with
+ * `WHOLESTAGE_UNION_CODEGEN_ENABLED` turned off: a `true` can then only come from the conf a
+ * snapshot pass recorded for it, or from a decision stamped earlier. Puts the conf back, so nothing
+ * downstream sees the flip.
+ */
+case class ObserveUnionSupportCodegen(seen: ListBuffer[Boolean]) extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = {
+    plan.foreach {
+      case u: UnionExec =>
+        val enabled = u.conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED)
+        u.conf.setConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED, false)
+        try seen += u.supportCodegen
+        finally u.conf.setConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED, enabled)
       case _ =>
     }
     plan

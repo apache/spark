@@ -143,7 +143,7 @@ case class AdaptiveSparkPlanExec(
       // Must run before `ensureRequirements`, which asks a `UnionExec` what it reports: it
       // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
       // decision under the same value the exchanges were planned against.
-      new SnapshotUnionOutputPartitioningConf(unionConf),
+      new SnapshotUnionPreparationConf(unionConf),
       ensureRequirements,
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, so
       // every rule below and the execution itself read the answer the exchanges above it were
@@ -177,7 +177,8 @@ case class AdaptiveSparkPlanExec(
       // channel, opt-in). Runs last so skew handling and sort cleanup have settled
       // before placement is decided.
       AQEEnablePipelinedShuffle
-    ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules :+
+    ) ++ SnapshotUnionPreparationConf.before(
+      unionConf, context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules) :+
       // A barrier for a `UnionExec` an injected prep rule just created. Decisions already stamped
       // above are kept.
       new StampUnionDecisions(unionConf)

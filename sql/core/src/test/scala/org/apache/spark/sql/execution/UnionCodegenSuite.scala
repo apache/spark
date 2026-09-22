@@ -22,6 +22,7 @@ import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioningLike, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
@@ -63,7 +64,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
    * `SparkPlan.collect` stops at them, since both are `LeafExecNode`s.
    *
    * Stricter than `codegenUnions` on purpose: this matches only a union that is the root of its own
-   * codegen stage, which is the node the callers here reach for its tags and metrics.
+   * codegen stage, which is the node whose tags and metrics the callers here inspect.
    */
   private def fusedUnions(df: DataFrame): Seq[UnionExec] =
     collect(df.queryExecution.executedPlan) {
@@ -116,8 +117,8 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
   private def stampUnionDecisions(plan: SparkPlan): SparkPlan =
     new StampUnionDecisions(UnionConfSnapshot(SQLConf.get))(plan)
 
-  private def snapshotUnionOutputPartitioningConf(plan: SparkPlan): SparkPlan =
-    new SnapshotUnionOutputPartitioningConf(UnionConfSnapshot(SQLConf.get))(plan)
+  private def snapshotUnionPreparationConf(plan: SparkPlan): SparkPlan =
+    new SnapshotUnionPreparationConf(UnionConfSnapshot(SQLConf.get))(plan)
 
   /**
    * Run `buildDf()` with union codegen on, then again with it off, and assert the two agree.
@@ -800,7 +801,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     "planning and execution") {
     // `supportCodegenFailureReason` used to read `WHOLESTAGE_UNION_CODEGEN_ENABLED` live, and the
     // copy that `insertInputAdapter` puts inside the codegen shell evaluated it for the first time
-    // at execution. Planned with the conf on the union is fused, so the generated code increments
+    // at execution. Planned with the conf on, the union is fused, so the generated code increments
     // `numOutputRows`; if the copy re-derives the reason with the conf off, `metrics` comes back
     // empty and `doProduce` throws `key not found: numOutputRows`.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
@@ -1043,7 +1044,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     // `EnsureRequirements` asks the union what it reports, and the barrier behind it freezes that
     // answer one rule later. `conf` is live, so another thread turning `UNION_OUTPUT_PARTITIONING`
     // off in between would leave the parent's elided exchange standing over a union that then
-    // concatenates. `SnapshotUnionOutputPartitioningConf` records the value ahead of
+    // concatenates. `SnapshotUnionPreparationConf` records the value ahead of
     // `EnsureRequirements` for both to use. Driven rule by rule, because the two sit next to each
     // other in the pipeline and no injected rule can run in the window.
     withSQLConf(
@@ -1053,7 +1054,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       // cannot land between them, but an edit to the list can. AQE builds its own list, and
       // `AdaptiveQueryExecSuite` asserts the same order there.
       val rules = QueryExecution.preparations(spark, subquery = false)
-      val snapshot = rules.indexWhere(_.isInstanceOf[SnapshotUnionOutputPartitioningConf])
+      val snapshot = rules.indexWhere(_.isInstanceOf[SnapshotUnionPreparationConf])
       val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
       assert(snapshot >= 0 && snapshot == ensureRequirements - 1,
         s"expected the conf snapshot right before EnsureRequirements at $ensureRequirements, " +
@@ -1063,7 +1064,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         .union(spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k")))
         .groupBy("k").count()
       val required = EnsureRequirements()(
-        snapshotUnionOutputPartitioningConf(df.queryExecution.sparkPlan.clone()))
+        snapshotUnionPreparationConf(df.queryExecution.sparkPlan.clone()))
       assert(required.collect { case s: ShuffleExchangeExec => s.shuffleOrigin } ==
         Seq(REPARTITION_BY_NUM, REPARTITION_BY_NUM),
         "the aggregate's exchange must have been elided, or the window has nothing at stake")
@@ -1092,7 +1093,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         .union(spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k")))
         .groupBy("k").count()
       val prepared = stampUnionDecisions(EnsureRequirements()(
-        snapshotUnionOutputPartitioningConf(df.queryExecution.sparkPlan.clone())))
+        snapshotUnionPreparationConf(df.queryExecution.sparkPlan.clone())))
       val union = prepared.collect { case u: UnionExec => u }
       assert(union.size == 1)
       // The value a preparation would carry to its late barrier, taken while the conf still says
@@ -1182,6 +1183,69 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
           assert(fused.head.children.forall(_.isInstanceOf[InputAdapter]))
           assert(fused.head.metrics("numOutputRows").value == 300)
         }
+      }
+    }
+  }
+
+  test("SPARK-59122: a snapshot pass ahead of each injected rule fills in what one created") {
+    // The barrier sits after the whole injected list, so between two injected rules a fresh union
+    // used to carry no record and answer live. `SnapshotUnionPreparationConf.before` lists a pass
+    // ahead of each of them. Driven by hand here; `SparkSessionExtensionSuite` runs it through real
+    // injected rules.
+    withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+      val df = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k"))
+        .union(spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k")))
+        .groupBy("k").count()
+      val prepared = EnsureRequirements()(
+        snapshotUnionPreparationConf(df.queryExecution.sparkPlan.clone()))
+      val kids = prepared.collect { case u: UnionExec => u }.head.children
+      // What a preparation carries to the rules below it, taken while the conf still says what
+      // `EnsureRequirements` above read.
+      val prepConf = UnionConfSnapshot(SQLConf.get)
+
+      // Stands for an injected rule that returns a `UnionExec` of its own, twice over: the pass
+      // between the two is what the rule listed second would otherwise be missing.
+      val fresh = UnionExec(kids)
+      val injected = new Rule[SparkPlan] {
+        override def apply(plan: SparkPlan): SparkPlan = fresh
+      }
+      val listed = SnapshotUnionPreparationConf.before(prepConf, Seq(injected, injected))
+      assert(listed.size == 4 &&
+        listed.head.isInstanceOf[SnapshotUnionPreparationConf] &&
+        listed(2).isInstanceOf[SnapshotUnionPreparationConf],
+        s"a snapshot pass must sit ahead of each injected rule, got ${listed.map(_.getClass)}")
+
+      withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+        assert(fresh.isPlainUnion, "the fresh union must reach the list with no record of its own")
+        listed.foldLeft(prepared)((plan, rule) => rule(plan))
+        assert(!fresh.outputPartitioning.isInstanceOf[UnknownPartitioning],
+          "the pass after the rule that created it must have recorded the preparation's conf, " +
+            s"got ${fresh.outputPartitioning}")
+      }
+    }
+  }
+
+  test("SPARK-59122: a recorded conf answers the codegen gate before a decision is stamped") {
+    // The gate's two codegen confs fall back to the record the way the partitioning decision does,
+    // so a rule reading the gate on a union an earlier rule created gets the preparation's values.
+    // Three children, because the cap cannot go below two and so says nothing about a union of one.
+    val df = rangeDF(100).union(rangeDF(100)).union(rangeDF(100))
+    val kids = df.queryExecution.sparkPlan.collect { case u: UnionExec => u }.head.children
+    assert(kids.size == 3, s"expected one union of three children, got ${kids.size}")
+    val prepConf = withSQLConf(
+        SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN.key -> "3") {
+      UnionConfSnapshot(SQLConf.get)
+    }
+
+    Seq(
+      "enablement" -> (SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false"),
+      "the child cap" -> (SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN.key -> "2")
+    ).foreach { case (what, flipped) =>
+      val union = UnionExec(kids)
+      new SnapshotUnionPreparationConf(prepConf)(union)
+      withSQLConf(flipped) {
+        assert(union.supportCodegen, s"the record must answer $what, not the value read now")
       }
     }
   }
