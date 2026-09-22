@@ -549,7 +549,9 @@ case class EnsureRequirements(
         (conf.v2BucketingPushPartValuesEnabled ||
           conf.v2BucketingAllowKeysSubsetOfPartitionKeys)) {
       logInfo("Pushing common partition values for storage-partitioned join")
-      isCompatible = leftSpec.areKeysCompatible(rightSpec)
+      // This branch is the one that runs the reduce, so it is the one that asks with the reduce
+      // allowed. See `areKeysCompatible`'s `allowReduce`.
+      isCompatible = leftSpec.areKeysCompatible(rightSpec, allowReduce = true)
 
       // Partition expressions are compatible. Regardless of whether partition values
       // match from both sides of children, we can calculate a superset of partition values and
