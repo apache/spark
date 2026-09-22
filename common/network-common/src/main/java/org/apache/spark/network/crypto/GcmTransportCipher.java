@@ -370,7 +370,7 @@ public class GcmTransportCipher implements TransportCipher {
                 }
                 expectedLengthBuffer.flip();
                 expectedLength = expectedLengthBuffer.getLong();
-                if (expectedLength < LENGTH_HEADER_BYTES + (long) headerLength) {
+                if (expectedLength < LENGTH_HEADER_BYTES + headerLength) {
                     throw new IllegalStateException(
                             "Invalid expected ciphertext length: " + expectedLength);
                 }
@@ -445,12 +445,7 @@ public class GcmTransportCipher implements TransportCipher {
                                 nettyBufReadableBytes,
                                 ciphertextBuffer.remaining());
                         long expectedRemaining = expectedLength - ciphertextRead;
-                        if (expectedRemaining <= 0) {
-                            throw new IllegalStateException(
-                                    "Invalid ciphertext state: expectedLength=" + expectedLength
-                                            + ", ciphertextRead=" + ciphertextRead);
-                        }
-                        int bytesToRead = (int) Math.min((long) readableBytes, expectedRemaining);
+                        int bytesToRead = (int) Math.min(readableBytes, expectedRemaining);
                         // The smallest ciphertext size is 16 bytes for the auth tag
                         ciphertextBuffer.limit(ciphertextBuffer.position() + bytesToRead);
                         ciphertextNettyBuf.readBytes(ciphertextBuffer);
