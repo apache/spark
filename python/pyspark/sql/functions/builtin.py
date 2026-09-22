@@ -7667,6 +7667,10 @@ def count_min_sketch(
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
+
+        .. versionchanged:: 4.4.0
+            Supports the TIME type for the ``col`` argument. A TIME column is counted by its
+            nanoseconds-of-day, so look it up in the resulting sketch by that value.
     eps : :class:`~pyspark.sql.Column` or float
         relative error, must be positive
 
@@ -14254,11 +14258,15 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
     unit : literal string
         This indicates the units of datetime that you want to add.
         Supported options are (case insensitive): "YEAR", "QUARTER", "MONTH", "WEEK",
-        "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND" and "MICROSECOND".
+        "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND", "MICROSECOND" and "NANOSECOND".
+        "NANOSECOND" is only valid for nanosecond-precision timestamp inputs
+        (TIMESTAMP_NTZ(p) / TIMESTAMP_LTZ(p), p in [7, 9]); the result is floored to the
+        input's precision.
     quantity : :class:`~pyspark.sql.Column` or column name
         The number of units of time that you want to add.
     ts : :class:`~pyspark.sql.Column` or column name
-        A timestamp to which you want to add.
+        A timestamp to which you want to add. A nanosecond-precision timestamp keeps its
+        sub-microsecond fraction; units of MICROSECOND or coarser leave the fraction unchanged.
 
     Returns
     -------

@@ -290,6 +290,140 @@ To use a secret through an environment variable use the following options to the
 --conf spark.kubernetes.executor.secretKeyRef.ENV_NAME=name:key
 ```
 
+## OIDC Credential Propagation
+
+Spark can propagate short-lived, identity-derived credentials to executors so that a job accesses
+cloud storage as a specific workload or user rather than as the pod's shared service account. On
+Kubernetes this pairs naturally with projected ServiceAccount tokens, which the kubelet issues as
+OIDC JWTs and rotates automatically.
+
+The mechanism, security model, and core configuration keys are described under
+[OIDC Credential Propagation](security.html#oidc-credential-propagation) on the security page. The
+AWS S3 / STS reference provider and its options are described under
+[AWS reference provider](security.html#aws-reference-provider) on the same page. This section shows
+two complete Kubernetes configurations that use the AWS reference provider.
+
+In both examples, the driver reads the identity token, exchanges it for temporary credentials via
+`sts:AssumeRoleWithWebIdentity`, and propagates those credentials to executors. The raw token stays
+on the driver; executors only ever receive the short-lived S3 credentials. Because credentials are
+carried over Spark's RPC channels, enable [RPC encryption](security.html#network-encryption)
+whenever you enable credential propagation.
+
+The examples below enable AES-based RPC encryption with `spark.authenticate=true` and
+`spark.network.crypto.enabled=true`. In general Spark documents SSL-based RPC encryption
+(`spark.ssl.rpc.enabled=true`) as the preferred method and AES-based encryption as the legacy one
+(see [Network Encryption](security.html#network-encryption)). The examples use the AES-based method
+because on Kubernetes Spark automatically generates and distributes the authentication secret, so it
+needs no additional key material, whereas the SSL-based method requires configuring a key store and
+related settings; choose SSL if your environment already standardizes on it.
+
+With credential propagation enabled and no `spark.hadoop.fs.s3a.aws.credentials.provider` set in
+your Spark configuration (a value in `core-site.xml` is not detected), both the
+driver and the executors access S3 using the propagated OIDC credentials. One caveat is specific to
+`cluster` mode: if you pass application dependencies from the same object store the job reads or
+writes (for example `--jars s3a://BUCKET/app.jar` where output also goes to `s3a://BUCKET/...`),
+`spark-submit` fetches those dependencies before the credentials are wired up and caches a
+`FileSystem` for that bucket using the pod's service account. The driver's later access to the same
+bucket then reuses that cached `FileSystem` and runs under the service account rather than the OIDC
+identity (the job succeeds, but under a mixed identity). Prefer `local://` for `--jars` / `--files`,
+or set `spark.hadoop.fs.s3a.impl.disable.cache=true`. See
+[Provider-declared configuration and driver-side access](security.html#provider-declared-configuration-and-driver-side-access)
+for the full discussion.
+
+These examples assume a Spark image built with both the `credential-aws` and `hadoop-cloud`
+modules (`-Pcredential-aws -Phadoop-cloud`), so that the reference provider and the S3A connector
+are both present. See
+[Enabling the AWS reference provider](security.html#enabling-the-aws-reference-provider)
+for details.
+
+### Example: workload-level ServiceAccount token
+
+This is the simplest setup. Kubernetes automatically mounts a projected ServiceAccount token, and
+the driver uses it directly as the OIDC identity. The IAM role's trust policy must trust the
+cluster's OIDC issuer and the driver's ServiceAccount.
+
+Add a projected token volume to the driver via a pod template (`driver-pod-template.yaml`):
+
+```yaml
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+    - name: spark-kubernetes-driver
+      volumeMounts:
+        - name: oidc-token
+          mountPath: /var/run/secrets/oidc
+          readOnly: true
+  volumes:
+    - name: oidc-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: 3600
+              # The audience must match the audience your IAM role's trust policy expects.
+              audience: sts.amazonaws.com
+```
+
+Then submit with credential propagation enabled:
+
+```bash
+/opt/spark/bin/spark-submit \
+    --deploy-mode cluster \
+    --master k8s://<KUBERNETES_MASTER_ENDPOINT> \
+    --conf spark.kubernetes.container.image=<spark-image-with-credential-aws> \
+    --conf spark.kubernetes.driver.podTemplateFile=driver-pod-template.yaml \
+    --conf spark.authenticate=true \
+    --conf spark.network.crypto.enabled=true \
+    --conf spark.security.oidc.enabled=true \
+    --conf spark.security.oidc.identityToken.file=/var/run/secrets/oidc/token \
+    --conf spark.security.oidc.aws.roleArn=arn:aws:iam::123456789012:role/spark-data-access \
+    <application-jar> <args>
+```
+
+Only the driver needs the projected token volume; executors receive the derived credentials over
+RPC and do not read the token themselves.
+
+### Example: per-user identity token
+
+For per-user access control, the identity token represents an individual user rather than the
+workload. Delivering such a token to the driver pod is outside Spark's scope and is handled by
+existing Kubernetes mechanisms, for example by mounting a
+[Secret](https://kubernetes.io/docs/concepts/configuration/secret/) that an external system (such
+as a sidecar or an admission webhook) populates with the user's token. Spark simply reads the token
+from the configured file path.
+
+Create a Secret holding the user's identity token and mount it into the driver using Spark's
+[secret management](#secret-management) options:
+
+```bash
+kubectl create secret generic user-oidc-token \
+    --from-file=token=/path/to/user-identity-token.jwt
+```
+
+```bash
+/opt/spark/bin/spark-submit \
+    --deploy-mode cluster \
+    --master k8s://<KUBERNETES_MASTER_ENDPOINT> \
+    --conf spark.kubernetes.container.image=<spark-image-with-credential-aws> \
+    --conf spark.kubernetes.driver.secrets.user-oidc-token=/etc/oidc \
+    --conf spark.authenticate=true \
+    --conf spark.network.crypto.enabled=true \
+    --conf spark.security.oidc.enabled=true \
+    --conf spark.security.oidc.identityToken.file=/etc/oidc/token \
+    --conf spark.security.oidc.aws.roleArn=arn:aws:iam::123456789012:role/spark-user-access \
+    <application-jar> <args>
+```
+
+Here `spark.kubernetes.driver.secrets.user-oidc-token=/etc/oidc` mounts the `user-oidc-token`
+Secret at `/etc/oidc`, so its `token` key becomes the file `/etc/oidc/token` that
+`spark.security.oidc.identityToken.file` points to. The Secret is mounted only on the driver; as
+before, executors receive only the derived S3 credentials.
+
+When the mounted token is rotated (the external system updates the Secret), Spark detects the change
+and re-exchanges it on the next renewal cycle, so long-running applications continue to work across
+token rotation.
+
 ## Pod Template
 Kubernetes allows defining pods from [template files](https://kubernetes.io/docs/concepts/workloads/pods/pod-overview/#pod-templates).
 Spark users can similarly use template files to define the driver or executor pod configurations that Spark configurations do not support.
@@ -1052,7 +1186,10 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>(value of spark.kubernetes.authenticate.driver.serviceAccountName)</code></td>
   <td>
     Service account that is used when running the executor pod.
-    If this parameter is not setup, the fallback logic will use the driver's service account.
+    If this parameter is not setup, the fallback logic will use the value of
+    <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>.
+    Both are ignored when the executor pod template already names a non-empty service account in
+    either <code>serviceAccount</code> or <code>serviceAccountName</code>.
   </td>
   <td>3.1.0</td>
 </tr>
@@ -1718,6 +1855,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>false</code></td>
   <td>
     If set to true, Spark will store the exit exception failed applications in the Kubernetes API server using the <code>spark.exit-exception</code> annotation.
+    Note that the annotation is visible to anyone who can get the driver pod. The parts of the exit exception matching
+    <code>spark.redaction.string.regex</code> are redacted.
   </td>
   <td>4.1.0</td>
 </tr>
@@ -2131,18 +2270,23 @@ See the below table for the full list of pod specifications that will be overwri
   <td>serviceAccount</td>
   <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
-    Spark will override <code>serviceAccount</code> with the value of the spark configuration for only
-    driver pods, and only if the spark configuration is specified and no driver credentials are
-    submitted for Spark to mount as a secret. Executor pods will remain unaffected.
+    For driver pods Spark will override <code>serviceAccount</code> with the value of
+    <code>spark.kubernetes.authenticate.driver.serviceAccountName</code>, but only if that
+    configuration is set and no driver credentials are submitted for Spark to mount as a secret.
+    For executor pods Spark writes both fields with the same value: the account the template names,
+    if it names one in either field, and otherwise
+    <code>spark.kubernetes.authenticate.executor.serviceAccountName</code>, falling back to the
+    driver's. When the template names both fields, <code>serviceAccountName</code> is the one that
+    decides, as it is for Kubernetes itself. Spark warns when
+    <code>spark.kubernetes.authenticate.executor.serviceAccountName</code> named an account the
+    template displaced.
   </td>
 </tr>
 <tr>
   <td>serviceAccountName</td>
   <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td>
-    Spark will override <code>serviceAccountName</code> with the value of the spark configuration for only
-    driver pods, and only if the spark configuration is specified and no driver credentials are
-    submitted for Spark to mount as a secret. Executor pods will remain unaffected.
+    Same as <code>serviceAccount</code>.
   </td>
 </tr>
 <tr>

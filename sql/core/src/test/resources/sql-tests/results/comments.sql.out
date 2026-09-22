@@ -119,6 +119,35 @@ selected content
 
 
 -- !query
+SELECT /* outer /*+ inner */ outer tail */ 1 AS nested_hint
+-- !query schema
+struct<nested_hint:int>
+-- !query output
+1
+
+
+-- !query
+/* SELECT /*+ HINT() */ 4; */
+SELECT 'after-comment' AS nested_hint_semicolon
+-- !query schema
+struct<nested_hint_semicolon:string>
+-- !query output
+after-comment
+
+
+-- !query
+/* SELECT /*+ HINT() 4; */ SELECT 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNCLOSED_BRACKETED_COMMENT",
+  "sqlState" : "42601"
+}
+
+
+-- !query
 /*abc*/
 select 1 as a
 /*
