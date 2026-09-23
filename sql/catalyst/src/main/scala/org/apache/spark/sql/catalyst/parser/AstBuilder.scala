@@ -2698,12 +2698,9 @@ class AstBuilder extends DataTypeAstBuilder
       throw QueryParsingErrors.incompatibleJoinTypesError(
         joinType1 = "ASOF", joinType2 = ctx.NATURAL.toString, ctx = ctx)
     }
-    val joinType = baseJoinType match {
-      case Inner => Inner
-      case LeftOuter => LeftOuter
-      case other =>
-        throw QueryParsingErrors.incompatibleJoinTypesError(
-          joinType1 = "ASOF", joinType2 = other.sql, ctx = ctx)
+    if (!Seq(Inner, LeftOuter).contains(baseJoinType)) {
+      throw QueryParsingErrors.incompatibleJoinTypesError(
+        joinType1 = "ASOF", joinType2 = baseJoinType.sql, ctx = ctx)
     }
     val (leftExpr, operator, rightExpr) =
       asOfMatchConditionFromExpression(expression(criteria.matchExpr), criteria.matchExpr)
@@ -2716,7 +2713,7 @@ class AstBuilder extends DataTypeAstBuilder
         throw SparkException.internalError(s"Unimplemented asofJoinCriteria: $criteria")
     }
     AsOfJoin.fromMatchCondition(
-      base, plan(ctx.right), leftExpr, operator, rightExpr, condition, joinType, usingColumns)
+      base, plan(ctx.right), leftExpr, operator, rightExpr, condition, baseJoinType, usingColumns)
   }
 
   /**

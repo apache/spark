@@ -1209,27 +1209,32 @@ class PlanParserSuite extends AnalysisTest {
 
   test("asof join - unsupported join types rejected") {
     withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
-      // Only INNER and LEFT OUTER are valid before ASOF. Any other join type, or a leading
-      // NATURAL, must fail with INCOMPATIBLE_JOIN_TYPES naming the pair (not a generic syntax
-      // error). Fails if the grammar rejected these outright, or the wrong type name is reported.
-      def checkUnsupported(sql: String, joinType2: String, start: Int, stop: Int): Unit = {
+      // Only INNER and LEFT OUTER are valid before ASOF, and NATURAL never is (even with LEFT).
+      // Each other form must fail with INCOMPATIBLE_JOIN_TYPES naming the pair, not a generic
+      // syntax error. The context is the whole join clause, so its position comes from the SQL.
+      def checkUnsupported(
+          joinClause: String,
+          joinType2: String,
+          prefix: String = "select * from t "): Unit = {
+        val sql = prefix + joinClause
         checkError(
           exception = parseException(sql),
           condition = "INCOMPATIBLE_JOIN_TYPES",
           sqlState = "42613",
           parameters = Map("joinType1" -> "ASOF", "joinType2" -> joinType2),
-          context = ExpectedContext(fragment = sql.substring(start), start = start, stop = stop))
+          context = ExpectedContext(
+            fragment = joinClause, start = prefix.length, stop = sql.length - 1))
       }
-      checkUnsupported(
-        "select * from t right asof join u match_condition (t.a >= u.a)", "RIGHT OUTER", 16, 61)
-      checkUnsupported(
-        "select * from t full asof join u match_condition (t.a >= u.a)", "FULL OUTER", 16, 60)
-      checkUnsupported(
-        "select * from t cross asof join u match_condition (t.a >= u.a)", "CROSS", 16, 61)
-      checkUnsupported(
-        "select * from t left semi asof join u match_condition (t.a >= u.a)", "LEFT SEMI", 16, 65)
-      checkUnsupported(
-        "select * from t natural asof join u match_condition (t.a >= u.a)", "NATURAL", 16, 63)
+      val asof = "asof join u match_condition (t.a >= u.a)"
+      Seq(
+        "right" -> "RIGHT OUTER", "right outer" -> "RIGHT OUTER",
+        "full" -> "FULL OUTER", "full outer" -> "FULL OUTER",
+        "cross" -> "CROSS",
+        "semi" -> "LEFT SEMI", "left semi" -> "LEFT SEMI",
+        "anti" -> "LEFT ANTI", "left anti" -> "LEFT ANTI",
+        "natural" -> "NATURAL", "natural left" -> "NATURAL"
+      ).foreach { case (written, reported) => checkUnsupported(s"$written $asof", reported) }
+      checkUnsupported(s"right $asof", "RIGHT OUTER", prefix = "from t |> ")
     }
   }
 
@@ -1399,6 +1404,18 @@ class PlanParserSuite extends AnalysisTest {
           fragment = "asof join u match_condition (t.a >= u.a)",
           start = 16,
           stop = 55))
+      // The disabled check runs before the join type check, so an unsupported type also reports
+      // the disabled feature.
+      checkError(
+        exception = parseException(
+          "select * from t right asof join u match_condition (t.a >= u.a)"),
+        condition = "UNSUPPORTED_FEATURE.ASOF_JOIN",
+        sqlState = "0A000",
+        parameters = Map("config" -> "\"spark.sql.join.asofJoin.enabled\""),
+        context = ExpectedContext(
+          fragment = "right asof join u match_condition (t.a >= u.a)",
+          start = 16,
+          stop = 61))
     }
   }
 
