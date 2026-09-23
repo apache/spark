@@ -671,8 +671,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           aggExprToOutputOrdinal.clear()
           val newAggregates =
             collectAggregates(newResultExpressions, aggExprToOutputOrdinal)
-          val newNormalizedAggExprs = DataSourceStrategy.normalizeExprs(
-            newAggregates, holder.relation.output).asInstanceOf[Seq[AggregateExpression]]
+          val newNormalizedAggExprs =
+            normalizeExpressions(newAggregates, holder).asInstanceOf[Seq[AggregateExpression]]
           val newTranslatedAggOpt = DataSourceStrategy.translateAggregation(
             newNormalizedAggExprs, normalizedGroupingExpr)
           if (newTranslatedAggOpt.isEmpty) {

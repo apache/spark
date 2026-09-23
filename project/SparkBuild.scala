@@ -1357,7 +1357,13 @@ object ExcludedDependencies {
       ExclusionRule("javax.servlet", "javax.servlet-api"),
       ExclusionRule("io.netty", "netty-codec-protobuf"),
       ExclusionRule("io.netty", "netty-codec-marshalling"),
-      ExclusionRule("junit", "junit"))
+      ExclusionRule("junit", "junit"),
+      // Parquet 1.18.0 test jars pull JUnit 5 vintage/migration support into the sbt build
+      // (Maven treats these as non-transitive test-scope deps). They clash with Spark's
+      // JUnit Jupiter platform, so exclude them here to mirror the Maven classpath.
+      ExclusionRule("org.junit.vintage", "junit-vintage-engine"),
+      ExclusionRule("org.junit.jupiter", "junit-jupiter-migrationsupport"),
+      ExclusionRule("com.carrotsearch", "junit-benchmarks"))
   )
 }
 

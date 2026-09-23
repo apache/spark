@@ -396,6 +396,34 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     outputMode = Append
   )
 
+  def asOfJoin(left: LogicalPlan, right: LogicalPlan): AsOfJoin = {
+    AsOfJoin(
+      left,
+      right,
+      left.output.head >= right.output.head,
+      condition = None,
+      joinType = Inner,
+      orderExpression = left.output.head - right.output.head,
+      toleranceAssertion = None)
+  }
+
+  assertSupportedInStreamingPlan(
+    "ASOF join with stream-static relations",
+    asOfJoin(streamRelation, batchRelation),
+    outputMode = Append)
+
+  assertNotSupportedInStreamingPlan(
+    "ASOF join with static-stream relations",
+    asOfJoin(batchRelation, streamRelation),
+    outputMode = Append,
+    expectedMsgs = Seq("ASOF join", "streaming DataFrame/Dataset on the right"))
+
+  assertNotSupportedInStreamingPlan(
+    "ASOF join with stream-stream relations",
+    asOfJoin(streamRelation, streamRelation),
+    outputMode = Append,
+    expectedMsgs = Seq("ASOF join", "streaming DataFrame/Dataset on the right"))
+
   // Inner joins: Multiple stream-stream joins supported only in append mode
   testBinaryOperationInStreamingPlan(
     "single inner join in append mode",

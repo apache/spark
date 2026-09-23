@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
+import java.lang.reflect.InvocationTargetException
 import java.security.PrivilegedExceptionAction
 import java.sql.{Connection, Driver}
 import java.util.Properties
@@ -30,6 +31,14 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
   val parserMethod: String = "parseAndMergeProperties"
 
   override val name: String = "mssql"
+
+  private def withInvocationTargetExceptionUnwrapped[T](invocation: => T): T = {
+    try {
+      invocation
+    } catch {
+      case e: InvocationTargetException if e.getCause != null => throw e.getCause
+    }
+  }
 
   override def appEntry(driver: Driver, options: JDBCOptions): String = {
     val configName = "jaasConfigurationName"
@@ -48,8 +57,9 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
     parseURL match {
       case Some(m) =>
         logDebug("Property parser method found, using it")
-        m.invoke(driver, options.url, null).asInstanceOf[Properties]
-          .getProperty(configName, appEntryDefault)
+        withInvocationTargetExceptionUnwrapped {
+          m.invoke(driver, options.url, null)
+        }.asInstanceOf[Properties].getProperty(configName, appEntryDefault)
 
       case None =>
         logDebug("Property parser method not found, using custom parsing mechanism")

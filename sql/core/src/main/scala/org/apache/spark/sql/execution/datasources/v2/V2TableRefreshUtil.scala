@@ -103,7 +103,12 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
         validateTableIdentity(currentTable, r)
         validateDataColumns(currentTable, r, schemaValidationMode)
         validateMetadataColumns(currentTable, r, schemaValidationMode)
-        r.copy(table = currentTable)
+        val refreshed = r.copy(table = currentTable)
+        if (schemaValidationMode == ALLOW_NEW_FIELDS) {
+          AnalyzedSchemaProjection.rebindToAnalyzedSchema(refreshed)
+        } else {
+          refreshed
+        }
     }
   }
 
@@ -123,7 +128,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
   }
 
   private def containsCommand(plan: LogicalPlan): Boolean = {
-    plan.find(_.isInstanceOf[Command]).isDefined
+    plan.exists(_.isInstanceOf[Command])
   }
 
   private def validateTableIdentity(currentTable: Table, relation: DataSourceV2Relation): Unit = {
