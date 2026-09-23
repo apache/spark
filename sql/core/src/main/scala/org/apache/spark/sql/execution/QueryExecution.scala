@@ -861,7 +861,8 @@ object QueryExecution {
       } else {
         // VerifyCTEReuse runs only on the main query (not per-subquery) after
         // ReuseExchangeAndSubquery, to verify guaranteed CTE shuffle reuse held (AQE off).
-        Seq(ReuseExchangeAndSubquery, VerifyCTEReuse(failOnReuseFailure = false))
+        Seq(ReuseExchangeAndSubquery, VerifyCTEReuse(failOnReuseFailure =
+          sparkSession.sessionState.conf.getConf(SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE)))
       }) ++
       // Opt-in (SPARK-57399): runs last so it observes the final reuse decision (a reused
       // exchange means fan-out, which it refuses to make pipelined).

@@ -6872,9 +6872,12 @@ object SQLConf {
   val REPLACE_CTE_REF_WITH_CTE_REUSE =
     buildConf("spark.sql.optimizer.replaceCTERefWithCTEReuse.enabled")
       .internal()
-      .doc("When true, replaces CTE references and repartitions with CTEReuse nodes " +
-        "instead of plain Repartition nodes. CTEReuse enables guaranteed exchange reuse " +
-        "in AQE by sharing a single inner AdaptiveSparkPlanExec across all references.")
+      .doc("When true, plan-reuse repartitions (those carrying a nonzero repartition id, " +
+        "currently produced only for CTE definitions marked forceSkipInline) are converted to " +
+        "CTEReuse nodes instead of plain Repartition nodes; ordinary retained or user " +
+        "MATERIALIZED CTEs keep plain repartitions and are unaffected. CTEReuse enables " +
+        "guaranteed exchange reuse in AQE by sharing a single inner AdaptiveSparkPlanExec " +
+        "across all references.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

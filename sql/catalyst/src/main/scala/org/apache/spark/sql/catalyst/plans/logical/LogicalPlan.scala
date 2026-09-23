@@ -590,9 +590,17 @@ object LogicalPlanIntegrity {
     if (!plan.containsPattern(CTE_REUSE)) {
       None
     } else {
-      val cteReuses = plan.collectWithSubqueries {
-        case r: CTEReuseRelation => r
+      // CTEReuseRelation is a leaf whose sharedSubplan is metadata (not a child), so
+      // collectWithSubqueries stops at it. Descend into sharedSubplan explicitly so nested
+      // same-id reuse relations are validated too, not just the top-level ones.
+      val cteReuses = mutable.ArrayBuffer.empty[CTEReuseRelation]
+      def collectDeep(p: LogicalPlan): Unit = p.foreachWithSubqueries {
+        case r: CTEReuseRelation =>
+          cteReuses += r
+          collectDeep(r.sharedSubplan)
+        case _ =>
       }
+      collectDeep(plan)
       if (cteReuses.isEmpty) {
         None
       } else {

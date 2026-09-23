@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.optimizer.{ReplaceCTERefWithRepartition, ReplaceRepartitionWithCTEReuse}
+import org.apache.spark.sql.catalyst.optimizer.{PushdownPredicatesAndPruneColumnsForCTEDef, ReplaceCTERefWithRepartition, ReplaceRepartitionWithCTEReuse}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.ExtendedMode
@@ -424,6 +424,63 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
       assert(explained.contains("CTEReuseRelation cteId="),
         s"Expected the CTEReuseRelation line in EXPLAIN EXTENDED:\n$explained")
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // forcePartitioning is a first-class contract, independent of forceSkipInline
+  // ---------------------------------------------------------------------------
+
+  test("forcePartitioning is honored independently of forceSkipInline, preserving numPartitions") {
+    // A CTE pinned with HashPartitioning but forceSkipInline = false still materializes as a
+    // plan-reuse repartition on the pinned keys (sealed for guaranteed reuse), and the exact
+    // requested numPartitions is preserved rather than replaced by the session default.
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val cteBody = LocalRelation(a, b)
+    val cteDef = CTERelationDef(cteBody, forceSkipInline = false,
+      forcePartitioning = Some(HashPartitioning(Seq(b), 7)))
+    val ref1 = CTERelationRef(cteDef.id, _resolved = true, cteBody.output, isStreaming = false)
+    val ref2 = CTERelationRef(cteDef.id, _resolved = true, cteBody.output, isStreaming = false)
+    val plan = WithCTE(Union(Seq(ref1, ref2)), Seq(cteDef))
+
+    val result = runReuseRules(plan)
+    val reuses = collectCTEReuseRelations(result)
+    assert(reuses.nonEmpty,
+      s"Expected CTEReuseRelation for a forcePartitioning CTE with forceSkipInline=false:" +
+        s"\n${result.treeString}")
+    reuses.foreach { r =>
+      r.partitioning match {
+        case h: HashPartitioning =>
+          assert(h.numPartitions == 7,
+            s"Expected the pinned numPartitions=7 to be preserved, got ${h.numPartitions}")
+        case other =>
+          fail(s"Expected a HashPartitioning on the reuse relation, got $other")
+      }
+    }
+  }
+
+  test("forcePartitioning keys survive CTE column pruning") {
+    // The CTE outputs (a, b) and is pinned on b, but no reference projects b. Column pruning must
+    // not drop b, otherwise the later forced repartition on b would dangle. `b` is retained even
+    // though it is not a user-visible consumer column.
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val cteBody = LocalRelation(a, b)
+    val cteDef = CTERelationDef(cteBody, forceSkipInline = true,
+      forcePartitioning = Some(HashPartitioning(Seq(b), 5)))
+    // A reference's output is a 1:1 copy of the def output; consumers project only `a`.
+    def refProjectingA(): LogicalPlan = {
+      val ref = CTERelationRef(cteDef.id, _resolved = true,
+        Seq(AttributeReference("a", IntegerType)(), AttributeReference("b", IntegerType)()),
+        isStreaming = false)
+      Project(Seq(ref.output.head), ref)
+    }
+    val plan = WithCTE(Union(Seq(refProjectingA(), refProjectingA())), Seq(cteDef))
+
+    val pruned = PushdownPredicatesAndPruneColumnsForCTEDef(plan)
+    val prunedDef = pruned.collectWithSubqueries { case d: CTERelationDef => d }.head
+    assert(prunedDef.output.exists(_.name == "b"),
+      s"Expected the forced partition key `b` to survive column pruning:\n${pruned.treeString}")
   }
 
 }

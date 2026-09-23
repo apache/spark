@@ -310,9 +310,23 @@ case class AdaptiveSparkPlanExec(
    */
   def materialize(): Future[Any] = materializeFuture
 
-  @transient private lazy val materializeFuture: Future[Any] = Future {
-    withFinalPlanUpdate((_: SparkPlan) => (), skipResultStage = true)
-  }(AdaptiveSparkPlanExec.cteExecutionContext)
+  @transient private lazy val materializeFuture: Future[Any] = {
+    // The inner AQE runs on a reused pool thread that does not inherit the initiating query's
+    // thread-locals. Capture them on the thread that first forces this lazy val (the outer AQE's
+    // stage-materialization thread, which carries the execution id, job group, scheduler
+    // properties, and artifact state) and forward them exactly as subquery execution does (see
+    // `SubqueryExec`), so the inner CTE jobs stay attributed to the query and reachable by its
+    // cancellation instead of running with an absent or stale execution context.
+    val executionId = context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    val threadLocals = SQLExecution.captureThreadLocals(context.session)
+    Future {
+      threadLocals.runWith {
+        SQLExecution.withExecutionId(context.session, executionId) {
+          withFinalPlanUpdate((_: SparkPlan) => (), skipResultStage = true)
+        }
+      }
+    }(AdaptiveSparkPlanExec.cteExecutionContext)
+  }
 
   def withFinalPlanUpdate[T](
       fun: SparkPlan => T,

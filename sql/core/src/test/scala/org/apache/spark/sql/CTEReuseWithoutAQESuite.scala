@@ -38,7 +38,10 @@ class CTEReuseWithoutAQESuite
   private def withCTEReuseNoAQE(f: => Unit): Unit = {
     withSQLConf(
       cteReuseConf -> "true",
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false"
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      // Fail fast if guaranteed reuse does not hold, so these tests actually exercise the
+      // fail-on-reuse-failure path (the individual reuse-disabled test overrides this to false).
+      SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE.key -> "true"
     )(f)
   }
 

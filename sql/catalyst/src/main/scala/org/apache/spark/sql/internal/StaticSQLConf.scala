@@ -250,6 +250,7 @@ object StaticSQLConf {
         "and reuse. This pool is isolated from the main QueryStageCreator thread pool. A " +
         "relatively large default size of 1024 is chosen to minimize the risk of deadlocks " +
         "caused by deeply nested CTEs exhausting the available threads.")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(thres => thres > 0 && thres <= 1024, "The threshold must be in (0,1024].")

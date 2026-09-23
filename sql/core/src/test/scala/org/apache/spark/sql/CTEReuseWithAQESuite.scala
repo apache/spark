@@ -58,12 +58,19 @@ class CTEReuseWithAQESuite
    */
   private def assertInnerAQEShared(
       df: DataFrame,
-      expectedDistinctCTEs: Int = 1): Unit = {
+      expectedDistinctCTEs: Int = 1,
+      allowEmpty: Boolean = false): Unit = {
     val executedPlan = df.queryExecution.executedPlan
     val stages = collectWithSubqueries(executedPlan) {
       case s: CTEReuseQueryStageExec => s
     }
-    if (stages.isEmpty) return
+    if (stages.isEmpty) {
+      // Only callers that legitimately prune all CTE stages (e.g. empty-relation propagation)
+      // may pass here; otherwise a missing-stages regression must fail, not pass vacuously.
+      assert(allowEmpty,
+        s"Expected CTEReuseQueryStageExec stages but found none:\n${executedPlan.treeString}")
+      return
+    }
     val distinctAQEs = stages.map(s =>
       System.identityHashCode(s.innerAQE)).toSet
     assert(distinctAQEs.size == expectedDistinctCTEs,
@@ -133,7 +140,7 @@ class CTEReuseWithAQESuite
             |""".stripMargin)
         checkAnswer(df, Seq.empty)
         // Any surviving CTE stages (empty-relation propagation may prune some) share one inner AQE.
-        assertInnerAQEShared(df)
+        assertInnerAQEShared(df, allowEmpty = true)
       }
     }
   }
