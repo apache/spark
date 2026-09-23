@@ -5163,8 +5163,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       messageParameters = Map(
-        "refs1" -> toSQLExpr(expr1),
-        "refs2" -> toSQLExpr(expr2)))
+        "operand1" -> toSQLExpr(expr1),
+        "operand2" -> toSQLExpr(expr2)))
   }
 
   def nestedSequentialStreamingUnionError(): Throwable = {

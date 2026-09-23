@@ -134,8 +134,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
       parameters = Map(
-        "refs1" -> "\"(trade_time + quote_time)\"",
-        "refs2" -> "\"quote_time\""),
+        "operand1" -> "\"(trade_time + quote_time)\"",
+        "operand2" -> "\"quote_time\""),
       queryContext = Array(
         ExpectedContext(
           fragment = """ASOF JOIN quotes q
@@ -159,14 +159,13 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
       parameters = Map(
-        "refs1" -> "\"symbol\"",
-        "refs2" -> "\"symbol\""))
+        "operand1" -> "\"symbol\"",
+        "operand2" -> "\"symbol\""))
   }
 
-  test("MATCH_CONDITION rejects a literal colliding with a same-side column") {
+  test("MATCH_CONDITION rejects a literal even when a same-side column is present") {
     setupTradeQuoteViews()
-    // `'AAPL'` has no column refs, so it takes its syntactic (right) side, the same side as
-    // q.symbol. No operand references the left input, so the condition is rejected.
+    // `'AAPL'` references no join input, so no operand binds to the left side and it is rejected.
     val sqlText =
       """
         |SELECT count(*)
@@ -178,7 +177,7 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException](sql(sqlText)),
       condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       sqlState = Some("42K0E"),
-      parameters = Map("refs1" -> "\"symbol\"", "refs2" -> "\"AAPL\""))
+      parameters = Map("operand1" -> "\"symbol\"", "operand2" -> "\"AAPL\""))
   }
 
   test("MATCH_CONDITION rejects non-deterministic expressions") {
@@ -277,7 +276,7 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("MATCH_CONDITION accepts CURRENT_TIMESTAMP as left operand") {
+  test("MATCH_CONDITION rejects a query-foldable constant operand (no join input reference)") {
     setupTradeQuoteViews()
     val sqlText =
       """
@@ -286,15 +285,16 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         |  MATCH_CONDITION (current_timestamp() >= q.quote_time)
         |  ON t.symbol = q.symbol
         |""".stripMargin
-    val asOfJoin = sql(sqlText).queryExecution.analyzed.collectFirst {
-      case j: AsOfJoin => j
-    }.get
-    assert(asOfJoin.asOfCondition.resolved)
-    assert(asOfJoin.leftSortExprs.nonEmpty)
-    assert(asOfJoin.rightSortExprs.nonEmpty)
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+      sqlState = Some("42K0E"),
+      parameters = Map(
+        "operand1" -> "\"current_timestamp()\"",
+        "operand2" -> "\"quote_time\""))
   }
 
-  test("MATCH_CONDITION accepts literal constant as right operand") {
+  test("MATCH_CONDITION rejects a literal constant operand (no join input reference)") {
     setupTradeQuoteViews()
     val sqlText =
       """
@@ -303,14 +303,18 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         |  MATCH_CONDITION (t.trade_time >= TIMESTAMP '2026-06-29 10:00:00')
         |  ON t.symbol = q.symbol
         |""".stripMargin
-    val asOfJoin = sql(sqlText).queryExecution.analyzed.collectFirst {
-      case j: AsOfJoin => j
-    }.get
-    assert(asOfJoin.asOfCondition.resolved)
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+      sqlState = Some("42K0E"),
+      parameters = Map(
+        "operand1" -> "\"trade_time\"",
+        "operand2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
   }
 
-  test("MATCH_CONDITION with two literal operands passes analysis") {
+  test("MATCH_CONDITION rejects two literal operands (neither references a join input)") {
     setupTradeQuoteViews()
+    // Both operands are literals that reference no join input, so neither binds to a side.
     val sqlText =
       """
         |SELECT count(*)
@@ -318,13 +322,33 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         |  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:00' >= TIMESTAMP '2026-06-29 09:00:00')
         |  ON t.symbol = q.symbol
         |""".stripMargin
-    // Both operands are literals with no column refs, so each takes its syntactic side
-    // (expr1 = left, expr2 = right). Opposite sides pass the table-reference check; same-side
-    // assignment would throw ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE before this point.
-    val asOfJoin = sql(sqlText).queryExecution.analyzed.collectFirst {
-      case j: AsOfJoin => j
-    }.get
-    assert(asOfJoin.asOfCondition.resolved)
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+      sqlState = Some("42K0E"),
+      parameters = Map(
+        "operand1" -> "\"TIMESTAMP '2026-06-29 10:00:00'\"",
+        "operand2" -> "\"TIMESTAMP '2026-06-29 09:00:00'\""))
+  }
+
+  test("MATCH_CONDITION rejects a constant operand under the single-pass analyzer") {
+    setupTradeQuoteViews()
+    val sqlText =
+      """
+        |SELECT count(*)
+        |FROM trades t ASOF JOIN quotes q
+        |  MATCH_CONDITION (t.trade_time >= TIMESTAMP '2026-06-29 10:00:00')
+        |  ON t.symbol = q.symbol
+        |""".stripMargin
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException](sql(sqlText)),
+        condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+        sqlState = Some("42K0E"),
+        parameters = Map(
+          "operand1" -> "\"trade_time\"",
+          "operand2" -> "\"TIMESTAMP '2026-06-29 10:00:00'\""))
+    }
   }
 
   test("MATCH_CONDITION rejects scalar subquery operand") {
