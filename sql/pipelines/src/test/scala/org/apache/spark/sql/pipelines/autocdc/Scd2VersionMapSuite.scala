@@ -288,6 +288,53 @@ class Scd2VersionMapSuite extends QueryTest with SharedSparkSession {
       encodedPath("col_two") -> true)))
   }
 
+  // Version map keys are persisted in target tables and must remain stable across Spark releases.
+  // This regression test guards against changes to QuotingUtils inadvertently breaking that format.
+  test("version map keys have a stable persisted serialization") {
+    val keyPathsAndExpectedSerialization = Seq(
+      Seq("simple") -> "`simple`",
+      Seq("a.b") -> "`a.b`",
+      Seq("a", "b") -> "`a`.`b`",
+      Seq("wrapper", "leaf") -> "`wrapper`.`leaf`",
+      Seq("wrapper", "a.b") -> "`wrapper`.`a.b`",
+      Seq("wrapper", "has space") -> "`wrapper`.`has space`",
+      Seq("wrapper", "col-one") -> "`wrapper`.`col-one`",
+      Seq("wrapper", "back`tick") -> "`wrapper`.`back``tick`",
+      Seq("wrapper", "`already quoted`") -> "`wrapper`.```already quoted```",
+      Seq("wrapper", "single'quote") -> "`wrapper`.`single'quote`",
+      Seq("wrapper", "double\"quote") -> "`wrapper`.`double\"quote`",
+      Seq("wrapper", "back\\slash") -> "`wrapper`.`back\\slash`",
+      Seq("wrapper", "") -> "`wrapper`.``",
+      Seq("wrapper", "null" + 0.toChar + "byte") ->
+        ("`wrapper`.`null" + 0.toChar + "byte`"))
+    // Extract wrapper's leaf names for the nested schema; "wrapper" remains in the persisted key.
+    val structLeafs = keyPathsAndExpectedSerialization.collect {
+      case (Seq("wrapper", name), _) => name
+    }
+    val schema = new StructType()
+      .add("simple", StringType)
+      .add("a.b", StringType)
+      .add("a", new StructType().add("b", StringType))
+      .add("wrapper", StructType(structLeafs.map(StructField(_, StringType))))
+    val df = singleRow(schema)(
+      null, null, Row(null), Row.fromSeq(Seq.fill[Any](structLeafs.size)(null)))
+
+    // Make every column an ignore-null column, so all leafs with a null value get persisted in the
+    // version map.
+    val selection = ColumnSelection.ExcludeColumns(Seq.empty)
+
+    val result = df.select(
+      Scd2VersionMap.buildVersionMap(schema, selection, resolver).as("vm"))
+
+    val expectedVersionMap = keyPathsAndExpectedSerialization.map {
+      // Since we populated every column with nulls and every column is included in the ignore-null
+      // selection, every leaf should appear in the constructed version map with the expected name
+      // serialization.
+      case (_, serializedKey) => serializedKey -> false
+    }.toMap
+    checkAnswer(result, Row(expectedVersionMap))
+  }
+
   test("special-character path parts round-trip through version map keys") {
     val specialNames =
       Seq("a.b", "has space", "back`tick", "quote\"", "back\\slash", "null" + 0.toChar + "byte")
