@@ -3102,6 +3102,30 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("merge with a SQL variable in matched delete condition") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+      Seq(1, 2).toDF("pk").createOrReplaceTempView("source")
+
+      withSessionVariable("salary_threshold") {
+        sql("DECLARE VARIABLE salary_threshold INT DEFAULT 150")
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED AND t.salary < salary_threshold THEN DELETE
+             |""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(2, 200, "software") :: Nil)
+      }
+    }
+  }
+
   test("merge with a SQL variable in the not-matched insert condition") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
