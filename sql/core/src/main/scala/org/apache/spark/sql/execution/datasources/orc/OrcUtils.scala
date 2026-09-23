@@ -447,7 +447,7 @@ object OrcUtils extends Logging {
         s"${getOrcSchemaString(m.valueType, charVarcharScanMode)}>"
     // Under standard semantics, keep Spark responsible for CHAR/VARCHAR assignment and scan
     // checks. Native ORC would truncate or pad before Spark can validate the original value.
-    // Legacy and preserve-only modes retain the native constrained schema and enforcement.
+    // Preserve-only mode retains the native constrained schema and its legacy enforcement.
     case _: CharType | _: VarcharType
         if charVarcharScanMode == CharVarcharScanMode.SparkStandard =>
       StringType.catalogString
@@ -542,7 +542,7 @@ object OrcUtils extends Logging {
    * @param resultSchema Result data schema created after pruning cols.
    * @param partitionSchema Schema of partitions.
    * @param conf Hadoop Configuration.
-   * @param charVarcharScanMode The mode bound during analysis; `None` uses legacy semantics.
+   * @param charVarcharScanMode The mode bound during analysis, if first-class types are enabled.
    * @return Returns the result schema as string.
    */
   def orcResultSchemaString(
@@ -552,7 +552,7 @@ object OrcUtils extends Logging {
       partitionSchema: StructType,
       conf: Configuration,
       charVarcharScanMode: Option[CharVarcharScanMode]): String = {
-    val mode = charVarcharScanMode.getOrElse(CharVarcharScanMode.Legacy)
+    val mode = charVarcharScanMode.getOrElse(CharVarcharScanMode.PreserveNative)
     val resultSchemaString = if (canPruneCols) {
       OrcUtils.getOrcSchemaString(resultSchema, mode)
     } else {

@@ -66,8 +66,6 @@ private[sql] case class TableCacheDescriptor(
   def charVarcharScanMode: Option[CharVarcharScanMode] =
     plan.collectFirst {
       case r: DataSourceV2Relation => r.charVarcharScanMode
-      case r: LogicalRelation => r.charVarcharScanMode
-      case r: HiveTableRelation => r.charVarcharScanMode
     }.flatten
 }
 
@@ -426,37 +424,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         case _ => false
       }
       if (isDirectCache && hasRelation) {
-        Some(TableCacheDescriptor(
-          cd.plan,
-          cd.cachedRepresentation.cacheBuilder.storageLevel))
-      } else {
-        None
-      }
-    }
-  }
-
-  /**
-   * Describes every direct named cache entry for a V1 table or view. The cached name may be less
-   * qualified than `name`, so it is matched as a suffix after parsing while the cached plan is
-   * matched against the fully qualified name. This excludes named dependent-query caches.
-   */
-  def lookupCacheDescriptorsByTableName(
-      spark: SparkSession,
-      name: Seq[String]): Seq[TableCacheDescriptor] = {
-    val resolver = spark.sessionState.conf.resolver
-    cachedData.flatMap { cd =>
-      val isDirectCache = cd.cachedRepresentation.cacheBuilder.tableName.exists { tableName =>
-        try {
-          val cacheName = spark.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-          cacheName.length <= name.length &&
-            isSameName(cacheName, name.takeRight(cacheName.length), resolver)
-        } catch {
-          case NonFatal(_) => false
-        }
-      }
-      val hasTableOrView = cd.plan.exists(
-        isMatchedTableOrView(_, name, resolver, includeTimeTravel = true))
-      if (isDirectCache && hasTableOrView) {
         Some(TableCacheDescriptor(
           cd.plan,
           cd.cachedRepresentation.cacheBuilder.storageLevel))

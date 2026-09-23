@@ -2629,7 +2629,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
     val formatName = classOf[TrackingOrcFileFormat].getName
     // A delegating subclass overrides the public seven-argument reader and calls `super`. That
     // `super` call must retain the analyzed scan mode bridged across the legacy signature, so a
-    // standard-semantics scan cannot be silently downgraded to PreserveNative behavior. Cover
+    // standard-semantics scan cannot be silently downgraded to native preserve behavior. Cover
     // both the row and vectorized ORC readers.
     Seq(true, false).foreach { vectorizedReaderEnabled =>
       withSQLConf(
