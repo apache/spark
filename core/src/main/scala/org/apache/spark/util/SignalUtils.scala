@@ -94,6 +94,23 @@ private[spark] object SignalUtils extends Logging {
   }
 
   /**
+   * Runs `body` with `handler` temporarily installed for the given signal, and restores the
+   * previous handler afterwards.
+   *
+   * Unlike `register`, the handler replaces the existing one instead of being chained with it,
+   * and it is run whenever the signal is received while `body` is running.
+   */
+  def withSignalHandler[T](signal: String)(handler: => Unit)(body: => T): T = {
+    val sig = new Signal(signal)
+    val prevHandler = Signal.handle(sig, (_: Signal) => handler)
+    try {
+      body
+    } finally {
+      Signal.handle(sig, prevHandler)
+    }
+  }
+
+  /**
    * A handler for the given signal that runs a collection of actions.
    */
   private class ActionHandler(signal: Signal) extends SignalHandler {
