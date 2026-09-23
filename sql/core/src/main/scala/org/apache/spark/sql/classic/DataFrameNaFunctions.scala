@@ -117,7 +117,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
       case _: String => StringType
     }
 
-    val output = df.queryExecution.analyzed.output
+    val output = df.queryExecution.resultOutput
     val projections = output.map { attr =>
       if (attrs.contains(attr) && (attr.dataType == targetColumnType ||
         (attr.dataType.isInstanceOf[NumericType] && targetColumnType == DoubleType))) {
@@ -147,7 +147,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
       attr -> replaceValue
     })
 
-    val output = df.queryExecution.analyzed.output
+    val output = df.queryExecution.resultOutput
     val projections = output.map {
       attr => attrToValue.get(attr).map {
         case v: jl.Float => fillCol[Float](attr, v)
@@ -212,7 +212,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
   }
 
   private def outputAttributes: Seq[Attribute] = {
-    df.queryExecution.analyzed.output
+    df.queryExecution.resultOutput
   }
 
 

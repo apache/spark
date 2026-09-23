@@ -48,12 +48,12 @@ private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.
   }
 
   private def getResultSetSchema(query: QueryExecution): Schema = {
-    val analyzed = query.analyzed
-    logDebug(s"Result Schema: ${analyzed.output}")
-    if (analyzed.output.isEmpty) {
+    val output = query.resultOutput
+    logDebug(s"Result Schema: $output")
+    if (output.isEmpty) {
       new Schema(Arrays.asList(new FieldSchema("Response code", "string", "")), null)
     } else {
-      val fieldSchemas = analyzed.output.map { attr =>
+      val fieldSchemas = output.map { attr =>
         new FieldSchema(attr.name, attr.dataType.catalogString, "")
       }
 

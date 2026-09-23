@@ -17,10 +17,17 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.util.Collections
+
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
+import org.apache.spark.sql.connector.read.{LocalScan, Scan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 
 class SparkSQLDriverSuite extends SharedSparkSession {
@@ -48,4 +55,48 @@ class SparkSQLDriverSuite extends SharedSparkSession {
       assert(jobDescription.contains(REDACTION_REPLACEMENT_TEXT))
     }
   }
+
+  test("CALL result schema reports the procedure's output columns") {
+    withSQLConf("spark.sql.catalog.cat" -> classOf[InMemoryCatalog].getName) {
+      val catalog =
+        spark.sessionState.catalogManager.catalog("cat").asInstanceOf[InMemoryCatalog]
+      catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+      val driver = new SparkSQLDriver(spark)
+      try {
+        // The procedure runs at execution time, so the reported schema must come from the executed
+        // plan (the procedure's columns), not the empty output of the `Call` logical node.
+        driver.run("CALL cat.ns.sum(5, 5)")
+        val fields = driver.getSchema.getFieldSchemas
+        assert(fields.size() == 1)
+        assert(fields.get(0).getName == "out")
+        assert(fields.get(0).getType == "int")
+      } finally {
+        driver.close()
+        spark.sessionState.catalogManager.reset()
+      }
+    }
+  }
+
+  object UnboundSum extends UnboundProcedure {
+    override def name: String = "sum"
+    override def description: String = "sum integers"
+    override def bind(inputType: StructType): BoundProcedure = Sum
+  }
+
+  object Sum extends BoundProcedure {
+    override def name: String = "sum"
+    override def description: String = "sum integers"
+    override def isDeterministic: Boolean = true
+    override def parameters: Array[ProcedureParameter] = Array(
+      ProcedureParameter.in("in1", DataTypes.IntegerType).build(),
+      ProcedureParameter.in("in2", DataTypes.IntegerType).build())
+    override def call(input: InternalRow): java.util.Iterator[Scan] = {
+      val result = Result(
+        new StructType().add("out", DataTypes.IntegerType),
+        Array(InternalRow(input.getInt(0) + input.getInt(1))))
+      Collections.singleton[Scan](result).iterator()
+    }
+  }
+
+  case class Result(readSchema: StructType, rows: Array[InternalRow]) extends LocalScan
 }

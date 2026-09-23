@@ -25,7 +25,7 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Command, ExecutableDuringAnalysis, LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{Call, Command, LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -177,7 +177,9 @@ case class ExplainCommand(
   }
 
   private def stageForAnalysis(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p: ExecutableDuringAnalysis => p.stageForExplain()
+    // A CALL is not executed during analysis; stage it so EXPLAIN renders the call without
+    // invoking the procedure (the strategy maps a non-executing `Call` to `ExplainOnlySparkPlan`).
+    case c: Call => c.copy(execute = false)
   }
 
   def withTransformedSupervisedPlan(transformer: LogicalPlan => LogicalPlan): LogicalPlan =

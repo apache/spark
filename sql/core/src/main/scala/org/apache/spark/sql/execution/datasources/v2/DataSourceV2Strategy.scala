@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXPR
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedProcedure, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, DynamicPruning, Expression, InSet, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
@@ -38,6 +38,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableSummary, TruncatableTable, V1Table, V1View, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
+import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
@@ -858,6 +859,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         userScope,
         systemScope,
         pattern) :: Nil
+
+    case c @ Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _) if c.execute =>
+      CallExec(procedure, args) :: Nil
 
     case c: Call =>
       ExplainOnlySparkPlan(c) :: Nil
