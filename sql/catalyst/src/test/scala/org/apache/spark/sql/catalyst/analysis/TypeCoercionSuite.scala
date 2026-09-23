@@ -234,17 +234,15 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
         originTs = Cast(string, TimestampType)))
   }
 
-  test("time_bucket implicitly casts time arguments to timestamp") {
+  test("time_bucket does not implicitly cast time arguments to timestamp") {
     val bucketSize = Literal(Duration.ofMinutes(15))
     val time = Literal(LocalTime.of(10, 23, 0))
+    val timeBucket = TimeBucket(bucketSize = bucketSize, ts = time, originTs = time)
 
     ruleTest(
       rule = implicitTypeCastsRule,
-      initial = TimeBucket(bucketSize = bucketSize, ts = time, originTs = time),
-      transformed = TimeBucket(
-        bucketSize = bucketSize,
-        ts = Cast(time, TimestampType),
-        originTs = Cast(time, TimestampType)))
+      initial = timeBucket,
+      transformed = timeBucket)
   }
 
   test("time_bucket does not implicitly cast string bucket size") {
@@ -259,6 +257,19 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
       rule = implicitTypeCastsRule,
       initial = timeBucket,
       transformed = timeBucket)
+  }
+
+  test("time_bucket implicitly casts null bucket size to day-time interval") {
+    val bucketSize = Literal(null)
+    val timestamp = Literal(Timestamp.valueOf("2024-01-01 00:00:00"))
+
+    ruleTest(
+      rule = implicitTypeCastsRule,
+      initial = TimeBucket(bucketSize = bucketSize, ts = timestamp, originTs = timestamp),
+      transformed = TimeBucket(
+        bucketSize = Cast(bucketSize, DayTimeIntervalType()),
+        ts = timestamp,
+        originTs = timestamp))
   }
 
   test("SPARK-56152: implicit type cast - TimeType") {

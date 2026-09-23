@@ -5229,7 +5229,7 @@ case class TimeBucket(
     ts: Expression,
     originTs: Expression,
     timeZoneId: Option[String] = None)
-  extends TernaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
+  extends TernaryExpression with ExpectsInputTypes with TimeZoneAwareExpression {
 
   override def nullIntolerant: Boolean = true
 
