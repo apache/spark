@@ -314,6 +314,16 @@ SELECT typeof(c), c FROM (
 SELECT typeof(c), c FROM (
     SELECT '1582-10-04 12:30:45.1234567' :: timestamp_ntz(7) AS c
     UNION ALL SELECT '1582-10-15 23:59:59.123456789' :: timestamp_ntz(9)) ORDER BY c;
+-- The p=8 boundary widens to the wider precision (nanos(7)/nanos(8) -> nanos(8), nanos(8)/nanos(9)
+-- -> nanos(9)); widening never floors, so each operand keeps its exact value and only the resolved
+-- type moves up. typeof() locks the wider precision; the rendered fractions confirm neither operand
+-- lost a digit (trailing zeros are trimmed on render, so the narrower value shows fewer digits).
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.1234567' :: timestamp_ntz(7) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.12345678' :: timestamp_ntz(8)) ORDER BY c;
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.12345678' :: timestamp_ntz(8) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.123456789' :: timestamp_ntz(9)) ORDER BY c;
 
 -- coalesce keeps the first non-null, widened to the wider precision: pre-epoch boundary values.
 SELECT typeof(v), v FROM (SELECT coalesce(
