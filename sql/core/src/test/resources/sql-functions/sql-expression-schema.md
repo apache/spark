@@ -192,7 +192,7 @@
 | org.apache.spark.sql.catalyst.expressions.JaroWinkler | jaro_winkler_similarity | SELECT jaro_winkler_similarity('MARTHA', 'MARHTA') | struct<jaro_winkler_similarity(MARTHA, MARHTA):double> |
 | org.apache.spark.sql.catalyst.expressions.JsonArrayExpressionBuilder | json_array | SELECT json_array(1, 'x', true) | struct<JSON_ARRAY(1, x, true):string> |
 | org.apache.spark.sql.catalyst.expressions.JsonExistsExpressionBuilder | json_exists | SELECT json_exists('{"a":1}', '$.a') | struct<JSON_EXISTS({"a":1}, '$.a'):boolean> |
-| org.apache.spark.sql.catalyst.expressions.JsonObjectExpressionBuilder | json_object | SELECT json_object('id', 7, 'name', 'Ada') | struct<JSON_OBJECT(id VALUE 7, name VALUE Ada):string> |
+| org.apache.spark.sql.catalyst.expressions.JsonObjectExpressionBuilder | json_object | SELECT json_object('id', 7, 'name', 'Ada') | struct<JSON_OBJECT(id VALUE 7, name VALUE Ada NULL ON NULL):string> |
 | org.apache.spark.sql.catalyst.expressions.JsonObjectKeys | json_object_keys | SELECT json_object_keys('{}') | struct<json_object_keys({}):array<string>> |
 | org.apache.spark.sql.catalyst.expressions.JsonQueryExpressionBuilder | json_query | SELECT json_query('{"a":[1,2]}', '$.a') | struct<JSON_QUERY({"a":[1,2]}, '$.a'):string> |
 | org.apache.spark.sql.catalyst.expressions.JsonToStructs | from_json | SELECT from_json('{"a":1, "b":0.8}', 'a INT, b DOUBLE') | struct<from_json({"a":1, "b":0.8}):struct<a:int,b:double>> |

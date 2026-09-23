@@ -1575,10 +1575,12 @@ jsonArrayValue
 // Both sides accept a full `expression` (not just `valueExpression`) so that ordinary predicates --
 // e.g. `JSON_OBJECT('present' VALUE x IS NOT NULL)` -- work without parentheses, matching normal
 // function-argument syntax. The `VALUE` / `COLON` separator and the trailing `ON NULL` / `RETURNING`
-// clauses are keywords that terminate the expression, so this stays unambiguous.
+// clauses are keywords that terminate the expression, so this stays unambiguous. The optional
+// `FORMAT JSON` clause marks a string value as already-JSON text to splice in raw instead of
+// quoting; a lexically-nested JSON constructor carries it implicitly (see `jsonArrayValue`).
 jsonObjectMember
-    : KEY keyExpr=expression VALUE valueExpr=expression
-    | keyExpr=expression (VALUE | COLON) valueExpr=expression
+    : KEY keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
+    | keyExpr=expression (VALUE | COLON) valueExpr=expression (FORMAT JSON)?
     ;
 
 // Compatibility form used by systems such as MySQL: `JSON_OBJECT(key, value[, key, value]...)`.

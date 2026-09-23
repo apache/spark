@@ -33,12 +33,9 @@ Null-field handling inside a struct value therefore follows
 controls only the top-level object members.
 
 This is an initial subset of the SQL:2016 `JSON_OBJECT` constructor. It supports the key/value
-members, the `{ NULL | ABSENT } ON NULL` clause, and a string-type `RETURNING`. The following
-SQL/JSON clauses are not yet supported:
+members, the value-level `FORMAT JSON` marker, the `{ NULL | ABSENT } ON NULL` clause, and a
+string-type `RETURNING`. The following SQL/JSON clauses are not yet supported:
 
-* The value-level `FORMAT JSON` marker (which tags a string value as pre-formatted JSON to be
-  spliced in raw). A nested JSON constructor written directly in the `JSON_OBJECT(...)` value
-  position is still spliced in as raw JSON; see the **value** parameter below.
 * The `{ WITH | WITHOUT } UNIQUE KEYS` clause. Duplicate keys are kept in source order (the
   `WITHOUT UNIQUE KEYS` behavior); there is no option to reject them.
 * `RETURNING` to a non-string type, or with a binary/`FORMAT JSON` output clause. The result is
@@ -47,7 +44,7 @@ SQL/JSON clauses are not yet supported:
 ### Syntax
 
 ```sql
-JSON_OBJECT ( [ { key VALUE value | KEY key VALUE value | key : value } [, ...] ]
+JSON_OBJECT ( [ { key VALUE value | KEY key VALUE value | key : value } [ FORMAT JSON ] [, ...] ]
               [ { NULL | ABSENT } ON NULL ]
               [ RETURNING data_type ] )
 
@@ -67,18 +64,29 @@ JSON_OBJECT ( [ key, value [, key, value] ... ]
 * **value**
 
     An expression producing the member value. Values may have different types and may be nested
-    JSON constructors. `JSON_OBJECT()` with no members produces the empty object `{}`. A value that
-    is itself JSON text written directly in the value position is spliced in as raw JSON rather than
-    quoted as a string. This covers a nested `JSON_OBJECT` or `JSON_ARRAY` (e.g.
+    JSON constructors. `JSON_OBJECT()` with no members produces the empty object `{}`. A value is
+    spliced in as raw JSON, rather than quoted as a string, only when it carries `FORMAT JSON` (see
+    below) -- either the explicit clause or the implicit form a recognized JSON producer written
+    directly in the value position carries. This covers a nested `JSON_OBJECT` or `JSON_ARRAY` (e.g.
     `JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1))` produces `{"a":{"b":1}}`), and a nested
     `JSON_QUERY` under the default `KEEP QUOTES`, which returns JSON text (e.g.
     `JSON_OBJECT('a' VALUE JSON_QUERY('{"o":{"x":1}}', '$.o'))` produces `{"a":{"x":1}}`). A
     `JSON_QUERY` with `OMIT QUOTES` returns an ordinary string, so it is quoted like any other value
     (e.g. `JSON_OBJECT('n' VALUE JSON_QUERY('{"n":"Ada"}', '$.n' OMIT QUOTES))` produces
-    `{"n":"Ada"}`). An explicit value-level `FORMAT JSON` clause is not yet supported. Raw splicing
-    applies only to this direct syntax: a qualified or otherwise routed call (e.g.
-    `builtin.json_object('a', json_object('b', 1))`) currently quotes the nested result instead,
-    producing `{"a":"{\"b\":1}"}`.
+    `{"n":"Ada"}`). Without `FORMAT JSON`, an ordinary string value is always quoted, even when its
+    contents are themselves valid JSON text (e.g. `JSON_OBJECT('a' VALUE '{"b":1}')` produces
+    `{"a":"{\"b\":1}"}`). Implicit raw splicing applies only to the direct syntax above: a qualified
+    or otherwise routed call (e.g. `builtin.json_object('a', json_object('b', 1))`) currently quotes
+    the nested result instead, producing `{"a":"{\"b\":1}"}`.
+
+* **FORMAT JSON**
+
+    Marks a string `value` as already-JSON text, so it is spliced into the object verbatim instead
+    of being quoted (e.g. `JSON_OBJECT('a' VALUE '{"b":1}' FORMAT JSON)` produces `{"a":{"b":1}}`).
+    A nested JSON constructor written directly in the value position carries `FORMAT JSON`
+    implicitly. `FORMAT JSON` requires a string argument (an untyped `NULL` literal is also accepted
+    and follows the `ON NULL` behavior). At runtime, a non-null `FORMAT JSON` value must contain
+    exactly one well-formed JSON value; malformed text or multiple top-level values raise an error.
 
 * **{ NULL | ABSENT } ON NULL**
 
@@ -142,6 +150,14 @@ SELECT json_object('a' VALUE json_object('b' VALUE 1));
 +-----------------------------------------------+
 |{"a":{"b":1}}                                  |
 +-----------------------------------------------+
+
+-- FORMAT JSON splices an already-JSON string verbatim instead of quoting it
+SELECT json_object('a' VALUE '{"b":1}' FORMAT JSON) AS obj;
++-------------+
+|obj          |
++-------------+
+|{"a":{"b":1}}|
++-------------+
 ```
 
 ### Related Statements
