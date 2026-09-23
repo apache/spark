@@ -2078,7 +2078,7 @@ class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
                 PythonException,
                 "CHAR/VARCHAR return types in Python DataSource",
             ):
-                self.spark.read.format("test").load().collect()
+                self.spark.read.format("test").load().count()
 
 
 class PythonDataSourceTestsWithSimpleWorker(PythonDataSourceTests):

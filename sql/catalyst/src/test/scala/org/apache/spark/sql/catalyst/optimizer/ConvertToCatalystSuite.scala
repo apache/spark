@@ -25,7 +25,13 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, DeleteFromTable, Filter, Join, JoinHint, LocalRelation, LogicalPlan, LogicalPlanIntegrity, Project, Sort}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, LongType}
+import org.apache.spark.sql.types.{
+  ArrayType,
+  BooleanType,
+  IntegerType,
+  LongType,
+  StringType,
+  VarcharType}
 
 /**
  * Unit tests for the ConvertToCatalyst optimizer rule, which rewrites
@@ -147,6 +153,23 @@ class ConvertToCatalystSuite extends PlanTest {
       val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
       assert(!result.isInstanceOf[TranspiledPythonUDF])
       assert(!result.isInstanceOf[PythonUDF])
+    }
+  }
+
+  test("preserves Python UDFs that own checked CHAR/VARCHAR semantics") {
+    transpileOn {
+      val input = $"s".string
+      val checkedUDF = PythonUDF(
+        "checked",
+        null,
+        StringType,
+        Seq(input),
+        PythonEvalType.SQL_BATCHED_UDF,
+        udfDeterministic = true,
+        charVarcharCheckedResultType = Some(VarcharType(3)))
+      val tpudf = makeTPUDF(checkedUDF, input)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      assert(result == checkedUDF)
     }
   }
 

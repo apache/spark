@@ -168,6 +168,8 @@ class UserDefinedTableFunction:
             if isinstance(returnType, str)
             else returnType
         )
+        if self.returnType is not None and not isinstance(self.returnType, UnparsedDataType):
+            _check_udtf_return_type(self.returnType)
         self._name = name or func.__name__
         self.evalType = evalType
         self.deterministic = deterministic

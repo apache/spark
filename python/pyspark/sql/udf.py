@@ -35,7 +35,7 @@ from pyspark.sql.types import (
     StructType,
     VarcharType,
     _has_char_varchar_in_udt,
-    _has_type,
+    _has_logical_type,
     _parse_datatype_string,
 )
 from pyspark.sql.utils import get_active_spark_context
@@ -346,7 +346,7 @@ class UserDefinedFunction:
         )
 
         def check_arrow_type() -> None:
-            if evalType not in char_varchar_supported_eval_types and _has_type(
+            if evalType not in char_varchar_supported_eval_types and _has_logical_type(
                 returnType, (CharType, VarcharType)
             ):
                 raise _InvalidCharVarcharArrowTypeError
@@ -536,7 +536,7 @@ class UserDefinedFunction:
                         f"{returnType}"
                     },
                 )
-        elif evalType not in char_varchar_supported_eval_types and _has_type(
+        elif evalType not in char_varchar_supported_eval_types and _has_logical_type(
             returnType, (CharType, VarcharType)
         ):
             raise PySparkNotImplementedError(

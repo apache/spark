@@ -1945,10 +1945,9 @@ class ArrowTestsMixin:
 )
 class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
     # These CHAR/VARCHAR cases are Classic-only: they exercise standard-semantics
-    # createDataFrame/toArrow and assign a UDT-backed `_schema` directly, neither of which is
-    # supported by a Connect session (Connect rejects such schemas up front and `_schema` is
-    # read-only). They live here rather than in `ArrowTestsMixin` so the Connect parity suite
-    # does not inherit them.
+    # createDataFrame/toArrow and override Classic's cached `schema` attribute with a UDT-backed
+    # schema, neither of which is supported by a Connect session. They live here rather than in
+    # `ArrowTestsMixin` so the Connect parity suite does not inherit them.
     def test_char_varchar_explicit_schema_and_to_arrow(self):
         schema = StructType(
             [

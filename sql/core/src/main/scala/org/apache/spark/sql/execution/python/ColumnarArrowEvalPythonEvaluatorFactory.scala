@@ -58,12 +58,12 @@ private[python] object ColumnarArrowEvalPythonEvaluatorFactory {
  *
  * Three execution paths based on input characteristics:
  *
- * 1. '''Arrow columnar path''' (UDF inputs are simple column refs AND
- *    columns are [[ArrowColumnVector]]): Arrow FieldVectors are extracted
- *    directly and serialized to IPC. Pass-through columns are transferred
- *    to independent vector views because the input reader may close its
- *    vectors before the Python result is consumed. Output is produced by
- *    columnar combining: passThruCols ++ resultCols -> ColumnarBatch.
+ * 1. '''Arrow columnar path''' (UDF inputs are simple column refs, columns are
+ *    [[ArrowColumnVector]], and no UDF result needs CHAR/VARCHAR checks): Arrow
+ *    FieldVectors are extracted directly and serialized to IPC. Pass-through
+ *    columns are transferred to independent vector views because the input reader
+ *    may close its vectors before the Python result is consumed. Output is produced
+ *    by columnar combining: passThruCols ++ resultCols -> ColumnarBatch.
  *
  * 2. '''Non-Arrow columnar path''' (UDF inputs are simple column refs
  *    BUT columns are NOT [[ArrowColumnVector]]): Non-Arrow columnar

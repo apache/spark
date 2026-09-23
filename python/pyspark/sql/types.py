@@ -3216,9 +3216,11 @@ def _has_nulltype(dt: DataType) -> bool:
 
 
 def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
-    """Return whether `dt` logically contains any of `dts`. Does not descend UDTs."""
+    """Return whether `dt` physically contains any of `dts`, including UDT storage types."""
     if isinstance(dt, dts):
         return True
+    elif isinstance(dt, UserDefinedType):
+        return _has_type(dt.sqlType(), dts)
     elif isinstance(dt, StructType):
         return any(_has_type(f.dataType, dts) for f in dt.fields)
     elif isinstance(dt, ArrayType):
@@ -3229,20 +3231,23 @@ def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
         return False
 
 
-def _has_physical_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
-    """Return whether `dt` contains any of `dts`, including UDT storage types."""
+def _has_logical_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
+    """Return whether `dt` logically contains any of `dts`. Does not descend UDTs."""
     if isinstance(dt, dts):
         return True
-    elif isinstance(dt, UserDefinedType):
-        return _has_physical_type(dt.sqlType(), dts)
     elif isinstance(dt, StructType):
-        return any(_has_physical_type(f.dataType, dts) for f in dt.fields)
+        return any(_has_logical_type(f.dataType, dts) for f in dt.fields)
     elif isinstance(dt, ArrayType):
-        return _has_physical_type(dt.elementType, dts)
+        return _has_logical_type(dt.elementType, dts)
     elif isinstance(dt, MapType):
-        return _has_physical_type(dt.keyType, dts) or _has_physical_type(dt.valueType, dts)
+        return _has_logical_type(dt.keyType, dts) or _has_logical_type(dt.valueType, dts)
     else:
         return False
+
+
+def _has_physical_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
+    """Return whether `dt` contains any of `dts`, including UDT storage types."""
+    return _has_type(dt, dts)
 
 
 def _first_timestamp_nanos_map_key_type(dt: DataType) -> Optional["DataType"]:
