@@ -64,6 +64,7 @@ object ExecuteExternalUDFExecSuite {
   private case object DuplicateFirstResponse extends ResponseBehavior
   private case object MalformedResponse extends ResponseBehavior
   private case object CombineLongArguments extends ResponseBehavior
+  private case object ConstantLongResponses extends ResponseBehavior
 
   private final case class TestExecution(
       plan: SparkPlan,
@@ -132,7 +133,10 @@ object ExecuteExternalUDFExecSuite {
         Iterator.single(DataResponse.newBuilder()
           .setData(ByteString.copyFromUtf8("not an Arrow record batch"))
           .build())
-      case CombineLongArguments => combineLongArguments(input, finish)
+      case CombineLongArguments => transformToLong(input, finish) { row =>
+        row.getLong(0) * 100L + row.getLong(1)
+      }
+      case ConstantLongResponses => transformToLong(input, finish)(_ => 42L)
     }
 
     override protected def doClose(cancel: () => Cancel): Termination = {
@@ -175,9 +179,10 @@ object ExecuteExternalUDFExecSuite {
       DataResponse.newBuilder().setData(request.getData).build()
     }
 
-    private def combineLongArguments(
+    private def transformToLong(
         input: Iterator[DataRequest],
-        finish: () => Finish): Iterator[DataResponse] = {
+        finish: () => Finish)(
+        evaluate: InternalRow => Long): Iterator[DataResponse] = {
       val requests = input.toVector
       requestCount.add(requests.length.toLong)
       finish()
@@ -191,7 +196,7 @@ object ExecuteExternalUDFExecSuite {
           expectedLargeVarTypes,
           context)
         val outputRows = inputRows.map { row =>
-          InternalRow(row.getLong(0) * 100L + row.getLong(1))
+          InternalRow(evaluate(row))
         }
         ArrowConverters.toBatchIterator(
           outputRows,
@@ -408,6 +413,24 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
     assert(execution.plan.executeCollect().isEmpty)
     assert(execution.requestCount.value === 0L)
     assert(execution.closeCount.value === 1L)
+  }
+
+  test("scalar external UDF preserves row count for zero-argument functions") {
+    withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "2") {
+      val child = spark.range(0L, 5L, 1L, 1).queryExecution.executedPlan
+      val execution = testExecution(
+        ConstantLongResponses,
+        child,
+        Seq.empty,
+        LongType,
+        udfNullable = false)
+
+      val rows = execution.plan.executeCollect()
+      assert(rows.map(row => (row.getLong(0), row.getLong(1))).toSeq ===
+        (0L until 5L).map(value => (value, 42L)))
+      assert(execution.requestCount.value === 3L)
+      assert(execution.closeCount.value === 1L)
+    }
   }
 
   test("scalar external UDF round-trips ordered multi-argument Arrow data") {

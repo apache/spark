@@ -229,6 +229,7 @@ object ExecuteExternalUDFExec {
 
     private var allocator: Option[BufferAllocator] = None
     private var root: Option[VectorSchemaRoot] = None
+    private var columnarBatch: Option[ColumnarBatch] = None
     private var rows: Iterator[InternalRow] = Iterator.empty
     private var initialized = false
     private var exhausted = false
@@ -241,7 +242,7 @@ object ExecuteExternalUDFExec {
 
     override def hasNext: Boolean = {
       try {
-        val (activeAllocator, activeRoot) = initialize()
+        val (activeAllocator, activeRoot, activeColumnarBatch) = initialize()
         while (!rows.hasNext && !exhausted) {
           if (responses.hasNext) {
             val batch = ArrowConverters.loadBatch(
@@ -252,7 +253,8 @@ object ExecuteExternalUDFExec {
             } finally {
               batch.close()
             }
-            rows = rowsFromRoot(activeRoot)
+            activeColumnarBatch.setNumRows(activeRoot.getRowCount)
+            rows = activeColumnarBatch.rowIterator().asScala
             rowsRemainingInBatch = activeRoot.getRowCount
           } else {
             exhausted = true
@@ -274,7 +276,7 @@ object ExecuteExternalUDFExec {
       row
     }
 
-    private def initialize(): (BufferAllocator, VectorSchemaRoot) = {
+    private def initialize(): (BufferAllocator, VectorSchemaRoot, ColumnarBatch) = {
       if (!initialized) {
         initialized = true
         val newAllocator = ArrowUtils.rootAllocator.newChildAllocator(
@@ -282,30 +284,27 @@ object ExecuteExternalUDFExec {
           0,
           Long.MaxValue)
         allocator = Some(newAllocator)
-        root = Some(VectorSchemaRoot.create(
+        val newRoot = VectorSchemaRoot.create(
           ArrowUtils.toArrowSchema(
             expectedSchema,
             timeZoneId,
             true,
             largeVarTypes),
-          newAllocator))
+          newAllocator)
+        root = Some(newRoot)
+        val columns: Array[ColumnVector] =
+          newRoot.getFieldVectors.asScala.iterator.map { vector =>
+            new ArrowColumnVector(vector): ColumnVector
+          }.toArray
+        columnarBatch = Some(new ColumnarBatch(columns))
       }
-      (allocator, root) match {
-        case (Some(activeAllocator), Some(activeRoot)) =>
-          (activeAllocator, activeRoot)
+      (allocator, root, columnarBatch) match {
+        case (Some(activeAllocator), Some(activeRoot), Some(activeColumnarBatch)) =>
+          (activeAllocator, activeRoot, activeColumnarBatch)
         case _ =>
           throw SparkException.internalError(
             "The Arrow response row iterator was not initialized correctly.")
       }
-    }
-
-    private def rowsFromRoot(root: VectorSchemaRoot): Iterator[InternalRow] = {
-      val columns: Array[ColumnVector] = root.getFieldVectors.asScala.iterator.map { vector =>
-        new ArrowColumnVector(vector): ColumnVector
-      }.toArray
-      val batch = new ColumnarBatch(columns)
-      batch.setNumRows(root.getRowCount)
-      batch.rowIterator().asScala
     }
 
     private def close(): Unit = {
