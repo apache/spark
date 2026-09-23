@@ -35,7 +35,6 @@ from unittest.mock import patch
 
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
-
 _jep_spec = find_spec("jep")
 _cdi_jar = os.environ.get("ARROW_C_DATA_JAR")
 _test_mode = os.environ.get("INPROCESS_TESTS")

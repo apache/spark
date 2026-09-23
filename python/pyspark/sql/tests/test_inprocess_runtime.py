@@ -21,8 +21,6 @@
 import unittest
 from importlib.util import find_spec
 
-from pyspark.testing.utils import have_pyarrow
-
 from pyspark import cloudpickle
 from pyspark.sql.types import (
     ArrayType,
@@ -34,7 +32,7 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
-
+from pyspark.testing.utils import have_pyarrow
 
 _have_arrow_cdi = have_pyarrow and find_spec("cffi") is not None
 if _have_arrow_cdi:
