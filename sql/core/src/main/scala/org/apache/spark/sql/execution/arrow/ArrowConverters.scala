@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.arrow
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, OutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, InputStream,
+  OutputStream}
 import java.nio.channels.{Channels, ReadableByteChannel}
 
 import scala.collection.mutable.ArrayBuffer
@@ -137,6 +138,51 @@ private[sql] object ArrowConverters extends Logging {
     }
   }
 
+  private[sql] class SizeLimitedArrowBatchIterator(
+      rows: Iterator[InternalRow],
+      schema: StructType,
+      maxRecordsPerBatch: Long,
+      maxBytesPerBatch: Int,
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean,
+      context: TaskContext)
+    extends ArrowBatchIterator(
+      rows,
+      schema,
+      maxRecordsPerBatch,
+      timeZoneId,
+      errorOnDuplicatedFieldNames,
+      largeVarTypes,
+      context) {
+
+    override def next(): Array[Byte] = {
+      var bytes: Array[Byte] = null
+
+      Utils.tryWithSafeFinally {
+        var rowCount = 0L
+        while (rows.hasNext &&
+            (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch) &&
+            (maxBytesPerBatch <= 0 || rowCount == 0 ||
+              arrowWriter.sizeInBytes() < maxBytesPerBatch)) {
+          arrowWriter.write(rows.next())
+          rowCount += 1
+        }
+        arrowWriter.finish()
+        val batch = unloader.getRecordBatch()
+        try {
+          bytes = serializeBatch(batch)
+        } finally {
+          batch.close()
+        }
+      } {
+        arrowWriter.reset()
+      }
+
+      bytes
+    }
+  }
+
   private[sql] class ArrowBatchWithSchemaIterator(
       rowIter: Iterator[InternalRow],
       schema: StructType,
@@ -225,6 +271,30 @@ private[sql] object ArrowConverters extends Logging {
       rowIter,
       schema,
       maxRecordsPerBatch,
+      timeZoneId,
+      errorOnDuplicatedFieldNames,
+      largeVarTypes,
+      context)
+  }
+
+  /**
+   * Maps an iterator of internal rows to serialized Arrow record batches, limiting each batch by
+   * both record count and byte size.
+   */
+  private[sql] def toBatchIterator(
+      rowIter: Iterator[InternalRow],
+      schema: StructType,
+      maxRecordsPerBatch: Long,
+      maxBytesPerBatch: Int,
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean,
+      context: TaskContext): ArrowBatchIterator = {
+    new SizeLimitedArrowBatchIterator(
+      rowIter,
+      schema,
+      maxRecordsPerBatch,
+      maxBytesPerBatch,
       timeZoneId,
       errorOnDuplicatedFieldNames,
       largeVarTypes,
@@ -512,6 +582,16 @@ private[sql] object ArrowConverters extends Logging {
     val in = new ByteArrayInputStream(batchBytes)
     MessageSerializer.deserializeRecordBatch(
       new ReadChannel(Channels.newChannel(in)), allocator)  // throws IOException
+  }
+
+  /**
+   * Load a serialized Arrow record batch from an input stream.
+   */
+  private[sql] def loadBatch(
+      batchInput: InputStream,
+      allocator: BufferAllocator): ArrowRecordBatch = {
+    MessageSerializer.deserializeRecordBatch(
+      new ReadChannel(Channels.newChannel(batchInput)), allocator)  // throws IOException
   }
 
   private[arrow] def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {

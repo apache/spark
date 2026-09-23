@@ -7082,6 +7082,12 @@
     ],
     "sqlState" : "42939"
   },
+  "RESULT_ROWS_MISMATCH" : {
+    "message" : [
+      "External UDF output row count was <output_length>; expected <input_length>. An external UDF must produce exactly one row for each input row."
+    ],
+    "sqlState" : "21000"
+  },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the <newRoutineType> <routineName> because a <existingRoutineType> of that name already exists.",

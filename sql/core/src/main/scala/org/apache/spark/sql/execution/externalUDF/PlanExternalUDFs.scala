@@ -242,7 +242,7 @@ private[sql] object PlanExternalUDFs
           throw QueryCompilationErrors.externalUDFWithMultipleChildrenUnsupportedError(udf)
         }
 
-        val resultAttr = AttributeReference("externalUDF", udf.dataType, udf.nullable)()
+        val resultAttr = AttributeReference("externalUDF", udf.dataType)()
         val newChildren = plan.children.zipWithIndex.map { case (child, index) =>
           if (index == childIndex) {
             ExecuteExternalUDF(udf, resultAttr, child)
