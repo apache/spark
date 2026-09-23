@@ -1055,7 +1055,10 @@ jobs:
           curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
           sudo install minikube-linux-amd64 /usr/local/bin/minikube
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
-          minikube start --cpus 2 --memory 6144
+          # Minikube 1.39.0 changed the default container runtime to containerd. The image builds
+          # below go through `minikube docker-env`, which needs a real Docker daemon in the node,
+          # so pin the runtime rather than inherit the default. See SPARK-59212.
+          minikube start --cpus 2 --memory 6144 --container-runtime=docker
       - name: Print K8S pods and nodes info
         run: |
           kubectl get pods -A
