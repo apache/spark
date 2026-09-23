@@ -52,8 +52,8 @@ import org.apache.spark.util.ArrayImplicits._
  * @param options Options for parsing ORC files.
  * @param charVarcharScanMode CHAR/VARCHAR scan mode bound during analysis. `SparkStandard`
  *                            requests physical ORC STRING for Spark-side checks;
- *                            `PreserveNative` and the unbound default retain native constrained
- *                            decoding.
+ *                            `Legacy`, `PreserveNative`, and the unbound default retain native
+ *                            constrained decoding.
  */
 case class OrcPartitionReaderFactory(
     sqlConf: SQLConf,
