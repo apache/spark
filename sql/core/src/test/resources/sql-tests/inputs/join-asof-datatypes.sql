@@ -105,6 +105,21 @@ ASOF JOIN (
 ) r
   MATCH_CONDITION (t.k >= r.k);
 
+-- FVT-ASOF-4-012a: whole STRUCT columns with different field names but same types
+SELECT r.k.y AS matched
+FROM VALUES (named_struct('a', 2, 'b', 5)) AS t(k)
+ASOF JOIN VALUES (named_struct('x', 1, 'y', 9)) AS r(k)
+  MATCH_CONDITION (t.k >= r.k);
+
+-- FVT-ASOF-4-012b: whole STRUCT columns with same field name and coercible field types
+-- (field a widens INT to BIGINT by name; closest match is a = 1)
+SELECT r.k.a AS matched
+FROM VALUES (named_struct('a', 3)) AS t(k)
+ASOF JOIN VALUES
+    (named_struct('a', CAST(1 AS BIGINT))),
+    (named_struct('a', CAST(4 AS BIGINT))) AS r(k)
+  MATCH_CONDITION (t.k >= r.k);
+
 -- FVT-ASOF-4-013: coercion TINYINT vs BIGINT
 SELECT t.k, r.k AS matched_k
 FROM VALUES (CAST(10 AS TINYINT)) AS t(k) ASOF JOIN VALUES (CAST(5 AS BIGINT)) AS r(k)
@@ -168,6 +183,13 @@ FROM VALUES (TIME '10:00:00') AS t(tm) ASOF JOIN
 SELECT t.a, r.a AS matched_a
 FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
      VALUES (ARRAY(1, 2)), (ARRAY(1, 4)) AS r(a)
+  MATCH_CONDITION (t.a >= r.a);
+
+-- FVT-ASOF-4-017a: coercion ARRAY<INT> vs ARRAY<BIGINT>
+SELECT t.a, r.a AS matched_a
+FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
+     VALUES (ARRAY(CAST(1 AS BIGINT), CAST(2 AS BIGINT))),
+            (ARRAY(CAST(1 AS BIGINT), CAST(4 AS BIGINT))) AS r(a)
   MATCH_CONDITION (t.a >= r.a);
 
 -- FVT-ASOF-4-018: ARRAY<STRUCT> whole column MATCH_CONDITION

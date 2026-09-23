@@ -447,6 +447,56 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(Seq(1, 2)) :: Nil)
   }
 
+  test("ARRAY<INT> vs ARRAY<BIGINT> coercible MATCH_CONDITION") {
+    // SPARK-59528: elements coerce to BIGINT; closest match is [1, 2]. ANSI on and off.
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        checkSortMergeAsOf(
+          sql(
+            """
+              |SELECT r.a
+              |FROM VALUES (ARRAY(1, 3)) AS t(a)
+              |ASOF JOIN VALUES (ARRAY(CAST(1 AS BIGINT), CAST(2 AS BIGINT))),
+              |                 (ARRAY(CAST(1 AS BIGINT), CAST(4 AS BIGINT))) AS r(a)
+              |MATCH_CONDITION (t.a >= r.a)
+              |""".stripMargin),
+          Row(Seq(1L, 2L)) :: Nil)
+      }
+    }
+  }
+
+  test("ARRAY<INT> vs ARRAY<FLOAT> coercible MATCH_CONDITION") {
+    // SPARK-59528: INT vs FLOAT coercion under both ANSI modes (FLOAT non-ANSI, DOUBLE ANSI).
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        checkSortMergeAsOf(
+          sql(
+            """
+              |SELECT r.a
+              |FROM VALUES (ARRAY(1, 3)) AS t(a)
+              |ASOF JOIN VALUES (ARRAY(CAST(1 AS FLOAT), CAST(2 AS FLOAT))),
+              |                 (ARRAY(CAST(1 AS FLOAT), CAST(4 AS FLOAT))) AS r(a)
+              |MATCH_CONDITION (t.a >= r.a)
+              |""".stripMargin),
+          Row(Seq(1.0f, 2.0f)) :: Nil)
+      }
+    }
+  }
+
+  test("nested ARRAY<ARRAY<INT>> vs ARRAY<ARRAY<BIGINT>> coercible MATCH_CONDITION") {
+    // SPARK-59528: array elements coerce element-wise; closest match is [[1, 2]].
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT r.a
+          |FROM VALUES (ARRAY(ARRAY(1, 3))) AS t(a)
+          |ASOF JOIN VALUES (ARRAY(ARRAY(CAST(1 AS BIGINT), CAST(2 AS BIGINT)))),
+          |                 (ARRAY(ARRAY(CAST(1 AS BIGINT), CAST(4 AS BIGINT)))) AS r(a)
+          |MATCH_CONDITION (t.a >= r.a)
+          |""".stripMargin),
+      Row(Seq(Seq(1L, 2L))) :: Nil)
+  }
+
   test("ARRAY<INT> operands of different lengths MATCH_CONDITION") {
     // All elements equal, so length alone orders the arrays: the nearest right array <= [5, 5, 5]
     // is [5, 5], not the longer [5, 5, 5, 5].
