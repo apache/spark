@@ -532,7 +532,7 @@ private[spark] object RestSubmissionClient {
 
   // SPARK_LOCAL_IP and SPARK_LOCAL_HOSTNAME describe the submitting host rather than the
   // worker the driver runs on, so they are never forwarded to the driver (SPARK-20025).
-  private[spark] val HOST_SPECIFIC_ENV_VARS = Set("SPARK_LOCAL_IP", "SPARK_LOCAL_HOSTNAME")
+  private[deploy] val HOST_SPECIFIC_ENV_VARS = Set("SPARK_LOCAL_IP", "SPARK_LOCAL_HOSTNAME")
 
   // SPARK_HOME and SPARK_CONF_DIR are filtered out because they are usually wrong
   // on the remote machine (SPARK-12345) (SPARK-25934).
@@ -547,7 +547,7 @@ private[spark] object RestSubmissionClient {
    * rule for the driver environment in standalone cluster mode, shared by this client and the
    * legacy RPC `Client`.
    */
-  private[spark] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
+  private[deploy] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
     env.filter { case (k, _) =>
       k.startsWith("SPARK_") && !EXCLUDED_SPARK_ENV_VARS.contains(k)
     }

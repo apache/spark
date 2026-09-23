@@ -237,7 +237,7 @@ private[rest] class StandaloneSubmitRequestServlet(
     // In addition, the placeholders are replaced into the values of environment variables.
     val environmentVariables =
       Option(request.environmentVariables).getOrElse(Map.empty[String, String])
-        .filterNot(x => x._1.matches("SPARK_LOCAL_(IP|HOSTNAME)"))
+        .filterNot(x => RestSubmissionClient.HOST_SPECIFIC_ENV_VARS.contains(x._1))
         .map(x => (x._1, replacePlaceHolder(x._2)))
 
     // Construct driver description
