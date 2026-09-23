@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
+import org.apache.spark.sql.catalyst.trees.TreePattern.WITH_EXPRESSION
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -92,7 +93,18 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       }
     }
 
-    val allStateWatermarks = splitConjunctivePredicates(joinCondition.get).flatMap { predicate =>
+    // `RewriteWithExpression` leaves a `With` in a join condition when the definition reads columns
+    // from both sides, and `CAST(leftTime AS LONG) - CAST(rightTime AS LONG) BETWEEN 0 AND 3600` is
+    // that shape. The conjunct then arrives as one node the match below does not recognise, hiding
+    // the comparisons it is built from, and no bound is derived -- so the state this one would have
+    // evicted is kept for good, and nothing says so in the log. Read the condition as what it
+    // stands for; nothing here evaluates it, so no definition is duplicated at runtime.
+    val condition = joinCondition.get.transformUpWithPruning(
+      _.containsPattern(WITH_EXPRESSION)) {
+      case w: With => With.inlineDefinitions(w)
+    }
+
+    val allStateWatermarks = splitConjunctivePredicates(condition).flatMap { predicate =>
 
       // The generated the state watermark cleanup expression is inclusive of the state watermark.
       // If state watermark is W, all state where timestamp <= W will be cleaned up.
