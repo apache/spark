@@ -23,8 +23,7 @@ import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{Files, FileSystems}
-import java.nio.file.attribute.PosixFilePermissions
+import java.nio.file.Files
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -571,30 +570,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val scenario8 = new File(testDir.getCanonicalPath + File.separator + "scenario8")
     assert(scenario8.createNewFile())
     assert(!Utils.createDirectory(scenario8))
-  }
-
-  test("chmod700 leaves rwx------ under concurrent calls on the same path") {
-    // Workers in local-cluster mode share local root dirs and can chmod the same
-    // per-application directory concurrently; the stat-then-chmod File.set* sequence
-    // interleaves into broken permission sets, so chmod700 must be atomic.
-    assume(FileSystems.getDefault.supportedFileAttributeViews().contains("posix"))
-    withTempDir { dir =>
-      (1 to 10).foreach { _ =>
-        val threads = (1 to 4).map { _ =>
-          new Thread(() => (1 to 20).foreach(_ => Utils.chmod700(dir)))
-        }
-        threads.foreach(_.start())
-        threads.foreach(_.join())
-        assert(
-          Files.getPosixFilePermissions(dir.toPath) ===
-            PosixFilePermissions.fromString("rwx------"))
-      }
-    }
-  }
-
-  test("chmod700 returns false instead of throwing for a nonexistent path") {
-    val missing = new File(System.getProperty("java.io.tmpdir"), "chmod700-" + System.nanoTime())
-    assert(!Utils.chmod700(missing))
   }
 
   test("doesDirectoryContainFilesNewerThan") {

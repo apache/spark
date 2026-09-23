@@ -27,7 +27,6 @@ import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.nio.file.attribute.PosixFilePermissions
 import java.security.SecureRandom
 import java.util.{HexFormat, Locale, Properties, Random, UUID}
 import java.util.concurrent._
@@ -227,29 +226,16 @@ private[spark] object Utils
   /**
    * JDK equivalent of `chmod 700 file`.
    *
-   * On POSIX filesystems this is a single `chmod` call, which is atomic: concurrent calls on
-   * the same path (e.g. Workers sharing a local root dir in local-cluster mode) cannot
-   * interleave into a broken permission set, unlike the `File.set*` fallback below, each call
-   * of which is a non-atomic stat-then-chmod.
-   *
    * @param file the file whose permissions will be modified
    * @return true if the permissions were successfully changed, false otherwise.
    */
   def chmod700(file: File): Boolean = {
-    try {
-      Files.setPosixFilePermissions(file.toPath, PosixFilePermissions.fromString("rwx------"))
-      true
-    } catch {
-      case _: UnsupportedOperationException =>
-        // Non-POSIX filesystem (e.g. Windows): best-effort, non-atomic fallback.
-        file.setReadable(false, false) &&
-        file.setReadable(true, true) &&
-        file.setWritable(false, false) &&
-        file.setWritable(true, true) &&
-        file.setExecutable(false, false) &&
-        file.setExecutable(true, true)
-      case NonFatal(_) => false
-    }
+    file.setReadable(false, false) &&
+    file.setReadable(true, true) &&
+    file.setWritable(false, false) &&
+    file.setWritable(true, true) &&
+    file.setExecutable(false, false) &&
+    file.setExecutable(true, true)
   }
 
   /**
