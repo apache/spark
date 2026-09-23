@@ -32,7 +32,7 @@ from pyspark.sql.connect.table_arg import TableArg
 from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.sql.types import DataType, StructType
+from pyspark.sql.types import DataType, StructType, _has_char_varchar_in_udt
 from pyspark.sql.udtf import (  # noqa: F401
     AnalyzeArgument,
     AnalyzeResult,
@@ -168,7 +168,11 @@ class UserDefinedTableFunction:
             if isinstance(returnType, str)
             else returnType
         )
-        if self.returnType is not None and not isinstance(self.returnType, UnparsedDataType):
+        if (
+            self.returnType is not None
+            and not isinstance(self.returnType, UnparsedDataType)
+            and _has_char_varchar_in_udt(self.returnType)
+        ):
             _check_udtf_return_type(self.returnType)
         self._name = name or func.__name__
         self.evalType = evalType
