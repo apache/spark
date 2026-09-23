@@ -1284,17 +1284,17 @@ object JsonConstructorNullBehavior {
 /**
  * Marker for expressions whose result is JSON text and therefore carry an implicit SQL/JSON
  * `FORMAT JSON`: when such an expression appears as an argument of a JSON constructor (e.g.
- * `JSON_ARRAY`), its value is spliced in verbatim rather than quoted as a JSON string:
+ * `JSON_ARRAY` or `JSON_OBJECT`), its value is spliced in verbatim rather than quoted as a JSON
+ * string:
  *
  * {{{
  *   JSON_ARRAY(JSON_ARRAY(1))   -- '[[1]]'    (spliced; not the quoted string '["[1]"]')
  * }}}
  *
  * Crucially, the constructor freezes this decision from the *lexical* argument at parse time (see
- * `AstBuilder.visitJsonArray`) rather than re-deriving it from the child expression during
- * evaluation, so a later optimizer rewrite (e.g. `CollapseProject` inlining a `JSON_ARRAY` alias
- * into an argument position) cannot change whether a value is spliced or quoted. `JSON_OBJECT`
- * should extend this as it is added.
+ * `AstBuilder.visitJsonArray` / `visitJsonObject`) rather than re-deriving it from the child
+ * expression during evaluation, so a later optimizer rewrite (e.g. `CollapseProject` inlining a
+ * `JSON_ARRAY` alias into an argument position) cannot change whether a value is spliced or quoted.
  *
  * Most implementers always emit JSON text, so `emitsImplicitJsonText` defaults to true. An
  * implementer with a mode that instead emits a plain (non-JSON) string overrides it so that mode
