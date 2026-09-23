@@ -2625,6 +2625,15 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       checkAnswer(
         sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(30)))"),
         Row("STRUCT<a: BIGINT>"))
+      Seq(
+        "schema_of_json(CAST('{\"a\":1}' AS CHAR(20) COLLATE SR_AI))" ->
+          "STRUCT<a: BIGINT>",
+        "schema_of_csv(CAST('1' AS CHAR(3) COLLATE SR_AI), map('delimiter', ' '))" ->
+          "STRUCT<_c0: INT>",
+        "schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(30) COLLATE SR_AI))" ->
+          "STRUCT<a: BIGINT>").foreach { case (expression, expected) =>
+        checkAnswer(sql(s"SELECT $expression"), Row(expected))
+      }
     }
   }
 

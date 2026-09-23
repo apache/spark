@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
@@ -266,7 +267,13 @@ private[sql] trait SupportTrimmedCharInput extends UnaryExpression {
   // A first-class CharType child already establishes that CHAR semantics apply.
   @transient
   protected final lazy val stringInput: Expression = child.dataType match {
-    case _: CharType => StringTrimRight(child)
+    case _: CharType =>
+      Invoke(
+        child,
+        "trimRight",
+        child.dataType,
+        returnNullable = false,
+        isDeterministic = child.deterministic)
     case _ => child
   }
 
