@@ -716,8 +716,9 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
  * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
  *                            [[DisableUnnecessaryBucketedScan]] for details.
  * @param charVarcharScanMode Analyzed CHAR/VARCHAR scan mode. Compared by `sameResult` so
- *                            preserve-only and standard scans are not reused. A bound mode uses
- *                            the mode-aware reader overload; `None` uses the legacy overload.
+ *                            legacy, preserve-only, and standard scans are not reused. A bound
+ *                            mode uses the mode-aware reader overload; `None` uses the legacy
+ *                            overload.
  *                            ORC maps these paths to constrained or physical STRING decoding.
  */
 case class FileSourceScanExec(

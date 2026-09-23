@@ -36,13 +36,13 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, CaseInsensitiveMap, CharVarcharScanMode, CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{TableCatalog, V1Table, V1View}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.CommandExecutionMode
+import org.apache.spark.sql.execution.{CommandExecutionMode, TableCacheDescriptor}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -193,6 +193,21 @@ case class AlterTableRenameCommand(
     isView: Boolean)
   extends LeafRunnableCommand {
 
+  private def withCharVarcharScanModeConf[T](
+      mode: Option[CharVarcharScanMode])(body: => T): T = mode match {
+    case Some(CharVarcharScanMode.Legacy) =>
+      withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")(body)
+    case Some(CharVarcharScanMode.PreserveNative) =>
+      withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")(body)
+    case Some(CharVarcharScanMode.SparkStandard) =>
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")(body)
+    case None => body
+  }
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     // If this is a temp view, just rename the view.
@@ -202,19 +217,35 @@ case class AlterTableRenameCommand(
     } else {
       val table = catalog.getTableMetadata(oldName)
       DDLUtils.verifyAlterTableType(catalog, table, isView)
-      // If `optStorageLevel` is defined, the old table was cached.
-      val optCachedData = sparkSession.sharedState.cacheManager.lookupCachedData(
-        sparkSession.table(oldName.unquotedString))
-      val optStorageLevel = optCachedData.map(_.cachedRepresentation.cacheBuilder.storageLevel)
-      if (optStorageLevel.isDefined) {
+      val cacheManager = sparkSession.sharedState.cacheManager
+      val oldTable = sparkSession.table(oldName.unquotedString)
+      val namedCaches = cacheManager.lookupCacheDescriptorsByTableName(
+        sparkSession, table.identifier.nameParts)
+      // Preserve the existing behavior for an unnamed direct Dataset cache in the caller's mode.
+      val callerCache = cacheManager.lookupCachedData(oldTable).collect {
+        case cached if cached.cachedRepresentation.cacheBuilder.tableName.isEmpty =>
+          TableCacheDescriptor(
+            cached.plan,
+            cached.cachedRepresentation.cacheBuilder.storageLevel)
+      }
+      val oldCaches = (namedCaches ++ callerCache).distinct
+      if (oldCaches.nonEmpty) {
         CommandUtils.uncacheTableOrView(sparkSession, oldName)
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
       // back into the hive metastore cache
       catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
-      optStorageLevel.foreach { storageLevel =>
-        sparkSession.catalog.cacheTable(newName.unquotedString, storageLevel)
+      // Build the legacy cache first so the V1 relation cache holds annotated STRING output.
+      // First-class modes can recover CHAR/VARCHAR from that output's metadata, while a legacy
+      // query cannot consume a relation cached with first-class CHAR/VARCHAR output.
+      val orderedCaches = oldCaches.sortBy { cache =>
+        if (cache.charVarcharScanMode.contains(CharVarcharScanMode.Legacy)) 0 else 1
+      }
+      orderedCaches.foreach { cache =>
+        withCharVarcharScanModeConf(cache.charVarcharScanMode) {
+          sparkSession.catalog.cacheTable(newName.unquotedString, cache.storageLevel)
+        }
       }
     }
     Seq.empty[Row]

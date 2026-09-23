@@ -21,7 +21,9 @@ import java.io.File
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
@@ -30,7 +32,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.RDDBlockId
-import org.apache.spark.storage.StorageLevel.{DISK_ONLY, MEMORY_ONLY}
+import org.apache.spark.storage.StorageLevel.{DISK_ONLY, MEMORY_AND_DISK_2, MEMORY_ONLY}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -140,6 +142,51 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
           val preserveRead = table(tableName)
           assertCached(preserveRead, 0)
           checkAnswer(preserveRead, Row("ab  "))
+        }
+      }
+    }
+  }
+
+  test("SPARK-58814: Hive RENAME TABLE preserves every CHAR/VARCHAR scan mode cache") {
+    val oldName = "hive_cached_cv"
+    val newName = "hive_cached_cv_renamed"
+    val boundModes = Seq(
+      (Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
+        MEMORY_AND_DISK_2, "MEMORY_AND_DISK_2", CharVarcharScanMode.Legacy),
+      (Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
+        MEMORY_ONLY, "MEMORY_ONLY", CharVarcharScanMode.PreserveNative),
+      (Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
+        DISK_ONLY, "DISK_ONLY", CharVarcharScanMode.SparkStandard))
+
+    withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
+      withTable(oldName, newName) {
+        sql(s"CREATE TABLE $oldName (id int, data varchar(4)) STORED AS ORC")
+        sql(s"INSERT INTO $oldName VALUES (1, 'a')")
+
+        boundModes.foreach { case (modeConf, _, storageLevelName, _) =>
+          withSQLConf(modeConf: _*) {
+            sql(s"CACHE TABLE $oldName OPTIONS('storageLevel' '$storageLevelName')")
+            checkAnswer(sql(s"SELECT * FROM $oldName"), Row(1, "a"))
+          }
+        }
+
+        sql(s"ALTER TABLE $oldName RENAME TO $newName")
+
+        boundModes.foreach { case (modeConf, storageLevel, _, expectedMode) =>
+          withSQLConf(modeConf: _*) {
+            val renamed = sql(s"SELECT * FROM $newName")
+            assertCached(renamed)
+            val cachedData = spark.sharedState.cacheManager.lookupCachedData(renamed).get
+            assert(cachedData.cachedRepresentation.cacheBuilder.storageLevel === storageLevel)
+            val scanMode = cachedData.plan.collectFirst {
+              case relation: HiveTableRelation => relation.charVarcharScanMode
+            }.flatten
+            assert(scanMode.contains(expectedMode))
+          }
         }
       }
     }

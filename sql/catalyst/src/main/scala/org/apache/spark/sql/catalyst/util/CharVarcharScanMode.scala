@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.util
 /**
  * The CHAR/VARCHAR scan mode bound to a relation (and its scan) during analysis.
  *
- * A relation carries `Option[CharVarcharScanMode]`: `None` means the relation was not analyzed
- * under first-class CHAR/VARCHAR types (native reader behavior), while a `Some` value pins the
- * mode so that `sameResult` / cache reuse keep the two variants distinct.
+ * A relation carries `Option[CharVarcharScanMode]`: `None` means the relation has not been bound
+ * during analysis yet, while a `Some` value pins the mode so that `sameResult` / cache reuse keep
+ * the variants distinct.
  */
 private[sql] sealed trait CharVarcharScanMode
 
@@ -37,6 +37,11 @@ private[sql] trait SupportsCharVarcharScanMode {
 }
 
 private[sql] object CharVarcharScanMode {
+  /**
+   * Use the legacy annotated-STRING semantics while retaining native reader behavior.
+   */
+  case object Legacy extends CharVarcharScanMode
+
   /**
    * Preserve the native, constrained CHAR/VARCHAR types of the source (e.g. native ORC
    * padding/truncation). Corresponds to preserve-only semantics.
@@ -57,6 +62,7 @@ private[sql] object CharVarcharScanMode {
 
   /** Parses a mode from its `toString` name; the inverse of [[CharVarcharScanMode.toString]]. */
   def fromName(name: String): CharVarcharScanMode = name match {
+    case "Legacy" => Legacy
     case "PreserveNative" => PreserveNative
     case "SparkStandard" => SparkStandard
     case other => throw new IllegalArgumentException(s"Unknown CharVarcharScanMode: $other")

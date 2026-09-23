@@ -2356,6 +2356,10 @@ class CachedTableSuite extends SharedSparkSession
     val version2 = "v2"
     val boundModes = Seq(
       (Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
+        MEMORY_AND_DISK_2, "MEMORY_AND_DISK_2", CharVarcharScanMode.Legacy),
+      (Seq(
         SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
         MEMORY_ONLY, "MEMORY_ONLY", CharVarcharScanMode.PreserveNative),
@@ -2375,7 +2379,7 @@ class CachedTableSuite extends SharedSparkSession
 
       sql(s"INSERT INTO $t VALUES (4, 'e'), (5, 'f')")
 
-      // Cache both mode-specific variants of the base table at once.
+      // Cache every mode-specific variant of the base table at once.
       boundModes.foreach { case (modeConf, storageLevel, storageLevelName, _) =>
         withSQLConf(modeConf: _*) {
           sql(s"CACHE TABLE $t OPTIONS('storageLevel' '$storageLevelName')")
@@ -2388,12 +2392,12 @@ class CachedTableSuite extends SharedSparkSession
       sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
       assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
 
-      assert(cacheManager.numCachedEntries == 4)
+      assert(cacheManager.numCachedEntries == boundModes.size + 2)
 
       sql(s"ALTER TABLE $t RENAME TO tbl_renamed")
 
-      // Time-travel and dependent caches are invalidated; both direct mode variants are restored.
-      assert(cacheManager.numCachedEntries == 2)
+      // Time-travel and dependent caches are invalidated; all direct mode variants are restored.
+      assert(cacheManager.numCachedEntries == boundModes.size)
       boundModes.foreach { case (modeConf, storageLevel, _, expectedMode) =>
         withSQLConf(modeConf: _*) {
           val renamed = sql(s"SELECT * FROM $tRenamed")
@@ -2509,7 +2513,7 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
-  test("non-first-class CHAR relations keep an unbound scan mode") {
+  test("non-first-class CHAR relations bind the legacy scan mode") {
     withSQLConf(
         SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
         SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
@@ -2518,7 +2522,83 @@ class CachedTableSuite extends SharedSparkSession
         val scanMode = spark.table("unbound_char").queryExecution.analyzed.collectFirst {
           case relation: LogicalRelation => relation.charVarcharScanMode
         }.flatten
-        assert(scanMode.isEmpty)
+        assert(scanMode.contains(CharVarcharScanMode.Legacy))
+      }
+    }
+  }
+
+  test("legacy CHAR/VARCHAR scan mode survives cache rebuild from a first-class session") {
+    val legacyConf = Seq(
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")
+    val standardConf = Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")
+
+    withTable("legacy_cached_cv") {
+      withSQLConf(legacyConf: _*) {
+        sql("CREATE TABLE legacy_cached_cv (id int, data varchar(4)) USING parquet")
+        sql("INSERT INTO legacy_cached_cv VALUES (1, 'a')")
+        sql("CACHE TABLE legacy_cached_cv OPTIONS('storageLevel' 'MEMORY_ONLY')")
+        checkAnswer(sql("SELECT * FROM legacy_cached_cv"), Row(1, "a"))
+      }
+
+      withSQLConf(standardConf: _*) {
+        sql("INSERT INTO legacy_cached_cv VALUES (2, 'b')")
+      }
+
+      withSQLConf(legacyConf: _*) {
+        val cached = sql("SELECT * FROM legacy_cached_cv")
+        checkAnswer(cached, Seq(Row(1, "a"), Row(2, "b")))
+        val cachedData = cacheManager.lookupCachedData(cached).get
+        val scanMode = cachedData.plan.collectFirst {
+          case relation: LogicalRelation => relation.charVarcharScanMode
+        }.flatten
+        assert(scanMode.contains(CharVarcharScanMode.Legacy))
+        assert(cachedData.cachedRepresentation.cacheBuilder.storageLevel === MEMORY_ONLY)
+      }
+    }
+  }
+
+  test("V1 RENAME TABLE preserves every CHAR/VARCHAR scan mode cache") {
+    val oldName = "v1_cached_cv"
+    val newName = "v1_cached_cv_renamed"
+    val boundModes = Seq(
+      (Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
+        MEMORY_AND_DISK_2, "MEMORY_AND_DISK_2", CharVarcharScanMode.Legacy),
+      (Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
+        MEMORY_ONLY, "MEMORY_ONLY", CharVarcharScanMode.PreserveNative),
+      (Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
+        DISK_ONLY, "DISK_ONLY", CharVarcharScanMode.SparkStandard))
+
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTable(oldName, newName) {
+        sql(s"CREATE TABLE $oldName (id int, data varchar(4)) USING parquet")
+        sql(s"INSERT INTO $oldName VALUES (1, 'a')")
+
+        boundModes.foreach { case (modeConf, _, storageLevelName, _) =>
+          withSQLConf(modeConf: _*) {
+            sql(s"CACHE TABLE $oldName OPTIONS('storageLevel' '$storageLevelName')")
+            checkAnswer(sql(s"SELECT * FROM $oldName"), Row(1, "a"))
+          }
+        }
+
+        sql(s"ALTER TABLE $oldName RENAME TO $newName")
+
+        boundModes.foreach { case (modeConf, storageLevel, _, expectedMode) =>
+          withSQLConf(modeConf: _*) {
+            val renamed = sql(s"SELECT * FROM $newName")
+            assertCached(renamed)
+            val cachedData = cacheManager.lookupCachedData(renamed).get
+            assert(cachedData.cachedRepresentation.cacheBuilder.storageLevel === storageLevel)
+            val scanMode = cachedData.plan.collectFirst {
+              case relation: LogicalRelation => relation.charVarcharScanMode
+            }.flatten
+            assert(scanMode.contains(expectedMode))
+          }
+        }
       }
     }
   }
