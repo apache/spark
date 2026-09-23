@@ -40,13 +40,13 @@ private[sql] object DuplicateMapKeyUtils {
   /**
    * Builds an XML map with a constrained CHAR/VARCHAR key type.
    *
-   * CHAR/VARCHAR keys: exact serialized names keep the last value, then
+   * CHAR/VARCHAR keys: repeated XML keys after namespace handling keep the last value, then
    * `spark.sql.mapKeyDedupPolicy` applies to normalized keys. Failed values still
    * occupy a slot so collisions are visible.
    *
    * Example: parsing `a` and `a ` as CHAR(2) keys raises
    * DUPLICATED_MAP_KEY under EXCEPTION and keeps `a ` -> 2 under LAST_WIN.
-   * Exact repeated serialized names use last-wins behavior regardless of policy.
+   * Repeated XML keys after namespace handling use last-wins behavior regardless of policy.
    */
   def buildConstrainedMap(
       entries: Seq[(UTF8String, UTF8String, Option[Any])],

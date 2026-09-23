@@ -430,9 +430,10 @@ class StaxXmlParser(
         parser.next
         convertField(parser, dataType, startElementName, attributes)
       case (c: Characters, dt: DataType) =>
+        val value = convertTo(c.getData, dt)
         parser.next
         StaxXmlParserUtils.skipNextEndElement(parser, startElementName, options)
-        convertTo(c.getData, dt)
+        value
       case (e: XMLEvent, dt: DataType) =>
         throw new SparkIllegalArgumentException(
           errorClass = "_LEGACY_ERROR_TEMP_3240",
