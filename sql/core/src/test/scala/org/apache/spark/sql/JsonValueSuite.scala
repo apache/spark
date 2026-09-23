@@ -103,6 +103,17 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
     assert(name.contains("JSON_ARRAY(1)"), s"unexpected name: $name")
   }
 
+  test("SPARK-59685: a nested SQL/JSON DEFAULT keeps a clean auto-generated column name") {
+    // A routed built-in constructor in the DEFAULT ... ON EMPTY / ON ERROR position is rendered in
+    // place too, so its clause-free display form must not leak the round-trip RETURNING clause.
+    Seq("ON EMPTY", "ON ERROR").foreach { position =>
+      val name = sql(s"SELECT json_value('$doc', '$$.name' DEFAULT json_array(1) $position)")
+        .schema.head.name
+      assert(!name.contains("RETURNING"), s"nested DEFAULT leaked the ownership clause: $name")
+      assert(name.contains("JSON_ARRAY(1)"), s"unexpected name: $name")
+    }
+  }
+
   test("extract a scalar value as STRING by default") {
     checkAnswer(sql(s"SELECT json_value('$doc', '$$.name')"), Row("Ada"))
     // Numbers and booleans come back as their JSON text under the default STRING RETURNING.
