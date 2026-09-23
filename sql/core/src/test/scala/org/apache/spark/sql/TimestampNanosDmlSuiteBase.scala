@@ -24,27 +24,11 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
- * End-to-end DML tests -- INSERT / INSERT OVERWRITE / UPDATE / MERGE / DELETE -- over the
- * nanosecond-precision timestamp types `TIMESTAMP_NTZ(p)` / `TIMESTAMP_LTZ(p)` (`p` in `[7, 9]`),
- * part of the nanosecond timestamp preview (SPARK-56822). These commands are type-agnostic: they
- * ride on the nanosecond type's ordering / equality / store-assignment, so no DML-specific
- * production change is required. What they lock is that the SUB-MICROSECOND remainder survives the
- * write path and drives row matching -- a micro-truncating write or key comparison would update,
- * delete or merge the wrong row.
- *
- * The target is an in-memory `SupportsRowLevelOperations` V2 table
- * (`InMemoryRowLevelOperationTableCatalog`), which exercises the row-level rewrite path (the path
- * real row-level stores such as Delta/Iceberg use) without depending on any file-format write.
- * Standalone `DELETE` uses a range predicate on purpose: the in-memory catalog routes an equality
- * delete to its partition-only metadata-delete path (`SupportsDelete`), which this table does not
- * support for a non-partition column; a range predicate falls to the row-level rewrite path, which
- * is the one that matters here. (Equality matching down to the sub-microsecond is still covered by
- * the UPDATE and MERGE tests, whose `ON` / `WHERE` are equalities.)
- *
- * The nanosecond timestamp types are gated behind a preview flag enabled by default under tests
- * (`Utils.isTesting`), so it is not set here. The session time zone is fixed so `TIMESTAMP_LTZ`
- * values are deterministic. The two subclasses run every test with ANSI mode on and off (INSERT
- * store-assignment differs between the two).
+ * DML (INSERT / INSERT OVERWRITE / UPDATE / MERGE / DELETE) over the nanosecond timestamp types
+ * (`TIMESTAMP_NTZ(p)` / `TIMESTAMP_LTZ(p)`, `p` in `[7, 9]`), checking the sub-microsecond
+ * remainder survives the write path and drives row matching. The target is an in-memory row-level
+ * V2 table; standalone `DELETE` uses a range predicate because the in-memory catalog's equality
+ * delete only handles partition columns. The two subclasses run ANSI on and off.
  */
 abstract class TimestampNanosDmlSuiteBase extends SharedSparkSession {
 
@@ -52,9 +36,7 @@ abstract class TimestampNanosDmlSuiteBase extends SharedSparkSession {
     .set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "America/Los_Angeles")
     .set("spark.sql.catalog.testcat", classOf[InMemoryRowLevelOperationTableCatalog].getName)
 
-  // A time-zone family under test: the SQL type, its resolved nanos DataType, and a nanos literal
-  // constructor from a 9-digit fraction. LTZ literals carry an explicit UTC zone so the stored
-  // instant is independent of the (fixed) session zone.
+  // A time-zone family: SQL type, resolved nanos type, and a literal from a 9-digit fraction.
   private case class Family(label: String, typ: String, nanosType: DataType, lit: String => String)
   private val ntz = Family("NTZ", "timestamp_ntz(9)", TimestampNTZNanosType(9),
     frac => s"TIMESTAMP_NTZ '2020-01-01 00:00:00.$frac'")
@@ -71,11 +53,11 @@ abstract class TimestampNanosDmlSuiteBase extends SharedSparkSession {
 
   private def rows(sqlText: String): Seq[Row] = spark.sql(sqlText).collect().toSeq
 
-  // Expected two-row (c, n) set built from nanos literals of the given family.
+  // Expected two-row (c, n) set for a family.
   private def pair(fam: Family, f1: String, n1: Int, f2: String, n2: Int): Seq[Row] =
     rows(s"SELECT * FROM VALUES (${fam.lit(f1)}, $n1), (${fam.lit(f2)}, $n2) AS v(c, n)")
 
-  // Seed the target with two (c, n) rows whose keys share a microsecond but differ within it.
+  // Seed two (c, n) rows keyed within the same microsecond.
   private def insert2(fam: Family, f1: String, n1: Int, f2: String, n2: Int): Unit =
     spark.sql(s"INSERT INTO $t VALUES (${fam.lit(f1)}, $n1), (${fam.lit(f2)}, $n2)")
 
@@ -85,7 +67,6 @@ abstract class TimestampNanosDmlSuiteBase extends SharedSparkSession {
         spark.sql(s"INSERT INTO $t VALUES (${fam.lit("000000001")}, 1)")
         spark.sql(s"INSERT INTO $t SELECT ${fam.lit("000000999")}, 2")
         assert(spark.sql(s"SELECT c FROM $t").schema.head.dataType === fam.nanosType)
-        // The .000000001 vs .000000999 rows share a microsecond and differ only within it.
         checkAnswer(spark.sql(s"SELECT c, n FROM $t"), pair(fam, "000000001", 1, "000000999", 2))
         spark.sql(s"INSERT OVERWRITE $t VALUES (${fam.lit("000000500")}, 5)")
         checkAnswer(spark.sql(s"SELECT c, n FROM $t"), rows(s"SELECT ${fam.lit("000000500")}, 5"))
@@ -95,7 +76,7 @@ abstract class TimestampNanosDmlSuiteBase extends SharedSparkSession {
     test(s"${fam.label}: UPDATE ... SET targets the row at a sub-microsecond key") {
       withV2Table(s"c ${fam.typ}, n int") {
         insert2(fam, "000000001", 1, "000000999", 2)
-        // Equality on the full nanos value: only the .000000999 row is updated, not the .000000001.
+        // Only the .000000999 row is updated.
         spark.sql(s"UPDATE $t SET n = 99 WHERE c = ${fam.lit("000000999")}")
         checkAnswer(spark.sql(s"SELECT c, n FROM $t"), pair(fam, "000000001", 1, "000000999", 99))
       }
@@ -113,8 +94,7 @@ abstract class TimestampNanosDmlSuiteBase extends SharedSparkSession {
              |WHEN MATCHED THEN UPDATE SET t.n = s.n
              |WHEN NOT MATCHED THEN INSERT (c, n) VALUES (s.c, s.n)
              |WHEN NOT MATCHED BY SOURCE THEN DELETE""".stripMargin)
-        // .000000009 matched on the sub-microsecond key -> updated to 900; .000000123 not matched
-        // -> inserted; .000000001 not matched by source -> deleted.
+        // .009 updated, .123 inserted, .001 deleted (not matched by source).
         checkAnswer(spark.sql(s"SELECT c, n FROM $t"),
           pair(fam, "000000009", 900, "000000123", 123))
       }
@@ -123,9 +103,7 @@ abstract class TimestampNanosDmlSuiteBase extends SharedSparkSession {
     test(s"${fam.label}: DELETE FROM removes the sub-micro row via row-level rewrite") {
       withV2Table(s"c ${fam.typ}, n int") {
         insert2(fam, "000000001", 1, "000000999", 2)
-        // A range predicate forces the row-level rewrite path (see the suite comment). The
-        // sub-microsecond digit decides membership: .000000999 > .000000500 is deleted; the
-        // .000000001 row is kept.
+        // Range predicate -> rewrite; .000000999 > .000000500 deleted, .000000001 kept.
         spark.sql(s"DELETE FROM $t WHERE c > ${fam.lit("000000500")}")
         checkAnswer(spark.sql(s"SELECT c, n FROM $t"), rows(s"SELECT ${fam.lit("000000001")}, 1"))
       }
@@ -136,19 +114,17 @@ abstract class TimestampNanosDmlSuiteBase extends SharedSparkSession {
     withV2Table("c timestamp_ntz(9), n int") {
       spark.sql(s"INSERT INTO $t SELECT '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7), 1")
       assert(spark.sql(s"SELECT c FROM $t").schema.head.dataType === TimestampNTZNanosType(9))
-      // .0000001 at p=7 is 100 ns, so it stores as .000000100 at p=9 (widening never floors).
+      // .0000001 at p=7 (100 ns) stores as .000000100 at p=9.
       checkAnswer(spark.sql(s"SELECT c, n FROM $t"),
         rows("SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100', 1"))
     }
   }
 }
 
-// Runs the nanosecond timestamp DML tests with ANSI mode enabled explicitly.
 class TimestampNanosDmlAnsiOnSuite extends TimestampNanosDmlSuiteBase {
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
 }
 
-// Runs the nanosecond timestamp DML tests with ANSI mode disabled explicitly.
 class TimestampNanosDmlAnsiOffSuite extends TimestampNanosDmlSuiteBase {
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 }
