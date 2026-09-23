@@ -103,4 +103,34 @@ class PullOutNondeterministicSuite extends AnalysisTest {
       assert(aesEncryptCount == 1)
     }
   }
+
+  test("pull out random-IV aes_encrypt with a nondeterministic child") {
+    val queries = Seq(
+      """SELECT count(*)
+        |FROM TaBlE
+        |GROUP BY aes_encrypt(uuid(), '0000111122223333')
+        |""".stripMargin,
+      """SELECT * FROM TaBlE
+        |ORDER BY aes_encrypt(uuid(), '0000111122223333')
+        |""".stripMargin)
+
+    queries.foreach { sqlText =>
+      val analyzed = analyze(sqlText)
+
+      val nondeterministicOperatorExpressions = analyzed.collect {
+        case aggregate: Aggregate => aggregate.groupingExpressions
+        case sort: Sort => sort.order
+      }.flatten.filterNot(_.deterministic)
+      assert(nondeterministicOperatorExpressions.isEmpty)
+
+      val extractedExpressions = analyzed.collect {
+        case plan => plan.expressions.flatMap(_.collect {
+          case _: AesEncrypt => "aes_encrypt"
+          case _: Uuid => "uuid"
+        })
+      }.flatten
+      assert(extractedExpressions.count(_ == "aes_encrypt") == 1)
+      assert(extractedExpressions.count(_ == "uuid") == 1)
+    }
+  }
 }
