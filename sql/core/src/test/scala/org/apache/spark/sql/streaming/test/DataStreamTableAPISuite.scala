@@ -502,7 +502,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("micro-batch V2 write recaches all bound CHAR/VARCHAR scan modes") {
+  test("micro-batch V2 write invalidates all bound CHAR/VARCHAR scan modes") {
     val t = "testcat.ns.cached_cv"
     val preserveConf = Seq(
       SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
@@ -554,39 +554,11 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
             case relation: DataSourceV2Relation => relation
           }.get
           val descriptors = cacheManager.lookupCacheDescriptorsByV2Relation(currentRelation)
-          assert(descriptors.map(d => d.charVarcharScanMode -> d.storageLevel).toSet === Set(
-            Some(CharVarcharScanMode.PreserveNative) -> MEMORY_ONLY,
-            Some(CharVarcharScanMode.SparkStandard) -> DISK_ONLY))
+          assert(descriptors.isEmpty)
         } finally {
           sq.stop()
           preserveRead.unpersist()
           standardRead.unpersist()
-        }
-      }
-    }
-  }
-
-  test("micro-batch V2 write keeps a non-CHAR table cached") {
-    val t = "testcat.ns.cached_int"
-    spark.sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns")
-    withTable(t) {
-      withTempDir { dir =>
-        sql(s"CREATE TABLE $t (value int) USING foo")
-        sql(s"INSERT INTO $t VALUES (1)")
-        sql(s"CACHE TABLE $t")
-        assert(spark.catalog.isCached(t))
-
-        val stream = MemoryStream[Int]
-        val query = stream.toDF().writeStream
-          .option("checkpointLocation", dir.getCanonicalPath)
-          .toTable(t)
-        try {
-          stream.addData(2)
-          query.processAllAvailable()
-          assert(spark.catalog.isCached(t))
-          checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1), Row(2)))
-        } finally {
-          query.stop()
         }
       }
     }

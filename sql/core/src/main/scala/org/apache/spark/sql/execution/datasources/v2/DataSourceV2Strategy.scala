@@ -75,6 +75,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       cacheManager.recacheByV2Relation(session, r)
   }
 
+  private def invalidateWriteCache(r: DataSourceV2Relation)(): Unit = r match {
+    case ExtractV2CatalogAndIdentifier(catalog, ident) =>
+      val nameParts = ident.toQualifiedNameParts(catalog)
+      cacheManager.uncacheTableOrView(session, nameParts, cascade = true)
+    case _ =>
+      cacheManager.uncacheByV2Relation(session, r, cascade = true)
+  }
+
   private def recacheTable(r: ResolvedTable, includeTimeTravel: Boolean)(): Unit = {
     val nameParts = r.identifier.toQualifiedNameParts(r.catalog)
     cacheManager.recacheTableOrView(session, nameParts, includeTimeTravel)
@@ -242,11 +250,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       DataSourceV2Strategy.withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
     case WriteToDataSourceV2(relationOpt, writer, query, customMetrics) =>
-      // Micro-batch V2Writes forwards the unbound target (scan mode None). Recache using the
-      // same catalog-name / catalog-less mutation identity as batch V2 writes so every bound
-      // CHAR/VARCHAR cache variant is rebuilt after a successful commit.
-      val refreshCacheFunc: () => Unit = () => relationOpt.foreach(r => refreshCache(r)())
-      WriteToDataSourceV2Exec(writer, refreshCacheFunc, planLater(query), customMetrics) :: Nil
+      // Micro-batch V2Writes forwards an unbound target. Invalidate by catalog name or by
+      // mutation-specific relation identity so every bound scan-mode variant is removed.
+      val invalidateCacheFunc: () => Unit =
+        () => relationOpt.foreach(r => invalidateWriteCache(r)())
+      WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
     case c @ CreateTable(ResolvedIdentifier(catalog, ident), columns, partitioning,
         tableSpec: TableSpec, ifNotExists) =>

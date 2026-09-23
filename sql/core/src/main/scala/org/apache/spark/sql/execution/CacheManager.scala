@@ -384,6 +384,26 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
+   * Removes cache entries whose plans contain the given catalog-less
+   * [[DataSourceV2Relation]]. The scan mode is ignored only for this mutation-specific match.
+   */
+  def uncacheByV2Relation(
+      spark: SparkSession,
+      relation: DataSourceV2Relation,
+      cascade: Boolean,
+      blocking: Boolean = false): Unit = {
+    uncacheByCondition(
+      spark,
+      {
+        case cached: DataSourceV2Relation =>
+          cached.sameResultWithUnboundCharVarcharScanMode(relation)
+        case _ => false
+      },
+      cascade,
+      blocking)
+  }
+
+  /**
    * Describes direct named cache entries for a V2 table. Matching the cache's table name excludes
    * dependent query caches while retaining the padding project of a standard-semantics scan.
    * Scan mode is ignored for the relation match.
