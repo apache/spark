@@ -209,11 +209,20 @@ case class TransformExpression(
    * arity-flexible function), so it is left to the connector reducer / other guards. The DataType
    * match is exact by design: any mismatch (including cosmetic ones like Array `containsNull` or
    * Decimal precision/scale) fails safe to a shuffle. See the two predicates below for the callers.
+   *
+   * Reading `dataType` can throw rather than answer. [[withReference]] retargets a transform at
+   * another key, and a [[GetStructField]] column slot retargeted at a non-struct attribute -- an
+   * `identity` column on the other side of a join, say -- leaves `GetStructField(intCol, 0)`, whose
+   * `dataType` raises `INTERNAL_ERROR: GetStructField requires a StructType child`. Both callers
+   * are gates that must answer "not reducible" rather than fail the query, so a child whose type
+   * cannot be read is treated as not matching.
    */
   private def inputTypesMatch(select: Expression => Boolean): Boolean = {
     val declaredTypes = function.inputTypes()
     children.zipWithIndex.forall {
-      case (c, i) => !select(c) || i >= declaredTypes.length || c.dataType == declaredTypes(i)
+      case (c, i) =>
+        !select(c) || i >= declaredTypes.length ||
+          Try(c.dataType).toOption.contains(declaredTypes(i))
     }
   }
 
@@ -240,9 +249,10 @@ case class TransformExpression(
    * [[literalParamsMatchInputTypes]], which keeps the beyond-arity short-circuit. The check is one
    * level and reads each child's `dataType`: the non-literal child is a column reference -- an
    * [[Attribute]] or [[GetStructField]] chain, never a nested transform (rejected by the scan gate
-   * `supportsExpressions`/`isColumnRef`) -- so there is no inner-transform column to recurse into,
-   * and a gate-admitted child always has a resolvable `dataType`, so the eager read is safe.
-   * Stronger than [[literalParamsMatchInputTypes]].
+   * `supportsExpressions`/`isColumnRef`) -- so there is no inner-transform column to recurse into.
+   * A `GetStructField` chain retargeted by [[withReference]] at a non-struct key cannot report a
+   * `dataType` at all; [[inputTypesMatch]] treats that as not matching rather than letting the read
+   * throw. Stronger than [[literalParamsMatchInputTypes]].
    */
   lazy val argsMatchInputTypes: Boolean =
     children.length == function.inputTypes().length && inputTypesMatch(_ => true)

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StructField, StructType}
 
 class TransformExpressionSuite extends SparkFunSuite {
 
@@ -182,6 +182,32 @@ class TransformExpressionSuite extends SparkFunSuite {
     val plusOne = TransformExpression(outer, Seq(Literal(4), Add(a, Literal(1))))
     assert(!plusOne.isSameFunction(TransformExpression(outer, Seq(Literal(4), Add(a, Literal(1))))),
       "a non-reference slot is not comparable, so not the same function")
+  }
+
+  test("SPARK-50593: a retargeted struct-field column slot is not reducible, and does not throw") {
+    // `withReference` retargets a transform at the other side's key. A GetStructField column slot
+    // retargeted at a non-struct attribute leaves GetStructField(intCol, 0), whose `dataType`
+    // raises INTERNAL_ERROR rather than answering. `argsMatchInputTypes` is a gate -- it has to
+    // report "not reducible" and let the join shuffle, not fail the query.
+    val structAttr = AttributeReference("s", StructType(Seq(StructField("f", IntegerType))))()
+    val sf = GetStructField(structAttr, 0)
+    // Two declared input types, so the arity short-circuit does not hide the dataType read.
+    val fn = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "test.truncate2"
+      override def canonicalName(): String = name()
+    }
+    val t = TransformExpression(fn, Seq(sf, Literal(3)))
+    val retargeted = t.withReference(AttributeReference("id", IntegerType)())
+
+    assert(!retargeted.argsMatchInputTypes,
+      "an unreadable child type must read as not matching, not raise")
+
+    // The same slot retargeted at a compatible struct still matches.
+    val otherStruct = AttributeReference("s2", StructType(Seq(StructField("f", IntegerType))))()
+    assert(t.withReference(otherStruct).argsMatchInputTypes,
+      "a compatible retarget still matches")
   }
 
 }
