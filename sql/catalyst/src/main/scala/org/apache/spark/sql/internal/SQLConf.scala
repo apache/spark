@@ -4888,9 +4888,11 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doc("When true, a stack of adjacent Window operators connected by transparent " +
         "projections is reordered, grouping windows that share a partition spec so that " +
-        "the number of inserted exchanges (shuffles) and sorts is minimized. Windows are " +
-        "grouped by the minimal partition spec their partition spec contains (or by " +
-        "their exact partition spec under " +
+        "the number of inserted exchanges (shuffles) is minimized: one exchange per " +
+        "distinct minimal partition spec. Within a partition group, windows with equal " +
+        "order specs are made adjacent, so that they share the same sort or can be " +
+        "merged. Windows are grouped by the minimal partition spec their partition spec " +
+        "contains (or by their exact partition spec under " +
         "`spark.sql.requireAllClusterKeysForDistribution`). When false, only adjacent " +
         "window pairs with compatible partitions are transposed.")
       .version("4.4.0")

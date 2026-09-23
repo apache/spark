@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.window.{WindowExec, WindowGroupLimitExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -68,17 +69,19 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withInput {
-        val actual = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
           val df = sql(query)
           assert(numWindows(df) == 6)
           assert(numExchanges(df) == 2)
-          df.collect().toSeq
+          df
         }
-        // The reordered plan must produce the same result as the default (reorder off) plan.
-        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
-          sql(query).collect().toSeq
+        // The reordered plan must produce the same result as the default (reorder off)
+        // plan. The queries have no outer ORDER BY, so `checkAnswer` compares the answers
+        // without making physical row order part of the contract.
+        val expectedDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          sql(query)
         }
-        assert(actual == expected)
+        checkAnswer(actualDf, expectedDf)
       }
     }
   }
@@ -94,17 +97,95 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withInput {
-        val actual = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
           val df = sql(query)
           assert(numWindows(df) == 2)
           assert(numExchanges(df) == 1)
           assert(numSorts(df) == 2)
-          df.collect().toSeq
+          df
         }
-        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
-          sql(query).collect().toSeq
+        val expectedDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          sql(query)
         }
-        assert(actual == expected)
+        checkAnswer(actualDf, expectedDf)
+      }
+    }
+  }
+
+  test("windows with equal order specs become adjacent to share one sort") {
+    // The three windows share the partition spec (k1, k2), so they all ride one exchange in
+    // any order, and the two k1-ordered ones come from different scopes (the analyzer groups
+    // only same-spec windows within one select list). The original order (k1, k2, k1) pays
+    // one sort per window; moving the two k1-ordered windows next to each other lets the
+    // second ride the first one's sort, for one fewer (and CollapseWindow then also merges
+    // the two equal-spec windows in a later iteration). `checkAnswer` compares the
+    // answers without making the physical row order of the unordered queries part of
+    // the contract.
+    val query =
+      """
+        |SELECT a1, a2, sum(v) OVER (PARTITION BY k1, k2 ORDER BY k1) AS s1
+        |FROM (
+        |  SELECT k1, k2, v,
+        |    sum(v) OVER (PARTITION BY k1, k2 ORDER BY k1) AS a1,
+        |    sum(v) OVER (PARTITION BY k1, k2 ORDER BY k2) AS a2
+        |  FROM t
+        |)
+      """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(query)
+          assert(numWindows(df) == 2)
+          assert(numExchanges(df) == 1)
+          assert(numSorts(df) == 2)
+          df
+        }
+        val expectedDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          val df = sql(query)
+          // Without reordering the equal-order windows are separated and each pays a sort.
+          assert(numWindows(df) == 3)
+          assert(numSorts(df) == 3)
+          df
+        }
+        checkAnswer(actualDf, expectedDf)
+      }
+    }
+  }
+
+  test("window with an empty order spec and a relative frame blocks reordering") {
+    // The running sum has no ORDER BY, so its ROWS ... CURRENT ROW frame covers whatever
+    // row prefix the operator receives; reordering the chain would change that order and
+    // hence the results. The rule must skip the chain, so the config-on results stay
+    // identical to the config-off ones. The partition specs are pairwise incomparable, so
+    // the disabled adjacent-pair transposition also leaves the plan untouched and the
+    // config-off plan is a valid reference. `checkAnswer` compares the answers without
+    // making the physical row order of the unordered query part of the contract.
+    val query =
+      """
+        |SELECT k1, k2, k3, k4, v,
+        |  sum(v) OVER (PARTITION BY k1, k2 ORDER BY k1) AS a1,
+        |  sum(v) OVER (PARTITION BY k1, k3 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS r1,
+        |  sum(v) OVER (PARTITION BY k1, k4 ORDER BY k1) AS s1,
+        |  sum(v) OVER (PARTITION BY k1, k2 ORDER BY k2) AS a2
+        |FROM t
+      """.stripMargin
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withInput {
+        val (actualDf, onPlan) = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+          val df = sql(query)
+          assert(numWindows(df) == 4)
+          (df, df.queryExecution.executedPlan)
+        }
+        val (expectedDf, offPlan) = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          val df = sql(query)
+          (df, df.queryExecution.executedPlan)
+        }
+        // The enabled rule must skip the chain, leaving the plan shape identical to the
+        // disabled one; `sameResult` normalizes the expression ids of the two runs.
+        assert(onPlan.sameResult(offPlan))
+        checkAnswer(actualDf, expectedDf)
       }
     }
   }
@@ -125,18 +206,18 @@ class TransposeWindowQuerySuite extends QueryTest with SharedSparkSession {
 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withInput {
-        val actual = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+        val actualDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
           val df = sql(query)
           assert(df.queryExecution.executedPlan.collect {
             case _: WindowGroupLimitExec => ()
           }.nonEmpty)
           assert(numExchanges(df) == 1)
-          df.collect().toSeq
+          df
         }
-        val expected = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
-          sql(query).collect().toSeq
+        val expectedDf = withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "false") {
+          sql(query)
         }
-        assert(actual == expected)
+        checkAnswer(actualDf, expectedDf)
       }
     }
   }

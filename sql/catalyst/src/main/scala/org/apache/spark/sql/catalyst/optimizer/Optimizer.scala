@@ -1956,28 +1956,36 @@ object TransposeWindow extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whether an exchange keyed on `spec2` can satisfy the `ClusteredDistribution` of a window
-   * with partition spec `spec1`. By default (subset semantics) a partitioning satisfies the
-   * distribution if every partitioning key appears in the required clustering keys, so
-   * `spec1` being a subset of `spec2` suffices; under
+   * Whether a window with partition spec `requiredKeys` can ride an exchange keyed on
+   * `exchangeKeys`: by default (subset semantics) a partitioning satisfies a
+   * `ClusteredDistribution` if its keys are a subset of the required clustering keys, so
+   * `exchangeKeys` being a subset of `requiredKeys` suffices; under
    * `requireAllClusterKeysForDistribution` the partitioning must match the required keys
    * exactly and in order, so only identical specs ride each other's exchange.
    */
-  private def subsetOf(spec1: Seq[Expression], spec2: Seq[Expression]): Boolean =
+  private def canRideExchange(
+      exchangeKeys: Seq[Expression],
+      requiredKeys: Seq[Expression]): Boolean =
     if (conf.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION)) {
-      spec1.length == spec2.length &&
-        spec1.zip(spec2).forall { case (e1, e2) => e1.semanticEquals(e2) }
+      exchangeKeys.length == requiredKeys.length &&
+        exchangeKeys.zip(requiredKeys).forall { case (e1, e2) => e1.semanticEquals(e2) }
     } else {
-      spec1.forall(e1 => spec2.exists(e1.semanticEquals))
+      exchangeKeys.forall(e1 => requiredKeys.exists(e1.semanticEquals))
     }
 
   /** Semantic equivalence of two partition specs, i.e. mutual subset. */
   private def equivalent(spec1: Seq[Expression], spec2: Seq[Expression]): Boolean =
-    subsetOf(spec1, spec2) && subsetOf(spec2, spec1)
+    canRideExchange(spec1, spec2) && canRideExchange(spec2, spec1)
+
+  /** Semantic equality of two order specs, i.e. element-wise `semanticEquals`. */
+  private def sameOrderSpec(orderSpec1: Seq[SortOrder], orderSpec2: Seq[SortOrder]): Boolean =
+    orderSpec1.length == orderSpec2.length &&
+      orderSpec1.zip(orderSpec2).forall { case (o1, o2) => o1.semanticEquals(o2) }
 
   /**
    * The chain is reorderable if all windows are deterministic and have a non-empty partition
-   * spec (an empty one requires `AllTuples` and must not move), no window references another
+   * spec (an empty one requires `AllTuples` and must not move), every window with an empty
+   * order spec is order-safe (see `orderSafeWithEmptyOrder`), no window references another
    * window's output, and no window references the aliased output of a link below it (such a
    * link could not be re-applied above that window). The aliased output may be any
    * deterministic expression; hoisting it above the windows only changes where it is
@@ -1988,6 +1996,11 @@ object TransposeWindow extends Rule[LogicalPlan] {
     val windows = chain.windows
     windows.forall(_.expressions.forall(_.deterministic)) &&
     windows.forall(_.partitionSpec.nonEmpty) &&
+    // An empty-order window with a relative frame (e.g. `ROWS ... CURRENT ROW`) is
+    // order-sensitive: moving it, or any window below it, changes results -- skip the chain.
+    windows.forall { w =>
+      w.orderSpec.nonEmpty || w.windowExpressions.forall(orderSafeWithEmptyOrder)
+    } &&
     windows.indices.forall { i =>
       windows.indices.forall { j =>
         i == j || windows(i).references.intersect(windows(j).windowOutputSet).isEmpty
@@ -2006,19 +2019,17 @@ object TransposeWindow extends Rule[LogicalPlan] {
   }
 
   /**
-   * The exchange-minimal window order, as indices into `windows` (bottom-to-top): group the
-   * windows by the minimal partition spec their own partition spec contains, groups ordered
-   * by first appearance, smaller specs first within a group; the sort is stable, so windows
-   * with equal keys keep their original relative order. Each group leader pays for its
-   * exchange and every other member rides it, because a riding window never changes the
-   * partitioning seen by the windows above it, so the result needs one exchange per minimal
-   * partition spec.
+   * Returns the exchange-minimal window order as indices into `windows` (bottom-to-top):
+   * the plan needs one exchange per distinct minimal partition spec, and windows with
+   * equal order specs are made adjacent to share sorts.
    */
   private def optimalOrder(windows: Seq[Window]): Seq[Int] = {
     val specs = windows.map(_.partitionSpec)
+    // A spec is minimal if no other spec in the stack is a strict subset of it, i.e. no
+    // other window already keys an exchange that this window could ride.
     val minimal = specs.indices.map { i =>
       !specs.indices.exists { j =>
-        j != i && subsetOf(specs(j), specs(i)) && !equivalent(specs(j), specs(i))
+        j != i && canRideExchange(specs(j), specs(i)) && !equivalent(specs(j), specs(i))
       }
     }
     // The distinct minimal specs, ranked by first appearance, bottom-to-top.
@@ -2028,11 +2039,63 @@ object TransposeWindow extends Rule[LogicalPlan] {
         minimalSpecs += specs(i)
       }
     }
+    // Every window rides the exchange of the first minimal spec its partition spec
+    // contains, so all windows of the same class share that exchange.
     val classOf = specs.indices.map { i =>
-      minimalSpecs.indices.filter(j => subsetOf(minimalSpecs(j), specs(i))).min
+      minimalSpecs.indices.filter(j => canRideExchange(minimalSpecs(j), specs(i))).min
     }
-    specs.indices.sortBy(i => (classOf(i), specs(i).length))
+    // Each group's leader is the first member whose partition spec is the group's minimal
+    // spec; it must come first within the group, so that its exchange is keyed on the
+    // minimal spec.
+    val leaders = minimalSpecs.indices.map { g =>
+      specs.indices.find(i => classOf(i) == g && equivalent(specs(i), minimalSpecs(g))).get
+    }
+    // The order-spec classes of the windows that are not ranked -1, in first-appearance
+    // order among those windows. Windows whose order spec equals their group leader's get
+    // the special rank -1: they belong right after the leader, where they ride its sort
+    // as well as its exchange (or merge with it). Ranking them by first appearance like
+    // the other classes would not be stable: the leader is forced to the front, which
+    // changes its class's first appearance, so re-applying the rule would compute a
+    // different order. With the special rank the first application is a fixed point.
+    val orderClass = Array.fill(windows.length)(-1)
+    val rankedOrders = mutable.ArrayBuffer.empty[Seq[SortOrder]]
+    windows.indices.foreach { i =>
+      val leader = leaders(classOf(i))
+      if (i != leader && !sameOrderSpec(windows(leader).orderSpec, windows(i).orderSpec)) {
+        val spec = windows(i).orderSpec
+        val rank = rankedOrders.indexWhere(sameOrderSpec(_, spec))
+        if (rank < 0) {
+          rankedOrders += spec
+          orderClass(i) = rankedOrders.length - 1
+        } else {
+          orderClass(i) = rank
+        }
+      }
+    }
+    // The other members ride the leader's exchange in any order, so they are ordered by
+    // orderClass (then by partition spec length, for stability): windows with equal order
+    // specs become adjacent and share the sort inserted for the first of them, without
+    // affecting the exchange count.
+    minimalSpecs.indices.flatMap { g =>
+      val members = specs.indices.filter(classOf(_) == g)
+      val leader = leaders(g)
+      leader +: members.filterNot(_ == leader).sortBy(i => (orderClass(i), specs(i).length))
+    }
   }
+
+  /**
+   * Whether the expression is safe in a window with an empty order spec, i.e. contains no
+   * window expression whose frame has bounds relative to the current row: only the
+   * whole-partition frame covers the same rows under any row order (the same distinction
+   * `CollapseWindow` draws). A bare aggregate without an explicit frame also evaluates
+   * over the whole partition, so it is safe.
+   */
+  private def orderSafeWithEmptyOrder(windowExpression: NamedExpression): Boolean =
+    !windowExpression.exists {
+      case WindowExpression(_, WindowSpecDefinition(_, _, frame: SpecifiedWindowFrame)) =>
+        !(frame.lower == UnboundedPreceding && frame.upper == UnboundedFollowing)
+      case _ => false
+    }
 
   /**
    * Whether `filter` above the chain top is a rank filter on the chain's top window that
@@ -2041,7 +2104,6 @@ object TransposeWindow extends Rule[LogicalPlan] {
    * the predicate pushdown rules may not have moved the filter below them yet.
    */
   private def isRankFilterOnTopWindow(filter: Filter, chain: WindowChain): Boolean = {
-    if (conf.windowGroupLimitThreshold == -1) return false
     val topWindow = chain.windows.last
     if (topWindow.orderSpec.isEmpty ||
       !topWindow.windowExpressions.forall(InferWindowGroupLimit.isExpandingWindow)) {
@@ -2060,13 +2122,15 @@ object TransposeWindow extends Rule[LogicalPlan] {
       }
     }
 
-    topWindow.windowExpressions.exists {
-      case alias @ Alias(WindowExpression(rankLikeFunction, _), _)
-          if InferWindowGroupLimit.support(rankLikeFunction) =>
-        InferWindowGroupLimit.extractLimits(condition, alias.toAttribute)
-          .exists(_ <= conf.windowGroupLimitThreshold)
-      case _ => false
-    }
+    // Pin only when the group-limit rule would actually select a rank candidate for the
+    // remapped condition, so that reordering is not constrained by an optimization that
+    // would never fire (over the threshold, outcompeted by another rank predicate, or
+    // unnecessary given the known child cardinality). `chain.bottomChild` has the same
+    // `maxRows` as the pinned Window's child would have: the reorder is
+    // cardinality-preserving.
+    InferWindowGroupLimit
+      .selectRankCandidate(condition, topWindow.windowExpressions, chain.bottomChild)
+      .isDefined
   }
 
   /**
@@ -2140,10 +2204,12 @@ object TransposeWindow extends Rule[LogicalPlan] {
     if (!reorderable(chain)) {
       return None
     }
+
     val pinTopWindow = parent.exists {
       case filter: Filter => isRankFilterOnTopWindow(filter, chain)
       case _ => false
     }
+
     reorderChain(chain, pinTopWindow)
   }
 
