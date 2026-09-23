@@ -16,19 +16,21 @@
  */
 package org.apache.spark.sql.connect.common
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InvalidClassException, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InvalidClassException}
+import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.sql.connect.test.ConnectFunSuite
-import org.apache.spark.sql.types.{SuidCompatV1, SuidCompatV2, SuidLayoutV1, SuidLayoutV2}
+import org.apache.spark.sql.types.{SuidCompatV1, SuidCompatV2, SuidCustomV1, SuidExplicitV1}
+import org.apache.spark.sql.types.{SuidLayoutV1, SuidLayoutV2}
 
 /**
  * Tests for [[UdfSerialization]]'s tolerance of `serialVersionUID` drift for
  * `org.apache.spark.sql.types` classes.
  *
- * Each fixture pair has same-length class names, so serializing the `*V1` instance and patching the
- * class name in the byte stream to `*V2` yields exactly what a `*V2` reader would see from a `*V1`
- * producer whose `serialVersionUID` differs -- a deterministic stand-in for a cross-version payload
- * without needing two builds.
+ * Each fixture pair has same-length class names, so serializing the `*V1` instance and patching
+ * the class name in the byte stream to `*V2` yields exactly what a `*V2` reader would see from a
+ * `*V1` producer whose `serialVersionUID` differs -- a deterministic stand-in for a cross-version
+ * payload without needing two builds.
  */
 class UdfSerializationSuite extends ConnectFunSuite {
 
@@ -80,11 +82,26 @@ class UdfSerializationSuite extends ConnectFunSuite {
     }
   }
 
+  test("does not tolerate an explicit serialVersionUID change") {
+    val stream =
+      patchClassName(serialize(SuidExplicitV1(1, "x")), "SuidExplicitV1", "SuidExplicitV2")
+    intercept[InvalidClassException] {
+      UdfSerialization.deserialize[AnyRef](stream, loader)
+    }
+  }
+
+  test("does not tolerate drift for a class with a custom readObject") {
+    val stream = patchClassName(serialize(SuidCustomV1(1, "x")), "SuidCustomV1", "SuidCustomV2")
+    intercept[InvalidClassException] {
+      UdfSerialization.deserialize[AnyRef](stream, loader)
+    }
+  }
+
   test("does not tolerate serialVersionUID drift outside sql.types") {
     val stream =
       patchClassName(serialize(SuidUntolerantV1(1, "x")), "SuidUntolerantV1", "SuidUntolerantV2")
     intercept[InvalidClassException] {
-      UdfSerialization.deserialize[SuidUntolerantV2](stream, loader)
+      UdfSerialization.deserialize[AnyRef](stream, loader)
     }
   }
 }

@@ -15,23 +15,35 @@
  * limitations under the License.
  */
 
-// Deterministic fixtures for UdfSerializationSuite. Each pair has same-length class names so a
+// Deterministic fixtures for UdfSerializationSuite. Each pair has same-length class names, so a
 // serialized stream of the *V1 class can be turned into a *V2 stream by an in-place, same-length
-// class-name patch, letting a single build simulate a cross-version producer/consumer pair.
-// The `sql.types`-package pairs exercise the SUID-tolerant path; the other pair verifies scoping.
+// class-name patch, letting a single build simulate a cross-version producer/consumer pair whose
+// serialVersionUIDs differ (the two auto-computed SUIDs differ because the class name differs).
 
 package org.apache.spark.sql.types {
-  // Same serialized field layout, different serialVersionUID: tolerated (rebind succeeds).
-  @SerialVersionUID(1001L) case class SuidCompatV1(a: Int, b: String)
-  @SerialVersionUID(1002L) case class SuidCompatV2(a: Int, b: String)
+  // Plain field-serialized, auto-computed SUID, identical layout: tolerated (rebind succeeds).
+  case class SuidCompatV1(a: Int, b: String)
+  case class SuidCompatV2(a: Int, b: String)
 
   // Different serialized field layout: not tolerated (must fail fast).
-  @SerialVersionUID(2001L) case class SuidLayoutV1(a: Int, b: String)
-  @SerialVersionUID(2002L) case class SuidLayoutV2(a: Int)
+  case class SuidLayoutV1(a: Int, b: String)
+  case class SuidLayoutV2(a: Int)
+
+  // Explicit serialVersionUID: an explicit-SUID change is a deliberate break, not tolerated.
+  @SerialVersionUID(4242L) case class SuidExplicitV1(a: Int, b: String)
+  @SerialVersionUID(4243L) case class SuidExplicitV2(a: Int, b: String)
+
+  // Custom readObject protocol: descriptor substitution is unsafe, not tolerated.
+  case class SuidCustomV1(a: Int, b: String) {
+    private def readObject(in: java.io.ObjectInputStream): Unit = in.defaultReadObject()
+  }
+  case class SuidCustomV2(a: Int, b: String) {
+    private def readObject(in: java.io.ObjectInputStream): Unit = in.defaultReadObject()
+  }
 }
 
 package org.apache.spark.sql.connect.common {
   // Outside the tolerant `sql.types` package: SUID drift must NOT be tolerated.
-  @SerialVersionUID(3001L) case class SuidUntolerantV1(a: Int, b: String)
-  @SerialVersionUID(3002L) case class SuidUntolerantV2(a: Int, b: String)
+  case class SuidUntolerantV1(a: Int, b: String)
+  case class SuidUntolerantV2(a: Int, b: String)
 }
