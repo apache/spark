@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Concat, CurrentRow, Rand, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Concat, CurrentRow, DenseRank, Rand, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, WindowGroupLimit}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -231,16 +231,59 @@ class TransposeWindowSuite extends PlanTest {
   }
 
   test("already optimally ordered window stack is unchanged") {
-    // Distinct order specs so that CollapseWindow cannot merge the same-spec windows.
+    // Distinct order specs so that CollapseWindow cannot merge the same-spec windows, and
+    // ordered so that no window can move next to an equal-order window to share a sort: the
+    // stack is optimal both in exchanges and in sorts, so the rule must leave it unchanged.
     val query = wideRelation
       .window(Seq(sum(v).as("s1")), Seq(k1), order)
       .window(Seq(sum(v).as("s2a")), specF, order)
       .window(Seq(sum(v).as("s2b")), specF, Seq(k2.asc))
-      .window(Seq(sum(v).as("s3")), specP, order)
+      .window(Seq(sum(v).as("s3")), specP, Seq(k3.asc))
 
     val analyzed = query.analyze
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
       comparePlans(Optimize.execute(analyzed), analyzed)
+    }
+  }
+
+  test("windows with equal order specs become adjacent within a group") {
+    // Every partition spec contains (k1), so all windows ride one exchange in any order.
+    // The original order (k1, k2, k1) pays one sort per window; moving the two k1-ordered
+    // windows next to each other lets the second ride the first one's sort, for one fewer.
+    val query = wideRelation
+      .window(Seq(sum(v).as("s1")), Seq(k1), Seq(k1.asc))
+      .window(Seq(sum(v).as("s2")), specF, Seq(k2.asc))
+      .window(Seq(sum(v).as("s3")), specP, Seq(k1.asc))
+
+    val analyzed = query.analyze
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("s1")), Seq(k1), Seq(k1.asc))
+      .window(Seq(sum(v).as("s3")), specP, Seq(k1.asc))
+      .window(Seq(sum(v).as("s2")), specF, Seq(k2.asc))
+      .select($"k1", $"k2", $"k3", $"k4", $"v", $"u", $"s1", $"s2", $"s3")
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(analyzed)
+      comparePlans(optimized, correctAnswer.analyze)
+    }
+  }
+
+  test("reordering a window stack is idempotent") {
+    // The leader (the window whose partition spec is the minimal spec (k1)) carries
+    // ORDER BY k1, which is not the first-appearing order spec in the input: pulling the
+    // leader to the front changes its class's first appearance, so unless the leader's
+    // class is ranked specially (see `optimalOrder`) a second application would reorder
+    // the stack again instead of being a no-op.
+    val query = wideRelation
+      .window(Seq(sum(v).as("b")), Seq(k1, k2), Seq(k2.asc))
+      .window(Seq(sum(v).as("a")), Seq(k1), Seq(k1.asc))
+      .window(Seq(sum(v).as("c")), Seq(k1, k2), Seq(k1.asc))
+
+    val analyzed = query.analyze
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val reordered = TransposeWindow.apply(analyzed)
+      comparePlans(reordered, TransposeWindow.apply(reordered))
     }
   }
 
@@ -411,6 +454,50 @@ class TransposeWindowSuite extends PlanTest {
     }
   }
 
+  // A window with no ORDER BY and an explicit relative frame. Post-analysis it keeps the
+  // `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` frame it was given.
+  private def runningSumAlias = WindowExpression(
+    sum(v),
+    WindowSpecDefinition(Seq(k1), Seq.empty,
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("run_sum")
+
+  test("window with an empty order spec and a relative frame blocks reordering") {
+    // The running-sum window has no ORDER BY, so its relative frame covers whatever row
+    // prefix the operator receives, in the delivery order established by the nearest window
+    // below it. Permuting the chain moves that boundary across different row orders and
+    // changes results, so the whole chain must be skipped.
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(runningSumAlias), Seq(k1), Seq.empty)
+      .window(Seq(sum(v).as("sum_s")), specS, order)
+
+    val analyzed = query.analyze
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(analyzed), analyzed)
+    }
+  }
+
+  test("window with an empty order spec and the whole-partition frame is still reorderable") {
+    // Without an explicit frame, analysis assigns the whole-partition frame
+    // (`UNBOUNDED PRECEDING` to `UNBOUNDED FOLLOWING`) to an empty-order window, which
+    // covers the same rows under any row order, so it does not pin the chain's order.
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(sum(v).as("sum_k1")), Seq(k1), Seq.empty)
+
+    val analyzed = query.analyze
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_k1")), Seq(k1), Seq.empty)
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .select($"k1", $"k2", $"k3", $"k4", $"v", $"u", $"sum_f", $"sum_k1")
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(analyzed)
+      comparePlans(optimized, correctAnswer.analyze)
+    }
+  }
+
   test("a single window is not a chain and is left unchanged") {
     // `collectChain` requires at least two adjacent windows, so a lone window is a no-op.
     val query = wideRelation.window(Seq(sum(v).as("s1")), Seq(k1), order)
@@ -425,6 +512,11 @@ class TransposeWindowSuite extends PlanTest {
     RowNumber(),
     WindowSpecDefinition(specP, order,
       SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("rn")
+
+  private def denseRankAlias = WindowExpression(
+    DenseRank(Seq.empty),
+    WindowSpecDefinition(specP, order,
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("dr")
 
   test("rank filter on the top window pins it and reorders the windows below") {
     val query = wideRelation
@@ -525,6 +617,94 @@ class TransposeWindowSuite extends PlanTest {
     withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
       val optimized = Optimize.execute(analyzed)
       comparePlans(optimized, correctAnswer.analyze)
+    }
+  }
+
+  test("competing rank predicates pin only the candidate InferWindowGroupLimit selects") {
+    // The window carries both a row_number and a dense_rank expression. The group-limit
+    // rule prefers RowNumber and checks only the selected function's limit: `rn <= 2000`
+    // is over the threshold, so the rewrite never happens and the chain must stay fully
+    // reorderable, even though the dense_rank limit `dr <= 1` alone would have qualified.
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(rankAlias, denseRankAlias), specP, order)
+      .where($"rn" <= 2000 && $"dr" <= 1)
+
+    val analyzed = query.analyze
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .window(Seq(rankAlias, denseRankAlias), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"sum_p", $"sum_f", $"rn", $"dr")
+      .where($"rn" <= 2000 && $"dr" <= 1)
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(analyzed)
+      comparePlans(optimized, correctAnswer.analyze)
+    }
+  }
+
+  test("a rank filter within a small known child does not pin the top window") {
+    // `wideRelation` has 3 rows, so a limit of 3 satisfies the threshold but the
+    // group-limit rewrite is unnecessary (child.maxRows is not greater than the limit);
+    // pinning would only retain an avoidable exchange.
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(rankAlias), specP, order)
+      .where($"rn" <= 3)
+
+    val analyzed = query.analyze
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .window(Seq(rankAlias), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"sum_p", $"sum_f", $"rn")
+      .where($"rn" <= 3)
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(analyzed)
+      comparePlans(optimized, correctAnswer.analyze)
+    }
+  }
+
+  test("rank filter above a renaming top project pins the top window") {
+    // The top project renames the rank attribute, so `isRankFilterOnTopWindow` must peel
+    // the alias off the filter condition to see the rank reference underneath.
+    val query = wideRelation
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(rankAlias), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"rn".as("rank"))
+      .where($"rank" <= 1)
+
+    val analyzed = query.analyze
+
+    val correctAnswer = wideRelation
+      .window(Seq(sum(v).as("sum_f")), specF, order)
+      .window(Seq(sum(v).as("sum_p")), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"sum_p", $"sum_f")
+      .window(Seq(rankAlias), specP, order)
+      .select(k1, k2, k3, k4, v, u, $"rn".as("rank"))
+      .where($"rank" <= 1)
+
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(analyzed)
+      comparePlans(optimized, correctAnswer.analyze)
+    }
+
+    object OptimizeMore extends RuleExecutor[LogicalPlan] {
+      val batches =
+        Batch("TransposeWindow", Once, TransposeWindow) ::
+        Batch("PushDownPredicates", Once, PushDownPredicates) ::
+        Batch("InferWindowGroupLimit", Once, InferWindowGroupLimit) :: Nil
+    }
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      val withGroupLimit = OptimizeMore.execute(analyzed)
+      assert(withGroupLimit.collect { case _: WindowGroupLimit => () }.nonEmpty)
     }
   }
 
