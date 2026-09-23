@@ -182,17 +182,19 @@ class ArrowBatchTransformer:
         )
 
     @classmethod
-    def concat_batches(cls, batches: Iterable["pa.RecordBatch"]) -> "pa.RecordBatch":
-        """Concatenate same-schema RecordBatches by row.
+    def concat_batches(cls, batches: Iterable["pa.RecordBatch"]) -> Optional["pa.RecordBatch"]:
+        """Concatenate same-schema RecordBatches by row, consuming ``batches``.
 
-        A single batch is returned unchanged. PyArrow before 19.0.0 has no ``concat_batches``;
-        the fallback concatenates the equivalent StructArrays and converts the result back to a
-        RecordBatch.
+        ``None`` is returned for an empty input, so a caller can pass a group iterator straight
+        in without materializing it to a list first just to test for emptiness. A single batch is
+        returned unchanged. PyArrow before 19.0.0 has no ``concat_batches``; the fallback
+        concatenates the equivalent StructArrays and converts the result back to a RecordBatch.
         """
         import pyarrow as pa
 
         batches = tuple(batches)
-        assert batches
+        if not batches:
+            return None
         if len(batches) == 1:
             return batches[0]
         if hasattr(pa, "concat_batches"):
