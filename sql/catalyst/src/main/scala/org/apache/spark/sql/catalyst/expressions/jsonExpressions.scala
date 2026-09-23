@@ -689,10 +689,11 @@ object JsonValueBehavior {
 // scalastyle:on line.size.limit
 
 /**
- * A SQL/JSON function whose clause-free call `AstBuilder` routes through function resolution, so
- * its canonical `sql` must append the default clause to reparse back to this built-in instead of
- * a same-named routine on the SQL PATH. `sqlString`'s `forceBuiltinOwnership` gates that clause
- * (true for `sql`, false for the never-reparsed pretty form) and `renderChild` renders each child.
+ * A SQL/JSON built-in whose clause-free call can route through function resolution, letting a
+ * same-named routine on the SQL PATH shadow it. So when `sql` renders an otherwise clause-free
+ * form, it appends the default clause to keep the reparse bound to this built-in. `sqlString`'s
+ * `forceBuiltinOwnership` gates that clause (true for `sql`, false for the never-reparsed pretty
+ * form) and `renderChild` renders each child.
  */
 trait RoutedSqlJsonExpression extends Expression {
   private[sql] def sqlString(

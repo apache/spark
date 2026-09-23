@@ -356,9 +356,9 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
 
   test("emitted SQL reparses and evaluates with raw-vs-quoted semantics preserved") {
     // The .sql renderings above are round-trip contracts: reparsing and evaluating the actual
-    // emitted SQL -- including the default RETURNING STRING clauses it now carries -- must
-    // reproduce the original splicing. A bare nested constructor stays spliced; a cast-neutralized
-    // one stays quoted.
+    // emitted SQL -- including any default RETURNING STRING clauses it carries -- must reproduce
+    // the original splicing. A bare nested constructor stays spliced; a cast-neutralized one stays
+    // quoted.
     val inner = JsonArray(
       Seq(Literal(1)), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
     val spliced = JsonArray(
@@ -419,8 +419,9 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     assert(
       splicedOmit.sql ==
         """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' OMIT QUOTES) FORMAT JSON)""")
-    // Each emitted rendering (with the default RETURNING STRING it now carries) must reparse and
-    // evaluate the same as its clause-free equivalent, i.e. the added clause is semantically inert.
+    // Each emitted rendering must reparse and evaluate the same as its clause-free equivalent, so
+    // any default RETURNING STRING it carries is semantically inert (splicedOmit, whose spliced
+    // element forces the direct grammar branch, carries none).
     checkAnswer(sql(s"SELECT ${splicedKeep.sql}"),
       sql("""SELECT JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a'))""").collect().toSeq)
     checkAnswer(sql(s"SELECT ${quotedKeep.sql}"),

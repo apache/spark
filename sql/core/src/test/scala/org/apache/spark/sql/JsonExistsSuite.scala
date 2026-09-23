@@ -80,6 +80,11 @@ class JsonExistsSuite extends QueryTest with SharedSparkSession {
         assert(reparsed.queryExecution.analyzed.expressions
           .exists(_.exists(_.isInstanceOf[JsonExists])),
           s"canonical SQL bound the shadow instead of the built-in: ${jsonExists.sql}")
+        // Valid input returns true under every ON ERROR mode, so also assert the emitted clause is
+        // the default FALSE ON ERROR -- otherwise a renderer that changed the default would still
+        // bind to the built-in and pass this round-trip.
+        assert(jsonExists.sql.contains("FALSE ON ERROR"),
+          s"canonical SQL changed the default ON ERROR mode: ${jsonExists.sql}")
         checkAnswer(reparsed, Row(true))
       } finally {
         sql("SET PATH = DEFAULT_PATH")
