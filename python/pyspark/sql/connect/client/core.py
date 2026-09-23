@@ -30,6 +30,7 @@ import logging
 import threading
 import os
 import copy
+import pickle
 import platform
 import urllib.parse
 import uuid
@@ -63,7 +64,7 @@ from google.protobuf import text_format, any_pb2
 from google.rpc import error_details_pb2
 
 from pyspark.util import is_remote_only
-from pyspark.accumulators import SpecialAccumulatorIds
+from pyspark.accumulators import SpecialAccumulatorIds, specialAccumulatorSer
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.metrics import MetricValue, PlanMetrics, ExecutionInfo, ObservedMetrics
@@ -1520,10 +1521,16 @@ class SparkConnectClient(object):
                 logger.debug("Received observed metric batch.")
                 for observed_metrics in self._build_observed_metrics(b.observed_metrics):
                     if observed_metrics.name == "__python_accumulator__":
-                        from pyspark.worker_util import pickleSer
-
                         for metric in observed_metrics.metrics:
-                            (aid, update) = pickleSer.loads(LiteralExpression._to_value(metric))
+                            try:
+                                aid, update = specialAccumulatorSer.loads(
+                                    LiteralExpression._to_value(metric)
+                                )
+                            except pickle.UnpicklingError as e:
+                                # We found unexpected class/function in the accumulator metric.
+                                # We will ignore this metric and continue.
+                                logger.warning(f"Error unpickling accumulator metric: {e}")
+                                continue
                             if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER:
                                 self._profiler_collector._update(update)
                     elif observed_metrics.name in observations:
