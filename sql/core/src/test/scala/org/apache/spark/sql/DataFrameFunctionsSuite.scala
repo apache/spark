@@ -363,6 +363,37 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("nullif keeps the coerced type of its first argument") {
+    Seq(true, false).foreach { alwaysInlineCommonExpr =>
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(
+          SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString,
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+          SQLConf.CONCAT_BINARY_AS_STRING.key -> "true") {
+          // The analyzers apply different comparison coercions to binary concat. Exercise result
+          // typing under each analyzer independently. Pure single-pass does not support the RDD
+          // deserialization check performed by the suite's checkAnswer helper.
+          Seq(false, true).foreach { singlePassResolverEnabled =>
+            withSQLConf(
+              SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+              SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+              SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key ->
+                singlePassResolverEnabled.toString) {
+              QueryTest.checkAnswer(
+                sql("SELECT nullif(concat(X'61', X'62'), 'z')"),
+                Row("ab") :: Nil,
+                checkToRDD = false)
+            }
+          }
+
+          val result = sql("SELECT nullif(1, 2.1D)")
+          checkAnswer(result, Row(1))
+          assert(result.schema.head.dataType == IntegerType)
+        }
+      }
+    }
+  }
+
   test("equal_null function") {
     val df = Seq[(Integer, Integer)]((null, 8)).toDF("a", "b")
     checkAnswer(df.selectExpr("equal_null(a, b)"), Seq(Row(false)))
@@ -2163,6 +2194,9 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         Timestamp.valueOf("2018-01-02 00:00:00")))))
 
     // test invalid data types
+    val nanosSeqStartType =
+      "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or " +
+        "\"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\" or \"DATE\")"
     checkError(
       exception = intercept[AnalysisException] {
         Seq((true, false)).toDF().selectExpr("sequence(_1, _2)")
@@ -2171,7 +2205,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"sequence(_1, _2)\"",
         "functionName" -> "`sequence`",
-        "startType" -> "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\")",
+        "startType" -> nanosSeqStartType,
         "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
         "otherStartType" -> "\"INTEGRAL\""
       ),
@@ -2185,7 +2219,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"sequence(_1, _2, _3)\"",
         "functionName" -> "`sequence`",
-        "startType" -> "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\")",
+        "startType" -> nanosSeqStartType,
         "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
         "otherStartType" -> "\"INTEGRAL\""
       ),
@@ -2199,7 +2233,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"sequence(_1, _2, _3)\"",
         "functionName" -> "`sequence`",
-        "startType" -> "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\")",
+        "startType" -> nanosSeqStartType,
         "stepType" -> "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")",
         "otherStartType" -> "\"INTEGRAL\""
       ),
@@ -6518,6 +6552,14 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     assert(r2.length == 2)
     assert(r2.exists(_.isNaN))
     assert(r2.exists(isPositiveZero))
+  }
+
+  test("SPARK-59602: array_distinct normalizes nested floating-point values") {
+    val result = Seq(Seq(Seq(-0.0d), Seq(0.0d))).toDF("a")
+      .select(array_distinct($"a")).head().getSeq[Seq[Double]](0)
+
+    assert(result.length == 1)
+    assert(isPositiveZero(result.head.head))
   }
 
   test("SPARK-54918: array_distinct normalizes -0.0 to +0.0") {

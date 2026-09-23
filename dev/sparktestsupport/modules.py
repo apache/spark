@@ -615,6 +615,9 @@ pyspark_core = Module(
         "pyspark.tests.test_stage_sched",
         "pyspark.tests.test_zero_copy_byte_stream",
         # unittests for upstream projects
+        "pyspark.tests.upstream.numpy.test_numpy_ufunc_type_coercion",
+        "pyspark.tests.upstream.pandas.test_pandas_api_types",
+        "pyspark.tests.upstream.pandas.test_pandas_series_astype",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_default",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_non_default",
@@ -666,6 +669,8 @@ pyspark_sql = Module(
         "pyspark.sql.observation",
         "pyspark.sql.tvf",
         # unittests
+        "pyspark.eval_handlers.tests.test_arrow_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_base_eval_type_handlers",
         "pyspark.sql.tests.test_artifact",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
@@ -673,8 +678,9 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_context",
         "pyspark.sql.tests.test_sql_context",
         "pyspark.sql.tests.test_dataframe",
+        "pyspark.sql.tests.test_pipelined_shuffle",
         "pyspark.sql.tests.test_collection",
-        "pyspark.sql.tests.test_creation",
+        "pyspark.sql.tests.test_dataframe_creation",
         "pyspark.sql.tests.test_conversion",
         "pyspark.sql.tests.test_dataframe_query_context",
         "pyspark.sql.tests.test_listener",
@@ -1250,6 +1256,7 @@ pyspark_connect = Module(
     dependencies=[pyspark_sql, connect],
     source_file_regexes=[
         "python/pyspark/sql/connect",
+        "sbin/start-connect-server.sh",
     ],
     python_test_goals=[
         # sql doctests
@@ -1281,7 +1288,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_collection",
         "pyspark.sql.tests.connect.test_connect_column",
-        "pyspark.sql.tests.connect.test_connect_creation",
+        "pyspark.sql.tests.connect.test_connect_dataframe_creation",
         "pyspark.sql.tests.connect.test_connect_readwriter",
         "pyspark.sql.tests.connect.test_connect_retry",
         "pyspark.sql.tests.connect.test_connect_session",
@@ -1304,7 +1311,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_dataframe",
         "pyspark.sql.tests.connect.test_parity_dataframe_query_context",
         "pyspark.sql.tests.connect.test_parity_collection",
-        "pyspark.sql.tests.connect.test_parity_creation",
+        "pyspark.sql.tests.connect.test_parity_dataframe_creation",
         "pyspark.sql.tests.connect.test_parity_observation",
         "pyspark.sql.tests.connect.test_parity_repartition",
         "pyspark.sql.tests.connect.test_parity_stat",
@@ -1367,6 +1374,7 @@ pyspark_structured_streaming_connect = Module(
     python_test_goals=[
         # unittests
         "pyspark.sql.tests.connect.test_parity_python_streaming_datasource",
+        "pyspark.sql.tests.connect.streaming.test_listener",
         "pyspark.sql.tests.connect.streaming.test_parity_streaming",
         "pyspark.sql.tests.connect.streaming.test_parity_listener",
         "pyspark.sql.tests.connect.streaming.test_parity_foreach",

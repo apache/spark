@@ -169,6 +169,64 @@ private[spark] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
 private[ml] object TreeEnsembleModel {
 
+  private[ml] def predictRaw[M <: DecisionTreeModel](
+      features: Vector,
+      trees: Array[M],
+      treeWeights: Array[Double]): Double = {
+    var prediction = 0.0
+    var i = 0
+    while (i < trees.length) {
+      prediction += trees(i).rootNode.predictImpl(features).prediction * treeWeights(i)
+      i += 1
+    }
+    prediction
+  }
+
+  private[ml] def predictRaw[M <: DecisionTreeModel](
+      features: Vector,
+      trees: Array[M]): Double = {
+    var prediction = 0.0
+    var i = 0
+    while (i < trees.length) {
+      prediction += trees(i).rootNode.predictImpl(features).prediction
+      i += 1
+    }
+    prediction
+  }
+
+  private[ml] def predictRaw(
+      features: Vector,
+      rootNodes: Array[Node],
+      treeWeights: Array[Double]): Double = {
+    var prediction = 0.0
+    var i = 0
+    while (i < rootNodes.length) {
+      prediction += rootNodes(i).predictImpl(features).prediction * treeWeights(i)
+      i += 1
+    }
+    prediction
+  }
+
+  private[ml] def predictRaw(features: Vector, rootNodes: Array[Node]): Double = {
+    var prediction = 0.0
+    var i = 0
+    while (i < rootNodes.length) {
+      prediction += rootNodes(i).predictImpl(features).prediction
+      i += 1
+    }
+    prediction
+  }
+
+  private[ml] def predictLeaf(features: Vector, rootNodes: Array[Node]): Vector = {
+    val indices = Array.ofDim[Double](rootNodes.length)
+    var i = 0
+    while (i < rootNodes.length) {
+      indices(i) = DecisionTreeModel.predictLeaf(features, rootNodes(i))
+      i += 1
+    }
+    Vectors.dense(indices)
+  }
+
   /**
    * Given a tree ensemble model, compute the importance of each feature.
    * This generalizes the idea of "Gini" importance to other losses,

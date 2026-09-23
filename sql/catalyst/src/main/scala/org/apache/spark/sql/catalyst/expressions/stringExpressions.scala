@@ -1096,9 +1096,24 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 
 object Overlay {
 
+  // `pos - 1` and `pos + length` overflow for positions near the ends of the `int` range,
+  // which turns an empty slice into the whole input and duplicates it around the
+  // replacement. Compute them as `long` and saturate into the `int` range instead, which
+  // is how `substring` already treats out-of-range positions.
+  private def clamp(value: Long): Int =
+    math.max(Int.MinValue.toLong, math.min(Int.MaxValue.toLong, value)).toInt
+
+  // The tail of the result starts at `pos + length`. `substringSQL` derives its end offset from
+  // `start + Int.MaxValue`, which still reaches the end of the input for every position down to
+  // `Int.MinValue + 1` but falls one character short at `Int.MinValue` itself. Both denote the
+  // same tail, the whole input, so raise the floor by one rather than reading the input length,
+  // which would cost an O(n) scan on every call to spare the one extreme position.
+  private def clampTail(value: Long): Int =
+    math.max(Int.MinValue.toLong + 1, math.min(Int.MaxValue.toLong, value)).toInt
+
   def calculate(input: UTF8String, replace: UTF8String, pos: Int, len: Int): UTF8String = {
     val builder = new UTF8StringBuilder
-    builder.append(input.substringSQL(1, pos - 1))
+    builder.append(input.substringSQL(1, clamp(pos.toLong - 1)))
     builder.append(replace)
     // If you specify length, it must be a positive whole number or zero.
     // Otherwise it will be ignored.
@@ -1108,7 +1123,8 @@ object Overlay {
     } else {
       replace.numChars
     }
-    builder.append(input.substringSQL(pos + length, Int.MaxValue))
+    val tail = clampTail(pos.toLong + length)
+    builder.append(input.substringSQL(tail, Int.MaxValue))
     builder.build()
   }
 
@@ -1121,8 +1137,9 @@ object Overlay {
     } else {
       replace.length
     }
-    ByteArray.concat(ByteArray.subStringSQL(input, 1, pos - 1),
-      replace, ByteArray.subStringSQL(input, pos + length, Int.MaxValue))
+    val tail = clampTail(pos.toLong + length)
+    ByteArray.concat(ByteArray.subStringSQL(input, 1, clamp(pos.toLong - 1)),
+      replace, ByteArray.subStringSQL(input, tail, Int.MaxValue))
   }
 }
 
@@ -1473,11 +1490,11 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
     if (evals.length == 1) {
       val stringTrimCode: String = this match {
         case _: StringTrim =>
-          CollationSupport.StringTrim.genCode(srcString.value)
+          CollationSupport.StringTrim.genCode(srcString.value, collationId)
         case _: StringTrimLeft =>
-          CollationSupport.StringTrimLeft.genCode(srcString.value)
+          CollationSupport.StringTrimLeft.genCode(srcString.value, collationId)
         case _: StringTrimRight =>
-          CollationSupport.StringTrimRight.genCode(srcString.value)
+          CollationSupport.StringTrimRight.genCode(srcString.value, collationId)
       }
       ev.copy(code = code"""
          |${srcString.code}
@@ -1605,7 +1622,7 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   override protected def direction: String = "BOTH"
 
   override def doEval(srcString: UTF8String): UTF8String =
-    CollationSupport.StringTrim.exec(srcString)
+    CollationSupport.StringTrim.exec(srcString, collationId)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrim.exec(srcString, trimString, collationId)
@@ -1722,7 +1739,7 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
   override protected def direction: String = "LEADING"
 
   override def doEval(srcString: UTF8String): UTF8String =
-    CollationSupport.StringTrimLeft.exec(srcString)
+    CollationSupport.StringTrimLeft.exec(srcString, collationId)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrimLeft.exec(srcString, trimString, collationId)
@@ -1790,7 +1807,7 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
   override protected def direction: String = "TRAILING"
 
   override def doEval(srcString: UTF8String): UTF8String =
-    CollationSupport.StringTrimRight.exec(srcString)
+    CollationSupport.StringTrimRight.exec(srcString, collationId)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrimRight.exec(srcString, trimString, collationId)
@@ -2390,10 +2407,18 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
       null
     } else {
       val formatter = new java.util.Formatter(Locale.US)
-      val arglist = children.tail.map(_.eval(input).asInstanceOf[AnyRef])
+      val arglist = children.tail.map(child => toFormatterArg(child.eval(input)))
       UTF8String.fromString(
         formatter.format(pattern.asInstanceOf[UTF8String].toString, arglist: _*).toString)
     }
+  }
+
+  // java.util.Formatter dispatches on the runtime class of its argument and has no case for
+  // Catalyst's Decimal, so %f/%e/%g reject it. java.math.BigDecimal is accepted and stays exact.
+  // %a stays unsupported: Formatter accepts it only for float and double.
+  private def toFormatterArg(value: Any): AnyRef = value match {
+    case d: Decimal => d.toJavaBigDecimal
+    case other => other.asInstanceOf[AnyRef]
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2402,9 +2427,18 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val argListGen = children.tail.map(x => (x.dataType, x.genCode(ctx)))
     val argList = ctx.freshName("argLists")
     val numArgLists = argListGen.length
+    val decimalClass = classOf[Decimal].getName
     val argListCode = argListGen.zipWithIndex.map { case(v, index) =>
+      val argClass = CodeGenerator.javaClass(v._1)
       val value =
-        if (CodeGenerator.boxedType(v._1) != CodeGenerator.javaType(v._1)) {
+        if (argClass == classOf[Decimal]) {
+          // Keep in sync with toFormatterArg in the interpreted path above.
+          s"(${v._2.isNull}) ? null : ${v._2.value}.toJavaBigDecimal()"
+        } else if (argClass.isAssignableFrom(classOf[Decimal])) {
+          // Keep in sync with toFormatterArg in the interpreted path above.
+          s"(${v._2.isNull}) ? null : ((${v._2.value} instanceof $decimalClass) ? " +
+            s"(($decimalClass) ${v._2.value}).toJavaBigDecimal() : ${v._2.value})"
+        } else if (CodeGenerator.boxedType(v._1) != CodeGenerator.javaType(v._1)) {
           // Java primitives get boxed in order to allow null values.
           s"(${v._2.isNull}) ? (${CodeGenerator.boxedType(v._1)}) null : " +
             s"new ${CodeGenerator.boxedType(v._1)}(${v._2.value})"

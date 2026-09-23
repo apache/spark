@@ -181,7 +181,8 @@ object TextInputJsonDataSource extends JsonDataSource {
     val sampled: Dataset[String] = JsonUtils.sample(json, parsedOptions)
     val rdd: RDD[InternalRow] = sampled.queryExecution.toRdd
     val rowParser = parsedOptions.encoding.map { enc =>
-      CreateJacksonParser.internalRow(enc, _: JsonFactory, _: InternalRow)
+      CreateJacksonParser.internalRow(enc, parsedOptions.legacyJavaCharsets,
+        parsedOptions.legacyCodingErrorAction, _: JsonFactory, _: InternalRow)
     }.getOrElse(CreateJacksonParser.internalRow(_: JsonFactory, _: InternalRow))
 
     SQLExecution.withSQLConfPropagated(json.sparkSession) {
@@ -213,7 +214,8 @@ object TextInputJsonDataSource extends JsonDataSource {
     )
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
     val textParser = parser.options.encoding
-      .map(enc => CreateJacksonParser.text(enc, _: JsonFactory, _: Text))
+      .map(enc => CreateJacksonParser.text(enc, parser.options.legacyJavaCharsets,
+        parser.options.legacyCodingErrorAction, _: JsonFactory, _: Text))
       .getOrElse(CreateJacksonParser.text(_: JsonFactory, _: Text))
 
     val safeParser = new FailureSafeParser[Text](
@@ -229,7 +231,8 @@ object TextInputJsonDataSource extends JsonDataSource {
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
     val textParser = parser.options.encoding
-      .map(enc => CreateJacksonParser.text(enc, _: JsonFactory, _: Text))
+      .map(enc => CreateJacksonParser.text(enc, parser.options.legacyJavaCharsets,
+        parser.options.legacyCodingErrorAction, _: JsonFactory, _: Text))
       .getOrElse(CreateJacksonParser.text(_: JsonFactory, _: Text))
 
     val safeParser = new FailureSafeParser[Text](
