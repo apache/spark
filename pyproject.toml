@@ -263,15 +263,14 @@ ci_classic_minimum = [
 ]
 
 ci_classic_pandas_3 = [
+    {include-group = "internal_numpy"},
     {include-group = "internal_pyspark_devtool"},
-    {include-group = "sql"},
-    {include-group = "pandas_on_spark"},
     {include-group = "pandas_on_spark_extra"},
-    {include-group = "ml"},
     # torch should be installed with ml_torch group
     {include-group = "ml_extra_base"},
     {include-group = "internal_test"},
     "pyarrow>=23.0.0",
+    # Make sure no other conflicts with pandas 3
     "pandas>=3.0.0",
 ]
 
