@@ -1653,6 +1653,7 @@ def _elementwise_udf_input_type(data_type: DataType, depth: int) -> DataType:
     ``ExtractPythonUDFFromLambda``.
     """
     for _ in range(depth):
+        assert isinstance(data_type, ArrayType)
         data_type = data_type.elementType
     return data_type
 
@@ -1760,9 +1761,11 @@ def _elementwise_flat_batch_to_pandas_or_arrow_udf_inputs(
 
     import pandas as pd
 
+    timezone = runner_conf.timezone
+    assert timezone is not None
     results = ArrowToPandasConversion.to_pandas(
         flat_batch,
-        timezone=runner_conf.timezone,
+        timezone=timezone,
         schema=input_schema,
         struct_in_pandas="dict",
         ndarray_as_list=False,
