@@ -78,7 +78,7 @@ case class ExecuteExternalUDFExec(
   override def producedAttributes: AttributeSet = AttributeSet(Seq(resultAttr))
 
   override protected def doExecute(): RDD[InternalRow] = {
-    // TODO(SPARK-59364): Preserve named argument metadata after the generic Init builder lands.
+    // TODO(SPARK-59745): Preserve named argument metadata in unified Python UDF execution.
     if (udf.children.exists(_.isInstanceOf[NamedArgumentExpression])) {
       throw QueryCompilationErrors.namedArgumentsNotSupported(
         udf.name.getOrElse(udf.prettyName))
