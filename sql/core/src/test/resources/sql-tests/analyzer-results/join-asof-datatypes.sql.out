@@ -235,6 +235,36 @@ Project [k#x.tag AS tag#x, k#x.inner_seq AS inner_seq#x]
 
 
 -- !query
+SELECT r.k.y AS matched
+FROM VALUES (named_struct('a', 2, 'b', 5)) AS t(k)
+ASOF JOIN VALUES (named_struct('x', 1, 'y', 9)) AS r(k)
+  MATCH_CONDITION (t.k >= r.k)
+-- !query analysis
+Project [k#x.y AS matched#x]
++- AsOfJoin (named_struct(a, k#x.a, b, k#x.b) >= named_struct(x, k#x.x, y, k#x.y)), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [k#x]
+   +- SubqueryAlias r
+      +- LocalRelation [k#x]
+
+
+-- !query
+SELECT r.k.a AS matched
+FROM VALUES (named_struct('a', 3)) AS t(k)
+ASOF JOIN VALUES
+    (named_struct('a', CAST(1 AS BIGINT))),
+    (named_struct('a', CAST(4 AS BIGINT))) AS r(k)
+  MATCH_CONDITION (t.k >= r.k)
+-- !query analysis
+Project [k#x.a AS matched#xL]
++- AsOfJoin (cast(named_struct(a, k#x.a) as struct<a:bigint>) >= named_struct(a, k#x.a)), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [k#x]
+   +- SubqueryAlias r
+      +- LocalRelation [k#x]
+
+
+-- !query
 SELECT t.k, r.k AS matched_k
 FROM VALUES (CAST(10 AS TINYINT)) AS t(k) ASOF JOIN VALUES (CAST(5 AS BIGINT)) AS r(k)
   MATCH_CONDITION (t.k >= r.k)
@@ -380,6 +410,21 @@ FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
 -- !query analysis
 Project [a#x, a#x AS matched_a#x]
 +- AsOfJoin (a#x >= a#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [a#x]
+   +- SubqueryAlias r
+      +- LocalRelation [a#x]
+
+
+-- !query
+SELECT t.a, r.a AS matched_a
+FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
+     VALUES (ARRAY(CAST(1 AS BIGINT), CAST(2 AS BIGINT))),
+            (ARRAY(CAST(1 AS BIGINT), CAST(4 AS BIGINT))) AS r(a)
+  MATCH_CONDITION (t.a >= r.a)
+-- !query analysis
+Project [a#x, a#x AS matched_a#x]
++- AsOfJoin (cast(a#x as array<bigint>) >= a#x), Inner
    :- SubqueryAlias t
    :  +- LocalRelation [a#x]
    +- SubqueryAlias r

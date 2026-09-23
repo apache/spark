@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
@@ -2775,12 +2776,7 @@ object AsOfJoin {
     def isValidOperandType(dataType: DataType): Boolean =
       RowOrdering.isOrderable(dataType) && !containsEmptyStructType(dataType)
 
-    /**
-     * Top-level operand compatibility. A string vs non-string scalar pair is compatible only when
-     * the comparison operator has a common type for it, so it coerces like `>=` (accepting DATE vs
-     * STRING, rejecting STRING vs INTERVAL). Other scalars widen; STRUCT/ARRAY use the stricter
-     * [[areFieldTypesCompatible]] rule.
-     */
+    /** Whether the `>=` this join builds can compare the two operands. */
     def areOperandsCompatible(leftType: DataType, rightType: DataType): Boolean = {
       if (!isValidOperandType(leftType) || !isValidOperandType(rightType)) {
         false
@@ -2803,11 +2799,7 @@ object AsOfJoin {
     private def isExactlyOneStringPair(leftType: DataType, rightType: DataType): Boolean =
       leftType.isInstanceOf[StringType] != rightType.isInstanceOf[StringType]
 
-    /**
-     * The type a string vs non-string scalar pair is cast to for comparison, ordering, and sort,
-     * mirroring the comparison operator's string coercion in the active mode (ANSI or default).
-     * Returns [[None]] for other pairs, whose monotonic widening keeps the raw operands.
-     */
+    /** Common type of a string vs non-string scalar pair, mirroring the comparison's coercion. */
     private[catalyst] def stringComparisonCommonType(
         leftType: DataType,
         rightType: DataType): Option[DataType] = {
@@ -2823,39 +2815,41 @@ object AsOfJoin {
       }
     }
 
-    /**
-     * Strict rule for STRUCT fields, ARRAY elements, and composite operands: widen only, with
-     * string vs temporal rejected.
-     */
-    private def areFieldTypesCompatible(leftType: DataType, rightType: DataType): Boolean = {
-      if (!isValidOperandType(leftType) || !isValidOperandType(rightType)) {
-        false
-      } else if (isStringTemporalMismatch(leftType, rightType)) {
-        false
-      } else {
-        (leftType, rightType) match {
-          case (ArrayType(_, _), ArrayType(_, _)) =>
-            usesArrayOrderExpression(leftType, rightType)
-          case _ =>
-            TypeCoercion.findWiderTypeForTwo(leftType, rightType).isDefined ||
-              arePositionalStructsCompatible(leftType, rightType)
-        }
+    /** STRUCT/ARRAY operands: fields and elements coerce only as the `>=` comparison can. */
+    private def areFieldTypesCompatible(leftType: DataType, rightType: DataType): Boolean =
+      (leftType, rightType) match {
+        case (ArrayType(_, _), ArrayType(_, _)) => usesArrayOrderExpression(leftType, rightType)
+        case (_: StructType, _: StructType) => comparisonCommonType(leftType, rightType).isDefined
+        case _ => false
       }
-    }
 
     def usesArrayOrderExpression(leftType: DataType, rightType: DataType): Boolean =
       (leftType, rightType) match {
         case (ArrayType(leftElem, _), ArrayType(rightElem, _)) =>
-          areArrayElementsCompatible(leftElem, rightElem)
+          comparisonCommonType(leftElem, rightElem).isDefined
         case _ => false
       }
 
-    private def areArrayElementsCompatible(leftElem: DataType, rightElem: DataType): Boolean = {
-      if (DataTypeUtils.sameType(leftElem, rightElem)) {
-        RowOrdering.isOrderable(leftElem)
+    /**
+     * Type the `>=` uses for two orderable operands: already structurally equal (names and
+     * nullability ignored), or a tightest common type; no string/decimal promotion. The type check
+     * and the array order expression both read this, so they cannot drift. int/bigint -> bigint;
+     * int/string -> None.
+     */
+    def comparisonCommonType(left: DataType, right: DataType): Option[DataType] = {
+      if (!isValidOperandType(left) || !isValidOperandType(right)) {
+        None
+      } else if (DataType.equalsStructurally(left, right, ignoreNullability = true)) {
+        Some(left)
       } else {
-        arePositionalStructsCompatible(leftElem, rightElem)
+        tightestCommonType(left, right)
       }
+    }
+
+    /** Tightest common type (ANSI-aware), the only widening a comparison does. */
+    def tightestCommonType(left: DataType, right: DataType): Option[DataType] = {
+      val coercion = if (SQLConf.get.ansiEnabled) AnsiTypeCoercion else TypeCoercion
+      coercion.findTightestCommonType(left, right)
     }
 
     /** Positional struct operands with the same field count (names may differ). */
@@ -2873,25 +2867,6 @@ object AsOfJoin {
           leftStruct.sameType(rightStruct) && leftStruct.nonEmpty
         case _ => false
       }
-
-    private def isStringTemporalMismatch(leftType: DataType, rightType: DataType): Boolean = {
-      def isString(dataType: DataType): Boolean = dataType.isInstanceOf[StringType]
-      def isTemporal(dataType: DataType): Boolean = dataType.isInstanceOf[DatetimeType]
-      (isTemporal(leftType) && isString(rightType)) || (isString(leftType) && isTemporal(rightType))
-    }
-
-    private def arePositionalStructsCompatible(
-        leftType: DataType,
-        rightType: DataType): Boolean = {
-      (leftType, rightType) match {
-        case (leftStruct: StructType, rightStruct: StructType)
-            if usesStructDecomposition(leftType, rightType) =>
-          leftStruct.zip(rightStruct).forall { case (leftField, rightField) =>
-            areFieldTypesCompatible(leftField.dataType, rightField.dataType)
-          }
-        case _ => false
-      }
-    }
 
     private def containsEmptyStructType(dataType: DataType): Boolean = dataType match {
       case struct: StructType =>
@@ -2988,13 +2963,13 @@ object AsOfJoin {
       rightOperand: Expression,
       operator: MatchComparisonOperator): Expression = {
     (leftOperand.dataType, rightOperand.dataType) match {
-      case (ArrayType(elementType, _), _)
+      case (_: ArrayType, _)
           if MatchConditionTypes.usesArrayOrderExpression(
             leftOperand.dataType, rightOperand.dataType) =>
         // MATCH_CONDITION array comparison uses Spark lexicographic ordering (including length).
         // The ordering distance below is element-wise via ZipWith, padding the shorter side with
         // null when lengths differ (e.g. [0, null]), not a lexicographic length tie-break.
-        buildArrayOrderExpression(leftOperand, rightOperand, elementType, operator)
+        buildArrayOrderExpression(leftOperand, rightOperand, operator)
       case (leftType, rightType)
           if MatchConditionTypes.usesStructDecomposition(leftType, rightType) =>
         buildFlattenedStructOrderExpression(
@@ -3065,8 +3040,23 @@ object AsOfJoin {
   private def buildArrayOrderExpression(
       leftOperand: Expression,
       rightOperand: Expression,
-      elementType: DataType,
       operator: MatchComparisonOperator): Expression = {
+    val leftElementType = leftOperand.dataType.asInstanceOf[ArrayType].elementType
+    val rightElementType = rightOperand.dataType.asInstanceOf[ArrayType].elementType
+    // Both array inputs and the ZipWith lambda variables must share the element type the binary
+    // comparison uses. comparisonCommonType is the single source the type check also reads, so
+    // the two cannot disagree. castArrayElementType widens a coercible side (e.g. INT to BIGINT)
+    // and leaves a structurally equal side untouched.
+    val elementType =
+      MatchConditionTypes.comparisonCommonType(leftElementType, rightElementType) match {
+        case Some(commonElementType) => commonElementType
+        case None =>
+          // Unreachable: usesArrayOrderExpression already required a common element type here.
+          throw SparkException.internalError(
+            "MATCH_CONDITION array elements have no common type")
+      }
+    val leftArray = castArrayElementType(leftOperand, elementType)
+    val rightArray = castArrayElementType(rightOperand, elementType)
     elementType match {
       case struct: StructType =>
         val leftElement = NamedLambdaVariable("left_elem", struct, nullable = true)
@@ -3078,17 +3068,31 @@ object AsOfJoin {
           leafDiffs,
           ArrayType(struct, containsNull = true))
         ZipWith(
-          leftOperand,
-          rightOperand,
+          leftArray,
+          rightArray,
           LambdaFunction(elementOrder, Seq(leftElement, rightElement)))
       case _ =>
         val leftElement = NamedLambdaVariable("left_elem", elementType, nullable = true)
         val rightElement = NamedLambdaVariable("right_elem", elementType, nullable = true)
         val elementOrder = buildLeafOrderExpression(leftElement, rightElement, operator)
         ZipWith(
-          leftOperand,
-          rightOperand,
+          leftArray,
+          rightArray,
           LambdaFunction(elementOrder, Seq(leftElement, rightElement)))
+    }
+  }
+
+  /** Cast an array operand to the given element type, keeping its own `containsNull`. */
+  private def castArrayElementType(operand: Expression, elementType: DataType): Expression = {
+    val arrayType = operand.dataType.asInstanceOf[ArrayType]
+    // Skip the cast when the element already matches structurally, the rule the type check uses,
+    // so a structurally equal side keeps its own field names instead of being renamed by a cast.
+    val alreadyMatches =
+      DataType.equalsStructurally(arrayType.elementType, elementType, ignoreNullability = true)
+    if (alreadyMatches) {
+      operand
+    } else {
+      Cast(operand, ArrayType(elementType, arrayType.containsNull))
     }
   }
 
