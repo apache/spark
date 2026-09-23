@@ -53,13 +53,17 @@ private[sql] case class RenameTableExec(
     } else newIdent
     catalog.renameTable(oldIdent, qualifiedNewIdent)
 
+    val table = if (oldCaches.nonEmpty) {
+      Some(catalog.loadTable(qualifiedNewIdent))
+    } else {
+      None
+    }
     oldCaches.foreach { cache =>
-      val tbl = catalog.loadTable(qualifiedNewIdent)
       val rewritten = cache.plan.transformUp {
         case relation: DataSourceV2Relation
             if relation.catalog.contains(catalog) && relation.identifier.contains(oldIdent) =>
           val restored = relation.copy(
-            table = tbl,
+            table = table.get,
             catalog = Some(catalog),
             identifier = Some(qualifiedNewIdent))
           restored.copyTagsFrom(relation)
