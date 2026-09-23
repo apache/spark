@@ -3046,6 +3046,7 @@ package object config {
         "using spark.jars.packages or ivy:// URIs passed to SparkSession.addArtifact instead " +
         "of the built-in defaults, such as maven central. " +
         "Additional repositories from spark.jars.repositories will also be included. " +
+        "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
         "The spark-submit --repositories option applies to submission-time resolution. " +
         "Useful for allowing Spark to resolve artifacts from behind a firewall " +
         "e.g. via an in-house artifact server like Artifactory. " +
@@ -3057,8 +3058,10 @@ package object config {
   private[spark] val JAR_IVY_CONNECT_TIMEOUT =
     ConfigBuilder("spark.jars.ivyConnectTimeout")
       .doc("Connection timeout for Ivy repository requests made by " +
-        "SparkSession.addArtifact. This must be set before the SparkContext starts.")
+        "SparkSession.addArtifact. Client-resolved Spark Connect Ivy URIs do not use this " +
+        "setting. This must be set before the SparkContext starts.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(
         timeout => timeout > 0 && timeout <= Int.MaxValue,
@@ -3068,8 +3071,10 @@ package object config {
   private[spark] val JAR_IVY_READ_TIMEOUT =
     ConfigBuilder("spark.jars.ivyReadTimeout")
       .doc("Read timeout for Ivy repository requests made by SparkSession.addArtifact. " +
+        "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
         "This must be set before the SparkContext starts.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(
         timeout => timeout > 0 && timeout <= Int.MaxValue,
@@ -3104,7 +3109,8 @@ package object config {
     ConfigBuilder("spark.jars.repositories")
       .doc("Comma-separated list of additional remote repositories to search " +
         "for the maven coordinates given with --packages, spark.jars.packages, or ivy:// URIs " +
-        "passed to SparkSession.addArtifact.")
+        "passed to SparkSession.addArtifact. Client-resolved Spark Connect Ivy URIs do not use " +
+        "this setting.")
       .version("2.3.0")
       .stringConf
       .toSequence

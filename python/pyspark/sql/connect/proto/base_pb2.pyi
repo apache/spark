@@ -2562,7 +2562,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
             global___AddArtifactsRequest.SingleChunkArtifact
         ]:
-            """Legacy artifact list used by clients that do not negotiate server-side Maven resolution."""
+            """Uploaded artifacts in batches that do not use ordered entries."""
         @property
         def entries(
             self,

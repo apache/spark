@@ -36,8 +36,8 @@ import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.sql.util.ArtifactUtils
-import org.apache.spark.util.Utils
 import org.apache.spark.util.RuntimeDependencyResolver.RejectRequestedRepositories
+import org.apache.spark.util.Utils
 
 /**
  * Handles [[AddArtifactsRequest]]s for the [[SparkConnectService]].

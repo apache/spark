@@ -698,7 +698,7 @@ message AddArtifactsRequest {
 
   // A number of `SingleChunkArtifact` batched into a single RPC.
   message Batch {
-    // Legacy artifact list used by clients that do not negotiate server-side Maven resolution.
+    // Uploaded artifacts in batches that do not use ordered entries.
     repeated SingleChunkArtifact artifacts = 1;
     // Ordered mixture of uploaded artifacts and server-resolved Maven dependencies.
     repeated ArtifactEntry entries = 2;
