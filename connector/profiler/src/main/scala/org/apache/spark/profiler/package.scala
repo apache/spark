@@ -48,7 +48,7 @@ package object profiler {
   private[profiler] val PROFILER_EXECUTOR_TASK_SPAN_ENABLED =
     ConfigBuilder("spark.profiler.executor.taskSpan.enabled")
       .doc("Record task attempt spans in the JFR output of executors selected for profiling.")
-      .version("5.0.0")
+      .version("4.4.0")
       .booleanConf
       .createWithDefault(false)
 

@@ -98,7 +98,7 @@ speculative attempts. Spans are only emitted while a JFR recording is active.
     Requires <code>spark.profiler.executor.enabled=true</code> and respects
     <code>spark.profiler.executor.fraction</code>.
   </td>
-  <td>5.0.0</td>
+  <td>4.4.0</td>
 </tr>
 <tr>
   <td><code>spark.profiler.dfsDir</code></td>
