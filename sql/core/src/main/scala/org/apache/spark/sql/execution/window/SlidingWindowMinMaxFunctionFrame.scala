@@ -279,9 +279,13 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     }
 
     // ExtractWindowExpressions hoists window aggregate arguments into the Project below,
-    // so `boundChild` is a BoundReference over an UnsafeRow. `InternalRow.copyValue` handles
-    // all reference types (String, Struct, Array, Map, Binary, Decimal) defensively, ensuring
-    // the deque never holds a stale reference when the source UnsafeRow is recycled on spill.
+    // so `boundChild` is a BoundReference over an UnsafeRow. `InternalRow.copyValue` explicitly
+    // copies UTF8String, BinaryView, InternalRow (Struct), ArrayData, and MapData.
+    // Binary (byte[]) and Decimal fall through to the identity case but are still safe:
+    // UnsafeRow.getBinary allocates a fresh byte[] (see Platform.copyMemory in UnsafeRow),
+    // and UnsafeRow.getDecimal constructs a detached Decimal from a Long or a new BigDecimal.
+    // Neither retains a pointer into the UnsafeRow's page memory, so the deque never holds a
+    // stale reference when the source UnsafeRow is recycled on spill.
     private def evaluateAndCopy(row: InternalRow): Any = {
       val value = boundChild.eval(row)
       if (value == null) null else InternalRow.copyValue(value)
