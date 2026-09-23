@@ -101,8 +101,7 @@ case class StructField(
     if (metadata.contains(DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY)) {
       throw new SparkIllegalArgumentException(
         errorClass = "INVALID_CHAR_VARCHAR_COLLATION_METADATA.RESERVED_METADATA_KEY",
-        messageParameters = Map(
-          "metadataKey" -> DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY))
+        messageParameters = Map("metadataKey" -> DataType.CHAR_VARCHAR_COLLATIONS_METADATA_KEY))
     }
     metadata.jsonValue match {
       case JObject(fields) =>
