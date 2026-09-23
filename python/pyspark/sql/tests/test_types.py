@@ -34,6 +34,7 @@ from pyspark.errors import (
     PySparkRuntimeError,
     PySparkTypeError,
     PySparkValueError,
+    PythonException,
     SparkRuntimeException,
 )
 from pyspark.sql import Row
@@ -304,6 +305,41 @@ class TypesTestsMixin:
     def test_infer_schema_upcast_boolean_to_string(self):
         df = self.spark.createDataFrame([[True, 1], ["false", 1]], schema=["a", "b"])
         self.assertEqual([Row(a="true", b=1), Row(a="false", b=1)], df.collect())
+
+    def test_infer_schema_row_length_mismatch(self):
+        # SPARK-59781: the schema is inferred from the first row. A later row with more values used
+        # to be silently truncated when a field needed a converter (the string column here), and a
+        # Row with an extra key came back with the values shifted (Row(a="3", b=None)).
+        for data in [
+            [("a", 1), ("b", 2, 3)],
+            [Row(a="x", b=1), Row(c=3, a="y", b=2)],
+            [("a", 1), ("b",)],
+        ]:
+            with self.subTest(data=data):
+                rdd = self.sc.parallelize(data)
+                with self.assertRaisesRegex(PythonException, "FIELD_STRUCT_LENGTH_MISMATCH"):
+                    self.spark.createDataFrame(rdd).collect()
+
+    def test_create_dataframe_row_length_mismatch_without_verification(self):
+        # SPARK-59781: with verifySchema=False the type verifier is skipped and a row longer than
+        # the schema used to be silently truncated, by the converter when a field needed one (the
+        # string column) and by StructType.toInternal when a field needed conversion (the date
+        # column). A shorter row failed only later in the JVM.
+        d = datetime.date(2026, 9, 23)
+        for data, schema, object_length in [
+            ([("a", 1), ("b", 2, 3)], "x string, y long", "3"),
+            ([(1, d), (2, d, 3)], "y long, d date", "3"),
+            ([("a", 1), ("b",)], "x string, y long", "1"),
+        ]:
+            with self.subTest(data=data, schema=schema):
+                with self.assertRaises(PySparkValueError) as pe:
+                    self.spark.createDataFrame(data, schema, verifySchema=False)
+
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="FIELD_STRUCT_LENGTH_MISMATCH",
+                    messageParameters={"object_length": object_length, "field_length": "2"},
+                )
 
     def test_infer_nested_schema(self):
         NestedRow = Row("f1", "f2")

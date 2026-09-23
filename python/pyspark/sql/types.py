@@ -2011,6 +2011,14 @@ class StructType(DataType):
                     for n, f, c in zip(self.names, self.fields, self._needConversion)
                 )
             elif isinstance(obj, (tuple, list)):
+                if len(obj) != len(self.fields):
+                    raise PySparkValueError(
+                        errorClass="FIELD_STRUCT_LENGTH_MISMATCH",
+                        messageParameters={
+                            "object_length": str(len(obj)),
+                            "field_length": str(len(self.fields)),
+                        },
+                    )
                 return tuple(
                     f.toInternal(v) if c else v
                     for f, v, c in zip(self.fields, obj, self._needConversion)
@@ -3421,6 +3429,14 @@ def _create_converter(dataType: DataType) -> Callable:
 
         if isinstance(obj, (tuple, list)):
             if convert_fields:
+                if len(obj) != len(converters):
+                    raise PySparkValueError(
+                        errorClass="FIELD_STRUCT_LENGTH_MISMATCH",
+                        messageParameters={
+                            "object_length": str(len(obj)),
+                            "field_length": str(len(converters)),
+                        },
+                    )
                 return tuple(conv(v) for v, conv in zip(obj, converters))
             else:
                 return tuple(obj)
