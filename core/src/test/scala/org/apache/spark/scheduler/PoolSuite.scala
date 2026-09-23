@@ -414,9 +414,8 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   test("SPARK-59674: FIFO orders priorities and stage ids at Int bounds") {
     sc = new SparkContext(LOCAL, APP_NAME)
     val taskScheduler = new TaskSchedulerImpl(sc)
-    // TimSort only detects the overflow while merging runs. Three values mis-order
-    // but do not throw. This sequence makes getSortedTaskSetQueue throw
-    // IllegalArgumentException: Comparison method violates its general contract!
+    // This sequence makes getSortedTaskSetQueue throw IllegalArgumentException:
+    // Comparison method violates its general contract!
     // when priority or stageId is ordered with signum(a - b).
     val boundaryValues = Array(
       0, Int.MaxValue, 0, 0, Int.MaxValue, Int.MinValue, Int.MinValue,
