@@ -177,6 +177,40 @@ class InlineCTESuite extends PlanTest {
       "A force-materialized CTE cannot carry an outer reference across its boundary"))
   }
 
+  test("SPARK-58006: forceSkipInline CTE with an outer-scope reference " +
+      "inside a nested subquery fails") {
+    // Corresponds to: WITH t AS (
+    //   SELECT (SELECT v FROM s2 WHERE v < (SELECT c FROM s1 WHERE s1.k = m.a)) AS s
+    //   FROM r) SELECT s FROM t, m
+    // `m.a` is two scopes out of the deepest subquery and produced outside the def, so it
+    // escapes the boundary. SQL analysis cannot build this shape (the def body cannot see
+    // `m`), so the def is hand-built with the escape registered only in the deepest subquery's
+    // outer-scope attrs, and the correlation predicate itself is omitted -- otherwise the
+    // direct `OuterReference` check would reject the definition first. Only the nested-wide
+    // outer-scope scan rejects this definition.
+    val relation = TestRelation(Seq($"c".int))
+    val s2 = TestRelation(Seq($"v".int))
+    val outerA = $"m.a".int
+    val deep = ScalarSubquery(
+      relation.select(relation.output.head),
+      outerAttrs = Seq(OuterScopeReference(outerA)))
+    val shallow = ScalarSubquery(
+      s2.where(s2.output.head < deep),
+      outerAttrs = Seq.empty)
+    val cteChild = TestRelation(Seq($"b".int)).select(shallow.as("s"))
+    val cteDef = CTERelationDef(cteChild, forceSkipInline = true)
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    val m = TestRelation(Seq(outerA))
+    val main = cteRef.select(cteDef.output.head).join(m, Cross)
+    val plan = WithCTE(main, Seq(cteDef))
+    assert(plan.resolved)
+    val e = intercept[SparkException] {
+      Optimize.execute(plan)
+    }
+    assert(e.getCondition == "INTERNAL_ERROR")
+    assert(e.getMessage.contains("found a subquery with outer-scope reference"))
+  }
+
   test("MATERIALIZED keeps a single-reference deterministic CTE") {
     val cteDef = CTERelationDef(
       TestRelation(Seq($"a".int)).select($"a"), materialized = Some(true))
