@@ -22,27 +22,40 @@ import java.util.LinkedHashMap
 import org.apache.spark.sql.catalyst.expressions._
 
 object NondeterministicExpressionCollection {
+  /**
+   * Returns a copy used only to classify the parent, plus the minimal nondeterministic
+   * evaluation frontier below `expression`.
+   *
+   * A selected expression is represented by a deterministic attribute while walking upward. If
+   * its parent is still nondeterministic after that substitution, the parent is the evaluation
+   * unit and replaces the selected descendants in the frontier.
+   */
+  private def collectNondeterministicFrontier(
+      expression: Expression): (Expression, Seq[Expression]) = {
+    if (expression.deterministic) {
+      (expression, Seq.empty)
+    } else {
+      val childResults = expression.children.map(collectNondeterministicFrontier)
+      val expressionWithDeterministicChildren =
+        expression.withNewChildren(childResults.map(_._1))
+
+      if (!expressionWithDeterministicChildren.deterministic) {
+        val placeholder = AttributeReference(
+          "_nondeterministic", expression.dataType, expression.nullable)()
+        (placeholder, Seq(expression))
+      } else {
+        (expressionWithDeterministicChildren, childResults.flatMap(_._2))
+      }
+    }
+  }
+
   def getNondeterministicToAttributes(
       expressions: Seq[Expression]): LinkedHashMap[Expression, NamedExpression] = {
     val nonDeterministicToAttributes = new LinkedHashMap[Expression, NamedExpression]
 
     for (expr <- expressions) {
       if (!expr.deterministic) {
-        val leafNondeterministic = expr.collect {
-          case nondeterministicExpr: Nondeterministic => nondeterministicExpr
-          case udf: UserDefinedExpression if !udf.deterministic => udf
-          case udf: ExternalUserDefinedFunction if !udf.deterministic => udf
-        }
-        val expressionsToCollect = if (leafNondeterministic.nonEmpty) {
-          leafNondeterministic
-        } else {
-          expr.collect {
-            case nondeterministicExpr
-                if !nondeterministicExpr.deterministic &&
-                  nondeterministicExpr.children.forall(_.deterministic) =>
-              nondeterministicExpr
-          }
-        }
+        val expressionsToCollect = collectNondeterministicFrontier(expr)._2
 
         for (nondeterministicExpr <- expressionsToCollect.distinct) {
           val namedExpression = nondeterministicExpr match {
