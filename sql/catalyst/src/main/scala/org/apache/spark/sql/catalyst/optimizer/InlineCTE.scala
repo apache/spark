@@ -115,8 +115,10 @@ case class InlineCTE(
     // residual gap is a plan stitched together from already-analyzed plans (e.g. a producer
     // embedding the same analyzed dataset twice): such a tree can carry the same exprId in
     // multiple places, so an escaping reference could match a duplicated exprId and slip
-    // through. Such a query is ill-formed and fails later during planning or execution
-    // anyway; this check is defense-in-depth that fails fast with a clear error otherwise.
+    // through. Depending on where the duplicated exprId lives, such a query then either
+    // fails during binding, or binds the escaping reference to an unintended input and
+    // silently produces wrong results; this check is defense-in-depth that fails fast
+    // with a clear error otherwise.
     val allNodes = cteDef.child.collectWithSubqueries { case n: LogicalPlan => n }
     val boundExprIds = allNodes.iterator
       .flatMap(_.output.filter(_.resolved).map(_.exprId))
