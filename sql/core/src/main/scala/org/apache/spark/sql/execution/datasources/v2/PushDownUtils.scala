@@ -79,15 +79,19 @@ object PushDownUtils extends Logging {
         }
 
         for (filterExpr <- filters) {
-          val translated = translateFilter(filterExpr)
-          if (translated.isEmpty) {
-            untranslatableExprs += filterExpr
-            if (filterExpr.deterministic) {
-              extractPushablePredicate(filterExpr, e => translateFilter(e).isDefined)
-                .flatMap(translateFilter).foreach(translatedFilters += _)
-            }
-          } else {
-            translatedFilters += translated.get
+          translateFilter(filterExpr) match {
+            case Some(filter) =>
+              translatedFilters += filter
+            case None =>
+              untranslatableExprs += filterExpr
+              if (filterExpr.deterministic) {
+                extractPushablePredicate(
+                  filterExpr,
+                  e => DataSourceStrategy.translateFilter(
+                    e, supportNestedPredicatePushdown = true))
+                  .flatMap(translateFilter)
+                  .foreach(translatedFilters += _)
+              }
           }
         }
 
@@ -118,13 +122,16 @@ object PushDownUtils extends Logging {
         }
 
         for (filterExpr <- deterministicFilters) {
-          val translated = translateFilter(filterExpr)
-          if (translated.isEmpty) {
-            untranslatableExprs += filterExpr
-            extractPushablePredicate(filterExpr, e => translateFilter(e).isDefined)
-              .flatMap(translateFilter).foreach(translatedFilters += _)
-          } else {
-            translatedFilters += translated.get
+          translateFilter(filterExpr) match {
+            case Some(filter) =>
+              translatedFilters += filter
+            case None =>
+              untranslatableExprs += filterExpr
+              extractPushablePredicate(
+                filterExpr,
+                DataSourceV2Strategy.translateFilterV2)
+                .flatMap(translateFilter)
+                .foreach(translatedFilters += _)
           }
         }
 
@@ -159,23 +166,23 @@ object PushDownUtils extends Logging {
   // Extract a necessary condition from a deterministic filter that cannot be fully translated.
   // The caller must retain the original filter for post-scan evaluation. AND can use either
   // child, but OR requires both children. Other expressions, including NOT, must translate whole.
-  private def extractPushablePredicate(
+  private def extractPushablePredicate[T](
       expression: Expression,
-      canTranslate: Expression => Boolean): Option[Expression] = expression match {
+      translate: Expression => Option[T]): Option[Expression] = expression match {
     case And(left, right) =>
-      val l = extractPushablePredicate(left, canTranslate)
-      val r = extractPushablePredicate(right, canTranslate)
+      val l = extractPushablePredicate(left, translate)
+      val r = extractPushablePredicate(right, translate)
       (l, r) match {
         case (Some(a), Some(b)) => Some(And(a, b))
         case _ => l.orElse(r)
       }
     case Or(left, right) =>
       for {
-        l <- extractPushablePredicate(left, canTranslate)
-        r <- extractPushablePredicate(right, canTranslate)
+        l <- extractPushablePredicate(left, translate)
+        r <- extractPushablePredicate(right, translate)
       } yield Or(l, r)
-    case other if canTranslate(other) => Some(other)
-    case _ => None
+    case other =>
+      translate(other).map(_ => other)
   }
 
   /**
