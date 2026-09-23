@@ -2151,7 +2151,7 @@ class SparkConnectPlanner(
     unpackScalaUDF[ForeachWriterPacket](fun)
   }
 
-  private def unpackScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
+  private[connect] def unpackScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
     try {
       logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
       UdfSerialization

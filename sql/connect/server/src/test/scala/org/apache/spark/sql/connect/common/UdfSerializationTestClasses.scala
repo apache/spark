@@ -16,34 +16,47 @@
  */
 
 // Deterministic fixtures for UdfSerializationSuite. Each pair has same-length class names, so a
-// serialized stream of the *V1 class can be turned into a *V2 stream by an in-place, same-length
-// class-name patch, letting a single build simulate a cross-version producer/consumer pair whose
-// serialVersionUIDs differ (the two auto-computed SUIDs differ because the class name differs).
+// serialized stream of the *V1 class can be turned into a *V2 stream by an in-place class-name
+// patch, letting a single build simulate a producer (*V1) and a consumer (*V2) whose
+// serialVersionUIDs differ.
 
 package org.apache.spark.sql.types {
-  // Plain field-serialized, auto-computed SUID, identical layout: tolerated (rebind succeeds).
+  // Default field serialization, computed SUID, identical layout.
   case class SuidCompatV1(a: Int, b: String)
   case class SuidCompatV2(a: Int, b: String)
 
-  // Different serialized field layout: not tolerated (must fail fast).
+  // Different persistent field layout.
   case class SuidLayoutV1(a: Int, b: String)
   case class SuidLayoutV2(a: Int)
 
-  // Explicit serialVersionUID: an explicit-SUID change is a deliberate break, not tolerated.
+  // The consumer declares a serialVersionUID.
   @SerialVersionUID(4242L) case class SuidExplicitV1(a: Int, b: String)
   @SerialVersionUID(4243L) case class SuidExplicitV2(a: Int, b: String)
 
-  // Custom readObject protocol: descriptor substitution is unsafe, not tolerated.
+  // The consumer has a custom readObject.
   case class SuidCustomV1(a: Int, b: String) {
     private def readObject(in: java.io.ObjectInputStream): Unit = in.defaultReadObject()
   }
   case class SuidCustomV2(a: Int, b: String) {
     private def readObject(in: java.io.ObjectInputStream): Unit = in.defaultReadObject()
   }
+
+  // Only the producer writes custom class data; the consumer uses default serialization.
+  case class SuidProducerCustomV1(a: Int, b: String) {
+    private def writeObject(out: java.io.ObjectOutputStream): Unit = {
+      out.defaultWriteObject()
+      out.writeInt(42)
+    }
+  }
+  case class SuidProducerCustomV2(a: Int, b: String)
+
+  // Only the producer declares a serialVersionUID; the consumer's is computed.
+  @SerialVersionUID(4244L) case class SuidProducerExplicitV1(a: Int, b: String)
+  case class SuidProducerExplicitV2(a: Int, b: String)
 }
 
 package org.apache.spark.sql.connect.common {
-  // Outside the tolerant `sql.types` package: SUID drift must NOT be tolerated.
+  // Outside the tolerant `sql.types` package.
   case class SuidUntolerantV1(a: Int, b: String)
   case class SuidUntolerantV2(a: Int, b: String)
 }
