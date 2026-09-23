@@ -31,7 +31,7 @@ import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark._
-import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
+import org.apache.spark.deploy.{DriverEnvironment, SparkSubmit, SparkSubmitArguments}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.deploy.master.RecoveryState
@@ -431,19 +431,19 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
 
   test("client does not send 'SPARK_ENV_LOADED' env var by default") {
     val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_ENV_LOADED" -> "1")
-    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    val filteredVariables = DriverEnvironment.filterSystemEnvironment(environmentVariables)
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
   test("client does not send 'SPARK_HOME' env var by default") {
     val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_HOME" -> "1")
-    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    val filteredVariables = DriverEnvironment.filterSystemEnvironment(environmentVariables)
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
   test("client does not send 'SPARK_CONF_DIR' env var by default") {
     val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_CONF_DIR" -> "1")
-    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    val filteredVariables = DriverEnvironment.filterSystemEnvironment(environmentVariables)
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
@@ -453,7 +453,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
       "SPARK_LOCAL_IP" -> "1",
       "SPARK_LOCAL_HOSTNAME" -> "1",
       "SPARK_LOCAL_DIRS" -> "1")
-    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    val filteredVariables = DriverEnvironment.filterSystemEnvironment(environmentVariables)
     assert(filteredVariables == Map("SPARK_VAR" -> "1", "SPARK_LOCAL_DIRS" -> "1"))
   }
 

@@ -91,7 +91,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     // ClientEndpoint.onStart into System.exit, killing the whole test JVM.
     val conf = new SparkConf(false)
     val command = submittedCommand(conf)
-    command.environment should be (Client.driverEnvironment(conf, sys.env))
+    command.environment should be (DriverEnvironment.forSubmission(conf, sys.env))
     // Checks that do not depend on the filtering implementation.
     command.environment.keys.forall(_.startsWith("SPARK_")) should be (true)
     command.environment should not contain key ("PATH")
@@ -124,11 +124,11 @@ class ClientSuite extends SparkFunSuite with Matchers {
       "LD_LIBRARY_PATH" -> "/usr/lib")
     val env = forwarded ++ dropped
 
-    Client.driverEnvironment(new SparkConf(false), env) should be (forwarded)
+    DriverEnvironment.forSubmission(new SparkConf(false), env) should be (forwarded)
 
     val unfiltered = new SparkConf(false).set(STANDALONE_SUBMIT_FILTER_ENVIRONMENT, false)
     // The escape hatch forwards everything else, including SPARK_HOME and PATH.
-    Client.driverEnvironment(unfiltered, env) should be (
+    DriverEnvironment.forSubmission(unfiltered, env) should be (
       env -- Seq("SPARK_LOCAL_IP", "SPARK_LOCAL_HOSTNAME"))
   }
 }

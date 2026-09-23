@@ -22,7 +22,7 @@ import java.io.File
 import jakarta.servlet.http.HttpServletResponse
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
-import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription, SparkSubmit}
+import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription, DriverEnvironment, SparkSubmit}
 import org.apache.spark.deploy.ClientArguments._
 import org.apache.spark.internal.config
 import org.apache.spark.launcher.{JavaModuleOptions, SparkLauncher}
@@ -237,7 +237,7 @@ private[rest] class StandaloneSubmitRequestServlet(
     // In addition, the placeholders are replaced into the values of environment variables.
     val environmentVariables =
       Option(request.environmentVariables).getOrElse(Map.empty[String, String])
-        .filterNot(x => RestSubmissionClient.HOST_SPECIFIC_ENV_VARS.contains(x._1))
+        .filterNot(x => DriverEnvironment.HOST_SPECIFIC_ENV_VARS.contains(x._1))
         .map(x => (x._1, replacePlaceHolder(x._2)))
 
     // Construct driver description
