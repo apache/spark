@@ -28,7 +28,7 @@ private[spark] object UDF {
       "executing an external UDF fails. This is an operator-level setting: it selects " +
       "the runtime that user code is executed by, so it is not intended to be changed " +
       "by individual queries.")
-    .version("5.0.0")
+    .version("4.4.0")
     .stringConf
     .createOptional
 }
