@@ -107,7 +107,8 @@ private[python] object InProcessPythonRuntime extends Logging {
           candidate.set("_site_packages", sitePackages.asJava)
           candidate.eval("import sys; sys.path.extend(list(_site_packages)); del _site_packages")
         }
-        candidate.eval("from pyspark.inprocess.runtime import _inprocess_invoke")
+        candidate.eval("from pyspark.inprocess.runtime import " +
+          "_inprocess_invoke, _inprocess_register, _inprocess_release, _udfs")
         interp = candidate
       } catch {
         case t: Throwable =>
@@ -134,8 +135,7 @@ private[python] object InProcessPythonRuntime extends Logging {
         runOnInterpreterThread(cancellable = false) {
           if (interp != null) {
             try {
-              interp.eval("from pyspark.inprocess.runtime import _load_udf")
-              interp.eval("_load_udf.cache_clear()")
+              interp.eval("_udfs.clear()")
             } finally {
               try { interp.close() } finally { interp = null }
             }
@@ -148,31 +148,53 @@ private[python] object InProcessPythonRuntime extends Logging {
     }
   }
 
+  /** Register a separate function instance per task, copying its closure only once. */
+  def register(
+      handle: String,
+      serializedUdf: Array[Byte],
+      returnTypeJson: String,
+      timeZoneId: String,
+      pythonVersion: String): Unit = onInterpreterThread {
+    initializeInterpreter(Seq.empty)
+    withPythonException {
+      interp.invoke("_inprocess_register",
+        handle, serializedUdf, returnTypeJson, timeZoneId, pythonVersion)
+    }
+  }
+
+  /** Cleanup must run even when the caller's task has been cancelled. */
+  def release(handles: Seq[String]): Unit = runOnInterpreterThread(cancellable = false) {
+    if (interp != null) {
+      interp.invoke("_inprocess_release", handles.asJava)
+    }
+  }
+
   /** Pass CDI addresses to Python and wait until it has finished consuming them. */
   def invoke(
-      serializedUdf: Array[Byte],
+      handle: String,
       inputArrayPtrs: Array[Long],
       inputSchemaPtrs: Array[Long],
       outputArrayAddr: Long,
       outputSchemaAddr: Long,
-      expectedRows: Int,
-      returnTypeJson: String,
-      timeZoneId: String): Unit = onInterpreterThread {
-    initializeInterpreter(Seq.empty)
+      expectedRows: Int): Unit = onInterpreterThread {
     // Box long[] so JEP treats even single-column inputs as an iterable.
     val arrayPtrList = inputArrayPtrs.map(java.lang.Long.valueOf).toSeq.asJava
     val schemaPtrList = inputSchemaPtrs.map(java.lang.Long.valueOf).toSeq.asJava
-    try {
+    withPythonException {
       interp.invoke(
         "_inprocess_invoke",
-        serializedUdf,
+        handle,
         arrayPtrList,
         schemaPtrList,
         java.lang.Long.valueOf(outputArrayAddr),
         java.lang.Long.valueOf(outputSchemaAddr),
-        java.lang.Integer.valueOf(expectedRows),
-        returnTypeJson,
-        timeZoneId)
+        java.lang.Integer.valueOf(expectedRows))
+    }
+  }
+
+  private def withPythonException(body: => Unit): Unit = {
+    try {
+      body
     } catch {
       case e: JepException =>
         val msg = e.getMessage

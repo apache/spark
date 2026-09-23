@@ -17,186 +17,143 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.{Column, QueryTest}
-import org.apache.spark.sql.classic.ExpressionUtils
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types._
+import scala.jdk.CollectionConverters._
 
-/**
- * Unit and integration tests for the in-process Python UDF framework.
- *
- * These tests verify:
- *   1. Query plan shape: ExtractInProcessPythonUDFs inserts InProcessEvalPython nodes
- *   2. Physical plan shape: InProcessEvalPython -> InProcessArrowEvalExec
- *   3. Concurrency config validation: InProcessPythonChecks rejects bad configs
- *
- * Note: Tests that require an actual jep installation and CPython runtime are tagged
- * with the "inprocess" test tag and skipped in CI unless jep is present on the classpath.
- * Plan-shape tests run without jep because they only inspect the logical/physical plan.
- */
+import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.{Column, QueryTest}
+import org.apache.spark.sql.catalyst.expressions.PythonUDF
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ArrowEvalPython, Filter, LocalLimit}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
+
+/** Planning regressions; runtime coverage lives in the PySpark integration suite. */
 class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 
-  // --- Helper: build a minimal InProcessPythonUDF expression (no real Python needed) ---
-  // A trivially serialized no-op function -- the plan tests only check structure, not execution.
-  private val dummySerializedFunc: Array[Byte] = Array[Byte](0x80.toByte, 0x04.toByte)
-
-  private def makeUDF(name: String, inputCol: Column, returnType: DataType): Column = {
-    val expr = InProcessPythonUDF(
-      name = name,
-      serializedFunc = dummySerializedFunc,
-      children = Seq(inputCol.expr),
-      dataType = returnType)
-    ExpressionUtils.column(expr)
+  private def makeUDF(
+      name: String,
+      input: Column,
+      deterministic: Boolean = true): Column = {
+    // Each call creates fresh bytes, as Py4J does. Semantic equality must compare their contents.
+    InProcessPythonUDFBuilder.build(
+      name, Array[Byte](1, 2), LongType.json, Seq(input).asJava, deterministic, "3.11")
   }
 
-  // ---------------------------------------------------------------------------
-  // Plan shape tests (no jep required)
-  // ---------------------------------------------------------------------------
-
-  test("ExtractInProcessPythonUDFs inserts InProcessEvalPython into logical plan") {
+  test("in-process UDFs use PythonUDF and ArrowEvalPython planning contracts") {
     val df = spark.range(10)
-    val doubled = makeUDF("double", df("id"), LongType)
-    val plan = df.select(doubled).queryExecution.optimizedPlan
+    val doubled = makeUDF("double", df("id"))
+    val expr = doubled.expr.asInstanceOf[PythonUDF]
+    assert(expr.evalType == PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF)
+    assert(expr.expensive)
+    assert(expr.semanticEquals(makeUDF("double", df("id")).expr))
 
-    val evalNodes = plan.collect { case n: InProcessEvalPython => n }
-    assert(evalNodes.size === 1,
-      s"Expected 1 InProcessEvalPython node, got ${evalNodes.size}")
-    assert(evalNodes.head.udfs.size === 1)
-    assert(evalNodes.head.udfs.head.name === "double")
+    val query = df.select(doubled)
+    val eval = query.queryExecution.optimizedPlan.collect { case p: ArrowEvalPython => p }
+    assert(eval.size == 1)
+    assert(eval.head.evalType == PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF)
+    val physical = query.queryExecution.executedPlan.collect {
+      case p: InProcessArrowEvalExec => p
+    }
+    assert(physical.size == 1)
+    assert(physical.head.producedAttributes ==
+      (physical.head.outputSet -- physical.head.child.outputSet))
+    assert(physical.head.missingInput.isEmpty)
   }
 
-  test("InProcessEvalPython is planned as InProcessArrowEvalExec") {
+  test("parallel calls fuse and deterministic duplicate calls are shared") {
     val df = spark.range(10)
-    val doubled = makeUDF("double", df("id"), LongType)
-    val execPlan = df.select(doubled).queryExecution.executedPlan
-
-    val execNodes = execPlan.collect { case n: InProcessArrowEvalExec => n }
-    assert(execNodes.size === 1,
-      s"Expected 1 InProcessArrowEvalExec node, got ${execNodes.size}")
+    val plan = df.select(
+      makeUDF("double", df("id")), makeUDF("triple", df("id")),
+      makeUDF("double", df("id"))).queryExecution.optimizedPlan
+    val eval = plan.collect { case p: ArrowEvalPython => p }
+    assert(eval.size == 1)
+    assert(eval.head.udfs.size == 2)
   }
 
-  test("multiple in-process UDFs on the same input are fused into one InProcessEvalPython") {
+  test("nested calls and collapsed projects produce separate evaluation nodes") {
     val df = spark.range(10)
-    val doubled = makeUDF("double", df("id"), LongType)
-    val tripled = makeUDF("triple", df("id"), LongType)
-    val plan = df.select(doubled, tripled).queryExecution.optimizedPlan
-
-    val evalNodes = plan.collect { case n: InProcessEvalPython => n }
-    assert(evalNodes.size === 1, "Expected one InProcessEvalPython for two UDFs on same input")
-    assert(evalNodes.head.udfs.size === 2)
-  }
-
-  test("InProcessPythonChecks rejects config allowing multiple concurrent tasks") {
-    val df = spark.range(10)
-    val doubled = makeUDF("double", df("id"), LongType)
-
-    withSQLConf(
-      "spark.executor.cores" -> "4",
-      "spark.task.cpus"      -> "1") {
-      val ex = intercept[IllegalArgumentException] {
-        df.select(doubled).queryExecution.optimizedPlan
-      }
-      assert(ex.getMessage.contains("4 concurrent tasks"))
-      assert(ex.getMessage.contains("spark.executor.cores"))
+    val nested = df.select(makeUDF("outer", makeUDF("inner", df("id"))))
+    val separate = df.select(makeUDF("inner", df("id")).as("x"))
+      .select(makeUDF("outer", col("x")))
+    Seq(nested, separate).foreach { query =>
+      val eval = query.queryExecution.optimizedPlan.collect { case p: ArrowEvalPython => p }
+      assert(eval.size == 2)
+      assert(eval.forall(_.udfs.forall(_.children.forall(!_.isInstanceOf[PythonUDF]))))
     }
   }
 
-  test("InProcessPythonChecks passes when executor.cores == task.cpus") {
+  test("UDFs over grouping keys, aggregate results and constants run after aggregation") {
+    val df = spark.range(10).selectExpr("id % 2 AS k", "id AS v")
+    val queries = Seq(
+      df.groupBy("k").agg(makeUDF("f", col("k"))),
+      df.groupBy("k").count().select(col("k"), makeUDF("f", col("k"))),
+      df.groupBy("k").agg(sum("v").as("s")).select(makeUDF("f", col("s"))),
+      df.agg(count(lit(1)), makeUDF("f", lit(1))))
+    queries.foreach { query =>
+      val plan = query.queryExecution.optimizedPlan
+      val eval = plan.collect { case p: ArrowEvalPython => p }
+      assert(eval.size == 1)
+      assert(eval.head.child.exists(_.isInstanceOf[Aggregate]))
+      assert(!plan.exists(_.missingInput.nonEmpty))
+      assert(!query.queryExecution.executedPlan.exists(_.missingInput.nonEmpty))
+    }
+  }
+
+  test("repeated UDFs in grouping keys and rebuilt queries are semantically equal") {
     val df = spark.range(10)
-    val doubled = makeUDF("double", df("id"), LongType)
+    val query = df.groupBy(makeUDF("f", col("id"))).agg(makeUDF("f", col("id")))
+    assert(!query.queryExecution.optimizedPlan.exists(_.missingInput.nonEmpty))
+    val first = df.select(makeUDF("f", col("id"))).queryExecution.optimizedPlan
+    val second = df.select(makeUDF("f", col("id"))).queryExecution.optimizedPlan
+    assert(first.sameResult(second))
+  }
 
-    // Should not throw
-    withSQLConf(
-      "spark.executor.cores" -> "2",
-      "spark.task.cpus"      -> "2") {
-      val plan = df.select(doubled).queryExecution.optimizedPlan
-      assert(plan.collect { case n: InProcessEvalPython => n }.size === 1)
+  test("nondeterministic calls work in grouping and sort expressions") {
+    val df = spark.range(10)
+    val nd = makeUDF("nd", col("id"), deterministic = false)
+    Seq(df.groupBy(nd).count(), df.orderBy(nd)).foreach { query =>
+      val plan = query.queryExecution.optimizedPlan
+      assert(plan.exists(_.isInstanceOf[ArrowEvalPython]))
+      assert(!plan.exists(_.missingInput.nonEmpty))
     }
   }
 
-  test("nested in-process UDF arguments fail during planning") {
-    val df = spark.range(3)
-    val nested = makeUDF("outer", makeUDF("inner", df("id"), LongType), LongType)
-    val error = intercept[IllegalArgumentException] {
-      df.select(nested).queryExecution.optimizedPlan
-    }
-    assert(error.getMessage.contains("nested UDF"))
+  test("ordinary filters and limits pass through in-process evaluation") {
+    val df = spark.range(10)
+    val plan = df.filter(col("id") =!= 0).filter(makeUDF("f", col("id")) > 1)
+      .queryExecution.optimizedPlan
+    val eval = plan.collectFirst { case p: ArrowEvalPython => p }.get
+    assert(eval.child.isInstanceOf[Filter])
+    val limited = df.select(makeUDF("f", col("id"))).limit(1).queryExecution.optimizedPlan
+    val limitedEval = limited.collectFirst { case p: ArrowEvalPython => p }.get
+    assert(limitedEval.child.isInstanceOf[LocalLimit])
   }
 
-  test("cross-side join UDF arguments fail during planning") {
+  test("in-process extraction cannot be disabled") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ExtractPythonUDFs.ruleName) {
+      val plan = spark.range(10).select(makeUDF("f", col("id"))).queryExecution.optimizedPlan
+      assert(plan.exists(_.isInstanceOf[ArrowEvalPython]))
+    }
+  }
+
+  test("planning does not parse scheduler CPU settings from SQLConf") {
+    withSQLConf("spark.executor.cores" -> "4", "spark.task.cpus" -> "0.5") {
+      val plan = spark.range(10).select(makeUDF("f", col("id"))).queryExecution.optimizedPlan
+      assert(plan.exists(_.isInstanceOf[ArrowEvalPython]))
+    }
+  }
+
+  test("inner join conditions using both sides use existing Python join extraction") {
     val left = spark.range(3).toDF("a")
     val right = spark.range(3).toDF("b")
-    val condition = makeUDF("both", left("a") + right("b"), LongType) > 0L
-    val error = intercept[IllegalArgumentException] {
-      left.join(right, condition).queryExecution.optimizedPlan
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val plan = left.join(right, makeUDF("f", left("a") + right("b")) > 0)
+        .queryExecution.optimizedPlan
+      assert(plan.exists(_.isInstanceOf[ArrowEvalPython]))
+      assert(!plan.exists(_.missingInput.nonEmpty))
     }
-    assert(error.getMessage.contains("one child"))
-  }
-
-  // ---------------------------------------------------------------------------
-  // Config constant tests
-  // ---------------------------------------------------------------------------
-
-  test("InProcessPythonRuntime.SITE_PACKAGES_CONFIG has the expected key") {
-    assert(InProcessPythonRuntime.SITE_PACKAGES_CONFIG === "spark.inprocess.python.sitePackages")
-  }
-
-  // ---------------------------------------------------------------------------
-  // Execution tests (require jep + CPython + PyArrow on the test classpath)
-  // Run with: -Dinprocess.tests=true
-  // ---------------------------------------------------------------------------
-
-  private val runExecutionTests =
-    sys.props.getOrElse("inprocess.tests", "false").toBoolean
-
-  if (runExecutionTests) {
-    test("end-to-end: in-process double(long) UDF returns correct results") {
-      // Serialize a real Python UDF via cloudpickle (requires Python + cloudpickle)
-      val serialized = serializePythonUDF(
-        "import pyarrow.compute as pc\ndef double(x): return pc.multiply(x, 2)")
-
-      val df = spark.range(1, 6)  // [1, 2, 3, 4, 5]
-      val udf = InProcessPythonUDF("double", serialized, Seq(df("id").expr), LongType)
-      val result = df.select(ExpressionUtils.column(udf)).collect().map(_.getLong(0))
-      assert(result.toSeq === Seq(2L, 4L, 6L, 8L, 10L))
-    }
-
-    test("end-to-end: in-process UDF with nulls preserves null positions") {
-      val serialized = serializePythonUDF(
-        "import pyarrow.compute as pc\ndef negate(x): return pc.negate(x)")
-
-      val data = Seq(Some(1L), None, Some(3L))
-      val df = spark.createDataset(data).toDF("v")
-      val udf = InProcessPythonUDF("negate", serialized, Seq(df("v").expr), LongType)
-      val result = df.select(ExpressionUtils.column(udf)).collect()
-
-      assert(result(0).getLong(0) === -1L)
-      assert(result(1).isNullAt(0))
-      assert(result(2).getLong(0) === -3L)
-    }
-  }
-
-  /**
-   * Serializes a Python function definition via cloudpickle by running a small Python script.
-   * Requires Python + cloudpickle on the test machine's PATH.
-   */
-  private def serializePythonUDF(pythonCode: String): Array[Byte] = {
-    import scala.sys.process._
-
-    val script = s"""
-      |import cloudpickle, sys
-      |$pythonCode
-      |func_name = [k for k in dir() if not k.startswith('_') and callable(eval(k))][0]
-      |func = eval(func_name)
-      |sys.stdout.buffer.write(cloudpickle.dumps(func))
-      """.stripMargin
-
-    val proc = Process(Seq("python3", "-c", script))
-    val buf = new java.io.ByteArrayOutputStream()
-    val exit = proc.#>(buf).run().exitValue()
-    require(exit == 0, s"Failed to serialize Python UDF (exit code $exit)")
-    buf.toByteArray
   }
 }

@@ -100,6 +100,9 @@ private[spark] object PythonEvalType {
   // worker, which folds them with `reduce` (from `zero`) and produces the value with `finish`.
   val SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF = 257
 
+  // Scalar Arrow UDF evaluated by embedded CPython in the executor JVM.
+  val SQL_SCALAR_ARROW_INPROCESS_UDF = 258
+
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
   val SQL_ARROW_UDTF = 302
@@ -148,6 +151,7 @@ private[spark] object PythonEvalType {
     case SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF =>
       "SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF"
     case SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF => "SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF"
+    case SQL_SCALAR_ARROW_INPROCESS_UDF => "SQL_SCALAR_ARROW_INPROCESS_UDF"
   }
 
   // The eval types produced by ExtractPythonUDFFromLambda: a scalar UDF lifted out of a

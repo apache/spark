@@ -18,6 +18,7 @@
 
 """Arrow CDI contract tests that do not need a Spark JVM or JEP."""
 
+import sys
 import unittest
 from importlib.util import find_spec
 
@@ -39,14 +40,20 @@ if _have_arrow_cdi:
     import pyarrow as pa
     from pyarrow.cffi import ffi
 
-    from pyspark.inprocess.runtime import _inprocess_invoke, _load_udf
+    from pyspark.inprocess.runtime import (
+        _inprocess_invoke,
+        _inprocess_register,
+        _inprocess_release,
+        _udfs,
+        _validate_result,
+    )
     from pyspark.inprocess.udf import inprocess_udf
 
 
 @unittest.skipUnless(_have_arrow_cdi, "Arrow CDI tests require PyArrow and cffi")
 class InProcessRuntimeTests(unittest.TestCase):
     def tearDown(self):
-        _load_udf.cache_clear()
+        _udfs.clear()
 
     def invoke(self, func, inputs, return_type, rows=None, timezone="UTC"):
         arrays = [ffi.new("struct ArrowArray*") for _ in inputs]
@@ -63,18 +70,20 @@ class InProcessRuntimeTests(unittest.TestCase):
             serialized = getattr(func, "_serialized", None)
             if serialized is None:
                 serialized = cloudpickle.dumps(func)
+            _inprocess_register(
+                "test", serialized, return_type.json(), timezone, "%d.%d" % sys.version_info[:2]
+            )
             _inprocess_invoke(
-                serialized,
+                "test",
                 [address(a) for a in arrays],
                 [address(s) for s in schemas],
                 address(output),
                 address(output_schema),
                 len(inputs[0]) if rows is None else rows,
-                return_type.json(),
-                timezone,
             )
             return pa.Array._import_from_c(address(output), address(output_schema))
         finally:
+            _inprocess_release(["test"])
             for value in arrays + schemas + [output, output_schema]:
                 if value.release != ffi.NULL:
                     value.release(value)
@@ -145,6 +154,95 @@ class InProcessRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "expected failure") as error:
             self.invoke(fail, [pa.array([1])], LongType())
         self.assertIn("Traceback", str(error.exception))
+
+    def test_system_exit_is_converted_to_an_ordinary_exception(self):
+        def fail(x):
+            raise SystemExit(0)
+
+        with self.assertRaisesRegex(RuntimeError, "SystemExit"):
+            self.invoke(fail, [pa.array([1])], LongType())
+
+    def test_base_exception_during_deserialization_is_converted(self):
+        def fail():
+            raise SystemExit(0)
+
+        class FailingLoad:
+            def __reduce__(self):
+                return fail, ()
+
+        with self.assertRaisesRegex(RuntimeError, "SystemExit"):
+            _inprocess_register(
+                "bad",
+                cloudpickle.dumps(FailingLoad()),
+                LongType().json(),
+                "UTC",
+                "%d.%d" % sys.version_info[:2],
+            )
+        self.assertNotIn("bad", _udfs)
+
+    def test_python_version_is_checked_before_deserialization(self):
+        with self.assertRaisesRegex(RuntimeError, "PYTHON_VERSION_MISMATCH"):
+            _inprocess_register("bad", b"invalid pickle", LongType().json(), "UTC", "0.0")
+        self.assertNotIn("bad", _udfs)
+
+    def test_registration_is_task_scoped(self):
+        state = []
+
+        def remember(x):
+            state.append(x)
+            return len(state)
+
+        command = cloudpickle.dumps(remember)
+        for handle in ("first", "second"):
+            _inprocess_register(
+                handle, command, LongType().json(), "UTC", "%d.%d" % sys.version_info[:2]
+            )
+        self.assertEqual(_udfs["first"][0](1), 1)
+        self.assertEqual(_udfs["first"][0](2), 2)
+        self.assertEqual(_udfs["second"][0](3), 1)
+        _inprocess_release(["first", "second", "unregistered"])
+        self.assertFalse(_udfs)
+
+    def test_slices_are_normalized_including_nested_child_offsets(self):
+        for value in (
+            pa.array([9, 1, None, 3]).slice(1),
+            pa.array(["discard", "one", None, "three"]).slice(1),
+            pa.array([[9], [1], None, [3]]).slice(1),
+            pa.StructArray.from_arrays([pa.array([9, 1, None, 3]).slice(1)], names=["x"]),
+        ):
+            with self.subTest(data_type=value.type):
+                normalized = _validate_result(value, 3, value.type)
+                self.assertEqual(normalized.offset, 0)
+                self.assertEqual(normalized.to_pylist(), value.to_pylist())
+                if pa.types.is_struct(value.type):
+                    self.assertEqual(normalized.field(0).offset, 0)
+
+    def test_nested_nullability_accepts_compatible_values(self):
+        nullable = pa.list_(pa.field("element", pa.string(), nullable=True))
+        required = pa.list_(pa.field("element", pa.string(), nullable=False))
+        for source, expected in ((nullable, required), (required, nullable)):
+            value = pa.array([["a"], None, []], type=source)
+            result = _validate_result(value, 3, expected)
+            self.assertEqual(result.type, expected)
+            self.assertEqual(result.to_pylist(), value.to_pylist())
+        with self.assertRaisesRegex(ValueError, "non-nullable"):
+            _validate_result(pa.array([[None]], type=nullable), 1, required)
+
+    def test_null_struct_parents_do_not_violate_child_nullability(self):
+        expected = pa.struct([pa.field("x", pa.int64(), nullable=False)])
+        value = pa.array([None, {"x": 1}], type=pa.struct([pa.field("x", pa.int64())]))
+        self.assertEqual(_validate_result(value, 2, expected).to_pylist(), [None, {"x": 1}])
+
+    def test_map_nullability_and_sliced_results(self):
+        nullable = pa.map_(pa.string(), pa.field("value", pa.int64()))
+        required = pa.map_(pa.string(), pa.field("value", pa.int64(), nullable=False))
+        value = pa.array([[("discard", 0)], [("a", 1)], None], type=nullable).slice(1)
+        result = _validate_result(value, 2, required)
+        self.assertEqual(result.offset, 0)
+        self.assertEqual(result.type, required)
+        self.assertEqual(result.to_pylist(), [[("a", 1)], None])
+        with self.assertRaisesRegex(ValueError, "non-nullable"):
+            _validate_result(pa.array([[("a", None)]], type=nullable), 1, required)
 
 
 if __name__ == "__main__":

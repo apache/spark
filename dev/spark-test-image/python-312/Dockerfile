@@ -71,7 +71,7 @@ RUN python3.12 -m pip install --group ml_torch --index-url https://download.pyto
 # Exercise in-process UDFs in the existing pyspark-sql job. JEP needs Python
 # headers and a JDK when building its JNI library; no separate test job is needed.
 RUN JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")" \
-    python3.12 -m pip install --no-cache-dir "jep==4.3.1" cffi
+    python3.12 -m pip install --no-cache-dir "jep==4.3.2" cffi
 # Keep the provided CDI dependency outside Spark's distribution JAR directory.
 # Read its version from this checkout, just as the Spark build does.
 COPY --from=root pom.xml /tmp/spark-pom.xml

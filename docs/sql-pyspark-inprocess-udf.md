@@ -26,8 +26,9 @@ license: |
 
 Each executor owns a dedicated interpreter thread. The plugin initializes the
 interpreter on that thread, and task calls and shutdown are dispatched to the
-same thread. The initial single-task-per-executor deployment restriction remains,
-but it is not relied on for JEP thread affinity.
+same thread. Calls from concurrent tasks are serialized by a lock. One task per
+executor is recommended for throughput, but is not a correctness requirement.
+Application-level Python parallelism comes from multiple executor JVMs.
 
 Task cancellation cannot safely stop arbitrary native Python code. An interrupted
 caller waits for the current invocation to finish before freeing the Arrow CDI
@@ -37,17 +38,44 @@ therefore prevent its task from completing cancellation.
 A scalar UDF must return a `pyarrow.Array` with exactly one element per input row.
 The runtime checks the result type against the declared Spark type, including
 nested fields, decimal scale, and timestamp unit/timezone. Existing numeric and
-boolean output casts are preserved. Invalid results fail before being read by
-Spark. Ordinary column expressions and literals may be passed as arguments;
-nested UDF, aggregate and window arguments must be evaluated in a separate stage.
-Cross-side join arguments are rejected during planning.
+boolean output casts are preserved. Nested field nullability may differ if the
+actual values satisfy the declared nullability. Sliced results, including nested
+child slices, are copied to remove offsets that Arrow Java's CDI importer cannot
+read. Compatible results retain zero-copy transfer.
+
+The API produces a regular `PythonUDF` expression with an in-process evaluation
+type. Spark's existing `ArrowEvalPython` planning rules handle aggregation,
+nested calls, nondeterminism, and filter/limit pushdown. Physical planning selects
+`InProcessArrowEvalExec` for this evaluation type. Ordinary Python UDFs continue
+to use Python workers.
 
 `maxRecordsPerBatch <= 0` means no row-count limit. The independent
 `spark.sql.execution.arrow.maxBytesPerBatch` limit still applies when positive.
-Input vectors and completed result vectors are released on task completion,
-early termination and failure. Extra site-packages paths are appended before
-loading the runtime bridge. UDF deserialization uses PySpark's bundled cloudpickle
-and a bounded executor-local cache.
+Only UDF arguments are converted to Arrow. Other columns stay in Spark rows,
+buffered in a spillable queue until the results are joined back. Duplicate nested
+field names in UDF arguments or declared results are rejected before Arrow Java
+reads their buffers.
+
+Each batch uses fresh input buffers. A Python function may retain an input array;
+later batches do not overwrite it. Retained arrays keep native memory alive, so
+functions should release them when no longer needed. JVM input vectors and result
+vectors are released on task completion, early termination and failure.
+
+UDF deserialization uses PySpark's bundled cloudpickle. Each task registers its
+own function instance once and passes a small handle for subsequent batches.
+Task completion releases the registered function and its closure state. Imported
+Python modules still share executor-wide state. Extra site-packages paths are
+appended before loading the runtime bridge.
+
+Spark broadcasts, accumulators, `SparkContext.addPyFile`, and Python `TaskContext`
+are not supported by this embedded runtime. Captured broadcast and accumulator
+objects are rejected during serialization; functions must not access them through
+imported modules either. Install modules on executors before startup, optionally
+using `spark.inprocess.python.sitePackages`. The driver's Python major.minor
+version must match the embedded interpreter; registration checks this before
+unpickling. Python exceptions, including `SystemExit` during deserialization or
+execution, are converted into task failures. Native process termination remains
+outside this exception handling.
 
 ## Overview
 
@@ -56,16 +84,17 @@ In-process Python UDFs embed CPython directly into the Spark executor JVM using
 standard Python UDFs and pandas UDFs. Data is passed to Python as
 [PyArrow](https://arrow.apache.org/docs/python/) arrays via the
 [Arrow C Data Interface](https://arrow.apache.org/docs/format/CDataInterface.html) — zero-copy
-for both input and output buffer transfer. Row-to-Arrow conversion still copies data.
+for compatible input and output buffers. Row-to-Arrow conversion and normalization
+of sliced results still copy data.
 
 **Use `inprocess_udf` when:**
 - You are already using `pandas_udf` for vectorized transformations and want lower latency.
 - Your UDF operates on Arrow/PyArrow arrays (e.g. using `pyarrow.compute`).
-- You can deploy executors with one task per core (see [Requirements](#requirements)).
+- You can deploy enough executor JVMs for Python parallelism (see [Requirements](#requirements)).
 
 **Stick with `pandas_udf` or `udf` when:**
 - You need pandas Series semantics in your UDF logic.
-- You cannot control executor sizing (multi-task-per-executor clusters).
+- You need concurrent Python invocations within a single executor.
 - You are not able to install jep on executors.
 
 ---
@@ -75,7 +104,7 @@ for both input and output buffer transfer. Row-to-Arrow conversion still copies 
 ### 1. Install dependencies
 
 ```bash
-pip install "jep>=4.3.1" pyarrow cloudpickle
+pip install "jep>=4.3.2" pyarrow cloudpickle
 ```
 
 JEP and `org.apache.arrow:arrow-c-data` are provided dependencies and are not
@@ -83,6 +112,12 @@ bundled with Spark. Supply their JARs on the driver/executor classpaths before
 starting Spark, and make the JEP native library available. Use an `arrow-c-data`
 version matching Spark's Arrow Java version. Installing the Python packages alone
 does not supply the Arrow Java CDI JAR.
+
+Building JEP from source requires a JDK, a C compiler, and development headers for
+the Python version being embedded (for example, `python3.12-dev` on Ubuntu with
+Python 3.12). These headers are build dependencies; running a prebuilt compatible
+JEP installation does not require the development package. The corresponding
+Python shared library must remain available at runtime.
 
 ### 2. Register the plugin
 
@@ -195,28 +230,23 @@ def add_noise(x):
 
 | Requirement | Detail |
 |---|---|
-| Python | 3.8+ |
-| jep | 4.3.1+ (`pip install jep`) |
+| Python | 3.11+; driver and embedded major.minor versions must match |
+| jep | 4.3.2+ (`pip install jep`) |
 | `arrow-c-data` JAR | Provided separately; match Spark's Arrow Java version |
-| PyArrow | 12+ |
-| cloudpickle | 2.x (already a PySpark dependency) |
-| `spark.executor.cores == spark.task.cpus` | Enforced at query planning time (see below) |
+| PyArrow | 18.0.0+ |
+| cloudpickle | Bundled with PySpark |
+| Python concurrency | One invocation at a time per executor (see below) |
 
-### Single task per executor
+### Executor concurrency
 
-In-process UDFs use a single `SharedInterpreter` per executor JVM process. Because CPython's
-GIL is not re-entrant, **only one task may run at a time per executor**. Spark enforces this
-by requiring `spark.executor.cores == spark.task.cpus` whenever an in-process UDF appears in
-a query. If this condition is violated, query planning raises:
+In-process UDFs use one `SharedInterpreter` on a dedicated thread per executor.
+Multiple Spark tasks can share an executor, including with fractional
+`spark.task.cpus`, but their Python invocations are serialized. `local[*]` therefore
+works but does not provide parallel embedded Python execution.
 
-```
-InProcessPythonUDF requires exactly one concurrent task per executor to avoid GIL contention.
-Current configuration allows 4 concurrent tasks (spark.executor.cores=4, spark.task.cpus=1).
-Set spark.executor.cores == spark.task.cpus, e.g. spark.executor.cores=1.
-```
-
-The simplest fix is `spark.executor.cores=1, spark.task.cpus=1`. Total cluster parallelism is
-unchanged — you just use more, smaller executors.
+For throughput, consider `spark.executor.cores=1, spark.task.cpus=1` and multiple
+executors. More executors also mean more JVM overhead; compare with worker-based
+Arrow UDFs under the same total CPU and memory budget.
 
 ---
 
@@ -230,7 +260,7 @@ site-packages are already on `sys.path`, so no extra configuration is needed.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install "jep>=4.3.1" pyarrow cloudpickle pyspark
+.venv/bin/pip install "jep>=4.3.2" pyarrow cloudpickle pyspark
 source .venv/bin/activate
 ```
 
@@ -251,8 +281,8 @@ venv on a machine that matches the executor OS and Python version:
 
 ```bash
 python3 -m venv myvenv
-myvenv/bin/pip install "jep>=4.3.1" pyarrow cloudpickle my-custom-lib
-zip -r myvenv.zip myvenv/
+myvenv/bin/pip install "jep>=4.3.2" pyarrow cloudpickle my-custom-lib
+(cd myvenv && zip -r ../myvenv.zip .)
 ```
 
 Adjust `python3.11` in the paths below to match the Python version in your venv.
@@ -301,9 +331,10 @@ Pre-installing jep into the executor image is the simplest approach — no `--ar
 ```dockerfile
 FROM apache/spark:latest
 USER root
-RUN pip install "jep>=4.3.1" pyarrow cloudpickle my-custom-lib
-# Expose jep native library to the JVM at startup
-ENV JAVA_TOOL_OPTIONS="-Djava.library.path=$(python3 -c 'import jep, os; print(os.path.dirname(jep.__file__))')"
+RUN pip install "jep>=4.3.2" pyarrow cloudpickle my-custom-lib
+# Resolve the location at image build time without importing the embedded-only jep module.
+RUN ln -s "$(python3 -c 'import importlib.util, pathlib; print(pathlib.Path(importlib.util.find_spec("jep").origin).parent)')" /opt/jep
+ENV JAVA_TOOL_OPTIONS="-Djava.library.path=/opt/jep"
 USER spark
 ```
 
@@ -523,11 +554,11 @@ df.withColumn("score", score_inprocess(df["x"], df["y"])).show()
 | `pandas.groupby`, `rolling`, `resample` | **Stay on `pandas_udf`** — no Arrow compute equivalents |
 | UDF calls an external library expecting `pd.Series` | **Stay on `pandas_udf`**, or wrap with `pd.Series(array.to_pylist())` at the boundary |
 
-### Executor sizing constraint
+### Executor sizing
 
-Unlike `pandas_udf`, `inprocess_udf` requires exactly one concurrent task per executor
-(see [Requirements](#requirements)). If you cannot set `spark.executor.cores=1` on your
-cluster, stay on `pandas_udf`.
+Unlike worker-based UDFs, in-process UDF invocations share one interpreter thread
+per executor. Use multiple executors for Python parallelism and include the added
+JVM memory in comparisons (see [Requirements](#requirements)).
 
 ---
 
@@ -539,7 +570,7 @@ cluster, stay on `pandas_udf`.
 | Output type | Python scalar | `pandas.Series` | `pa.Array` |
 | Data transfer | Pickle, row-by-row | Arrow IPC (process boundary) | Arrow CDI (zero-copy, in-process) |
 | Requires jep | No | No | Yes |
-| Executor sizing constraint | None | None | 1 task per executor |
+| Python concurrency per executor | Multiple workers | Multiple workers | One invocation |
 | Best for | Simple row transforms | pandas-heavy logic | High-throughput Arrow transforms |
 
 ### Related pages

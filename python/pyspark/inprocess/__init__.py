@@ -16,7 +16,7 @@
 #
 
 """
-pyspark.inprocess — In-process Python UDF framework for Apache Spark.
+pyspark.inprocess -- In-process Python UDF framework for Apache Spark.
 
 Provides zero-copy Arrow-based UDF execution via jep (Java Embedded Python),
 eliminating the socket IPC overhead of standard Python/pandas UDFs.

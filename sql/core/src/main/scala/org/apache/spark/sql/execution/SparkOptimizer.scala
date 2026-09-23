@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperatio
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.execution.externalUDF.{ExtractExternalUDFFromWindow, PlanExternalUDFs}
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
-import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractInProcessPythonUDFs, ExtractPythonUDFFromAggregate, ExtractPythonUDFs, ExtractPythonUDTFs, InProcessPythonChecks}
+import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs, ExtractPythonUDTFs}
 
 class SparkOptimizer(
     catalogManager: CatalogManager,
@@ -86,9 +86,6 @@ class SparkOptimizer(
       BooleanSimplification,
       PruneFilters),
     postHocOptimizationBatches,
-    Batch("Extract InProcess Python UDFs", Once,
-      ExtractInProcessPythonUDFs,
-      InProcessPythonChecks),
     Batch("Extract UDFs", Once,
       ExtractPythonUDFFromJoinCondition,
       // Expose window results as attributes before creating external UDF evaluation nodes.

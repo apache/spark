@@ -716,6 +716,9 @@ class PythonEvalType:
     # frame's rows are folded with ``reduce`` (from ``zero``) and finished with ``finish``.
     SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF: "ArrowWindowAggIncrementalUDFType" = 257
 
+    # Scalar Arrow UDF evaluated by embedded CPython in the executor JVM.
+    SQL_SCALAR_ARROW_INPROCESS_UDF: int = 258
+
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
     SQL_ARROW_UDTF: "SQLArrowUDTFType" = 302

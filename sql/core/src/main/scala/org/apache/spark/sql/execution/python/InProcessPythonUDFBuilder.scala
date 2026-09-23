@@ -17,25 +17,27 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.util.{List => JList}
+import java.util.{Collections, List => JList}
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.classic.{ColumnNodeExpression, ExpressionUtils}
 import org.apache.spark.sql.types.DataType
 
 /**
- * JVM-side builder for [[InProcessPythonUDF]] expressions, called from the Python API
+ * JVM-side builder for in-process [[PythonUDF]] expressions, called from the Python API
  * via py4j's JVM reflection bridge (``sc._jvm.org.apache.spark...InProcessPythonUDFBuilder``).
  *
  * Accepts Java-typed arguments as passed by PySpark's ``sc._jvm`` proxy and returns a
- * [[Column]] backed by an [[InProcessPythonUDF]] expression.
+ * [[Column]] backed by a [[PythonUDF]] with the in-process evaluation type.
  */
 object InProcessPythonUDFBuilder {
 
   /**
-   * Build a [[Column]] backed by an [[InProcessPythonUDF]] expression.
+   * Build a [[Column]] backed by an in-process [[PythonUDF]] expression.
    *
    * @param name            display name (Python function ``__name__``)
    * @param serializedFunc  cloudpickle bytes of the Python UDF
@@ -43,17 +45,28 @@ object InProcessPythonUDFBuilder {
    * @param jColumns        Java List of JVM [[Column]] objects (the UDF inputs)
    * @param deterministic   whether the UDF always returns the same output for the same input;
    *                        set to false for UDFs that use randomness or external state
-   * @return                [[Column]] backed by an [[InProcessPythonUDF]] expression
+   * @param pythonVersion   driver's Python major.minor version
+   * @return                [[Column]] backed by an in-process [[PythonUDF]] expression
    */
   def build(
       name: String,
       serializedFunc: Array[Byte],
       returnTypeJson: String,
       jColumns: JList[Column],
-      deterministic: Boolean): Column = {
+      deterministic: Boolean,
+      pythonVersion: String): Column = {
     val returnType = DataType.fromJson(returnTypeJson)
     val inputExprs = jColumns.asScala.map(col => ColumnNodeExpression(col.node)).toSeq
-    ExpressionUtils.column(
-      InProcessPythonUDF(name, serializedFunc, inputExprs, returnType, deterministic))
+    val function = new SimplePythonFunction(
+      serializedFunc,
+      Collections.emptyMap[String, String](),
+      Collections.emptyList[String](),
+      "",
+      pythonVersion,
+      Collections.emptyList(),
+      null)
+    ExpressionUtils.column(PythonUDF(
+      name, function, returnType, inputExprs,
+      PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, deterministic))
   }
 }

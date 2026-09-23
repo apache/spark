@@ -24,7 +24,6 @@ to require the suite (missing dependencies then fail), or 0 to disable it.
 Otherwise, the suite runs when JEP, PyArrow and the CDI JAR are available.
 """
 
-import contextlib
 import os
 import shutil
 import tempfile
@@ -58,13 +57,14 @@ class InProcessUDFTests(ReusedSQLTestCase):
 
     @classmethod
     def master(cls):
-        return "local[1]"
+        return "local[2]"
 
     @classmethod
     def conf(cls):
         return (
             super()
             .conf()
+            .set("spark.task.cpus", "0.5")
             .set("spark.driver.extraClassPath", os.pathsep.join([str(cls.jep_jar), cls.cdi_jar]))
             .set("spark.driver.extraLibraryPath", str(cls.jep_dir))
             .set("spark.inprocess.python.sitePackages", cls.site_packages)
@@ -104,38 +104,6 @@ class InProcessUDFTests(ReusedSQLTestCase):
             super().tearDownClass()
         finally:
             shutil.rmtree(cls.site_packages)
-
-    @contextlib.contextmanager
-    def _raw_sqlconf(self, pairs):
-        """Set SQLConf key/value pairs directly, bypassing static-config restrictions.
-
-        ``spark.conf.set()`` rejects static configs (e.g. spark.executor.cores,
-        spark.task.cpus) with CANNOT_MODIFY_CONFIG.  Calling
-        ``SQLConf.setConfString`` directly (no static check there) lets tests
-        override these values and restore them afterwards.
-        """
-        jvm = self.spark.sparkContext._jvm
-        sqlconf = jvm.org.apache.spark.sql.internal.SQLConf.get()
-        saved = {}
-        for k in pairs:
-            try:
-                saved[k] = sqlconf.getConfString(k)
-            except Exception:
-                saved[k] = None
-        for k, v in pairs.items():
-            sqlconf.setConfString(k, v)
-        try:
-            yield
-        finally:
-            for k, old_v in saved.items():
-                if old_v is None:
-                    sqlconf.unsetConf(k)
-                else:
-                    sqlconf.setConfString(k, old_v)
-
-    # ------------------------------------------------------------------
-    # Basic numeric UDFs
-    # ------------------------------------------------------------------
 
     def test_expression_arguments_and_multiple_batches(self):
         import pyarrow.compute as pc
@@ -194,7 +162,7 @@ class InProcessUDFTests(ReusedSQLTestCase):
         from pyspark.sql.types import LongType
 
         short = inprocess_udf(LongType())(lambda x: x.slice(0, len(x) - 1))
-        df = self.spark.range(3)
+        df = self.spark.range(3, numPartitions=1)
         with self.assertRaisesRegex(Exception, "returned 2 rows; expected 3"):
             df.select(short(df.id)).collect()
 
@@ -223,7 +191,7 @@ class InProcessUDFTests(ReusedSQLTestCase):
             self.assertEqual(allocator.getAllocatedMemory(), before)
             # Deserialization fails before Python imports any input CDI structures.
             identity._serialized = b"invalid pickle"
-            with self.assertRaisesRegex(Exception, "infrastructure error"):
+            with self.assertRaisesRegex(Exception, "UnpicklingError"):
                 df.select(identity(df.id)).collect()
             self.assertEqual(allocator.getAllocatedMemory(), before)
 
@@ -414,43 +382,29 @@ class InProcessUDFTests(ReusedSQLTestCase):
         self.assertEqual(result2, [20, 22, 24])
 
     # ------------------------------------------------------------------
-    # Concurrency config validation
+    # Concurrency
     # ------------------------------------------------------------------
 
-    def test_config_check_rejects_multi_task_executor(self):
-        """InProcessPythonChecks must raise when executor.cores > task.cpus."""
-        import pyarrow.compute as pc
+    def test_concurrent_tasks_have_separate_function_state(self):
+        import pyarrow as pa
 
-        from pyspark.errors import IllegalArgumentException
-        from pyspark.inprocess.udf import inprocess_udf
+        from pyspark.inprocess import inprocess_udf
         from pyspark.sql.types import LongType
 
-        @inprocess_udf(return_type=LongType())
-        def double(x):
-            return pc.multiply(x, 2)
+        state = []
 
-        df = self.spark.range(5)
-        # spark.executor.cores and spark.task.cpus are static configs; use
-        # _raw_sqlconf to bypass the CANNOT_MODIFY_CONFIG restriction.
-        with self._raw_sqlconf({"spark.executor.cores": "4", "spark.task.cpus": "1"}):
-            with self.assertRaisesRegex(IllegalArgumentException, "concurrent tasks"):
-                df.select(double(df["id"])).collect()
+        @inprocess_udf(LongType(), deterministic=False)
+        def counter(x):
+            state.append(1)
+            return pa.array([len(state)] * len(x), type=pa.int64())
 
-    def test_config_check_passes_when_single_task(self):
-        """InProcessPythonChecks must not raise when executor.cores == task.cpus."""
-        import pyarrow.compute as pc
-
-        from pyspark.inprocess.udf import inprocess_udf
-        from pyspark.sql.types import LongType
-
-        @inprocess_udf(return_type=LongType())
-        def double(x):
-            return pc.multiply(x, 2)
-
-        df = self.spark.range(1, 4)
-        with self._raw_sqlconf({"spark.executor.cores": "2", "spark.task.cpus": "2"}):
-            result = [r[0] for r in df.select(double(df["id"])).collect()]
-        self.assertEqual(result, [2, 4, 6])
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "2"}):
+            df = self.spark.range(8, numPartitions=2)
+            for _ in range(2):
+                self.assertEqual(
+                    [r[0] for r in df.select(counter(df.id)).collect()],
+                    [1, 1, 2, 2, 1, 1, 2, 2],
+                )
 
     # ------------------------------------------------------------------
     # Closure capture
@@ -493,7 +447,7 @@ class InProcessUDFTests(ReusedSQLTestCase):
         self.assertEqual(result, [2, 4, 6])
 
     def test_nondeterministic_flag_propagates_to_expression(self):
-        """deterministic=False must be reflected in the InProcessPythonUDF expression."""
+        """deterministic=False must be reflected in the PythonUDF expression."""
         import pyarrow.compute as pc
 
         from pyspark.inprocess.udf import inprocess_udf
@@ -505,13 +459,13 @@ class InProcessUDFTests(ReusedSQLTestCase):
 
         df = self.spark.range(3)
         jdf = df.select(double(df["id"]))._jdf
-        # ExtractInProcessPythonUDFs is an optimizer rule, so use optimizedPlan.
+        # Python UDF extraction happens during optimization.
         optimized = jdf.queryExecution().optimizedPlan()
 
         # Walk the logical plan via children() (no PartialFunction needed)
-        # to locate the InProcessEvalPython node inserted during optimization.
+        # to locate the ArrowEvalPython node inserted during optimization.
         def find_node(plan):
-            if plan.getClass().getSimpleName() == "InProcessEvalPython":
+            if plan.getClass().getSimpleName() == "ArrowEvalPython":
                 return plan
             children = plan.children().toList()
             for i in range(children.length()):
@@ -521,12 +475,12 @@ class InProcessUDFTests(ReusedSQLTestCase):
             return None
 
         inprocess_node = find_node(optimized)
-        self.assertIsNotNone(inprocess_node, "InProcessEvalPython not found in analyzed plan")
+        self.assertIsNotNone(inprocess_node, "ArrowEvalPython not found in analyzed plan")
         udfs = inprocess_node.udfs().toList()
         self.assertGreater(udfs.length(), 0)
         self.assertFalse(
             udfs.apply(0).deterministic(),
-            "InProcessPythonUDF with deterministic=False must have deterministic()==False",
+            "PythonUDF with deterministic=False must have deterministic()==False",
         )
 
     # ------------------------------------------------------------------
@@ -742,6 +696,207 @@ class InProcessUDFTests(ReusedSQLTestCase):
             self.assertIn(
                 "always_fails", error_msg, "UDF function name must appear in the traceback"
             )
+
+    def test_sliced_results_are_read_correctly_by_arrow_java(self):
+        import pyarrow as pa
+
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import (
+            ArrayType,
+            BooleanType,
+            LongType,
+            StringType,
+            StructField,
+            StructType,
+        )
+
+        cases = [
+            (pa.array([9, 1, None, 3]).slice(1), LongType()),
+            (pa.array([False, True, None, False]).slice(1), BooleanType()),
+            (pa.array(["discard", "one", None, "three"]).slice(1), StringType()),
+            (pa.array([[9], [1], None, [3]]).slice(1), ArrayType(LongType())),
+            (
+                pa.StructArray.from_arrays([pa.array([9, 1, None, 3]).slice(1)], names=["x"]),
+                StructType([StructField("x", LongType())]),
+            ),
+        ]
+        df = self.spark.range(3, numPartitions=1)
+        for value, return_type in cases:
+            with self.subTest(return_type=return_type):
+                identity = inprocess_udf(return_type)(lambda x: value)
+                actual = [r[0] for r in df.select(identity(df.id)).collect()]
+                if isinstance(return_type, StructType):
+                    actual = [r.asDict() for r in actual]
+                self.assertEqual(actual, value.to_pylist())
+
+    def test_retained_inputs_are_not_overwritten_by_later_batches(self):
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import LongType
+
+        retained = []
+
+        @inprocess_udf(LongType(), deterministic=False)
+        def remember(x):
+            for previous, snapshot in retained:
+                if previous.to_pylist() != snapshot:
+                    raise ValueError("retained input changed")
+            retained.append((x, x.to_pylist()))
+            return x
+
+        df = self.spark.createDataFrame([(1,), (None,), (3,), (4,), (None,), (6,)], "x long")
+        df = df.coalesce(1)
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "2"}):
+            self.assertEqual(
+                [r[0] for r in df.select(remember("x")).collect()], [1, None, 3, 4, None, 6]
+            )
+
+    def test_pass_through_struct_with_duplicate_names(self):
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql import functions as F
+        from pyspark.sql.types import LongType
+
+        identity = inprocess_udf(LongType())(lambda x: x)
+        df = self.spark.range(3).select(
+            "id", F.struct(F.col("id"), F.col("id").cast("string").alias("id")).alias("s")
+        )
+        # Materialize the struct so CollapseProject cannot move it above the UDF.
+        df.cache()
+        try:
+            rows = df.select("s", identity("id")).collect()
+            self.assertEqual(
+                [(tuple(r[0]), r[1]) for r in rows], [((i, str(i)), i) for i in range(3)]
+            )
+        finally:
+            df.unpersist()
+
+    def test_pass_through_interval_does_not_require_arrow_conversion(self):
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import LongType
+
+        identity = inprocess_udf(LongType())(lambda x: x)
+        df = self.spark.range(3).selectExpr(
+            "id", "make_interval(0, 0, 0, 0, 0, 0, 10000000000 + id) AS c"
+        )
+        df.cache()
+        try:
+            # CalendarInterval cannot be converted to a Python Row. Compare JVM Row values.
+            expected = df.select("c", "id")._jdf.collect()
+            actual = df.select("c", identity("id"))._jdf.collect()
+            self.assertEqual(
+                [(r.get(0).toString(), r.getLong(1)) for r in actual],
+                [(r.get(0).toString(), r.getLong(1)) for r in expected],
+            )
+        finally:
+            df.unpersist()
+
+    def test_mixed_worker_and_inprocess_udfs(self):
+        import pyarrow.compute as pc
+
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.functions import udf
+        from pyspark.sql.types import LongType
+
+        double = inprocess_udf(LongType())(lambda x: pc.multiply(x, 2))
+        plus_one = udf(lambda x: x + 1, LongType(), useArrow=False)
+        df = self.spark.range(4)
+        rows = df.select(double(plus_one("id")), plus_one(double("id"))).collect()
+        self.assertEqual([tuple(r) for r in rows], [(2 * (i + 1), 2 * i + 1) for i in range(4)])
+
+    def test_duplicate_names_in_udf_arguments_are_rejected(self):
+        import pyarrow as pa
+
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql import functions as F
+        from pyspark.sql.types import LongType
+
+        size = inprocess_udf(LongType())(lambda x: pa.array([len(x)] * len(x), type=pa.int64()))
+        df = self.spark.range(3)
+        duplicate = F.struct(F.col("id"), F.col("id").cast("string").alias("id"))
+        with self.assertRaisesRegex(Exception, "DUPLICATED_FIELD_NAME"):
+            df.select(size(duplicate)).collect()
+
+    def test_grouping_aggregate_results_and_nested_calls(self):
+        import pyarrow.compute as pc
+
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql import functions as F
+        from pyspark.sql.types import LongType
+
+        double = inprocess_udf(LongType())(lambda x: pc.multiply(x, 2))
+        df = self.spark.range(4).selectExpr("id % 2 AS k", "id AS v")
+        grouped = df.groupBy("k").agg(double("k").alias("r"))
+        self.assertEqual(sorted(r.r for r in grouped.collect()), [0, 2])
+        summed = df.groupBy("k").agg(F.sum("v").alias("s")).select(double("s"))
+        self.assertEqual(sorted(r[0] for r in summed.collect()), [4, 8])
+        constants = df.agg(F.count("*"), double(F.lit(1)))
+        self.assertEqual(tuple(constants.first()), (4, 2))
+        repeated = df.groupBy(double("k")).agg(double("k"))
+        self.assertEqual(sorted(tuple(r) for r in repeated.collect()), [(0, 0), (2, 2)])
+        nested = df.select(double("v").alias("x")).select(double("x"))
+        self.assertEqual(sorted(r[0] for r in nested.collect()), [0, 4, 8, 12])
+
+    def test_nondeterministic_grouping_and_ordering(self):
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import LongType
+
+        identity = inprocess_udf(LongType(), deterministic=False)(lambda x: x)
+        df = self.spark.range(4)
+        self.assertEqual(len(df.groupBy(identity("id")).count().collect()), 4)
+        self.assertEqual([r.id for r in df.orderBy(identity("id")).collect()], list(range(4)))
+
+    def test_non_udf_predicates_run_before_udf(self):
+        import pyarrow.compute as pc
+
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql import functions as F
+        from pyspark.sql.types import LongType
+
+        divide = inprocess_udf(LongType())(lambda n, d: pc.divide(n, d))
+        df = self.spark.createDataFrame([(4, 0), (4, 2)], "n long, d long")
+        result = df.filter(F.col("d") != 0).filter(divide("n", "d") > 1).collect()
+        self.assertEqual([tuple(r) for r in result], [(4, 2)])
+
+    def test_partition_filters_do_not_evaluate_udfs_on_driver(self):
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql import functions as F
+        from pyspark.sql.types import LongType
+
+        identity = inprocess_udf(LongType())(lambda x: x)
+        with tempfile.TemporaryDirectory() as path:
+            self.spark.range(4).selectExpr("id", "id % 2 AS k").write.partitionBy("k").parquet(
+                path, mode="overwrite"
+            )
+            df = self.spark.read.parquet(path)
+            self.assertEqual(sorted(r.id for r in df.filter(identity("k") == 1).collect()), [1, 3])
+            filtered = df.filter((F.col("k") == 1) & (identity("id") > 1))
+            self.assertEqual([r.id for r in filtered.collect()], [3])
+            plan = filtered._jdf.queryExecution().executedPlan().toString()
+            self.assertRegex(plan, r"PartitionFilters: \[[^\]]*k#")
+
+    def test_nested_nullability_is_compatible(self):
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql import functions as F
+        from pyspark.sql.types import ArrayType, StringType
+
+        identity = inprocess_udf(ArrayType(StringType()))(lambda x: x)
+        df = self.spark.createDataFrame([("a,b",), (None,)], "s string")
+        self.assertEqual(
+            [r[0] for r in df.select(identity(F.split("s", ","))).collect()], [["a", "b"], None]
+        )
+
+    def test_captured_spark_broadcasts_and_accumulators_are_rejected(self):
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import LongType
+
+        broadcast = self.spark.sparkContext.broadcast(1)
+        accumulator = self.spark.sparkContext.accumulator(0)
+        try:
+            for value in (broadcast, accumulator):
+                with self.subTest(value=type(value).__name__):
+                    with self.assertRaisesRegex(TypeError, "broadcasts or accumulators"):
+                        inprocess_udf(LongType())(lambda x: value.value)
+        finally:
+            broadcast.destroy()
 
 
 if __name__ == "__main__":

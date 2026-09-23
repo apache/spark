@@ -35,7 +35,8 @@ import org.apache.spark.util.Utils
  *   Python. Python calls ``pa.Array._import_from_c(array_ptr, schema_ptr)`` to wrap the
  *   same Arrow buffers as a PyArrow array -- no memcpy. When Python GCs the array, the CDI
  *   release callback decrements the buffer reference counts; the JVM [[FieldVector]] retains
- *   its own reference, so buffers remain live until [[ArrowWriter]] resets for the next batch.
+ *   its own reference. Each batch uses new vectors; closing the old vectors releases only the
+ *   JVM's references, leaving any arrays retained by Python valid and unchanged.
  *
  * Output path (Python to JVM, zero-copy via CDI):
  *   JVM pre-allocates [[ArrowArray]] and [[ArrowSchema]] C structs. Python calls

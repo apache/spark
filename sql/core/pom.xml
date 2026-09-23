@@ -37,13 +37,13 @@
   <dependencies>
     <!--
       jep (Java Embedded Python): embeds CPython in the JVM via JNI for in-process Python UDFs.
-      Marked as "provided" — users must install jep on each executor separately.
+      Marked as "provided": users must install jep on each executor separately.
       See: https://github.com/ninia/jep
     -->
     <dependency>
       <groupId>black.ninia</groupId>
       <artifactId>jep</artifactId>
-      <version>4.3.1</version>
+      <version>4.3.2</version>
       <scope>provided</scope>
     </dependency>
     <dependency>

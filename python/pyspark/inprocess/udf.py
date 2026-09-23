@@ -32,11 +32,13 @@ Usage::
     df.select(double(df.value)).show()
 """
 
+import io
+import sys
 from typing import Callable
 
 import pyarrow as pa
 
-from pyspark import cloudpickle
+from pyspark import Accumulator, Broadcast, cloudpickle
 from pyspark.sql.types import (
     BooleanType,
     ByteType,
@@ -60,12 +62,25 @@ _SPARK_TO_ARROW: dict = {
 }
 
 
+class _InProcessPickler(cloudpickle.CloudPickler):
+    def reducer_override(self, obj):
+        if isinstance(obj, (Broadcast, Accumulator)):
+            raise TypeError("In-process UDFs do not support Spark broadcasts or accumulators")
+        return super().reducer_override(obj)
+
+
+def _serialize_udf(func: Callable) -> bytes:
+    buffer = io.BytesIO()
+    _InProcessPickler(buffer).dump(func)
+    return buffer.getvalue()
+
+
 class InProcessUDFWrapper:
     """
     Wraps a Python function as an in-process UDF.
 
     Returned by ``@inprocess_udf``. Calling an instance with Spark ``Column``
-    arguments creates a ``Column`` expression backed by ``InProcessPythonUDF``
+    arguments creates a ``Column`` expression backed by ``PythonUDF``
     on the JVM side.
     """
 
@@ -88,9 +103,9 @@ class InProcessUDFWrapper:
                     result = result.cast(_atype)
                 return result
 
-            self._serialized: bytes = cloudpickle.dumps(_wrapped)
+            self._serialized: bytes = _serialize_udf(_wrapped)
         else:
-            self._serialized = cloudpickle.dumps(func)
+            self._serialized = _serialize_udf(func)
 
     def __call__(self, *cols):
         """
@@ -122,13 +137,14 @@ class InProcessUDFWrapper:
         for jcol in jcols:
             jlist.add(jcol)
 
-        # Delegate to JVM builder which returns a JVM Column backed by InProcessPythonUDF
+        # Use the existing PythonUDF planning contracts with an in-process eval type.
         jcol = jvm.org.apache.spark.sql.execution.python.InProcessPythonUDFBuilder.build(
             self._name,
             self._serialized,
             self._return_type.json(),
             jlist,
             self._deterministic,
+            "%d.%d" % sys.version_info[:2],
         )
 
         return Column(jcol)
@@ -143,8 +159,13 @@ def inprocess_udf(return_type: DataType, deterministic: bool = True) -> Callable
 
     The result must have the same length as the input batch and its Arrow type
     must match the declared Spark type, including nested fields and timestamp
-    timezone. Numeric and boolean results are cast to the declared primitive type.
-    Nested UDF, aggregate and window arguments are not supported.
+    timezone. Nested nullability may be widened, but actual nulls cannot be returned
+    in non-nullable fields. Numeric and boolean results are cast to the declared
+    primitive type. Sliced results are copied when required by Arrow Java.
+
+    Spark broadcasts, accumulators, and ``SparkContext.addPyFile`` are unsupported.
+    Install dependencies on executors before starting Spark. The driver's Python
+    major.minor version must match the embedded interpreter.
 
     Args:
         return_type:   Spark SQL DataType for the UDF return value

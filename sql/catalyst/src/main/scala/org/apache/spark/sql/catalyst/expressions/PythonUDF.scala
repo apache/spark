@@ -48,7 +48,8 @@ object PythonUDF {
     PythonEvalType.SQL_SCALAR_PANDAS_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
     PythonEvalType.SQL_SCALAR_ARROW_UDF,
-    PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+    PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+    PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF
   )
 
   def isScalarPythonUDF(e: Expression): Boolean = {
