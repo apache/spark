@@ -417,14 +417,13 @@ trait JoinSelectionHelper extends Logging {
 
   /**
    * The build side a broadcast hash join would use, or `None` when one is ruled out by the join
-   * shape or by a hint.
+   * shape, a hint, or its size.
    *
-   * `Some` does not promise the planner picks a broadcast hash join: a `SHUFFLE_MERGE` or
-   * `SHUFFLE_REPLICATE_NL` hint is tried before the sizes are consulted, join keys no hash join
-   * supports send it to a sort merge join, and AQE re-estimates the sizes at runtime. Within the
-   * broadcast decision itself this does follow the planner's precedence: a hinted broadcast first,
-   * a hinted shuffle hash join as a veto, then the sizes. Callers that only need to know whether a
-   * broadcast hash join is possible should use `canPlanAsBroadcastHashJoin`.
+   * For equi-joins, `Some` does not promise the planner picks a broadcast hash join: other hints,
+   * unsupported join keys, or AQE can select another strategy. For a single-column null-aware anti
+   * join, the dedicated and automatic broadcast thresholds determine eligibility before hints.
+   * Callers that only need to know whether a broadcast hash join is possible should use
+   * `canPlanAsBroadcastHashJoin`.
    */
   def getBroadcastHashJoinBuildSide(join: Join, conf: SQLConf): Option[BuildSide] = join match {
     case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
@@ -438,36 +437,17 @@ trait JoinSelectionHelper extends Logging {
       getBroadcastBuildSide(join, hintOnly = true, conf).orElse {
         if (noShufflePlannedBefore) getBroadcastBuildSide(join, hintOnly = false, conf) else None
       }
-    // `JoinSelection` always builds from the right for this shape. A dedicated threshold that
-    // admits the right side takes precedence over join hints. Otherwise, use the automatic
-    // threshold as a floor only when regular planning selects a right-side broadcast by hint or
-    // size. A left-only broadcast hint or a right-only no-broadcast-and-replication hint makes the
-    // fallback build the left side instead. This decision also controls aggregate pushdown.
+    // `JoinSelection` always builds from the right for this shape. The applicable automatic
+    // broadcast threshold floors a nonnegative dedicated threshold. As before, threshold
+    // eligibility takes precedence over join hints. This same decision intentionally controls
+    // aggregate pushdown.
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) =>
       val dedicatedThreshold = conf.nullAwareAntiJoinBroadcastThreshold
-      val canBroadcast = if (dedicatedThreshold < 0) {
-        true
-      } else {
-        val rightBroadcastHint = hintToBroadcastRight(j.hint)
-        val automaticBroadcastDisabled = conf.autoBroadcastJoinThreshold < 0 &&
-          conf.getConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD).forall(_ < 0)
-        if (dedicatedThreshold == 0 && automaticBroadcastDisabled && !rightBroadcastHint) {
-          // Avoid potentially expensive statistics computation when the configurations alone
-          // determine the result. Both automatic thresholds must be disabled because selecting
-          // between them requires reading `stats.isRuntime`.
-          false
-        } else {
-          val rightBroadcastSelectedByHintOrSize =
-            !hintToNotBroadcastAndReplicateRight(j.hint) &&
-              (rightBroadcastHint ||
-                (!hintToBroadcastLeft(j.hint) && canBroadcastBySize(j.right, conf)))
-          rightBroadcastSelectedByHintOrSize ||
-            (dedicatedThreshold > 0 && {
-              val rightSize = j.right.stats.sizeInBytes
-              rightSize >= 0 && rightSize <= dedicatedThreshold
-            })
-        }
-      }
+      val canBroadcast = dedicatedThreshold < 0 ||
+        (dedicatedThreshold > 0 && {
+          val rightSize = j.right.stats.sizeInBytes
+          rightSize >= 0 && rightSize <= dedicatedThreshold
+        }) || canBroadcastBySize(j.right, conf)
       if (canBroadcast) {
         Some(BuildRight)
       } else {

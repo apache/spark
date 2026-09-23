@@ -7448,29 +7448,19 @@ object SQLConf {
   val NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD =
     buildConf("spark.sql.optimizeNullAwareAntiJoin.broadcastThreshold")
       .internal()
-      .doc("Configures the maximum estimated size in bytes of the right side of a " +
-        "single-column null-aware anti join for which Spark uses the broadcast hash join " +
-        "optimization. This configuration takes effect only when " +
-        "spark.sql.optimizeNullAwareAntiJoin is enabled. A negative value allows the " +
-        "optimization regardless of the estimated size. For a nonnegative value, the " +
-        "optimization is also allowed when regular join planning selects the right side for " +
-        "broadcast by an explicit broadcast hint or the applicable automatic threshold. A " +
-        "broadcast hint only on the left, or a hint that prevents broadcasting and replicating " +
-        "the right side, prevents this floor from applying. For join selection, regular planning " +
-        "uses " +
-        "spark.sql.adaptive.autoBroadcastJoinThreshold for runtime statistics when it is set, " +
-        "and spark.sql.autoBroadcastJoinThreshold otherwise. The same eligibility decision " +
-        "controls whether a null-aware anti join can be pushed below an aggregate; this " +
-        "pushdown runs before adaptive execution and therefore uses estimated statistics and " +
-        "spark.sql.autoBroadcastJoinThreshold. Moving the join below the aggregate may increase " +
-        "the number of left-side rows it evaluates. Thus, zero does not disable the optimization " +
-        "by itself: regular planning must also not select a right-side broadcast by hint or " +
-        "size. Otherwise, Spark falls back to regular join planning. The fallback may still be " +
-        "forced to broadcast the right side with a nested-loop representation that runs in " +
-        "O(M * N) time. Join hints do not override a negative dedicated threshold or a positive " +
-        "dedicated threshold that admits the right side. Set " +
-        "spark.sql.optimizeNullAwareAntiJoin to false to disable the optimization without " +
-        "changing automatic broadcast thresholds.")
+      .doc(s"Configures a dedicated broadcast threshold for the right side of a single-column " +
+        "null-aware anti join. This configuration takes effect only when " +
+        s"${OPTIMIZE_NULL_AWARE_ANTI_JOIN.key} is enabled. A negative value allows the " +
+        "broadcast hash join optimization regardless of the estimated size. For a nonnegative " +
+        "value, the applicable automatic broadcast threshold acts as a floor: " +
+        s"${ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key} is used for runtime statistics when set, " +
+        s"and ${AUTO_BROADCASTJOIN_THRESHOLD.key} is used otherwise. Once either threshold " +
+        "admits the right side, the optimization takes precedence over join hints. The same " +
+        "eligibility decision controls aggregate pushdown, which runs before adaptive execution " +
+        "and uses estimated statistics; join selection may reevaluate it with runtime " +
+        s"statistics. Thus, zero alone does not disable the optimization. Set " +
+        s"${OPTIMIZE_NULL_AWARE_ANTI_JOIN.key} to false to disable it without changing automatic " +
+        "broadcast thresholds.")
       .version("4.2.1")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)

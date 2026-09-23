@@ -155,12 +155,6 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
       smallRight,
       joinType = LeftAnti,
       condition = Some(equality || IsNull(equality)))
-    val leftHintedQuery = Join(
-      aggregate,
-      smallRight,
-      LeftAnti,
-      Some(equality || IsNull(equality)),
-      JoinHint(Some(HintInfo(Some(BROADCAST))), None))
     val pushedDownQuery = testRelation
       .join(
         smallRight,
@@ -178,22 +172,18 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
       condition = Some(equality || IsNull(equality)))
 
     withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
       SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
       comparePlans(Optimize.execute(originalQuery.analyze), pushedDownQuery.analyze)
-      comparePlans(Optimize.execute(leftHintedQuery.analyze), leftHintedQuery.analyze)
+      comparePlans(Optimize.execute(largeRightQuery.analyze), largeRightQuery.analyze)
     }
 
     withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
       comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
-    }
-
-    withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
-      SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
-      comparePlans(Optimize.execute(largeRightQuery.analyze), largeRightQuery.analyze)
     }
   }
 

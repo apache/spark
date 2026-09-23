@@ -27,7 +27,7 @@ import org.apache.spark.internal.config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_T
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION}
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -1308,7 +1308,7 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-59673: NAAJ automatic threshold floor respects broadcast hints") {
+  test("SPARK-36082, SPARK-59673: NAAJ threshold eligibility precedes broadcast hints") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true") {
@@ -1326,51 +1326,34 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
         val rightHintedQuery = "select /*+ BROADCAST(naajHintedRight) */ " + querySuffix
         val unhintedQuery = "select " + querySuffix
 
+        def checkNAAJ(
+            query: String,
+            expectedClass: Class[_ <: BinaryExecNode],
+            expectedBuildSide: BuildSide): Unit = {
+          assertJoin((query, expectedClass)) match {
+            case join: BroadcastHashJoinExec =>
+              assert(join.isNullAwareAntiJoin)
+              assert(join.buildSide === expectedBuildSide)
+            case join: BroadcastNestedLoopJoinExec =>
+              assert(join.buildSide === expectedBuildSide)
+            case join =>
+              fail(s"Unexpected join: $join")
+          }
+          checkAnswer(sql(query), Row(2.0d))
+        }
+
         withSQLConf(
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
           SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
-          val leftHintedResult = sql(leftHintedQuery)
-          val leftHintedPlan = leftHintedResult.queryExecution.sparkPlan
-          val leftHintedNestedLoopJoins = leftHintedPlan.collect {
-            case join: BroadcastNestedLoopJoinExec => join
-          }
-          val leftHintedNullAwareHashJoins = leftHintedPlan.collect {
-            case join: BroadcastHashJoinExec if join.isNullAwareAntiJoin => join
-          }
-          assert(leftHintedNestedLoopJoins.size === 1)
-          assert(leftHintedNestedLoopJoins.head.buildSide === BuildLeft)
-          assert(leftHintedNullAwareHashJoins.isEmpty)
-          checkAnswer(leftHintedResult, Row(2.0d))
-
-          val unhintedResult = sql(unhintedQuery)
-          val unhintedPlan = unhintedResult.queryExecution.sparkPlan
-          val unhintedNestedLoopJoins = unhintedPlan.collect {
-            case join: BroadcastNestedLoopJoinExec => join
-          }
-          val unhintedNullAwareHashJoins = unhintedPlan.collect {
-            case join: BroadcastHashJoinExec if join.isNullAwareAntiJoin => join
-          }
-          assert(unhintedNestedLoopJoins.isEmpty)
-          assert(unhintedNullAwareHashJoins.size === 1)
-          assert(unhintedNullAwareHashJoins.head.buildSide === BuildRight)
-          checkAnswer(unhintedResult, Row(2.0d))
+          checkNAAJ(leftHintedQuery, classOf[BroadcastHashJoinExec], BuildRight)
+          checkNAAJ(unhintedQuery, classOf[BroadcastHashJoinExec], BuildRight)
         }
 
         withSQLConf(
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
           SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD.key -> "0") {
-          val rightHintedResult = sql(rightHintedQuery)
-          val rightHintedPlan = rightHintedResult.queryExecution.sparkPlan
-          val rightHintedNestedLoopJoins = rightHintedPlan.collect {
-            case join: BroadcastNestedLoopJoinExec => join
-          }
-          val rightHintedNullAwareHashJoins = rightHintedPlan.collect {
-            case join: BroadcastHashJoinExec if join.isNullAwareAntiJoin => join
-          }
-          assert(rightHintedNestedLoopJoins.isEmpty)
-          assert(rightHintedNullAwareHashJoins.size === 1)
-          assert(rightHintedNullAwareHashJoins.head.buildSide === BuildRight)
-          checkAnswer(rightHintedResult, Row(2.0d))
+          checkNAAJ(leftHintedQuery, classOf[BroadcastNestedLoopJoinExec], BuildLeft)
+          checkNAAJ(rightHintedQuery, classOf[BroadcastNestedLoopJoinExec], BuildRight)
         }
       }
     }
