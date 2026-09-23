@@ -397,3 +397,17 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "fragment" : "ASOF JOIN quotes q\n  MATCH_CONDITION (t.trade_time >= q.quote_time AND t.symbol = q.symbol)\n  ON t.symbol = q.symbol"
   } ]
 }
+
+
+-- !query
+SELECT * FROM trades ASOF JOIN quotes q ON trades.symbol = q.symbol
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'ASOF'",
+    "hint" : ""
+  }
+}

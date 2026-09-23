@@ -1376,16 +1376,36 @@ class PlanParserSuite extends AnalysisTest {
     }
   }
 
+  test("asof join - missing MATCH_CONDITION is rejected, not parsed as a plain join") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      // ASOF is strict-non-reserved, so `from t asof` cannot read `asof` as t's alias. Without
+      // that, this unaliased query parses as a plain INNER join and the missing MATCH_CONDITION
+      // goes unreported. It must fail to parse instead.
+      checkError(
+        exception = parseException("select * from t asof join u on t.a = u.a"),
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'asof'", "hint" -> ""))
+      // The aliased form already failed before this change; keep it pinned.
+      checkError(
+        exception = parseException("select * from t x asof join u on t.a = u.a"),
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'on'", "hint" -> ""))
+      // ASOF stays usable as an identifier (column and table name); only the alias slot rejects it.
+      parsePlan("select asof from t")
+      parsePlan("select * from asof")
+    }
+  }
+
   test("nearest-by keywords are non-reserved (usable as identifiers)") {
     // Spark-specific join keywords must remain non-reserved so they can be used as identifiers.
-    Seq("approx", "asof", "distance", "exact", "nearest", "similarity").foreach { kw =>
+    Seq("approx", "distance", "exact", "nearest", "similarity").foreach { kw =>
       // As a column identifier in the SELECT list.
       parsePlan(s"select $kw from t")
       // As a table identifier in the FROM clause.
       parsePlan(s"select * from $kw")
     }
     // All six together in a single SELECT list.
-    parsePlan("select approx, asof, distance, exact, nearest, similarity from t")
+    parsePlan("select approx, distance, exact, nearest, similarity from t")
   }
 
   test("sampled relations") {
