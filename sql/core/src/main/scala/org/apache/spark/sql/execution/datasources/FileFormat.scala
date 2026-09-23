@@ -172,15 +172,14 @@ trait FileFormat {
    * on key-column evaluation (e.g., late materialization with a runtime bloom filter).
    *
    * The default implementation delegates to [[buildReaderWithPartitionValues]] and accepts no
-   * storage filter at all. File formats that support storage-filter pushdown (e.g., Parquet) should
-   * override this method.
+   * storage filter at all. A format that supports storage-filter pushdown overrides this, and must
+   * not let the two builders call each other: this default delegates one way, so an override that
+   * delegates back recurses until the driver's stack runs out, `super` included, since that call is
+   * virtual too. Route both to a private implementation instead, the way `ParquetFileFormat` does.
    *
    * A non-empty `storageFilters` here is a planner bug, so the default body rejects it rather than
-   * dropping it. The planner removes an extracted conjunct from the post-scan `Filter`, so a reader
-   * that ignores it returns rows the filter rejects. Every other layer of the feature fails loudly
-   * for the same reason. Unreachable today, because `FileSourceStrategy.extractStorageFilters` only
-   * extracts for `ParquetFileFormat` itself, but that keeps the invariant one method away from the
-   * code that relies on it.
+   * dropping it: the planner removes an extracted conjunct from the post-scan `Filter`, so a reader
+   * that ignores it returns rows the filter rejects.
    *
    * Scalar subqueries inside `storageFilters` are expected to have been materialized before this
    * method is called, so that the returned reader can be safely serialized to executors.
@@ -206,6 +205,17 @@ trait FileFormat {
     buildReaderWithPartitionValues(
       sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
   }
+
+  /**
+   * Whether this format's reader can evaluate `expr` as a storage filter, i.e. whether the planner
+   * may extract it from the post-scan `Filter` and hand it to [[buildReaderWithStorageFilters]].
+   *
+   * The planner decides what it can see from the plan -- that the conjunct is deterministic and
+   * references only projected data columns -- and asks this for everything else, so the expression
+   * shapes and column types a reader supports stay in that reader's own package. A format that
+   * answers true for an expression must be able to honor it: the planner removes it from the plan.
+   */
+  def supportsStorageFilter(expr: Expression): Boolean = false
 
   /**
    * Create a file metadata struct column containing fields supported by the given file format.

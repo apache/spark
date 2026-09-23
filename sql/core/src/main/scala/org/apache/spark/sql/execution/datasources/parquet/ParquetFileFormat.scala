@@ -192,12 +192,39 @@ class ParquetFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    buildReaderWithStorageFilters(
+    buildParquetReader(
       sparkSession, dataSchema, partitionSchema, requiredSchema, filters, Nil, options, hadoopConf,
       Map.empty)
   }
 
+  /**
+   * Subclasses answer false on purpose, even though they inherit this reader: a subclass may
+   * customize reading by overriding `buildReaderWithPartitionValues`, and a scan with storage
+   * filters routes through `buildReaderWithStorageFilters` instead, which would silently bypass
+   * whatever the subclass does.
+   */
+  override def supportsStorageFilter(expr: Expression): Boolean =
+    getClass == classOf[ParquetFileFormat] && ParquetStorageFilter.isSupportedStorageFilter(expr)
+
   override def buildReaderWithStorageFilters(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      storageFilters: Seq[Expression],
+      options: Map[String, String],
+      hadoopConf: Configuration,
+      storageFilterMetrics: Map[String, SQLMetric]): PartitionedFile => Iterator[InternalRow] = {
+    buildParquetReader(sparkSession, dataSchema, partitionSchema, requiredSchema, filters,
+      storageFilters, options, hadoopConf, storageFilterMetrics)
+  }
+
+  /**
+   * The implementation behind both public entry points above, which is why neither of them calls
+   * the other -- see the warning on `FileFormat.buildReaderWithStorageFilters`.
+   */
+  private def buildParquetReader(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -247,18 +274,16 @@ class ParquetFileFormat
     val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
     val archiveFormatEnabled = parquetOptions.archiveFormatEnabled
 
-    // A non-empty `storageFilters` means `FileSourceStrategy.extractStorageFilters` already removed
-    // those conjuncts from the post-scan Filter, so there is no longer anything else in the plan
-    // that would apply them. Quietly not installing them here would return extra rows, so anything
-    // that stops us from honoring them has to fail loudly instead.
-    //
-    // `enableVectorizedReader` is recomputed from the live session conf when the RDD is built, i.e.
-    // after planning, so flipping spark.sql.parquet.enableVectorizedReader (or the nested-column
-    // variant) between planning and execution lands here.
+    // Extraction has already removed these conjuncts from the post-scan Filter, so nothing else in
+    // the plan would apply them: anything that stops the reader from honoring them fails loudly
+    // rather than dropping them. `enableVectorizedReader` is one such thing, and it is recomputed
+    // from the live session conf when the RDD is built, so a flip of
+    // spark.sql.parquet.enableVectorizedReader (or the nested-column variant) after planning lands
+    // here.
     val storageFilterOpt: Option[ParquetStorageFilter] = if (storageFilters.isEmpty) {
       None
     } else if (!enableVectorizedReader) {
-      throw new IllegalStateException(
+      throw new UnsupportedFileReadException(
         "Cannot honor storage filters " + storageFilters.mkString("[", ", ", "]") +
           " because the " +
           "vectorized Parquet reader is disabled for schema " + resultSchema.catalogString + ". " +
@@ -279,7 +304,8 @@ class ParquetFileFormat
           FileSourceScanLike.STORAGE_FILTER_BYTES_AVOIDED_BY_PAGE_FILTERING, null))
       // `create` requires every condition extractStorageFilters already pre-checked, so it throws
       // rather than letting us drop the filter.
-      Some(ParquetStorageFilter.create(storageFilters, requiredSchema, metrics))
+      Some(ParquetStorageFilter.create(storageFilters, requiredSchema, metrics,
+        sqlConf.parquetStorageFilterPushdownMaxSplicedRowGroupBytes))
     }
 
     // Should always be set by FileSourceScanExec creating this.

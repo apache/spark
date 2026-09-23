@@ -87,13 +87,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   protected ParquetRowGroupReader reader;
 
-  /**
-   * The opened input file and parquet footer. Stored so subclasses can read footer-derived metadata
-   * without re-opening the file. Set by both {@link #initialize} overloads.
-   */
-  protected HadoopInputFile inputFile;
-  protected ParquetMetadata fileFooter;
-
   protected Configuration configuration;
 
   @Override
@@ -117,14 +110,11 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         .build();
     ParquetFileReader fileReader;
     if (inputFile.isDefined() && fileFooter.isDefined() && inputStream.isDefined()) {
-      this.inputFile = inputFile.get();
-      this.fileFooter = fileFooter.get();
       fileReader = new ParquetFileReader(
-          this.inputFile, this.fileFooter, options, inputStream.get());
+          inputFile.get(), fileFooter.get(), options, inputStream.get());
     } else {
-      this.inputFile = HadoopInputFile.fromPath(file, configuration);
-      fileReader = new ParquetFileReader(this.inputFile, options);
-      this.fileFooter = fileReader.getFooter();
+      fileReader = new ParquetFileReader(
+          HadoopInputFile.fromPath(file, configuration), options);
     }
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
     this.fileSchema = fileReader.getFileMetaData().getSchema();
@@ -190,11 +180,10 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       .builder(configuration, file)
       .withRange(0, length)
       .build();
-    this.inputFile = HadoopInputFile.fromPath(file, configuration);
-    ParquetFileReader fileReader = ParquetFileReader.open(this.inputFile, options);
-    this.fileFooter = fileReader.getFooter();
+    ParquetFileReader fileReader = ParquetFileReader.open(
+      HadoopInputFile.fromPath(file, configuration), options);
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
-    this.fileSchema = fileFooter.getFileMetaData().getSchema();
+    this.fileSchema = fileReader.getFooter().getFileMetaData().getSchema();
 
     if (columns == null) {
       this.requestedSchema = fileSchema;
