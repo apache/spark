@@ -30,9 +30,63 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(!MatchConditionTypes.usesStructDecomposition(IntegerType, LongType))
   }
 
-  test("string and temporal types are incompatible") {
-    assert(!MatchConditionTypes.areOperandsCompatible(StringType, TimestampType))
-    assert(!MatchConditionTypes.areOperandsCompatible(DateType, StringType))
+  test("scalar string and temporal types coerce, matching the comparison operator") {
+    assert(MatchConditionTypes.areOperandsCompatible(StringType, TimestampType))
+    assert(MatchConditionTypes.areOperandsCompatible(DateType, StringType))
+    // Common type is the temporal type (string is cast to it), so sort and comparison agree.
+    assert(MatchConditionTypes.stringComparisonCommonType(DateType, StringType).contains(DateType))
+    assert(
+      MatchConditionTypes.stringComparisonCommonType(StringType, TimestampType)
+        .contains(TimestampType))
+    // TIME reaches the same coercion via the generic atomic fallback, not a temporal special case.
+    assert(MatchConditionTypes.areOperandsCompatible(TimeType(), StringType))
+    assert(
+      MatchConditionTypes.stringComparisonCommonType(TimeType(), StringType).contains(TimeType()))
+  }
+
+  test("scalar string and numeric types coerce, matching the comparison operator") {
+    // Common type must be numeric, not string, so the buffer sorts by value.
+    assert(MatchConditionTypes.areOperandsCompatible(IntegerType, StringType))
+    assert(MatchConditionTypes.stringComparisonCommonType(IntegerType, StringType).nonEmpty)
+    assert(
+      !MatchConditionTypes.stringComparisonCommonType(IntegerType, StringType).contains(StringType))
+  }
+
+  test("scalar string and boolean or binary coerce, matching the comparison operator") {
+    // BOOLEAN/BINARY vs STRING have a comparison common type, so ASOF accepts them like `>=`.
+    assert(MatchConditionTypes.areOperandsCompatible(BooleanType, StringType))
+    assert(MatchConditionTypes.areOperandsCompatible(StringType, BinaryType))
+    // Common type is the non-string type, so sort and comparison agree (not lexicographic).
+    assert(
+      MatchConditionTypes.stringComparisonCommonType(BooleanType, StringType).contains(BooleanType))
+    assert(
+      MatchConditionTypes.stringComparisonCommonType(StringType, BinaryType).contains(BinaryType))
+  }
+
+  test("scalar string vs interval is rejected, matching the comparison operator") {
+    // No comparison common type exists, so reject it instead of leaving it uncoerced.
+    val interval = DayTimeIntervalType()
+    assert(!MatchConditionTypes.areOperandsCompatible(StringType, interval))
+    assert(!MatchConditionTypes.areOperandsCompatible(YearMonthIntervalType(), StringType))
+    assert(MatchConditionTypes.stringComparisonCommonType(StringType, interval).isEmpty)
+  }
+
+  test("struct fields keep the strict rule: string vs temporal field is rejected") {
+    // Coercion is scoped to scalar operands, so a string vs temporal STRUCT field stays rejected.
+    val leftStruct = StructType(StructField("f", DateType) :: Nil)
+    val rightStruct = StructType(StructField("g", StringType) :: Nil)
+    assert(!MatchConditionTypes.areOperandsCompatible(leftStruct, rightStruct))
+    // TIME is a DatetimeType, so a string vs TIME field is rejected like DATE, though the
+    // scalar TIME vs STRING pair above is accepted.
+    val leftTimeStruct = StructType(StructField("f", TimeType()) :: Nil)
+    val rightTimeStruct = StructType(StructField("g", StringType) :: Nil)
+    assert(!MatchConditionTypes.areOperandsCompatible(leftTimeStruct, rightTimeStruct))
+  }
+
+  test("array elements keep the strict rule: string vs numeric element is rejected") {
+    val intArray = ArrayType(IntegerType)
+    val stringArray = ArrayType(StringType)
+    assert(!MatchConditionTypes.areOperandsCompatible(intArray, stringArray))
   }
 
   test("orderable scalars with no common type are incompatible") {
