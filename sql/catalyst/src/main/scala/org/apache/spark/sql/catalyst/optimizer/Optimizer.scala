@@ -2327,11 +2327,18 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         } else {
           grandChild
         }
-        // Case 3: split the projection around the expensive conditions.
+        // Case 3: split the projection around the expensive conditions. Non-deterministic
+        // conditions stay in the top filter, as they do everywhere else in this rule -- the
+        // split orders conditions by cost, and cost is no way to decide how many rows a
+        // non-deterministic expression sees.
         val (splitChild, splitAliases, stayUp) =
           if (expensiveWithUsed.nonEmpty && SQLConf.get.splitProjectionForExpensiveFilters) {
-            splitProjectForExpensiveConditions(project, aliasMap, baseChild,
-              expensiveWithUsed.map { case (cond, used, _) => (cond, used) })
+            val (deterministic, nonDeterministic) =
+              expensiveWithUsed.partition { case (cond, _, _) => cond.deterministic }
+            val (child, aliases, unplaced) = splitProjectForExpensiveConditions(
+              project, aliasMap, baseChild,
+              deterministic.map { case (cond, used, _) => (cond, used) })
+            (child, aliases, unplaced ++ nonDeterministic.map(_._1))
           } else {
             (baseChild, AttributeSet.empty, expensiveWithUsed.map(_._1))
           }
@@ -2550,6 +2557,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    *
    * The most demanding group is left un-placed for the caller to put above the projection --
    * where expensive conditions go when there is nothing worth splitting.
+   *
+   * Callers must pass deterministic conditions only -- the grouping below orders conditions by
+   * cost, and cost is no way to decide how many rows a non-deterministic expression sees.
    *
    * Returns the new plan, the alias attributes it has already computed, and the un-placed
    * conditions (in their original, alias-referencing form).

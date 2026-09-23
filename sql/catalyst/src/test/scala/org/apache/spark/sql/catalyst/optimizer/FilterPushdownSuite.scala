@@ -562,6 +562,43 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-55014: a non-deterministic condition is not split off into a lower layer") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"e".rlike("third") as
+        "j")
+      .where((Rand(10) > 0.5 || $"j") && ($"f" || $"g"))
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // The non-deterministic condition needs one alias and (f || g) needs two, so on cost alone
+    // it would go lowest and see every row. It stays in the top filter instead, and (f || g)
+    // takes the layer it would have had.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f", $"e".rlike("other") as "g")
+      .where($"f" || $"g")
+      .select($"a", $"f", $"g", $"e".rlike("third") as "j")
+      .where(Rand(10) > 0.5 || $"j")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-55014: no split when the expensive conditions are non-deterministic") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .where(Rand(10) > 0.5 || $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Nothing deterministic to split around, and the non-deterministic condition must not
+    // move, so the plan is unchanged.
+    val correctAnswer = originalQuery
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("SPARK-55014: do not split the projection when configured") {
     withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
       val originalQuery = testStringRelation
