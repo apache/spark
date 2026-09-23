@@ -1937,8 +1937,8 @@ object SQLConf {
     buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
       .doc("For IN predicate, Parquet filter will push-down a set of OR clauses if its " +
         "number of values not exceeds this threshold. Otherwise, Parquet filter will push-down " +
-        "a value greater than or equal to its minimum value and less than or equal to " +
-        "its maximum value. By setting this value to 0 this feature can be disabled. " +
+        "a single native Parquet IN predicate over these values. By setting this value to 0 " +
+        "this feature can be disabled. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled.")
       .version("2.4.0")
