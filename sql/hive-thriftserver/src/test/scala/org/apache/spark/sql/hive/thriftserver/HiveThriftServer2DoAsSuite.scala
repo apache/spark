@@ -23,10 +23,12 @@ import org.apache.hive.service.auth.HiveAuthFactory.AuthTypes
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.internal.StaticSQLConf
 
 /**
  * Tests for the SPARK-59118 startup warning: `hive.server2.enable.doAs` is accepted but
- * impersonation does not reach executor-side data access. Spark 5.0 refuses to start instead.
+ * impersonation does not reach executor-side data access. Spark 5.0 is expected to refuse
+ * to start instead, on the same configuration and with the same opt-out conf.
  */
 class HiveThriftServer2DoAsSuite extends SparkFunSuite {
 
@@ -38,11 +40,11 @@ class HiveThriftServer2DoAsSuite extends SparkFunSuite {
   }
 
   /** Warnings naming the doAs conf, emitted while checking `conf`. */
-  private def doAsWarnings(conf: HiveConf): Seq[String] = {
+  private def doAsWarnings(conf: HiveConf, allowIneffectiveDoAs: Boolean = false): Seq[String] = {
     val appender = new LogAppender("doAs impersonation warning")
     val canary = "doAs-appender-canary"
     withLogAppender(appender, level = Some(Level.WARN)) {
-      HiveThriftServer2.warnIfIneffectiveDoAs(conf)
+      HiveThriftServer2.warnIfIneffectiveDoAs(conf, allowIneffectiveDoAs)
       logWarning(canary)
     }
     val messages = appender.loggingEvents
@@ -63,6 +65,15 @@ class HiveThriftServer2DoAsSuite extends SparkFunSuite {
     assert(warnings.head.contains("SPARK-5159"))
     // Auth type matching is case-insensitive.
     assert(doAsWarnings(hiveConf("kerberos", doAs = true)).length == 1)
+  }
+
+  test("SPARK-59118 allowIneffectiveDoAs=true silences an otherwise-warned config") {
+    assert(doAsWarnings(hiveConf("KERBEROS", doAs = true), allowIneffectiveDoAs = true).isEmpty)
+  }
+
+  test("SPARK-59118 the warning names the conf that silences it") {
+    val warning = doAsWarnings(hiveConf("KERBEROS", doAs = true)).head
+    assert(warning.contains(StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key))
   }
 
   test("SPARK-59118 warn for every auth type that verifies the user") {

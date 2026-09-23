@@ -30,7 +30,7 @@ import org.apache.hive.service.server.HiveServer2
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.CONFIG
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2}
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.hive.HiveUtils
@@ -115,13 +115,16 @@ object HiveThriftServer2 extends Logging {
   // and Hive's out-of-the-box config (auth NONE, doAs true) must stay quiet. Unrecognized auth
   // types are left alone too: HiveAuthFactory rejects them with its own "Unsupported
   // authentication type" error, which points at the actual problem.
-  private[thriftserver] def warnIfIneffectiveDoAs(hiveConf: HiveConf): Unit = {
+  private[thriftserver] def warnIfIneffectiveDoAs(
+      hiveConf: HiveConf,
+      allowIneffectiveDoAs: Boolean): Unit = {
     val authType = hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
     val verifyingAuthTypes =
       AuthTypes.values().filterNot(Set(AuthTypes.NONE, AuthTypes.NOSASL)).map(_.getAuthName)
     // getVar returns the default (NONE) when unset and "" when set empty, never null.
     val authVerifiesUser = verifyingAuthTypes.exists(_.equalsIgnoreCase(authType))
-    if (authVerifiesUser && hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS)) {
+    if (authVerifiesUser && hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
+        !allowIneffectiveDoAs) {
       logWarning(log"${MDC(CONFIG, ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname)} is set to true, " +
         log"but the Spark Thrift Server impersonates the connecting user only on the driver, " +
         log"for Hive metastore calls and driver-side file system access: executor-side data " +
@@ -130,9 +133,11 @@ object HiveThriftServer2 extends Logging {
         log"(SPARK-5159). That can expose data the connecting user is not authorized to " +
         log"read. Setting it to false silences this, but note that it stops impersonating " +
         log"metastore calls too, so it is not a no-op (and unsetting it does not help -- " +
-        log"Hive's own default is true). Spark 5.0 is expected to refuse to start on this " +
-        log"configuration; set spark.sql.hive.thriftServer.allowIneffectiveDoAs=true there " +
-        log"to keep it running.")
+        log"Hive's own default is true). To acknowledge the limitation and silence this " +
+        log"instead, set " +
+        log"${MDC(CONFIG2, StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key)} to " +
+        log"true; it is a static conf, so it must be set before the SparkSession is created. " +
+        log"Spark 5.0 is expected to refuse to start on this configuration unless it is set.")
     }
   }
 
@@ -185,7 +190,8 @@ private[hive] class HiveThriftServer2(sparkSession: SparkSession)
   private val started = new AtomicBoolean(false)
 
   override def init(hiveConf: HiveConf): Unit = {
-    HiveThriftServer2.warnIfIneffectiveDoAs(hiveConf)
+    HiveThriftServer2.warnIfIneffectiveDoAs(
+      hiveConf, sparkSession.conf.get(StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS))
     val sparkSqlCliService = new SparkSQLCLIService(this, sparkSession)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
