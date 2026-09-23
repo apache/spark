@@ -772,6 +772,22 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(len(data_source.paths), 1)
         self.assertEqual(data_source.paths[0], "test_path")
 
+    def test_reader_options_case_insensitive(self):
+        reader = DataFrameReader(self.connect)
+        df = (
+            reader.option("versionAsOf", 0)
+            .option("versionasof", 1)
+            .option("versionAsOf", 2)
+            .table("myTable")
+        )
+        options = df._plan.to_proto(self.connect).root.read.named_table.options
+        self.assertEqual(dict(options), {"versionAsOf": "2"})
+
+        reader = DataFrameReader(self.connect)
+        df = reader.option("header", False).option("HEADER", True).load(format="csv")
+        options = df._plan.to_proto(self.connect).root.read.data_source.options
+        self.assertEqual(dict(options), {"HEADER": "true"})
+
     def test_relation_changes(self):
         reader = DataFrameReader(self.connect)
         df = reader.option("startingVersion", "1").option("endingVersion", "5").changes("myTable")
