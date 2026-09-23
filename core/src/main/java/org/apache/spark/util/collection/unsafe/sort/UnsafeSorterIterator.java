@@ -33,6 +33,11 @@ public abstract class UnsafeSorterIterator {
 
   public abstract long getKeyPrefix();
 
+  /**
+   * The total number of records this iterator was created over. It is a fixed total rather than a
+   * remaining count: it does not change as {@link #loadNext()} is called, and it does not account
+   * for records the iterator was advanced past and will not emit.
+   */
   public abstract int getNumRecords();
 
   public abstract long getCurrentPageNumber();

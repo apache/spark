@@ -3532,6 +3532,48 @@ class CollectionExpressionsSuite
       Literal.create(Seq(Float.NaN, null, 1f), ArrayType(FloatType))), true)
   }
 
+  test("SPARK-59602: array set operations normalize special floating-point values") {
+    val nonCanonicalNaN = java.lang.Double.longBitsToDouble(0x7ff8000000000001L)
+    val doubles = Literal.create(
+      Seq(-0.0d, 0.0d, nonCanonicalNaN, Double.NaN), ArrayType(DoubleType, false))
+    val doubleSet = Literal.create(Seq(0.0d, Double.NaN), ArrayType(DoubleType, false))
+    checkEvaluation(ArrayDistinct(doubles), Seq(0.0d, Double.NaN))
+    checkEvaluation(ArrayUnion(doubles, doubleSet), Seq(0.0d, Double.NaN))
+    checkEvaluation(ArrayIntersect(doubles, doubleSet), Seq(0.0d, Double.NaN))
+    checkEvaluation(ArrayExcept(doubles, doubleSet), Seq.empty[Double])
+    checkEvaluation(ArrayExcept(doubleSet, doubles), Seq.empty[Double])
+    checkEvaluation(ArraysOverlap(doubles, doubleSet), true)
+
+    val nonCanonicalFloatNaN = java.lang.Float.intBitsToFloat(0x7f800001)
+    val floats = Literal.create(
+      Seq(-0.0f, 0.0f, nonCanonicalFloatNaN, Float.NaN), ArrayType(FloatType, false))
+    val floatSet = Literal.create(Seq(0.0f, Float.NaN), ArrayType(FloatType, false))
+    checkEvaluation(ArrayDistinct(floats), Seq(0.0f, Float.NaN))
+    checkEvaluation(ArrayUnion(floats, floatSet), Seq(0.0f, Float.NaN))
+    checkEvaluation(ArrayIntersect(floats, floatSet), Seq(0.0f, Float.NaN))
+    checkEvaluation(ArrayExcept(floats, floatSet), Seq.empty[Float])
+    checkEvaluation(ArrayExcept(floatSet, floats), Seq.empty[Float])
+    checkEvaluation(ArraysOverlap(floats, floatSet), true)
+  }
+
+  test("SPARK-59602: array set operations normalize nested floating-point values") {
+    val nestedType = ArrayType(DoubleType, containsNull = false)
+    val nested = Literal.create(
+      Seq(Seq(-0.0d), Seq(0.0d), Seq(Double.NaN)), ArrayType(nestedType, false))
+    val nestedSet = Literal.create(
+      Seq(Seq(0.0d), Seq(Double.NaN)), ArrayType(nestedType, false))
+    checkEvaluation(ArrayDistinct(nested), Seq(Seq(0.0d), Seq(Double.NaN)))
+    checkEvaluation(ArrayUnion(nested, nestedSet), Seq(Seq(0.0d), Seq(Double.NaN)))
+    checkEvaluation(ArrayIntersect(nested, nestedSet), Seq(Seq(0.0d), Seq(Double.NaN)))
+    checkEvaluation(ArrayExcept(nested, nestedSet), Seq.empty[Seq[Double]])
+    checkEvaluation(ArraysOverlap(nested, nestedSet), true)
+
+    val structType = new StructType().add("d", DoubleType, nullable = false)
+    val structs = Literal.create(
+      Seq(Row(-0.0d), Row(0.0d)), ArrayType(structType, containsNull = false))
+    checkEvaluation(ArrayDistinct(structs), Seq(Row(0.0d)))
+  }
+
   test("SPARK-36740: ArrayMin/ArrayMax/SortArray should handle NaN greater than non-NaN value") {
     // ArrayMin
     checkEvaluation(ArrayMin(

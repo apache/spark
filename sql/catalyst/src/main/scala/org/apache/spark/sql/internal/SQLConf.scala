@@ -1937,8 +1937,8 @@ object SQLConf {
     buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
       .doc("For IN predicate, Parquet filter will push-down a set of OR clauses if its " +
         "number of values not exceeds this threshold. Otherwise, Parquet filter will push-down " +
-        "a value greater than or equal to its minimum value and less than or equal to " +
-        "its maximum value. By setting this value to 0 this feature can be disabled. " +
+        "a single native Parquet IN predicate over these values. By setting this value to 0 " +
+        "this feature can be disabled. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled.")
       .version("2.4.0")
@@ -2572,12 +2572,13 @@ object SQLConf {
     buildConf("spark.sql.sources.v2.bucketing.partition.filter.enabled")
       .doc(s"Whether to filter partitions when running storage-partition join. " +
         s"When enabled, partitions without matches on the other side can be omitted for " +
-        s"scanning, if allowed by the join type. This config requires both " +
-        s"${V2_BUCKETING_ENABLED.key} and ${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be " +
-        s"enabled.")
+        s"scanning, if allowed by the join type. This config requires " +
+        s"${V2_BUCKETING_ENABLED.key} to be enabled, together with either " +
+        s"${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} or " +
+        s"${V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key}.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_SORTING_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.sorting.enabled")
@@ -2599,7 +2600,7 @@ object SQLConf {
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.preserveKeyOrderingOnCoalesce.enabled")
@@ -2613,7 +2614,7 @@ object SQLConf {
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.preserveOrderingOnCoalesce.enabled")
@@ -7007,6 +7008,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_ORACLE_NUMBER_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.oracle.numberMapping.enabled")
+      .internal()
+      .doc("When true, Oracle bare NUMBER columns (no explicit precision/scale) are mapped " +
+        "to DecimalType(38, 10), preserving the pre-Spark-4.4 behavior. When false (default), " +
+        "they are mapped to DecimalType(38, 18) using DecimalType.DEFAULT_SCALE. The new " +
+        "default preserves more fractional digits (18 vs 10) but reduces the integer range " +
+        "from 28 to 20 digits; bare NUMBER values with more than 20 integer digits that " +
+        "previously read correctly will raise NUMERIC_VALUE_OUT_OF_RANGE. Set to true to " +
+        "restore the old mapping.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.db2.numericMapping.enabled")
       .internal()
@@ -9222,6 +9238,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyOracleTimestampNTZMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED)
+
+  def legacyOracleNumberMappingEnabled: Boolean =
+    getConf(LEGACY_ORACLE_NUMBER_MAPPING_ENABLED)
 
   def legacyDB2numericMappingEnabled: Boolean =
     getConf(LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED)

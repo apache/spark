@@ -31,7 +31,10 @@ import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkSQLException}
+import org.apache.spark.{
+  SparkArithmeticException, SparkException,
+  SparkIllegalArgumentException, SparkSQLException
+}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
@@ -1675,10 +1678,14 @@ class JDBCSuite extends SharedSparkSession {
   test("OracleDialect jdbc type mapping") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle")
     val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", -127)
-    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ==
-      Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+    // Bare NUMBER (precision=0) uses DEFAULT_SCALE (18) by default
     assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
-      Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+      Some(DecimalType(DecimalType.MAX_PRECISION, DecimalType.DEFAULT_SCALE)))
+    // FLOAT (scale=-127) also uses DEFAULT_SCALE
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ==
+      Some(DecimalType(DecimalType.MAX_PRECISION, DecimalType.DEFAULT_SCALE)))
+    // Explicit precision/scale columns are NOT affected (falls through to None)
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 10, null) == None)
     assert(oracleDialect.getCatalystType(OracleDialect.BINARY_FLOAT, "BINARY_FLOAT", 0, null) ==
       Some(FloatType))
     assert(oracleDialect.getCatalystType(OracleDialect.BINARY_DOUBLE, "BINARY_DOUBLE", 0, null) ==
@@ -1687,6 +1694,55 @@ class JDBCSuite extends SharedSparkSession {
       Some(TimestampType))
     assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMP_LTZ, "TIMESTAMP", 0, null) ==
       Some(TimestampType))
+  }
+
+  test("SPARK-57925: Oracle bare NUMBER legacy config restores scale=10") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", -127)
+    withSQLConf(SQLConf.LEGACY_ORACLE_NUMBER_MAPPING_ENABLED.key -> "true") {
+      assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
+        Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+      assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ==
+        Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+    }
+  }
+
+  test("SPARK-57925: Oracle bare NUMBER boundary - fraction preserved, large int overflows") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    val result = oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null)
+    assert(result == Some(DecimalType(DecimalType.MAX_PRECISION, DecimalType.DEFAULT_SCALE)))
+    val p = DecimalType.MAX_PRECISION
+    val newScale = DecimalType.DEFAULT_SCALE // 18
+    val oldScale = 10
+
+    // High-precision fraction: 18 fractional digits (14 significant).
+    // New Decimal(38,18) preserves it; old Decimal(38,10) would truncate to 10 digits.
+    val highPrecFraction = new java.math.BigDecimal("0.000012345678912345")
+    val preserved = Decimal(highPrecFraction, p, newScale)
+    assert(preserved.toBigDecimal.scale == newScale)
+    assert(preserved.toString == "0.000012345678912345")
+
+    // Large integer: 23 digits.
+    // Old Decimal(38,10) fits (28 integer digits);
+    // new Decimal(38,18) overflows (20 integer digits).
+    val largeInt = new java.math.BigDecimal("12345678901234567890123")
+    // Old mapping: fits
+    val legacyDecimal = Decimal(largeInt, p, oldScale)
+    assert(legacyDecimal.toString.startsWith("12345678901234567890123"))
+    // New mapping: overflows
+    val ex = intercept[SparkArithmeticException] {
+      Decimal(largeInt, p, newScale)
+    }
+    assert(ex.getCondition == "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION")
+
+    // Legacy config restores 28 integer digits via type mapping
+    withSQLConf(SQLConf.LEGACY_ORACLE_NUMBER_MAPPING_ENABLED.key -> "true") {
+      val legacyResult = oracleDialect.getCatalystType(
+        java.sql.Types.NUMERIC, "numeric", 0, null)
+      val legacyDt = legacyResult.get.asInstanceOf[DecimalType]
+      assert(legacyDt.precision - legacyDt.scale == 28,
+        "legacy integer range should be 28 digits")
+    }
   }
 
   test("SPARK-58876: Oracle stamps the NTZ wall-clock write marker, legacy-gated, even wrapped") {
@@ -1901,15 +1957,43 @@ class JDBCSuite extends SharedSparkSession {
       "{ts '2018-07-06 06:00:00.0'}")
   }
 
-  test("SPARK-58876: Oracle TIMESTAMP stays microsecond TimestampNTZType under the nanos preview") {
-    val oracleDialect = JdbcDialects.get("jdbc:oracle")
-    // Even with the nanosecond timestamp preview enabled, the Oracle mapping is microsecond
-    // TimestampNTZType and does not engage that preview (no nanosecond type, no deferral).
-    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-      val md = new MetadataBuilder()
-        .putBoolean("preferTimestampNanos", value = true).putLong("scale", 9)
-      assert(oracleDialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 0, md) ===
-        Some(TimestampNTZType))
+  test("SPARK-58876: Oracle TIMESTAMP(7-9) resolves to nanosecond NTZ under the nanos preview") {
+    // scale/preferTimestampNanos reach the dialect only as metadata getSchema stamps, so resolve a
+    // mocked Oracle TIMESTAMP column via getSchema for each (scale, option, preview) combination.
+    def resolve(scale: Int, preferNanos: Boolean, nanosEnabled: Boolean): StructField = {
+      val rsmd = mock(classOf[java.sql.ResultSetMetaData])
+      when(rsmd.getColumnCount).thenReturn(1)
+      when(rsmd.getColumnLabel(anyInt())).thenReturn("T")
+      when(rsmd.getColumnType(anyInt())).thenReturn(java.sql.Types.TIMESTAMP)
+      when(rsmd.getColumnTypeName(anyInt())).thenReturn("TIMESTAMP")
+      when(rsmd.getPrecision(anyInt())).thenReturn(0)
+      when(rsmd.getScale(anyInt())).thenReturn(scale)
+      when(rsmd.isSigned(anyInt())).thenReturn(false)
+      when(rsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNullable)
+      val rs = mock(classOf[ResultSet])
+      when(rs.getMetaData).thenReturn(rsmd)
+      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> nanosEnabled.toString) {
+        JdbcUtils.getSchema(mock(classOf[Connection]), rs, OracleDialect(),
+          preferTimestampNanos = preferNanos).fields.head
+      }
+    }
+    def marked(f: StructField): Boolean =
+      f.metadata.contains(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK)
+    // Sub-microsecond scales (7-9) widen to the nanosecond NTZ type only when both the read option
+    // and the preview are on; every coarser scale and either flag off stays microsecond NTZ.
+    (TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION).foreach { s =>
+      val f = resolve(s, preferNanos = true, nanosEnabled = true)
+      assert(f.dataType === TimestampNTZNanosType(s), s"scale=$s")
+      // The nanos NTZ getter is wall-clock by construction, so the marker must not be stamped.
+      assert(!marked(f), s"scale=$s")
+    }
+    // Microsecond NTZ results carry the wall-clock read marker.
+    Seq(
+      resolve(6, preferNanos = true, nanosEnabled = true),
+      resolve(9, preferNanos = false, nanosEnabled = true),
+      resolve(9, preferNanos = true, nanosEnabled = false)).foreach { f =>
+      assert(f.dataType === TimestampNTZType)
+      assert(marked(f))
     }
   }
 

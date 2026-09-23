@@ -402,8 +402,10 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME =
     ConfigBuilder(s"$KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX.serviceAccountName")
-      .doc("Service account that is used when running the executor pod." +
-        "If this parameter is not setup, the fallback logic will use the driver's service account.")
+      .doc("Service account that is used when running the executor pod. " +
+        "If this parameter is not setup, the fallback logic will use the value of " +
+        "spark.kubernetes.authenticate.driver.serviceAccountName. Both are ignored when the " +
+        "executor pod template already names a non-empty service account.")
       .version("3.1.0")
       .stringConf
       .createOptional
@@ -938,7 +940,9 @@ private[spark] object Config extends Logging {
   val KUBERNETES_ANNOTATE_EXIT_EXCEPTION =
     ConfigBuilder("spark.kubernetes.driver.annotateExitException")
       .doc("If set to true, Spark will store the exit exception failed applications in" +
-        s" the Kubernetes API server using the $EXIT_EXCEPTION_ANNOTATION annotation.")
+        s" the Kubernetes API server using the $EXIT_EXCEPTION_ANNOTATION annotation. Note that" +
+        " the annotation is visible to anyone who can get the driver pod. The parts of the exit" +
+        " exception matching `spark.redaction.string.regex` are redacted.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)

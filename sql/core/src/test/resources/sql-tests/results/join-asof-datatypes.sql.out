@@ -226,6 +226,72 @@ struct<ts:timestamp,matched_ts_ntz:timestamp_ntz>
 
 
 -- !query
+SELECT t.d, r.s AS matched_s
+FROM VALUES (DATE '2026-06-29') AS t(d) ASOF JOIN
+     VALUES ('2026-06-28'), ('2026-06-29') AS r(s)
+  MATCH_CONDITION (t.d >= r.s)
+-- !query schema
+struct<d:date,matched_s:string>
+-- !query output
+2026-06-29	2026-06-29
+
+
+-- !query
+SELECT t.ts, r.s AS matched_s
+FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
+     VALUES ('2026-06-29 09:00:00'), ('2026-06-29 10:00:00') AS r(s)
+  MATCH_CONDITION (t.ts >= r.s)
+-- !query schema
+struct<ts:timestamp,matched_s:string>
+-- !query output
+2026-06-29 10:00:00	2026-06-29 10:00:00
+
+
+-- !query
+SELECT t.k, r.s AS matched_s
+FROM VALUES (25) AS t(k) ASOF JOIN
+     VALUES ('9'), ('10'), ('20') AS r(s)
+  MATCH_CONDITION (t.k >= r.s)
+-- !query schema
+struct<k:int,matched_s:string>
+-- !query output
+25	20
+
+
+-- !query
+SELECT t.s, r.d AS matched_d
+FROM VALUES ('2026-06-29') AS t(s) ASOF JOIN
+     VALUES (DATE '2026-06-28'), (DATE '2026-06-29') AS r(d)
+  MATCH_CONDITION (t.s >= r.d)
+-- !query schema
+struct<s:string,matched_d:date>
+-- !query output
+2026-06-29	2026-06-29
+
+
+-- !query
+SELECT t.ts, r.s AS matched_s
+FROM VALUES (TIMESTAMP_NTZ '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
+     VALUES ('2026-06-29 09:00:00'), ('2026-06-29 10:00:00') AS r(s)
+  MATCH_CONDITION (t.ts >= r.s)
+-- !query schema
+struct<ts:timestamp_ntz,matched_s:string>
+-- !query output
+2026-06-29 10:00:00	2026-06-29 10:00:00
+
+
+-- !query
+SELECT t.tm, r.s AS matched_s
+FROM VALUES (TIME '10:00:00') AS t(tm) ASOF JOIN
+     VALUES ('09:00:00'), ('10:00:00') AS r(s)
+  MATCH_CONDITION (t.tm >= r.s)
+-- !query schema
+struct<tm:time(6),matched_s:string>
+-- !query output
+10:00:00	10:00:00
+
+
+-- !query
 SELECT t.a, r.a AS matched_a
 FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
      VALUES (ARRAY(1, 2)), (ARRAY(1, 4)) AS r(a)

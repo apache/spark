@@ -820,4 +820,41 @@ class SortMergeAsOfJoinSuite extends QueryTest
       )
     }
   }
+
+  test("backward join - in-memory group followed by a spill-backed one") {
+    // `clear()` drops the spillable backing store between equi-key groups, so one scanner can
+    // see an in-memory group (whose buffer iterator yields the distinct stored rows) and then a
+    // spill-backed one (whose iterator re-points a single UnsafeRow on every next(), so that a
+    // retained match has to be copied out). Group "A" has one right row and stays in memory,
+    // group "B" has three and spills; in "B" the match is followed by a non-matching row, so a
+    // match that was not copied out would be clobbered before it is emitted.
+    withSQLConf(
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      val leftSchema = StructType(
+        StructField("grp", StringType) ::
+          StructField("ts", IntegerType) :: Nil)
+      val rightSchema = StructType(
+        StructField("grp", StringType) ::
+          StructField("ts", IntegerType) ::
+          StructField("right_val", StringType) :: Nil)
+      // Values of differing lengths so a clobbered match stands out in the answer.
+      val bestVal = "b" * 40
+      val left = spark.createDataFrame(
+        List(Row("A", 8), Row("B", 8)).asJava, leftSchema)
+      val right = spark.createDataFrame(
+        List(Row("A", 3, "aa"), Row("B", 1, "x"), Row("B", 5, bestVal), Row("B", 12, "y")).asJava,
+        rightSchema)
+      checkAnswerAndSpill(
+        left.joinAsOf(
+          right, left.col("ts"), right.col("ts"), usingColumns = Seq("grp"),
+          joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        Seq(
+          Row("A", 8, "A", 3, "aa"),
+          Row("B", 8, "B", 5, bestVal)
+        )
+      )
+    }
+  }
 }

@@ -1381,8 +1381,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotUsePreservedDatabaseAsCurrentDatabaseError(database: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1068",
-      messageParameters = Map("database" -> database))
+      errorClass = "CANNOT_USE_RESERVED_DATABASE_AS_CURRENT",
+      messageParameters = Map("database" -> toSQLId(database)))
   }
 
   def createExternalTableWithoutLocationError(): Throwable = {
@@ -5163,8 +5163,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
       messageParameters = Map(
-        "refs1" -> toSQLExpr(expr1),
-        "refs2" -> toSQLExpr(expr2)))
+        "operand1" -> toSQLExpr(expr1),
+        "operand2" -> toSQLExpr(expr2)))
   }
 
   def nestedSequentialStreamingUnionError(): Throwable = {

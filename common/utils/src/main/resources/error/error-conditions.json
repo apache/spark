@@ -176,7 +176,7 @@
   },
   "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE" : {
     "message" : [
-      "Each operand of the MATCH_CONDITION comparison must reference only columns of one join input. Got: <refs1> and <refs2>."
+      "Each operand of the MATCH_CONDITION comparison must reference exactly one join input, and the two operands must reference different inputs. Got: <operand1> and <operand2>."
     ],
     "sqlState" : "42K0E"
   },
@@ -980,6 +980,12 @@
       "Multiple aliases are not supported in watermark clause."
     ],
     "sqlState" : "42000"
+  },
+  "CANNOT_USE_RESERVED_DATABASE_AS_CURRENT" : {
+    "message" : [
+      "Cannot use <database> as the current database because the name is reserved for system use. To access global temporary views, use a qualified name, e.g. SELECT * FROM <database>.viewName."
+    ],
+    "sqlState" : "42939"
   },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
@@ -3869,6 +3875,29 @@
     },
     "sqlState" : "42K03"
   },
+  "INVALID_CHAR_VARCHAR_COLLATION_METADATA" : {
+    "message" : [
+      "Invalid CHAR/VARCHAR collation metadata."
+    ],
+    "subClass" : {
+      "INVALID_VALUE" : {
+        "message" : [
+          "The value <value> must be a provider-qualified, non-empty collation name."
+        ]
+      },
+      "RESERVED_METADATA_KEY" : {
+        "message" : [
+          "The metadata key <metadataKey> is reserved and cannot be provided by callers."
+        ]
+      },
+      "UNRECOGNIZED_PATH" : {
+        "message" : [
+          "The field path <fieldPath> does not identify an uncollated CHAR/VARCHAR type."
+        ]
+      }
+    },
+    "sqlState" : "2203G"
+  },
   "INVALID_CHECKPOINT_DIRECTORY" : {
     "message" : [
       "Cannot read the checkpoint directory <path>: expected the partition file <expectedFileName> but found <fileName>. The partition files must be numbered contiguously from part-00000."
@@ -5741,7 +5770,7 @@
   },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
-      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. <externalEngineError>."
+      "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. External engine SQLSTATE: <externalEngineSqlState>. <externalEngineError>."
     ],
     "subClass" : {
       "DURING_OUTPUT_SCHEMA_RESOLUTION" : {
@@ -10324,11 +10353,6 @@
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
       "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1068" : {
-    "message" : [
-      "<database> is a system preserved database, you cannot use it as current database. To access global temporary views, you should use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM <database>.viewName."
     ]
   },
   "_LEGACY_ERROR_TEMP_1071" : {

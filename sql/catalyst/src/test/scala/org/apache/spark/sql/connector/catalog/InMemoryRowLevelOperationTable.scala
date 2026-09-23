@@ -272,7 +272,7 @@ class InMemoryRowLevelOperationTable private (
    * scan mixes in [[CatalystRuntimeFilteringScan]] so group filtering goes through the Catalyst
    * path.
    */
-  private def newRowLevelScanBuilder(
+  protected def newRowLevelScanBuilder(
       options: CaseInsensitiveStringMap)(
       onBuild: BatchScanBaseClass => Unit): ScanBuilder = {
     new InMemoryScanBuilder(schema, options) {

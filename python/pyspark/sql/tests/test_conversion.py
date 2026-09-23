@@ -324,7 +324,7 @@ class ArrowBatchTransformerTests(unittest.TestCase):
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 @unittest.skipIf(not have_pandas, pandas_requirement_message)
 class PandasToArrowConversionTests(unittest.TestCase):
-    def test_convert(self):
+    def test_from_pandas(self):
         """Test basic DataFrame/Series to Arrow RecordBatch conversion."""
         import pandas as pd
         import pyarrow as pa
@@ -332,7 +332,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
         # Basic DataFrame conversion
         df = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         schema = StructType([StructField("a", IntegerType()), StructField("b", DoubleType())])
-        result = PandasToArrowConversion.convert(df, schema)
+        result = PandasToArrowConversion.from_pandas(df, schema)
         self.assertIsInstance(result, pa.RecordBatch)
         self.assertEqual(result.num_rows, 3)
         self.assertEqual(result.num_columns, 2)
@@ -340,26 +340,26 @@ class PandasToArrowConversionTests(unittest.TestCase):
 
         # List of Series input
         series_list = [pd.Series([1, 2, 3]), pd.Series([1.0, 2.0, 3.0])]
-        result = PandasToArrowConversion.convert(series_list, schema)
+        result = PandasToArrowConversion.from_pandas(series_list, schema)
         self.assertEqual(result.num_rows, 3)
 
         # With nulls
         df = pd.DataFrame({"a": [1, None, 3], "b": [1.0, 2.0, None]})
-        result = PandasToArrowConversion.convert(df, schema)
+        result = PandasToArrowConversion.from_pandas(df, schema)
         self.assertEqual(result.column(0).to_pylist(), [1, None, 3])
 
         # Empty DataFrame (0 rows)
         df = pd.DataFrame({"a": pd.Series([], dtype=int), "b": pd.Series([], dtype=float)})
-        result = PandasToArrowConversion.convert(df, schema)
+        result = PandasToArrowConversion.from_pandas(df, schema)
         self.assertEqual(result.num_rows, 0)
 
         # Empty schema (0 columns) should preserve row count
         df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
-        result = PandasToArrowConversion.convert(df, StructType([]))
+        result = PandasToArrowConversion.from_pandas(df, StructType([]))
         self.assertEqual(result.num_columns, 0)
         self.assertEqual(result.num_rows, 3)
 
-    def test_convert_assign_cols_by_name(self):
+    def test_from_pandas_assign_cols_by_name(self):
         """Test assign_cols_by_name reorders columns to match schema."""
         import pandas as pd
 
@@ -368,18 +368,18 @@ class PandasToArrowConversionTests(unittest.TestCase):
         schema = StructType([StructField("a", IntegerType()), StructField("b", StringType())])
 
         # With assign_cols_by_name=True - reorders columns to match schema field names
-        result = PandasToArrowConversion.convert(df, schema, assign_cols_by_name=True)
+        result = PandasToArrowConversion.from_pandas(df, schema, assign_cols_by_name=True)
         self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])  # a
         self.assertEqual(result.column(1).to_pylist(), ["x", "y", "z"])  # b
 
         # Without assign_cols_by_name - uses positional order (b first, a second)
         df = pd.DataFrame({"b": [10, 20, 30], "a": [1.0, 2.0, 3.0]})
         schema = StructType([StructField("x", IntegerType()), StructField("y", DoubleType())])
-        result = PandasToArrowConversion.convert(df, schema, assign_cols_by_name=False)
+        result = PandasToArrowConversion.from_pandas(df, schema, assign_cols_by_name=False)
         self.assertEqual(result.column(0).to_pylist(), [10, 20, 30])  # positional: b -> x
         self.assertEqual(result.column(1).to_pylist(), [1.0, 2.0, 3.0])  # positional: a -> y
 
-    def test_convert_timezone(self):
+    def test_from_pandas_timezone(self):
         """Test timezone handling for timestamp conversion."""
         import pandas as pd
 
@@ -388,11 +388,11 @@ class PandasToArrowConversionTests(unittest.TestCase):
         schema = StructType([StructField("ts", TimestampType())])
 
         # Convert with timezone
-        result = PandasToArrowConversion.convert(df, schema, timezone="UTC")
+        result = PandasToArrowConversion.from_pandas(df, schema, timezone="UTC")
         self.assertEqual(result.num_rows, 2)
         self.assertEqual(result.num_columns, 1)
 
-    def test_convert_arrow_cast(self):
+    def test_from_pandas_arrow_cast(self):
         """Test arrow_cast allows type coercion on mismatch."""
         import pandas as pd
 
@@ -401,10 +401,10 @@ class PandasToArrowConversionTests(unittest.TestCase):
         schema = StructType([StructField("a", LongType())])
 
         # With arrow_cast=True, should allow the conversion
-        result = PandasToArrowConversion.convert(df, schema, arrow_cast=True)
+        result = PandasToArrowConversion.from_pandas(df, schema, arrow_cast=True)
         self.assertEqual(result.column(0).to_pylist(), [1, 2, 3])
 
-    def test_convert_decimal(self):
+    def test_from_pandas_decimal(self):
         """Test int to decimal coercion."""
         from decimal import Decimal
 
@@ -415,13 +415,15 @@ class PandasToArrowConversionTests(unittest.TestCase):
         schema = StructType([StructField("a", DecimalType(10, 2))])
 
         # With int_to_decimal_coercion_enabled=True
-        result = PandasToArrowConversion.convert(df, schema, int_to_decimal_coercion_enabled=True)
+        result = PandasToArrowConversion.from_pandas(
+            df, schema, int_to_decimal_coercion_enabled=True
+        )
         self.assertEqual(result.num_rows, 3)
         # Values should be converted to decimal
         values = result.column(0).to_pylist()
         self.assertEqual(values, [Decimal("1.00"), Decimal("2.00"), Decimal("3.00")])
 
-    def test_convert_struct(self):
+    def test_from_pandas_struct(self):
         """Test struct type conversion via nested DataFrame columns."""
         import pandas as pd
         import pyarrow as pa
@@ -437,7 +439,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
         )
         # List input: second element is a DataFrame (struct column)
         data = [pd.Series([1, 2]), pd.DataFrame({"x": [10, 20], "y": [1.1, 2.2]})]
-        result = PandasToArrowConversion.convert(data, schema)
+        result = PandasToArrowConversion.from_pandas(data, schema)
         self.assertEqual(result.num_rows, 2)
         self.assertEqual(result.num_columns, 2)
         # Struct column should be a StructArray
@@ -448,10 +450,10 @@ class PandasToArrowConversionTests(unittest.TestCase):
             pd.Series([], dtype=int),
             pd.DataFrame({"x": pd.Series([], dtype=int), "y": pd.Series([], dtype=float)}),
         ]
-        result = PandasToArrowConversion.convert(data, schema)
+        result = PandasToArrowConversion.from_pandas(data, schema)
         self.assertEqual(result.num_rows, 0)
 
-    def test_convert_error_messages(self):
+    def test_from_pandas_error_messages(self):
         """Test error messages include series name from schema field."""
         import pandas as pd
 
@@ -460,12 +462,12 @@ class PandasToArrowConversionTests(unittest.TestCase):
         # Type mismatch: string data for integer column
         data = [pd.Series(["not_int", "bad"]), pd.Series(["a", "b"])]
         with self.assertRaises((PySparkValueError, PySparkTypeError)) as ctx:
-            PandasToArrowConversion.convert(data, schema)
+            PandasToArrowConversion.from_pandas(data, schema)
         # Error message should use the new format and reference the schema field name
         self.assertIn("age", str(ctx.exception))
 
-    def test_convert_is_legacy(self):
-        """Test is_legacy=True uses the legacy error format."""
+    def test_from_pandas_use_legacy_error_handling(self):
+        """Test use_legacy_error_handling=True uses the legacy error format."""
         import pandas as pd
 
         schema = StructType([StructField("val", DoubleType())])
@@ -473,7 +475,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
 
         # ValueError path (string -> double)
         with self.assertRaises(PySparkValueError) as ctx:
-            PandasToArrowConversion.convert(data, schema, is_legacy=True)
+            PandasToArrowConversion.from_pandas(data, schema, use_legacy_error_handling=True)
         self.assertIn("Exception thrown when converting pandas.Series", str(ctx.exception))
         self.assertIn("val", str(ctx.exception))
 
@@ -485,16 +487,16 @@ class PandasToArrowConversionTests(unittest.TestCase):
         )
         data = [pd.Series([0, 1])]
         with self.assertRaises(PySparkTypeError) as ctx:
-            PandasToArrowConversion.convert(
+            PandasToArrowConversion.from_pandas(
                 data,
                 struct_schema,
-                is_legacy=True,
+                use_legacy_error_handling=True,
                 ignore_unexpected_complex_type_values=True,
             )
         self.assertIn("Exception thrown when converting pandas.Series", str(ctx.exception))
         self.assertIn("x", str(ctx.exception))
 
-    def test_convert_prefers_large_types(self):
+    def test_from_pandas_prefers_large_types(self):
         """Test prefers_large_types produces large Arrow types."""
         import pandas as pd
         import pyarrow as pa
@@ -502,22 +504,22 @@ class PandasToArrowConversionTests(unittest.TestCase):
         df = pd.DataFrame({"s": ["hello", "world"]})
         schema = StructType([StructField("s", StringType())])
 
-        result = PandasToArrowConversion.convert(df, schema, prefers_large_types=True)
+        result = PandasToArrowConversion.from_pandas(df, schema, prefers_large_types=True)
         self.assertEqual(result.column(0).type, pa.large_string())
 
-        result = PandasToArrowConversion.convert(df, schema, prefers_large_types=False)
+        result = PandasToArrowConversion.from_pandas(df, schema, prefers_large_types=False)
         self.assertEqual(result.column(0).type, pa.string())
 
-    def test_convert_categorical(self):
+    def test_from_pandas_categorical(self):
         """Test CategoricalDtype series is correctly converted."""
         import pandas as pd
 
         cat_series = pd.Series(pd.Categorical(["a", "b", "a", "c"]))
         schema = StructType([StructField("cat", StringType())])
-        result = PandasToArrowConversion.convert([cat_series], schema)
+        result = PandasToArrowConversion.from_pandas([cat_series], schema)
         self.assertEqual(result.column(0).to_pylist(), ["a", "b", "a", "c"])
 
-    def test_convert_chunked_array_backed(self):
+    def test_from_pandas_chunked_array_backed(self):
         """Test a chunked arrow-backed series is converted to a single Array."""
         import pandas as pd
         import pyarrow as pa
@@ -528,7 +530,7 @@ class PandasToArrowConversionTests(unittest.TestCase):
         series = pd.Series(chunked, dtype="string[pyarrow]")
         schema = StructType([StructField("s", StringType())])
 
-        result = PandasToArrowConversion.convert([series], schema, arrow_cast=True)
+        result = PandasToArrowConversion.from_pandas([series], schema, arrow_cast=True)
         self.assertIsInstance(result.column(0), pa.Array)
         self.assertEqual(result.column(0).to_pylist(), ["a", "b", "c", "d", "e"])
 
@@ -774,8 +776,8 @@ class ConversionTests(unittest.TestCase):
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowToPandasConversionTests(unittest.TestCase):
-    def test_convert_numpy_ser_name_survives_preprocess_time(self):
-        # convert_numpy reads the Arrow field name before preprocess_time, because the
+    def test_convert_array_numpy_ser_name_survives_preprocess_time(self):
+        # _convert_array_numpy reads the Arrow field name before preprocess_time, because the
         # pa.compute kernels it runs for timestamps return a new array with no field name.
         import pyarrow as pa
 
@@ -785,17 +787,17 @@ class ArrowToPandasConversionTests(unittest.TestCase):
             )
             col = pa.RecordBatch.from_arrays([ts], ["tscol"]).column(0)
             spark_type = TimestampType() if pa_type.tz is not None else TimestampNTZType()
-            result = ArrowToPandasConversion.convert_numpy(col, spark_type, timezone="UTC")
+            result = ArrowToPandasConversion._convert_array_numpy(col, spark_type, timezone="UTC")
             self.assertEqual(result.name, "tscol", f"name lost for {pa_type}")
 
-    def test_udt_convert_numpy(self):
+    def test_udt_convert_array_numpy(self):
         import pyarrow as pa
 
         udt = ExamplePointUDT()
 
         # basic conversion with nulls
         arr = pa.array([[1.0, 2.0], None, [3.0, 4.0]], type=pa.list_(pa.float64()))
-        result = ArrowToPandasConversion.convert_numpy(arr, udt, ser_name="my_point")
+        result = ArrowToPandasConversion._convert_array_numpy(arr, udt, ser_name="my_point")
         self.assertIsInstance(result.iloc[0], ExamplePoint)
         self.assertEqual(result.iloc[0], ExamplePoint(1.0, 2.0))
         self.assertIsNone(result.iloc[1])
@@ -803,13 +805,13 @@ class ArrowToPandasConversionTests(unittest.TestCase):
         self.assertEqual(result.name, "my_point")
 
         # empty
-        result = ArrowToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion._convert_array_numpy(
             pa.array([], type=pa.list_(pa.float64())), udt
         )
         self.assertEqual(len(result), 0)
 
         # PythonOnlyUDT
-        result = ArrowToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion._convert_array_numpy(
             pa.array([[5.0, 6.0]], type=pa.list_(pa.float64())), PythonOnlyUDT()
         )
         self.assertIsInstance(result.iloc[0], PythonOnlyPoint)
@@ -821,11 +823,11 @@ class ArrowToPandasConversionTests(unittest.TestCase):
         chunk1 = pa.array([[1.0, 2.0]], type=pa.list_(pa.float64()))
         chunk2 = pa.array([[3.0, 4.0]], type=pa.list_(pa.float64()))
         chunked = pa.chunked_array([chunk1, chunk2])
-        result = ArrowToPandasConversion.convert_numpy(chunked, ExamplePointUDT())
+        result = ArrowToPandasConversion._convert_array_numpy(chunked, ExamplePointUDT())
         self.assertEqual(result.iloc[0], ExamplePoint(1.0, 2.0))
         self.assertEqual(result.iloc[1], ExamplePoint(3.0, 4.0))
 
-    def test_variant_convert_numpy(self):
+    def test_variant_convert_array_numpy(self):
         import pyarrow as pa
 
         variant_type = pa.struct(
@@ -844,7 +846,7 @@ class ArrowToPandasConversionTests(unittest.TestCase):
             ],
             type=variant_type,
         )
-        result = ArrowToPandasConversion.convert_numpy(arr, VariantType(), ser_name="v")
+        result = ArrowToPandasConversion._convert_array_numpy(arr, VariantType(), ser_name="v")
         self.assertIsInstance(result.iloc[0], VariantVal)
         self.assertEqual(result.iloc[0].value, b"\x01")
         self.assertEqual(result.iloc[0].metadata, b"\x02")
@@ -854,12 +856,12 @@ class ArrowToPandasConversionTests(unittest.TestCase):
         self.assertEqual(result.name, "v")
 
         # empty
-        result = ArrowToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion._convert_array_numpy(
             pa.array([], type=variant_type), VariantType()
         )
         self.assertEqual(len(result), 0)
 
-    def test_geography_convert_numpy(self):
+    def test_geography_convert_array_numpy(self):
         import pyarrow as pa
 
         geography_type = pa.struct(
@@ -886,19 +888,21 @@ class ArrowToPandasConversionTests(unittest.TestCase):
             ],
             type=geography_type,
         )
-        result = ArrowToPandasConversion.convert_numpy(arr, GeographyType(4326), ser_name="g")
+        result = ArrowToPandasConversion._convert_array_numpy(
+            arr, GeographyType(4326), ser_name="g"
+        )
         self.assertEqual(result.iloc[0], Geography(wkb1, 4326))
         self.assertIsNone(result.iloc[1])
         self.assertEqual(result.iloc[2], Geography(wkb2, 4326))
         self.assertEqual(result.name, "g")
 
         # empty
-        result = ArrowToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion._convert_array_numpy(
             pa.array([], type=geography_type), GeographyType(4326)
         )
         self.assertEqual(len(result), 0)
 
-    def test_geometry_convert_numpy(self):
+    def test_geometry_convert_array_numpy(self):
         import pyarrow as pa
 
         geometry_type = pa.struct(
@@ -925,14 +929,14 @@ class ArrowToPandasConversionTests(unittest.TestCase):
             ],
             type=geometry_type,
         )
-        result = ArrowToPandasConversion.convert_numpy(arr, GeometryType(0), ser_name="g")
+        result = ArrowToPandasConversion._convert_array_numpy(arr, GeometryType(0), ser_name="g")
         self.assertEqual(result.iloc[0], Geometry(wkb1, 0))
         self.assertIsNone(result.iloc[1])
         self.assertEqual(result.iloc[2], Geometry(wkb2, 0))
         self.assertEqual(result.name, "g")
 
         # empty
-        result = ArrowToPandasConversion.convert_numpy(
+        result = ArrowToPandasConversion._convert_array_numpy(
             pa.array([], type=geometry_type), GeometryType(0)
         )
         self.assertEqual(len(result), 0)

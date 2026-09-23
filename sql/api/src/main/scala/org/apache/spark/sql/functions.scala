@@ -484,8 +484,10 @@ object functions {
    * space.
    *
    * @param e
-   *   The column to compute the sketch on. A column that evaluates to an integral, string or
-   *   binary.
+   *   The column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or binary. A TIME column is counted by its nanoseconds-of-day; look it up in the
+   *   resulting sketch by that value (e.g. `LocalTime.toNanoOfDay`). TIME support was added in
+   *   4.4.0.
    * @param eps
    *   The relative error, must be positive. A column that evaluates to a numeric. Must be a
    *   constant.
@@ -509,8 +511,10 @@ object functions {
    * space.
    *
    * @param e
-   *   The column to compute the sketch on. A column that evaluates to an integral, string or
-   *   binary.
+   *   The column to compute the sketch on. A column that evaluates to an integral, a time, a
+   *   string or binary. A TIME column is counted by its nanoseconds-of-day; look it up in the
+   *   resulting sketch by that value (e.g. `LocalTime.toNanoOfDay`). TIME support was added in
+   *   4.4.0.
    * @param eps
    *   The relative error, must be positive. A column that evaluates to a numeric. Must be a
    *   constant.
