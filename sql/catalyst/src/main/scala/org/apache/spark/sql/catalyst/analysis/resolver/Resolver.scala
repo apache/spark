@@ -47,7 +47,8 @@ import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   AttributeSet,
   Expression,
-  ExprId
+  ExprId,
+  PipeSetInput
 }
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -273,6 +274,8 @@ class Resolver(
             handleResolvedWithCte(withCte)
           case unresolvedProject: Project =>
             projectResolver.resolve(unresolvedProject)
+          case unresolvedPipeSetInput: PipeSetInput =>
+            resolvePipeSetInput(unresolvedPipeSetInput)
           case unresolvedAggregate: Aggregate =>
             aggregateResolver.resolve(unresolvedAggregate)
           case unresolvedFilter: Filter =>
@@ -346,6 +349,18 @@ class Resolver(
       operatorResolutionContextStack.pop()
       CurrentOrigin.set(previousOrigin)
     }
+  }
+
+  /**
+   * Resolves the input marker of a pipe SET assignment and exposes its original qualified row as
+   * hidden output. The visible output remains unchanged so unqualified references continue to see
+   * the values produced by earlier assignments.
+   */
+  private def resolvePipeSetInput(unresolvedPipeSetInput: PipeSetInput): LogicalPlan = {
+    val resolvedPipeSetInput =
+      unresolvedPipeSetInput.copy(child = resolve(unresolvedPipeSetInput.child))
+    scopes.overwriteCurrent(hiddenOutput = Some(resolvedPipeSetInput.metadataOutput))
+    resolvedPipeSetInput
   }
 
   /**

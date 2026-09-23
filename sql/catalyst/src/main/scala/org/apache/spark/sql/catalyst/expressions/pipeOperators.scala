@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PIPE_EXPRESSION, PIPE_OPERATOR, TreePattern}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 
@@ -53,11 +54,39 @@ case class PipeOperator(child: LogicalPlan) extends UnaryNode {
   override def withNewChildInternal(newChild: LogicalPlan): PipeOperator = copy(child = newChild)
 }
 
-/** This rule removes all PipeOperator nodes from a logical plan at the end of analysis. */
+/**
+ * Preserves the qualified input row of a SQL pipe SET assignment as metadata output.
+ *
+ * The SET projection replaces assigned columns in its visible output. Keeping the original row as
+ * qualified-access-only metadata lets a later `t.a` or `t.*` continue to refer to the input row
+ * without changing the SET output schema or unqualified star expansion.
+ */
+case class PipeSetInput(child: LogicalPlan) extends UnaryNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(PIPE_OPERATOR)
+
+  override def output: Seq[Attribute] = child.output
+
+  override def metadataOutput: Seq[Attribute] = {
+    val retainedQualifiedOutput = AttributeSeq
+      .mergeHiddenAndVisibleOutput(
+        child.metadataOutput.filter(_.qualifiedAccessOnly), child.output)
+      .filter(_.qualifier.nonEmpty)
+      .map(_.markAsQualifiedAccessOnly())
+    val retainedQualifiedOutputIds = retainedQualifiedOutput.iterator.map(_.exprId).toSet
+    retainedQualifiedOutput ++ child.metadataOutput.filterNot { attribute =>
+      attribute.qualifiedAccessOnly || retainedQualifiedOutputIds.contains(attribute.exprId)
+    }
+  }
+
+  override def withNewChildInternal(newChild: LogicalPlan): PipeSetInput = copy(child = newChild)
+}
+
+/** This rule removes transparent pipe-operator nodes from a logical plan after analysis. */
 object EliminatePipeOperators extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(PIPE_OPERATOR), ruleId) {
     case PipeOperator(child) => child
+    case PipeSetInput(child) => child
   }
 }
 

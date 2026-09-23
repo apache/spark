@@ -1893,6 +1893,37 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expectedPlan = Project(Seq(UnresolvedAttribute("i")), addColumnF).analyze
     checkAnalysis(inputPlan, expectedPlan)
   }
+
+  test("SPARK-59146: pipe SET retained output remains a regular plan-ID candidate") {
+    val source = testRelation2.subquery("t")
+    val Seq(_, b) = source.output.take(2)
+    val set = Project(Seq(Alias(Literal("x"), "a")(), b), PipeSetInput(source))
+    set.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+
+    val otherRelation = LocalRelation(AttributeReference("b", StringType)())
+    val other = Project(otherRelation.output, otherRelation)
+    other.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+
+    val column = UnresolvedAttribute("b")
+    column.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+    val plan = Project(Seq(column), Join(set, other, Inner, None, JoinHint.NONE))
+
+    checkError(
+      exception = intercept[AnalysisException](getAnalyzer.execute(plan)),
+      condition = "AMBIGUOUS_COLUMN_REFERENCE",
+      parameters = Map("name" -> "\"b\""))
+  }
+
+  test("SPARK-59146: pipe SET does not duplicate retained metadata output") {
+    val a = AttributeReference("a", IntegerType)().withQualifier(Seq("t"))
+    val metadata = MetadataAttribute("_metadata", StringType).withQualifier(Seq("t"))
+    val child = Project(Seq(a, metadata), LocalRelation(a, metadata))
+    child.setTagValue(Project.hiddenOutputTag, Seq(metadata))
+
+    val metadataOutput = PipeSetInput(child).metadataOutput
+    assert(metadataOutput.map(_.exprId) === Seq(a.exprId, metadata.exprId))
+    assert(metadataOutput.forall(_.qualifiedAccessOnly))
+  }
 }
 
 /**

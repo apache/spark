@@ -109,6 +109,24 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     checkResolverGuard("SELECT table.* FROM VALUES(1) as table")
   }
 
+  test("SPARK-59146: pipe SET retains qualified source columns") {
+    checkResolverGuard(
+      "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> SELECT a, t.a, t.b")
+    checkResolverGuard(
+      "VALUES (1, 2, 3) AS t(a, b, c) |> SET b = 20 |> SELECT t.*")
+    checkResolverGuard(
+      "SELECT 1 AS x, NAMED_STRUCT('x', 2) AS col " +
+        "|> AS col |> SET x = x + 1 |> SELECT x, col.x")
+    val aliasQuery = "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> AS u"
+    checkResolverGuard(aliasQuery)
+    withSQLConf(
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
+      assert(sql(aliasQuery).schema.fieldNames === Array("a", "b"))
+    }
+  }
+
   test("Binary arithmetic") {
     checkResolverGuard("SELECT col1+col2 FROM VALUES(1,2)")
     checkResolverGuard("SELECT 1 + 2.3 / 2 - 3 DIV 2 + 3.0 * 10.0")

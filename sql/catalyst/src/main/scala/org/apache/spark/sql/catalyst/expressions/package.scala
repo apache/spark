@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import com.google.common.collect.Maps
 
 import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
@@ -83,6 +85,40 @@ package object expressions  {
       // access. In case something goes wrong, like a scan relation from a custom data source,
       // we explicitly remove that special flag to be safe.
       new AttributeSeq(attr.map(_.markAsAllowAnyAccess()))
+    }
+
+    /**
+     * Merges hidden and visible output in the order used by qualified star expansion.
+     *
+     * Hidden output can repeat visible attributes to preserve their position in an original row.
+     * Each hidden occurrence therefore consumes at most one visible occurrence with the same
+     * expression ID. Any visible occurrences that were not consumed are appended in their
+     * original order.
+     */
+    def mergeHiddenAndVisibleOutput(
+        hiddenOutput: Seq[Attribute],
+        visibleOutput: Seq[Attribute]): Seq[Attribute] = {
+      val visible = visibleOutput.toIndexedSeq
+      val visibleIndicesByExprId = mutable.HashMap.empty[ExprId, mutable.Queue[Int]]
+      visible.zipWithIndex.foreach { case (attribute, index) =>
+        visibleIndicesByExprId
+          .getOrElseUpdate(attribute.exprId, mutable.Queue.empty[Int])
+          .enqueue(index)
+      }
+      val consumedVisible = Array.fill(visible.length)(false)
+      val mergedHidden = hiddenOutput.map { hiddenAttribute =>
+        visibleIndicesByExprId.get(hiddenAttribute.exprId) match {
+          case Some(visibleIndices) if visibleIndices.nonEmpty =>
+            val visibleIndex = visibleIndices.dequeue()
+            consumedVisible(visibleIndex) = true
+            visible(visibleIndex)
+          case _ =>
+            hiddenAttribute
+        }
+      }
+      mergedHidden ++ visible.zipWithIndex.collect {
+        case (attribute, index) if !consumedVisible(index) => attribute
+      }
     }
   }
 

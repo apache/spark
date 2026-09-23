@@ -910,6 +910,154 @@ struct<a:int,a:int,z2:int>
 
 
 -- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select t.a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select a, t.a, t.b
+-- !query schema
+struct<a:int,a:int,b:int>
+-- !query output
+2	1	10
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> as u
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+2	10
+
+
+-- !query
+select 1 as x, named_struct('x', 2) as col
+|> as col
+|> set x = x + 1
+|> select x, col.x
+-- !query schema
+struct<x:int,x:int>
+-- !query output
+2	1
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select *
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+2	10
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> select t.*
+-- !query schema
+struct<a:int,b:int,c:int>
+-- !query output
+1	2	3
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1, b = b + 1
+|> select a, b, t.*
+-- !query schema
+struct<a:int,b:int,a:int,b:int>
+-- !query output
+2	11	1	10
+
+
+-- !query
+values (1, 2) as s(a, b)
+|> select a, a, b
+|> as t
+|> set b = 3
+|> select t.*
+-- !query schema
+struct<a:int,a:int,b:int>
+-- !query output
+1	1	2
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> where t.a = 1
+|> select a, t.a
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+2	1
+
+
+-- !query
+values (1, 10) as lhs(k, l)
+|> inner join values (1, 20) as rhs(k, r) using (k)
+|> set k = k + 1
+|> select k, lhs.k, rhs.k, l, r
+-- !query schema
+struct<k:int,k:int,k:int,l:int,r:int>
+-- !query output
+2	1	1	10	20
+
+
+-- !query
+values (1) as t(a)
+|> set a = a + 1
+|> aggregate count(t.*)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "tableName" : "`t`"
+  }
+}
+
+
+-- !query
+table t
+|> set x = x + 1
+|> select x, _metadata.file_name is not null as has_file_name
+|> order by x
+-- !query schema
+struct<x:int,has_file_name:boolean>
+-- !query output
+1	true
+2	true
+
+
+-- !query
+table t
+|> select *, _metadata
+|> set _metadata = 1
+|> select x, _metadata,
+     t._metadata.file_name is not null as original_metadata_available
+|> order by x
+-- !query schema
+struct<x:int,_metadata:int,original_metadata_available:boolean>
+-- !query output
+0	1	true
+1	1	true
+
+
+-- !query
 table t
 |> set z = 1
 -- !query schema

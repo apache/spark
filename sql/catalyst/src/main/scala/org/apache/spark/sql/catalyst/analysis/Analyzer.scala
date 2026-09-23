@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils, GeneratedColumn}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils, GeneratedColumn, MetadataColumnHelper}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 // `View` is aliased to `V2View` to avoid clashing with the logical-plan `View` imported via
 // `org.apache.spark.sql.catalyst.plans.logical._`.
@@ -2152,7 +2152,9 @@ class Analyzer(
                     resolvesToCountBuiltin &&
                     f.arguments.length == 1) {
                   f.arguments.foreach {
-                    case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
+                    case u: UnresolvedStar if u.isQualifiedByTable(
+                        child.output ++ child.metadataOutput.filter(_.qualifiedAccessOnly),
+                        resolver) =>
                       throw QueryCompilationErrors
                         .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
                     case _ => // do nothing
