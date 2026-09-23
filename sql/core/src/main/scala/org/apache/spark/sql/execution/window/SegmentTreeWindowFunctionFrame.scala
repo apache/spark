@@ -314,17 +314,23 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     if (fallbackUsed) fallback.currentUpperBound() else upperBound
 
   /**
-   * Drop references to open rowArray iterators. Idempotent.
+   * Close and drop references to open rowArray iterators. Idempotent.
    *
-   * Note: `ExternalAppendOnlyUnsafeRowArrayIterator.closeIfNeeded()` is
-   * `protected`, so we cannot invoke it. Spark's own `SlidingWindowFunctionFrame`
-   * also does not close its iterator; the backing `UnsafeExternalSorter` is
-   * released by the enclosing `WindowExec`'s `TaskCompletionListener`.
+   * `SpillableArrayIterator` implements `Closeable`, so spill readers are
+   * released at partition boundary rather than deferred to task completion.
    */
   private def closeIters(): Unit = {
+    closeIterator(boundIter)
+    closeIterator(lowerIter)
+    closeIterator(upperIter)
     boundIter = null
     lowerIter = null
     upperIter = null
+  }
+
+  private def closeIterator(it: Iterator[UnsafeRow]): Unit = it match {
+    case c: java.io.Closeable => c.close()
+    case _ => // in-memory iterator: no-op
   }
 
   override def close(): Unit = {
