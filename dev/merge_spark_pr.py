@@ -456,6 +456,41 @@ def fix_precedes_affects(fix_version_names: list[str], affects_version_names: li
     return min(fix) < min(affects)
 
 
+def suggest_affects_version(
+    fix_version_names: list[str], unreleased_version_names: list[str]
+) -> str:
+    """Suggest the earliest fix version only if it is an unreleased major or minor release.
+
+    An unreleased x.y.0 can identify affected development builds. A patch fix version
+    does not identify the earlier release affected by the bug.
+
+    >>> unreleased = ["5.0.0", "4.4.0", "4.2.1"]
+    >>> suggest_affects_version(["4.4.0"], unreleased)
+    '4.4.0'
+    >>> suggest_affects_version(["5.0.0"], unreleased)
+    '5.0.0'
+    >>> suggest_affects_version(["5.0.0", "4.4.0"], unreleased)
+    '4.4.0'
+    >>> suggest_affects_version(["4.2.1"], unreleased)
+    ''
+    >>> suggest_affects_version(["4.4.0", "4.2.1"], unreleased)
+    ''
+    >>> suggest_affects_version(["4.3.0", "4.4.0"], unreleased)
+    ''
+    >>> suggest_affects_version(["4.10.0", "4.9.0"], ["4.10.0", "4.9.0"])
+    '4.9.0'
+    >>> suggest_affects_version([], unreleased)
+    ''
+    >>> suggest_affects_version(["unknown", "4.4.0"], unreleased)
+    ''
+    """
+    versions = [(parse_version(name), name) for name in fix_version_names]
+    if not versions or any(version is None for version, _ in versions):
+        return ""
+    version, name = min(versions)
+    return name if version[2] == 0 and name in unreleased_version_names else ""
+
+
 def red(text):
     return "\033[91m%s\033[0m" % text
 
@@ -1311,44 +1346,52 @@ def reconcile_jira_components(issue, title_components):
 
 
 def reconcile_jira_affects_versions(
-    issue, fix_version_names: list[str], affects_available: set[str]
+    issue,
+    fix_version_names: list[str],
+    affects_available: set[str],
+    unreleased_version_names: list[str],
 ) -> None:
-    """Prompt the committer to correct the Affects Version/s when none precedes the fix.
+    """Prompt the committer to correct Affects Version/s newer than the earliest fix.
 
-    The caller gates on ``fix_precedes_affects``, so this runs only when the affected
-    version is likely wrong. The merge target cannot reveal when the bug was introduced,
-    so the committer types the version(s) explicitly (validated against
-    ``affects_available``); when the issue already has versions, they choose to append
-    (default), overwrite, or keep. A blank input or [k]eep leaves the field untouched.
+    Blank input accepts the suggested version, or skips when none is available. Versions
+    are validated against ``affects_available`` before the committer chooses to append
+    (default), overwrite, or keep. Entering 'skip' or [k]eep leaves the field untouched.
     Writes go through ``jira_ops`` so a dry run only logs them.
     """
     current_names = [v.name for v in issue.fields.versions]
+    default_affects_version = suggest_affects_version(fix_version_names, unreleased_version_names)
+    if default_affects_version:
+        prompt_suffix = f"[{default_affects_version}] (or 'skip')"
+        skip_hint = "enter 'skip'"
+    else:
+        prompt_suffix = "(blank to skip)"
+        skip_hint = "leave blank to skip"
     print()
     print("=" * 80)
     print(
         f"JIRA {issue.key} Affects Version/s {current_names if current_names else '(none)'} "
-        f"vs Fix Version/s {fix_version_names}: at least one Affects Version must precede "
+        f"vs Fix Version/s {fix_version_names}: at least one Affects Version must be at or before "
         f"the earliest Fix Version, so the recorded affected version is likely wrong."
     )
     print("=" * 80)
     while True:
         try:
-            raw = bold_input("Enter comma-separated affects version(s) (blank to skip): ")
-            if raw.strip() == "":
+            raw = bold_input(f"Enter comma-separated affects version(s) {prompt_suffix}: ").strip()
+            if raw.lower() == "skip" or (not raw and not default_affects_version):
                 print(f"Affects Version/s left unchanged; update {issue.key} manually.")
                 return
-            new_names = parse_version_list(raw)
+            new_names = parse_version_list(raw or default_affects_version)
             if new_names and set(new_names).issubset(affects_available):
                 break
             print(
                 f"Specified version(s) [{', '.join(new_names)}] not found in the available "
-                f"versions, try again (or leave blank to skip)."
+                f"versions, try again (or {skip_hint})."
             )
         except KeyboardInterrupt:
             raise
         except BaseException:
             traceback.print_exc()
-            print("Error setting affects version(s), try again (or leave blank to skip).")
+            print(f"Error setting affects version(s), try again (or {skip_hint}).")
 
     if current_names:
         choice = get_input(
@@ -1366,10 +1409,14 @@ def reconcile_jira_affects_versions(
     jira_ops.update_affects_versions(issue, new_names)
 
 
-def maybe_reconcile_jira_affects_versions(issue, fix_version_names, affects_available):
+def maybe_reconcile_jira_affects_versions(
+    issue, fix_version_names, affects_available, unreleased_version_names
+):
     """Reconcile the Affects Version/s only when they fail to precede the fix version(s)."""
     if fix_precedes_affects(fix_version_names, [v.name for v in issue.fields.versions]):
-        reconcile_jira_affects_versions(issue, fix_version_names, affects_available)
+        reconcile_jira_affects_versions(
+            issue, fix_version_names, affects_available, unreleased_version_names
+        )
 
 
 def get_jira_issue(prompt, default_jira_id=""):
@@ -1460,7 +1507,7 @@ def resolve_jira_issue(
             )
             # A re-run may still have Affects Version/s sitting above the unchanged fix set.
             maybe_reconcile_jira_affects_versions(
-                issue, existing_fix_version_names, affects_available
+                issue, existing_fix_version_names, affects_available, unreleased_names
             )
             return
         if default_fix_list:
@@ -1472,7 +1519,7 @@ def resolve_jira_issue(
                 # Declining the addition still leaves any Affects Version/s that sit above
                 # the already-recorded fix version(s) to reconcile.
                 maybe_reconcile_jira_affects_versions(
-                    issue, existing_fix_version_names, affects_available
+                    issue, existing_fix_version_names, affects_available, unreleased_names
                 )
                 return
         else:
@@ -1511,7 +1558,9 @@ def resolve_jira_issue(
     # On a fresh resolve, offer to update the Affects Version/s when they sit above the fix
     # version(s) just chosen; the already-resolved paths handle their own cases.
     if not is_resolved:
-        maybe_reconcile_jira_affects_versions(issue, fix_versions, affects_available)
+        maybe_reconcile_jira_affects_versions(
+            issue, fix_versions, affects_available, unreleased_names
+        )
 
     def get_version_json(version_str):
         return list(filter(lambda v: v.name == version_str, versions))[0].raw
@@ -1524,13 +1573,15 @@ def resolve_jira_issue(
         if not jira_fix_versions:
             print("No new fix versions selected for JIRA issue %s; no update needed." % issue.key)
             maybe_reconcile_jira_affects_versions(
-                issue, existing_fix_version_names, affects_available
+                issue, existing_fix_version_names, affects_available, unreleased_names
             )
             return
         # A backport adds an earlier fix line, which usually means that line is affected too;
         # offer to extend the Affects Version/s down when they miss the full fix set.
         full_fix_names = existing_fix_version_names + [v["name"] for v in jira_fix_versions]
-        maybe_reconcile_jira_affects_versions(issue, full_fix_names, affects_available)
+        maybe_reconcile_jira_affects_versions(
+            issue, full_fix_names, affects_available, unreleased_names
+        )
         jira_ops.add_fix_versions(issue, existing_fix_versions, jira_fix_versions)
         return
 
