@@ -83,10 +83,6 @@ private[sql] case class RenameTableExec(
   // Re-cache under the mode that produced the original plan so CHAR/VARCHAR output is legal.
   private def withCharVarcharScanModeConf[T](mode: Option[CharVarcharScanMode])(body: => T): T = {
     mode match {
-      case Some(CharVarcharScanMode.Legacy) =>
-        withSQLConf(
-          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
-          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")(body)
       case Some(CharVarcharScanMode.SparkStandard) =>
         withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")(body)
       case Some(CharVarcharScanMode.PreserveNative) =>

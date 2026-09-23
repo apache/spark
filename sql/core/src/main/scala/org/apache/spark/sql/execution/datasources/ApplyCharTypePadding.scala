@@ -52,14 +52,10 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val standardSemantics = conf.charVarcharStandardSemantics
-    val scanMode = if (conf.charVarcharFirstClassTypes) {
-      CharVarcharScanMode(standardSemantics)
-    } else {
-      CharVarcharScanMode.Legacy
-    }
+    val scanMode = CharVarcharScanMode(standardSemantics)
 
     /**
-     * Binds the mode captured while analyzing a CHAR/VARCHAR relation.
+     * Binds the mode captured while analyzing a first-class CHAR/VARCHAR relation.
      *
      * For example, `SELECT c FROM t` retains its analyzed mode if the session setting changes
      * before the physical scan is built. Relations without CHAR/VARCHAR columns remain unbound.
@@ -83,10 +79,14 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
       case _ => p
     }
 
-    val boundPlan = plan.resolveOperatorsUp {
-      case relation: LogicalRelation => bindCharVarcharScanMode(relation)
-      case relation: DataSourceV2Relation => bindCharVarcharScanMode(relation)
-      case relation: HiveTableRelation => bindCharVarcharScanMode(relation)
+    val boundPlan = if (conf.charVarcharFirstClassTypes) {
+      plan.resolveOperatorsUp {
+        case relation: LogicalRelation => bindCharVarcharScanMode(relation)
+        case relation: DataSourceV2Relation => bindCharVarcharScanMode(relation)
+        case relation: HiveTableRelation => bindCharVarcharScanMode(relation)
+      }
+    } else {
+      plan
     }
 
     // standardSemantics takes precedence over legacy charVarcharAsString.
