@@ -2937,8 +2937,8 @@ object AsOfJoin {
       expr1: Expression,
       operator: MatchComparisonOperator,
       expr2: Expression): (Expression, Expression, MatchComparisonOperator) = {
-    val expr1Side = operandJoinSide(expr1, leftSet, rightSet, syntacticIsLeft = true)
-    val expr2Side = operandJoinSide(expr2, leftSet, rightSet, syntacticIsLeft = false)
+    val expr1Side = operandJoinSide(expr1, leftSet, rightSet)
+    val expr2Side = operandJoinSide(expr2, leftSet, rightSet)
     (expr1Side, expr2Side) match {
       case (Some(true), Some(false)) => (expr1, expr2, operator)
       case (Some(false), Some(true)) => (expr2, expr1, operator.flip)
@@ -2950,13 +2950,11 @@ object AsOfJoin {
   private def operandJoinSide(
       expr: Expression,
       leftSet: AttributeSet,
-      rightSet: AttributeSet,
-      syntacticIsLeft: Boolean): Option[Boolean] = {
+      rightSet: AttributeSet): Option[Boolean] = {
     val refs = expr.references
     if (refs.isEmpty) {
-      // Literals, CURRENT_TIMESTAMP(), session variables, etc. have no column refs;
-      // use MATCH_CONDITION syntactic position (expr1/expr2) for join-side assignment.
-      Some(syntacticIsLeft)
+      // Constant operand (literal, current_timestamp(), session variable): no join input.
+      None
     } else if (refs.subsetOf(leftSet)) {
       Some(true)
     } else if (refs.subsetOf(rightSet)) {

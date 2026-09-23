@@ -371,8 +371,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "refs1" : "\"(trade_time + (quote_time - trade_time))\"",
-    "refs2" : "\"quote_time\""
+    "operand1" : "\"(trade_time + (quote_time - trade_time))\"",
+    "operand2" : "\"quote_time\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -394,8 +394,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "refs1" : "\"trade_time\"",
-    "refs2" : "\"trade_time - INTERVAL '01' HOUR\""
+    "operand1" : "\"trade_time\"",
+    "operand2" : "\"trade_time - INTERVAL '01' HOUR\""
   }
 }
 
@@ -534,7 +534,71 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "refs1" : "\"quote_time\"",
-    "refs2" : "\"quote_time - INTERVAL '01' HOUR\""
+    "operand1" : "\"quote_time\"",
+    "operand2" : "\"quote_time - INTERVAL '01' HOUR\""
+  }
+}
+
+
+-- !query
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= TIMESTAMP '2026-06-29 10:00:00')
+  ON t.symbol = q.symbol
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "operand1" : "\"trade_time\"",
+    "operand2" : "\"TIMESTAMP '2026-06-29 10:00:00'\""
+  }
+}
+
+
+-- !query
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:00' >= q.quote_time)
+  ON t.symbol = q.symbol
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "operand1" : "\"TIMESTAMP '2026-06-29 10:00:00'\"",
+    "operand2" : "\"quote_time\""
+  }
+}
+
+
+-- !query
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (current_timestamp() >= q.quote_time)
+  ON t.symbol = q.symbol
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "operand1" : "\"current_timestamp()\"",
+    "operand2" : "\"quote_time\""
+  }
+}
+
+
+-- !query
+SELECT * FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (TIMESTAMP '2026-06-29 10:00:01' >= TIMESTAMP '2026-06-29 10:00:00')
+  ON t.symbol = q.symbol
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "operand1" : "\"TIMESTAMP '2026-06-29 10:00:01'\"",
+    "operand2" : "\"TIMESTAMP '2026-06-29 10:00:00'\""
   }
 }
