@@ -148,6 +148,16 @@ class BinaryComparisonSimplificationSuite extends PlanTest {
     }
   }
 
+  test("do not derive pruning predicates when disabled") {
+    val a = nonNullableRelation.output.head
+    val condition = Add(a, Literal(10), EvalMode.ANSI) > Literal(100)
+    val plan = nonNullableRelation.where(condition).analyze
+
+    withSQLConf(SQLConf.DERIVE_INTEGRAL_COMPARISON_PREDICATES_ENABLED.key -> "false") {
+      comparePlans(DeriveOnly.execute(plan), plan)
+    }
+  }
+
   test("do not derive pruning predicates when arithmetic is not checked integral arithmetic") {
     val a = nonNullableRelation.output.head
     val cases = Seq(

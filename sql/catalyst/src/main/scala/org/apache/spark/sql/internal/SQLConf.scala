@@ -1701,6 +1701,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val DERIVE_INTEGRAL_COMPARISON_PREDICATES_ENABLED =
+    buildConf("spark.sql.optimizer.deriveIntegralComparisonPredicates.enabled")
+      .internal()
+      .doc("When true, derives pushable predicates from comparisons over ANSI integral addition " +
+        "and subtraction with literals.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val PROPAGATE_DISTINCT_KEYS_ENABLED =
     buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
       .internal()

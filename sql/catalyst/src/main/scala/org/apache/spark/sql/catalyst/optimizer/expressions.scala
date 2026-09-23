@@ -737,9 +737,12 @@ object DeriveIntegralComparisonPredicates extends Rule[LogicalPlan] {
     case other => other
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(BINARY_COMPARISON), ruleId) {
-    case filter: Filter => filter.mapExpressions(deriveInConjunction)
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.getConf(SQLConf.DERIVE_INTEGRAL_COMPARISON_PREDICATES_ENABLED)) return plan
+
+    plan.transformWithPruning(_.containsPattern(BINARY_COMPARISON), ruleId) {
+      case filter: Filter => filter.mapExpressions(deriveInConjunction)
+    }
   }
 }
 
