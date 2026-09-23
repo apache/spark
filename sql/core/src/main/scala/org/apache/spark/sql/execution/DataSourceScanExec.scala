@@ -303,11 +303,9 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
 
   // Filters on non-partition columns.
   def dataFilters: Seq[Expression]
-  // Filters that should be evaluated lazily by the storage layer (e.g. parquet reader) for IO
-  // pruning of value columns based on key column evaluation. These may reference subqueries (e.g. a
-  // runtime bloom filter built from a join build side) and are materialized at task launch time.
-  // Defaults to Nil so that a scan which does not support storage-filter pushdown need not know
-  // about it.
+  // Filters the storage layer evaluates to prune value-column IO based on key-column evaluation.
+  // These may reference subqueries (e.g. a runtime bloom filter built from a join build side) and
+  // are materialized at task launch time. Nil for a scan that does not support pushing them.
   def storageFilters: Seq[Expression] = Nil
   // Disable bucketed scan based on physical query plan, see rule
   // [[DisableUnnecessaryBucketedScan]] for details.
@@ -660,8 +658,7 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
   } ++ storageFilterMetrics ++ driverMetrics
 
   protected lazy val storageFilterMetrics: Map[String, SQLMetric] = if (storageFilters.nonEmpty) {
-    // A row group is skipped, a row is excluded, a byte is avoided. See StorageFilterMetrics for
-    // why each counter uses its own verb.
+    // See `StorageFilterMetrics` for what each of these counts.
     Map(
       FileSourceScanLike.STORAGE_FILTER_ROW_GROUPS_SKIPPED ->
         SQLMetrics.createMetric(sparkContext, "row groups skipped by storage filter"),
@@ -799,11 +796,10 @@ case class FileSourceScanExec(
   lazy val inputRDD: RDD[InternalRow] = {
     val options = relation.options +
       (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
-    // Only route through the storage-filter entry point when there is something to push. A
-    // `FileFormat` subclass that customizes reading by overriding `buildReaderWithPartitionValues`
-    // -- the long-standing entry point -- would otherwise be bypassed on every query, because
-    // `ParquetFileFormat` overrides `buildReaderWithStorageFilters` with a full reader
-    // implementation that the subclass knows nothing about.
+    // Only route through the storage-filter entry point when there is something to push, so that a
+    // `FileFormat` subclass which customizes reading by overriding `buildReaderWithPartitionValues`
+    // keeps being used on every other query: `ParquetFileFormat` answers
+    // `buildReaderWithStorageFilters` with a full reader the subclass knows nothing about.
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       if (preparedStorageFilters.isEmpty) {
         relation.fileFormat.buildReaderWithPartitionValues(
@@ -844,17 +840,13 @@ case class FileSourceScanExec(
     if (storageFilters.isEmpty) {
       Nil
     } else {
-      // Trust the planning-time decision: when [[FileSourceStrategy.extractStorageFilters]] moved a
-      // bloom filter into [[storageFilters]], it removed that conjunct from the post-scan Filter.
-      // Re-checking the conf here would silently drop the filter if the user toggled it off between
-      // planning and execution, producing wrong results. The conf only gates whether extraction
-      // happens at planning time.
+      // No conf check here: extraction has already removed these conjuncts from the post-scan
+      // Filter, so re-reading the conf would drop the filter for good if the user turned it off
+      // between planning and execution. The conf gates extraction at planning time only.
       //
-      // `output` is constructed by FileSourceStrategy as
-      // `readDataColumns ++ generatedMetadataColumns ++ partitionColumns ++
-      //   constantMetadataColumns`
-      // and `requiredSchema` is the StructType of the first two groups, so the first
-      // `requiredSchema.length` attributes of `output` correspond 1:1 to requiredSchema fields.
+      // `output` is `readDataColumns ++ generatedMetadataColumns ++ partitionColumns ++
+      // constantMetadataColumns` and `requiredSchema` is the StructType of the first two groups, so
+      // the first `requiredSchema.length` attributes line up with its fields.
       val requestedDataAttrs = output.take(requiredSchema.length)
       storageFilters.map { expr =>
         val subqueryReplaced = expr.transform {  case s: execution.ScalarSubquery => s.toLiteral }
