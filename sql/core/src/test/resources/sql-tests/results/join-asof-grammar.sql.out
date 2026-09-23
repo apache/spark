@@ -209,12 +209,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "INCOMPATIBLE_JOIN_TYPES",
+  "sqlState" : "42613",
   "messageParameters" : {
-    "error" : "'ASOF'",
-    "hint" : ": extra input 'ASOF'"
-  }
+    "joinType1" : "ASOF",
+    "joinType2" : "RIGHT OUTER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 121,
+    "fragment" : "RIGHT ASOF JOIN quotes q\n  MATCH_CONDITION (t.trade_time >= q.quote_time)\n  ON t.symbol = q.symbol"
+  } ]
 }
 
 
@@ -227,12 +234,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "INCOMPATIBLE_JOIN_TYPES",
+  "sqlState" : "42613",
   "messageParameters" : {
-    "error" : "'ASOF'",
-    "hint" : ": extra input 'ASOF'"
-  }
+    "joinType1" : "ASOF",
+    "joinType2" : "FULL OUTER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 120,
+    "fragment" : "FULL ASOF JOIN quotes q\n  MATCH_CONDITION (t.trade_time >= q.quote_time)\n  ON t.symbol = q.symbol"
+  } ]
 }
 
 
@@ -244,12 +258,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "INCOMPATIBLE_JOIN_TYPES",
+  "sqlState" : "42613",
   "messageParameters" : {
-    "error" : "'ASOF'",
-    "hint" : ": extra input 'ASOF'"
-  }
+    "joinType1" : "ASOF",
+    "joinType2" : "CROSS"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 96,
+    "fragment" : "CROSS ASOF JOIN quotes q\n  MATCH_CONDITION (t.trade_time >= q.quote_time)"
+  } ]
 }
 
 
@@ -261,12 +282,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "INCOMPATIBLE_JOIN_TYPES",
+  "sqlState" : "42613",
   "messageParameters" : {
-    "error" : "'ASOF'",
-    "hint" : ": extra input 'ASOF'"
-  }
+    "joinType1" : "ASOF",
+    "joinType2" : "NATURAL"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 104,
+    "fragment" : "NATURAL ASOF JOIN quotes\n  MATCH_CONDITION (trades.trade_time >= quotes.quote_time)"
+  } ]
 }
 
 
@@ -279,12 +307,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "INCOMPATIBLE_JOIN_TYPES",
+  "sqlState" : "42613",
   "messageParameters" : {
-    "error" : "'ASOF'",
-    "hint" : ": extra input 'ASOF'"
-  }
+    "joinType1" : "ASOF",
+    "joinType2" : "LEFT SEMI"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 125,
+    "fragment" : "LEFT SEMI ASOF JOIN quotes q\n  MATCH_CONDITION (t.trade_time >= q.quote_time)\n  ON t.symbol = q.symbol"
+  } ]
 }
 
 

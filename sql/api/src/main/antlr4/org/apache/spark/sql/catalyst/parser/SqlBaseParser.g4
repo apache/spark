@@ -1122,12 +1122,7 @@ relationExtension
 joinRelation
     : (joinType) JOIN LATERAL? right=relationPrimary joinPostfix?
     | NATURAL joinType JOIN LATERAL? right=relationPrimary
-    | asofJoinType ASOF JOIN right=relationPrimary asofJoinCriteria
-    ;
-
-asofJoinType
-    : INNER?
-    | LEFT OUTER?
+    | NATURAL? joinType ASOF JOIN right=relationPrimary asofJoinCriteria
     ;
 
 joinPostfix
