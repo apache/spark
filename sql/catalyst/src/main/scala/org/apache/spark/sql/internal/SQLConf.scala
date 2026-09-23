@@ -7036,10 +7036,9 @@ object SQLConf {
 
   val JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY =
     buildConf("spark.sql.json.enableStreamingTopLevelArray")
-      .internal()
-      .doc("When true, multiline JSON reads stream the elements of a top-level array one at a " +
-        "time instead of materializing the entire array before returning rows. This applies only " +
-        "to reads into a struct schema that take top-level arrays as structs, and has no " +
+      .doc("When true, multiline JSON file reads stream the elements of a top-level array one at " +
+        "a time instead of materializing the entire array before returning rows. This applies " +
+        "only to reads into a struct schema that take top-level arrays as structs, and has no " +
         "effect on reads using the `singleVariantColumn` or `explodeEmbeddedArray` option. " +
         "Streaming also makes an array element, rather than the whole document, the record " +
         "that a parse mode applies to, since rows already emitted cannot be withdrawn: " +

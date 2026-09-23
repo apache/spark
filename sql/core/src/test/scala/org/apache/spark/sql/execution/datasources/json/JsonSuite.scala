@@ -1479,8 +1479,9 @@ abstract class JsonSuite
     }
   }
 
-  test("multiline top level JSON array streaming option overrides the session config") {
-    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "false") {
+  gridTest("multiline top level JSON array streaming option overrides the session config")(
+      Seq(false, true)) { streaming =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> (!streaming).toString) {
       withTempPath { file =>
         val document = """[{"a":"bad"},{"a":2}]"""
         Files.write(file.toPath, document.getBytes(StandardCharsets.UTF_8))
@@ -1490,10 +1491,15 @@ abstract class JsonSuite
         val df = spark.read
           .schema(schema)
           .option("multiLine", true)
-          .option("enableStreamingTopLevelArray", true)
+          .option("enableStreamingTopLevelArray", streaming)
           .json(file.getCanonicalPath)
 
-        checkAnswer(df, Seq(Row(null, document), Row(2, null)))
+        val expected = if (streaming) {
+          Seq(Row(null, document), Row(2, null))
+        } else {
+          Seq(Row(null, document), Row(2, document))
+        }
+        checkAnswer(df, expected)
       }
     }
   }
