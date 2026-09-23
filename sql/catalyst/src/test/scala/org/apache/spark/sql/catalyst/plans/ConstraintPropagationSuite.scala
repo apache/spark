@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType, StructType}
 
 class ConstraintPropagationSuite extends PlanTest {
 

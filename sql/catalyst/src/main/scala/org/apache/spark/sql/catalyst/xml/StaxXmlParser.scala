@@ -16,12 +16,12 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader, StringWriter}
+import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
 import java.nio.charset.{Charset, MalformedInputException}
 import java.text.NumberFormat
 import java.util
 import java.util.Locale
-import javax.xml.stream.{XMLEventReader, XMLOutputFactory, XMLStreamException}
+import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
@@ -84,6 +84,72 @@ class StaxXmlParser(
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
   private val caseSensitive = SQLConf.get.caseSensitiveAnalysis
+
+  /**
+   * Limits a view of an event stream to one element whose start event has already been consumed.
+   * Closing or draining this view consumes the matching end event without closing the underlying
+   * reader.
+   */
+  private final class ElementBoundedEventReader(delegate: XMLEventReader)
+      extends XMLEventReader {
+    private var depth = 1
+
+    private def track(event: XMLEvent): XMLEvent = {
+      event match {
+        case _: StartElement => depth += 1
+        case _: EndElement => depth -= 1
+        case _ =>
+      }
+      event
+    }
+
+    override def hasNext: Boolean = depth > 0 && delegate.hasNext
+
+    override def nextEvent(): XMLEvent = {
+      if (!hasNext) {
+        throw new NoSuchElementException("No more events in the current element")
+      }
+      track(delegate.nextEvent())
+    }
+
+    override def peek(): XMLEvent = if (hasNext) delegate.peek() else null
+
+    override def next(): AnyRef = nextEvent()
+
+    override def getElementText: String = {
+      val text = new StringBuilder
+      var complete = false
+      while (!complete && hasNext) {
+        nextEvent() match {
+          case c: Characters => text.append(c.getData)
+          case _: EndElement => complete = true
+          case _: StartElement =>
+            throw new XMLStreamException("Element text contains a nested start element")
+          case _ =>
+        }
+      }
+      text.toString()
+    }
+
+    override def nextTag(): XMLEvent = {
+      var event = nextEvent()
+      while (event.isCharacters && event.asCharacters().isWhiteSpace) {
+        event = nextEvent()
+      }
+      if (!event.isStartElement && !event.isEndElement) {
+        throw new XMLStreamException(s"Expected a start or end element, but found $event")
+      }
+      event
+    }
+
+    override def getProperty(name: String): AnyRef = delegate.getProperty(name)
+
+    def drain(): Unit = while (hasNext) {
+      nextEvent()
+    }
+
+    override def close(): Unit = drain()
+  }
 
   /**
    * Parses a single XML string and turns it into either one resulting row or no row (if the
@@ -415,7 +481,6 @@ class StaxXmlParser(
       attributes: Array[Attribute]): MapData = {
     val kvPairs = ArrayBuffer.empty[(UTF8String, UTF8String, Option[Any])]
     var badMapException: Option[Throwable] = None
-    lazy val outputFactory = XMLOutputFactory.newFactory()
     def mapKey(raw: String): UTF8String = {
       CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(raw), keyType)
     }
@@ -442,15 +507,19 @@ class StaxXmlParser(
       parser.nextEvent match {
         case e: StartElement =>
           val rawKey = StaxXmlParserUtils.getName(e.asStartElement.getName, options)
-          val entryXml = consumeElement(parser, e, outputFactory)
-          val value = try {
-            Some(convertIsolatedElement(entryXml, valueType, rawKey))
-          } catch {
-            case e: SparkUpgradeException => throw e
-            case DuplicateMapKeyUtils(e) => throw e
-            case NonFatal(e) =>
-              badMapException = badMapException.orElse(Some(e))
-              None
+          val entryParser = new ElementBoundedEventReader(parser)
+          val value = {
+            try {
+              Some(convertField(entryParser, valueType, rawKey))
+            } catch {
+              case e: SparkUpgradeException => throw e
+              case DuplicateMapKeyUtils(e) => throw e
+              case NonFatal(e) =>
+                badMapException = badMapException.orElse(Some(e))
+                None
+            } finally {
+              entryParser.drain()
+            }
           }
           appendPair(rawKey, value)
         case c: Characters if !c.isWhiteSpace =>
@@ -474,47 +543,6 @@ class StaxXmlParser(
       kvPairs.toSeq, keyType, valueType)
     badMapException.foreach(throw _)
     mapData
-  }
-
-  private def consumeElement(
-      parser: XMLEventReader,
-      start: StartElement,
-      outputFactory: XMLOutputFactory): String = {
-    val output = new StringWriter()
-    val writer = outputFactory.createXMLEventWriter(output)
-    try {
-      writer.add(start)
-      var depth = 1
-      while (depth > 0) {
-        val event = parser.nextEvent()
-        writer.add(event)
-        event match {
-          case _: StartElement => depth += 1
-          case _: EndElement => depth -= 1
-          case _ =>
-        }
-      }
-      writer.flush()
-      output.toString
-    } finally {
-      writer.close()
-    }
-  }
-
-  private def convertIsolatedElement(
-      xml: String,
-      valueType: DataType,
-      startElementName: String): Any = {
-    val parser = StaxXmlParserUtils.filteredReader(xml)
-    try {
-      while (!parser.peek().isStartElement) {
-        parser.nextEvent()
-      }
-      parser.nextEvent()
-      convertField(parser, valueType, startElementName)
-    } finally {
-      parser.close()
-    }
   }
 
   /**

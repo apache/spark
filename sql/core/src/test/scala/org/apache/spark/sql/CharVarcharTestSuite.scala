@@ -2440,22 +2440,22 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
 
   test("SPARK-59274: from_json/csv/xml honor CHAR/VARCHAR under standardSemantics") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
-      def checkTrimmedCharInput(query: String, charType: CharType): DataFrame = {
+      def checkTextInput(query: String, inputType: DataType): DataFrame = {
         val df = sql(query)
         val inputTypes = df.queryExecution.analyzed.expressions.flatMap(_.collect {
           case e: SupportTrimmedCharInput => e.child.dataType
         })
-        assert(inputTypes === Seq(charType), df.queryExecution.analyzed)
+        assert(inputTypes === Seq(inputType), df.queryExecution.analyzed)
         df
       }
 
       checkAnswer(
-        checkTrimmedCharInput(
+        checkTextInput(
           """SELECT from_json(CAST('{"a":1}' AS CHAR(12)), 'a INT')""",
           CharType(12)),
         Row(Row(1)))
       checkAnswer(
-        checkTrimmedCharInput(
+        checkTextInput(
           """SELECT from_csv(
             |  CAST('1' AS CHAR(3)),
             |  '_c0 INT',
@@ -2463,12 +2463,21 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           CharType(3)),
         Row(Row(1)))
       checkAnswer(
-        checkTrimmedCharInput(
+        checkTextInput(
           """SELECT from_xml(
             |  CAST('<ROW><a>1</a></ROW>' AS CHAR(30)),
             |  'a INT')""".stripMargin,
           CharType(30)),
         Row(Row(1)))
+      Seq(
+        ("CAST('1 ' AS VARCHAR(2))", VarcharType(2)),
+        ("CAST('1 ' AS STRING)", StringType)).foreach { case (input, inputType) =>
+        checkAnswer(
+          checkTextInput(
+            s"SELECT schema_of_csv($input, map('delimiter', ' '))",
+            inputType),
+          Row("STRUCT<_c0: INT, _c1: STRING>"))
+      }
 
       val jsonChar = sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
       val jsonCharType = jsonChar.schema.head.dataType.asInstanceOf[StructType]
@@ -2663,6 +2672,26 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           |  '<ROW><m><a>1</a>2</m></ROW>',
           |  'm MAP<CHAR(2), INT>',
           |  map('valueTag', 'a ', 'ignoreCorruptFiles', 'true')).m""".stripMargin
+      val attributePaddingQuery =
+        """SELECT from_xml(
+          |  '<ROW><m a="1"><b>2</b></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('attributePrefix', '')).m""".stripMargin
+      val attributeOverflowQuery =
+        """SELECT from_xml(
+          |  '<ROW><m abc="1"><b>2</b></m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>',
+          |  map('attributePrefix', '')).m""".stripMargin
+      val attributeOverflowFailfastQuery =
+        """SELECT from_xml(
+          |  '<ROW><m abc="1"><b>2</b></m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>',
+          |  map('attributePrefix', '', 'mode', 'FAILFAST')).m""".stripMargin
+      val attributeCollisionQuery =
+        """SELECT from_xml(
+          |  '<ROW><m a="1"><b>0</b>2</m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('attributePrefix', '', 'valueTag', 'a ')).m""".stripMargin
 
       assertDuplicateMapKey(xmlQuery)
       assertDuplicateMapKey(varcharXmlQuery, expectedKey = "ab")
@@ -2673,13 +2702,16 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assertDuplicateMapKey(malformedXmlValueBeforeDuplicateQuery)
       assertDuplicateMapKey(ignoreCorruptXmlQuery)
       checkAnswer(sql(badXmlKeyThenSiblingQuery), Row(2))
+      checkAnswer(sql(attributePaddingQuery), Row(Map("a " -> 1, "b " -> 2)))
+      checkAnswer(sql(attributeOverflowQuery), Row(null))
+      assertParseExceedLimit(attributeOverflowFailfastQuery, expectedLimit = "2")
+      assertDuplicateMapKey(attributeCollisionQuery)
 
       withTempPath { path =>
         Seq("<ROW><m><a>1</a>2</m></ROW>").toDS().write.text(path.getCanonicalPath)
         def readXmlMap(): DataFrame = spark.read
           .option("rowTag", "ROW")
           .option("valueTag", "a ")
-          .option("ignoreCorruptFiles", "true")
           .schema("m MAP<CHAR(2), INT>")
           .xml(path.getCanonicalPath)
 
@@ -2701,6 +2733,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         checkAnswer(sql(badXmlKeyBeforeDuplicateQuery), Row(null))
         checkAnswer(sql(malformedXmlValueBeforeDuplicateQuery), Row(null))
         checkAnswer(sql(ignoreCorruptXmlQuery), Row(Map("a " -> 2)))
+        checkAnswer(sql(attributeCollisionQuery), Row(Map("a " -> 2, "b " -> 0)))
       }
     }
   }
