@@ -50,6 +50,16 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
       Row("""{"id":7,"name":"Ada"}"""))
   }
 
+  test("colon member with a column-valued value") {
+    // The `key : value` member overlaps the semi-structured extraction form `expr : path`
+    // (`primaryExpression COLON semiStructuredExtractionPath`), which also accepts a bare
+    // identifier on the right. Confirm a column-valued colon member still parses as a JSON_OBJECT
+    // pair rather than as `'k' : v` semi-structured extraction.
+    checkAnswer(
+      sql("SELECT json_object('k': v) FROM VALUES ('x') t(v)"),
+      Row("""{"k":"x"}"""))
+  }
+
   test("construct object using comma-separated key-value syntax") {
     checkAnswer(
       sql("SELECT json_object('id', 7, 'name', 'Ada')"),
@@ -330,7 +340,7 @@ world'))"""))
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = Some("42K09"),
       parameters = Map(
-        "sqlExpr" -> "\"JSON_OBJECT(ok VALUE 1, 2 VALUE bad)\"",
+        "sqlExpr" -> "\"JSON_OBJECT(ok VALUE 1, 2 VALUE bad NULL ON NULL)\"",
         "paramIndex" -> "third",
         "requiredType" -> "\"STRING\"",
         "inputSql" -> "\"2\"",
@@ -359,7 +369,8 @@ world'))"""))
     // direct Catalyst construction would advertise a length JSON_OBJECT does not enforce.
     Seq(VarcharType(2), CharType(2)).foreach { returning =>
       val expr = JsonObjectExpr(
-        Seq((Literal("k"), Literal(1))), Seq(false), JsonConstructorNullBehavior.Null, returning)
+        Seq((Literal("k"), Literal(1))), Seq(false), Seq(false),
+        JsonConstructorNullBehavior.Null, returning)
       expr.checkInputDataTypes() match {
         case DataTypeMismatch(errorSubClass, _) =>
           assert(errorSubClass == "INVALID_JSON_RETURNING_TYPE", s"for $returning")
@@ -392,7 +403,7 @@ world'))"""))
     // JacksonGenerator cannot serialize it, so JSON_OBJECT must reject it up front, not at runtime.
     val bad = JsonObjectExpr(
       Seq((Literal("k"), Literal.create(null, GeometryType(4326)))),
-      Seq(false), JsonConstructorNullBehavior.Null, StringType)
+      Seq(false), Seq(false), JsonConstructorNullBehavior.Null, StringType)
     bad.checkInputDataTypes() match {
       case DataTypeMismatch(sub, _) => assert(sub == "CANNOT_CONVERT_TO_JSON")
       case other => fail(s"expected DataTypeMismatch, got $other")
@@ -401,7 +412,7 @@ world'))"""))
     // into map values (unlike the top-level atomic case above), so this exercises that descent.
     val badNested = JsonObjectExpr(
       Seq((Literal("k"), Literal.create(null, MapType(StringType, GeometryType(4326))))),
-      Seq(false), JsonConstructorNullBehavior.Null, StringType)
+      Seq(false), Seq(false), JsonConstructorNullBehavior.Null, StringType)
     badNested.checkInputDataTypes() match {
       case DataTypeMismatch(sub, _) => assert(sub == "CANNOT_CONVERT_TO_JSON")
       case other => fail(s"expected DataTypeMismatch for a nested spatial value, got $other")
@@ -410,42 +421,46 @@ world'))"""))
     // toString, so the value-type guard must not over-reject it.
     val ok = JsonObjectExpr(
       Seq((Literal("k"), Literal.create(null, MapType(GeometryType(4326), IntegerType)))),
-      Seq(false), JsonConstructorNullBehavior.Null, StringType)
+      Seq(false), Seq(false), JsonConstructorNullBehavior.Null, StringType)
     assert(ok.checkInputDataTypes().isSuccess)
   }
 
-  test("a directly-constructed raw value that is not a string is rejected") {
-    // The parser only marks a nested constructor (STRING-typed) raw; a non-string raw value from
-    // direct construction would fail with a ClassCastException at eval, so reject it at analysis.
+  test("a raw (FORMAT JSON) value that is not a string is rejected") {
+    // A raw-spliced value must carry JSON text (string); a non-string raw value would fail with a
+    // ClassCastException at eval, so reject it at analysis with the FORMAT JSON input error.
     val expr = JsonObjectExpr(
-      Seq((Literal("k"), Literal(1))), Seq(true), JsonConstructorNullBehavior.Null, StringType)
+      Seq((Literal("k"), Literal(1))), Seq(true), Seq(true),
+      JsonConstructorNullBehavior.Null, StringType)
     expr.checkInputDataTypes() match {
-      case DataTypeMismatch(sub, _) => assert(sub == "UNEXPECTED_INPUT_TYPE")
+      case DataTypeMismatch(sub, _) => assert(sub == "INVALID_JSON_FORMAT_JSON_INPUT")
       case other => fail(s"expected DataTypeMismatch, got $other")
     }
   }
 
-  test("SQL renders an explicit collated RETURNING and omits only the default") {
+  test("SQL renders an explicit collated RETURNING and an explicit ON NULL clause") {
     val collated = JsonObjectExpr(
-      Seq((Literal("k"), Literal(1))), Seq(false), JsonConstructorNullBehavior.Null,
+      Seq((Literal("k"), Literal(1))), Seq(false), Seq(false), JsonConstructorNullBehavior.Null,
       StringType("UTF8_LCASE"))
     assert(collated.sql.contains("RETURNING STRING COLLATE UTF8_LCASE"))
-    // The omitted default is the companion StringType (by reference) and renders no RETURNING.
+    // .sql always renders an explicit ON NULL clause so reparse stays on the direct grammar path.
     val default = JsonObjectExpr(
-      Seq((Literal("k"), Literal(1))), Seq(false), JsonConstructorNullBehavior.Null, StringType)
-    assert(default.sql == "JSON_OBJECT('k' VALUE 1)")
+      Seq((Literal("k"), Literal(1))), Seq(false), Seq(false),
+      JsonConstructorNullBehavior.Null, StringType)
+    assert(default.sql == "JSON_OBJECT('k' VALUE 1 NULL ON NULL)")
   }
 
-  test("SQL renders a raw nested value as a bare constructor even after collation wrapping") {
+  test("SQL renders a raw nested value spliced back to raw even after collation wrapping") {
     val inner = JsonObjectExpr(
-      Seq((Literal("b"), Literal(1))), Seq(false), JsonConstructorNullBehavior.Null, StringType)
-    // Simulate the default-collation rule wrapping the raw nested value in a Cast. rawJson stays
-    // frozen true; .sql must render the bare constructor so reparse re-derives raw splicing (there
-    // is no value-level FORMAT JSON marker in JSON_OBJECT).
-    val wrapped = JsonObjectExpr(
-      Seq((Literal("a"), Cast(inner, StringType("UTF8_LCASE")))), Seq(true),
+      Seq((Literal("b"), Literal(1))), Seq(false), Seq(false),
       JsonConstructorNullBehavior.Null, StringType)
-    assert(wrapped.sql == "JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1))")
+    // Simulate the default-collation rule wrapping the raw nested value in a Cast. rawJson stays
+    // frozen true; the Cast hides the bare constructor, so .sql renders an explicit FORMAT JSON so
+    // reparse splices it raw.
+    val wrapped = JsonObjectExpr(
+      Seq((Literal("a"), Cast(inner, StringType("UTF8_LCASE")))), Seq(true), Seq(false),
+      JsonConstructorNullBehavior.Null, StringType)
+    assert(wrapped.sql.contains("FORMAT JSON"))
+    checkAnswer(sql(s"SELECT ${wrapped.sql}"), Row("""{"a":{"b":1}}"""))
   }
 
   test("emitted SQL reparses and evaluates with raw-vs-quoted semantics preserved") {
@@ -457,20 +472,21 @@ world'))"""))
     // A quoted value that the optimizer inlined as an implicit-JSON expression is neutralized with
     // CAST(... AS STRING); reparsing must keep it quoted rather than splicing it raw.
     val inner = JsonObjectExpr(
-      Seq((Literal("b"), Literal(1))), Seq(false), JsonConstructorNullBehavior.Null, StringType)
+      Seq((Literal("b"), Literal(1))), Seq(false), Seq(false),
+      JsonConstructorNullBehavior.Null, StringType)
     val quoted = JsonObjectExpr(
-      Seq((Literal("a"), inner)), Seq(false), JsonConstructorNullBehavior.Null, StringType)
-    assert(quoted.sql == "JSON_OBJECT('a' VALUE CAST(JSON_OBJECT('b' VALUE 1) AS STRING))")
+      Seq((Literal("a"), inner)), Seq(false), Seq(false),
+      JsonConstructorNullBehavior.Null, StringType)
+    assert(quoted.sql ==
+      "JSON_OBJECT('a' VALUE CAST(JSON_OBJECT('b' VALUE 1 NULL ON NULL) AS STRING) NULL ON NULL)")
     checkAnswer(sql(s"SELECT ${quoted.sql}"), Row("""{"a":"{\"b\":1}"}"""))
   }
 
   test("JSON_OBJECT is not foldable") {
-    // Folding a constant JSON_OBJECT would (a) surface a null-key error at optimization even for
-    // rows a filter/join drops, and (b) fold a nested raw JSON_OBJECT value to a string literal,
-    // which .sql could no longer render as a bare constructor (JSON_OBJECT has no value-level
-    // FORMAT JSON marker). So it stays non-foldable.
+    // Folding a constant JSON_OBJECT would surface a null-key error at optimization even for rows a
+    // filter/join drops, so it stays non-foldable.
     assert(!JsonObjectExpr(
-      Seq((Literal("k"), Literal(1))), Seq(false),
+      Seq((Literal("k"), Literal(1))), Seq(false), Seq(false),
       JsonConstructorNullBehavior.Null, StringType).foldable)
   }
 
@@ -571,7 +587,7 @@ world'))"""))
     // report nullable: were it non-nullable, `NullPropagation` would fold `IS [NOT] NULL` and
     // `count(...)` away and skip the eval that must raise JSON_OBJECT_NULL_KEY (see below).
     assert(JsonObjectExpr(
-      Seq((Literal("k"), Literal.create(null, IntegerType))), Seq(false),
+      Seq((Literal("k"), Literal.create(null, IntegerType))), Seq(false), Seq(false),
       JsonConstructorNullBehavior.Null, StringType).nullable)
     assert(sql("SELECT json_object('id' VALUE a) FROM VALUES (1), (2) t(a)")
       .schema.head.nullable)
@@ -592,7 +608,8 @@ world'))"""))
     // JSON_OBJECT throws on a null key at runtime, so throwable must be true even when its children
     // are not themselves throwable.
     val e = JsonObjectExpr(
-      Seq((Literal("k"), Literal(1))), Seq(false), JsonConstructorNullBehavior.Null, StringType)
+      Seq((Literal("k"), Literal(1))), Seq(false), Seq(false),
+      JsonConstructorNullBehavior.Null, StringType)
     assert(e.throwable)
   }
 
@@ -662,15 +679,97 @@ world'))"""))
       Row("""{"a":"{\"b\":1}"}"""))
   }
 
-  test("SQL renders a COLLATE-wrapped raw nested value as a bare constructor") {
-    // A raw value behind a pass-through Collate renders as the bare constructor so reparse
+  test("explicit FORMAT JSON splices a string value raw; a plain string is quoted") {
+    checkAnswer(
+      sql("""SELECT json_object('a' VALUE '{"b":1}' FORMAT JSON)"""), Row("""{"a":{"b":1}}"""))
+    checkAnswer(
+      sql("SELECT json_object('a' VALUE '[1,2]' FORMAT JSON)"), Row("""{"a":[1,2]}"""))
+    // Without FORMAT JSON the same string is quoted, even though its contents are valid JSON.
+    checkAnswer(
+      sql("""SELECT json_object('a' VALUE '{"b":1}')"""), Row("""{"a":"{\"b\":1}"}"""))
+  }
+
+  test("a malformed FORMAT JSON value raises an error at runtime") {
+    Seq("'{bad'", "'1,2'", "''").foreach { value =>
+      val e = intercept[SparkRuntimeException] {
+        sql(s"SELECT json_object('a' VALUE $value FORMAT JSON)").collect()
+      }
+      assert(e.getCondition == "INVALID_JSON_FORMAT_JSON_VALUE", s"for $value")
+    }
+  }
+
+  test("FORMAT JSON on a non-string value is rejected at analysis") {
+    val e = intercept[AnalysisException] {
+      sql("SELECT json_object('a' VALUE 123 FORMAT JSON)")
+    }
+    assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_JSON_FORMAT_JSON_INPUT")
+  }
+
+  test("a NULL FORMAT JSON value follows ON NULL like any other null") {
+    checkAnswer(sql("SELECT json_object('a' VALUE NULL FORMAT JSON)"), Row("""{"a":null}"""))
+    checkAnswer(
+      sql("SELECT json_object('a' VALUE NULL FORMAT JSON ABSENT ON NULL)"), Row("{}"))
+  }
+
+  test("a per-row (non-foldable) FORMAT JSON value is validated for each row") {
+    // A column-valued FORMAT JSON is non-foldable, so it exercises the per-row validation branch
+    // (not the cached foldable branch).
+    checkAnswer(
+      Seq("""{"b":1}""").toDF("j").selectExpr("json_object('a' VALUE j FORMAT JSON)"),
+      Row("""{"a":{"b":1}}"""))
+    val e = intercept[SparkRuntimeException] {
+      Seq("bad").toDF("j").selectExpr("json_object('a' VALUE j FORMAT JSON)").collect()
+    }
+    assert(e.getCondition == "INVALID_JSON_FORMAT_JSON_VALUE")
+  }
+
+  test("a constant-folded raw nested value round-trips through .sql as raw") {
+    // ConstantFolding rewrites the nested json_array(1) to the literal '[1]', but rawJson stays
+    // frozen true. .sql must emit FORMAT JSON so reparse splices it raw rather than quoting it.
+    val jsonObj = sql("SELECT json_object('a' VALUE json_array(1)) AS r")
+      .queryExecution.optimizedPlan.expressions
+      .flatMap(_.collect { case j: JsonObjectExpr => j }).head
+    assert(jsonObj.children(1).isInstanceOf[Literal],
+      "the nested constructor should have been constant-folded to a literal")
+    assert(jsonObj.sql.contains("FORMAT JSON"))
+    checkAnswer(sql(s"SELECT ${jsonObj.sql} AS r"), Row("""{"a":[1]}"""))
+  }
+
+  test("canonical .sql reparses to the built-in even under a shadowing routine") {
+    // .sql renders an explicit ON NULL clause, forcing the direct grammar path, so a resolved
+    // built-in round-trips to the built-in even when a same-named routine is on the path.
+    val objSql = JsonObjectExpr(
+      Seq((Literal("id"), Literal(7))), Seq(false), Seq(false),
+      JsonConstructorNullBehavior.Null, StringType).sql
+    assert(objSql.contains("NULL ON NULL"))
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_object(a STRING, b INT) RETURNS STRING " +
+          "RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        // The clause-free call is shadowed, but the canonical .sql (with ON NULL) is not.
+        checkAnswer(sql("SELECT json_object('id', 7)"), Row("shadowed"))
+        checkAnswer(sql(s"SELECT $objSql"), Row("""{"id":7}"""))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
+      }
+    }
+  }
+
+  test("SQL renders a COLLATE-wrapped raw nested value as its bare constructor") {
+    // A raw value behind a pass-through Collate renders as the bare inner constructor so reparse
     // re-derives raw splicing (the collation does not affect the spliced-raw bytes).
     val inner = JsonObjectExpr(
-      Seq((Literal("b"), Literal(1))), Seq(false), JsonConstructorNullBehavior.Null, StringType)
-    val wrapped = JsonObjectExpr(
-      Seq((Literal("a"), Collate(inner, Literal("UTF8_BINARY")))), Seq(true),
+      Seq((Literal("b"), Literal(1))), Seq(false), Seq(false),
       JsonConstructorNullBehavior.Null, StringType)
-    assert(wrapped.sql == "JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1))")
+    val wrapped = JsonObjectExpr(
+      Seq((Literal("a"), Collate(inner, Literal("UTF8_BINARY")))), Seq(true), Seq(false),
+      JsonConstructorNullBehavior.Null, StringType)
+    assert(wrapped.sql ==
+      "JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1 NULL ON NULL) NULL ON NULL)")
     checkAnswer(sql(s"SELECT ${wrapped.sql}"), Row("""{"a":{"b":1}}"""))
   }
 

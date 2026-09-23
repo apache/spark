@@ -328,5 +328,10 @@ select json_object('id', 7, 'name', 'Ada');
 select json_object('a', json_object('b', 1));
 -- JSON_OBJECT value accepts an unparenthesized predicate expression
 select json_object('isnull' VALUE 1 IS NULL);
+-- JSON_OBJECT FORMAT JSON splices an already-JSON string verbatim; a plain string is quoted
+select json_object('a' VALUE '{"b":1}' FORMAT JSON);
+select json_object('a' VALUE '{"b":1}');
 -- JSON_OBJECT error: invalid RETURNING type
 select json_object('a' VALUE 1 RETURNING INT);
+-- JSON_OBJECT error: malformed FORMAT JSON value
+select json_object('a' VALUE '{bad' FORMAT JSON);

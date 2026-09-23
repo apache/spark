@@ -1776,7 +1776,7 @@ object JsonObjectExpressionBuilder extends ExpressionBuilder {
     // nested constructor is preserved only via `JSON_OBJECT(...)` syntax.
     // TODO(SPARK-59243): splice JSON-producing arguments reached through routed/qualified calls.
     val members = expressions.grouped(2).map { case Seq(k, v) => (k, v) }.toSeq
-    JsonObjectExpr(members, members.map(_ => false))
+    JsonObjectExpr(members, members.map(_ => false), members.map(_ => false))
   }
 }
 
@@ -2316,11 +2316,11 @@ case class JsonTypeof(child: Expression)
  * Keys must be non-null strings; a null key is an error. The `ON NULL` clause controls whether
  * null-valued pairs are included (NULL ON NULL, the standard default) or omitted (ABSENT ON NULL).
  *
- * A value is spliced in raw (unquoted) when it is a lexically nested `ImplicitlyFormattedAsJson`
- * producer whose `emitsImplicitJsonText` holds -- a nested JSON constructor, or `JSON_QUERY` under
- * KEEP QUOTES -- tracked per member by `rawJson` (see `rawJsonValue`). The standard's explicit
- * value-level `FORMAT JSON` clause (e.g. `JSON_OBJECT('a' VALUE '{"b":1}' FORMAT JSON)`) is
- * deferred.
+ * A value is spliced in raw (unquoted) when it carries `FORMAT JSON` (tracked per member by
+ * `rawJson`): the explicit clause (e.g. `JSON_OBJECT('a' VALUE '{"b":1}' FORMAT JSON)`), or the
+ * implicit form a nested JSON constructor / `JSON_QUERY` under KEEP QUOTES carries (see
+ * `rawJsonValue`). Explicit `FORMAT JSON` on a non-constructor is arbitrary user text, so
+ * `needsValidation` marks it for JSON validation at eval; a nested constructor is trusted.
  *
  * Examples:
  *   JSON_OBJECT('id' VALUE 7, 'name' VALUE 'Ada')      -> '{"id":7,"name":"Ada"}'
@@ -2338,6 +2338,7 @@ case class JsonTypeof(child: Expression)
 case class JsonObjectExpr(
     members: Seq[(Expression, Expression)],
     rawJson: Seq[Boolean],
+    needsValidation: Seq[Boolean],
     nullBehavior: JsonConstructorNullBehavior = JsonConstructorNullBehavior.Null,
     returning: DataType = StringType,
     timeZoneId: Option[String] = None)
@@ -2351,16 +2352,23 @@ case class JsonObjectExpr(
   with DefaultStringProducingExpression
   with ImplicitlyFormattedAsJson {
 
-  // `rawJson(i)` marks member `i`'s value as already-JSON text to splice verbatim, not quote; it is
-  // frozen at parse time (see `AstBuilder.visitJsonObject`, [[ImplicitlyFormattedAsJson]]).
-  require(members.length == rawJson.length,
-    "JsonObjectExpr requires one rawJson flag per member")
+  // `rawJson(i)` splices member `i`'s value verbatim (already-JSON text) rather than quoting it;
+  // `needsValidation(i)` marks that raw text as arbitrary user input to JSON-validate at eval (an
+  // explicit `FORMAT JSON` on a non-constructor). Both are frozen at parse time (see
+  // `AstBuilder.visitJsonObject`). A validated value is always a spliced one.
+  require(members.length == rawJson.length && members.length == needsValidation.length,
+    "JsonObjectExpr requires one rawJson and one needsValidation flag per member")
+  require(needsValidation.lazyZip(rawJson).forall((nv, raw) => !nv || raw),
+    "JsonObjectExpr needsValidation implies rawJson")
 
   @transient private lazy val memberArray: Array[(Expression, Expression)] =
     members.toArray
 
   @transient private lazy val rawJsonArray: Array[Boolean] =
     rawJson.toArray
+
+  @transient private lazy val needsValidationArray: Array[Boolean] =
+    needsValidation.toArray
 
   // Always throwable: a null key raises JSON_OBJECT_NULL_KEY at eval even with non-throwable
   // children, which keeps the optimizer from pushing it below a filtering join. Left non-foldable
@@ -2420,15 +2428,14 @@ case class JsonObjectExpr(
             case (acc, _) if acc.isFailure => acc
             case (_, (v, valueIndex)) if rawJsonArray(valueIndex) &&
                 !(v.dataType.isInstanceOf[StringType] || v.dataType == NullType) =>
-              // `eval` casts a raw-spliced value to UTF8String. The parser only marks a nested
-              // constructor (STRING-typed) raw, so reject a non-string raw value from direct
-              // Catalyst construction here instead of failing with a ClassCastException at eval.
+              // A raw-spliced value must carry JSON text (string); NullType is allowed (eval drops
+              // or emits it before splicing). Reject any other type up front, matching JSON_ARRAY's
+              // FORMAT JSON check, rather than failing with a ClassCastException at eval.
               DataTypeMismatch(
-                errorSubClass = "UNEXPECTED_INPUT_TYPE",
+                errorSubClass = "INVALID_JSON_FORMAT_JSON_INPUT",
                 messageParameters = Map(
-                  "paramIndex" -> ordinalNumber(valueIndex * 2 + 1),
-                  "requiredType" -> toSQLType(StringType),
-                  "inputSql" -> toSQLExpr(v),
+                  "functionName" -> toSQLId(prettyName),
+                  "position" -> (valueIndex + 1).toString,
                   "inputType" -> toSQLType(v.dataType)))
             case (_, (v, _)) =>
               val elemCheck = JacksonUtils.verifyType(prettyName, v.dataType)
@@ -2493,6 +2500,55 @@ case class JsonObjectExpr(
     sb.append(arrJson, 1, arrJson.length - 1)
   }
 
+  @transient private lazy val formatJsonFactory: JsonFactory = new JsonFactory()
+
+  @transient private lazy val cachedValidatedTexts: Array[String] =
+    new Array[String](memberArray.length)
+
+  // A `FORMAT JSON` value is spliced verbatim, so it must be exactly one well-formed JSON value
+  // (a string like `1,2` or `{bad` would corrupt the object). Parse one value; reject anything
+  // trailing. Mirrors `JsonArray.validateJsonText`.
+  private def validateJsonText(idx: Int, text: String): Unit = {
+    val valid =
+      try {
+        Utils.tryWithResource(formatJsonFactory.createParser(text)) { parser =>
+          if (parser.nextToken() == null) {
+            false
+          } else {
+            parser.skipChildren()
+            parser.nextToken() == null
+          }
+        }
+      } catch {
+        case _: JsonProcessingException => false
+      }
+    if (!valid) {
+      throw QueryExecutionErrors.invalidJsonFormatJsonValueError(prettyName, idx + 1, text)
+    }
+  }
+
+  // Raw text to splice for member `idx`: a trusted nested constructor splices as-is; an explicit
+  // `FORMAT JSON` string is validated once (cached) when foldable, else per row.
+  private def rawJsonText(idx: Int, value: Any): String = {
+    if (!needsValidationArray(idx)) {
+      value.asInstanceOf[UTF8String].toString
+    } else if (memberArray(idx)._2.foldable) {
+      val cached = cachedValidatedTexts(idx)
+      if (cached != null) {
+        cached
+      } else {
+        val text = value.asInstanceOf[UTF8String].toString
+        validateJsonText(idx, text)
+        cachedValidatedTexts(idx) = text
+        text
+      }
+    } else {
+      val text = value.asInstanceOf[UTF8String].toString
+      validateJsonText(idx, text)
+      text
+    }
+  }
+
   // A foldable, non-null key (the common literal-key case, e.g. `JSON_OBJECT('id' VALUE col)`)
   // renders to the same JSON member name on every row, so render it once here instead of re-running
   // the Jackson writer per row. `renderedKeys(i)` holds that cached name, or `null` when the key
@@ -2539,7 +2595,7 @@ case class JsonObjectExpr(
         if (value == null) {
           sb.append("null")
         } else if (localRawJson(i)) {
-          sb.append(value.asInstanceOf[UTF8String].toString)
+          sb.append(rawJsonText(i, value))
         } else {
           appendRenderedValue(sb, i, value)
         }
@@ -2560,34 +2616,39 @@ case class JsonObjectExpr(
 
   override def sql: String = {
     val membersSQL = members.zip(rawJson).map { case ((k, v), raw) =>
-      // JSON_OBJECT has no value-level FORMAT JSON marker, so rawness can only be expressed in SQL
-      // by rendering the value as a bare JSON constructor (which reparse re-derives as implicit
-      // FORMAT JSON). Cover both directions of optimizer rewrites around the frozen `raw` flag:
-      val valueSQL = (raw, v) match {
-        // Raw value: a nested constructor, possibly behind collation-only wrappers (an explicit
-        // COLLATE or a default-collation Cast). Neither affects the raw-spliced bytes, so render
-        // the bare constructor and reparse re-derives raw splicing.
-        // TODO(SPARK-59243): a foldable nested value (e.g. JSON_ARRAY(1)) can be constant-folded to
-        // a string literal; with no value-level FORMAT JSON to restore rawness, this falls back to
-        // `v.sql` and the emitted SQL reparses quoted. Eval is unaffected (rawJson still splices).
-        case (true, _) => JsonObjectExpr.rawJsonConstructor(v).map(_.sql).getOrElse(v.sql)
-        // Quoted value the optimizer inlined here may now be a raw JSON constructor, bare or behind
-        // a pass-through COLLATE; neutralize it with CAST(... AS STRING) so reparse keeps it quoted
-        // (otherwise {"a":"{...}"} would flip to {"a":{...}}). A Cast-wrapped value already
-        // reparses as quoted, so it needs no extra cancellation.
-        case (false, _) if JsonObjectExpr.rawJsonValue(v).isDefined => s"CAST(${v.sql} AS STRING)"
-        case (false, _) => v.sql
+      // Render SQL that reparses to the frozen `raw` flag, regardless of optimizer rewrites of the
+      // child:
+      //  - raw + child still a bare implicit producer (bare, or under a pass-through COLLATE):
+      //    render that bare constructor so reparse re-derives implicit raw splicing.
+      //  - raw + child no longer recoverable as a constructor (constant-folded to a literal, or a
+      //    Cast wrapper): render an explicit `FORMAT JSON` so reparse splices it raw.
+      //  - quoted + child would reparse as implicit JSON (an optimizer-inlined constructor, bare or
+      //    under COLLATE): neutralize with `CAST(... AS STRING)` so reparse keeps it quoted.
+      //  - otherwise the child's shape already reproduces the flag.
+      val valueSQL = (raw, JsonObjectExpr.rawJsonValue(v)) match {
+        case (true, Some(c)) => c.sql
+        case (true, None) => s"${v.sql} FORMAT JSON"
+        case (false, Some(_)) => s"CAST(${v.sql} AS STRING)"
+        case (false, None) => v.sql
       }
       s"${k.sql} VALUE $valueSQL"
     }.mkString(", ")
-    val nullSQL = if (nullBehavior == JsonConstructorNullBehavior.Null) ""
-      else " ABSENT ON NULL"
-    // Use reference identity, not value equality: an explicit `RETURNING STRING COLLATE ...`
-    // produces a distinct StringType instance that `==` the default companion `StringType`, so `==`
-    // would drop it. `eq` renders nothing for anything reaching the companion (omitted RETURNING or
-    // plain `RETURNING STRING` alike) and renders only the distinct instance: a collated STRING.
+    // Always render an explicit ON NULL clause. It forces the direct grammar path on reparse (a
+    // clause-free call routes through function resolution and could bind a shadowing routine), so a
+    // resolved built-in round-trips to the same built-in. This diverges from `JsonArray`, which
+    // omits its default clause and has the same latent gap.
+    // TODO(SPARK-59728): align `JsonArray.sql` to render an explicit direct-path marker too.
+    val nullSQL = nullBehavior match {
+      case JsonConstructorNullBehavior.Null => " NULL ON NULL"
+      case JsonConstructorNullBehavior.Absent => " ABSENT ON NULL"
+    }
+    // Reference identity, not value equality: an explicit `RETURNING STRING COLLATE ...` is a
+    // distinct StringType instance that `==` the default companion, so `==` would drop it. `eq`
+    // renders nothing for the companion (omitted or plain `RETURNING STRING`) and only the collated
+    // instance otherwise.
     val returningSQL = if (returning.eq(StringType)) "" else s" RETURNING ${returning.sql}"
-    s"JSON_OBJECT($membersSQL$nullSQL$returningSQL)"
+    // `trim` drops the leading space of the clauses in the no-member case (`JSON_OBJECT()`).
+    s"JSON_OBJECT(${s"$membersSQL$nullSQL$returningSQL".trim})"
   }
 
   override protected def withNewChildrenInternal(
@@ -2625,19 +2686,6 @@ object JsonObjectExpr {
   def rawJsonValue(e: Expression): Option[ImplicitlyFormattedAsJson] = e match {
     case i: ImplicitlyFormattedAsJson if i.emitsImplicitJsonText => Some(i)
     case c: Collate => rawJsonValue(c.child)
-    case _ => None
-  }
-
-  /**
-   * Like `rawJsonValue`, but also sees through a `Cast` that the default-collation rule adds on top
-   * of the nested constructor. Used only by `.sql` rendering, where the raw flag is already frozen,
-   * to recover the bare constructor to render -- neither the `Cast` nor a `Collate` affects the
-   * spliced-raw bytes.
-   */
-  def rawJsonConstructor(e: Expression): Option[ImplicitlyFormattedAsJson] = e match {
-    case i: ImplicitlyFormattedAsJson if i.emitsImplicitJsonText => Some(i)
-    case c: Collate => rawJsonConstructor(c.child)
-    case Cast(child, _: StringType, _, _) => rawJsonConstructor(child)
     case _ => None
   }
 

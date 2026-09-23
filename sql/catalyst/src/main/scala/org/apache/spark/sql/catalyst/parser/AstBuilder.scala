@@ -4402,30 +4402,37 @@ class AstBuilder extends DataTypeAstBuilder
    * The `ON NULL` clause defaults to `NULL` when absent, per the standard.
    */
   override def visitJsonObject(ctx: JsonObjectContext): Expression = withOrigin(ctx) {
-    // Parse key-value pairs. The standard `key VALUE value` / `key : value` forms and the
-    // compatibility `key, value` form are separate grammar alternatives, so only one list is
-    // populated for a single constructor.
+    // Parse key-value pairs, tagging each value's explicit `FORMAT JSON` flag. The standard
+    // `key VALUE value` / `key : value` forms and the compatibility `key, value` form are separate
+    // grammar alternatives, so only one list is populated for a single constructor. Only the
+    // standard forms carry `FORMAT JSON`; the comma form never does.
     val standardMembers = ctx.jsonObjectMember().asScala.map { memberCtx =>
-      val keyExpr = expression(memberCtx.keyExpr)
-      val valueExpr = expression(memberCtx.valueExpr)
-      (keyExpr, valueExpr)
+      (expression(memberCtx.keyExpr), expression(memberCtx.valueExpr), memberCtx.FORMAT() != null)
     }.toSeq
-    val members = if (standardMembers.nonEmpty) {
+    val taggedMembers = if (standardMembers.nonEmpty) {
       standardMembers
     } else {
       ctx.jsonObjectCommaMember().asScala.map { memberCtx =>
-        val keyExpr = expression(memberCtx.keyExpr)
-        val valueExpr = expression(memberCtx.valueExpr)
-        (keyExpr, valueExpr)
+        (expression(memberCtx.keyExpr), expression(memberCtx.valueExpr), false)
       }.toSeq
     }
-    // Freeze the raw-splice decision from the lexical argument so a later optimizer rewrite that
-    // swaps the child cannot change it (see [[ImplicitlyFormattedAsJson]]). A value is spliced raw
-    // when it is a nested JSON constructor (implicit FORMAT JSON), seen through a pass-through
-    // `COLLATE` but not a `CAST(... AS STRING)` (which cancels splicing; see JsonObjectExpr).
-    val rawJson = members.map { case (_, v) => JsonObjectExpr.rawJsonValue(v).isDefined }
+    val members = taggedMembers.map { case (k, v, _) => (k, v) }
+    // Freeze each value's splice decision from the lexical argument so a later optimizer rewrite
+    // that swaps the child cannot change it (see [[ImplicitlyFormattedAsJson]]):
+    //  - `rawJson`: spliced raw as already-JSON text -- an explicit `FORMAT JSON`, or a lexically
+    //    nested JSON constructor (via `rawJsonValue`, seen through a pass-through `COLLATE` but not
+    //    a `CAST(... AS STRING)`, which cancels splicing).
+    //  - `needsValidation`: raw text is arbitrary user input to JSON-validate at eval -- only an
+    //    explicit `FORMAT JSON` on a non-constructor; a nested constructor is trusted.
+    val formatArgs = taggedMembers.map { case (_, v, explicit) =>
+      val implicitlyJson = JsonObjectExpr.rawJsonValue(v).isDefined
+      (explicit || implicitlyJson, explicit && !implicitlyJson)
+    }
+    val rawJson = formatArgs.map(_._1)
+    val needsValidation = formatArgs.map(_._2)
     // Route a flat, clause-free call through routine resolution so it can be shadowed, mirroring
-    // JSON_ARRAY. A raw value (nested constructor) stays direct so its splice stays frozen.
+    // JSON_ARRAY. A raw value (nested constructor or explicit FORMAT JSON) stays direct so its
+    // splice stays frozen.
     val routeThroughResolution =
       ctx.returning == null && ctx.nullBehavior == null &&
         !isDirectJsonConstructorArgument(ctx) && !rawJson.contains(true)
@@ -4445,7 +4452,7 @@ class AstBuilder extends DataTypeAstBuilder
       // JSON_OBJECT defaults to NULL ON NULL per the standard (emits keys with null values).
       val nullBehavior = Option(ctx.nullBehavior)
         .map(buildJsonConstructorNullBehavior).getOrElse(JsonConstructorNullBehavior.Null)
-      JsonObjectExpr(members, rawJson, nullBehavior, returning)
+      JsonObjectExpr(members, rawJson, needsValidation, nullBehavior, returning)
     }
   }
 
