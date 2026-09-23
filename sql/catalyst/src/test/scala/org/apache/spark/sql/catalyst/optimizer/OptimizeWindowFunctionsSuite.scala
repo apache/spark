@@ -102,10 +102,10 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
   }
 
   test("can't replace first by nth_value if the aggregate has a FILTER clause") {
-    Seq(CurrentRow, UnboundedFollowing).foreach { upper =>
+    for (upper <- Seq(CurrentRow, UnboundedFollowing); ignoreNulls <- Seq(false, true)) {
       val inputPlan = testRelation.select(
         WindowExpression(
-          First(a, false).toAggregateExpression(isDistinct = false, filter = Some(a > 0.0)),
+          First(a, ignoreNulls).toAggregateExpression(isDistinct = false, filter = Some(a > 0.0)),
           WindowSpecDefinition(b :: Nil, c.asc :: Nil,
             SpecifiedWindowFrame(RowFrame, UnboundedPreceding, upper))))
 
