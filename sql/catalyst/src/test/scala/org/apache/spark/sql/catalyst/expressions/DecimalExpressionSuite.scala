@@ -78,6 +78,16 @@ class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, DecimalType(2, 1)), DecimalType(3, 2), false), null)
   }
 
+  test("SPARK-59643: CheckOverflow nullability") {
+    val d = Literal(Decimal("10.1"))                // non-nullable
+    val n = Literal.create(null, DecimalType(3, 1)) // nullable
+    assert(CheckOverflow(d, DecimalType(4, 1), nullOnOverflow = true).nullable)
+    assert(!CheckOverflow(d, DecimalType(4, 1), nullOnOverflow = false).nullable)
+    assert(CheckOverflow(n, DecimalType(4, 1), nullOnOverflow = true).nullable)
+    assert(CheckOverflow(n, DecimalType(4, 1), nullOnOverflow = false).nullable)
+    checkEvaluation(CheckOverflow(d, DecimalType(4, 1), nullOnOverflow = false), Decimal("10.1"))
+  }
+
   test("SPARK-39208: CheckOverflow & CheckOverflowInSum support query context in runtime errors") {
     val d = Decimal(101, 3, 1)
     val query = "select cast(d as decimal(4, 3)) from t"
