@@ -60,6 +60,7 @@ if should_test_connect:
     )
     from pyspark.sql.types import (
         ArrayType,
+        CharType,
         DoubleType,
         IntegerType,
         MapType,
@@ -68,6 +69,7 @@ if should_test_connect:
         StructType,
         TimestampLTZNanosType,
         TimestampNTZNanosType,
+        VarcharType,
     )
 
 
@@ -75,6 +77,32 @@ if should_test_connect:
 class SparkConnectPlanTests(PlanOnlyTestFixture):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
+
+    def test_char_varchar_collation_type_round_trip(self):
+        data_types = [
+            CharType(4),
+            CharType(4, "UTF8_BINARY"),
+            CharType(4, "UTF8_LCASE"),
+            VarcharType(6),
+            VarcharType(6, "UTF8_BINARY"),
+            VarcharType(6, "UNICODE_CI"),
+            StructType(
+                [
+                    StructField("c", CharType(4, "UTF8_LCASE")),
+                    StructField("v", ArrayType(VarcharType(6, "UNICODE_CI"))),
+                ]
+            ),
+        ]
+
+        for data_type in data_types:
+            proto_type = pyspark_types_to_proto_types(data_type)
+            self.assertEqual(data_type, proto_schema_to_pyspark_data_type(proto_type))
+
+        default_char = pyspark_types_to_proto_types(CharType(4)).char
+        self.assertFalse(default_char.HasField("collation"))
+        explicit_binary_char = pyspark_types_to_proto_types(CharType(4, "UTF8_BINARY")).char
+        self.assertTrue(explicit_binary_char.HasField("collation"))
+        self.assertEqual(explicit_binary_char.collation, "UTF8_BINARY")
 
     def test_sql_project(self):
         plan = self.connect.sql("SELECT 1")._plan.to_proto(self.connect)
