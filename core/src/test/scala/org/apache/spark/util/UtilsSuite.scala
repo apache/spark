@@ -23,7 +23,7 @@ import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{FileSystems, Files}
+import java.nio.file.{Files, FileSystems}
 import java.nio.file.attribute.PosixFilePermissions
 import java.text.DecimalFormatSymbols
 import java.util.Locale
