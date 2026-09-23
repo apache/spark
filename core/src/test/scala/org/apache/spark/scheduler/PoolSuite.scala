@@ -39,12 +39,16 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   val APP_NAME = "PoolSuite"
   val TEST_POOL = "testPool"
 
-  def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
-    : TaskSetManager = {
+  def createTaskSetManager(
+      stageId: Int,
+      numTasks: Int,
+      taskScheduler: TaskSchedulerImpl,
+      priority: Int = 0,
+      stageAttemptId: Int = 0): TaskSetManager = {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, Nil)
     }
-    new TaskSetManager(taskScheduler, new TaskSet(tasks, stageId, 0, 0, null,
+    new TaskSetManager(taskScheduler, new TaskSet(tasks, stageId, stageAttemptId, priority, null,
       ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None), 0)
   }
 
@@ -405,6 +409,50 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     assert(addedLogs.nonEmpty,
       s"Expected 'Added task set' log to contain '$expectedQueryPrefix' " +
         s"and '$expectedBatchPrefix'.\nCaptured logs:\n${logs.mkString("\n")}")
+  }
+
+  test("SPARK-59674: FIFO orders priorities and stage ids at Int bounds") {
+    sc = new SparkContext(LOCAL, APP_NAME)
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    // TimSort only detects the overflow while merging runs. Three values mis-order
+    // but do not throw. This sequence makes getSortedTaskSetQueue throw
+    // IllegalArgumentException: Comparison method violates its general contract!
+    // when priority or stageId is ordered with signum(a - b).
+    val boundaryValues = Array(
+      0, Int.MaxValue, 0, 0, Int.MaxValue, Int.MinValue, Int.MinValue,
+      Int.MaxValue, Int.MaxValue, 0,
+      0, Int.MaxValue, Int.MaxValue, 0, 0, 0, Int.MaxValue, Int.MaxValue,
+      Int.MinValue, Int.MaxValue, 0, 0, 0, Int.MinValue, Int.MinValue, Int.MinValue,
+      Int.MinValue, Int.MaxValue, 0, 0, 0, Int.MinValue, Int.MinValue, Int.MinValue,
+      Int.MaxValue, 0, Int.MinValue, Int.MinValue, Int.MaxValue, Int.MaxValue,
+      Int.MinValue, Int.MinValue,
+      Int.MaxValue, 0, Int.MinValue, Int.MinValue, Int.MaxValue, Int.MaxValue,
+      Int.MinValue, Int.MinValue)
+    val expected = boundaryValues.sorted.toSeq
+
+    // Equal stage ids so the priority comparison is the only one that can overflow.
+    val priorityPool = new Pool("", FIFO, 0, 0)
+    boundaryValues.zipWithIndex.foreach { case (priority, attempt) =>
+      priorityPool.addSchedulable(createTaskSetManager(
+        stageId = 0,
+        numTasks = 1,
+        taskScheduler,
+        priority = priority,
+        stageAttemptId = attempt))
+    }
+    assert(priorityPool.getSortedTaskSetQueue.map(_.priority) === expected)
+
+    // Equal priorities so ordering falls through to stageId.
+    val stagePool = new Pool("", FIFO, 0, 0)
+    boundaryValues.zipWithIndex.foreach { case (stageId, attempt) =>
+      stagePool.addSchedulable(createTaskSetManager(
+        stageId,
+        numTasks = 1,
+        taskScheduler,
+        priority = 1,
+        stageAttemptId = attempt))
+    }
+    assert(stagePool.getSortedTaskSetQueue.map(_.stageId) === expected)
   }
 
   private def verifyPool(rootPool: Pool, poolName: String, expectedInitMinShare: Int,
