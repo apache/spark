@@ -78,6 +78,41 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
     }
   }
 
+  test("rtm does not support stream-static ASOF join") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      withTempView("trades", "quotes") {
+        val inputData = LowLatencyMemoryStream[(Int, String)](2)
+        inputData.toDF().toDF("trade_time", "symbol").createOrReplaceTempView("trades")
+        Seq((1, "AAPL", 18010), (3, "AAPL", 18015))
+          .toDF("quote_time", "symbol", "bid_price")
+          .createOrReplaceTempView("quotes")
+
+        val df = sql(
+          """
+            |SELECT concat(t.trade_time, '-', t.symbol, '-', q.bid_price) AS output
+            |FROM trades t ASOF JOIN quotes q
+            |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+            |  ON t.symbol = q.symbol
+            |""".stripMargin)
+        val query = runStreamingQuery("asof_join_allowlist", df)
+
+        eventually(timeout(60.seconds)) {
+          checkError(
+            exception = query.exception.get.getCause.asInstanceOf[SparkIllegalArgumentException],
+            condition = "STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST",
+            parameters = Map(
+              "errorType" -> "operator",
+              "message" -> (
+                "org.apache.spark.sql.execution.SortExec, " +
+                  "org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec are"
+                )
+            )
+          )
+        }
+      }
+    }
+  }
+
   test("rtm sink allowlist") {
     val read = LowLatencyMemoryStream[Int](2)
 
