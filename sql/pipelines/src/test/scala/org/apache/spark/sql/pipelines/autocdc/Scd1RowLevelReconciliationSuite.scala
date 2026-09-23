@@ -17,6 +17,12 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import Scd1RowLevelReconciliation.{
+  applyTombstonesToMicrobatch,
+  deduplicateMicrobatch,
+  projectTargetColumnsOntoMicrobatch
+}
+
 import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
@@ -62,11 +68,6 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
   private def columnNamesAndDataTypes(schema: StructType): Seq[(String, DataType)] =
     schema.fields.map(f => (f.name, f.dataType)).toSeq
 
-  private def deduplicateMicrobatch(
-      changeArgs: ChangeArgs,
-      batch: DataFrame): DataFrame =
-    Scd1RowLevelReconciliation.deduplicateMicrobatch(changeArgs, batch)
-
   private def extendMicrobatchRowsWithCdcMetadata(
       changeArgs: ChangeArgs,
       batch: DataFrame): DataFrame =
@@ -74,24 +75,6 @@ class Scd1RowLevelReconciliationSuite extends QueryTest with SharedSparkSession 
       changeArgs = changeArgs,
       resolvedSequencingType = LongType,
       validatedMicrobatch = batch
-    )
-
-  private def projectTargetColumnsOntoMicrobatch(
-      changeArgs: ChangeArgs,
-      batch: DataFrame): DataFrame =
-    Scd1RowLevelReconciliation.projectTargetColumnsOntoMicrobatch(
-      changeArgs = changeArgs,
-      microbatchWithCdcMetadataDf = batch
-    )
-
-  private def applyTombstonesToMicrobatch(
-      changeArgs: ChangeArgs,
-      microbatch: DataFrame,
-      auxiliary: DataFrame): DataFrame =
-    Scd1RowLevelReconciliation.applyTombstonesToMicrobatch(
-      changeArgs = changeArgs,
-      microbatchDf = microbatch,
-      auxiliaryTableDf = auxiliary
     )
 
   // =============== deduplicateMicrobatch tests ===============

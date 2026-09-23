@@ -59,7 +59,7 @@ private[pipelines] trait Scd1ReconciliationStrategy {
       validatedMicrobatch: DataFrame): DataFrame = {
     val rowDeleteSequence: Column = changeArgs.deleteCondition match {
       case Some(deleteCondition) =>
-        F.when(deleteCondition, changeArgs.sequencing).otherwise(F.lit(null))
+        F.when(deleteCondition, changeArgs.sequencing)
       case None =>
         F.lit(null)
     }
@@ -67,7 +67,7 @@ private[pipelines] trait Scd1ReconciliationStrategy {
     val rowUpsertSequence: Column =
       // A row that is not a delete must be an upsert, these are mutually exclusive and a complete
       // set of CDC event types.
-      F.when(rowDeleteSequence.isNull, changeArgs.sequencing).otherwise(F.lit(null))
+      F.when(rowDeleteSequence.isNull, changeArgs.sequencing)
 
     validatedMicrobatch.withColumn(
       AutoCdcReservedNames.cdcMetadataColName,
