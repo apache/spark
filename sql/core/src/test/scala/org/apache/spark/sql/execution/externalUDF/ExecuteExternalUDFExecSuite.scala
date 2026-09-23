@@ -20,13 +20,20 @@ package org.apache.spark.sql.execution.externalUDF
 import java.io.IOException
 import java.nio.channels.Channels
 import java.nio.charset.StandardCharsets
+import java.util.Properties
+
+import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 import org.apache.arrow.vector.ipc.ReadChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
+import org.apache.arrow.vector.types.pojo.Schema
+import org.json4s.{Formats, NoTypeHints}
+import org.json4s.jackson.Serialization
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{BarrierTaskContext, SparkException, TaskContext, TaskContextImpl}
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.resource.{CpuAmount, ResourceInformation}
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression,
@@ -45,6 +52,11 @@ import org.apache.spark.util.{LongAccumulator, Utils}
 
 object ExecuteExternalUDFExecSuite {
   private val TEST_PAYLOAD = "identity".getBytes(StandardCharsets.UTF_8)
+  private val RESPONSE_ALLOCATOR_NAME = "externalUdfArrowResponse"
+
+  private implicit val jsonFormats: Formats = Serialization.formats(NoTypeHints)
+
+  private final case class SerializedResource(name: String, addresses: Seq[String])
 
   private sealed trait ResponseBehavior extends Serializable
   private case object EchoResponses extends ResponseBehavior
@@ -79,21 +91,24 @@ object ExecuteExternalUDFExecSuite {
       require(message.getDataFormat == UDFWorkerDataFormat.ARROW, "unexpected data format")
       require(message.getUdf.getPayload.toByteArray.sameElements(TEST_PAYLOAD),
         "unexpected UDF payload")
-      require(message.getUdf.getFormat == "pyspark-udf-v1", "unexpected UDF format")
+      require(message.getUdf.getFormat == "experimental", "unexpected UDF format")
       require(message.getUdf.getEvalType == PythonEvalType.SQL_ARROW_BATCHED_UDF.toString,
         "unexpected Python evaluation type")
       require(message.getUdf.getName == "identity", "unexpected UDF name")
-      require(deserializeArrowSchema(message.getInputSchema) == expectedInputSchema,
+      require(deserializeArrowSchema(message.getInputSchema) == ArrowUtils.toArrowSchema(
+        expectedInputSchema,
+        expectedTimeZone,
+        true,
+        expectedLargeVarTypes),
         "unexpected input schema")
-      require(deserializeArrowSchema(message.getOutputSchema) == expectedOutputSchema,
+      require(deserializeArrowSchema(message.getOutputSchema) == ArrowUtils.toArrowSchema(
+        expectedOutputSchema,
+        expectedTimeZone,
+        true,
+        expectedLargeVarTypes),
         "unexpected output schema")
       require(message.getTimezone == expectedTimeZone, "unexpected session timezone")
-
-      val taskContext = message.getTaskContextMap
-      require(taskContext.containsKey("partitionId"), "partition ID is missing")
-      require(taskContext.containsKey("taskAttemptId"), "task attempt ID is missing")
-      require(taskContext.containsKey("resources"), "task resources are missing")
-      require(taskContext.containsKey("localProperties"), "local properties are missing")
+      validateTaskContext(message, TaskContext.get())
 
       val sessionConf = message.getSessionConfMap
       require(sessionConf.get("input_type") == expectedInputSchema.json, "unexpected input type")
@@ -191,10 +206,42 @@ object ExecuteExternalUDFExecSuite {
       }
     }
 
-    private def deserializeArrowSchema(schema: ByteString): StructType = {
-      ArrowUtils.fromArrowSchema(MessageSerializer.deserializeSchema(
-        new ReadChannel(Channels.newChannel(schema.newInput()))))
+    private def deserializeArrowSchema(schema: ByteString): Schema = {
+      MessageSerializer.deserializeSchema(
+        new ReadChannel(Channels.newChannel(schema.newInput())))
     }
+  }
+
+  private def validateTaskContext(message: Init, context: TaskContext): Unit = {
+    val taskContext = message.getTaskContextMap.asScala.toMap
+    val expectedValues = Map(
+      "isBarrier" -> context.isInstanceOf[BarrierTaskContext].toString,
+      "stageId" -> context.stageId().toString,
+      "partitionId" -> context.partitionId().toString,
+      "attemptNumber" -> context.attemptNumber().toString,
+      "taskAttemptId" -> context.taskAttemptId().toString,
+      "cpus" -> context.cpuAmount()
+        .setScale(0, BigDecimal.RoundingMode.CEILING).intValue.toString,
+      "cpuAmount" -> CpuAmount.toDisplayString(context.cpuAmount()))
+    val expectedKeys = expectedValues.keySet ++ Set("resources", "localProperties")
+    require(taskContext.keySet == expectedKeys,
+      s"unexpected task context keys: ${taskContext.keySet}")
+    expectedValues.foreach { case (key, value) =>
+      require(taskContext(key) == value,
+        s"unexpected task context value for $key: ${taskContext(key)}")
+    }
+
+    val expectedResources = context.resources().map { case (name, resource) =>
+      name -> SerializedResource(resource.name, resource.addresses.toSeq)
+    }
+    require(
+      Serialization.read[Map[String, SerializedResource]](taskContext("resources")) ==
+        expectedResources,
+      "unexpected task resources")
+    require(
+      Serialization.read[Map[String, String]](taskContext("localProperties")) ==
+        context.getLocalProperties.asScala.toMap,
+      "unexpected task local properties")
   }
 
   private final class TestExecuteExternalUDFExec(
@@ -260,7 +307,11 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
       udfNullable = udfNullable)
     val resultAttr = AttributeReference("externalUDF", udfDataType, udf.nullable)()
     val requestCount = spark.sparkContext.longAccumulator("external UDF request count")
-    val closeCount = spark.sparkContext.longAccumulator("external UDF close count")
+    val closeCount = new LongAccumulator
+    closeCount.register(
+      spark.sparkContext,
+      name = Some("external UDF close count"),
+      countFailedValues = true)
     val inputSchema = StructType(udfChildren.zipWithIndex.map {
       case (expression, index) =>
         StructField(s"_$index", expression.dataType, expression.nullable)
@@ -293,6 +344,38 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "output_length" -> outputLength,
         "input_length" -> inputLength.toString))
+  }
+
+  private def checkFailedExecutionCleanup(execution: TestExecution): Unit = {
+    assert(execution.closeCount.value === 1L)
+    val openResponseAllocators = ArrowUtils.rootAllocator.getChildAllocators.asScala
+      .filter(_.getName == RESPONSE_ALLOCATOR_NAME)
+      .toSeq
+    assert(openResponseAllocators.isEmpty,
+      s"Arrow response allocators remain open: $openResponseAllocators")
+  }
+
+  test("Python Init adapter serializes the complete task context") {
+    val localProperties = new Properties
+    localProperties.setProperty("externalUdfTestProperty", "test-value")
+    val context = new TaskContextImpl(
+      stageId = 7,
+      stageAttemptNumber = 3,
+      partitionId = 5,
+      taskAttemptId = 1234L,
+      attemptNumber = 2,
+      numPartitions = 10,
+      taskMemoryManager = null,
+      localProperties = localProperties,
+      metricsSystem = null,
+      cpuAmount = BigDecimal("1.5"),
+      resources = Map(
+        "gpu" -> new ResourceInformation("gpu", Array("0", "2"))))
+
+    val init = PythonInitAdapter.build(
+      PythonInitAdapter.PreparedInit(Init.getDefaultInstance),
+      context)
+    validateTaskContext(init, context)
   }
 
   test("scalar external UDF exchanges multiple Arrow batches through a worker session") {
@@ -436,6 +519,29 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("scalar external UDF uses large variable Arrow types for requests and responses") {
+    withSQLConf(SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES.key -> "true") {
+      val child = spark.range(0L, 3L, 1L, 1)
+        .selectExpr("concat('value-', id) AS value")
+        .queryExecution.executedPlan
+      val input = child.output.head
+      val execution = testExecution(
+        EchoResponses,
+        child,
+        Seq(input),
+        input.dataType,
+        input.nullable)
+      val rows = execution.plan.executeCollect()
+
+      assert(rows.length === 3)
+      rows.foreach { row =>
+        assert(row.getUTF8String(0) === row.getUTF8String(1))
+      }
+      assert(execution.requestCount.value === 1L)
+      assert(execution.closeCount.value === 1L)
+    }
+  }
+
   test("scalar external UDF rejects fewer output rows than input rows") {
     withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "1") {
       val execution = testExecution(DropLastResponse, rowCount = 3L)
@@ -444,6 +550,7 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
       }
 
       checkResultRowsMismatch(error, outputLength = "2", inputLength = 3L)
+      checkFailedExecutionCleanup(execution)
     }
   }
 
@@ -455,6 +562,7 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
       }
 
       checkResultRowsMismatch(error, outputLength = "at least 6", inputLength = 3L)
+      checkFailedExecutionCleanup(execution)
     }
   }
 
@@ -465,6 +573,7 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
     }
 
     assert(Utils.getRootCause(error).isInstanceOf[IOException])
+    checkFailedExecutionCleanup(execution)
   }
 
   test("scalar external UDF closes its worker session when output consumption stops early") {
