@@ -300,7 +300,7 @@ object ExecuteExternalUDFExec {
     }
 
     private def rowsFromRoot(root: VectorSchemaRoot): Iterator[InternalRow] = {
-      val columns: Array[ColumnVector] = root.getFieldVectors.asScala.map { vector =>
+      val columns: Array[ColumnVector] = root.getFieldVectors.asScala.iterator.map { vector =>
         new ArrowColumnVector(vector): ColumnVector
       }.toArray
       val batch = new ColumnarBatch(columns)

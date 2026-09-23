@@ -279,7 +279,8 @@ private[sql] object ArrowConverters extends Logging {
 
   /**
    * Maps an iterator of internal rows to serialized Arrow record batches, limiting each batch by
-   * both record count and byte size.
+   * record count and a best-effort byte target. A batch can exceed the byte target because its size
+   * checked before appending each row, and the first row is always accepted.
    */
   private[sql] def toBatchIterator(
       rowIter: Iterator[InternalRow],
