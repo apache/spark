@@ -41,7 +41,7 @@ private[ui] class StageTableBase(
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     isFailedStage: Boolean,
-    killViaGetEnabled: Boolean,
+    actionsViaGetEnabled: Boolean,
     csrfToken: String) {
 
   val stagePage = Option(request.getParameter(stageTag + ".page")).map(_.toInt).getOrElse(1)
@@ -58,7 +58,7 @@ private[ui] class StageTableBase(
       subPath,
       isFairScheduler,
       killEnabled,
-      killViaGetEnabled,
+      actionsViaGetEnabled,
       csrfToken,
       currentTime,
       isFailedStage,
@@ -105,7 +105,7 @@ private[ui] class StagePagedTable(
     subPath: String,
     isFairScheduler: Boolean,
     killEnabled: Boolean,
-    killViaGetEnabled: Boolean,
+    actionsViaGetEnabled: Boolean,
     csrfToken: String,
     currentTime: Long,
     isFailedStage: Boolean,
@@ -230,21 +230,16 @@ private[ui] class StagePagedTable(
       val confirm =
         s"if (window.confirm('Are you sure you want to kill stage ${s.stageId} ?')) " +
         "{ this.parentNode.submit(); return true; } else { return false; }"
-      if (killViaGetEnabled) {
-        // A plain GET link, which also works through proxies that do not forward POST,
-        // such as the YARN ResourceManager/AM proxy (SPARK-6846). The endpoint requires
-        // the CSRF token and rejects prefetch requests; see SparkUI.initialize.
-        <a href={s"$basePathUri/stages/stage/kill/?id=${s.stageId}&csrfToken=$csrfToken"}
-           onclick={confirm} class="kill-link">(kill)</a>
-      } else {
-        // POST-only mode: the form this file used to carry commented out, now live. The
-        // confirm handler submits the enclosing form.
-        <form action={s"$basePathUri/stages/stage/kill/"} method="POST" style="display:inline">
-          <input type="hidden" name="id" value={s.stageId.toString}/>
-          <input type="hidden" name="csrfToken" value={csrfToken}/>
-          <a href="#" onclick={confirm} class="kill-link">(kill)</a>
-        </form>
-      }
+      // The form this file used to carry commented out, now live in both modes; only the
+      // method follows spark.ui.actionsViaGetEnabled, see UIUtils.actionFormMethod. The
+      // confirm handler submits the enclosing form.
+      <form action={s"$basePathUri/stages/stage/kill/"}
+            method={UIUtils.actionFormMethod(actionsViaGetEnabled)}
+            style="display:inline">
+        <input type="hidden" name="id" value={s.stageId.toString}/>
+        <input type="hidden" name="csrfToken" value={csrfToken}/>
+        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
+      </form>
     } else {
       Seq.empty
     }

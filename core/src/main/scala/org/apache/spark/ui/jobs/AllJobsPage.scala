@@ -263,7 +263,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         "jobs", // subPath
         killEnabled,
         jobIdTitle,
-        parent.killViaGetEnabled,
+        parent.actionsViaGetEnabled,
         parent.csrfToken
       ).table(jobPage)
     } catch {
@@ -517,7 +517,7 @@ private[ui] class JobPagedTable(
     subPath: String,
     killEnabled: Boolean,
     jobIdTitle: String,
-    killViaGetEnabled: Boolean,
+    actionsViaGetEnabled: Boolean,
     csrfToken: String
   ) extends PagedTable[JobTableRowData] {
 
@@ -580,21 +580,16 @@ private[ui] class JobPagedTable(
       val confirm =
         s"if (window.confirm('Are you sure you want to kill job ${job.jobId} ?')) " +
           "{ this.parentNode.submit(); return true; } else { return false; }"
-      if (killViaGetEnabled) {
-        // A plain GET link, which also works through proxies that do not forward POST,
-        // such as the YARN ResourceManager/AM proxy (SPARK-6846). The endpoint requires
-        // the CSRF token and rejects prefetch requests; see SparkUI.initialize.
-        <a href={s"$basePath/jobs/job/kill/?id=${job.jobId}&csrfToken=$csrfToken"}
-           onclick={confirm} class="kill-link">(kill)</a>
-      } else {
-        // POST-only mode: the form this file used to carry commented out, now live. The
-        // confirm handler submits the enclosing form.
-        <form action={s"$basePath/jobs/job/kill/"} method="POST" style="display:inline">
-          <input type="hidden" name="id" value={job.jobId.toString}/>
-          <input type="hidden" name="csrfToken" value={csrfToken}/>
-          <a href="#" onclick={confirm} class="kill-link">(kill)</a>
-        </form>
-      }
+      // The form this file used to carry commented out, now live in both modes; only the
+      // method follows spark.ui.actionsViaGetEnabled, see UIUtils.actionFormMethod. The
+      // confirm handler submits the enclosing form.
+      <form action={s"$basePath/jobs/job/kill/"}
+            method={UIUtils.actionFormMethod(actionsViaGetEnabled)}
+            style="display:inline">
+        <input type="hidden" name="id" value={job.jobId.toString}/>
+        <input type="hidden" name="csrfToken" value={csrfToken}/>
+        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
+      </form>
     } else {
       Seq.empty
     }
