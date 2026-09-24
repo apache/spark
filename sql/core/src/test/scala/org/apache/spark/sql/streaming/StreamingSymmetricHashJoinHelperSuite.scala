@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.execution.LocalTableScanExec
+import org.apache.spark.sql.execution.streaming.operators.stateful.WatermarkSupport
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.JoinConditionSplitPredicates
 import org.apache.spark.sql.types._
 
@@ -126,5 +127,28 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
     assert(split.bothSides.contains(
       leftAttributeA === rightAttributeC && randAttribute > Literal(0)))
     assert(split.full.contains(predicate))
+  }
+
+  test("millisToMicrosSaturating saturates instead of overflowing") {
+    // In-range values scale exactly; the max exactly-scalable millisecond value is
+    // Long.MaxValue / 1000.
+    assert(WatermarkSupport.millisToMicrosSaturating(5L) === 5000L)
+    assert(WatermarkSupport.millisToMicrosSaturating(-5L) === -5000L)
+    assert(WatermarkSupport.millisToMicrosSaturating(9223372036854775L) === 9223372036854775000L)
+    assert(WatermarkSupport.millisToMicrosSaturating(-9223372036854775L) === -9223372036854775000L)
+    // One millisecond past the boundary would overflow Long; it saturates instead.
+    assert(WatermarkSupport.millisToMicrosSaturating(9223372036854776L) === Long.MaxValue)
+    assert(WatermarkSupport.millisToMicrosSaturating(-9223372036854776L) === Long.MinValue)
+    assert(WatermarkSupport.millisToMicrosSaturating(Long.MaxValue) === Long.MaxValue)
+    assert(WatermarkSupport.millisToMicrosSaturating(Long.MinValue) === Long.MinValue)
+  }
+
+  test("addMicrosSaturating saturates instead of overflowing") {
+    assert(WatermarkSupport.addMicrosSaturating(1000L, 2000L) === 3000L)
+    assert(WatermarkSupport.addMicrosSaturating(-5L, 3L) === -2L)
+    assert(WatermarkSupport.addMicrosSaturating(Long.MaxValue, 1L) === Long.MaxValue)
+    assert(WatermarkSupport.addMicrosSaturating(Long.MaxValue, Long.MaxValue) === Long.MaxValue)
+    assert(WatermarkSupport.addMicrosSaturating(Long.MinValue, -1L) === Long.MinValue)
+    assert(WatermarkSupport.addMicrosSaturating(Long.MinValue, Long.MinValue) === Long.MinValue)
   }
 }
