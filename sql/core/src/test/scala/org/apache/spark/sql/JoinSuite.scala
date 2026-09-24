@@ -66,6 +66,9 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     val c = pair._2
     val df = sql(sqlString)
     val optimized = df.queryExecution.optimizedPlan
+    val optimizedJoin = optimized.collectFirst { case join: Join => join }.getOrElse {
+      fail(s"No join in optimized plan:\n$optimized")
+    }
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
       case j: BroadcastHashJoinExec => j
@@ -80,13 +83,13 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       fail(s"$sqlString expected operator: $c, but got ${operators.head}\n physical: \n$physical")
     }
     assert(
-      canPlanAsBroadcastHashJoin(optimized.asInstanceOf[Join], conf) ===
+      canPlanAsBroadcastHashJoin(optimizedJoin, conf) ===
         operators.head.isInstanceOf[BroadcastHashJoinExec],
       "canPlanAsBroadcastHashJoin not in sync with join selection codepath!")
     operators.head match {
       case bhj: BroadcastHashJoinExec =>
         assert(
-          getBroadcastHashJoinBuildSide(optimized.asInstanceOf[Join], conf)
+          getBroadcastHashJoinBuildSide(optimizedJoin, conf)
             .contains(bhj.buildSide),
           "getBroadcastHashJoinBuildSide not in sync with join selection codepath!")
       case _ =>
