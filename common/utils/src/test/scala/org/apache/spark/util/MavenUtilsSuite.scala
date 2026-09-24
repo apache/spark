@@ -21,7 +21,7 @@ import java.io.{File, OutputStream, PrintStream}
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
-import java.util.concurrent.{CancellationException, CountDownLatch, TimeUnit}
+import java.util.concurrent.{CancellationException, CountDownLatch, Executors, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.collection.mutable.ArrayBuffer
@@ -218,7 +218,7 @@ class MavenUtilsSuite
   }
 
   test("runtime dependency resolver honors cancellation while waiting for Ivy") {
-    val executor = ThreadUtils.newDaemonFixedThreadPool(2, "maven-utils-cancellation-test")
+    val executor = Executors.newFixedThreadPool(2)
     implicit val executionContext: ExecutionContext =
       ExecutionContext.fromExecutorService(executor)
     try {
@@ -273,12 +273,12 @@ class MavenUtilsSuite
           assert(waitingForIvy.await(5, TimeUnit.SECONDS))
           cancelled.set(true)
           intercept[CancellationException] {
-            ThreadUtils.awaitResult(second, 5.seconds)
+            SparkThreadUtils.awaitResultNoSparkExceptionConversion(second, 5.seconds)
           }
         } finally {
           releaseFirst.countDown()
         }
-        ThreadUtils.awaitResult(first, 5.seconds)
+        SparkThreadUtils.awaitResultNoSparkExceptionConversion(first, 5.seconds)
       }
     } finally {
       executor.shutdownNow()
