@@ -807,6 +807,74 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(Seq(1, 6)) :: Nil)
   }
 
+  test("forward MATCH_CONDITION with NULL array elements picks the smallest right row") {
+    // NULL elements sort first: [null] < [null, null] < [5]. A distance-based pick chose [5].
+    val nullInt = "CAST(NULL AS INT)"
+    val nullEmpty = "CAST(NULL AS STRUCT<>)"
+    for {
+      (left, rights) <- Seq(
+        s"ARRAY($nullInt)" -> s"(ARRAY($nullInt, $nullInt), 'nn'), (ARRAY(5), 'five')",
+        s"ARRAY($nullEmpty)" ->
+          s"(ARRAY($nullEmpty, $nullEmpty), 'nn'), (ARRAY(named_struct()), 'e')")
+      op <- Seq("<=", "<")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES ($left) AS t(a)
+             |ASOF JOIN VALUES $rights AS r(a, tag)
+             |  MATCH_CONDITION (t.a $op r.a)
+             |""".stripMargin),
+        Row("nn") :: Nil)
+    }
+  }
+
+  test("forward MATCH_CONDITION with a NULL struct field picks the smallest right row") {
+    // A NULL field sorts first, so {null, 7} < {x, 1}. A distance-based pick chose {x, 1}.
+    for {
+      (nullField, value) <- Seq(
+        "CAST(NULL AS INT)" -> "0",
+        "CAST(NULL AS STRUCT<>)" -> "named_struct()")
+      (left, right) <- Seq("t.k" -> "r.k", "(t.k.f, t.k.seq)" -> "(r.k.f, r.k.seq)")
+      op <- Seq("<=", "<")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES (named_struct('f', $nullField, 'seq', 5)) AS t(k)
+             |ASOF JOIN VALUES
+             |  (named_struct('f', $nullField, 'seq', 7), 's7'),
+             |  (named_struct('f', $value, 'seq', 1), 's1') AS r(k, tag)
+             |  MATCH_CONDITION ($left $op $right)
+             |""".stripMargin),
+        Row("s7") :: Nil)
+    }
+  }
+
+  test("ARRAY<STRUCT> MATCH_CONDITION with fields of different types") {
+    // The per-element distance mixes INT and INTERVAL, which one array(...) could not hold.
+    def element(first: String, time: String): String =
+      s"ARRAY(named_struct('f', $first, 'ts', TIMESTAMP '2026-06-29 $time'))"
+    for {
+      first <- Seq("1", "named_struct()")
+      (op, tag) <- Seq(">=" -> "r9", ">" -> "r9", "<=" -> "r11", "<" -> "r11")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES (${element(first, "10:00:00")}) AS t(a)
+             |ASOF JOIN VALUES
+             |  (${element(first, "09:00:00")}, 'r9'),
+             |  (${element(first, "11:00:00")}, 'r11') AS r(a, tag)
+             |  MATCH_CONDITION (t.a $op r.a)
+             |""".stripMargin),
+        Row(tag) :: Nil)
+    }
+  }
+
   test("ARRAY<STRUCT> operands with different field names") {
     checkSortMergeAsOf(
       sql(

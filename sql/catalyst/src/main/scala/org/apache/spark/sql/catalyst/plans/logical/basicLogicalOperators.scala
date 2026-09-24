@@ -3057,9 +3057,7 @@ object AsOfJoin {
         val leafDiffs = collectStructLeafPairs(leftElement, rightElement, struct).map {
           case (left, right) => buildLeafOrderExpression(left, right, operator)
         }
-        val elementOrder = wrapCompositeOrderExpression(
-          leafDiffs,
-          ArrayType(struct, containsNull = true))
+        val elementOrder = wrapCompositeOrderExpression(leafDiffs)
         ZipWith(
           leftArray,
           rightArray,
@@ -3097,7 +3095,7 @@ object AsOfJoin {
     val leafDiffs = collectStructLeafPairs(leftOperand, rightOperand, structType).map {
       case (left, right) => buildLeafOrderExpression(left, right, operator)
     }
-    wrapCompositeOrderExpression(leafDiffs, structType)
+    wrapCompositeOrderExpression(leafDiffs)
   }
 
   private def collectStructLeafPairs(
@@ -3117,16 +3115,11 @@ object AsOfJoin {
       }
   }
 
-  private def wrapCompositeOrderExpression(
-      diffs: Seq[Expression],
-      compositeType: DataType): Expression = {
+  /** A struct, not an array, since field distances can differ in type (INT vs INTERVAL). */
+  private def wrapCompositeOrderExpression(diffs: Seq[Expression]): Expression = {
     diffs match {
       case Seq(single) => single
-      case _ =>
-        compositeType match {
-          case _: ArrayType => CreateArray(diffs)
-          case _ => CreateStruct(diffs)
-        }
+      case _ => CreateStruct(diffs)
     }
   }
 
