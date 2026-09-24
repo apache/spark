@@ -16,8 +16,9 @@
 #
 
 import functools
+import json
 from itertools import chain, islice
-from typing import IO, Iterable, Iterator, List, Tuple, Union
+from typing import Any, IO, Iterable, Iterator, List, Tuple, Union
 
 import pyarrow as pa
 
@@ -53,6 +54,33 @@ from pyspark.worker_util import (
     read_command,
     utf8_deserializer,
 )
+
+
+def _json_type_has_char_varchar_in_udt(data_type: Any, inside_udt: bool = False) -> bool:
+    """Detect CHAR/VARCHAR in UDT storage without deserializing the UDT class."""
+    if isinstance(data_type, str):
+        normalized = data_type.lower()
+        return inside_udt and (
+            normalized.startswith("char(") or normalized.startswith("varchar(")
+        )
+    if not isinstance(data_type, dict):
+        return False
+
+    type_name = data_type.get("type")
+    if type_name == "udt":
+        return _json_type_has_char_varchar_in_udt(data_type.get("sqlType"), inside_udt=True)
+    if type_name == "struct":
+        return any(
+            _json_type_has_char_varchar_in_udt(field.get("type"), inside_udt)
+            for field in data_type.get("fields", [])
+        )
+    if type_name == "array":
+        return _json_type_has_char_varchar_in_udt(data_type.get("elementType"), inside_udt)
+    if type_name == "map":
+        return _json_type_has_char_varchar_in_udt(
+            data_type.get("keyType"), inside_udt
+        ) or _json_type_has_char_varchar_in_udt(data_type.get("valueType"), inside_udt)
+    return False
 
 
 def records_to_arrow_batches(
@@ -340,6 +368,11 @@ def _main(infile: IO, outfile: IO) -> None:
 
     # Receive the data source output schema.
     schema_json = utf8_deserializer.loads(infile)
+    if _json_type_has_char_varchar_in_udt(json.loads(schema_json)):
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "CHAR/VARCHAR return types in Python DataSource"},
+        )
     schema = _parse_datatype_json_string(schema_json)
     if not isinstance(schema, StructType):
         raise PySparkAssertionError(

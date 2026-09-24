@@ -168,9 +168,12 @@ class UserDefinedTableFunction:
             if isinstance(returnType, str)
             else returnType
         )
+        # Regular UDTFs validate UDT storage while decorating, matching Classic. PyArrow-native
+        # UDTFs validate every return-type form on invocation.
         if (
             self.returnType is not None
             and not isinstance(self.returnType, UnparsedDataType)
+            and evalType != PythonEvalType.SQL_ARROW_UDTF
             and _has_char_varchar_in_udt(self.returnType)
         ):
             _check_udtf_return_type(self.returnType)
