@@ -878,13 +878,12 @@ private[spark] class ExecutorAllocationManager(
       val stageAttemptId = stageCompleted.stageInfo.attemptNumber()
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       allocationManager.synchronized {
-        // do NOT remove stageAttempt from stageAttemptToNumRunningTask
-        // because the attempt may still have running tasks,
+        // do NOT remove stageAttempt from stageAttemptToNumRunningTask or
+        // stageAttemptToSpeculativeTaskIds because the attempt may still have running tasks,
         // even after another attempt for the stage is submitted.
         stageAttemptToNumTasks -= stageAttempt
         stageAttemptToPendingSpeculativeTasks -= stageAttempt
         stageAttemptToTaskIndices -= stageAttempt
-        stageAttemptToSpeculativeTaskIds -= stageAttempt
         stageAttemptToExecutorPlacementHints -= stageAttempt
         removeStageFromResourceProfileIfUnused(stageAttempt)
 
@@ -894,8 +893,7 @@ private[spark] class ExecutorAllocationManager(
         // If this is the last stage with pending tasks, mark the scheduler queue as empty
         // This is needed in case the stage is aborted for any reason
         if (stageAttemptToNumTasks.isEmpty
-          && stageAttemptToPendingSpeculativeTasks.isEmpty
-          && stageAttemptToSpeculativeTaskIds.isEmpty) {
+          && stageAttemptToPendingSpeculativeTasks.isEmpty) {
           allocationManager.onSchedulerQueueEmpty()
         }
       }
@@ -931,16 +929,21 @@ private[spark] class ExecutorAllocationManager(
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       val taskIndex = taskEnd.taskInfo.index
       allocationManager.synchronized {
+        if (taskEnd.taskInfo.speculative) {
+          stageAttemptToSpeculativeTaskIds.get(stageAttempt).foreach { ids =>
+            ids.remove(taskEnd.taskInfo.taskId)
+            if (ids.isEmpty) {
+              stageAttemptToSpeculativeTaskIds -= stageAttempt
+              removeStageFromResourceProfileIfUnused(stageAttempt)
+            }
+          }
+        }
         if (stageAttemptToNumRunningTask.contains(stageAttempt)) {
           stageAttemptToNumRunningTask(stageAttempt) -= 1
           if (stageAttemptToNumRunningTask(stageAttempt) == 0) {
             stageAttemptToNumRunningTask -= stageAttempt
             removeStageFromResourceProfileIfUnused(stageAttempt)
           }
-        }
-        if (taskEnd.taskInfo.speculative) {
-          stageAttemptToSpeculativeTaskIds.get(stageAttempt)
-            .foreach(_.remove(taskEnd.taskInfo.taskId))
         }
 
         taskEnd.reason match {

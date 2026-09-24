@@ -2165,6 +2165,51 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     // Both specInfo1 (taskId 3) and specInfo2 (taskId 4) are tracked as distinct running attempts
     assert(manager.listener.runningSpeculativeTasksPerResourceProfile(defaultProfile.id) === 2)
   }
+
+  test("SPARK-49485: preserve running speculative attempts across stage retries") {
+    val conf = createConf(1, 5, 2).set(config.EXECUTOR_CORES, 3)
+    val manager = createManager(conf)
+
+    val stageInfo = createStageInfo(0, 5)
+    post(SparkListenerStageSubmitted(stageInfo))
+    post(SparkListenerExecutorAdded(0, "executor-1", new ExecutorInfo("host1", 3, Map.empty)))
+    post(SparkListenerExecutorAdded(0, "executor-2", new ExecutorInfo("host2", 3, Map.empty)))
+    post(SparkListenerExecutorAdded(0, "executor-3", new ExecutorInfo("host3", 3, Map.empty)))
+
+    // 5 regular tasks running
+    val taskInfo0 = createTaskInfo(0, 0, "executor-1")
+    val taskInfo1 = createTaskInfo(1, 1, "executor-1")
+    val taskInfo2 = createTaskInfo(2, 2, "executor-1")
+    val taskInfo3 = createTaskInfo(3, 3, "executor-2")
+    val taskInfo4 = createTaskInfo(4, 4, "executor-2")
+    post(SparkListenerTaskStart(0, 0, taskInfo0))
+    post(SparkListenerTaskStart(0, 0, taskInfo1))
+    post(SparkListenerTaskStart(0, 0, taskInfo2))
+    post(SparkListenerTaskStart(0, 0, taskInfo3))
+    post(SparkListenerTaskStart(0, 0, taskInfo4))
+
+    // 1 speculative task running for task 0 (taskId 5) on executor-3
+    post(new SparkListenerSpeculativeTaskSubmitted(0, 0, 0, 0))
+    val specInfo0 = createTaskInfo(5, 0, "executor-3", speculative = true)
+    post(SparkListenerTaskStart(0, 0, specInfo0))
+
+    // 5 regular running + 1 speculative running = 6 total tasks. 3 slots/exec.
+    // maxNeeded = ceil(6/3) = 2, baseMaxNeededWithoutSpeculation = ceil(5/3) = 2.
+    // Since maxNeeded == baseMaxNeededWithoutSpeculation and speculativeTasks > 0, target is 3.
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 3)
+
+    // Stage completes (e.g. retryable fetch failure on another task)
+    post(SparkListenerStageCompleted(stageInfo))
+
+    // Target must be preserved at 3 while the speculative task is still running
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 3)
+    assert(manager.listener.runningSpeculativeTasksPerResourceProfile(defaultProfile.id) === 1)
+
+    // Once speculative task ends, target drops back to base
+    post(SparkListenerTaskEnd(0, 0, "task", Success, specInfo0, null, null))
+    assert(manager.listener.runningSpeculativeTasksPerResourceProfile(defaultProfile.id) === 0)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 2)
+  }
 }
 
 /**
