@@ -144,7 +144,7 @@ class StaxXmlParser(
     lazy val xmlRecord = UTF8String.fromString(xml)
     try {
       xsdSchema.foreach { schema =>
-        schema.newValidator().validate(new StreamSource(new StringReader(xml)))
+        ValidatorUtil.newValidator(schema).validate(new StreamSource(new StringReader(xml)))
       }
       options.singleVariantColumn match {
         case Some(_) =>
@@ -161,6 +161,9 @@ class StaxXmlParser(
       }
     } catch {
       case e: SparkUpgradeException => throw e
+      // ValidatorUtil.newValidator throws this when the JAXP implementation cannot
+      // disable external access; that is an environment error, not a bad record.
+      case e: UnsupportedOperationException => throw e
       case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
               | _: SAXException) =>
         // XML parser currently doesn't support partial results for corrupted records.
