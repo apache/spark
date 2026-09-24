@@ -592,3 +592,46 @@ SELECT timestampadd(NANOSECOND, -300, TIMESTAMP_LTZ '2020-01-01 00:00:00.0000001
 SELECT timestampadd(NANOSECOND, 900, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000200 UTC');
 -- NANOSECOND is rejected on a microsecond-precision timestamp (nanoseconds are unrepresentable).
 SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC');
+
+-- Join types over nanos keys within one microsecond: only .000000999 matches.
+CREATE TEMPORARY VIEW nanos_l AS SELECT * FROM VALUES
+  (1, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (2, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (3, CAST(NULL AS TIMESTAMP_LTZ(9))) AS t(lid, c);
+CREATE TEMPORARY VIEW nanos_r AS SELECT * FROM VALUES
+  (10, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (20, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC'),
+  (30, CAST(NULL AS TIMESTAMP_LTZ(9))) AS t(rid, c);
+SELECT lid, rid FROM nanos_l l JOIN nanos_r r ON l.c = r.c;
+SELECT lid, rid FROM nanos_l l LEFT JOIN nanos_r r ON l.c = r.c ORDER BY lid;
+SELECT lid, rid FROM nanos_l l RIGHT JOIN nanos_r r ON l.c = r.c ORDER BY rid;
+SELECT lid, rid FROM nanos_l l FULL JOIN nanos_r r ON l.c = r.c ORDER BY lid, rid;
+SELECT lid FROM nanos_l l LEFT SEMI JOIN nanos_r r ON l.c = r.c;
+SELECT lid FROM nanos_l l LEFT ANTI JOIN nanos_r r ON l.c = r.c ORDER BY lid;
+SELECT lid, rid FROM nanos_l l CROSS JOIN nanos_r r WHERE l.c < r.c ORDER BY lid, rid;
+SELECT * FROM nanos_l JOIN nanos_r USING (c);
+SELECT * FROM nanos_l FULL JOIN nanos_r USING (c) ORDER BY lid, rid;
+-- Mixed-precision join key: p=7 .0000009 widens to .000000900, not .000000901.
+SELECT a.c, b.c FROM VALUES (TIMESTAMP_LTZ '2020-01-01 00:00:00.0000009 UTC') AS a(c)
+  JOIN VALUES (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000900 UTC'),
+              (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000901 UTC') AS b(c) ON a.c = b.c;
+
+-- PIVOT over a nanos measure and on a nanos pivot column.
+SELECT * FROM VALUES
+  ('a', TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  ('a', TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  ('b', TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC') AS t(g, c)
+PIVOT (max(c) FOR g IN ('a' AS a, 'b' AS b));
+SELECT * FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 1),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 2),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 3) AS t(c, v)
+PIVOT (sum(v) FOR c IN (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' AS x,
+                        TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC' AS y));
+
+-- UNPIVOT widens p=7 / p=8 / p=9 columns into one TIMESTAMP_LTZ(9) column.
+SELECT * FROM (
+  SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.1234567 UTC' AS c7,
+         TIMESTAMP_LTZ '2020-01-01 00:00:00.12345678 UTC' AS c8,
+         TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS c9)
+UNPIVOT (c FOR name IN (c7, c8, c9));

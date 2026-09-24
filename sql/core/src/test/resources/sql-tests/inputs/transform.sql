@@ -420,3 +420,14 @@ SELECT TRANSFORM(a, b)
 SELECT TRANSFORM (a, b)
   USING 'cat' AS (a CHAR(10), b VARCHAR(10))
 FROM VALUES('apache', 'spark') t(a, b);
+
+-- Nanosecond timestamps are written to the script at full precision.
+SELECT TRANSFORM (c7, c8, c9)
+  USING 'cat' AS (c7 STRING, c8 STRING, c9 STRING)
+FROM VALUES (TIMESTAMP_NTZ '2020-01-01 00:00:00.1234567',
+             TIMESTAMP_NTZ '2020-01-01 00:00:00.12345678',
+             TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789') t(c7, c8, c9);
+
+SELECT TRANSFORM (c)
+  USING 'cat' AS (c STRING)
+FROM VALUES (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC') t(c);

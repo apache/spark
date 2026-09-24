@@ -585,3 +585,46 @@ SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_NTZ '2020-01-01 00:00:00');
 -- .0000001 value lands on .0000002, and a sub-step +50ns is truncated back to .0000001.
 SELECT timestampadd(NANOSECOND, 150, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7));
 SELECT timestampadd(NANOSECOND, 50, '2020-01-01 00:00:00.0000001' :: timestamp_ntz(7));
+
+-- Join types over nanos keys within one microsecond: only .000000999 matches.
+CREATE TEMPORARY VIEW nanos_l AS SELECT * FROM VALUES
+  (1, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (2, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (3, CAST(NULL AS TIMESTAMP_NTZ(9))) AS t(lid, c);
+CREATE TEMPORARY VIEW nanos_r AS SELECT * FROM VALUES
+  (10, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (20, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500'),
+  (30, CAST(NULL AS TIMESTAMP_NTZ(9))) AS t(rid, c);
+SELECT lid, rid FROM nanos_l l JOIN nanos_r r ON l.c = r.c;
+SELECT lid, rid FROM nanos_l l LEFT JOIN nanos_r r ON l.c = r.c ORDER BY lid;
+SELECT lid, rid FROM nanos_l l RIGHT JOIN nanos_r r ON l.c = r.c ORDER BY rid;
+SELECT lid, rid FROM nanos_l l FULL JOIN nanos_r r ON l.c = r.c ORDER BY lid, rid;
+SELECT lid FROM nanos_l l LEFT SEMI JOIN nanos_r r ON l.c = r.c;
+SELECT lid FROM nanos_l l LEFT ANTI JOIN nanos_r r ON l.c = r.c ORDER BY lid;
+SELECT lid, rid FROM nanos_l l CROSS JOIN nanos_r r WHERE l.c < r.c ORDER BY lid, rid;
+SELECT * FROM nanos_l JOIN nanos_r USING (c);
+SELECT * FROM nanos_l FULL JOIN nanos_r USING (c) ORDER BY lid, rid;
+-- Mixed-precision join key: p=7 .0000009 widens to .000000900, not .000000901.
+SELECT a.c, b.c FROM VALUES (TIMESTAMP_NTZ '2020-01-01 00:00:00.0000009') AS a(c)
+  JOIN VALUES (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900'),
+              (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000901') AS b(c) ON a.c = b.c;
+
+-- PIVOT over a nanos measure and on a nanos pivot column.
+SELECT * FROM VALUES
+  ('a', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  ('a', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  ('b', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500') AS t(g, c)
+PIVOT (max(c) FOR g IN ('a' AS a, 'b' AS b));
+SELECT * FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 1),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 2),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3) AS t(c, v)
+PIVOT (sum(v) FOR c IN (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001' AS x,
+                        TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999' AS y));
+
+-- UNPIVOT widens p=7 / p=8 / p=9 columns into one TIMESTAMP_NTZ(9) column.
+SELECT * FROM (
+  SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.1234567' AS c7,
+         TIMESTAMP_NTZ '2020-01-01 00:00:00.12345678' AS c8,
+         TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS c9)
+UNPIVOT (c FOR name IN (c7, c8, c9));
