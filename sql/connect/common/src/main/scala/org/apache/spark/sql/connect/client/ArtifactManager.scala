@@ -190,9 +190,7 @@ class ArtifactManager(
   def addArtifacts(uris: Seq[URI]): Unit =
     addArtifacts(uris, serverSideMavenArtifacts = false)
 
-  private[client] def addArtifacts(
-      uris: Seq[URI],
-      serverSideMavenArtifacts: Boolean): Unit = {
+  private[client] def addArtifacts(uris: Seq[URI], serverSideMavenArtifacts: Boolean): Unit = {
     if (serverSideMavenArtifacts) {
       val entries = uris.flatMap { uri =>
         uri.getScheme match {
@@ -467,7 +465,7 @@ class ArtifactManager(
           .getMavenDependencyBuilder
           .setUri(uri.toString)
         ()
-      }
+    }
     stream.onNext(builder.build())
   }
 

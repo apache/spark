@@ -262,9 +262,7 @@ class ArtifactSuite extends ConnectFunSuite {
     val ivyUri = URI.create("ivy://my.artifactsuite.lib:mylib:0.1")
     val jarFile = artifactFilePath.resolve("smallJar.jar").toUri
 
-    artifactManager.addArtifacts(
-      Seq(classFile, ivyUri, jarFile),
-      serverSideMavenArtifacts = true)
+    artifactManager.addArtifacts(Seq(classFile, ivyUri, jarFile), serverSideMavenArtifacts = true)
 
     val requests = service.getAndClearLatestAddArtifactRequests()
     assert(requests.size == 1)
@@ -292,14 +290,14 @@ class ArtifactSuite extends ConnectFunSuite {
       val batch = requests.head.getBatch
       assert(batch.getEntriesCount == 3)
       assert(batch.getEntries(0).getArtifact.getName == "classes/smallClassFile.class")
-      assert(batch.getEntries(1).getArtifact.getName.contains("my.artifactsuite.client_mylib-0.1"))
+      assert(
+        batch.getEntries(1).getArtifact.getName.contains("my.artifactsuite.client_mylib-0.1"))
       assert(batch.getEntries(2).getMavenDependency.getUri == serverIvyUri.toString)
     }
   }
 
   test("Spark Connect uses server-side Maven resolution when advertised") {
-    service.serverCapabilities = Seq(
-      SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY)
+    service.serverCapabilities = Seq(SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY)
     client = new SparkConnectClient(Configuration(), channel)
     val ivyUri = URI.create("ivy://my.artifactsuite.lib:mylib:0.1")
 
@@ -325,8 +323,7 @@ class ArtifactSuite extends ConnectFunSuite {
       val batch = requests.head.getBatch
       assert(batch.getArtifactsCount == 1)
       assert(
-        batch.getArtifacts(0).getName.contains(
-          "my.artifactsuite.clientcapability_mylib-0.1"))
+        batch.getArtifacts(0).getName.contains("my.artifactsuite.clientcapability_mylib-0.1"))
     }
   }
 
@@ -334,9 +331,7 @@ class ArtifactSuite extends ConnectFunSuite {
     val largeUri = URI.create(s"ivy://org.example:${"a" * CHUNK_SIZE}:1.0")
     val otherUri = URI.create("ivy://org.example:other:1.0")
 
-    artifactManager.addArtifacts(
-      Seq(largeUri, otherUri),
-      serverSideMavenArtifacts = true)
+    artifactManager.addArtifacts(Seq(largeUri, otherUri), serverSideMavenArtifacts = true)
 
     val requests = service.getAndClearLatestAddArtifactRequests()
     assert(requests.size == 2)

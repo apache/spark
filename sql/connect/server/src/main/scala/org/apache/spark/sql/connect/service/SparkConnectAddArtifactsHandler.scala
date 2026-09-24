@@ -123,12 +123,13 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     responseObserver.onError(throwable)
   }
 
-  private def addMavenDependency(
-      dependency: proto.AddArtifactsRequest.MavenDependency): Unit = {
+  private def addMavenDependency(dependency: proto.AddArtifactsRequest.MavenDependency): Unit = {
     val value = dependency.getUri
-    val uri = try new URI(value) catch {
-      case _: URISyntaxException => null
-    }
+    val uri =
+      try new URI(value)
+      catch {
+        case _: URISyntaxException => null
+      }
     if (uri == null || uri.getScheme != "ivy") {
       throw SparkException.internalError(s"Maven dependency must be an ivy URI: $value")
     }
@@ -153,8 +154,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
       isCancelled)
   }
 
-  private def resolveMavenDependencies(
-      dependencies: Seq[URI]): Map[URI, Seq[Artifact]] = {
+  private def resolveMavenDependencies(dependencies: Seq[URI]): Map[URI, Seq[Artifact]] = {
     dependencies.map { uri =>
       val timeoutCapMs = Option(grpcContext.getDeadline)
         .map(_.timeRemaining(TimeUnit.MILLISECONDS))
@@ -165,9 +165,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
         throw SparkException.internalError(
           "AddArtifacts deadline expired before Maven resolution")
       }
-      val connectTimeoutMs = math.min(
-        timeoutCapMs,
-        holder.artifactManager.ivyConnectTimeoutMs)
+      val connectTimeoutMs = math.min(timeoutCapMs, holder.artifactManager.ivyConnectTimeoutMs)
       val readTimeoutMs = math.min(timeoutCapMs, holder.artifactManager.ivyReadTimeoutMs)
       uri -> resolveMavenDependency(
         uri,
@@ -193,9 +191,12 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   }
 
   private def prepareArtifacts(): Seq[StagedArtifact] = {
-    val dependencies = pendingArtifacts.collect {
-      case PendingMavenDependency(uri) => uri
-    }.distinct.toSeq
+    val dependencies = pendingArtifacts
+      .collect { case PendingMavenDependency(uri) =>
+        uri
+      }
+      .distinct
+      .toSeq
     val resolved = resolveMavenDependencies(dependencies)
     pendingArtifacts.flatMap {
       case PendingStagedArtifact(artifact) => Seq(artifact)
@@ -316,15 +317,16 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
         messageParameters = Map("name" -> name))
     }
     val stagedPath: Path = physicalPath.getOrElse {
-      val requestedPath = try {
-        ArtifactUtils.concatenatePaths(stagingDir, path)
-      } catch {
-        case _: IllegalArgumentException =>
-          throw new SparkRuntimeException(
-            errorClass = "INVALID_ARTIFACT_PATH",
-            messageParameters = Map("name" -> name))
-        case NonFatal(e) => throw e
-      }
+      val requestedPath =
+        try {
+          ArtifactUtils.concatenatePaths(stagingDir, path)
+        } catch {
+          case _: IllegalArgumentException =>
+            throw new SparkRuntimeException(
+              errorClass = "INVALID_ARTIFACT_PATH",
+              messageParameters = Map("name" -> name))
+          case NonFatal(e) => throw e
+        }
       if (Files.exists(requestedPath)) {
         Files.createTempFile(stagingDir, "duplicate-artifact-", ".tmp")
       } else {

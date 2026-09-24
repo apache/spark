@@ -83,8 +83,9 @@ class SparkConnectServiceSuite
       .build()
     val response = new SparkConnectAnalyzeHandler(null).process(request, sparkSessionHolder)
 
-    assert(response.getSparkVersion.getCapabilitiesList.asScala.contains(
-      SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY))
+    assert(
+      response.getSparkVersion.getCapabilitiesList.asScala
+        .contains(SparkConnectClient.SERVER_SIDE_MAVEN_ARTIFACTS_CAPABILITY))
   }
 
   test("Test schema in analyze response") {

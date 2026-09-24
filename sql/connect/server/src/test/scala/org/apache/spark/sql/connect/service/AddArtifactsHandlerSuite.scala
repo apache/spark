@@ -373,17 +373,15 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
         .setBatch(
           proto.AddArtifactsRequest.Batch
             .newBuilder()
-            .addEntries(
-              uploaded(
-                "classes/smallClassFile.class",
-                inputFilePath.resolve("smallClassFile.class")))
+            .addEntries(uploaded(
+              "classes/smallClassFile.class",
+              inputFilePath.resolve("smallClassFile.class")))
             .addEntries(
               proto.AddArtifactsRequest.ArtifactEntry
                 .newBuilder()
-                .setMavenDependency(
-                  proto.AddArtifactsRequest.MavenDependency
-                    .newBuilder()
-                    .setUri(ivyUri.toString)))
+                .setMavenDependency(proto.AddArtifactsRequest.MavenDependency
+                  .newBuilder()
+                  .setUri(ivyUri.toString)))
             .addEntries(uploaded("jars/smallJar.jar", inputFilePath.resolve("smallJar.jar")))
             .build())
         .build()
@@ -603,8 +601,8 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
     try {
       val name = "classes/smallClassFile.class"
-      val bytes = ByteString.copyFrom(
-        Files.readAllBytes(inputFilePath.resolve("smallClassFile.class")))
+      val bytes =
+        ByteString.copyFrom(Files.readAllBytes(inputFilePath.resolve("smallClassFile.class")))
       val crc = new CRC32()
       crc.update(bytes.toByteArray)
       def entry(checksum: Long): proto.AddArtifactsRequest.ArtifactEntry = {
