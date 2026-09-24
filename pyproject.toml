@@ -274,6 +274,16 @@ ci_classic_pandas_3 = [
     "pandas>=3.0.0",
 ]
 
+ci_connect_pandas_3 = [
+    {include-group = "internal_protobuf"},
+    "grpcio==1.76.0",
+    "grpcio-status==1.76.0",
+    "googleapis-common-protos==1.71.0",
+    "zstandard==0.25.0",
+    "protobuf==6.33.5",
+    "graphviz==0.20.3",
+]
+
 ci_lint = [
     {include-group = "internal_lint"},
     {include-group = "ml_extra_base"},
