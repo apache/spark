@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
 import org.apache.spark.sql.types.{DataType, IntegerType, StructField, StructType}
 
@@ -208,6 +208,72 @@ class TransformExpressionSuite extends SparkFunSuite {
     val otherStruct = AttributeReference("s2", StructType(Seq(StructField("f", IntegerType))))()
     assert(t.withReference(otherStruct).argsMatchInputTypes,
       "a compatible retarget still matches")
+  }
+
+  test("SPARK-50593: hasSameReducedKeys tells nested transforms apart, like isSameFunction") {
+    // Both used to agree only in the flat case: identity collapsed a nested transform to an opaque
+    // slot, so bucket(4, years(c)) and bucket(4, days(c)) shared a reduced key space even though
+    // isSameFunction told them apart.
+    val outer = new NamedFunction("test.bucket")
+    val years = new NamedFunction("test.years")
+    val days = new NamedFunction("test.days")
+    val partner = bucket(outer, a, 8)
+    val overYears = TransformExpression(outer, Seq(Literal(4), TransformExpression(years, Seq(a))))
+    val overDays = TransformExpression(outer, Seq(Literal(4), TransformExpression(days, Seq(a))))
+
+    assert(!overYears.isSameFunction(overDays))
+    assert(!overYears.reducedTogetherWith(partner)
+      .hasSameReducedKeys(overDays.reducedTogetherWith(partner)),
+      "a different nested transform is a different reduced key space")
+    assert(overYears.reducedTogetherWith(partner)
+      .hasSameReducedKeys(overYears.withReference(b).reducedTogetherWith(partner)),
+      "the same nested transform over another column is the same key space")
+  }
+
+  test("SPARK-50593: a transform with a non-reference argument has no identity") {
+    val fn = new NamedFunction("test.bucket")
+    val plusOne = TransformExpression(fn, Seq(Literal(4), Add(a, Literal(1))))
+    assert(plusOne.functionId.isEmpty)
+    assert(!plusOne.isSameFunction(plusOne), "never the same, not even as itself")
+    // Nesting one inside a transform takes the identity away from the outer one too.
+    val nested = TransformExpression(fn, Seq(Literal(4), TransformExpression(fn, Seq(Add(a, a)))))
+    assert(nested.functionId.isEmpty)
+
+    // Recording a reduce needs an identity on both sides: reducedWith stores the partner's, and
+    // silently skipping the mark would report reduced keys as raw. So it fails loudly.
+    val ok = bucket(fn, a, 8)
+    Seq(() => plusOne.reducedTogetherWith(ok), () => ok.reducedTogetherWith(plusOne)).foreach { f =>
+      val e = intercept[SparkException](f())
+      assert(e.getMessage.contains("without an identity"))
+    }
+  }
+
+  test("SPARK-50593: isSameFunction and hasSameReducedKeys agree on every pair") {
+    // The two questions are answered from one value, `functionId`. Pin that they cannot drift:
+    // for every pair of transforms that have an identity, "same function" and "reduced onto the
+    // same key space with the same partner" must give the same answer.
+    val bucketFn = new NamedFunction("test.bucket")
+    val truncFn = new NamedFunction("test.truncate")
+    val years = new NamedFunction("test.years")
+    val days = new NamedFunction("test.days")
+    val s = AttributeReference("s", StructType(Seq(StructField("f", IntegerType))))()
+    val shapes: Seq[TransformExpression] = Seq(
+      bucket(bucketFn, a, 4), bucket(bucketFn, b, 4), bucket(bucketFn, a, 8),
+      TransformExpression(truncFn, Seq(a, Literal(2))),
+      TransformExpression(truncFn, Seq(Literal(2), b)),
+      TransformExpression(truncFn, Seq(a, Literal(3))),
+      TransformExpression(bucketFn, Seq(Literal(4), GetStructField(s, 0))),
+      TransformExpression(bucketFn, Seq(Literal(4), TransformExpression(years, Seq(a)))),
+      TransformExpression(bucketFn, Seq(Literal(4), TransformExpression(days, Seq(b)))),
+      TransformExpression(years, Seq(a)), TransformExpression(days, Seq(a)))
+    assert(shapes.forall(_.functionId.isDefined), "the fixture needs identities throughout")
+    val partner = bucket(bucketFn, a, 16)
+    for (x <- shapes; y <- shapes) {
+      val sameFunction = x.isSameFunction(y)
+      val sameKeys =
+        x.reducedTogetherWith(partner).hasSameReducedKeys(y.reducedTogetherWith(partner))
+      assert(sameFunction == sameKeys, s"disagree on $x vs $y: $sameFunction vs $sameKeys")
+    }
   }
 
 }

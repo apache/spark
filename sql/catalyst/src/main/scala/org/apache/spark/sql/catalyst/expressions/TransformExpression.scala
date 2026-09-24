@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.catalyst.InternalRow
@@ -30,25 +31,44 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, MapType, StructType, UserDefinedType}
 
 /**
- * The identity of a reduced key space, stored in [[TransformExpression.reducedWith]] and compared
- * by `hasSameReducedKeys`. It is NOT the "same function" test -- that is
- * [[TransformExpression.isSameFunction]], a structural per-position walk that also recurses into
- * nested transforms. This type exists because `reducedWith` has to *store* an identity in a
- * field, which a structural predicate cannot express.
+ * The identity of a partition transform: what [[TransformExpression.isSameFunction]] compares, and
+ * what [[TransformExpression.reducedWith]] stores to name the key space a reduce produced. Both
+ * questions are answered by this one value, so "same function" and "same reduced key space" cannot
+ * disagree about which transforms are the same.
+ *
+ * It carries no exprIds (a column argument is [[TransformFunctionId.ArgumentShape.Column]], not the
+ * attribute), so an expression can hold one in a plain field and expression equality still answers
+ * the same after canonicalization.
  *
  * @param canonicalName the transform function's canonical name
- * @param argSlots one entry per argument, in order: `Some(literal)` for a literal parameter (e.g.
- *                 the bucket count for `bucket`, or the width for `truncate`), `None` for any
- *                 other slot. Positions are part of the identity, so `truncate(id, 2)` and
- *                 `truncate(2, store_id)` are different key spaces.
- *
- *                 Known coarseness: a nested transform maps to `None`, so
- *                 `bucket(4, years(c))` and `bucket(4, days(c))` share an identity here. That is
- *                 unreachable for SPJ -- `KeyedPartitioning.supportsExpressions` requires the
- *                 single non-literal child to be a column reference, which rejects nested
- *                 transforms -- and `isSameFunction` distinguishes them regardless.
+ * @param argumentShapes one entry per argument, in order. Positions are part of the identity, so
+ *                       `truncate(id, 2)` and `truncate(2, store_id)` are different transforms, and
+ *                       a nested transform is compared recursively, so `bucket(4, years(c))` and
+ *                       `bucket(4, days(c))` are too.
  */
-case class TransformFunctionId(canonicalName: String, argSlots: Seq[Option[Literal]])
+case class TransformFunctionId(
+    canonicalName: String,
+    argumentShapes: Seq[TransformFunctionId.ArgumentShape])
+
+object TransformFunctionId {
+  /** The shape of one argument of a partition transform, as its identity sees it. */
+  sealed trait ArgumentShape
+
+  object ArgumentShape {
+    /** A literal parameter, e.g. the bucket count of `bucket` or the width of `truncate`. */
+    case class Param(value: Literal) extends ArgumentShape
+
+    /** A nested transform, compared by its own identity, recursively. */
+    case class Nested(id: TransformFunctionId) extends ArgumentShape
+
+    /**
+     * A plain column reference: an [[Attribute]] or a [[GetStructField]] chain. Which column is not
+     * part of the identity -- the two sides of a join reference different columns by construction,
+     * and `KeyedShuffleSpec.keyPositions` reconciles them separately.
+     */
+    case object Column extends ArgumentShape
+  }
+}
 
 /**
  * Represents a partition transform expression, for instance, `bucket`, `days`, `years`, etc.
@@ -79,21 +99,35 @@ case class TransformExpression(
    * Extract literal children (constant parameters) from this transform. These are constant
    * arguments like the bucket count in `bucket(n, col)` or the width in `truncate(col, width)`.
    * Positions are dropped, so this is for handing parameters to a connector reducer, NOT for
-   * identity -- see [[functionId]] and [[TransformFunctionId.argSlots]].
+   * identity -- see [[functionId]] and [[TransformFunctionId.argumentShapes]].
    */
   private lazy val literalChildren: Seq[Literal] =
     children.collect { case l: Literal => l }
 
   /**
-   * The identity of this expression's transform function: its canonical name plus the per-argument
-   * shape, so a literal in a different argument position is a different identity. See
-   * [[TransformFunctionId.argSlots]] for why the positions matter.
+   * The identity of this expression's transform function, or `None` when it has none.
+   *
+   * A transform has an identity when every argument is a literal, a nested transform that itself
+   * has one, or a plain column reference. Any other argument -- a value-changing expression such as
+   * `c + 1` or `cast(c)` -- is not a shape identity can affirm, so the transform is never the same
+   * as anything, not even an identical copy. `None` is how that is expressed: a value would always
+   * be equal to itself. `KeyedPartitioning.supportsExpressions` rejects such transforms before
+   * planning, so for SPJ this is a backstop rather than a path.
    */
-  lazy val functionId: TransformFunctionId =
-    TransformFunctionId(function.canonicalName(), children.map {
-      case l: Literal => Some(l)
+  lazy val functionId: Option[TransformFunctionId] = {
+    import TransformFunctionId.ArgumentShape
+    val shapes = children.map {
+      case l: Literal => Some(ArgumentShape.Param(l))
+      case t: TransformExpression => t.functionId.map(ArgumentShape.Nested(_))
+      case c if TransformExpression.isColumnRef(c) => Some(ArgumentShape.Column)
       case _ => None
-    })
+    }
+    if (shapes.forall(_.isDefined)) {
+      Some(TransformFunctionId(function.canonicalName(), shapes.flatten))
+    } else {
+      None
+    }
+  }
 
   /**
    * Whether this [[TransformExpression]] has the same semantics as `other`. For instance,
@@ -118,25 +152,18 @@ case class TransformExpression(
    *     non-reference slot such as `c + 1` or `cast(c)`, or a literal-vs-reference mismatch, is
    *     treated as not the same.
    *
-   * The walk is per position, not a set of literal values. Comparing only the values would make
-   * `truncate(id, 2)` and `truncate(2, store_id)` the same function; `isCompatible` short-circuits
-   * on this method, so `sameArgumentLayout` -- which guards exactly that, but only inside `reducer`
-   * -- would never run, and the pair would be paired as-is with no reduce.
+   * The comparison is of [[functionId]], which is per position rather than a set of literal
+   * values. Comparing only the values would make `truncate(id, 2)` and `truncate(2, store_id)` the
+   * same function; `isCompatible` short-circuits on this method, so `sameArgumentLayout` -- which
+   * guards exactly that, but only inside `reducer` -- would never run, and the pair would be paired
+   * as-is with no reduce. `hasSameReducedKeys` compares the same identity, so the two never
+   * disagree about which transforms are the same.
    *
    * @param other the transform expression to compare to
    * @return true if this and `other` has the same semantics w.r.t to transform, false otherwise.
    */
   def isSameFunction(other: TransformExpression): Boolean =
-    function.canonicalName() == other.function.canonicalName() &&
-      children.length == other.children.length &&
-      children.zip(other.children).forall {
-        case (l1: Literal, l2: Literal) => l1 == l2
-        case (t1: TransformExpression, t2: TransformExpression) => t1.isSameFunction(t2)
-        // Any other pair must be a plain column reference on both sides. Column identity is
-        // ignored (reconciled separately via keyPositions); a non-reference slot (Add, Cast, ...)
-        // or a literal/transform-vs-reference mismatch is "not the same".
-        case (c1, c2) => TransformExpression.isColumnRef(c1) && TransformExpression.isColumnRef(c2)
-      }
+    functionId.isDefined && functionId == other.functionId
 
   /**
    * Whether this [[TransformExpression]]'s function is compatible with the `other`
@@ -363,7 +390,7 @@ case class TransformExpression(
    * carry the same pair.
    */
   private def reducedKeySpace: Option[Set[TransformFunctionId]] =
-    reducedWith.map(partner => Set(functionId, partner))
+    for (self <- functionId; partner <- reducedWith) yield Set(self, partner)
 
   /**
    * Whether this and `other` describe the same reduced key space, i.e. whether the same pair of
@@ -375,11 +402,26 @@ case class TransformExpression(
    * onto, so the pairing is all there is to compare.
    */
   def hasSameReducedKeys(other: TransformExpression): Boolean =
-    reducedWith.isDefined && reducedKeySpace == other.reducedKeySpace
+    reducedKeySpace.isDefined && reducedKeySpace == other.reducedKeySpace
 
-  /** Records that this expression's keys were reduced together with `other`'s. */
+  /**
+   * Records that this expression's keys were reduced together with `other`'s.
+   *
+   * Both sides need an identity: `reducedWith` stores the partner's, and `isDefined` on it is what
+   * marks the keys as reduced, so there is no way to record a reduce with a partner that has none.
+   * Silently skipping the mark would report reduced keys as raw, which is the wrong-results
+   * direction, so this fails loudly instead. It is unreachable: the only producer,
+   * `KeyedShuffleSpec.reducersBothWays`, sees only partitionings admitted by
+   * `KeyedPartitioning.supportsExpressions`, and those always have an identity.
+   */
   def reducedTogetherWith(other: TransformExpression): TransformExpression =
-    copy(reducedWith = Some(other.functionId))
+    (functionId, other.functionId) match {
+      case (Some(_), Some(partner)) => copy(reducedWith = Some(partner))
+      case _ =>
+        throw SparkException.internalError(
+          s"Cannot record a reduce of $this with $other: a transform without an identity " +
+            "cannot be reduced, since KeyedPartitioning.supportsExpressions rejects it.")
+    }
 
   override def dataType: DataType = function.resultType()
 
