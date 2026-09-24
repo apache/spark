@@ -151,6 +151,15 @@ public class TransportConf {
   }
 
   /**
+   * Whether stream and chunk fetch requests on a channel behind an authentication bootstrap
+   * are only served once the channel has completed authentication. Opt-in on branch-3.5 so a
+   * patch release does not change runtime behavior for existing deployments.
+   */
+  public boolean requireAuthForStreamRequests() {
+    return conf.getBoolean("spark.network.auth.requireAuthForStreamRequests", false);
+  }
+
+  /**
    * Max number of times we will try IO exceptions (such as connection timeouts) per request.
    * If set to 0, we will not do any retries.
    */

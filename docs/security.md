@@ -98,6 +98,16 @@ Kubernetes admin to ensure that Spark authentication is secure.
   </td>
   <td>1.0.0</td>
 </tr>
+<tr>
+  <td><code>spark.network.auth.requireAuthForStreamRequests</code></td>
+  <td>false</td>
+  <td>
+    When enabled, stream and chunk fetch requests on a connection that requires authentication
+    are only served after authentication has completed. When disabled, such requests may be
+    served before authentication completes, matching the behavior of earlier 3.5 releases.
+  </td>
+  <td>3.5.10</td>
+</tr>
 </table>
 
 Alternatively, one can mount authentication secrets using files and Kubernetes secrets that

@@ -37,8 +37,8 @@ import org.apache.spark.network.client.TransportClient;
 public class AbstractAuthRpcHandlerSuite {
 
   private static class TestAuthRpcHandler extends AbstractAuthRpcHandler {
-    TestAuthRpcHandler(RpcHandler delegate) {
-      super(delegate);
+    TestAuthRpcHandler(RpcHandler delegate, boolean requireAuthForStreamRequests) {
+      super(delegate, requireAuthForStreamRequests);
     }
 
     @Override
@@ -55,7 +55,7 @@ public class AbstractAuthRpcHandlerSuite {
     RpcHandler delegate = mock(RpcHandler.class);
     StreamManager delegateManager = mock(StreamManager.class);
     when(delegate.getStreamManager()).thenReturn(delegateManager);
-    AbstractAuthRpcHandler handler = new TestAuthRpcHandler(delegate);
+    AbstractAuthRpcHandler handler = new TestAuthRpcHandler(delegate, true);
 
     StreamManager sm = handler.getStreamManager();
     TransportClient client = mock(TransportClient.class);
@@ -79,7 +79,7 @@ public class AbstractAuthRpcHandlerSuite {
     RpcHandler delegate = mock(RpcHandler.class);
     StreamManager delegateManager = mock(StreamManager.class);
     when(delegate.getStreamManager()).thenReturn(delegateManager);
-    AbstractAuthRpcHandler handler = new TestAuthRpcHandler(delegate);
+    AbstractAuthRpcHandler handler = new TestAuthRpcHandler(delegate, true);
     StreamManager sm = handler.getStreamManager();
 
     // Complete the (test) auth handshake; the wrapper obtained pre-auth must observe it.
@@ -94,5 +94,18 @@ public class AbstractAuthRpcHandlerSuite {
     TransportClient client = mock(TransportClient.class);
     sm.checkAuthorization(client, 1L);
     verify(delegateManager).checkAuthorization(client, 1L);
+  }
+
+  @Test
+  public void testStreamManagerServedBeforeAuthWhenDisabled() {
+    // With the flag off the historical behavior is kept: the delegate's stream manager is
+    // returned unwrapped, so requests are served before authentication completes.
+    RpcHandler delegate = mock(RpcHandler.class);
+    StreamManager delegateManager = mock(StreamManager.class);
+    when(delegate.getStreamManager()).thenReturn(delegateManager);
+    AbstractAuthRpcHandler handler = new TestAuthRpcHandler(delegate, false);
+
+    assertSame(delegateManager, handler.getStreamManager());
+    assertFalse(handler.isAuthenticated());
   }
 }

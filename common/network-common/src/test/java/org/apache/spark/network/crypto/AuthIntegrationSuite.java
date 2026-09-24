@@ -190,6 +190,20 @@ public class AuthIntegrationSuite {
     verify(delegate, never()).getMergedBlockMetaReqHandler();
   }
 
+  @Test
+  public void testStreamManagerFailsClosedWhenConfigured() {
+    // Pins the wiring: with the conf set, the handler must return the fail-closed wrapper.
+    RpcHandler delegate = mock(RpcHandler.class);
+    when(delegate.getStreamManager()).thenReturn(mock(StreamManager.class));
+    TransportConf conf = new TransportConf("rpc", new MapConfigProvider(
+      ImmutableMap.of("spark.network.auth.requireAuthForStreamRequests", "true")));
+    AuthRpcHandler handler = new AuthRpcHandler(
+      conf, mock(Channel.class), delegate, mock(SecretKeyHolder.class));
+
+    assertThrows(SecurityException.class,
+      () -> handler.getStreamManager().openStream("/jars/app.jar"));
+  }
+
   private static class DummyRpcHandler extends RpcHandler {
     @Override
     public void receive(

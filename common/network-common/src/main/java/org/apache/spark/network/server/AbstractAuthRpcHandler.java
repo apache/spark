@@ -25,6 +25,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * RPC Handler which performs authentication, and when it's successful, delegates further
@@ -35,10 +36,23 @@ public abstract class AbstractAuthRpcHandler extends RpcHandler {
   /** RpcHandler we will delegate to for authenticated connections. */
   private final RpcHandler delegate;
 
+  /**
+   * Whether stream and chunk fetch requests fail closed until the channel has authenticated.
+   * See {@link TransportConf#requireAuthForStreamRequests()}.
+   */
+  private final boolean requireAuthForStreamRequests;
+
   private boolean isAuthenticated;
 
+  // Kept for external subclasses on this maintenance branch: defaults to the historical
+  // behavior of serving stream requests before authentication completes.
   protected AbstractAuthRpcHandler(RpcHandler delegate) {
+    this(delegate, false);
+  }
+
+  protected AbstractAuthRpcHandler(RpcHandler delegate, boolean requireAuthForStreamRequests) {
     this.delegate = delegate;
+    this.requireAuthForStreamRequests = requireAuthForStreamRequests;
   }
 
   /**
@@ -86,7 +100,11 @@ public abstract class AbstractAuthRpcHandler extends RpcHandler {
 
   @Override
   public StreamManager getStreamManager() {
-    return new AuthCheckingStreamManager(delegate.getStreamManager());
+    StreamManager streamManager = delegate.getStreamManager();
+    if (requireAuthForStreamRequests) {
+      return new AuthCheckingStreamManager(streamManager);
+    }
+    return streamManager;
   }
 
   @Override
@@ -128,8 +146,10 @@ public abstract class AbstractAuthRpcHandler extends RpcHandler {
    * StreamManagers whose checkAuthorization is a no-op (e.g. the NettyRpcEnv file server that
    * distributes jars, files and REPL classes), so enabling spark.authenticate did not protect
    * the file-distribution channel. This wrapper makes every StreamManager behind an
-   * authentication bootstrap fail closed instead. Lifecycle and accounting callbacks are
-   * always delegated so per-channel state is cleaned up regardless of authentication state.
+   * authentication bootstrap fail closed instead. It is only installed when
+   * {@link TransportConf#requireAuthForStreamRequests()} is enabled. Lifecycle and accounting
+   * callbacks are always delegated so per-channel state is cleaned up regardless of
+   * authentication state.
    */
   private class AuthCheckingStreamManager extends StreamManager {
     private final StreamManager delegate;
