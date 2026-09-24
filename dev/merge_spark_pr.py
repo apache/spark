@@ -2541,6 +2541,45 @@ def main():
         update_jira_for_pr(pr_num, title, merged_refs, title_components)
 
 
+__test__ = {
+    "reconcile_jira_affects_versions": """
+    Blank input accepts the suggested version and appends it to the existing versions:
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from types import SimpleNamespace
+    >>> from unittest.mock import Mock, patch
+    >>> issue = SimpleNamespace(
+    ...     key="SPARK-1", fields=SimpleNamespace(versions=[SimpleNamespace(name="5.0.0")]))
+    >>> available = {"5.0.0", "4.4.0"}
+    >>> writer = Mock(spec=Jira)
+    >>> with (
+    ...     patch.dict(reconcile_jira_affects_versions.__globals__, jira_ops=writer),
+    ...     patch("builtins.input", side_effect=["", "", KeyboardInterrupt]) as user_input,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     reconcile_jira_affects_versions(issue, ["4.4.0"], available, ["4.4.0"])
+    >>> writer.update_affects_versions.assert_called_once_with(issue, ["5.0.0", "4.4.0"])
+    >>> user_input.call_count
+    2
+
+    Explicitly skipping an eligible suggestion leaves the JIRA writer untouched:
+
+    >>> writer.reset_mock()
+    >>> with (
+    ...     patch.dict(reconcile_jira_affects_versions.__globals__, jira_ops=writer),
+    ...     patch("builtins.input", side_effect=["skip", KeyboardInterrupt]) as user_input,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     reconcile_jira_affects_versions(issue, ["4.4.0"], available, ["4.4.0"])
+    >>> writer.mock_calls
+    []
+    >>> user_input.call_count
+    1
+    """,
+}
+
+
 if __name__ == "__main__":
     import doctest
 
