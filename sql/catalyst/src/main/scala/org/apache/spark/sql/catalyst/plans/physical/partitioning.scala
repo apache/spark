@@ -1103,12 +1103,14 @@ object KeyedPartitioning {
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
-    def isSupportedTransform(transform: TransformExpression): Boolean = {
-      // Should only consider column references, not literals.
-      val nonLiteralChildren = transform.children.filterNot(_.isInstanceOf[Literal])
-      // We need exactly one column reference per transform.
-      nonLiteralChildren.size == 1 && TransformExpression.isColumnRef(nonLiteralChildren.head)
-    }
+    // Exactly one column argument, and it must be a plain column reference; literal arguments are
+    // parameters. `columnSlots` is also what alias projection reads, so the two agree by
+    // construction on what "the column argument" is.
+    def isSupportedTransform(transform: TransformExpression): Boolean =
+      transform.columnSlots match {
+        case Seq(col) => TransformExpression.isColumnRef(col)
+        case _ => false
+      }
 
     expressions.forall {
       case t: TransformExpression if isSupportedTransform(t) => true
@@ -2074,15 +2076,12 @@ case class KeyedShuffleSpec(
         case (_: LeafExpression, _: LeafExpression) => true
         case (left: TransformExpression, right: TransformExpression) =>
           if (canReduce) left.isCompatible(right) else left.isSameFunction(right)
-        // Identity transform on one side, arbitrary transform on the other. Retargeting `t` at
-        // `col` and checking `argsMatchInputTypes` must agree with the reducer built below
-        // (`reducersBothWays`), since `EnsureRequirements` cannot otherwise tell a mismatched-type
-        // pair from a matched one -- both keep the identity side's declared data type -- so a gate
-        // that admits what the reducer refuses would keep raw keys and mis-join.
+        // Identity transform on one side, arbitrary transform on the other. The decision is
+        // `retargetForIdentity`'s, shared with the reducer `reducersBothWays` builds.
         case (col: AttributeReference, t: TransformExpression) =>
-          canReduce && t.withReference(col).argsMatchInputTypes
+          canReduce && retargetForIdentity(t, col).isDefined
         case (t: TransformExpression, col: AttributeReference) =>
-          canReduce && t.withReference(col).argsMatchInputTypes
+          canReduce && retargetForIdentity(t, col).isDefined
         case _ => false
       }
     }
@@ -2098,6 +2097,24 @@ case class KeyedShuffleSpec(
       !conf.v2BucketingPartiallyClusteredDistributionEnabled &&
       conf.v2BucketingAllowCompatibleTransforms
   }
+
+  /**
+   * The transform `t` retargeted at the identity side's key `col`, if Spark can evaluate it on the
+   * raw identity values -- which is how an identity side is reduced onto a transform side
+   * ([[IdentityReducer]]). `None` when the retargeted transform's argument types do not match what
+   * its bound function declares, since evaluating it would throw at reduce time.
+   *
+   * This is the single source of the identity-vs-transform decision: `isExpressionCompatible`'s
+   * gate admits the pair exactly when this is defined, and `reducersBothWays` builds its reducer
+   * from the result. The two must agree -- `EnsureRequirements` cannot tell a mismatched-type pair
+   * from a matched one, since both keep the identity side's declared data type, so a gate that
+   * admitted what the reducer refused would keep raw keys and mis-join -- and sharing this one
+   * function is what keeps them agreeing.
+   */
+  private def retargetForIdentity(
+      t: TransformExpression,
+      col: AttributeReference): Option[TransformExpression] =
+    Some(t.withReference(col)).filter(_.argsMatchInputTypes)
 
   /**
    * Compute the reducers for both sides of a join between this shuffle spec and `other`, in a
@@ -2168,26 +2185,14 @@ case class KeyedShuffleSpec(
       // Identity transform on this side, arbitrary transform on the other side: create a reducer
       // that applies the other's transform to the raw identity values. Each partition expression
       // is guaranteed to have exactly one leaf child (asserted in keyPositions), which
-      // `IdentityReducer` binds to ordinal 0. Retargeting `t` at `a` and checking
-      // `argsMatchInputTypes` must agree with `isExpressionCompatible`'s gate above: evaluating a
-      // type-mismatched substituted transform (e.g. a narrower column at a wider declared slot)
-      // would throw at reduce time instead of falling back to a shuffle.
+      // `IdentityReducer` binds to ordinal 0. Whether one exists is `retargetForIdentity`'s
+      // decision, shared with `isExpressionCompatible`'s gate.
       case (a: AttributeReference, t: TransformExpression) =>
-        val retargeted = t.withReference(a)
-        if (retargeted.argsMatchInputTypes) {
-          (Some(KeyReducer(IdentityReducer(retargeted), t)), None)
-        } else {
-          (None, None)
-        }
+        (retargetForIdentity(t, a).map(r => KeyReducer(IdentityReducer(r), t)), None)
 
       // Symmetric: identity transform on the other side.
       case (t: TransformExpression, a: AttributeReference) =>
-        val retargeted = t.withReference(a)
-        if (retargeted.argsMatchInputTypes) {
-          (None, Some(KeyReducer(IdentityReducer(retargeted), t)))
-        } else {
-          (None, None)
-        }
+        (None, retargetForIdentity(t, a).map(r => KeyReducer(IdentityReducer(r), t)))
 
       case (_, _) => (None, None)
     }

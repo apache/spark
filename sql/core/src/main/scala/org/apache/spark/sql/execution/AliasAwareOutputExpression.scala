@@ -92,15 +92,12 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   /**
    * Projects a partitioning expression through the output aliases.
    *
-   * A [[TransformExpression]] is handled by retargeting its column slot only: its literal
-   * parameters (the bucket count, the truncate width) live in `children`, so a bare
-   * `projectExpression` would substitute one that happens to match an alias -- `SELECT data AS d,
-   * 2 AS w` over `truncate(data, 2)` yields `truncate(d, w)`, which drops `w` from the transform's
-   * identity, adds a second entry to `references`, and makes
-   * `KeyedPartitioning.supportsExpressions` reject the partitioning, silently losing SPJ. A
-   * `Literal` has no children, so `projectExpression`'s `containsChild.nonEmpty` fallback does not
-   * re-offer the original either. See `TransformExpression#rewriteColumnSlots`, which
-   * `KeyedShuffleSpec.createPartitioning` uses for the same reason.
+   * A [[TransformExpression]] has only its column argument projected, through
+   * `TransformExpression#rewriteColumnSlots`, which explains why its literal parameters must be
+   * left alone. What goes wrong here otherwise: `aliasMap` holds any aliased expression, so
+   * `SELECT data AS d, 2 AS w` over `truncate(data, 2)` would yield `truncate(d, w)`, and since a
+   * `Literal` has no children, `projectExpression`'s `containsChild.nonEmpty` fallback would not
+   * re-offer the original `2` either.
    */
   private def projectPartitionExpression(expr: Expression): LazyList[Expression] = expr match {
     case te: TransformExpression =>
