@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import static org.apache.spark.sql.execution.datasources.parquet.VectorizedReaderBase.checkLength;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -518,7 +520,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   @Override
   public final void readBinary(int total, WritableColumnVector v, int rowId) {
     for (int i = 0; i < total; i++) {
-      int len = readInteger();
+      int len = checkLength(readInteger());
       ByteBuffer buffer = getBuffer(len);
       if (buffer.hasArray()) {
         v.putByteArray(rowId + i, buffer.array(), buffer.arrayOffset() + buffer.position(), len);
@@ -533,8 +535,14 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   @Override
   public void skipBinary(int total) {
     for (int i = 0; i < total; i++) {
-      int len = readInteger();
-      in.skip(len);
+      // Validate before skipping: a negative length rewinds a single-buffer stream and is a
+      // silent no-op on a multi-buffer one, and skipFully throws on neither. See checkLength.
+      int len = checkLength(readInteger());
+      try {
+        in.skipFully(len);
+      } catch (IOException e) {
+        throw new ParquetDecodingException("Failed to skip " + len + " bytes", e);
+      }
     }
   }
 
@@ -602,7 +610,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     ByteBufferOutputStream out = new ByteBufferOutputStream();
 
     for (int i = 0; i < total; i++) {
-      int len = readInteger();
+      int len = checkLength(readInteger());
 
       // Converts WKB into a physical representation of geometry/geography.
       byte[] physicalValue = converter.convert(in.readNBytes(len), srid);
