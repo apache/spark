@@ -242,6 +242,60 @@ class WorkerMetricsProtocolTests(unittest.TestCase):
 
 
 class WorkerMetricsSocketTests(unittest.TestCase):
+    def test_live_arrow_udf_sends_legacy_marker_to_jvm(self):
+        if os.name == "nt":
+            self.skipTest("the custom worker module requires the Python daemon")
+
+        from pyspark.testing.utils import have_pandas, have_pyarrow
+
+        if not (have_pandas and have_pyarrow):
+            self.skipTest("pandas and pyarrow are required for Arrow UDFs")
+
+        from pyspark.sql import SparkSession
+        from pyspark.sql.functions import pandas_udf
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            marker_path = Path(temp_dir) / "marker"
+            spark = (
+                SparkSession.builder.master("local[1]")
+                .appName("worker-metrics-legacy-arrow")
+                .config("spark.python.use.daemon", "true")
+                .config("spark.python.worker.module", "pyspark.tests.test_worker_metrics")
+                .config("spark.executorEnv.PYSPARK_METRICS_TEST_MARKER_PATH", str(marker_path))
+                .config("spark.executorEnv.PYSPARK_METRICS_TEST_MODE", "legacy")
+                .getOrCreate()
+            )
+            try:
+
+                @pandas_udf("long")
+                def increment(values):
+                    import time
+
+                    time.sleep(0.02)
+                    return values + 1
+
+                result = spark.range(2).select(increment("id"))
+                self.assertEqual([row[0] for row in result.collect()], [1, 2])
+
+                def find_arrow_exec(plan):
+                    if plan.getClass().getSimpleName() == "ArrowEvalPythonExec":
+                        return plan
+                    children = plan.children()
+                    for index in range(children.size()):
+                        found = find_arrow_exec(children.apply(index))
+                        if found is not None:
+                            return found
+                    return None
+
+                arrow_exec = find_arrow_exec(result._jdf.queryExecution().executedPlan())
+                self.assertIsNotNone(arrow_exec)
+                self.assertGreater(arrow_exec.metrics().apply("pythonProcessingTime").value(), 0)
+                self.assertEqual(
+                    marker_path.read_bytes(), struct.pack("!i", SpecialLengths.TIMING_DATA)
+                )
+            finally:
+                spark.stop()
+
     def test_live_arrow_udf_sends_v1_marker_to_jvm(self):
         if os.name == "nt":
             self.skipTest("the custom worker module requires the Python daemon")
@@ -262,6 +316,7 @@ class WorkerMetricsSocketTests(unittest.TestCase):
                 .config("spark.python.use.daemon", "true")
                 .config("spark.python.worker.module", "pyspark.tests.test_worker_metrics")
                 .config("spark.executorEnv.PYSPARK_METRICS_TEST_MARKER_PATH", str(marker_path))
+                .config("spark.executorEnv.PYSPARK_METRICS_TEST_MODE", "v1")
                 .getOrCreate()
             )
             try:
@@ -294,6 +349,7 @@ class WorkerMetricsSocketTests(unittest.TestCase):
                 .set("spark.python.use.daemon", "true")
                 .set("spark.python.worker.module", "pyspark.tests.test_worker_metrics")
                 .set("spark.executorEnv.PYSPARK_METRICS_TEST_MARKER_PATH", str(marker_path))
+                .set("spark.executorEnv.PYSPARK_METRICS_TEST_MODE", "v1")
             )
             sc = SparkContext("local[1]", "worker-metrics-v1-marker", conf=conf)
             try:
@@ -301,6 +357,61 @@ class WorkerMetricsSocketTests(unittest.TestCase):
                 self.assertEqual(result, [2, 3])
                 self.assertEqual(
                     marker_path.read_bytes(), struct.pack("!i", SpecialLengths.METRICS_DATA)
+                )
+            finally:
+                sc.stop()
+
+    def test_live_worker_sends_legacy_marker_to_jvm(self):
+        if os.name == "nt":
+            self.skipTest("the custom worker module requires the Python daemon")
+
+        from pyspark import SparkConf, SparkContext
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            marker_path = Path(temp_dir) / "marker"
+            conf = (
+                SparkConf()
+                .set("spark.python.use.daemon", "true")
+                .set("spark.python.worker.module", "pyspark.tests.test_worker_metrics")
+                .set("spark.executorEnv.PYSPARK_METRICS_TEST_MARKER_PATH", str(marker_path))
+                .set("spark.executorEnv.PYSPARK_METRICS_TEST_MODE", "legacy")
+            )
+            sc = SparkContext("local[1]", "worker-metrics-legacy-marker", conf=conf)
+            try:
+                result = sc.parallelize([1, 2], 1).map(lambda value: value + 1).collect()
+                self.assertEqual(result, [2, 3])
+                self.assertEqual(
+                    marker_path.read_bytes(), struct.pack("!i", SpecialLengths.TIMING_DATA)
+                )
+            finally:
+                sc.stop()
+
+    def test_reused_worker_sends_v1_marker_for_each_task(self):
+        if os.name == "nt":
+            self.skipTest("the custom worker module requires the Python daemon")
+
+        from pyspark import SparkConf, SparkContext
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            marker_path = Path(temp_dir) / "markers"
+            conf = (
+                SparkConf()
+                .set("spark.python.use.daemon", "true")
+                .set("spark.python.worker.reuse", "true")
+                .set("spark.python.worker.module", "pyspark.tests.test_worker_metrics")
+                .set("spark.executorEnv.PYSPARK_METRICS_TEST_MARKER_PATH", str(marker_path))
+                .set("spark.executorEnv.PYSPARK_METRICS_TEST_MODE", "v1")
+            )
+            sc = SparkContext("local[1]", "worker-metrics-v1-reuse", conf=conf)
+            try:
+                result = (
+                    sc.parallelize([1, 2], 2).map(lambda value: (os.getpid(), value + 1)).collect()
+                )
+                self.assertEqual([value for _, value in result], [2, 3])
+                self.assertEqual(result[0][0], result[1][0])
+                self.assertEqual(
+                    marker_path.read_bytes(),
+                    struct.pack("!ii", *([SpecialLengths.METRICS_DATA] * 2)),
                 )
             finally:
                 sc.stop()
@@ -315,12 +426,22 @@ def _worker_main(infile, outfile):
     def checked_report(out, boot, init, finish, processing_time_ms, runner_conf):
         if runner_conf.get("spark.python.worker.metrics.protocol.version") != "1":
             raise AssertionError("JVM did not advertise worker metrics v1")
+        mode = os.environ.get("PYSPARK_METRICS_TEST_MODE", "v1")
+        if mode == "legacy":
+            report_conf = RunnerConf()
+            expected_marker = SpecialLengths.TIMING_DATA
+        elif mode == "v1":
+            report_conf = runner_conf
+            expected_marker = SpecialLengths.METRICS_DATA
+        else:
+            raise AssertionError(f"unknown metrics test mode: {mode}")
         frame = io.BytesIO()
-        original_report(frame, boot, init, finish, processing_time_ms, runner_conf)
+        original_report(frame, boot, init, finish, processing_time_ms, report_conf)
         marker = struct.unpack("!i", frame.getvalue()[:4])[0]
-        if marker != SpecialLengths.METRICS_DATA:
-            raise AssertionError(f"expected METRICS_DATA, received {marker}")
-        Path(os.environ["PYSPARK_METRICS_TEST_MARKER_PATH"]).write_bytes(frame.getvalue()[:4])
+        if marker != expected_marker:
+            raise AssertionError(f"expected marker {expected_marker}, received {marker}")
+        with Path(os.environ["PYSPARK_METRICS_TEST_MARKER_PATH"]).open("ab") as marker_file:
+            marker_file.write(frame.getvalue()[:4])
         out.write(frame.getvalue())
 
     worker.report_worker_metrics = checked_report
