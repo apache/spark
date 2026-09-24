@@ -45,7 +45,7 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
     val activeStagesTable =
       new StageTableBase(parent.store, request, activeStages, "", "activeStage", parent.basePath,
         "stages/pool", parent.isFairScheduler, parent.killEnabled, false,
-        parent.killViaGetEnabled, parent.csrfToken)
+        parent.actionsViaGetEnabled, parent.csrfToken)
 
     val poolTable = new PoolTable(Map(pool -> uiPool), parent)
     var content = <h4>Summary </h4> ++ poolTable.toNodeSeq(request)

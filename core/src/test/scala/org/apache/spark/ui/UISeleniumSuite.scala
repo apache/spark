@@ -262,11 +262,16 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     }
   }
 
-  private def scrapeCsrfToken(sc: SparkContext): String = {
-    val html = Utils.tryWithResource(
+  private def jobsPage(sc: SparkContext): String = {
+    Utils.tryWithResource(
       Source.fromURL(sc.ui.get.webUrl.stripSuffix("/") + "/jobs/"))(_.mkString)
-    """(?:csrfToken=|name="csrfToken" value=")([0-9a-f]+)""".r
-      .findFirstMatchIn(html)
+  }
+
+  // The state-changing endpoints require the per-UI token, rendered as a hidden field of
+  // the kill forms; scrape it the way a scripted client would.
+  private def scrapeCsrfToken(sc: SparkContext): String = {
+    """name="csrfToken" value="([0-9a-f]+)"""".r
+      .findFirstMatchIn(jobsPage(sc))
       .map(_.group(1))
       .getOrElse(fail("no CSRF token found on the jobs page"))
   }
@@ -275,11 +280,11 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     // GET mode is off by default outside YARN, and this test is about the token, so ask
     // for GET explicitly.
     withSpark(newSparkContext(killEnabled = true,
-      additionalConfs = Map(UI_KILL_VIA_GET_ENABLED.key -> "true"))) { sc =>
+      additionalConfs = Map(UI_ACTIONS_VIA_GET_ENABLED.key -> "true"))) { sc =>
       sc.parallelize(1 to 10).map { x => Thread.sleep(10000); x }.countAsync()
       val base = sc.ui.get.webUrl.stripSuffix("/")
-      // Retry only until the kill link appears. Everything after this runs once: a request
-      // that the endpoint accepts kills the job, and the link is then gone, so retrying
+      // Retry only until the kill form appears. Everything after this runs once: a request
+      // that the endpoint accepts kills the job, and the form is then gone, so retrying
       // the whole block could never succeed a second time.
       val token = eventually(timeout(10.seconds), interval(50.milliseconds))(scrapeCsrfToken(sc))
 
@@ -291,7 +296,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
         // HEAD must be safe (RFC 9110), so it is refused rather than delegated to doGet.
         assert(TestUtils.httpResponseCode(withToken, "HEAD") === 405)
         // Browser link prefetchers identify themselves; a valid token must not save them,
-        // since the token rides in the link they prefetch. HttpURLConnection drops
+        // since the token rides in the URL they prefetch. HttpURLConnection drops
         // Sec-Purpose, so drive these through Jetty's client instead.
         val client = new HttpClient()
         client.start()
@@ -310,27 +315,34 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     }
   }
 
-  test("kill link rendering follows spark.ui.killViaGetEnabled") {
+  test("kill form method follows spark.ui.actionsViaGetEnabled") {
+    // The kill control is the same form either way, id and token as hidden fields; only
+    // its method follows the setting, so the token is never spliced into a link.
+    def killFormMethod(html: String): Option[String] = {
+      """<form [^>]*action="/jobs/job/kill/"[^>]*>""".r.findFirstIn(html).flatMap { form =>
+        """method="([A-Z]+)"""".r.findFirstMatchIn(form).map(_.group(1))
+      }
+    }
     withSpark(newSparkContext(killEnabled = true,
-      additionalConfs = Map(UI_KILL_VIA_GET_ENABLED.key -> "true"))) { sc =>
+      additionalConfs = Map(UI_ACTIONS_VIA_GET_ENABLED.key -> "true"))) { sc =>
       sc.parallelize(1 to 10).map { x => Thread.sleep(10000); x }.countAsync()
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
-        val html = Utils.tryWithResource(
-          Source.fromURL(sc.ui.get.webUrl.stripSuffix("/") + "/jobs/"))(_.mkString)
-        // GET mode: a link carrying the token. ("&amp;" is the escaped "&" in the href.)
-        assert("/jobs/job/kill/\\?id=\\d+&amp;csrfToken=[0-9a-f]+".r.findFirstIn(html).isDefined)
-        assert(!html.contains("""action="/jobs/job/kill/""""))
+        val html = jobsPage(sc)
+        // GET mode: the browser turns the fields into the query string, the same request
+        // a plain link would make, which also works through proxies that block POST.
+        assert(killFormMethod(html) === Some("GET"))
+        assert(html.contains("""name="csrfToken""""))
+        assert(!html.contains("/jobs/job/kill/?id="))
       }
     }
     // No explicit setting and spark.master is local, so the default resolves to POST-only.
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       sc.parallelize(1 to 10).map { x => Thread.sleep(10000); x }.countAsync()
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
-        val html = Utils.tryWithResource(
-          Source.fromURL(sc.ui.get.webUrl.stripSuffix("/") + "/jobs/"))(_.mkString)
-        assert(!html.contains("/jobs/job/kill/?id="))
-        assert(html.contains("""action="/jobs/job/kill/""""))
+        val html = jobsPage(sc)
+        assert(killFormMethod(html) === Some("POST"))
         assert(html.contains("""name="csrfToken""""))
+        assert(!html.contains("/jobs/job/kill/?id="))
       }
     }
   }
@@ -615,7 +627,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
   test("kill stage POST/GET response is correct") {
     // GET is refused unless asked for, and either method needs the per-UI CSRF token.
     withSpark(newSparkContext(killEnabled = true,
-      additionalConfs = Map(UI_KILL_VIA_GET_ENABLED.key -> "true"))) { sc =>
+      additionalConfs = Map(UI_ACTIONS_VIA_GET_ENABLED.key -> "true"))) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       val token = eventually(timeout(10.seconds), interval(50.milliseconds))(scrapeCsrfToken(sc))
       val url = new URL(
@@ -628,7 +640,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
   test("kill job POST/GET response is correct") {
     // GET is refused unless asked for, and either method needs the per-UI CSRF token.
     withSpark(newSparkContext(killEnabled = true,
-      additionalConfs = Map(UI_KILL_VIA_GET_ENABLED.key -> "true"))) { sc =>
+      additionalConfs = Map(UI_ACTIONS_VIA_GET_ENABLED.key -> "true"))) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       val token = eventually(timeout(10.seconds), interval(50.milliseconds))(scrapeCsrfToken(sc))
       val url = new URL(
