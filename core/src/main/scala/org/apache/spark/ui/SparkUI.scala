@@ -56,7 +56,7 @@ private[spark] class SparkUI private (
 
   val killEnabled = sc.map(_.conf.get(UI_KILL_ENABLED)).getOrElse(false)
 
-  val killViaGetEnabled = SparkUI.killViaGetEnabled(conf)
+  val actionsViaGetEnabled = SparkUI.actionsViaGetEnabled(conf)
 
   var appId: String = _
 
@@ -121,17 +121,17 @@ private[spark] class SparkUI private (
     }
 
     // These endpoints change state, so they require the per-UI CSRF token and reject
-    // prefetch requests (see JettyUtils.createRedirectHandler). Kill also accepts GET
+    // prefetch requests (see JettyUtils.createRedirectHandler). They also accept GET
     // where a proxy in front of the UI cannot forward POST -- the token rides in the
-    // request parameters, which such proxies do forward. See SparkUI.killViaGetEnabled.
-    val killHttpMethods: Set[String] =
-      if (killViaGetEnabled) Set("GET", "POST") else Set("POST")
+    // request parameters, which such proxies do forward. See SparkUI.actionsViaGetEnabled.
+    val actionHttpMethods: Set[String] =
+      if (actionsViaGetEnabled) Set("GET", "POST") else Set("POST")
     attachHandler(createRedirectHandler(
-      "/jobs/job/kill", "/jobs/", jobsTab.handleKillRequest, httpMethods = killHttpMethods,
+      "/jobs/job/kill", "/jobs/", jobsTab.handleKillRequest, httpMethods = actionHttpMethods,
       csrfToken = Some(csrfToken)))
     attachHandler(createRedirectHandler(
       "/stages/stage/kill", "/stages/", stagesTab.handleKillRequest,
-      httpMethods = killHttpMethods, csrfToken = Some(csrfToken)))
+      httpMethods = actionHttpMethods, csrfToken = Some(csrfToken)))
   }
 
   initialize()
@@ -261,8 +261,8 @@ private[spark] object SparkUI {
    * manager: on for YARN, whose ResourceManager/AM proxy does not forward POST
    * (SPARK-6846), and off everywhere else.
    */
-  def killViaGetEnabled(conf: SparkConf): Boolean = {
-    conf.get(UI_KILL_VIA_GET_ENABLED)
+  def actionsViaGetEnabled(conf: SparkConf): Boolean = {
+    conf.get(UI_ACTIONS_VIA_GET_ENABLED)
       .getOrElse(conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn")
   }
 
