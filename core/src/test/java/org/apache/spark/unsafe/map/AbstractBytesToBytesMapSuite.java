@@ -875,4 +875,266 @@ public abstract class AbstractBytesToBytesMapSuite {
     }
   }
 
+  @Test
+  public void lookupAfterFreeDoesNotRestoreArray() {
+    memoryManager.limit(5000);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
+    final long[] key = new long[]{1L};
+    try {
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+      map.free();
+      assertEquals(0L, taskMemoryManager.getMemoryConsumptionForThisTask());
+
+      map.reset();
+      assertEquals(0, map.getNumDataPages());
+      assertEquals(0L, taskMemoryManager.getMemoryConsumptionForThisTask());
+
+      assertThrows(
+        AssertionError.class,
+        () -> map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8));
+      assertEquals(0L, taskMemoryManager.getMemoryConsumptionForThisTask());
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void reuseMapAfterFailedReset() {
+    // A reset() whose eager longArray reallocation OOMs leaves the map with longArray == null (and,
+    // because the trailing reset() bookkeeping never runs, a stale currentPage). A subsequent
+    // lookup then NPEs in safeLookup (this.longArray is null), and a later append would write into
+    // a freed page. The map must instead recover to a usable empty state.
+    memoryManager.limit(5000);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
+    try {
+      final long[] key = new long[]{1L};
+      final long[] value = new long[]{42L};
+      BytesToBytesMap.Location loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
+      loc.append(key, Platform.LONG_ARRAY_OFFSET, 8, value, Platform.LONG_ARRAY_OFFSET, 8);
+
+      // Force OOM on the reallocation inside reset(), leaving longArray == null.
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+
+      // The map must recover: lookup must not NPE, it must report an empty map, and it must be
+      // usable again (append into a fresh page, then read the value back).
+      memoryManager.limit(PAGE_SIZE_BYTES);
+      loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
+      Assertions.assertFalse(loc.isDefined());
+      Assertions.assertEquals(0, map.numValues());
+      Assertions.assertTrue(
+        loc.append(key, Platform.LONG_ARRAY_OFFSET, 8, value, Platform.LONG_ARRAY_OFFSET, 8));
+      Assertions.assertEquals(1, map.getNumDataPages());
+      loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
+      Assertions.assertTrue(loc.isDefined());
+      Assertions.assertEquals(42L, Platform.getLong(loc.getValueBase(), loc.getValueOffset()));
+      Assertions.assertEquals(1, map.numValues());
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void reuseMapWithSemanticKeyOperationsAfterFailedReset() {
+    memoryManager.limit(5000);
+    BytesToBytesMap.KeyOperationsFactory caseInsensitiveWithConstantHash =
+      () -> new BytesToBytesMap.KeyOperations() {
+        @Override
+        public int hash(Object base, long offset, int length) {
+          return 0;
+        }
+
+        @Override
+        public boolean equals(
+            Object leftBase,
+            long leftOffset,
+            int leftLength,
+            Object rightBase,
+            long rightOffset,
+            int rightLength) {
+          return Character.toLowerCase(Platform.getByte(leftBase, leftOffset)) ==
+            Character.toLowerCase(Platform.getByte(rightBase, rightOffset));
+        }
+      };
+    BytesToBytesMap map = new BytesToBytesMap(
+      taskMemoryManager,
+      blockManager,
+      serializerManager,
+      256,
+      0.5,
+      4000,
+      caseInsensitiveWithConstantHash);
+    try {
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+      memoryManager.limit(PAGE_SIZE_BYTES);
+
+      byte[] storedKey = new byte[8];
+      storedKey[0] = 'A';
+      byte[] equivalentKey = new byte[16];
+      equivalentKey[0] = 'a';
+      byte[] value = new byte[8];
+      Platform.putLong(value, Platform.BYTE_ARRAY_OFFSET, 42L);
+
+      BytesToBytesMap.Location loc =
+        map.lookup(storedKey, Platform.BYTE_ARRAY_OFFSET, storedKey.length);
+      assertFalse(loc.isDefined());
+      assertTrue(loc.append(
+        storedKey,
+        Platform.BYTE_ARRAY_OFFSET,
+        storedKey.length,
+        value,
+        Platform.BYTE_ARRAY_OFFSET,
+        value.length));
+
+      loc = map.lookup(equivalentKey, Platform.BYTE_ARRAY_OFFSET, equivalentKey.length);
+      assertTrue(loc.isDefined());
+      assertEquals(storedKey.length, loc.getKeyLength());
+      assertEquals(42L, Platform.getLong(loc.getValueBase(), loc.getValueOffset()));
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void reuseMapAfterFailedResetRestoresGrowthState() {
+    memoryManager.limit(PAGE_SIZE_BYTES);
+    // A sub-one-key growth threshold makes canGrowArray observable through append(): after a
+    // failed grow, no new key is accepted until reset restores the flag.
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 64, 0.01, 4000);
+    try {
+      for (long i = 0; i < 2; i++) {
+        final long[] key = new long[]{i};
+        if (i == 1) {
+          // The data page already exists, so this OOM is consumed by growAndRehash().
+          memoryManager.markExecutionAsOutOfMemoryOnce();
+        }
+        assertTrue(map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8).append(
+          key, Platform.LONG_ARRAY_OFFSET, 8, key, Platform.LONG_ARRAY_OFFSET, 8));
+      }
+
+      final long[] blockedKey = new long[]{2L};
+      assertFalse(map.lookup(blockedKey, Platform.LONG_ARRAY_OFFSET, 8).append(
+        blockedKey,
+        Platform.LONG_ARRAY_OFFSET,
+        8,
+        blockedKey,
+        Platform.LONG_ARRAY_OFFSET,
+        8));
+
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+
+      memoryManager.limit(PAGE_SIZE_BYTES);
+      for (long i = 10; i < 12; i++) {
+        final long[] key = new long[]{i};
+        final long[] value = new long[]{i * 10};
+        BytesToBytesMap.Location loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
+        assertFalse(loc.isDefined());
+        assertTrue(loc.append(
+          key, Platform.LONG_ARRAY_OFFSET, 8, value, Platform.LONG_ARRAY_OFFSET, 8));
+        loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
+        assertTrue(loc.isDefined());
+        assertEquals(i * 10, Platform.getLong(loc.getValueBase(), loc.getValueOffset()));
+      }
+      assertEquals(2, map.numKeys());
+      assertEquals(2, map.numValues());
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void reuseMapAfterFailedResetPropagatesRepeatedOom() {
+    memoryManager.limit(5000);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
+    try {
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+
+      final long[] key = new long[]{1L};
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(
+        SparkOutOfMemoryError.class,
+        () -> map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8));
+
+      memoryManager.limit(PAGE_SIZE_BYTES);
+      BytesToBytesMap.Location loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
+      assertFalse(loc.isDefined());
+      assertEquals(0, map.numKeys());
+      assertEquals(0, map.numValues());
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void reuseMapAfterRepeatedFailedReset() {
+    memoryManager.limit(5000);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
+    try {
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+
+      memoryManager.limit(PAGE_SIZE_BYTES);
+      final long[] key = new long[]{1L};
+      BytesToBytesMap.Location loc = map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8);
+      assertFalse(loc.isDefined());
+      assertEquals(0, map.numKeys());
+      assertEquals(0, map.numValues());
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void safeLookupAfterFailedReset() throws Exception {
+    memoryManager.limit(5000);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+      memoryManager.limit(PAGE_SIZE_BYTES);
+
+      final long[] key = new long[]{1L};
+      CountDownLatch ready = new CountDownLatch(2);
+      CountDownLatch start = new CountDownLatch(1);
+      Callable<Boolean> concurrentLookup = () -> {
+        BytesToBytesMap.Location threadLocation = map.new Location();
+        ready.countDown();
+        start.await();
+        map.safeLookup(key, Platform.LONG_ARRAY_OFFSET, 8, threadLocation);
+        return threadLocation.isDefined();
+      };
+      Future<Boolean> firstLookup = executor.submit(concurrentLookup);
+      Future<Boolean> secondLookup = executor.submit(concurrentLookup);
+      ready.await();
+      start.countDown();
+      assertFalse(firstLookup.get());
+      assertFalse(secondLookup.get());
+      assertEquals(
+        map.getTotalMemoryConsumption(), taskMemoryManager.getMemoryConsumptionForThisTask());
+
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+      BytesToBytesMap.Location location = map.new Location();
+      map.safeLookup(key, Platform.LONG_ARRAY_OFFSET, 8, location, 42);
+      assertFalse(location.isDefined());
+    } finally {
+      executor.shutdownNow();
+      map.free();
+    }
+  }
+
 }

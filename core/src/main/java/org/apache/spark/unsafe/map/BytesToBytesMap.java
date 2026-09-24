@@ -140,6 +140,18 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * while position {@code 2 * i + 1} in the array holds key's full 32-bit hashcode.
    */
   @Nullable private LongArray longArray;
+
+  /**
+   * Whether a completed reset needs to restore longArray after its allocation failed.
+   *
+   * Volatile so that clearing this flag safely publishes the replacement array to concurrent
+   * safeLookup callers.
+   */
+  private volatile boolean longArrayRecoveryRequired = false;
+
+  /** Whether {@link #free()} has permanently released this map. */
+  private volatile boolean freed = false;
+
   // TODO: we're wasting 32 bits of space here; we can probably store fewer bits of the hashcode
   // and exploit word-alignment to use fewer bits to hold the address.  This might let us store
   // only one long per map entry, increasing the chance that this array will fit in cache at the
@@ -588,6 +600,29 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
+   * Restores the hash array after a {@link #reset()} freed it but its eager reallocation failed
+   * with an OOM, leaving {@code longArray == null}. A reset() empties the map, so re-allocating at
+   * {@code initialCapacity} here is correct. Without this, a subsequent lookup dereferences the
+   * null array in {@code safeLookup} (or an assertion error with -ea). If memory is still
+   * unavailable this throws a SparkOutOfMemoryError instead.
+   */
+  private void restoreArrayAfterFailedReset() {
+    if (!freed && longArrayRecoveryRequired) {
+      // Only the failed-reset state is recoverable here: the map is empty, so a fresh
+      // initial-capacity array is correct. `destructiveIterator != null` means destructive
+      // iteration has begun, after which map operations are illegal. Do not re-allocate the
+      // array in that terminal state; leave the illegal lookup to fail loudly.
+      synchronized (this) {
+        if (!freed && longArray == null && destructiveIterator == null &&
+            longArrayRecoveryRequired) {
+          allocate(initialCapacity);
+          longArrayRecoveryRequired = false;
+        }
+      }
+    }
+  }
+
+  /**
    * Looks up a key and saves the result in the provided `loc`.
    *
    * This is a thread-safe version of `lookup`, provided that each thread supplies its own
@@ -603,6 +638,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         loc,
         Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
     } else {
+      restoreArrayAfterFailedReset();
       safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
     }
   }
@@ -615,6 +651,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * and the map must not be modified concurrently.
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
+    restoreArrayAfterFailedReset();
     assert(longArray != null);
     if (keyOperationsFactory != null) {
       safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
@@ -1036,8 +1073,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * as well as the hash map array itself.
    *
    * This method is idempotent and can be called multiple times.
+   * After this method is called, the map cannot be reused and {@link #reset()} is a no-op.
    */
-  public void free() {
+  public synchronized void free() {
+    freed = true;
+    longArrayRecoveryRequired = false;
     updatePeakMemoryUsed();
     if (longArray != null) {
       freeArray(longArray);
@@ -1117,22 +1157,34 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Reset this map to initialized state.
+   * Reset this map to initialized state. If {@link #free()} has been called, the map cannot be
+   * reinitialized and this method is a no-op.
    */
-  public void reset() {
+  public synchronized void reset() {
+    if (freed) {
+      return;
+    }
     updatePeakMemoryUsed();
+    // Put the map into its empty state up front so that if the allocate() below fails with an OOM,
+    // the map is left consistently empty (longArray == null, no stale currentPage) rather than
+    // half-reset. A subsequent lookup then restores the array lazily (restoreArrayAfterFailedReset)
+    // instead of dereferencing a null longArray or writing into a freed currentPage.
     numKeys = 0;
     numValues = 0;
-    freeArray(longArray);
+    canGrowArray = true;
+    currentPage = null;
+    pageCursor = 0;
+    if (longArray != null) {
+      freeArray(longArray);
+    }
     longArray = null;
     while (dataPages.size() > 0) {
       MemoryBlock dataPage = dataPages.removeLast();
       freePage(dataPage);
     }
+    longArrayRecoveryRequired = true;
     allocate(initialCapacity);
-    canGrowArray = true;
-    currentPage = null;
-    pageCursor = 0;
+    longArrayRecoveryRequired = false;
   }
 
   /**
