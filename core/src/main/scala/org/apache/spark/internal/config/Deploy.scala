@@ -66,6 +66,7 @@ private[spark] object Deploy {
         "jdk.serialFilter; znodes rejected only by jdk.serialFilter are deleted like other " +
         "unreadable znodes. Set to '*' to disable filtering.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .checkValue(v => v.trim.nonEmpty && ObjectInputFilter.Config.createFilter(v) != null,
         "must be a non-empty JEP-290 filter pattern; use '*' to disable filtering.")
