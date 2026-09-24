@@ -66,8 +66,8 @@ JSON_OBJECT ( [ key, value [, key, value] ... ]
     An expression producing the member value. Values may have different types and may be nested
     JSON constructors. `JSON_OBJECT()` with no members produces the empty object `{}`. A value is
     spliced in as raw JSON, rather than quoted as a string, only when it carries `FORMAT JSON` (see
-    below) -- either the explicit clause or the implicit form a recognized JSON producer written
-    directly in the value position carries. This covers a nested `JSON_OBJECT` or `JSON_ARRAY` (e.g.
+    below) -- either the explicit clause or the implicit form carried by a recognized JSON producer
+    written directly in the value position. This covers a nested `JSON_OBJECT` or `JSON_ARRAY` (e.g.
     `JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1))` produces `{"a":{"b":1}}`), and a nested
     `JSON_QUERY` under the default `KEEP QUOTES`, which returns JSON text (e.g.
     `JSON_OBJECT('a' VALUE JSON_QUERY('{"o":{"x":1}}', '$.o'))` produces `{"a":{"x":1}}`). A
