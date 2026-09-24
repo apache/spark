@@ -75,4 +75,25 @@ class PushProjectThroughUnionSuite extends PlanTest {
 
     comparePlans(optimized, expected)
   }
+
+  test("SPARK-59042: PushProjectionThroughUnion handles uncorrelated subquery without rewrite") {
+    val testRelation1 = LocalRelation($"a".int)
+    val testRelation2 = LocalRelation($"d".int)
+    val subqueryRelation = LocalRelation($"x".int)
+    val subquery = ScalarSubquery(subqueryRelation.select($"x"))
+
+    val query = testRelation1
+      .union(testRelation2)
+      .select($"a", subquery.as("sub"))
+      .analyze
+    val optimized = Optimize.execute(query)
+
+    val expected = testRelation1
+      .select($"a", subquery.as("sub"))
+      .union(testRelation2
+        .select($"d", subquery.as("sub")))
+      .analyze
+
+    comparePlans(optimized, expected)
+  }
 }
