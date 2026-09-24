@@ -1,3 +1,6 @@
+--SET spark.sql.timestampNanosTypes.enabled=true
+--SET spark.sql.session.timeZone=America/Los_Angeles
+
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW t AS SELECT * FROM VALUES
 ('1', true, unhex('537061726B2053514C'), tinyint(1), 1, smallint(100), bigint(1), float(1.0), 1.0, Decimal(1.0), timestamp('1997-01-02'), date('2000-04-01')),

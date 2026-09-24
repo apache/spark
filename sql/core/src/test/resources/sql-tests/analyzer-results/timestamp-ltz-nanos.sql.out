@@ -1971,11 +1971,12 @@ SELECT * FROM (
   SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.1234567 UTC' AS c7,
          TIMESTAMP_LTZ '2020-01-01 00:00:00.12345678 UTC' AS c8,
          TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS c9)
-UNPIVOT (c FOR name IN (c7, c8, c9))
+UNPIVOT (c FOR name IN (c7, c8, c9)) ORDER BY name
 -- !query analysis
-Project [name#x, c#x]
-+- Filter isnotnull(coalesce(c#x))
-   +- Expand [[c7, cast(c7#x as timestamp_ltz(9))], [c8, cast(c8#x as timestamp_ltz(9))], [c9, c9#x]], [name#x, c#x]
-      +- SubqueryAlias __auto_generated_subquery_name
-         +- Project [2019-12-31 16:00:00.1234567 AS c7#x, 2019-12-31 16:00:00.12345678 AS c8#x, 2019-12-31 16:00:00.123456789 AS c9#x]
-            +- OneRowRelation
+Sort [name#x ASC NULLS FIRST], true
++- Project [name#x, c#x]
+   +- Filter isnotnull(coalesce(c#x))
+      +- Expand [[c7, cast(c7#x as timestamp_ltz(9))], [c8, cast(c8#x as timestamp_ltz(9))], [c9, c9#x]], [name#x, c#x]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [2019-12-31 16:00:00.1234567 AS c7#x, 2019-12-31 16:00:00.12345678 AS c8#x, 2019-12-31 16:00:00.123456789 AS c9#x]
+               +- OneRowRelation

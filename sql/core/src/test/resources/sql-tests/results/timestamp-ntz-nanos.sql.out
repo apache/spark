@@ -1887,7 +1887,7 @@ SELECT * FROM (
   SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.1234567' AS c7,
          TIMESTAMP_NTZ '2020-01-01 00:00:00.12345678' AS c8,
          TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS c9)
-UNPIVOT (c FOR name IN (c7, c8, c9))
+UNPIVOT (c FOR name IN (c7, c8, c9)) ORDER BY name
 -- !query schema
 struct<name:string,c:timestamp_ntz(9)>
 -- !query output

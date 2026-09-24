@@ -401,7 +401,8 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
   // ==========================================================================================
   // RIGHT / FULL / LEFT SEMI / LEFT ANTI on the sort-merge path (supports all four).
   // ==========================================================================================
-  private val smjConf: Seq[(String, String)] = joinStrategies.find(_._1 == "SortMergeJoin").get._3
+  private val smjConf: Seq[(String, String)] =
+    joinStrategies.find(_._1 == "SortMergeJoin").getOrElse(fail("no SortMergeJoin strategy"))._3
 
   // select(lid, rid). RIGHT keeps all right rows; only 500 == 500 matches.
   private val expectedRightOuter: Seq[Row] =
