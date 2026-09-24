@@ -1791,6 +1791,28 @@ Project [variablereference(system.session.var1='default1') AS default1#x, variab
 
 
 -- !query
+SET VARIABLE var1 = 'changed1', var2 = 'changed2', var3 = 'changed3'
+-- !query analysis
+SetVariable [variablereference(system.session.var1='default1'), variablereference(system.session.var2='default2'), variablereference(system.session.var3='default3')]
++- Project [changed1 AS var1#x, changed2 AS var2#x, changed3 AS var3#x]
+   +- OneRowRelation
+
+
+-- !query
+SET VARIABLE (var1, var2, var3) = (VALUES(DEFAULT, DEFAULT, DEFAULT))
+-- !query analysis
+SetVariable [variablereference(system.session.var1='changed1'), variablereference(system.session.var2='changed2'), variablereference(system.session.var3='changed3')]
++- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT var1 AS `default1`, var2 AS `default2`, var3 AS `default3`
+-- !query analysis
+Project [variablereference(system.session.var1='default1') AS default1#x, variablereference(system.session.var2='default2') AS default2#x, variablereference(system.session.var3='default3') AS default3#x]
++- OneRowRelation
+
+
+-- !query
 SET VARIABLE var1 = 'hello'
 -- !query analysis
 SetVariable [variablereference(system.session.var1='default1')]
@@ -1925,6 +1947,215 @@ SetVariable [variablereference(system.session.var1='hello')]
 
 
 -- !query
+SET VARIABLE (var1) =
+  (SELECT DEFAULT FROM VALUES(2),(1) AS T(c1) ORDER BY c1 LIMIT 1)
+-- !query analysis
+SetVariable [variablereference(system.session.var1='hello')]
++- GlobalLimit 1
+   +- LocalLimit 1
+      +- Project [DEFAULT#x]
+         +- Sort [c1#x ASC NULLS FIRST], true
+            +- Project [default1 AS DEFAULT#x, c1#x]
+               +- SubqueryAlias T
+                  +- LocalRelation [c1#x]
+
+
+-- !query
+SELECT var1 AS `default`
+-- !query analysis
+Project [variablereference(system.session.var1='default1') AS default#x]
++- OneRowRelation
+
+
+-- !query
+SET VARIABLE var1 = 'hello'
+-- !query analysis
+SetVariable [variablereference(system.session.var1='default1')]
++- Project [hello AS var1#x]
+   +- OneRowRelation
+
+
+-- !query
+SET VARIABLE (var1) = (SELECT * FROM VALUES(DEFAULT) AS T(c1))
+-- !query analysis
+SetVariable [variablereference(system.session.var1='hello')]
++- Project [c1#x]
+   +- SubqueryAlias T
+      +- LocalRelation [c1#x]
+
+
+-- !query
+SELECT var1 AS `default`
+-- !query analysis
+Project [variablereference(system.session.var1='default1') AS default#x]
++- OneRowRelation
+
+
+-- !query
+SET VARIABLE var1 = 'hello'
+-- !query analysis
+SetVariable [variablereference(system.session.var1='default1')]
++- Project [hello AS var1#x]
+   +- OneRowRelation
+
+
+-- !query
+SET VARIABLE (var1) = (SELECT max(c1) FROM VALUES(DEFAULT) AS T(c1))
+-- !query analysis
+SetVariable [variablereference(system.session.var1='hello')]
++- Aggregate [max(c1#x) AS max(c1)#x]
+   +- SubqueryAlias T
+      +- LocalRelation [c1#x]
+
+
+-- !query
+SELECT var1 AS `default`
+-- !query analysis
+Project [variablereference(system.session.var1='default1') AS default#x]
++- OneRowRelation
+
+
+-- !query
+SET VARIABLE (var1) =
+  (SELECT * FROM VALUES(DEFAULT) AS T(c1) ORDER BY c1)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`DEFAULT`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 47,
+    "stopIndex" : 53,
+    "fragment" : "DEFAULT"
+  } ]
+}
+
+
+-- !query
+SET VARIABLE (var1) = (SELECT (SELECT DEFAULT))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`DEFAULT`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 45,
+    "fragment" : "DEFAULT"
+  } ]
+}
+
+
+-- !query
+SET VARIABLE var1 = 'hello'
+-- !query analysis
+SetVariable [variablereference(system.session.var1='default1')]
++- Project [hello AS var1#x]
+   +- OneRowRelation
+
+
+-- !query
+SET VARIABLE (var1) =
+  (SELECT (SELECT DEFAULT) FROM VALUES('outer-value') AS T(default))
+-- !query analysis
+SetVariable [variablereference(system.session.var1='hello')]
++- Project [scalar-subquery#x [DEFAULT#x] AS scalarsubquery(DEFAULT)#x]
+   :  +- Project [outer(DEFAULT#x) AS DEFAULT#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias T
+      +- LocalRelation [default#x]
+
+
+-- !query
+SELECT var1 AS `outer-value`
+-- !query analysis
+Project [variablereference(system.session.var1='outer-value') AS outer-value#x]
++- OneRowRelation
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE default STRING DEFAULT 'variable-value'
+-- !query analysis
+CreateVariable default(cast(variable-value as string), sql=''variable-value''), true, false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.default
+
+
+-- !query
+SET VARIABLE var1 = default
+-- !query analysis
+SetVariable [variablereference(system.session.var1='outer-value')]
++- Project [variablereference(system.session.default='variable-value') AS default#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT var1 AS `variable-value`
+-- !query analysis
+Project [variablereference(system.session.var1='variable-value') AS variable-value#x]
++- OneRowRelation
+
+
+-- !query
+SET VARIABLE var1 = session.default
+-- !query analysis
+SetVariable [variablereference(system.session.var1='variable-value')]
++- Project [variablereference(system.session.default='variable-value') AS default#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT var1 AS `qualified-variable-value`
+-- !query analysis
+Project [variablereference(system.session.var1='variable-value') AS qualified-variable-value#x]
++- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY VARIABLE default
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.default
+
+
+-- !query
+SET VARIABLE (var1) = (SELECT DEFAULT, 1)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`DEFAULT`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 37,
+    "fragment" : "DEFAULT"
+  } ]
+}
+
+
+-- !query
+SET VARIABLE var1 = 'hello'
+-- !query analysis
+SetVariable [variablereference(system.session.var1='variable-value')]
++- Project [hello AS var1#x]
+   +- OneRowRelation
+
+
+-- !query
 SET VARIABLE (var1) = (WITH v1(c1) AS (VALUES(1) AS T(c1)) SELECT DEFAULT FROM VALUES(1),(2),(3) AS T(c1))
 -- !query analysis
 org.apache.spark.SparkException
@@ -1956,6 +2187,50 @@ SET VARIABLE (var1) = (VALUES(DEFAULT))
 -- !query analysis
 SetVariable [variablereference(system.session.var1='hello')]
 +- LocalRelation [col1#x]
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE default_int INT DEFAULT 7
+-- !query analysis
+CreateVariable default(cast(7 as int), sql='7'), true, false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.default_int
+
+
+-- !query
+SET VARIABLE (default_int) = (VALUES(DEFAULT + 1))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DEFAULT_PLACEMENT_INVALID",
+  "sqlState" : "42608"
+}
+
+
+-- !query
+DROP TEMPORARY VARIABLE default_int
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.default_int
+
+
+-- !query
+SET VARIABLE (var1) = (VALUES(DEFAULT, 1))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`DEFAULT`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 37,
+    "fragment" : "DEFAULT"
+  } ]
+}
 
 
 -- !query
