@@ -32,8 +32,8 @@ import java.lang.reflect.Modifier
  * serialized form, and a plain [[ObjectInputStream]] then rejects a payload produced by another
  * Spark version with an `InvalidClassException`.
  *
- * A stream does not reveal whether the producer's class used the same serialization protocol
- * (custom `writeObject`, explicit `serialVersionUID`), so tolerance is limited to the exact
+ * A stream descriptor flags custom `writeObject` data, but its numeric SUID does not reveal
+ * whether the producer declared or computed that SUID. Tolerance is therefore limited to the exact
  * transitions in [[auditedTransitions]]. A class descriptor is rebound to the local class only
  * when its (class, stream SUID, local SUID) triple is audited, the local class uses default field
  * serialization with a computed SUID, and the complete persistent field layout of the stream and
