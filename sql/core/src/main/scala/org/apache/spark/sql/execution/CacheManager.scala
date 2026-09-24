@@ -23,12 +23,12 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.analysis.{ApplyCharTypePaddingHelper, EliminateSubqueryAliases}
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, Project, ResolvedHint, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.{sideBySide, CharVarcharScanMode}
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
@@ -404,32 +404,43 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Describes direct named cache entries for a V2 table. Matching the cache's table name excludes
-   * dependent query caches while retaining the padding project of a standard-semantics scan.
-   * Scan mode is ignored for the relation match.
+   * Describes cache entries containing the given V2 relation, ignoring scan mode for the relation
+   * match. If `directNamedCacheOnly` is true, returns only direct table caches, including those
+   * wrapped in an analyzer-generated CHAR/VARCHAR read-side projection.
    */
   def lookupCacheDescriptorsByV2Relation(
       relation: DataSourceV2Relation,
       directNamedCacheOnly: Boolean = false): Seq[TableCacheDescriptor] = {
-    val directCacheName = for {
-      catalog <- relation.catalog
-      ident <- relation.identifier
-    } yield ident.toQualifiedNameParts(catalog).quoted
     cachedData.flatMap { cd =>
-      val isDirectCache = !directNamedCacheOnly ||
-        cd.cachedRepresentation.cacheBuilder.tableName == directCacheName
-      val hasRelation = cd.plan.exists {
-        case cached: DataSourceV2Relation =>
-          cached.sameResultWithUnboundCharVarcharScanMode(relation)
-        case _ => false
+      val cachedRelation = if (directNamedCacheOnly) {
+        directV2TableRelation(cd.plan)
+      } else {
+        cd.plan.collectFirst { case cached: DataSourceV2Relation => cached }
       }
-      if (isDirectCache && hasRelation) {
+      if (cachedRelation.exists(_.sameResultWithUnboundCharVarcharScanMode(relation))) {
         Some(TableCacheDescriptor(
           cd.plan,
           cd.cachedRepresentation.cacheBuilder.storageLevel))
       } else {
         None
       }
+    }
+  }
+
+  /**
+   * Returns the resolved V2 relation for a direct table cache. An analyzer-generated
+   * CHAR/VARCHAR projection is part of a direct cache; arbitrary projections are not.
+   */
+  private def directV2TableRelation(plan: LogicalPlan): Option[DataSourceV2Relation] = {
+    EliminateSubqueryAliases(plan) match {
+      case relation: DataSourceV2Relation if relation.timeTravelSpec.isEmpty =>
+        Some(relation)
+      case project @ Project(_, relation: DataSourceV2Relation)
+          if relation.timeTravelSpec.isEmpty &&
+            relation.charVarcharScanMode.exists(
+              ApplyCharTypePaddingHelper.isReadSidePaddingProject(project, relation, _)) =>
+        Some(relation)
+      case _ => None
     }
   }
 

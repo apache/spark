@@ -24,12 +24,15 @@ import java.time.{Duration, Period}
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema}
-import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
@@ -55,6 +58,37 @@ case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSes
 
   override def insert(input: DataFrame, overwrite: Boolean): Unit = {
     input.collect()
+  }
+}
+
+object CharVarcharInsertSource {
+  var data: Seq[Row] = Seq.empty
+}
+
+class CharVarcharInsertSource extends SchemaRelationProvider {
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      schema: StructType): BaseRelation = {
+    CharVarcharInsert(schema)(sqlContext.sparkSession)
+  }
+}
+
+case class CharVarcharInsert(
+    userSpecifiedSchema: StructType)(
+    @transient val sparkSession: SparkSession)
+  extends BaseRelation with InsertableRelation with TableScan {
+
+  override def sqlContext: SQLContext = sparkSession.sqlContext
+
+  override def schema: StructType = userSpecifiedSchema
+
+  override def insert(input: DataFrame, overwrite: Boolean): Unit = {
+    CharVarcharInsertSource.data = input.collect().toSeq
+  }
+
+  override def buildScan(): RDD[Row] = {
+    sparkSession.sparkContext.parallelize(CharVarcharInsertSource.data)
   }
 }
 
@@ -400,24 +434,55 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-58814: insert recaches both bound CHAR/VARCHAR scan modes") {
-    Seq(
-      Seq(
-        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
-      Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")).foreach { modeConf =>
-      withSQLConf(modeConf: _*) {
-        sql("INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt")
-        spark.catalog.cacheTable("jsonTable")
-        try {
-          checkAnswer(sql("SELECT * FROM jsonTable"), (1 to 10).map(i => Row(i, s"str$i")))
-          sql("INSERT OVERWRITE TABLE jsonTable SELECT a * 2, b FROM jt")
-          assertCached(sql("SELECT * FROM jsonTable"))
-          checkAnswer(
-            sql("SELECT * FROM jsonTable"),
-            (1 to 10).map(i => Row(i * 2, s"str$i")))
-        } finally {
-          spark.catalog.uncacheTable("jsonTable")
+    val tableName = "charJsonTable"
+    val provider = classOf[CharVarcharInsertSource].getName
+    withTempView(tableName) {
+      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+        sql(
+          s"""
+             |CREATE TEMPORARY VIEW $tableName (a int, b varchar(8))
+             |USING $provider
+             |""".stripMargin)
+        sql(s"INSERT OVERWRITE TABLE $tableName SELECT a, b FROM jt")
+      }
+      try {
+        val relation = withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+          sql(s"SELECT * FROM $tableName").queryExecution.analyzed.collectFirst {
+            case relation: LogicalRelation => relation.relation
+          }.get
         }
+        val modes = Seq(
+          (Seq(
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
+            CharVarcharScanMode.PreserveNative),
+          (Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
+            CharVarcharScanMode.SparkStandard))
+        modes.foreach { case (modeConf, expectedMode) =>
+          withSQLConf(modeConf: _*) {
+            val read = Dataset.ofRows(spark, LogicalRelation(relation))
+            val scanMode = read.queryExecution.analyzed.collectFirst {
+              case relation: LogicalRelation => relation.charVarcharScanMode
+            }.flatten
+            assert(scanMode.contains(expectedMode))
+            read.cache()
+            checkAnswer(read, (1 to 10).map(i => Row(i, s"str$i")))
+          }
+        }
+
+        withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+          sql(s"INSERT OVERWRITE TABLE $tableName SELECT a * 2, b FROM jt")
+        }
+        modes.foreach { case (modeConf, _) =>
+          withSQLConf(modeConf: _*) {
+            val refreshedRead = Dataset.ofRows(spark, LogicalRelation(relation))
+            assertCached(refreshedRead)
+            checkAnswer(refreshedRead, (1 to 10).map(i => Row(i * 2, s"str$i")))
+          }
+        }
+      } finally {
+        spark.catalog.clearCache()
+        CharVarcharInsertSource.data = Seq.empty
       }
     }
   }

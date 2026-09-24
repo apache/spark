@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
@@ -38,7 +37,7 @@ private[sql] case class RenameTableExec(
     newIdent: Identifier,
     invalidateCache: () => Seq[TableCacheDescriptor],
     cacheTable: (SparkSession, LogicalPlan, Option[String], StorageLevel) => Unit)
-  extends LeafV2CommandExec with SQLConfHelper {
+  extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -70,26 +69,27 @@ private[sql] case class RenameTableExec(
           restored.setAnalyzed()
           restored
       }
-      withCharVarcharScanModeConf(cache.charVarcharScanMode) {
-        cacheTable(
-          session,
-          rewritten,
-          Some(qualifiedNewIdent.quoted), cache.storageLevel)
-      }
+      cacheTable(
+        sessionForCharVarcharScanMode(cache.charVarcharScanMode),
+        rewritten,
+        Some(qualifiedNewIdent.quoted),
+        cache.storageLevel)
     }
     Seq.empty
   }
 
-  // Re-cache under the mode that produced the original plan so CHAR/VARCHAR output is legal.
-  private def withCharVarcharScanModeConf[T](mode: Option[CharVarcharScanMode])(body: => T): T = {
+  // Re-cache under the mode that produced the original plan without changing the caller session.
+  private def sessionForCharVarcharScanMode(
+      mode: Option[CharVarcharScanMode]): SparkSession = {
+    val restoreSession = session.cloneSession()
     mode match {
       case Some(CharVarcharScanMode.SparkStandard) =>
-        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")(body)
+        restoreSession.conf.set(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key, "true")
       case Some(CharVarcharScanMode.PreserveNative) =>
-        withSQLConf(
-          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false")(body)
-      case None => body
+        restoreSession.conf.set(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key, "true")
+        restoreSession.conf.set(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key, "false")
+      case None =>
     }
+    restoreSession
   }
 }

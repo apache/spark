@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.util
 /**
  * The CHAR/VARCHAR scan mode bound to a relation (and its scan) during analysis.
  *
- * A relation carries `Option[CharVarcharScanMode]`: `None` means the relation was not analyzed
- * under first-class CHAR/VARCHAR types (native reader behavior), while a `Some` value pins the
- * mode so that `sameResult` / cache reuse keep the two variants distinct.
+ * A relation carries `Option[CharVarcharScanMode]`: `None` means no mode was bound, including for
+ * a relation with no CHAR/VARCHAR columns. A `Some` value pins the mode so that `sameResult` /
+ * cache reuse keep the two variants distinct.
  */
 private[sql] sealed trait CharVarcharScanMode
 
