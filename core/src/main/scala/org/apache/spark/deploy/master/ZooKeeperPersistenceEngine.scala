@@ -28,7 +28,7 @@ import org.apache.zookeeper.CreateMode
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkCuratorUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.serializer.{JavaSerializerInstance, Serializer}
 import org.apache.spark.util.ByteBufferInputStream
@@ -94,8 +94,9 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
         // Rejected by the serialization filter, not found corrupt. Skip the znode without
         // deleting it: an overly narrow filter pattern (e.g. "org.apache.spark.*", which
         // does not match subpackages) must not wipe the whole recovery state on failover.
-        logError(s"Skipping persisted file $filename, rejected by the recovery " +
-          s"serialization filter (${RECOVERY_SERIALIZATION_FILTER.key})", e)
+        logError(log"Skipping persisted file ${MDC(LogKeys.FILE_NAME, filename)}, " +
+          log"rejected by the recovery serialization filter " +
+          log"(${MDC(LogKeys.CONFIG, RECOVERY_SERIALIZATION_FILTER.key)})", e)
         None
       case e: Exception =>
         logWarning("Exception while reading persisted file, deleting", e)
