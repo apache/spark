@@ -2071,17 +2071,17 @@ case class KeyedShuffleSpec(
         case _ => false
       }
     } else {
-      val canReduce = allowReduce && canReduceKeys
       (left, right) match {
         case (_: LeafExpression, _: LeafExpression) => true
         case (left: TransformExpression, right: TransformExpression) =>
-          if (canReduce) left.isCompatible(right) else left.isSameFunction(right)
+          if (allowReduce && canReduceKeys) left.isCompatible(right)
+          else left.isSameFunction(right)
         // Identity transform on one side, arbitrary transform on the other. The decision is
         // `retargetForIdentity`'s, shared with the reducer `reducersBothWays` builds.
         case (col: AttributeReference, t: TransformExpression) =>
-          canReduce && retargetForIdentity(t, col).isDefined
+          allowReduce && canReduceKeys && retargetForIdentity(t, col).isDefined
         case (t: TransformExpression, col: AttributeReference) =>
-          canReduce && retargetForIdentity(t, col).isDefined
+          allowReduce && canReduceKeys && retargetForIdentity(t, col).isDefined
         case _ => false
       }
     }
