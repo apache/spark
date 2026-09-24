@@ -17,6 +17,8 @@
 
 package org.apache.spark.memory
 
+import java.util.concurrent.atomic.AtomicReference
+
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -33,27 +35,40 @@ class TestMemoryManager(conf: SparkConf)
   private var available = Long.MaxValue
   @GuardedBy("this")
   private val memoryForTask = mutable.HashMap[Long, Long]().withDefaultValue(0L)
+  private val beforeNextExecutionMemoryGrant = new AtomicReference[Runnable]()
+
+  /** Runs one test action before the next grant, outside this manager's accounting lock. */
+  def runBeforeNextExecutionMemoryGrant(action: Runnable): Unit = {
+    require(action != null)
+    require(beforeNextExecutionMemoryGrant.compareAndSet(null, action))
+  }
 
   override private[memory] def acquireExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long,
-      memoryMode: MemoryMode): Long = synchronized {
-    require(numBytes >= 0)
-    val acquired = {
-      if (consequentOOM > 0) {
-        consequentOOM -= 1
-        0
-      } else if (available >= numBytes) {
-        available -= numBytes
-        numBytes
-      } else {
-        val grant = available
-        available = 0
-        grant
-      }
+      memoryMode: MemoryMode): Long = {
+    val action = beforeNextExecutionMemoryGrant.getAndSet(null)
+    if (action != null) {
+      action.run()
     }
-    memoryForTask(taskAttemptId) = memoryForTask.getOrElse(taskAttemptId, 0L) + acquired
-    acquired
+    synchronized {
+      require(numBytes >= 0)
+      val acquired = {
+        if (consequentOOM > 0) {
+          consequentOOM -= 1
+          0
+        } else if (available >= numBytes) {
+          available -= numBytes
+          numBytes
+        } else {
+          val grant = available
+          available = 0
+          grant
+        }
+      }
+      memoryForTask(taskAttemptId) = memoryForTask.getOrElse(taskAttemptId, 0L) + acquired
+      acquired
+    }
   }
 
   override private[memory] def releaseExecutionMemory(

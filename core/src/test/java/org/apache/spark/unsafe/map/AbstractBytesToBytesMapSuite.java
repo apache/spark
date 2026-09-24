@@ -19,6 +19,9 @@ package org.apache.spark.unsafe.map;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.Callable;
@@ -26,6 +29,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -1102,27 +1106,68 @@ public abstract class AbstractBytesToBytesMapSuite {
     BytesToBytesMap map =
       new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
     ExecutorService executor = Executors.newFixedThreadPool(2);
+    CountDownLatch releaseRecoveryAllocation = new CountDownLatch(1);
     try {
       memoryManager.markExecutionAsOutOfMemoryOnce();
       assertThrows(SparkOutOfMemoryError.class, map::reset);
       memoryManager.limit(PAGE_SIZE_BYTES);
+      assertEquals(0L, taskMemoryManager.getMemoryConsumptionForThisTask());
 
       final long[] key = new long[]{1L};
-      CountDownLatch ready = new CountDownLatch(2);
-      CountDownLatch start = new CountDownLatch(1);
-      Callable<Boolean> concurrentLookup = () -> {
+      CountDownLatch recoveryAllocationEntered = new CountDownLatch(1);
+      memoryManager.runBeforeNextExecutionMemoryGrant(() -> {
+        recoveryAllocationEntered.countDown();
+        try {
+          if (!releaseRecoveryAllocation.await(30, TimeUnit.SECONDS)) {
+            throw new AssertionError("Recovery allocation was not released");
+          }
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new AssertionError("Recovery allocation was interrupted", e);
+        }
+      });
+
+      Future<Boolean> firstLookup = executor.submit(() -> {
         BytesToBytesMap.Location threadLocation = map.new Location();
-        ready.countDown();
-        start.await();
         map.safeLookup(key, Platform.LONG_ARRAY_OFFSET, 8, threadLocation);
         return threadLocation.isDefined();
-      };
-      Future<Boolean> firstLookup = executor.submit(concurrentLookup);
-      Future<Boolean> secondLookup = executor.submit(concurrentLookup);
-      ready.await();
-      start.countDown();
-      assertFalse(firstLookup.get());
-      assertFalse(secondLookup.get());
+      });
+      assertTrue(recoveryAllocationEntered.await(10, TimeUnit.SECONDS));
+
+      AtomicReference<Thread> secondWorker = new AtomicReference<>();
+      CountDownLatch secondStarted = new CountDownLatch(1);
+      Future<Boolean> secondLookup = executor.submit(() -> {
+        BytesToBytesMap.Location threadLocation = map.new Location();
+        secondWorker.set(Thread.currentThread());
+        secondStarted.countDown();
+        map.safeLookup(key, Platform.LONG_ARRAY_OFFSET, 8, threadLocation);
+        return threadLocation.isDefined();
+      });
+      assertTrue(secondStarted.await(10, TimeUnit.SECONDS));
+
+      // The first lookup is held during allocation. Verify that the second has reached the
+      // synchronized recovery gate before allowing the first to publish the replacement array.
+      boolean contended = false;
+      long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+      ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
+      while (System.nanoTime() < deadline && !secondLookup.isDone()) {
+        ThreadInfo info = threadBean.getThreadInfo(secondWorker.get().getId());
+        if (info != null && info.getThreadState() == Thread.State.BLOCKED &&
+            info.getLockInfo() != null &&
+            info.getLockInfo().getClassName().equals(BytesToBytesMap.class.getName()) &&
+            info.getLockInfo().getIdentityHashCode() == System.identityHashCode(map)) {
+          contended = true;
+          break;
+        }
+        TimeUnit.MILLISECONDS.sleep(1);
+      }
+      assertTrue(contended, "Second lookup never contended for recovery");
+      assertFalse(firstLookup.isDone());
+      releaseRecoveryAllocation.countDown();
+
+      assertFalse(firstLookup.get(10, TimeUnit.SECONDS));
+      assertFalse(secondLookup.get(10, TimeUnit.SECONDS));
+      assertEquals(0, map.getNumDataPages());
       assertEquals(
         map.getTotalMemoryConsumption(), taskMemoryManager.getMemoryConsumptionForThisTask());
 
@@ -1132,6 +1177,7 @@ public abstract class AbstractBytesToBytesMapSuite {
       map.safeLookup(key, Platform.LONG_ARRAY_OFFSET, 8, location, 42);
       assertFalse(location.isDefined());
     } finally {
+      releaseRecoveryAllocation.countDown();
       executor.shutdownNow();
       map.free();
     }
