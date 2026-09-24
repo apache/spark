@@ -132,6 +132,9 @@ abstract class BasePythonUDFRunner(
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
               read()
+            case SpecialLengths.METRICS_DATA =>
+              handleMetricsData()
+              read()
             case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
               throw handlePythonException()
             case SpecialLengths.END_OF_DATA_SECTION =>
