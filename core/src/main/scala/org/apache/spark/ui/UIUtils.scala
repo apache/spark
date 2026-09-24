@@ -637,6 +637,21 @@ private[spark] object UIUtils extends Logging {
   }
 
   /**
+   * The method for the forms behind the UI's state-changing buttons (job and stage kill,
+   * application hold and resume). Those are always forms, carrying the per-UI CSRF token
+   * and the target id as hidden fields; only the method follows
+   * spark.ui.actionsViaGetEnabled. Submitted with GET, the browser turns the fields into
+   * the query string, the same request a plain link would make, which also works through
+   * proxies that do not forward POST, such as the YARN ResourceManager/AM proxy
+   * (SPARK-6846). SparkUI.initialize accepts GET on the endpoints under the same flag, so
+   * the form and the endpoint always agree, and webui.js prompts for confirmation before
+   * the submit either way.
+   */
+  def actionFormMethod(actionsViaGetEnabled: Boolean): String = {
+    if (actionsViaGetEnabled) "GET" else "POST"
+  }
+
+  /**
    * Returns HTML rendering of a job or stage description. It will try to parse the string as HTML
    * and make sure that it only contains anchors with root-relative links. Otherwise,
    * the whole string will rendered as a simple escaped text.
