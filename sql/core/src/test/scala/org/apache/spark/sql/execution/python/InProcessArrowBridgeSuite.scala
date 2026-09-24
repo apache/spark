@@ -18,7 +18,10 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.arrow.c.{ArrowArray, ArrowSchema}
+import org.apache.arrow.memory.util.MemoryUtil
 import org.apache.arrow.vector.IntVector
+import org.apache.arrow.vector.complex.StructVector
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.util.ArrowUtils
@@ -53,4 +56,66 @@ class InProcessArrowBridgeSuite extends SparkFunSuite {
     }
     assert(allocator.getAllocatedMemory == before)
   }
+  gridTest("CDI rejects offsets before importing buffers")(Seq(false, true)) { childOffset =>
+    val allocator = ArrowUtils.rootAllocator
+    val before = allocator.getAllocatedMemory
+    val input = StructVector.empty("value", allocator)
+    val child = input.addOrGet("x", FieldType.nullable(new ArrowType.Int(32, true)),
+      classOf[IntVector])
+    val array = ArrowArray.allocateNew(allocator)
+    val schema = ArrowSchema.allocateNew(allocator)
+    try {
+      input.allocateNew()
+      child.setSafe(0, 7)
+      input.setIndexDefined(0)
+      input.setValueCount(1)
+      InProcessArrowBridge.exportColumn(input, array, schema)
+      val target = if (childOffset) {
+        ArrowArray.wrap(MemoryUtil.getLong(array.snapshot().children))
+      } else {
+        array
+      }
+      val snapshot = target.snapshot()
+      snapshot.offset = 1L
+      target.save(snapshot)
+      val error = intercept[IllegalArgumentException] {
+        InProcessArrowBridge.cdiToColumn(array, schema)
+      }
+      assert(error.getMessage.contains("offset"))
+    } finally {
+      if (array.snapshot().release != 0L) array.release()
+      if (schema.snapshot().release != 0L) schema.release()
+      array.close()
+      schema.close()
+      input.close()
+    }
+    assert(allocator.getAllocatedMemory == before)
+  }
+
+  test("CDI rejects a result type mismatch before constructing an accessor") {
+    val allocator = ArrowUtils.rootAllocator
+    val before = allocator.getAllocatedMemory
+    val input = new IntVector("value", allocator)
+    val array = ArrowArray.allocateNew(allocator)
+    val schema = ArrowSchema.allocateNew(allocator)
+    try {
+      input.allocateNew(1)
+      input.setSafe(0, 7)
+      input.setValueCount(1)
+      InProcessArrowBridge.exportColumn(input, array, schema)
+      val expected = Field.nullable("result", ArrowType.Utf8.INSTANCE)
+      val error = intercept[IllegalArgumentException] {
+        InProcessArrowBridge.cdiToColumn(array, schema, Some(expected))
+      }
+      assert(error.getMessage.contains("expected"))
+    } finally {
+      if (array.snapshot().release != 0L) array.release()
+      if (schema.snapshot().release != 0L) schema.release()
+      array.close()
+      schema.close()
+      input.close()
+    }
+    assert(allocator.getAllocatedMemory == before)
+  }
+
 }

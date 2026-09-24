@@ -23,6 +23,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{Column, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ArrowEvalPython, Filter, LocalLimit}
+import org.apache.spark.sql.execution.{GlobalLimitExec, ProjectExec, SortExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -55,7 +56,7 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     assert(eval.size == 1)
     assert(eval.head.evalType == PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF)
     val physical = query.queryExecution.executedPlan.collect {
-      case p: InProcessArrowEvalExec => p
+      case p: ArrowEvalPythonExec => p
     }
     assert(physical.size == 1)
     assert(physical.head.producedAttributes ==
@@ -156,4 +157,21 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
       assert(!plan.exists(_.missingInput.nonEmpty))
     }
   }
+  test("non-root limit and offset propagate ordering through the shared physical node") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1") {
+      val df = spark.range(0, 100, 1, 4).orderBy("id")
+      val projected = df.select(makeUDF("identity", col("id")))
+      Seq(projected.limit(10), projected.offset(7).limit(10)).foreach { query =>
+        val plan = query.distinct().queryExecution.executedPlan
+        assert(plan.exists {
+          case GlobalLimitExec(_, sort: SortExec, _) => !sort.global
+          case GlobalLimitExec(_, ProjectExec(_, sort: SortExec), _) => !sort.global
+          case _ => false
+        })
+        assert(plan.exists(_.isInstanceOf[ArrowEvalPythonExec]))
+      }
+    }
+  }
+
 }

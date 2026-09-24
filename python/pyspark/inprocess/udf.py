@@ -34,36 +34,17 @@ Usage::
 
 import io
 import sys
-from typing import Callable
-
-import pyarrow as pa
+from inspect import getfullargspec
+from typing import Any, Callable, Optional, Union
 
 from pyspark import Accumulator, Broadcast, cloudpickle
-from pyspark.sql.types import (
-    BooleanType,
-    ByteType,
-    DataType,
-    DoubleType,
-    FloatType,
-    IntegerType,
-    LongType,
-    ShortType,
-)
-
-# Map from Spark SQL DataType to PyArrow type for output type enforcement.
-_SPARK_TO_ARROW: dict = {
-    LongType(): pa.int64(),
-    IntegerType(): pa.int32(),
-    DoubleType(): pa.float64(),
-    FloatType(): pa.float32(),
-    BooleanType(): pa.bool_(),
-    ShortType(): pa.int16(),
-    ByteType(): pa.int8(),
-}
+from pyspark.errors import PySparkValueError
+from pyspark.sql.column import Column
+from pyspark.sql.types import DataType
 
 
 class _InProcessPickler(cloudpickle.CloudPickler):
-    def reducer_override(self, obj):
+    def reducer_override(self, obj: Any) -> Any:
         if isinstance(obj, (Broadcast, Accumulator)):
             raise TypeError("In-process UDFs do not support Spark broadcasts or accumulators")
         return super().reducer_override(obj)
@@ -89,25 +70,21 @@ class InProcessUDFWrapper:
         self._deterministic: bool = deterministic
         self._name: str = getattr(func, "__name__", "inprocess_udf")
 
-        # Wrap the function to cast its output to the declared return type.
-        # This handles the case where the UDF's input column type differs from
-        # the declared return type (e.g. input is int64, return_type is IntegerType).
-        arrow_type = _SPARK_TO_ARROW.get(return_type)
-        if arrow_type is not None:
+        argspec = getfullargspec(func)
+        if not argspec.args and argspec.varargs is None and not argspec.kwonlyargs:
+            raise PySparkValueError(
+                errorClass="INVALID_PANDAS_UDF",
+                messageParameters={"detail": "0-arg inprocess_udfs are not supported."},
+            )
+        self._func = func
+        self._serialized: Optional[bytes] = None
 
-            def _wrapped(*args, _fn=func, _atype=arrow_type):
-                result = _fn(*args)
-                if not isinstance(result, pa.Array):
-                    raise TypeError("In-process UDF must return a pyarrow.Array")
-                if result.type != _atype:
-                    result = result.cast(_atype)
-                return result
+    def _serialize(self) -> bytes:
+        if self._serialized is None:
+            self._serialized = _serialize_udf(self._func)
+        return self._serialized
 
-            self._serialized: bytes = _serialize_udf(_wrapped)
-        else:
-            self._serialized = _serialize_udf(func)
-
-    def __call__(self, *cols):
+    def __call__(self, *cols: Union[Column, str], **kwargs: Union[Column, str]) -> Column:
         """
         Create a ``Column`` expression invoking this UDF with the given columns.
 
@@ -119,7 +96,6 @@ class InProcessUDFWrapper:
         """
         from pyspark import SparkContext
         from pyspark.sql.classic.column import _to_java_column
-        from pyspark.sql.column import Column
 
         sc = SparkContext._active_spark_context
         if sc is None:
@@ -128,9 +104,19 @@ class InProcessUDFWrapper:
             )
 
         jvm = sc._jvm
+        assert jvm is not None
 
         # Convert Python Column objects to JVM Column objects
+        if not cols and not kwargs:
+            raise PySparkValueError(
+                errorClass="INVALID_PANDAS_UDF",
+                messageParameters={"detail": "An inprocess_udf requires at least one argument."},
+            )
         jcols = [_to_java_column(c) for c in cols]
+        jcols.extend(
+            jvm.PythonSQLUtils.namedArgumentExpression(name, _to_java_column(value))
+            for name, value in kwargs.items()
+        )
 
         # Build a Java ArrayList (py4j vararg spread doesn't work with Arrays.asList)
         jlist = jvm.java.util.ArrayList()
@@ -140,7 +126,7 @@ class InProcessUDFWrapper:
         # Use the existing PythonUDF planning contracts with an in-process eval type.
         jcol = jvm.org.apache.spark.sql.execution.python.InProcessPythonUDFBuilder.build(
             self._name,
-            self._serialized,
+            self._serialize(),
             self._return_type.json(),
             jlist,
             self._deterministic,
@@ -160,8 +146,9 @@ def inprocess_udf(return_type: DataType, deterministic: bool = True) -> Callable
     The result must have the same length as the input batch and its Arrow type
     must match the declared Spark type, including nested fields and timestamp
     timezone. Nested nullability may be widened, but actual nulls cannot be returned
-    in non-nullable fields. Numeric and boolean results are cast to the declared
-    primitive type. Sliced results are copied when required by Arrow Java.
+    in non-nullable fields. Value types must match exactly; use an explicit PyArrow
+    cast in the function when conversion is intended. Sliced results are copied when
+    required by Arrow Java.
 
     Spark broadcasts, accumulators, and ``SparkContext.addPyFile`` are unsupported.
     Install dependencies on executors before starting Spark. The driver's Python

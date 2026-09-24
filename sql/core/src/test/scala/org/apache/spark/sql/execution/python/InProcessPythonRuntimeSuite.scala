@@ -23,30 +23,38 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.{SparkFunSuite, TaskContext, TaskKilledException}
 
 class InProcessPythonRuntimeSuite extends SparkFunSuite {
+  private var runtime: InProcessPythonRuntime.InterpreterSession = _
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    runtime = new InProcessPythonRuntime.InterpreterSession()
+  }
+
   override def afterEach(): Unit = {
-    try { InProcessPythonRuntime.shutdown() } finally { super.afterEach() }
+    try { runtime.shutdown() } finally { super.afterEach() }
   }
 
   test("calls from different threads use the same interpreter owner thread") {
-    val first = InProcessPythonRuntime.onInterpreterThread { Thread.currentThread() }
+    val first = runtime.onInterpreterThread { Thread.currentThread() }
     @volatile var second: Thread = null
     val caller = new Thread(() => {
-      second = InProcessPythonRuntime.onInterpreterThread { Thread.currentThread() }
+      second = runtime.onInterpreterThread { Thread.currentThread() }
     })
     caller.start()
     caller.join(10000)
     assert(!caller.isAlive)
     assert(first eq second)
     assert(first ne Thread.currentThread())
-    InProcessPythonRuntime.shutdown()
-    val restarted = InProcessPythonRuntime.onInterpreterThread { Thread.currentThread() }
-    assert(restarted ne first)
+    runtime.shutdown()
+    intercept[IllegalStateException] {
+      runtime.onInterpreterThread { fail("stopped sessions must not restart") }
+    }
   }
 
   test("interpreter exceptions retain their original cause") {
     val expected = new IllegalArgumentException("python failure")
     val actual = intercept[IllegalArgumentException] {
-      InProcessPythonRuntime.onInterpreterThread { throw expected }
+      runtime.onInterpreterThread { throw expected }
     }
     assert(actual eq expected)
   }
@@ -61,7 +69,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     val cancelled = new AtomicBoolean(false)
     val context = TaskContext.empty()
     val owner = new Thread(() => {
-      InProcessPythonRuntime.onInterpreterThread {
+      runtime.onInterpreterThread {
         entered.countDown()
         assert(finish.await(10, TimeUnit.SECONDS))
       }
@@ -70,7 +78,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
       TaskContext.setTaskContext(context)
       try {
         waiting.countDown()
-        InProcessPythonRuntime.onInterpreterThread { invoked.set(true) }
+        runtime.onInterpreterThread { invoked.set(true) }
       } catch {
         case _: InterruptedException => cancelled.set(true)
         case _: TaskKilledException => cancelled.set(true)
@@ -104,7 +112,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     TaskContext.setTaskContext(context)
     try {
       intercept[TaskKilledException] {
-        InProcessPythonRuntime.onInterpreterThread { fail("must not invoke Python") }
+        runtime.onInterpreterThread { fail("must not invoke Python") }
       }
     } finally {
       TaskContext.unset()
@@ -117,7 +125,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     TaskContext.setTaskContext(context)
     try {
       intercept[TaskKilledException] {
-        InProcessPythonRuntime.onInterpreterThread {
+        runtime.onInterpreterThread {
           context.markInterrupted("test cancellation")
           finished.set(true)
         }
@@ -135,7 +143,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     val interrupted = new AtomicBoolean(false)
     val caller = new Thread(() => {
       try {
-        InProcessPythonRuntime.onInterpreterThread {
+        runtime.onInterpreterThread {
           entered.countDown()
           assert(finish.await(10, TimeUnit.SECONDS))
         }
@@ -156,4 +164,32 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     assert(!caller.isAlive)
     assert(interrupted.get())
   }
+  test("cleanup and bounded shutdown do not wait behind a running invocation") {
+    val entered = new CountDownLatch(1)
+    val finish = new CountDownLatch(1)
+    val caller = new Thread(() => runtime.onInterpreterThread {
+      entered.countDown()
+      assert(finish.await(10, TimeUnit.SECONDS))
+    })
+    caller.start()
+    try {
+      assert(entered.await(10, TimeUnit.SECONDS))
+      val start = System.nanoTime()
+      runtime.release(Seq.empty)
+      runtime.release(Seq("partially-registered"))
+      runtime.shutdown(waitMillis = 20)
+      assert(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) < 2000)
+      assert(!runtime.isTerminated)
+      intercept[IllegalStateException] {
+        runtime.onInterpreterThread { fail("shutdown must reject new work") }
+      }
+      runtime.release(Seq("late-task"))
+    } finally {
+      finish.countDown()
+      caller.join(10000)
+      runtime.shutdown()
+    }
+    assert(runtime.isTerminated)
+  }
+
 }

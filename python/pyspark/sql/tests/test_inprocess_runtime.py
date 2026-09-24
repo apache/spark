@@ -25,7 +25,9 @@ from importlib.util import find_spec
 from pyspark import cloudpickle
 from pyspark.sql.types import (
     ArrayType,
+    BooleanType,
     DecimalType,
+    FloatType,
     IntegerType,
     LongType,
     StringType,
@@ -67,9 +69,9 @@ class InProcessRuntimeTests(unittest.TestCase):
         try:
             for value, array, schema in zip(inputs, arrays, schemas):
                 value._export_to_c(address(array), address(schema))
-            serialized = getattr(func, "_serialized", None)
-            if serialized is None:
-                serialized = cloudpickle.dumps(func)
+            serialized = (
+                func._serialize() if hasattr(func, "_serialize") else cloudpickle.dumps(func)
+            )
             _inprocess_register(
                 "test", serialized, return_type.json(), timezone, "%d.%d" % sys.version_info[:2]
             )
@@ -134,14 +136,38 @@ class InProcessRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "America/Los_Angeles"):
             self.invoke(lambda x: x, [value], TimestampType(), timezone="America/Los_Angeles")
 
-    def test_primitive_cast_is_preserved(self):
-        wrapper = inprocess_udf(IntegerType())(lambda x: x)
-        result = self.invoke(wrapper, [pa.array([1, 2])], IntegerType())
-        self.assertEqual(result.type, pa.int32())
+    def test_primitive_types_do_not_implicitly_cast(self):
+        cases = [
+            (pa.array([1, 2]), IntegerType()),
+            (pa.array(["1", "22"]), LongType()),
+            (pa.array([1, 2], type=pa.timestamp("us", tz="UTC")), LongType()),
+            (pa.array([1, 2], type=pa.date32()), IntegerType()),
+            (pa.array([0.001, 0.0]), BooleanType()),
+            (pa.array([1e300, 0.0]), FloatType()),
+        ]
+        for value, declared in cases:
+            with self.subTest(value=value.type, declared=declared):
+                wrapper = inprocess_udf(declared)(lambda x: x)
+                with self.assertRaisesRegex(RuntimeError, "expected"):
+                    self.invoke(wrapper, [value], declared)
 
-    def test_zero_argument_udf(self):
-        result = self.invoke(lambda: pa.array([7, 7]), [], LongType(), rows=2)
-        self.assertEqual(result.to_pylist(), [7, 7])
+    def test_zero_argument_udf_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "0-arg"):
+            inprocess_udf(LongType())(lambda: pa.array([7]))
+
+    def test_serialization_is_deferred_until_first_use(self):
+        namespace = {"inprocess_udf": inprocess_udf, "LongType": LongType, "pa": pa}
+        exec(
+            "@inprocess_udf(LongType())\n"
+            "def f(x): return pa.array([LOOKUP] * len(x), type=pa.int64())\n",
+            namespace,
+        )
+        wrapper = namespace["f"]
+        namespace["LOOKUP"] = 42
+        self.assertEqual(self.invoke(wrapper, [pa.array([0])], LongType()).to_pylist(), [42])
+        # Like other Python UDFs, the command is stable after first serialization.
+        namespace["LOOKUP"] = 99
+        self.assertEqual(self.invoke(wrapper, [pa.array([0])], LongType()).to_pylist(), [42])
 
     def test_empty_batch(self):
         value = pa.array([], type=pa.int64())
@@ -229,9 +255,53 @@ class InProcessRuntimeTests(unittest.TestCase):
             _validate_result(pa.array([[None]], type=nullable), 1, required)
 
     def test_null_struct_parents_do_not_violate_child_nullability(self):
-        expected = pa.struct([pa.field("x", pa.int64(), nullable=False)])
-        value = pa.array([None, {"x": 1}], type=pa.struct([pa.field("x", pa.int64())]))
-        self.assertEqual(_validate_result(value, 2, expected).to_pylist(), [None, {"x": 1}])
+        import pyarrow.compute as pc
+
+        expected = pa.struct([pa.field("len", pa.int32(), nullable=False)])
+        strings = pa.array([None, "a"])
+        original = pa.StructArray.from_arrays(
+            [pc.utf8_length(strings)], names=["len"], mask=pc.is_null(strings)
+        )
+        values = [original, pc.if_else(pc.is_valid(strings), original, None)]
+        values.append(pc.take(original, pa.array([None, 1], type=pa.int32())))
+        for value in values:
+            with self.subTest(value=value):
+                self.assertEqual(value.field(0).null_count, 1)
+                result = _validate_result(value, 2, expected)
+                self.assertEqual(result.to_pylist(), [None, {"len": 1}])
+                self.assertEqual(result.type, expected)
+        visible_null = pa.StructArray.from_arrays([pa.array([None], pa.int32())], names=["len"])
+        with self.assertRaisesRegex(ValueError, "non-nullable"):
+            _validate_result(visible_null, 1, expected)
+
+    def test_sliced_map_entries_are_normalized(self):
+        map_type = pa.map_(pa.string(), pa.int64())
+        entries = pa.StructArray.from_arrays(
+            [pa.array(["hidden", "a", "b", "c"]), pa.array([None, 1, 2, 3])],
+            fields=[map_type.key_field, map_type.item_field],
+        )
+        offsets = pa.array([0, 1, 3], type=pa.int32())
+        value = pa.Array.from_buffers(
+            map_type, 2, [None, offsets.buffers()[1]], children=[entries.slice(1)]
+        )
+        self.assertEqual(value.offset, 0)
+        self.assertEqual(value.values.offset, 1)
+        result = _validate_result(value, 2, map_type)
+        self.assertEqual(result.values.offset, 0)
+        self.assertEqual(result.to_pylist(), [[("a", 1)], [("b", 2), ("c", 3)]])
+
+    def test_map_field_names_and_nested_metadata_are_normalized(self):
+        value = pa.array(
+            [[("a", 1)]],
+            type=pa.map_(pa.field("k", pa.string(), False), pa.field("v", pa.int64())),
+        )
+        expected = pa.map_(pa.string(), pa.int64())
+        result = _validate_result(value, 1, expected)
+        self.assertEqual(result.type.key_field.name, "key")
+        self.assertEqual(result.type.item_field.name, "value")
+        expected_struct = pa.struct([pa.field("x", pa.int64(), metadata={b"type": b"required"})])
+        result = _validate_result(pa.array([{"x": 1}]), 1, expected_struct)
+        self.assertEqual(result.type[0].metadata, {b"type": b"required"})
 
     def test_map_nullability_and_sliced_results(self):
         nullable = pa.map_(pa.string(), pa.field("value", pa.int64()))

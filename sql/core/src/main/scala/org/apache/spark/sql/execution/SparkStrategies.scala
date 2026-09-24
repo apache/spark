@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1028,9 +1027,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ArrowEvalPython(udfs, resultAttrs, child,
-          PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) =>
-        python.InProcessArrowEvalExec(udfs, resultAttrs, planLater(child)) :: Nil
       case ArrowEvalPython(udfs, output, child, evalType) =>
         ArrowEvalPythonExec(udfs, output, planLater(child), evalType) :: Nil
       case BatchEvalPython(udfs, output, child) =>

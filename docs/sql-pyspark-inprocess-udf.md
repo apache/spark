@@ -26,27 +26,32 @@ license: |
 
 Each executor owns a dedicated interpreter thread. The plugin initializes the
 interpreter on that thread, and task calls and shutdown are dispatched to the
-same thread. Calls from concurrent tasks are serialized by a lock. One task per
-executor is recommended for throughput, but is not a correctness requirement.
+same thread. Calls from concurrent tasks are queued on the interpreter thread.
+One task per executor is recommended for throughput, but is not a correctness requirement.
 Application-level Python parallelism comes from multiple executor JVMs.
 
 Task cancellation cannot safely stop arbitrary native Python code. An interrupted
 caller waits for the current invocation to finish before freeing the Arrow CDI
 structures, then restores its interrupt status. A UDF that never returns can
-therefore prevent its task from completing cancellation.
+therefore prevent its task from completing cancellation. Plugin shutdown stops accepting
+new calls and waits up to five seconds for the interpreter thread. If a call is
+still running, cleanup stays queued behind it; its memory remains live until the
+call returns or the process exits. Shutdown does not forcibly interrupt native
+code. A new interpreter cannot start until the previous one has fully stopped.
 
 A scalar UDF must return a `pyarrow.Array` with exactly one element per input row.
 The runtime checks the result type against the declared Spark type, including
-nested fields, decimal scale, and timestamp unit/timezone. Existing numeric and
-boolean output casts are preserved. Nested field nullability may differ if the
-actual values satisfy the declared nullability. Sliced results, including nested
+nested fields, decimal scale, and timestamp unit/timezone. Value types must match
+exactly: use an explicit PyArrow cast in the UDF for numeric or other conversions.
+Nested field nullability may differ if the actual values satisfy the declared nullability. Sliced results, including nested
 child slices, are copied to remove offsets that Arrow Java's CDI importer cannot
 read. Compatible results retain zero-copy transfer.
 
 The API produces a regular `PythonUDF` expression with an in-process evaluation
 type. Spark's existing `ArrowEvalPython` planning rules handle aggregation,
-nested calls, nondeterminism, and filter/limit pushdown. Physical planning selects
-`InProcessArrowEvalExec` for this evaluation type. Ordinary Python UDFs continue
+nested calls, nondeterminism, and filter/limit pushdown. `ArrowEvalPythonExec` selects
+an in-process evaluator factory for this evaluation type, reusing the projection,
+row queue, result join, and partition-evaluator path. Ordinary Python UDFs continue
 to use Python workers.
 
 `maxRecordsPerBatch <= 0` means no row-count limit. The independent
@@ -63,15 +68,22 @@ vectors are released on task completion, early termination and failure.
 
 UDF deserialization uses PySpark's bundled cloudpickle. Each task registers its
 own function instance once and passes a small handle for subsequent batches.
-Task completion releases the registered function and its closure state. Imported
+Task completion queues release of the registered function and its closure state. Imported
 Python modules still share executor-wide state. Extra site-packages paths are
-appended before loading the runtime bridge.
+processed with `site.addsitedir` before loading the runtime bridge, including `.pth`
+files. Configured directories and newly discovered `.pth` paths precede system
+paths. Already imported modules cannot be replaced by changing the search path.
 
 Spark broadcasts, accumulators, `SparkContext.addPyFile`, and Python `TaskContext`
 are not supported by this embedded runtime. Captured broadcast and accumulator
 objects are rejected during serialization; functions must not access them through
 imported modules either. Install modules on executors before startup, optionally
-using `spark.inprocess.python.sitePackages`. The driver's Python major.minor
+using `spark.inprocess.python.sitePackages`. SQL registration through
+`spark.udf.register` is not supported and is rejected at registration time.
+Functions must receive at least one input column (a literal also works) to determine
+the batch length. Positional and keyword arguments are supported. Functions are
+serialized on first use, so globals can be defined or rebound after decoration
+and before that first call. The driver's Python major.minor
 version must match the embedded interpreter; registration checks this before
 unpickling. Python exceptions, including `SystemExit` during deserialization or
 execution, are converted into task failures. Native process termination remains
@@ -384,8 +396,8 @@ spark-submit \
 | **Required value** | `org.apache.spark.sql.execution.python.InProcessPythonPlugin` |
 
 Registers the in-process Python plugin. This initializes the `SharedInterpreter` on each
-executor at startup. Without this, the interpreter is initialized lazily on the first UDF call
-(with no extra `sys.path` configuration applied).
+executor at startup. Without this plugin, in-process UDF execution fails with an
+initialization error. Task calls and cleanup never create or restart an interpreter.
 
 ---
 
@@ -395,7 +407,9 @@ executor at startup. Without this, the interpreter is initialized lazily on the 
 |---|---|
 | **Type** | Comma-separated list of absolute or relative directory paths |
 
-Paths to append to `sys.path` inside the jep interpreter at executor startup.
+Site-package directories to process inside the JEP interpreter at executor startup.
+Paths are made absolute and processed with `site.addsitedir`, including `.pth` files.
+Configured paths take precedence over system paths for modules not yet imported.
 
 **When you need this:** When you distribute a Python virtual environment via `--archives` and
 need packages from that venv to be importable inside UDFs. The problem is that the jep
@@ -444,8 +458,9 @@ so the path above is stable across executor nodes without any per-node configura
 
 ### `spark.executor.cores` and `spark.task.cpus`
 
-Must satisfy `spark.executor.cores == spark.task.cpus`. The recommended setting for in-process
-UDF workloads is:
+Multiple tasks may share an executor, including fractional `spark.task.cpus` values.
+Python invocations run one at a time per executor. For throughput, consider multiple
+executors with:
 
 ```
 spark.executor.cores = 1
@@ -456,7 +471,7 @@ spark.task.cpus      = 1
 
 ## Supported Types
 
-All Spark SQL types are supported as UDF inputs and outputs:
+Common supported Spark SQL input/output types include:
 
 | Category | Types |
 |---|---|
@@ -464,9 +479,11 @@ All Spark SQL types are supported as UDF inputs and outputs:
 | Boolean | `BooleanType` |
 | String / Binary | `StringType`, `BinaryType` |
 | Temporal | `DateType`, `TimestampType` |
-| Complex | `ArrayType`, `StructType` |
+| Complex | `ArrayType`, `StructType`, `MapType` |
 
-`MapType` is not currently supported.
+Nested values must satisfy the declared nullability. Map keys cannot be null.
+Only types representable by Spark's Arrow conversion and JVM Arrow accessors are
+supported; this is not a guarantee for every Spark SQL type.
 
 ---
 

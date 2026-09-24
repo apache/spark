@@ -85,12 +85,20 @@ class InProcessUDFTests(ReusedSQLTestCase):
             raise RuntimeError("Set ARROW_C_DATA_JAR to the provided Arrow CDI JAR")
         cls.cdi_jar = str(Path(_cdi_jar).resolve())
         cls.site_packages = tempfile.mkdtemp()
-        with open(os.path.join(cls.site_packages, "_inprocess_test_helper.py"), "w") as f:
+        helper_dir = os.path.join(cls.site_packages, "extra")
+        system_dir = os.path.join(cls.site_packages, "system")
+        os.mkdir(helper_dir)
+        os.mkdir(system_dir)
+        with open(os.path.join(system_dir, "_inprocess_test_helper.py"), "w") as f:
+            f.write("MAGIC = -1\n")
+        with open(os.path.join(helper_dir, "_inprocess_test_helper.py"), "w") as f:
             f.write("MAGIC = 99\n")
+        with open(os.path.join(cls.site_packages, "helper.pth"), "w") as f:
+            f.write("extra\n")
         try:
             # Embedded CPython needs the selected environment before JEP initializes.
             python_path = os.pathsep.join(
-                [str(cls.jep_dir.parent), os.environ.get("PYTHONPATH", "")]
+                [system_dir, str(cls.jep_dir.parent), os.environ.get("PYTHONPATH", "")]
             )
             with patch.dict(os.environ, {"PYTHONPATH": python_path}):
                 super().setUpClass()
@@ -238,7 +246,7 @@ class InProcessUDFTests(ReusedSQLTestCase):
             return x
 
         data = [(i,) for i in range(5)]
-        df = self.spark.createDataFrame(data, ["v"])
+        df = self.spark.createDataFrame(data, "v int")
         result = [r[0] for r in df.select(identity(df["v"])).collect()]
         self.assertEqual(result, list(range(5)))
 
@@ -658,7 +666,15 @@ class InProcessUDFTests(ReusedSQLTestCase):
         expected = df.select(identity(df.id)).collect()
         runtime = self.spark.sparkContext._jvm.org.apache.spark.sql.execution.python
         runtime.InProcessPythonRuntime.shutdown()
-        # The next invocation creates a new dedicated interpreter thread.
+        try:
+            with self.assertRaisesRegex(Exception, "not running"):
+                df.select(identity(df.id)).collect()
+        finally:
+            paths = self.spark.sparkContext._jvm.java.util.ArrayList()
+            paths.add(self.site_packages)
+            runtime.InProcessPythonRuntime.initialize(
+                self.spark.sparkContext._jvm.PythonUtils.toSeq(paths)
+            )
         self.assertEqual(df.select(identity(df.id)).collect(), expected)
 
     # ------------------------------------------------------------------
@@ -867,7 +883,10 @@ class InProcessUDFTests(ReusedSQLTestCase):
                 path, mode="overwrite"
             )
             df = self.spark.read.parquet(path)
-            self.assertEqual(sorted(r.id for r in df.filter(identity("k") == 1).collect()), [1, 3])
+            partition_identity = inprocess_udf(df.schema["k"].dataType)(lambda x: x)
+            self.assertEqual(
+                sorted(r.id for r in df.filter(partition_identity("k") == 1).collect()), [1, 3]
+            )
             filtered = df.filter((F.col("k") == 1) & (identity("id") > 1))
             self.assertEqual([r.id for r in filtered.collect()], [3])
             plan = filtered._jdf.queryExecution().executedPlan().toString()
@@ -894,9 +913,131 @@ class InProcessUDFTests(ReusedSQLTestCase):
             for value in (broadcast, accumulator):
                 with self.subTest(value=type(value).__name__):
                     with self.assertRaisesRegex(TypeError, "broadcasts or accumulators"):
-                        inprocess_udf(LongType())(lambda x: value.value)
+                        inprocess_udf(LongType())(lambda x: value.value)("id")
         finally:
             broadcast.destroy()
+
+    def test_sql_registration_fails_early(self):
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import LongType
+
+        identity = inprocess_udf(LongType())(lambda x: x)
+        with self.assertRaisesRegex(TypeError, "INVALID_UDF_EVAL_TYPE"):
+            self.spark.udf.register("inprocess_identity", identity)
+
+    def test_named_arguments_partition_evaluator_and_columnar_child(self):
+        import pyarrow.compute as pc
+
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import LongType
+
+        subtract = inprocess_udf(LongType())(lambda x, y: pc.subtract(x, y))
+        df = self.spark.range(8).selectExpr("id", "id + 1 as other").cache()
+        try:
+            df.count()
+            for evaluator in ("true", "false"):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.usePartitionEvaluator": evaluator,
+                        "spark.sql.execution.arrow.pythonUDF.columnarInput.enabled": "true",
+                        "spark.sql.adaptive.enabled": "false",
+                    }
+                ):
+                    query = df.select(subtract(y="id", x="other"))
+                    self.assertEqual([r[0] for r in query.collect()], [1] * 8)
+                    plan = query._jdf.queryExecution().executedPlan().toString()
+                    self.assertIn("ArrowEvalPython", plan)
+                    nodes = [query._jdf.queryExecution().executedPlan()]
+                    metrics = None
+                    while nodes:
+                        node = nodes.pop()
+                        if node.nodeName() == "ArrowEvalPython":
+                            # A dual-mode cache scan can execute rows directly without a transition.
+                            self.assertTrue(node.child().supportsColumnar())
+                            self.assertFalse(node.supportsColumnar())
+                            metrics = node.metrics()
+                        children = node.children().iterator()
+                        while children.hasNext():
+                            nodes.append(children.next())
+                    self.assertIsNotNone(metrics)
+                    self.assertEqual(metrics.apply("pythonNumRowsReceived").value(), 8)
+                    self.assertGreater(metrics.apply("pythonDataSent").value(), 0)
+                    self.assertGreater(metrics.apply("pythonDataReceived").value(), 0)
+        finally:
+            df.unpersist()
+
+    def test_nonroot_limit_and_offset_preserve_order(self):
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import LongType
+
+        identity = inprocess_udf(LongType())(lambda x: x)
+        with self.sql_conf(
+            {
+                "spark.sql.execution.topKSortFallbackThreshold": "1",
+                "spark.sql.shuffle.partitions": "4",
+                "spark.sql.adaptive.enabled": "false",
+            }
+        ):
+            df = self.spark.range(100, numPartitions=4).orderBy("id")
+            mapped = df.select(identity("id").alias("v"))
+            for offset in (0, 7):
+                query = mapped.offset(offset).limit(10).distinct()
+                self.assertEqual(
+                    sorted(r.v for r in query.collect()), list(range(offset, offset + 10))
+                )
+                self.assertIn("Sort [id#", query._jdf.queryExecution().executedPlan().toString())
+
+    def test_map_entries_offset_and_custom_names(self):
+        import pyarrow as pa
+
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import LongType, MapType, StringType
+
+        def make_map(x):
+            map_type = pa.map_(pa.field("k", pa.string(), False), pa.field("v", pa.int64()))
+            entries = pa.StructArray.from_arrays(
+                [pa.array(["hidden", "a", "b", "c"]), pa.array([None, 1, 2, 3])],
+                fields=[map_type.key_field, map_type.item_field],
+            )
+            offsets = pa.array([0, 1, 3], type=pa.int32())
+            return pa.Array.from_buffers(
+                map_type, 2, [None, offsets.buffers()[1]], children=[entries.slice(1)]
+            )
+
+        udf = inprocess_udf(MapType(StringType(), LongType()))(make_map)
+        rows = self.spark.range(2, numPartitions=1).select(udf("id")).collect()
+        self.assertEqual([r[0] for r in rows], [{"a": 1}, {"b": 2, "c": 3}])
+
+    def test_hidden_struct_nulls(self):
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import IntegerType, StructField, StructType
+
+        @inprocess_udf(StructType([StructField("len", IntegerType(), False)]))
+        def lengths(s):
+            return pa.StructArray.from_arrays(
+                [pc.utf8_length(s)], names=["len"], mask=pc.is_null(s)
+            )
+
+        df = self.spark.createDataFrame([(None,), ("a",)], "s string")
+        self.assertEqual([r[0] for r in df.select(lengths("s")).collect()], [None, (1,)])
+
+    def test_large_closure_uses_bulk_transfer(self):
+        import pyarrow as pa
+
+        from pyspark.inprocess import inprocess_udf
+        from pyspark.sql.types import LongType
+
+        model = bytes(range(256)) * 16384
+
+        @inprocess_udf(LongType())
+        def lookup(x):
+            return pa.array([model[i % len(model)] for i in x.to_pylist()], type=pa.int64())
+
+        df = self.spark.range(256, numPartitions=4)
+        self.assertEqual([r[0] for r in df.select(lookup("id")).collect()], list(range(256)))
 
 
 if __name__ == "__main__":

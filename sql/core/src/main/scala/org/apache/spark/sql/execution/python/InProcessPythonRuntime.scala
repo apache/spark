@@ -17,178 +17,222 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.util.concurrent.{Callable, ExecutionException, ExecutorService, TimeUnit}
-import java.util.concurrent.locks.ReentrantLock
+import java.nio.ByteBuffer
+import java.util.concurrent.{Callable, ExecutionException, TimeoutException, TimeUnit}
 
 import scala.jdk.CollectionConverters._
 
 import jep.{JepException, SharedInterpreter}
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{TaskContext, TaskKilledException}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-/**
- * Owns one interpreter on a dedicated thread per executor. JEP requires construction,
- * invocation and close to happen on the same thread, even when Spark tasks run serially.
- */
+/** Owns one interpreter generation per executor plugin lifecycle. */
 private[python] object InProcessPythonRuntime extends Logging {
   val SITE_PACKAGES_CONFIG = "spark.inprocess.python.sitePackages"
-
-  // Access to the executor is serialized by onInterpreterThread and shutdown. The interpreter
-  // itself is accessed only by the executor's thread.
-  private val interpreterLock = new ReentrantLock()
-  private var executor: ExecutorService = _
-  private var interp: SharedInterpreter = _
   private val TRACEBACK_SENTINEL = "__INPROCESS_UDF_TRACEBACK__:"
+  private var active: InterpreterSession = _
 
-  private def withInterpreterLock[T](cancellable: Boolean)(body: => T): T = {
-    if (cancellable) {
-      val context = Option(TaskContext.get())
-      context.foreach(_.killTaskIfInterrupted())
-      // Poll the task state as cancellation need not interrupt the Java thread.
-      while (!interpreterLock.tryLock(100, TimeUnit.MILLISECONDS)) {
-        context.foreach(_.killTaskIfInterrupted())
-      }
+  def initialize(sitePackages: Seq[String] = Seq.empty): Unit = synchronized {
+    if (active != null && !active.isTerminated) {
+      require(active.isRunning && active.sitePackages == sitePackages,
+        "In-process Python is stopping or already initialized with different sitePackages")
     } else {
-      interpreterLock.lock()
+      val candidate = new InterpreterSession(sitePackages)
+      try {
+        candidate.initialize()
+        active = candidate
+      } catch {
+        case t: Throwable => Utils.tryWithSafeFinally { throw t } { candidate.shutdown() }
+      }
     }
-    try {
-      if (cancellable) Option(TaskContext.get()).foreach(_.killTaskIfInterrupted())
-      body
-    } finally {
-      interpreterLock.unlock()
-    }
+  }
+
+  def currentSession: InterpreterSession = synchronized {
+    checkState(active != null && active.isRunning)
+    active
+  }
+
+  def shutdown(): Unit = {
+    val session = synchronized { active }
+    if (session != null) session.shutdown()
+  }
+
+  private def checkState(running: Boolean): Unit = {
+    checkState(running, "In-process Python is not running; initialize the executor plugin first")
+  }
+
+  private def checkState(running: Boolean, message: String): Unit = {
+    if (!running) throw new IllegalStateException(message)
   }
 
   /**
-   * Wait for native code to finish even if the task is interrupted. Returning early would let
-   * the task free CDI pointers that Python may still be accessing. Restore the interruption
-   * afterwards so Spark can observe cancellation. Arbitrary Python code cannot be forcibly
-   * interrupted safely in the executor process.
+   * Tasks retain this generation, so stale tasks cannot enter a later SparkContext's interpreter.
+   * Lifecycle operations only hold the monitor while enqueueing work, never while running Python.
    */
-  private[python] def onInterpreterThread[T](body: => T): T = {
-    runOnInterpreterThread(cancellable = true)(body)
-  }
+  private[python] class InterpreterSession(val sitePackages: Seq[String] = Seq.empty) {
+    private val executor = ThreadUtils.newDaemonSingleThreadExecutor("inprocess-python")
+    @volatile private var running = true
+    // Accessed only on the owning thread.
+    private var interp: SharedInterpreter = _
 
-  private def runOnInterpreterThread[T](cancellable: Boolean)(body: => T): T =
-    withInterpreterLock(cancellable) {
-      if (executor == null) {
-        executor = ThreadUtils.newDaemonSingleThreadExecutor("inprocess-python")
+    def isRunning: Boolean = running
+    def isTerminated: Boolean = executor.isTerminated
+
+    private[python] def onInterpreterThread[T](body: => T): T = {
+      val context = Option(TaskContext.get())
+      context.foreach(_.killTaskIfInterrupted())
+      val gate = new Object
+      var started = false
+      var cancelled = false
+      val future = synchronized {
+        checkState(running)
+        executor.submit(new Callable[T] {
+          override def call(): T = {
+            gate.synchronized {
+              if (cancelled) throw new TaskKilledException("Cancelled before Python invocation")
+              started = true
+            }
+            body
+          }
+        })
       }
-      val future = executor.submit(new Callable[T] {
-        override def call(): T = body
-      })
       var interrupted = false
       try {
-        var result: Option[T] = None
-        while (result.isEmpty) {
+        while (true) {
+          val taskCancelled = context.exists(_.isInterrupted())
+          if (interrupted || taskCancelled) {
+            val cancelledBeforeStart = gate.synchronized {
+              if (started) false else {
+                cancelled = true
+                future.cancel(false)
+                true
+              }
+            }
+            if (cancelledBeforeStart) {
+              context.foreach(_.killTaskIfInterrupted())
+              throw new InterruptedException("Cancelled before Python invocation")
+            }
+          }
           try {
-            result = Some(future.get())
+            val result = future.get(100, TimeUnit.MILLISECONDS)
+            context.foreach(_.killTaskIfInterrupted())
+            return result
           } catch {
+            case _: TimeoutException =>
             case _: InterruptedException => interrupted = true
             case e: ExecutionException => throw e.getCause
           }
         }
-        if (cancellable) Option(TaskContext.get()).foreach(_.killTaskIfInterrupted())
-        result.get
+        throw new IllegalStateException("Unreachable")
       } finally {
+        // Once native work starts, wait for it even after cancellation: the caller still owns
+        // CDI structs that Python may use. Pending work, however, is safe to cancel immediately.
         if (interrupted) Thread.currentThread().interrupt()
       }
     }
 
-  private def initializeInterpreter(sitePackages: Seq[String]): Unit = {
-    if (interp == null) {
+    def initialize(): Unit = onInterpreterThread {
       val candidate = new SharedInterpreter()
       try {
-        // Configure paths before importing the bridge and its dependencies.
-        if (sitePackages.nonEmpty) {
-          candidate.set("_site_packages", sitePackages.asJava)
-          candidate.eval("import sys; sys.path.extend(list(_site_packages)); del _site_packages")
-        }
-        candidate.eval("from pyspark.inprocess.runtime import " +
+        candidate.set("_site_packages", sitePackages.asJava)
+        candidate.exec(
+          """import os, site, sys
+            |_configured = [os.path.abspath(p) for p in _site_packages]
+            |_before = set(sys.path)
+            |for _path in _configured:
+            |    site.addsitedir(_path)
+            |_added = [p for p in sys.path if p not in _before and p not in _configured]
+            |_preferred = list(dict.fromkeys(_configured + _added))
+            |sys.path[:] = _preferred + [p for p in sys.path if p not in _preferred]
+            |del _site_packages, _configured, _before, _added, _preferred
+            |""".stripMargin)
+        candidate.exec("from pyspark.inprocess.runtime import " +
           "_inprocess_invoke, _inprocess_register, _inprocess_release, _udfs")
         interp = candidate
       } catch {
-        case t: Throwable =>
-          Utils.tryWithSafeFinally { throw t } { candidate.close() }
-      }
-    }
-  }
-
-  def initialize(sitePackages: Seq[String] = Seq.empty): Unit =
-    withInterpreterLock(cancellable = false) {
-      try {
-        runOnInterpreterThread(cancellable = false) { initializeInterpreter(sitePackages) }
-      } catch {
-        case t: Throwable =>
-          executor.shutdown()
-          executor = null
-          throw t
+        case t: Throwable => Utils.tryWithSafeFinally { throw t } { candidate.close() }
       }
     }
 
-  def shutdown(): Unit = withInterpreterLock(cancellable = false) {
-    if (executor != null) {
-      try {
-        runOnInterpreterThread(cancellable = false) {
-          if (interp != null) {
-            try {
-              interp.eval("_udfs.clear()")
-            } finally {
-              try { interp.close() } finally { interp = null }
-            }
+    /** Enqueue cleanup after outstanding calls without creating an executor or waiting. */
+    def release(handles: Seq[String]): Unit = synchronized {
+      if (running && handles.nonEmpty) {
+        executor.submit(new Runnable {
+          override def run(): Unit = {
+            if (interp != null) interp.invoke("_inprocess_release", handles.asJava)
           }
+        })
+      }
+      // During shutdown the queued close clears all remaining handles.
+    }
+
+    /** A timeout bounds plugin stop, not native execution or CDI buffer ownership. */
+    def shutdown(waitMillis: Long = 5000L): Unit = {
+      synchronized {
+        if (running) {
+          running = false
+          executor.submit(new Runnable {
+            override def run(): Unit = {
+              if (interp != null) {
+                try {
+                  interp.exec("_udfs.clear()")
+                } finally {
+                  try { interp.close() } finally { interp = null }
+                }
+              }
+            }
+          })
+          executor.shutdown()
         }
-      } finally {
-        executor.shutdown()
-        executor = null
+      }
+      try {
+        if (!executor.awaitTermination(waitMillis, TimeUnit.MILLISECONDS)) {
+          logWarning("In-process Python is still stopping; native work and its buffers " +
+            "remain alive until the invocation finishes or the process exits.")
+        }
+      } catch {
+        case _: InterruptedException => Thread.currentThread().interrupt()
       }
     }
-  }
 
-  /** Register a separate function instance per task, copying its closure only once. */
-  def register(
-      handle: String,
-      serializedUdf: Array[Byte],
-      returnTypeJson: String,
-      timeZoneId: String,
-      pythonVersion: String): Unit = onInterpreterThread {
-    initializeInterpreter(Seq.empty)
-    withPythonException {
-      interp.invoke("_inprocess_register",
-        handle, serializedUdf, returnTypeJson, timeZoneId, pythonVersion)
+    def register(
+        handle: String,
+        serializedUdf: Array[Byte],
+        returnTypeJson: String,
+        timeZoneId: String,
+        pythonVersion: String,
+        largeVarTypes: Boolean): Unit = {
+      // Bulk-copy on the task thread. JEP's PyJBuffer supports memoryview without per-byte JNI.
+      val command = ByteBuffer.allocateDirect(serializedUdf.length)
+      command.put(serializedUdf).flip()
+      onInterpreterThread {
+        withPythonException {
+          interp.invoke("_inprocess_register", handle, command, returnTypeJson, timeZoneId,
+            pythonVersion, java.lang.Boolean.valueOf(largeVarTypes))
+        }
+      }
     }
-  }
 
-  /** Cleanup must run even when the caller's task has been cancelled. */
-  def release(handles: Seq[String]): Unit = runOnInterpreterThread(cancellable = false) {
-    if (interp != null) {
-      interp.invoke("_inprocess_release", handles.asJava)
-    }
-  }
-
-  /** Pass CDI addresses to Python and wait until it has finished consuming them. */
-  def invoke(
-      handle: String,
-      inputArrayPtrs: Array[Long],
-      inputSchemaPtrs: Array[Long],
-      outputArrayAddr: Long,
-      outputSchemaAddr: Long,
-      expectedRows: Int): Unit = onInterpreterThread {
-    // Box long[] so JEP treats even single-column inputs as an iterable.
-    val arrayPtrList = inputArrayPtrs.map(java.lang.Long.valueOf).toSeq.asJava
-    val schemaPtrList = inputSchemaPtrs.map(java.lang.Long.valueOf).toSeq.asJava
-    withPythonException {
-      interp.invoke(
-        "_inprocess_invoke",
-        handle,
-        arrayPtrList,
-        schemaPtrList,
-        java.lang.Long.valueOf(outputArrayAddr),
-        java.lang.Long.valueOf(outputSchemaAddr),
-        java.lang.Integer.valueOf(expectedRows))
+    def invoke(
+        handle: String,
+        inputArrayPtrs: Array[Long],
+        inputSchemaPtrs: Array[Long],
+        outputArrayAddr: Long,
+        outputSchemaAddr: Long,
+        expectedRows: Int,
+        argumentNames: Array[String]): Long = onInterpreterThread {
+      val start = System.nanoTime()
+      val arrayPtrs = inputArrayPtrs.map(java.lang.Long.valueOf).toSeq.asJava
+      val schemaPtrs = inputSchemaPtrs.map(java.lang.Long.valueOf).toSeq.asJava
+      withPythonException {
+        interp.invoke("_inprocess_invoke", handle, arrayPtrs, schemaPtrs,
+          java.lang.Long.valueOf(outputArrayAddr), java.lang.Long.valueOf(outputSchemaAddr),
+          java.lang.Integer.valueOf(expectedRows), argumentNames.toSeq.asJava)
+      }
+      (System.nanoTime() - start) / 1000000
     }
   }
 

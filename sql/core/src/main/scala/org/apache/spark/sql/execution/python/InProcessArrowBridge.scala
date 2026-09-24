@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.arrow.c.{ArrowArray, ArrowSchema, Data}
+import org.apache.arrow.memory.util.MemoryUtil
 import org.apache.arrow.vector.FieldVector
+import org.apache.arrow.vector.types.pojo.Field
 
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ArrowColumnVector
@@ -80,9 +82,27 @@ private[python] object InProcessArrowBridge {
    *  - When the returned [[ArrowColumnVector]] is closed, the reference count drops to
    *    zero, PyArrow's C ``release`` callback is invoked, and the Python array is GC'd.
    */
-  def cdiToColumn(arrowArray: ArrowArray, arrowSchema: ArrowSchema): ArrowColumnVector = {
+  private def checkOffsets(array: ArrowArray): Unit = {
+    val snapshot = array.snapshot()
+    require(snapshot.offset == 0L, "In-process UDF returned an unsupported Arrow CDI offset")
+    (0L until snapshot.n_children).foreach { i =>
+      checkOffsets(ArrowArray.wrap(MemoryUtil.getLong(snapshot.children + i * 8L)))
+    }
+    if (snapshot.dictionary != 0L) checkOffsets(ArrowArray.wrap(snapshot.dictionary))
+  }
+
+  def cdiToColumn(
+      arrowArray: ArrowArray,
+      arrowSchema: ArrowSchema,
+      expected: Option[Field] = None): ArrowColumnVector = {
+    checkOffsets(arrowArray)
     val field = Data.importField(
       ArrowUtils.rootAllocator, ArrowSchema.wrap(arrowSchema.memoryAddress()), null)
+    expected.foreach { declared =>
+      require(field.getType == declared.getType && field.getChildren == declared.getChildren &&
+        field.getMetadata == declared.getMetadata,
+        s"In-process UDF returned Arrow field $field; expected $declared")
+    }
     val vector = field.createVector(ArrowUtils.rootAllocator)
     try {
       Data.importIntoVector(
