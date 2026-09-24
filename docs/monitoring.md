@@ -662,9 +662,11 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
       Whether the given application is held, as <code>supported</code> (whether the deployment
       allows holding), <code>held</code>, and <code>draining</code> (the number of executors
       that have not exited yet). An application is held and resumed through the
-      <code>/jobs/hold/</code> and <code>/jobs/resume/</code> POST endpoints of its web UI,
-      which require modify permissions, while reading this status only requires view
-      permissions. Not available via the history server.
+      <code>/jobs/hold/</code> and <code>/jobs/resume/</code> endpoints of its web UI,
+      which require modify permissions and the per-UI <code>csrfToken</code> parameter
+      rendered into the jobs page, and accept GET in addition to POST only when
+      <code>spark.ui.actionsViaGetEnabled</code> is on, while reading this status only
+      requires view permissions. Not available via the history server.
     </td>
   </tr>
   <tr>
