@@ -2318,7 +2318,7 @@ case class JsonTypeof(child: Expression)
  *
  * A value is spliced in raw (unquoted) when it carries `FORMAT JSON` (tracked per member by
  * `rawJson`): the explicit clause (e.g. `JSON_OBJECT('a' VALUE '{"b":1}' FORMAT JSON)`), or the
- * implicit form a nested JSON constructor / `JSON_QUERY` under KEEP QUOTES carries (see
+ * implicit form carried by a nested JSON constructor / `JSON_QUERY` under KEEP QUOTES (see
  * `rawJsonValue`). Explicit `FORMAT JSON` on a non-constructor is arbitrary user text, so
  * `needsValidation` marks it for JSON validation at eval; a nested constructor is trusted.
  *
@@ -2328,11 +2328,14 @@ case class JsonTypeof(child: Expression)
  *   JSON_OBJECT('id': 7, 'v': NULL ABSENT ON NULL)     -> '{"id":7}'
  *   JSON_OBJECT()                                       -> '{}'
  *
- * A flat, clause-free call routes through function resolution and is rebuilt by
- * `JsonObjectExpressionBuilder` (so a same-named routine can shadow the built-in `json_object`); a
- * clause-bearing call, or one lexically nested in the *value* position of an enclosing JSON
- * constructor, is built directly from the grammar (see `AstBuilder.visitJsonObject`); a nested call
- * in *key* position instead stays eligible for routine resolution and shadowing.
+ * A flat, clause-free call whose members carry no raw value routes through function resolution
+ * and is rebuilt by `JsonObjectExpressionBuilder`, so a same-named routine can shadow the
+ * built-in `json_object`. It is instead built directly from the grammar (see
+ * `AstBuilder.visitJsonObject`) when it is clause-bearing, carries a raw value in any member (an
+ * explicit `FORMAT JSON` or a nested JSON producer in the *value* position, i.e.
+ * `rawJson.contains(true)`), or is itself lexically nested in the *value* position of an enclosing
+ * JSON constructor; a nested call in *key* position instead stays eligible for routine resolution
+ * and shadowing.
  * The user-facing reference lives in `docs/sql-ref-syntax-qry-select-json-object.md`.
  */
 case class JsonObjectExpr(
