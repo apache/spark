@@ -93,6 +93,25 @@ class JsonExistsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59685: explicit-clause JSON_EXISTS canonical SQL keeps its clause and appends no " +
+      "default ON ERROR") {
+    // The ownership clause (FALSE ON ERROR) is appended only to an otherwise clause-free render, so
+    // an explicit ON ERROR must suppress it. Malformed input makes the mode observable: were the
+    // explicit TRUE ON ERROR dropped or replaced by the default, the round-trip result would flip
+    // from true to false.
+    val jsonExists = sql(s"SELECT json_exists('not json', '$$.a' TRUE ON ERROR)")
+      .queryExecution.analyzed.expressions
+      .flatMap(_.collect { case je: JsonExists => je }).head
+    val rendered = jsonExists.sql
+    assert(!rendered.contains("FALSE ON ERROR"),
+      s"canonical SQL appended a duplicate default clause: $rendered")
+    val reparsed = sql(s"SELECT $rendered")
+    assert(reparsed.queryExecution.analyzed.expressions
+      .exists(_.exists(_.isInstanceOf[JsonExists])),
+      s"canonical SQL did not reparse to the built-in: $rendered")
+    checkAnswer(reparsed, Row(true))
+  }
+
   test("SPARK-59685: a default JSON_EXISTS keeps a clean auto-generated column name") {
     val name = sql(s"SELECT json_exists('$doc', '$$.addr.city')").schema.head.name
     assert(!name.contains("ON ERROR"), s"column name leaked the ownership clause: $name")

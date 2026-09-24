@@ -647,6 +647,19 @@ case class JsonTable(
 }
 
 /**
+ * A SQL/JSON built-in whose clause-free call can route through function resolution, letting a
+ * same-named routine on the SQL PATH shadow it. So when `sql` renders an otherwise clause-free
+ * form, it appends the default clause to keep the reparse bound to this built-in. `sqlString`'s
+ * `forceBuiltinOwnership` gates that clause (true for `sql`, false for the never-reparsed pretty
+ * form) and `renderChild` renders each child.
+ */
+trait RoutedSqlJsonExpression extends Expression {
+  private[sql] def sqlString(
+      forceBuiltinOwnership: Boolean,
+      renderChild: Expression => String): String
+}
+
+/**
  * Behavior of `JSON_VALUE`'s `ON EMPTY` / `ON ERROR` clause: what to produce when the path matches
  * nothing, or when the input/extraction fails.
  */
@@ -687,19 +700,6 @@ object JsonValueBehavior {
  * }}}
  */
 // scalastyle:on line.size.limit
-
-/**
- * A SQL/JSON built-in whose clause-free call can route through function resolution, letting a
- * same-named routine on the SQL PATH shadow it. So when `sql` renders an otherwise clause-free
- * form, it appends the default clause to keep the reparse bound to this built-in. `sqlString`'s
- * `forceBuiltinOwnership` gates that clause (true for `sql`, false for the never-reparsed pretty
- * form) and `renderChild` renders each child.
- */
-trait RoutedSqlJsonExpression extends Expression {
-  private[sql] def sqlString(
-      forceBuiltinOwnership: Boolean,
-      renderChild: Expression => String): String
-}
 
 case class JsonValue(
     child: Expression,

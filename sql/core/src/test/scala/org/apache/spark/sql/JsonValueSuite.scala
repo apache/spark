@@ -88,6 +88,30 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59685: explicit-clause JSON_VALUE canonical SQL keeps its clause and appends no " +
+      "default ownership clause") {
+    // The ownership clause (RETURNING STRING) is appended only to an otherwise clause-free render,
+    // gated independently on RETURNING, ON EMPTY, and ON ERROR. Exercise one explicit clause at a
+    // time so a regression appending a duplicate or conflicting RETURNING STRING fails here.
+    Seq(
+      s"json_value('$doc', '$$.id' RETURNING INT)" -> Row(7),
+      s"json_value('$doc', '$$.missing' DEFAULT -1 ON EMPTY)" -> Row("-1"),
+      s"json_value('$doc', '$$.name' ERROR ON ERROR)" -> Row("Ada")).foreach {
+      case (query, expected) =>
+        val jsonValue = sql(s"SELECT $query")
+          .queryExecution.analyzed.expressions
+          .flatMap(_.collect { case jv: JsonValue => jv }).head
+        val rendered = jsonValue.sql
+        assert(!rendered.contains("RETURNING STRING"),
+          s"canonical SQL appended a duplicate default clause: $rendered")
+        val reparsed = sql(s"SELECT $rendered")
+        assert(reparsed.queryExecution.analyzed.expressions
+          .exists(_.exists(_.isInstanceOf[JsonValue])),
+          s"canonical SQL did not reparse to the built-in: $rendered")
+        checkAnswer(reparsed, expected)
+    }
+  }
+
   test("SPARK-59685: a default JSON_VALUE keeps a clean auto-generated column name") {
     // The canonical `sql` forces the default RETURNING STRING so it stays bound to the built-in on
     // reparse, but the display (column) name is never reparsed and must not leak that clause.
