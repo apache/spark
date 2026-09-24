@@ -3865,10 +3865,13 @@ object SQLConf {
       .internal()
       .doc("Test/development only, not intended for production use. When true, plan a streaming " +
         "aggregation with the streamline aggregation operator, which merges each input row " +
-        "against state and emits immediately, instead of the microbatch operators that only emit " +
-        "once the batch ends. Real-Time Mode queries use the streamline operator regardless of " +
-        "this config; this flag exists only so the operator can be exercised under an ordinary " +
-        "microbatch trigger in tests, and changes an aggregation's output timing when set.")
+        "against state and emits an intermediate result per input in Update mode, instead of the " +
+        "microbatch operators that only emit once the batch ends. Append and Complete drain the " +
+        "input before producing their mode-specific output, and only non-session aggregations " +
+        "are planned this way (session windows use a separate planning path). Real-Time Mode " +
+        "queries use the streamline operator regardless of this config; this flag exists only so " +
+        "the operator can be exercised under an ordinary microbatch trigger in tests, and " +
+        "changes an aggregation's output timing when set.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
