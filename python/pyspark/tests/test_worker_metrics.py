@@ -22,10 +22,14 @@ import struct
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from pyspark.serializers import SpecialLengths, read_int
-from pyspark.worker import WorkerMetrics, report_metrics, report_worker_metrics
-from pyspark.worker_util import RunnerConf
+
+# These reporting helpers live in worker-only modules. Allow their import for this test module.
+with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+    from pyspark.worker import WorkerMetrics, report_metrics, report_worker_metrics
+    from pyspark.worker_util import RunnerConf
 
 
 class WorkerMetricsTests(unittest.TestCase):

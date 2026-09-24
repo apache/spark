@@ -17,8 +17,7 @@
 
 package org.apache.spark.api.python
 
-import java.io.File
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, EOFException}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, EOFException, File}
 import java.nio.charset.StandardCharsets
 
 import com.fasterxml.jackson.databind.node.IntNode
@@ -29,7 +28,7 @@ class PythonWorkerMetricsDecoderSuite extends SparkFunSuite {
   import PythonWorkerMetricsDecoder.Metric
 
   private def metric(name: String, value: String, unit: String): String = {
-    s"\"$name\":{\"value\":$value,\"unit\":\"$unit\"}"
+    "\"" + name + "\":{\"value\":" + value + ",\"unit\":\"" + unit + "\"}"
   }
 
   private val boot = metric("bootTimestampMs", "1250", "timestampMillis")
