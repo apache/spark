@@ -48,6 +48,13 @@ class JettyUtilsSuite extends SparkFunSuite {
     assert(JettyUtils.isPrefetchRequest(newRequest(xMoz = "prefetch")))
   }
 
+  test("isPrefetchRequest requires the header value to say prefetch") {
+    // All three headers are matched on the value, not mere presence.
+    assert(!JettyUtils.isPrefetchRequest(newRequest(secPurpose = "foo")))
+    assert(!JettyUtils.isPrefetchRequest(newRequest(purpose = "foo")))
+    assert(!JettyUtils.isPrefetchRequest(newRequest(xMoz = "foo")))
+  }
+
   test("isValidCsrfToken accepts only the matching token") {
     val token = "0123456789abcdef0123456789abcdef"
     assert(JettyUtils.isValidCsrfToken(newRequest(csrfTokenParam = token), token))
