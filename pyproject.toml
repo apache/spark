@@ -264,6 +264,7 @@ ci_classic_minimum = [
 
 ci_classic_pandas_3 = [
     {include-group = "internal_numpy"},
+    {include-group = "internal_py4j"},
     {include-group = "internal_pyspark_devtool"},
     {include-group = "pandas_on_spark_extra"},
     # torch should be installed with ml_torch group
@@ -275,7 +276,6 @@ ci_classic_pandas_3 = [
 ]
 
 ci_connect_pandas_3 = [
-    {include-group = "internal_protobuf"},
     "grpcio==1.76.0",
     "grpcio-status==1.76.0",
     "googleapis-common-protos==1.71.0",
