@@ -59,6 +59,9 @@ private[pipelines] object Scd1VersionMap {
   def mapType(sequencingType: DataType): MapType =
     MapType(StringType, sequencingType, valueContainsNull = true)
 
+  /** Serializes a leaf field path into its version-map key. */
+  def serializeKey(path: Seq[String]): String = QuotingUtils.quoteNameParts(path)
+
   /**
    * Builds the version map for one ingested upsert, independently of other events for its key.
    *
@@ -88,7 +91,7 @@ private[pipelines] object Scd1VersionMap {
       AutoCdcSchemaUtils.flattenStructFieldPaths(ignoreNullSchema).toSet
 
     val keyValueColumns = AutoCdcSchemaUtils.flattenStructFieldPaths(schema).flatMap { path =>
-      val versionMapKey = QuotingUtils.quoteNameParts(path)
+      val versionMapKey = serializeKey(path)
       val leafSequence =
         if (ignoreNullLeafPaths.contains(path)) {
           F.when(F.col(versionMapKey).isNotNull, upsertSequence)

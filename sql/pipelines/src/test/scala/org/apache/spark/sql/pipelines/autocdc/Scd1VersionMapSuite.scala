@@ -19,14 +19,13 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.sql.{functions => F, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
-import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 class Scd1VersionMapSuite extends QueryTest with SharedSparkSession {
 
-  private def encodedPath(parts: String*): String = QuotingUtils.quoteNameParts(parts)
+  private def encodedPath(parts: String*): String = Scd1VersionMap.serializeKey(parts)
 
   private def dataFrameOf(schema: StructType)(rows: Row*): DataFrame =
     spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
