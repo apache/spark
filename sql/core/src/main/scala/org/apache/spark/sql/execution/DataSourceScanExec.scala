@@ -304,8 +304,9 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
   // Filters on non-partition columns.
   def dataFilters: Seq[Expression]
   // Filters the storage layer evaluates to prune value-column IO based on key-column evaluation.
-  // These may reference subqueries (e.g. a runtime bloom filter built from a join build side) and
-  // are materialized at task launch time. Nil for a scan that does not support pushing them.
+  // These may reference subqueries (e.g. a runtime bloom filter built from a join build side),
+  // which are materialized on the driver while the RDD is built, before the reader is serialized.
+  // Nil for a scan that does not support pushing them.
   def storageFilters: Seq[Expression] = Nil
   // Disable bucketed scan based on physical query plan, see rule
   // [[DisableUnnecessaryBucketedScan]] for details.
@@ -757,7 +758,7 @@ object FileSourceScanLike {
  *                            [[DisableUnnecessaryBucketedScan]] for details.
  * @param storageFilters Filters evaluated by the storage layer (e.g. parquet reader) to drive
  *                       value-column IO pruning based on key-column evaluation. May contain
- *                       subqueries materialized at task launch.
+ *                       subqueries, which `preparedStorageFilters` materializes on the driver.
  */
 case class FileSourceScanExec(
     @transient override val relation: HadoopFsRelation,
@@ -840,9 +841,8 @@ case class FileSourceScanExec(
     if (storageFilters.isEmpty) {
       Nil
     } else {
-      // No conf check here: extraction has already removed these conjuncts from the post-scan
-      // Filter, so re-reading the conf would drop the filter for good if the user turned it off
-      // between planning and execution. The conf gates extraction at planning time only.
+      // No conf check here: the conf decides at planning time whether a scan is offered storage
+      // filters at all, and re-reading it now could only make this scan drop work it already has.
       //
       // `output` is `readDataColumns ++ generatedMetadataColumns ++ partitionColumns ++
       // constantMetadataColumns` and `requiredSchema` is the StructType of the first two groups, so

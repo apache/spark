@@ -222,7 +222,7 @@ class ParquetFileFormat
 
   /**
    * The implementation behind both public entry points above, which is why neither of them calls
-   * the other -- see the warning on `FileFormat.buildReaderWithStorageFilters`.
+   * the other. See the warning on `FileFormat.buildReaderWithStorageFilters`.
    */
   private def buildParquetReader(
       sparkSession: SparkSession,
@@ -274,22 +274,16 @@ class ParquetFileFormat
     val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
     val archiveFormatEnabled = parquetOptions.archiveFormatEnabled
 
-    // Extraction has already removed these conjuncts from the post-scan Filter, so nothing else in
-    // the plan would apply them: anything that stops the reader from honoring them fails loudly
-    // rather than dropping them. `enableVectorizedReader` is one such thing, and it is recomputed
-    // from the live session conf when the RDD is built, so a flip of
+    // Late materialization needs the vectorized reader. `enableVectorizedReader` is recomputed from
+    // the live session conf when the RDD is built, so a flip of
     // spark.sql.parquet.enableVectorizedReader (or the nested-column variant) after planning lands
-    // here.
+    // here, and the filters are simply not installed: the post-scan Filter still holds them.
     val storageFilterOpt: Option[ParquetStorageFilter] = if (storageFilters.isEmpty) {
       None
     } else if (!enableVectorizedReader) {
-      throw new UnsupportedFileReadException(
-        "Cannot honor storage filters " + storageFilters.mkString("[", ", ", "]") +
-          " because the " +
-          "vectorized Parquet reader is disabled for schema " + resultSchema.catalogString + ". " +
-          "The scan was planned with storage-filter pushdown, which requires the vectorized " +
-          "reader; a vectorized-reader conf was most likely changed after the query was planned. " +
-          s"Set ${SQLConf.PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key}=false and re-run the query.")
+      logInfo(log"Not honoring storage filters for schema " +
+        log"${MDC(SCHEMA, resultSchema.catalogString)}: the vectorized Parquet reader is disabled")
+      None
     } else {
       val metrics = StorageFilterMetrics(
         rowGroupsSkipped = storageFilterMetrics.getOrElse(
@@ -302,8 +296,8 @@ class ParquetFileFormat
           FileSourceScanLike.STORAGE_FILTER_BYTES_AVOIDED_BY_ROW_GROUP, null),
         bytesAvoidedByPageFiltering = storageFilterMetrics.getOrElse(
           FileSourceScanLike.STORAGE_FILTER_BYTES_AVOIDED_BY_PAGE_FILTERING, null))
-      // `create` requires every condition extractStorageFilters already pre-checked, so it throws
-      // rather than letting us drop the filter.
+      // `create` requires every condition extractStorageFilters already pre-checked, so a violation
+      // is a planner bug rather than something to work around here.
       Some(ParquetStorageFilter.create(storageFilters, requiredSchema, metrics,
         sqlConf.parquetStorageFilterPushdownMaxSplicedRowGroupBytes))
     }
