@@ -326,6 +326,37 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     )
   }
 
+  test("SPARK-59725: Garbage collect PodGroup after deleting completed driver",
+    k8sTestTag, volcanoTag) {
+    sparkAppConf
+      .set("spark.kubernetes.driver.pod.featureSteps", VOLCANO_FEATURE_STEP)
+      .set("spark.kubernetes.executor.pod.featureSteps", VOLCANO_FEATURE_STEP)
+    runSparkPiAndVerifyCompletion()
+
+    val client = kubernetesTestComponents.kubernetesClient
+    val namespace = kubernetesTestComponents.namespace
+    val driverPod = client.pods().inNamespace(namespace).withName(driverPodName)
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      assert(driverPod.get().getStatus.getPhase === "Succeeded")
+    }
+    val completedDriver = driverPod.get()
+    val podGroupName = completedDriver.getMetadata.getAnnotations
+      .get(VolcanoFeatureStep.POD_GROUP_ANNOTATION)
+    val podGroup = client.adapt(classOf[VolcanoClient])
+      .podGroups().inNamespace(namespace).withName(podGroupName)
+    val existingPodGroup = podGroup.get()
+    assert(existingPodGroup != null)
+    assert(existingPodGroup.getMetadata.getOwnerReferences.asScala.exists { owner =>
+      owner.getUid == completedDriver.getMetadata.getUid && owner.getKind == "Pod"
+    })
+
+    driverPod.delete()
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      assert(driverPod.get() == null)
+      assert(podGroup.get() == null)
+    }
+  }
+
   private def verifyJobsSucceededOneByOne(jobNum: Int, groupName: String): Unit = {
     // Check Pending jobs completed one by one
     (1 until jobNum).map { completedNum =>
