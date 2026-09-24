@@ -8182,8 +8182,10 @@ object SQLConf {
       .internal()
       .doc("When set to true, the output partitioning of UnionExec will be the same as the " +
         "input partitioning if its children have same partitioning. Otherwise, it will be a " +
-        "default partitioning. The value is read once per physical preparation, so the exchanges " +
-        "planned around a UnionExec and the decision it executes under agree.")
+        "default partitioning. The value is read once per physical preparation, and the decision " +
+        "taken with it, so the exchanges planned around a UnionExec and the decision it executes " +
+        "under agree. One decided to concatenate keeps reporting the default partitioning if its " +
+        "children come to share one afterwards.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)

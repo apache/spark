@@ -741,6 +741,70 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-59122: the barrier in AQE post stage creation stamps from the adaptive snapshot") {
+    // The cases above leave the conf where it is until their barriers have run, so one answering
+    // from a read of its own rather than the snapshot `AdaptiveSparkPlanExec` took at construction
+    // would pass them too. Here the two differ: the flip lands after the wrapper is built and
+    // before the stage carrying the injected union is created. This is where it can be seen, since
+    // the rules listed per stage are the ones built anew each time; the lists that run per
+    // re-planning round are built once, with the snapshot, so a barrier in them cannot take a
+    // later value to begin with.
+    withSession(create(_.injectColumnar(_ => WrapRootInUnionColumnarRule))) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, true)
+      val df = session.range(0, 20, 1, 2).selectExpr("id % 5 AS k", "id AS v")
+        .repartition(4, col("k")).selectExpr("k", "v + 1 AS w")
+      // Constructing the wrapper is what reads AQE's snapshot.
+      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, false)
+      // The stages, the columnar rules and the barrier behind them all run here.
+      assert(df.collect().map(_.getLong(1)).sorted.toSeq == (1L to 20L).toSeq,
+        "the injected union must not drop or duplicate rows")
+
+      val unions = collect(df.queryExecution.executedPlan) { case u: UnionExec => u }
+      assert(unions.size == 1, s"expected the one union the rule adds, got ${unions.size}")
+      assert(!unions.head.outputPartitioning.isInstanceOf[UnknownPartitioning],
+        "the barrier must stamp from the snapshot, not from the value the conf holds when it " +
+          s"runs, got ${unions.head.outputPartitioning}")
+    }
+  }
+
+  test("SPARK-59122: a late AQE barrier records the codegen confs the wrapper was built with") {
+    // The same divergence read through the codegen gate. A barrier taking the value the conf holds
+    // when it runs would record fusion as out, so nothing would fuse and the copy of the union
+    // inside the shell would carry no `numOutputRows`. Round-robin children, so the union has
+    // nothing to pass through and stays plain, which is what leaves its gate on these two confs.
+    withSession(create(_.injectColumnar(_ => RebuildRootUnionColumnarRule))) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      Seq(
+        "enablement" -> (SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false"),
+        "the child cap" -> (SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN.key -> "2")
+      ).foreach { case (what, (key, flipped)) =>
+        session.conf.set(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key, "true")
+        // Three children, so that a cap of two excludes this union; the cap cannot go below two.
+        session.conf.set(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN.key, "3")
+        val df = session.range(0, 20, 1, 2).repartition(2)
+          .union(session.range(20, 40, 1, 2).repartition(2))
+          .union(session.range(40, 60, 1, 2).repartition(2))
+        assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+
+        session.conf.set(key, flipped)
+        assert(df.collect().map(_.longValue()).sorted.toSeq == (0L until 60L).toSeq,
+          "the rebuilt union must not drop or duplicate rows")
+
+        val fused = collect(df.queryExecution.executedPlan) { case w: WholeStageCodegenExec => w }
+          .flatMap(_.collect { case u: UnionExec => u })
+        assert(fused.size == 1, s"the rebuilt union must fuse with $what flipped, got\n" +
+          df.queryExecution.executedPlan)
+        assert(fused.head.children.forall(_.isInstanceOf[InputAdapter]),
+          s"expected the copy inside the shell, got ${fused.head.children.map(_.getClass)}")
+        assert(fused.head.metrics("numOutputRows").value == 60,
+          s"the copy inside the shell must count the rows with $what flipped")
+      }
+    }
+  }
+
   test("custom aggregate hint") {
     // The custom hint allows us to replace the aggregate (without grouping keys) with just
     // Literal.
@@ -1526,6 +1590,24 @@ object WrapRootInUnion extends Rule[SparkPlan] {
 /** The columnar-rule wrapper for `WrapRootInUnion`. */
 object WrapRootInUnionColumnarRule extends ColumnarRule {
   override def postColumnarTransitions: Rule[SparkPlan] = WrapRootInUnion
+}
+
+/**
+ * Stands for an extension that returns a `UnionExec` of its own in place of one already in the
+ * plan: a fresh instance over the same children, so it carries no stamped decision, and the rows
+ * are the same ones. Replaces the root only, which is where `postStageCreationRules` hands it a
+ * union; a stage's own plan is rooted at the exchange, so those applications leave it alone.
+ */
+object RebuildRootUnion extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = plan match {
+    case u: UnionExec => UnionExec(u.children)
+    case other => other
+  }
+}
+
+/** The columnar-rule wrapper for `RebuildRootUnion`. */
+object RebuildRootUnionColumnarRule extends ColumnarRule {
+  override def postColumnarTransitions: Rule[SparkPlan] = RebuildRootUnion
 }
 
 /**
