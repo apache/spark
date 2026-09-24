@@ -2086,7 +2086,7 @@ Project [variablereference(system.session.var1='outer-value') AS outer-value#x]
 -- !query
 DECLARE OR REPLACE VARIABLE default STRING DEFAULT 'variable-value'
 -- !query analysis
-CreateVariable default(cast(variable-value as string), sql=''variable-value''), true, false
+CreateVariable default(cast(variable-value as string), sql=''variable-value''), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.default
 
 
@@ -2192,7 +2192,7 @@ SetVariable [variablereference(system.session.var1='hello')]
 -- !query
 DECLARE OR REPLACE VARIABLE default_int INT DEFAULT 7
 -- !query analysis
-CreateVariable default(cast(7 as int), sql='7'), true, false
+CreateVariable default(cast(7 as int), sql='7'), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.default_int
 
 
