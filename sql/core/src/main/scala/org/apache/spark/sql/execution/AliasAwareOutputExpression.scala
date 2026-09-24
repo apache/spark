@@ -99,16 +99,16 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
    * identity, adds a second entry to `references`, and makes
    * `KeyedPartitioning.supportsExpressions` reject the partitioning, silently losing SPJ. A
    * `Literal` has no children, so `projectExpression`'s `containsChild.nonEmpty` fallback does not
-   * re-offer the original either. See `TransformExpression.rewriteColumnSlots`, which
+   * re-offer the original either. See `TransformExpression#rewriteColumnSlots`, which
    * `KeyedShuffleSpec.createPartitioning` uses for the same reason.
    */
   private def projectPartitionExpression(expr: Expression): LazyList[Expression] = expr match {
     case te: TransformExpression =>
-      TransformExpression.columnSlots(te) match {
+      te.columnSlots match {
         // `KeyedPartitioning.supportsExpressions` admits exactly one column slot. Anything else
         // (no column, or a shape that bypassed the gate) is not projectable here.
         case Seq(col) =>
-          projectExpression(col).map(c => TransformExpression.rewriteColumnSlots(te)(_ => c))
+          projectExpression(col).map(c => te.rewriteColumnSlots(_ => c))
         case _ => LazyList.empty
       }
     case other => projectExpression(other)

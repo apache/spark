@@ -175,36 +175,8 @@ case class TransformExpression(
    * @param other the transform expression to compare to
    * @return true if compatible, false if not
    */
-  def isCompatible(other: TransformExpression): Boolean = {
-    if (isSameFunction(other)) {
-      true
-    } else {
-      (function, other.function) match {
-        case (f: ReducibleFunction[_, _], o: ReducibleFunction[_, _]) =>
-          val thisReducer = reducer(f, this, o, other)
-          val otherReducer = reducer(o, other, f, this)
-          thisReducer.isDefined || otherReducer.isDefined
-        case _ => false
-      }
-    }
-  }
-
-  /**
-   * Return a [[Reducer]] for this transform expression on another
-   * on the transform expression.
-   * <p>
-   * A [[Reducer]] exists for a transform expression function if it is
-   * 'reducible' on the other expression function.
-   * <p>
-   * @return reducer function or None if not reducible on the other transform expression
-   */
-  def reducers(other: TransformExpression): Option[Reducer[_, _]] = {
-    (function, other.function) match {
-      case (e1: ReducibleFunction[_, _], e2: ReducibleFunction[_, _]) =>
-        reducer(e1, this, e2, other)
-      case _ => None
-    }
-  }
+  def isCompatible(other: TransformExpression): Boolean =
+    isSameFunction(other) || reducers(other).isDefined || other.reducers(this).isDefined
 
   /**
    * Re-targets this partition transform expression at `attr`. A partition transform expression
@@ -215,6 +187,36 @@ case class TransformExpression(
    */
   def withReference(attr: Attribute): TransformExpression =
     transform { case _: AttributeReference => attr }.asInstanceOf[TransformExpression]
+
+  /**
+   * Rewrites this transform's column arguments with `rewriteColumn`, leaving its literal parameters
+   * untouched. Unlike [[withReference]], which swaps the attribute *inside* a column argument (so a
+   * `GetStructField` path above it is kept), this replaces the whole argument.
+   *
+   * Since literal parameters (the bucket count, the truncate width) live in `children` rather than
+   * in a field of their own, any path that rewrites a transform's children has to skip them. A
+   * parameter is not an aliasable value: substituting it changes what the transform computes, drops
+   * it out of `functionId`, adds a second entry to `references` (tripping
+   * `KeyedShuffleSpec.keyPositions`' single-reference assert), and makes
+   * `KeyedPartitioning.supportsExpressions` reject the partitioning outright -- so SPJ is silently
+   * lost. Every such path should go through here rather than reimplement the skip.
+   *
+   * Callers: `KeyedShuffleSpec.createPartitioning`, which retargets a transform at the other side's
+   * clustering key, and `PartitioningPreservingUnaryExecNode`, which retargets it at an aliased
+   * output attribute.
+   */
+  def rewriteColumnSlots(rewriteColumn: Expression => Expression): TransformExpression =
+    copy(children = children.map {
+      case l: Literal => l
+      case c => rewriteColumn(c)
+    })
+
+  /**
+   * This transform's column arguments -- its children that are not literal parameters. For a
+   * partitioning expression admitted by `KeyedPartitioning.supportsExpressions` this holds exactly
+   * one element.
+   */
+  def columnSlots: Seq[Expression] = children.filterNot(_.isInstanceOf[Literal])
 
   /**
    * Extract all literal parameters of this transform as V2 [[V2Literal]]s, preserving each value's
@@ -313,24 +315,30 @@ case class TransformExpression(
     })
 
   /**
-   * Return a Reducer for a reducible function on another reducible function
+   * Return a [[Reducer]] that maps this transform's partition keys onto `other`'s, or None if there
+   * is none: when either function is not a [[ReducibleFunction]], when the argument layouts or
+   * literal parameters rule a reducer out, or when the connector reports it is not reducible.
    * Handles both parameterized (bucket, truncate) and non-parameterized (days, hours) functions.
    */
-  private def reducer(
-      thisFunction: ReducibleFunction[_, _],
-      thisExpr: TransformExpression,
-      otherFunction: ReducibleFunction[_, _],
-      otherExpr: TransformExpression): Option[Reducer[_, _]] = {
+  def reducers(other: TransformExpression): Option[Reducer[_, _]] = {
     import TransformExpression._
-    if (!thisExpr.sameArgumentLayout(otherExpr) ||
-        !thisExpr.literalParamsMatchInputTypes || !otherExpr.literalParamsMatchInputTypes ||
-        !thisExpr.noComplexLiteralParams || !otherExpr.noComplexLiteralParams) {
+    val thisFunction: ReducibleFunction[_, _] = function match {
+      case f: ReducibleFunction[_, _] => f
+      case _ => return None
+    }
+    val otherFunction: ReducibleFunction[_, _] = other.function match {
+      case o: ReducibleFunction[_, _] => o
+      case _ => return None
+    }
+    if (!sameArgumentLayout(other) ||
+        !literalParamsMatchInputTypes || !other.literalParamsMatchInputTypes ||
+        !noComplexLiteralParams || !other.noComplexLiteralParams) {
       return None
     }
 
-    val thisParams = thisExpr.extractParameters
-    val otherParams = otherExpr.extractParameters
-    val thisName = thisExpr.function.canonicalName()
+    val thisParams = extractParameters
+    val otherParams = other.extractParameters
+    val thisName = function.canonicalName()
 
     // A single non-null IntegerType param on each side is the shape the deprecated
     // reducer(int, ..., int) fallback accepts. Gate on the DataType, not the boxed runtime class
@@ -451,35 +459,6 @@ case class TransformExpression(
 }
 
 object TransformExpression {
-  /**
-   * Rewrites `te`'s column slots with `rewriteColumn`, leaving its literal parameters untouched.
-   *
-   * Since literal parameters (the bucket count, the truncate width) live in `children` rather than
-   * in a field of their own, any path that rewrites a transform's children has to skip them. A
-   * parameter is not an aliasable value: substituting it changes what the transform computes, drops
-   * it out of `functionId`, adds a second entry to `references` (tripping
-   * `KeyedShuffleSpec.keyPositions`' single-reference assert), and makes
-   * `KeyedPartitioning.supportsExpressions` reject the partitioning outright -- so SPJ is silently
-   * lost. Every such path should go through here rather than reimplement the skip.
-   *
-   * Callers: `KeyedShuffleSpec.createPartitioning`, which retargets a transform at the other side's
-   * clustering key, and `PartitioningPreservingUnaryExecNode`, which retargets it at an aliased
-   * output attribute.
-   */
-  def rewriteColumnSlots(te: TransformExpression)(
-      rewriteColumn: Expression => Expression): TransformExpression =
-    te.copy(children = te.children.map {
-      case l: Literal => l
-      case c => rewriteColumn(c)
-    })
-
-  /**
-   * The column slots of `te` -- its children that are not literal parameters. For a partitioning
-   * expression admitted by `KeyedPartitioning.supportsExpressions` this holds exactly one element.
-   */
-  def columnSlots(te: TransformExpression): Seq[Expression] =
-    te.children.filterNot(_.isInstanceOf[Literal])
-
   /**
    * Whether `e` is a bare column reference: an [[Attribute]] or a [[GetStructField]] chain
    * (struct-field access on a column). Shared by [[TransformExpression.isSameFunction]] and by
