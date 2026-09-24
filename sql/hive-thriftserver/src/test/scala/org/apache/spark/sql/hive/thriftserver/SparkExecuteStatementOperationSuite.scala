@@ -145,10 +145,11 @@ class SparkExecuteStatementOperationSuite extends SharedSparkSession {
     // init() boots Hive's service graph; operation logging attaches an appender to the root
     // logger that nothing ever removes, so keep it off rather than leak it into this JVM.
     hiveConf.setBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED, false)
+    // Attach to the root logger, not the HiveThriftServer2 logger by name: withLogAppender on
+    // a named logger leaves behind a non-additive LoggerConfig (log4j2 copies root's additivity)
+    // that swallows that logger's output for every later suite in this JVM.
     val appender = new LogAppender("doAs impersonation warning")
-    withLogAppender(appender,
-        loggerNames = Seq(HiveThriftServer2.getClass.getName.stripSuffix("$")),
-        level = Some(Level.WARN)) {
+    withLogAppender(appender, level = Some(Level.WARN)) {
       new HiveThriftServer2(spark).init(hiveConf)
     }
     val warnings = appender.loggingEvents.map(_.getMessage.getFormattedMessage)

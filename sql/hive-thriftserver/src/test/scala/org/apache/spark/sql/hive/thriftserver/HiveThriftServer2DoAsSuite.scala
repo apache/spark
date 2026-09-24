@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.thriftserver
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.auth.HiveAuthFactory.AuthTypes
-import org.apache.logging.log4j.Level
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.internal.StaticSQLConf
@@ -39,20 +38,13 @@ class HiveThriftServer2DoAsSuite extends SparkFunSuite {
     conf
   }
 
-  /** Warnings naming the doAs conf, emitted while checking `conf`. */
+  /**
+   * The warning text (if any) that checking `conf` would log. These tests assert on the
+   * returned entry rather than captured log output, which is hostage to JVM-global logging
+   * state when the whole module shares one forked JVM (SERIAL_SBT_TESTS=1 in CI).
+   */
   private def doAsWarnings(conf: HiveConf, allowIneffectiveDoAs: Boolean = false): Seq[String] = {
-    val appender = new LogAppender("doAs impersonation warning")
-    val canary = "doAs-appender-canary"
-    withLogAppender(appender, level = Some(Level.WARN)) {
-      HiveThriftServer2.warnIfIneffectiveDoAs(conf, allowIneffectiveDoAs)
-      logWarning(canary)
-    }
-    val messages = appender.loggingEvents
-      .filter(_.getLevel == Level.WARN)
-      .map(_.getMessage.getFormattedMessage)
-    // Without this, a broken appender would make every "does not warn" case pass vacuously.
-    assert(messages.exists(_.contains(canary)), "log appender captured nothing")
-    messages.filter(_.contains(ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname)).toSeq
+    HiveThriftServer2.ineffectiveDoAsWarning(conf, allowIneffectiveDoAs).map(_.message).toSeq
   }
 
   // The auth types that establish a user identity worth impersonating.

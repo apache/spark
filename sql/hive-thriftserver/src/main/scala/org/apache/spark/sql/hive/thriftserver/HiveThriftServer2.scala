@@ -29,6 +29,7 @@ import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.internal.LogEntry
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2}
 import org.apache.spark.internal.config.UI.UI_ENABLED
@@ -115,9 +116,9 @@ object HiveThriftServer2 extends Logging {
   // and Hive's out-of-the-box config (auth NONE, doAs true) must stay quiet. Unrecognized auth
   // types are left alone too: HiveAuthFactory rejects them with its own "Unsupported
   // authentication type" error, which points at the actual problem.
-  private[thriftserver] def warnIfIneffectiveDoAs(
+  private[thriftserver] def ineffectiveDoAsWarning(
       hiveConf: HiveConf,
-      allowIneffectiveDoAs: Boolean): Unit = {
+      allowIneffectiveDoAs: Boolean): Option[LogEntry] = {
     val authType = hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
     val verifyingAuthTypes =
       AuthTypes.values().filterNot(Set(AuthTypes.NONE, AuthTypes.NOSASL)).map(_.getAuthName)
@@ -125,7 +126,7 @@ object HiveThriftServer2 extends Logging {
     val authVerifiesUser = verifyingAuthTypes.exists(_.equalsIgnoreCase(authType))
     if (authVerifiesUser && hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
         !allowIneffectiveDoAs) {
-      logWarning(log"${MDC(CONFIG, ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname)} is set to true, " +
+      Some(log"${MDC(CONFIG, ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname)} is set to true, " +
         log"but the Spark Thrift Server impersonates the connecting user only on the driver, " +
         log"for Hive metastore calls and driver-side file system access: executor-side data " +
         log"access still runs as the server's own service identity, so storage permissions " +
@@ -138,7 +139,15 @@ object HiveThriftServer2 extends Logging {
         log"${MDC(CONFIG2, StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key)} to " +
         log"true; it is a static conf, so it must be set before the SparkSession is created. " +
         log"Spark 5.0 is expected to refuse to start on this configuration unless it is set.")
+    } else {
+      None
     }
+  }
+
+  private[thriftserver] def warnIfIneffectiveDoAs(
+      hiveConf: HiveConf,
+      allowIneffectiveDoAs: Boolean): Unit = {
+    ineffectiveDoAsWarning(hiveConf, allowIneffectiveDoAs).foreach(logWarning(_))
   }
 
   def main(args: Array[String]): Unit = {
