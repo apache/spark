@@ -828,9 +828,9 @@ SELECT 'Foo.a: ' || a ||  ' Foo.a: ' || foo7a.a
        || ' T.c: ' || c || ' T.c: ' || t.c FROM VALUES('t.b', 't.c') AS T(b, c)
 -- !query analysis
 CreateSQLFunctionCommand a STRING, b STRING, c STRING, STRING, SELECT 'Foo.a: ' || a ||  ' Foo.a: ' || foo7a.a
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo7a
        || ' T.b: ' ||  b || ' Foo.b: ' || foo7a.b
        || ' T.c: ' || c || ' T.c: ' || t.c FROM VALUES('t.b', 't.c') AS T(b, c), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo7a
 
 
 -- !query
@@ -851,9 +851,9 @@ SELECT CONCAT('Foo.a: ', a), CONCAT('Foo.b: ', foo7at.b), CONCAT('T.b: ', b),
 FROM VALUES ('t.b', 't.c') AS T(b, c)
 -- !query analysis
 CreateSQLFunctionCommand a STRING, b STRING, c STRING, a STRING, b STRING, c STRING, d STRING, e STRING, SELECT CONCAT('Foo.a: ', a), CONCAT('Foo.b: ', foo7at.b), CONCAT('T.b: ', b),
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo7at
        CONCAT('Foo.c: ', foo7at.c), CONCAT('T.c: ', c)
 FROM VALUES ('t.b', 't.c') AS T(b, c), true, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo7at
 
 
 -- !query
@@ -1836,9 +1836,9 @@ UNION ALL
 SELECT a + 1 FROM (VALUES 1) AS V(c1)
 -- !query analysis
 CreateSQLFunctionCommand a INT, INT, SELECT a FROM (VALUES 1) AS V(c1) WHERE c1 = 2
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_2e
 UNION ALL
 SELECT a + 1 FROM (VALUES 1) AS V(c1), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_2e
 
 
 -- !query
@@ -1848,9 +1848,9 @@ EXCEPT
 SELECT a + 1 FROM (VALUES 1) AS V(a)
 -- !query analysis
 CreateSQLFunctionCommand a INT, INT, SELECT a FROM (VALUES 1) AS V(c1)
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_2f
 EXCEPT
 SELECT a + 1 FROM (VALUES 1) AS V(a), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_2f
 
 
 -- !query
@@ -1860,9 +1860,9 @@ INTERSECT
 SELECT a FROM (VALUES 1) AS V(a)
 -- !query analysis
 CreateSQLFunctionCommand a INT, INT, SELECT a FROM (VALUES 1) AS V(c1)
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_2g
 INTERSECT
 SELECT a FROM (VALUES 1) AS V(a), false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo2_2g
 
 
 -- !query
@@ -3562,7 +3562,6 @@ SELECT CASE WHEN occurrences IS NULL OR size(occurrences) = 0
 FROM t
 -- !query analysis
 CreateSQLFunctionCommand occurrences ARRAY<STRUCT<start_time: TIMESTAMP, occurrence_id: STRING>>,
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_2e1
     instance_start_time TIMESTAMP, STRING, WITH t AS (
     SELECT transform(occurrences, x -> named_struct(
         'diff', abs(unix_millis(x.start_time) - unix_millis(instance_start_time)),
@@ -3573,6 +3572,7 @@ SELECT CASE WHEN occurrences IS NULL OR size(occurrences) = 0
        THEN NULL
        ELSE sort_array(diffs)[0].id END AS id
 FROM t, false, false, false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.foo3_2e1
 
 
 -- !query
