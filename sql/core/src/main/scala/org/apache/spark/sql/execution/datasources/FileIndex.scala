@@ -150,6 +150,12 @@ trait FileIndex {
   def partitionSchema: StructType
 
   /**
+   * Returns whether this index reads an immutable time-travel snapshot. Table writes do not need
+   * to invalidate cached snapshots whose contents cannot change.
+   */
+  def isTimeTravel: Boolean = false
+
+  /**
    * Returns an optional metadata operation time, in nanoseconds, for listing files.
    *
    * We do file listing in query optimization (in order to get the proper statistics) and we want
