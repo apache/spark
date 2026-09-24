@@ -35,6 +35,12 @@ import org.apache.spark.sql.internal.SQLConf
  * how large the generated (and compiled) code is. It is the standard instrument for changes that
  * aim to reduce generated Java size (see the umbrella SPARK-56908).
  *
+ * The tables are empty, and a broadcast join generates its code from the value of its broadcast:
+ * over an empty one it generates a stub instead of the join and the rest of its subtree. So each
+ * subtree's code is generated from a copy in which every broadcast reads one row of default
+ * values (`BenchmarkQueryTest.withRowBroadcasts`). A single row makes the join keys unique, so a
+ * hash join is measured in its unique-key form; the loop over repeated keys is not measured.
+ *
  * The reported grand totals (lower is better, except the query/stage counts) are:
  *   - source code size: characters of generated Java summed over all stages;
  *   - max method bytecode (sum): the per-stage largest compiled method size, summed over stages --
@@ -126,27 +132,25 @@ object WholeStageCodegenSizeBenchmark extends SqlBasedBenchmark with Logging {
   private def measureQuery(queryLocation: String, name: String, totals: Totals): Unit = {
     val queryString = resourceToString(s"$queryLocation/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
-    val stages = try {
-      val plan = spark.sql(queryString).queryExecution.executedPlan
-      // Every WholeStageCodegenExec subtree (recursing subqueries), with the code it generates
-      // for data: the tables are empty, and over an empty broadcast a join generates a stub
-      // instead of its code and the rest of its subtree's. Compiled for the ByteCodeStats.
-      BenchmarkQueryTest.generatedCode(plan).map { case (_, code) =>
-        val stats = try CodeGenerator.compile(code)._2 catch {
-          case NonFatal(_) => ByteCodeStats.UNAVAILABLE
-        }
-        (CodeFormatter.format(code), stats)
-      }
+    val plan = try {
+      spark.sql(queryString).queryExecution.executedPlan
     } catch {
       case NonFatal(e) =>
         logWarning(s"Skipping query $name: failed to plan (${e.getMessage})")
         return
     }
-    val stubbed = stages.count { case (source, _) =>
-      BenchmarkQueryTest.joinsEmptyBuildSide(source)
+    // Every WholeStageCodegenExec subtree (recursing subqueries), with the code it generates for
+    // data: the tables are empty, and over an empty broadcast a join generates a stub instead of
+    // its code and the rest of its subtree's. Compiled for the ByteCodeStats; a subtree that fails
+    // to compile is counted as a fallback.
+    val stages = BenchmarkQueryTest.generatedCode(plan).map { case (_, code) =>
+      val stats = try CodeGenerator.compile(code)._2 catch {
+        case NonFatal(_) => ByteCodeStats.UNAVAILABLE
+      }
+      (CodeFormatter.format(code), stats)
     }
-    require(stubbed == 0, s"$stubbed whole-stage-codegen subtrees of query $name join an empty " +
-      "broadcast, so their code is not the code they generate for data")
+    require(stages.nonEmpty, s"query $name has no whole-stage-codegen subtree to measure; " +
+      "the plan must be fully materialized at planning time, with adaptive execution disabled")
     totals.queries += 1
     stages.foreach { case (source, stats) =>
       totals.stages += 1
