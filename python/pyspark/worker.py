@@ -4425,6 +4425,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             )
             deserializer = serializer
 
+        split_index = init_info.split_index
+        del init_info, init_message
+
         init_time = time.time()
 
         # Processing
@@ -4434,7 +4437,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
 
         def process():
             iterator = deserializer.load_stream(input_data_stream)
-            out_iter = func(init_info.split_index, iterator)
+            out_iter = func(split_index, iterator)
             try:
                 serializer.dump_stream(out_iter, outfile)
             finally:
@@ -4502,7 +4505,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                         return
                     yield item
 
-            out_iter = func(init_info.split_index, _queued_iter())
+            out_iter = func(split_index, _queued_iter())
             try:
                 serializer.dump_stream(out_iter, outfile)
             finally:
