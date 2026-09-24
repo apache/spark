@@ -234,9 +234,8 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     val emptyStruct = StructType(Nil)
     assert(MatchConditionTypes.isValidOperandType(emptyStruct))
     assert(MatchConditionTypes.areOperandsCompatible(emptyStruct, emptyStruct))
-    // No fields to split into, so the struct is compared and sorted as one value.
+    // Splitting into zero fields would compare two empty literals, so a NULL operand would match.
     assert(!MatchConditionTypes.usesStructDecomposition(emptyStruct, emptyStruct))
-    assert(!MatchConditionTypes.usesIdenticalStructSort(emptyStruct, emptyStruct))
   }
 
   test("nested empty struct operands are valid") {
@@ -254,6 +253,10 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     val nestedEmpty = StructType(StructField("x", emptyStruct) :: Nil)
     val nestedNonEmpty = StructType(StructField("x", nonEmptyStruct) :: Nil)
     assert(!MatchConditionTypes.areOperandsCompatible(nestedEmpty, nestedNonEmpty))
+    val emptyArray = ArrayType(emptyStruct)
+    val nonEmptyArray = ArrayType(nonEmptyStruct)
+    assert(!MatchConditionTypes.areOperandsCompatible(emptyArray, nonEmptyArray))
+    assert(!MatchConditionTypes.usesArrayOrderExpression(emptyArray, nonEmptyArray))
   }
 
   test("identical struct schemas enable whole-struct sort") {

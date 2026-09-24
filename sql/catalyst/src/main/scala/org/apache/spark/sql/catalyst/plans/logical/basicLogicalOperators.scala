@@ -3050,7 +3050,8 @@ object AsOfJoin {
     val leftArray = castArrayElementType(leftOperand, elementType)
     val rightArray = castArrayElementType(rightOperand, elementType)
     elementType match {
-      case struct: StructType =>
+      // An empty struct has no fields to split into, so it takes the whole-value arm below.
+      case struct: StructType if struct.nonEmpty =>
         val leftElement = NamedLambdaVariable("left_elem", struct, nullable = true)
         val rightElement = NamedLambdaVariable("right_elem", struct, nullable = true)
         val leafDiffs = collectStructLeafPairs(leftElement, rightElement, struct).map {

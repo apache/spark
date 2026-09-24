@@ -208,6 +208,17 @@ struct<matched:bigint>
 
 
 -- !query
+SELECT t.id, r.tag AS matched
+FROM VALUES (1, named_struct()) AS t(id, k) ASOF JOIN
+     VALUES (named_struct(), 'hit') AS r(k, tag)
+  MATCH_CONDITION (t.k >= r.k)
+-- !query schema
+struct<id:int,matched:string>
+-- !query output
+1	hit
+
+
+-- !query
 SELECT t.k, r.k AS matched_k
 FROM VALUES (CAST(10 AS TINYINT)) AS t(k) ASOF JOIN VALUES (CAST(5 AS BIGINT)) AS r(k)
   MATCH_CONDITION (t.k >= r.k)
@@ -361,3 +372,15 @@ FROM VALUES (1, 2) AS t(c1, c2) ASOF JOIN VALUES (1, 1) AS r(c1, c2)
 struct<c1:int,c2:int>
 -- !query output
 1	1
+
+
+-- !query
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a >= r.a)
+-- !query schema
+struct<matched_size:int>
+-- !query output
+1

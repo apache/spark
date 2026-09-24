@@ -453,13 +453,32 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
+  test("NULL empty STRUCT operand never matches") {
+    // A NULL operand fails every comparison, though any two non-NULL empty structs are equal.
+    for {
+      (leftValue, rightValue) <- Seq(
+        "CAST(NULL AS STRUCT<>)" -> "named_struct()",
+        "named_struct()" -> "CAST(NULL AS STRUCT<>)")
+      op <- Seq(">=", ">", "<=", "<")
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES ($leftValue) AS t(s)
+             |LEFT ASOF JOIN VALUES ($rightValue, 'hit') AS r(s, tag)
+             |  MATCH_CONDITION (t.s $op r.s)
+             |""".stripMargin),
+        Row(null) :: Nil)
+    }
+  }
+
   test("STRUCT with an empty STRUCT field MATCH_CONDITION") {
-    // The empty field always ties, so field 'seq' alone picks the match.
-    Seq(
-      "t.k >= r.k" -> 4,
-      "t.k <= r.k" -> 7,
-      "(t.k.e, t.k.seq) >= (r.k.e, r.k.seq)" -> 4,
-      "(t.k.e, t.k.seq) <= (r.k.e, r.k.seq)" -> 7).foreach { case (matchCondition, seq) =>
+    // The empty field always ties, so field 'seq' alone picks the nearest match to 5.
+    for {
+      (left, right) <- Seq("t.k" -> "r.k", "(t.k.e, t.k.seq)" -> "(r.k.e, r.k.seq)")
+      (op, seq) <- Seq(">=" -> 5, ">" -> 4, "<=" -> 5, "<" -> 6)
+    } {
       checkSortMergeAsOf(
         sql(
           s"""
@@ -468,8 +487,10 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
              |ASOF JOIN VALUES
              |  (named_struct('e', named_struct(), 'seq', 3)),
              |  (named_struct('e', named_struct(), 'seq', 4)),
+             |  (named_struct('e', named_struct(), 'seq', 5)),
+             |  (named_struct('e', named_struct(), 'seq', 6)),
              |  (named_struct('e', named_struct(), 'seq', 7)) AS r(k)
-             |  MATCH_CONDITION ($matchCondition)
+             |  MATCH_CONDITION ($left $op $right)
              |""".stripMargin),
         Row(seq) :: Nil)
     }
