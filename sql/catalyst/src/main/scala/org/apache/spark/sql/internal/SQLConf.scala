@@ -7458,7 +7458,8 @@ object SQLConf {
         "admits the right side, the optimization takes precedence over join hints. The same " +
         "eligibility decision controls aggregate pushdown, which runs before adaptive execution " +
         "and uses estimated statistics; join selection may reevaluate it with runtime " +
-        s"statistics. Thus, zero alone does not disable the optimization. Set " +
+        "statistics. A lower adaptive threshold can leave a pushed-down join using a " +
+        s"nested-loop plan. Thus, zero alone does not disable the optimization. Set " +
         s"${OPTIMIZE_NULL_AWARE_ANTI_JOIN.key} to false to disable it without changing automatic " +
         "broadcast thresholds.")
       .version("4.2.1")

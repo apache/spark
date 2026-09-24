@@ -440,7 +440,9 @@ trait JoinSelectionHelper extends Logging {
     // `JoinSelection` always builds from the right for this shape. The applicable automatic
     // broadcast threshold floors a nonnegative dedicated threshold. As before, threshold
     // eligibility takes precedence over join hints. This same decision intentionally controls
-    // aggregate pushdown.
+    // aggregate pushdown. If neither threshold admits the hash join, regular planning may still
+    // broadcast the right side for a nested-loop join. The thresholds limit hash relation
+    // construction, not all broadcasts.
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) =>
       val dedicatedThreshold = conf.nullAwareAntiJoinBroadcastThreshold
       val canBroadcast = dedicatedThreshold < 0 ||
