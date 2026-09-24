@@ -1319,7 +1319,7 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
           .createOrReplaceTempView("naajHintedRight")
 
         val querySuffix =
-          "naajHintedLeft.* from naajHintedLeft left anti join naajHintedRight on " +
+          "* from naajHintedLeft left anti join naajHintedRight on " +
             "naajHintedLeft.key = naajHintedRight.key or " +
             "isnull(naajHintedLeft.key = naajHintedRight.key)"
         val leftHintedQuery = "select /*+ BROADCAST(naajHintedLeft) */ " + querySuffix
