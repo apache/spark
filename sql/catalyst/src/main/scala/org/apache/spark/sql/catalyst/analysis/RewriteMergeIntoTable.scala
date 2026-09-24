@@ -174,14 +174,19 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       readRelation, joinPlan, matchedActions, notMatchedActions,
       notMatchedBySourceActions, metadataAttrs, checkCardinality)
 
-    // predicates of the ON condition can be used to filter the target table only together with
-    // predicates of all NOT MATCHED BY SOURCE clauses, target rows that satisfy none of them
-    // match no action and are simply carried over, so such rows don't have to be read
+    // without NOT MATCHED BY SOURCE clauses, target rows that don't satisfy the ON condition
+    // match no action and are simply carried over, so the ON condition can filter the target
+    // with such clauses, the ON condition can only be used together with the predicates of all
+    // of them, and only the part of it that references the target alone can take part, as a
+    // disjunction that references the source is not a valid filter for the target table
     // an unconditional NOT MATCHED BY SOURCE clause matches any target row and disables this
-    val pushableCond = if (notMatchedBySourceActions.exists(_.condition.isEmpty)) {
+    val pushableCond = if (notMatchedBySourceActions.isEmpty) {
+      cond
+    } else if (notMatchedBySourceActions.exists(_.condition.isEmpty)) {
       TrueLiteral
     } else {
-      (cond +: notMatchedBySourceActions.flatMap(_.condition)).reduce(Or)
+      val (targetCond, _) = splitTargetPredicates(readRelation, cond)
+      (targetCond +: notMatchedBySourceActions.flatMap(_.condition)).reduce(Or)
     }
 
     // predicates of the ON condition can be used to filter the target table at runtime
@@ -395,13 +400,23 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       targetTable: LogicalPlan,
       cond: Expression): (LogicalPlan, Expression) = {
 
+    val (targetCond, joinCond) = splitTargetPredicates(targetTable, cond)
+    (Filter(targetCond, targetTable), joinCond)
+  }
+
+  // splits the given condition into a part that can be evaluated against the target table alone
+  // and a part that requires the source as well, each returned as a conjunction
+  private def splitTargetPredicates(
+      targetTable: LogicalPlan,
+      cond: Expression): (Expression, Expression) = {
+
     val predicates = splitConjunctivePredicates(cond)
     val (targetPredicates, joinPredicates) = predicates.partition { predicate =>
       predicate.references.subsetOf(targetTable.outputSet)
     }
     val targetCond = targetPredicates.reduceOption(And).getOrElse(TrueLiteral)
     val joinCond = joinPredicates.reduceOption(And).getOrElse(TrueLiteral)
-    (Filter(targetCond, targetTable), joinCond)
+    (targetCond, joinCond)
   }
 
   private def join(
