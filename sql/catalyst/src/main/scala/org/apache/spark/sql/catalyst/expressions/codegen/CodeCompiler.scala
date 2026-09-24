@@ -337,11 +337,19 @@ object CodeCompiler extends Logging {
           method.getAttributes.collect { case attr: CodeAttribute =>
             val byteCodeSize = attr.code.length
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
-            if (byteCodeSize > CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT) {
-              logInfo(log"Generated method too long to be JIT compiled: " +
+            val jitLimit = CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT
+            if (byteCodeSize > jitLimit) {
+              // A warning, not an info: HotSpot does not JIT-compile a method past this size
+              // (-XX:+DontCompileHugeMethods, on by default), so it runs in the interpreter,
+              // typically several times slower, and nothing else reports it.
+              logWarning(log"Generated method too long to be JIT compiled: " +
                 log"${MDC(LogKeys.CLASS_NAME, cf.getThisClassName)}." +
                 log"${MDC(LogKeys.METHOD_NAME, method.getName)} is " +
-                log"${MDC(LogKeys.BYTECODE_SIZE, byteCodeSize)} bytes")
+                log"${MDC(LogKeys.BYTECODE_SIZE, byteCodeSize)} bytes, past the JVM's limit of " +
+                log"${MDC(LogKeys.HUGE_METHOD_LIMIT, jitLimit)} " +
+                log"bytes, so it runs interpreted. In whole-stage codegen, setting " +
+                log"${MDC(LogKeys.CONFIG, SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key)} to that " +
+                log"value runs such a stage without whole-stage codegen instead.")
             }
             byteCodeSize
           }

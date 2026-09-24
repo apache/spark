@@ -573,8 +573,12 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       val actual = proj(null)
       assert(actual.getInt(0) == x)
     }
-    assert(appender.loggingEvents
-      .exists(_.getMessage().getFormattedMessage.contains("Generated method too long")))
+    // A warning, so it is seen at the shells' default level, and it names the remedy.
+    assert(appender.loggingEvents.exists { event =>
+      val message = event.getMessage().getFormattedMessage
+      event.getLevel == Level.WARN && message.contains("Generated method too long") &&
+        message.contains(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key)
+    })
   }
 
   test("SPARK-51527: spark.sql.codegen.logLevel") {
