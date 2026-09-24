@@ -2533,7 +2533,10 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def withJoinRelation(ctx: JoinRelationContext, base: LogicalPlan): LogicalPlan = {
     withOrigin(ctx) {
-      val baseJoinType = ctx.joinType match {
+      val naturalJoinType = Option(ctx.naturalJoinType)
+      val joinTypeCtx =
+        Option(ctx.joinType).orElse(naturalJoinType.flatMap(n => Option(n.joinType)))
+      val baseJoinType = joinTypeCtx.orNull match {
         case null => Inner
         case jt if jt.CROSS != null => Cross
         case jt if jt.FULL != null => FullOuter
@@ -2559,8 +2562,19 @@ class AstBuilder extends DataTypeAstBuilder
       val joinCriteriaCtx = joinPostfix.flatMap(p => Option(p.joinCriteria))
       val nearestByClauseCtx = joinPostfix.flatMap(p => Option(p.nearestByClause))
 
-      if (ctx.asofJoinCriteria != null) {
-        withAsOfJoin(ctx, base, baseJoinType, ctx.asofJoinCriteria)
+      // ASOF is written alone, as the last word of the join type, or after NATURAL.
+      val asof = Option(ctx.ASOF)
+        .orElse(joinTypeCtx.flatMap(jt => Option(jt.ASOF)))
+        .orElse(naturalJoinType.flatMap(n => Option(n.ASOF)))
+
+      if (asof.isDefined) {
+        withAsOfJoin(ctx, base, baseJoinType, asof.get)
+      } else if (ctx.asofJoinCriteria != null) {
+        val matchCondition = ctx.asofJoinCriteria.MATCH_CONDITION.getText
+        throw new ParseException(
+          errorClass = "PARSE_SYNTAX_ERROR",
+          messageParameters = Map("error" -> s"'$matchCondition'", "hint" -> ""),
+          ctx = ctx.asofJoinCriteria)
       } else if (nearestByClauseCtx.isDefined) {
         withNearestByJoin(ctx, base, baseJoinType, nearestByClauseCtx.get)
       } else {
@@ -2683,14 +2697,16 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Build an [[AsOfJoin]] from the parsed `ASOF JOIN ... MATCH_CONDITION` clause.
    *
-   * Only `INNER` and `LEFT OUTER` are valid. The grammar accepts any join type and a leading
-   * `NATURAL` so a wrong one raises `INCOMPATIBLE_JOIN_TYPES` here, not a generic syntax error.
+   * Only `INNER` and `LEFT OUTER` are valid. The grammar accepts any join type, `NATURAL` and
+   * `LATERAL` so a wrong one raises `INCOMPATIBLE_JOIN_TYPES` here, not a generic syntax error.
+   * It also accepts ASOF without `MATCH_CONDITION` (to keep the missing `JOIN` hint for ordinary
+   * joins), so that form raises the syntax error here.
    */
   private def withAsOfJoin(
       ctx: JoinRelationContext,
       base: LogicalPlan,
       baseJoinType: JoinType,
-      criteria: AsofJoinCriteriaContext): AsOfJoin = {
+      asof: TerminalNode): AsOfJoin = {
     if (!conf.sqlAsOfJoinEnabled) {
       throw QueryParsingErrors.sqlAsOfJoinDisabled(SQLConf.SQL_ASOF_JOIN_ENABLED.key, ctx)
     }
@@ -2698,9 +2714,20 @@ class AstBuilder extends DataTypeAstBuilder
       throw QueryParsingErrors.incompatibleJoinTypesError(
         joinType1 = "ASOF", joinType2 = ctx.NATURAL.toString, ctx = ctx)
     }
+    if (ctx.LATERAL != null) {
+      throw QueryParsingErrors.incompatibleJoinTypesError(
+        joinType1 = "ASOF", joinType2 = ctx.LATERAL.toString, ctx = ctx)
+    }
     if (!Seq(Inner, LeftOuter).contains(baseJoinType)) {
       throw QueryParsingErrors.incompatibleJoinTypesError(
         joinType1 = "ASOF", joinType2 = baseJoinType.sql, ctx = ctx)
+    }
+    val criteria = Option(ctx.asofJoinCriteria).getOrElse {
+      throw new ParseException(
+        errorClass = "PARSE_SYNTAX_ERROR",
+        messageParameters = Map(
+          "error" -> s"'${asof.getText}'", "hint" -> ": missing 'MATCH_CONDITION'"),
+        ctx = ctx)
     }
     val (leftExpr, operator, rightExpr) =
       asOfMatchConditionFromExpression(expression(criteria.matchExpr), criteria.matchExpr)

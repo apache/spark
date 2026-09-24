@@ -1119,10 +1119,19 @@ relationExtension
     | binByClause
     ;
 
+// ASOF is an optional last word of joinType, not a separate alternative, so a join type followed
+// by a missing JOIN still gets the "missing 'JOIN'" hint. AstBuilder rejects the invalid forms
+// this accepts (for example ASOF without MATCH_CONDITION). The bare ASOF form requires
+// MATCH_CONDITION, so `FROM t asof JOIN u ON ...` still reads `asof` as an alias of t.
 joinRelation
-    : (joinType) JOIN LATERAL? right=relationPrimary joinPostfix?
-    | NATURAL joinType JOIN LATERAL? right=relationPrimary
-    | NATURAL? joinType ASOF JOIN right=relationPrimary asofJoinCriteria
+    : JOIN LATERAL? right=relationPrimary joinPostfix?
+    | joinType JOIN LATERAL? right=relationPrimary (asofJoinCriteria | joinPostfix)?
+    | NATURAL naturalJoinType JOIN LATERAL? right=relationPrimary asofJoinCriteria?
+    | ASOF JOIN LATERAL? right=relationPrimary asofJoinCriteria
+    ;
+
+naturalJoinType
+    : (joinType | ASOF)?
     ;
 
 joinPostfix
@@ -1136,13 +1145,13 @@ asofJoinCriteria
     ;
 
 joinType
-    : INNER?
+    : (INNER
     | CROSS
     | LEFT OUTER?
     | LEFT? SEMI
     | RIGHT OUTER?
     | FULL OUTER?
-    | LEFT? ANTI
+    | LEFT? ANTI) ASOF?
     ;
 
 joinCriteria

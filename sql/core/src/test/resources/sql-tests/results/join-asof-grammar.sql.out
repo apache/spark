@@ -361,3 +361,50 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "fragment" : "ASOF JOIN quotes q\n  MATCH_CONDITION (t.trade_time >= q.quote_time AND t.symbol = q.symbol)\n  ON t.symbol = q.symbol"
   } ]
 }
+
+
+-- !query
+SELECT * FROM trades t LEFT ASOF JOIN quotes q ON t.symbol = q.symbol
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'ASOF'",
+    "hint" : ": missing 'MATCH_CONDITION'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 69,
+    "fragment" : "LEFT ASOF JOIN quotes q ON t.symbol = q.symbol"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM trades t ASOF JOIN LATERAL (SELECT * FROM quotes) q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INCOMPATIBLE_JOIN_TYPES",
+  "sqlState" : "42613",
+  "messageParameters" : {
+    "joinType1" : "ASOF",
+    "joinType2" : "LATERAL"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 114,
+    "fragment" : "ASOF JOIN LATERAL (SELECT * FROM quotes) q\n  MATCH_CONDITION (t.trade_time >= q.quote_time)"
+  } ]
+}
