@@ -1095,6 +1095,109 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
+  // A global aggregation (no grouping key) must return its initialized row for an executed batch
+  // whose rows are all dropped upstream, so the aggregation's input is empty. The micro-batch plan
+  // seeds that row for the empty grouping key in HashAggregateExec; the streamline plan must match.
+  testWithAllStateVersions("streamline aggregation: global aggregation over empty input emits " +
+    "the initialized result", streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, 1, 2),
+      // Every row is filtered out: count 0, sum null.
+      CheckLastBatch((0L, null)),
+      AddData(inputData, -5),
+      CheckLastBatch((1L, -5L))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: global aggregation over empty input emits " +
+    "the initialized result in update mode", streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Update)(
+      AddData(inputData, 1, 2),
+      CheckLastBatch((0L, null)),
+      // Update mode emits an intermediate result per input row.
+      AddData(inputData, -3, -4),
+      CheckLastBatch((1L, -3L), (2L, -7L))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: complete mode retains the accumulated global " +
+    "result when a later batch has no input", streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, -1, -2),
+      CheckLastBatch((2L, -3L)),
+      AddData(inputData, 3, 4),
+      // The batch has no surviving rows; the accumulated result must be re-emitted unchanged.
+      CheckLastBatch((2L, -3L))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: update mode retains the accumulated global " +
+    "result when a later batch has no input", streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Update)(
+      AddData(inputData, -1, -2),
+      CheckLastBatch((1L, -1L), (2L, -3L)),
+      AddData(inputData, 3, 4),
+      CheckLastBatch((2L, -3L))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: global aggregation with multiple partitions " +
+    "over empty input emits a single initialized row", streamlineEnabled) {
+    val inputData = MemoryStream[Int](2)
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .agg(count("*").as("count"), sum("value").as("sum"))
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, 1, 2, 3, 4),
+      // Two partitions with no surviving rows must still produce one initialized global row.
+      CheckLastBatch((0L, null))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: grouped aggregation over empty input emits " +
+    "no rows", streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .filter($"value" < 0)
+      .groupBy($"value")
+      .agg(count("*").as("count"))
+
+    testStream(aggregated, Update)(
+      AddData(inputData, 1, 2),
+      // No group is created for an empty input.
+      CheckLastBatch(),
+      AddData(inputData, -5),
+      CheckLastBatch((-5, 1L))
+    )
+  }
+
   // Append mode is the one mode that drives the operator's eviction path: a windowed grouping key
   // is emitted only once the watermark passes it, via EvictionIterator (which removes in hasNext).
   // Mirrors the stateStoreSave Append test above so the streamline operator is held to the same
