@@ -92,11 +92,20 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
       }
 
       protected override def handleTimingData(): Unit = {
+        updateDataReceived()
+        super.handleTimingData()
+      }
+
+      protected override def handleMetricsData(): Unit = {
+        updateDataReceived()
+        super.handleMetricsData()
+      }
+
+      private def updateDataReceived(): Unit = {
         // Get data size from pythonMetrics which is already being tracked
         totalDataReceived = pythonMetrics.get("pythonDataReceived")
           .map(_.value)
           .getOrElse(0L)
-        super.handleTimingData()
       }
 
       protected override def read(): OUT = {
@@ -137,6 +146,9 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
                 read()
               case SpecialLengths.TIMING_DATA =>
                 handleTimingData()
+                read()
+              case SpecialLengths.METRICS_DATA =>
+                handleMetricsData()
                 read()
               case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
                 throw handlePythonException()

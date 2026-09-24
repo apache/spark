@@ -93,6 +93,7 @@ class SpecialLengths:
     NULL = -5
     START_ARROW_STREAM = -6
     START_OF_INIT_MESSAGE = -8
+    METRICS_DATA = -9
 
 
 class Serializer:
