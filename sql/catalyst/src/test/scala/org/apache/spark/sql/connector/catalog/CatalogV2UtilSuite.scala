@@ -327,6 +327,52 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(stateOptions.isEmpty)
   }
 
+  test("changelogStateOptionKeys defaults to table-state option keys") {
+    val catalog = mock(classOf[TableCatalog])
+    when(catalog.tableStateOptionKeys()).thenReturn(java.util.Set.of("branch"))
+    when(catalog.changelogStateOptionKeys()).thenCallRealMethod()
+    val options = new CaseInsensitiveStringMap(java.util.Map.of(
+      "BRANCH", "main",
+      "starting-version", "1",
+      "split-size", "5"))
+
+    val stateOptions = CatalogV2Util.extractChangelogStateOptions(catalog, options)
+
+    assert(stateOptions ===
+      new CaseInsensitiveStringMap(java.util.Map.of("BRANCH", "main")))
+  }
+
+  test("extractChangelogStateOptions uses the changelog-specific key set") {
+    val catalog = mock(classOf[TableCatalog])
+    when(catalog.tableStateOptionKeys()).thenReturn(java.util.Set.of("branch"))
+    when(catalog.changelogStateOptionKeys()).thenReturn(java.util.Set.of("change-feed"))
+    val options = new CaseInsensitiveStringMap(java.util.Map.of(
+      "branch", "main",
+      "CHANGE-FEED", "audit",
+      "split-size", "5"))
+
+    val stateOptions = CatalogV2Util.extractChangelogStateOptions(catalog, options)
+
+    assert(stateOptions ===
+      new CaseInsensitiveStringMap(java.util.Map.of("CHANGE-FEED", "audit")))
+  }
+
+  test("DelegatingCatalogExtension forwards changelog state-aware catalog APIs") {
+    val delegate = mock(classOf[TableCatalog])
+    val extension = new DelegatingCatalogExtension() {}
+    extension.setDelegateCatalog(delegate)
+    val ident = Identifier.of(Array("ns"), "table")
+    val changelogKeys = java.util.Set.of("change-feed")
+    val changelogContext = mock(classOf[ChangelogContext])
+    val stateOptions = new CaseInsensitiveStringMap(java.util.Map.of("change-feed", "audit"))
+    val changelog = mock(classOf[Changelog])
+    when(delegate.changelogStateOptionKeys()).thenReturn(changelogKeys)
+    when(delegate.loadChangelog(ident, changelogContext, stateOptions)).thenReturn(changelog)
+
+    assert(extension.changelogStateOptionKeys() === changelogKeys)
+    assert(extension.loadChangelog(ident, changelogContext, stateOptions) === changelog)
+  }
+
   test("viewInfoBuilderFrom preserves the dependency list") {
     val dependencies = DependencyList.of(Array(Dependency.table(Array("cat", "ns", "events"))))
     val existing = viewWithDependencies(Some(dependencies))

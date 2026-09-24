@@ -44,7 +44,7 @@ import org.apache.spark.sql.execution.datasources.{
   HadoopFsRelation,
   LogicalRelation,
   LogicalRelationWithTable}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, ChangelogTable, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -428,22 +428,32 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * @return the refreshed plan if refresh succeeds, None otherwise
    */
   private def tryRefreshPlan(spark: SparkSession, plan: LogicalPlan): Option[LogicalPlan] = {
-    try {
-      EliminateSubqueryAliases(plan) match {
-        case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
-          val table = CatalogV2Util.getTable(catalog, ident, options = r.options)
-          if (r.table.id == table.id) {
-            Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), r.options))
-          } else {
-            None
-          }
-        case _ =>
-          Some(V2TableRefreshUtil.refresh(spark, plan))
+    val containsChangelog = plan.collectWithSubqueries {
+      case r: DataSourceV2Relation if r.table.isInstanceOf[ChangelogTable] => r
+    }.nonEmpty
+    if (containsChangelog) {
+      // Reloading a changelog requires its original context and another analyzer pass because
+      // connector capabilities determine CDC post-processing. Evict the stale cache entry when
+      // it cannot be rebuilt safely.
+      None
+    } else {
+      try {
+        EliminateSubqueryAliases(plan) match {
+          case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
+            val table = CatalogV2Util.getTable(catalog, ident, options = r.options)
+            if (r.table.id == table.id) {
+              Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), r.options))
+            } else {
+              None
+            }
+          case _ =>
+            Some(V2TableRefreshUtil.refresh(spark, plan))
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Failed to refresh plan while attempting to recache", e)
+          None
       }
-    } catch {
-      case NonFatal(e) =>
-        logWarning(log"Failed to refresh plan while attempting to recache", e)
-        None
     }
   }
 
@@ -456,8 +466,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     val name = ident.toQualifiedNameParts(catalog)
     val cachedRelations = findCachedRelations(name, resolver)
     val cachedRelation = cachedRelations.collectFirst {
+      // A changelog and its base table share a catalog identifier but represent different
+      // relations. Changelogs have their own per-analysis state cache and must not pin tables.
       case r: DataSourceV2Relation
-          if r.catalog.contains(catalog) && r.identifier.contains(ident) &&
+          if !r.table.isInstanceOf[ChangelogTable] &&
+            r.catalog.contains(catalog) && r.identifier.contains(ident) &&
             tableId.forall(_ == r.table.id) &&
             CatalogV2Util.extractTableStateOptions(catalog, r.options) == stateOptions =>
         r

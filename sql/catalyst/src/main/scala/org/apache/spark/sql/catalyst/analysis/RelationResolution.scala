@@ -63,6 +63,7 @@ class RelationResolution(
 
   private def relationCache = AnalysisContext.get.relationCache
   private def tableCache = AnalysisContext.get.tableCache
+  private def changelogCache = AnalysisContext.get.changelogCache
 
   /**
    * If we are resolving database objects (relations, functions, etc.) inside views, we may need to
@@ -383,12 +384,16 @@ class RelationResolution(
     expandIdentifier(u.multipartIdentifier) match {
       case CatalogAndIdentifier(catalog, ident) =>
         val tableCatalog = catalog.asTableCatalog
-        val changelog = try {
-          tableCatalog.loadChangelog(ident, ctx, u.options)
-        } catch {
-          case _: UnsupportedOperationException =>
-            throw QueryCompilationErrors.cdcNotSupportedError(tableCatalog.name())
-        }
+        val stateOptions = CatalogV2Util.extractChangelogStateOptions(catalog, u.options)
+        val cacheKey = ChangelogCacheKey(catalog, ident, ctx, stateOptions)
+        val changelog = changelogCache.getOrElseUpdate(cacheKey, {
+          try {
+            tableCatalog.loadChangelog(ident, ctx, stateOptions)
+          } catch {
+            case _: UnsupportedOperationException =>
+              throw QueryCompilationErrors.cdcNotSupportedError(tableCatalog.name())
+          }
+        })
         val changelogTable = ChangelogTable(changelog, ctx)
         val relation = if (u.isStreaming) {
           StreamingRelationV2(
