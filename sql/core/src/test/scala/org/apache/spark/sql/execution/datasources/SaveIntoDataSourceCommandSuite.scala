@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.catalyst.util.CharVarcharScanMode
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.sql.types.{LongType, StructField, StructType, VarcharType}
 
 class SaveIntoDataSourceCommandSuite extends SharedSparkSession {
 
@@ -69,29 +71,61 @@ class SaveIntoDataSourceCommandSuite extends SharedSparkSession {
 
     saveIntoDataSource(2)
     checkAnswer(loadData, Row(0) :: Row(1) :: Nil)
+  }
 
-    spark.catalog.clearCache()
-    FakeV1DataSource.data = null
+  test("SPARK-58814: SaveIntoDataSourceCommand recaches bound CHAR/VARCHAR scan modes") {
+    val provider = classOf[FakeV1DataSource].getName
 
-    // The two bound scan modes are part of LogicalRelation identity, so recache must match the
-    // written BaseRelation rather than sameResult against an unbound probe.
-    Seq(
-      Seq(
-        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
-        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
-      Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")).foreach { extraConf =>
-      extraConf.foreach { case (k, v) => spark.conf.set(k, v) }
-      try {
-        saveIntoDataSource(1)
-        val boundCached = loadData.cache()
-        checkAnswer(boundCached, Row(0))
-        saveIntoDataSource(2)
-        checkAnswer(loadData, Row(0) :: Row(1) :: Nil)
-      } finally {
-        spark.catalog.clearCache()
-        extraConf.foreach { case (k, _) => spark.conf.unset(k) }
-        FakeV1DataSource.data = null
+    def saveIntoDataSource(values: String*): Unit = {
+      import testImplicits._
+      values.toDF("id")
+        .write
+        .mode("overwrite")
+        .format(provider)
+        .option("varchar", "true")
+        .save()
+    }
+
+    def loadData: DataFrame = {
+      spark.read
+        .format(provider)
+        .option("varchar", "true")
+        .load()
+    }
+
+    saveIntoDataSource("a")
+    try {
+      val modes = Seq(
+        (Seq(
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false"),
+          CharVarcharScanMode.PreserveNative),
+        (Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true"),
+          CharVarcharScanMode.SparkStandard))
+      modes.foreach { case (modeConf, expectedMode) =>
+        withSQLConf(modeConf: _*) {
+          val read = loadData.cache()
+          val scanMode = read.queryExecution.analyzed.collectFirst {
+            case relation: LogicalRelation => relation.charVarcharScanMode
+          }.flatten
+          assert(scanMode.contains(expectedMode))
+          checkAnswer(read, Row("a"))
+        }
       }
+
+      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+        saveIntoDataSource("a", "b")
+      }
+      modes.foreach { case (modeConf, _) =>
+        withSQLConf(modeConf: _*) {
+          val refreshedRead = loadData
+          assertCached(refreshedRead)
+          checkAnswer(refreshedRead, Row("a") :: Row("b") :: Nil)
+        }
+      }
+    } finally {
+      spark.catalog.clearCache()
+      FakeV1DataSource.data = null
     }
   }
 
@@ -141,7 +175,7 @@ class FakeV1DataSource extends RelationProvider with CreatableRelationProvider {
   override def createRelation(
      sqlContext: SQLContext,
      parameters: Map[String, String]): BaseRelation = {
-    FakeRelation()
+    FakeRelation(parameters.get("varchar").contains("true"))
   }
 
   override def createRelation(
@@ -150,12 +184,15 @@ class FakeV1DataSource extends RelationProvider with CreatableRelationProvider {
      parameters: Map[String, String],
      data: DataFrame): BaseRelation = {
     FakeV1DataSource.data = data.rdd
-    FakeRelation()
+    FakeRelation(parameters.get("varchar").contains("true"))
   }
 }
 
-case class FakeRelation() extends BaseRelation with TableScan {
+case class FakeRelation(varchar: Boolean = false) extends BaseRelation with TableScan {
   override def sqlContext: SQLContext = SparkSession.getActiveSession.get.sqlContext
-  override def schema: StructType = StructType(Seq(StructField("id", LongType)))
+  override def schema: StructType = {
+    val dataType = if (varchar) VarcharType(4) else LongType
+    StructType(Seq(StructField("id", dataType)))
+  }
   override def buildScan(): RDD[Row] = FakeV1DataSource.data
 }

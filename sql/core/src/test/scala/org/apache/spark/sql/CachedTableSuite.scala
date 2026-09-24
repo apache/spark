@@ -2375,13 +2375,20 @@ class CachedTableSuite extends SharedSparkSession
 
       sql(s"INSERT INTO $t VALUES (4, 'e'), (5, 'f')")
 
-      // Cache both mode-specific variants of the base table at once.
-      boundModes.foreach { case (modeConf, storageLevel, storageLevelName, _) =>
-        withSQLConf(modeConf: _*) {
-          sql(s"CACHE TABLE $t OPTIONS('storageLevel' '$storageLevelName')")
-          assertCached(sql(s"SELECT * FROM $t"))
-          assert(spark.table(t).storageLevel === storageLevel)
+      // Cache both mode-specific variants using a short display name. Rename lookup must use the
+      // resolved table identity rather than the spelling captured by CACHE TABLE.
+      val previousCatalog = spark.catalog.currentCatalog()
+      try {
+        spark.catalog.setCurrentCatalog("testcat")
+        boundModes.foreach { case (modeConf, storageLevel, storageLevelName, _) =>
+          withSQLConf(modeConf: _*) {
+            sql(s"CACHE TABLE ${ident.name()} OPTIONS('storageLevel' '$storageLevelName')")
+            assertCached(sql(s"SELECT * FROM $t"))
+            assert(spark.table(t).storageLevel === storageLevel)
+          }
         }
+      } finally {
+        spark.catalog.setCurrentCatalog(previousCatalog)
       }
       sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
       assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
