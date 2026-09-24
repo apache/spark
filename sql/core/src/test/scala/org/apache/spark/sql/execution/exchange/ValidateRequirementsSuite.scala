@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, GreaterThan, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, KeyedPartitioning, PartitioningCollection, SinglePartition}
 import org.apache.spark.sql.execution.{CoGroupExec, DummySparkPlan, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
@@ -427,6 +427,11 @@ class ValidateRequirementsSuite extends SharedSparkSession {
       assert(!ValidateRequirements.validate(SortMergeAsOfJoinExec(
         Seq(a), Seq(b), Seq(a), Seq(b), GreaterThan(a, b), a, Inner, None, left, right)),
         "an as-of join builds no spread side, so the same pair is refused")
+      // Nor for a join type that may duplicate neither side: the producer applies that gate before
+      // it spreads, so a full outer join over the same pair is one no producer builds either.
+      assert(!ValidateRequirements.validate(
+        SortMergeJoinExec(Seq(a), Seq(b), FullOuter, None, left, right)),
+        "neither side of a full outer join may be duplicated, so nothing spreads this pair")
     }
   }
 

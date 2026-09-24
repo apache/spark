@@ -60,11 +60,19 @@ object ValidateRequirements extends Logging {
     // `EnsureRequirements.checkKeyGroupCompatible`. Both halves of that admission are asked here,
     // and the answer is passed down to the pairing below so the waiver cannot be read one way here
     // and the other way there. Neither half is a second copy: the operator kinds come from the
-    // producer itself. What is left to the member, its count and the permission for the collapse it
-    // went through, is asked there.
+    // producer, and so does the join type's capability, the second gate it applies before spreading
+    // a side (`canDuplicateLeftSide` / `canDuplicateRightSide`; a `FullOuter` join may duplicate
+    // neither side, so nothing spreads such a pair). That gate is asked here rather than through
+    // `partiallyClusteredJoinType`, which is the producer's entry to key-group checking at all: a
+    // kind turned away there would lose the storage-partitioned join it can still plan without
+    // spreading. What is left to the member, its count and the permission for the collapse it went
+    // through, is asked in the spec.
     val mayBeUngrouped = clusteredMultiChild &&
       SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
-      ShuffledJoin.partiallyClusteredJoinType(plan).isDefined
+      ShuffledJoin.partiallyClusteredJoinType(plan).exists { joinType =>
+        ShuffledJoin.canDuplicateLeftSide(joinType) ||
+          ShuffledJoin.canDuplicateRightSide(joinType)
+      }
 
     val satisfied = children.zip(requiredChildDistributions.zip(requiredChildOrderings)).forall {
       case (child, (distribution, ordering))
@@ -103,8 +111,10 @@ object ValidateRequirements extends Logging {
    * re-sorted to make a pair: a side is judged on the partitions it has, under the key the
    * operation clusters on.
    *
-   * This is the question `EnsureRequirements` asks of a pair it takes as it stands, the
-   * `compatibleAsIs` path. Its other path commits on the sides it builds rather than on the pair it
+   * That is the question `EnsureRequirements` asks of a pair it takes as it stands, though not by
+   * the same predicate: its `compatibleAsIs` path reads two unprojected specs, while a member here
+   * may be relabelled onto the key the operation clusters on (see `reportedSpecOf`). Its other path
+   * commits on the sides it builds rather than on the pair it
    * picked: `agreeingPairs` admits a pair a reduce would reconcile (`areKeysCompatible` with the
    * reduce allowed), and `committed` then compares the declared layouts of the two sides that
    * reduce ran on. A finished plan is asked the strict question alone, which is sound because the

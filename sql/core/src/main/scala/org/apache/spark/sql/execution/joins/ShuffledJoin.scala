@@ -182,7 +182,9 @@ object ShuffledJoin {
    * the operators this names, so the two read one list rather than a copy each.
    *
    * A `SortMergeAsOfJoinExec` is a `ShuffledJoin` and builds none, which is why the kinds are named
-   * rather than read off the trait. The side that repeats is decided next to this, by
+   * rather than read off the trait. One of these kinds can still be unable to spread for its join
+   * type, which is a separate question: no side of a `FullOuter` join may be duplicated, so the
+   * alignment spreads nothing there. The side that repeats is decided next to this, by
    * `canDuplicateLeftSide` and `canDuplicateRightSide`.
    */
   def partiallyClusteredJoinType(plan: SparkPlan): Option[JoinType] = plan match {
