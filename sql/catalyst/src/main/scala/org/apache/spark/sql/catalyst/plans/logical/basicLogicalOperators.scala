@@ -2772,8 +2772,8 @@ object AsOfJoin {
    */
   private[catalyst] object MatchConditionTypes {
 
-    def isValidOperandType(dataType: DataType): Boolean =
-      RowOrdering.isOrderable(dataType) && !containsEmptyStructType(dataType)
+    /** Any orderable type, including an empty struct, which equals any other empty struct. */
+    def isValidOperandType(dataType: DataType): Boolean = RowOrdering.isOrderable(dataType)
 
     /** Whether the `>=` this join builds can compare the two operands. */
     def areOperandsCompatible(leftType: DataType, rightType: DataType): Boolean = {
@@ -2866,13 +2866,6 @@ object AsOfJoin {
           leftStruct.sameType(rightStruct) && leftStruct.nonEmpty
         case _ => false
       }
-
-    private def containsEmptyStructType(dataType: DataType): Boolean = dataType match {
-      case struct: StructType =>
-        struct.isEmpty || struct.exists(field => containsEmptyStructType(field.dataType))
-      case ArrayType(elementType, _) => containsEmptyStructType(elementType)
-      case _ => false
-    }
   }
 
   /**

@@ -435,6 +435,46 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(Row(5, Seq(1, 1))) :: Nil)
   }
 
+  test("empty STRUCT column MATCH_CONDITION") {
+    // Empty structs are equal, also when nested, so inclusive operators match and strict do not.
+    for {
+      emptyStruct <- Seq("named_struct()", "named_struct('e', named_struct())")
+      (op, tag) <- Seq(">=" -> "hit", "<=" -> "hit", ">" -> null, "<" -> null)
+    } {
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.tag
+             |FROM VALUES ($emptyStruct) AS t(s)
+             |LEFT ASOF JOIN VALUES ($emptyStruct, 'hit') AS r(s, tag)
+             |  MATCH_CONDITION (t.s $op r.s)
+             |""".stripMargin),
+        Row(tag) :: Nil)
+    }
+  }
+
+  test("STRUCT with an empty STRUCT field MATCH_CONDITION") {
+    // The empty field always ties, so field 'seq' alone picks the match.
+    Seq(
+      "t.k >= r.k" -> 4,
+      "t.k <= r.k" -> 7,
+      "(t.k.e, t.k.seq) >= (r.k.e, r.k.seq)" -> 4,
+      "(t.k.e, t.k.seq) <= (r.k.e, r.k.seq)" -> 7).foreach { case (matchCondition, seq) =>
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT r.k.seq
+             |FROM VALUES (named_struct('e', named_struct(), 'seq', 5)) AS t(k)
+             |ASOF JOIN VALUES
+             |  (named_struct('e', named_struct(), 'seq', 3)),
+             |  (named_struct('e', named_struct(), 'seq', 4)),
+             |  (named_struct('e', named_struct(), 'seq', 7)) AS r(k)
+             |  MATCH_CONDITION ($matchCondition)
+             |""".stripMargin),
+        Row(seq) :: Nil)
+    }
+  }
+
   test("ARRAY<INT> MATCH_CONDITION") {
     checkSortMergeAsOf(
       sql(
@@ -545,6 +585,24 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |  MATCH_CONDITION (t.a >= r.a)
           |""".stripMargin),
       Row(Seq(Row(1, 4))) :: Nil)
+  }
+
+  test("ARRAY of empty STRUCT MATCH_CONDITION") {
+    // Empty struct elements always tie, so the arrays order by length alone.
+    Seq(">=" -> 2, ">" -> 1, "<=" -> 2, "<" -> 3).foreach { case (op, size) =>
+      checkSortMergeAsOf(
+        sql(
+          s"""
+             |SELECT size(r.a)
+             |FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a)
+             |ASOF JOIN VALUES
+             |  (ARRAY(named_struct())),
+             |  (ARRAY(named_struct(), named_struct())),
+             |  (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+             |  MATCH_CONDITION (t.a $op r.a)
+             |""".stripMargin),
+        Row(size) :: Nil)
+    }
   }
 
   test("STRUCT tuple from scalar columns MATCH_CONDITION") {
