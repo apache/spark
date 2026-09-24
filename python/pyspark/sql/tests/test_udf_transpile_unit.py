@@ -891,6 +891,61 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             "both parameters are supplied at the call site, so both get placeholders",
         )
 
+    def test_udf_transpile_positional_only_params_lower(self):
+        # No placeholder-omission hazard -- always bound by position -- so this
+        # lowers now, unlike default/variadic/keyword-only params. Typed str/int
+        # and value-dependent on both, so a swapped placeholder or category
+        # fails on the result, not just a missing lowering.
+        def two_posonly(a: str, b: int, /):
+            return a if b > 0 else "-"
+
+        def mixed_posonly(a: str, /, b: int):
+            return a if b > 0 else "-"
+
+        posonly_lambda = lambda x, /, y: y - x  # noqa: E731
+
+        self.assertEqual(
+            self._vals(two_posonly, StringType(), "a string, b long", [("xy", 5)]), ["xy"]
+        )
+        self.assertEqual(
+            self._vals(mixed_posonly, StringType(), "a string, b long", [("xy", 5)]), ["xy"]
+        )
+        self.assertEqual(self._vals(posonly_lambda, LongType(), "a long, b long", [(2, 5)]), [3])
+
+    def test_udf_transpile_positional_only_param_with_default_still_falls_back(self):
+        # A default's a default whether it's positional-only or not.
+        def posonly_with_default(a, b=1, /):
+            return a + b
+
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf = UserDefinedFunction(posonly_with_default, LongType())
+            self.assertEqual([], pudf.transpiled)
+            df = self.spark.createDataFrame([(2,)], "a long")
+            self.assertEqual(df.select(pudf("a")).first()[0], 3)
+
+    def test_udf_transpile_positional_only_receiver_and_public_params(self):
+        # self/a/b all land in posonlyargs here, none in args.args -- the slice
+        # _param_category_combos used to miss. Typed str/int so a reversed
+        # slice (self swapped in for a public param) fails on the result.
+        class Adder:
+            def __call__(self, a: str, b: int, /):
+                return a if b > 0 else "-"
+
+        self.assertEqual(self._vals(Adder(), StringType(), "a string, b long", [("xy", 3)]), ["xy"])
+
+    def test_udf_transpile_positional_only_kwarg_call_raises_like_python(self):
+        # A kwarg naming a positional-only param must still raise -- the
+        # transpile candidacy shim resolves kwargs to positions and must not
+        # paper over a call Python itself rejects.
+        def posonly(a, b, /):
+            return a + b
+
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf = UserDefinedFunction(posonly, LongType())
+            df = self.spark.createDataFrame([(2, 3)], "a long, b long")
+            with self.assertRaisesRegex(Exception, "positional-only arguments"):
+                df.select(pudf(a=df.a, b=df.b)).collect()
+
     def test_udf_transpile_falls_back_for_wraps_decorated_function(self):
         # inspect.getsource follows __wrapped__, so a functools.wraps-decorated
         # UDF previously transpiled the WRAPPED function's source while the
