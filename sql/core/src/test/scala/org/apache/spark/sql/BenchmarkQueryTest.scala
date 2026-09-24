@@ -18,10 +18,13 @@
 package org.apache.spark.sql
 
 import org.apache.spark.internal.config.Tests.IS_TESTING
-import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodeGenerator}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
+import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
-import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{LocalTableScanExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -75,7 +78,10 @@ abstract class BenchmarkQueryTest extends SharedSparkSession {
 
     findSubtrees(plan)
     codegenSubtrees.toSeq.foreach { subtree =>
-      val code = subtree.doCodeGen()._2
+      val code = BenchmarkQueryTest.withRowBroadcasts(subtree).doCodeGen()._2
+      assert(!BenchmarkQueryTest.joinsEmptyBuildSide(code.body),
+        s"the WholeStageCodegenExec subtree (id=${subtree.id}) joins an empty broadcast, so " +
+          s"its code is not the code it generates for data:\n${subtree.treeString}")
       val (_, ByteCodeStats(maxMethodCodeSize, _, _)) = try {
         // Just check the generated code can be properly compiled
         CodeGenerator.compile(code)
@@ -98,4 +104,46 @@ abstract class BenchmarkQueryTest extends SharedSparkSession {
           s"and JIT optimization might not work:\n${subtree.treeString}")
     }
   }
+}
+
+object BenchmarkQueryTest {
+
+  /**
+   * Returns a copy of a whole-stage codegen subtree in which every broadcast exchange reads one
+   * row of non-null default values instead of its child, to generate the subtree's code from.
+   *
+   * The benchmark queries are planned over empty tables. A broadcast join generates its code
+   * from the value of its broadcast, and for an empty one it generates a stub in place of the
+   * join, which leaves the rest of the subtree ungenerated too. Over one row it generates the
+   * code it generates for data. A single row makes every join key unique, so a hash join
+   * generates its unique-key form. Only the copy's code is used: the build side is a subtree of
+   * its own, found and measured from the original plan.
+   */
+  def withRowBroadcasts(subtree: WholeStageCodegenExec): WholeStageCodegenExec = {
+    def oneRow(output: Seq[Attribute]): SparkPlan = LocalTableScanExec(output,
+      Seq(InternalRow.fromSeq(output.map(a => Literal.default(a.dataType).value))), None)
+    subtree.transformUp {
+      case r @ ReusedExchangeExec(_, b: BroadcastExchangeExec) =>
+        r.copy(child = b.copy(child = oneRow(b.child.output)))
+      case b: BroadcastExchangeExec =>
+        b.copy(child = oneRow(b.child.output))
+    }.asInstanceOf[WholeStageCodegenExec]
+  }
+
+  /**
+   * The whole-stage codegen subtrees of `plan` and of its subqueries, in stage id order, each
+   * with the code it generates for data (see [[withRowBroadcasts]]).
+   */
+  def generatedCode(plan: SparkPlan): Seq[(WholeStageCodegenExec, CodeAndComment)] = {
+    val subtrees = new collection.mutable.LinkedHashSet[WholeStageCodegenExec]()
+    def findSubtrees(plan: SparkPlan): Unit = plan foreach {
+      case s: WholeStageCodegenExec => subtrees += s
+      case s => s.subqueries.foreach(findSubtrees)
+    }
+    findSubtrees(plan)
+    subtrees.toSeq.sortBy(_.codegenStageId).map { s => s -> withRowBroadcasts(s).doCodeGen()._2 }
+  }
+
+  /** Whether generated code has a hash join's stub for an empty build side. */
+  def joinsEmptyBuildSide(code: String): Boolean = code.contains("If HashedRelation is empty")
 }

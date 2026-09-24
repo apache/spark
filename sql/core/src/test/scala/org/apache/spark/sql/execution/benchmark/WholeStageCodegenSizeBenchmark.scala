@@ -22,11 +22,10 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, TPCDSSchema, TPCDSTableStats}
+import org.apache.spark.sql.{BenchmarkQueryTest, SparkSession, TPCDSSchema, TPCDSTableStats}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
+import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -127,29 +126,41 @@ object WholeStageCodegenSizeBenchmark extends SqlBasedBenchmark with Logging {
   private def measureQuery(queryLocation: String, name: String, totals: Totals): Unit = {
     val queryString = resourceToString(s"$queryLocation/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
-    try {
+    val stages = try {
       val plan = spark.sql(queryString).queryExecution.executedPlan
-      // codegenStringSeq walks all WholeStageCodegenExec subtrees (recursing subqueries), calls
-      // doCodeGen() for the source and CodeGenerator.compile() for the compiled ByteCodeStats.
-      val stages = codegenStringSeq(plan)
-      totals.queries += 1
-      stages.foreach { case (_, source, stats) =>
-        totals.stages += 1
-        totals.sourceChars += source.length
-        if (stats == ByteCodeStats.UNAVAILABLE) {
-          totals.fallbacks += 1
-        } else {
-          totals.maxMethodBytecodeSum += stats.maxMethodCodeSize
-          totals.maxMethodBytecodeMax =
-            math.max(totals.maxMethodBytecodeMax, stats.maxMethodCodeSize)
-          totals.innerClasses += stats.numInnerClasses
-          totals.constPoolSum += stats.maxConstPoolSize
-          totals.constPoolMax = math.max(totals.constPoolMax, stats.maxConstPoolSize)
+      // Every WholeStageCodegenExec subtree (recursing subqueries), with the code it generates
+      // for data: the tables are empty, and over an empty broadcast a join generates a stub
+      // instead of its code and the rest of its subtree's. Compiled for the ByteCodeStats.
+      BenchmarkQueryTest.generatedCode(plan).map { case (_, code) =>
+        val stats = try CodeGenerator.compile(code)._2 catch {
+          case NonFatal(_) => ByteCodeStats.UNAVAILABLE
         }
+        (CodeFormatter.format(code), stats)
       }
     } catch {
       case NonFatal(e) =>
         logWarning(s"Skipping query $name: failed to plan (${e.getMessage})")
+        return
+    }
+    val stubbed = stages.count { case (source, _) =>
+      BenchmarkQueryTest.joinsEmptyBuildSide(source)
+    }
+    require(stubbed == 0, s"$stubbed whole-stage-codegen subtrees of query $name join an empty " +
+      "broadcast, so their code is not the code they generate for data")
+    totals.queries += 1
+    stages.foreach { case (source, stats) =>
+      totals.stages += 1
+      totals.sourceChars += source.length
+      if (stats == ByteCodeStats.UNAVAILABLE) {
+        totals.fallbacks += 1
+      } else {
+        totals.maxMethodBytecodeSum += stats.maxMethodCodeSize
+        totals.maxMethodBytecodeMax =
+          math.max(totals.maxMethodBytecodeMax, stats.maxMethodCodeSize)
+        totals.innerClasses += stats.numInnerClasses
+        totals.constPoolSum += stats.maxConstPoolSize
+        totals.constPoolMax = math.max(totals.constPoolMax, stats.maxConstPoolSize)
+      }
     }
   }
 
