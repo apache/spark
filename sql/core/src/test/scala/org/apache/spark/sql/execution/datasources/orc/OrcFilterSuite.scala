@@ -730,6 +730,26 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     ).toImmutableArraySeq).isEmpty)
   }
 
+  test("SPARK-59605: IN filter with a NULL literal drops the NULL and pushes the rest") {
+    import org.apache.spark.sql.sources._
+    val schema = StructType(Array(StructField("a", IntegerType, nullable = true)))
+
+    def sarg(filter: Filter): Option[String] =
+      OrcFilters.createFilter(schema, Array(filter).toImmutableArraySeq)
+        .map(_.asInstanceOf[SearchArgumentImpl].toOldString)
+
+    // A NULL literal is inert: IN (1, 3, NULL) pushes the same SearchArgument as IN (1, 3).
+    assert(sarg(In("a", Array[Any](1, 3, null))) === sarg(In("a", Array[Any](1, 3))))
+    assert(sarg(In("a", Array[Any](1, 3, null))).isDefined)
+
+    // IN (NULL) has no non-null value to push, so no SearchArgument is generated.
+    assert(sarg(In("a", Array[Any](null))).isEmpty)
+
+    // Not(IN (1, 3, NULL)) still builds and matches Not(IN (1, 3)); Not(IN (NULL)) pushes nothing.
+    assert(sarg(Not(In("a", Array[Any](1, 3, null)))) === sarg(Not(In("a", Array[Any](1, 3)))))
+    assert(sarg(Not(In("a", Array[Any](null)))).isEmpty)
+  }
+
   test("SPARK-27160: Fix casting of the DecimalType literal") {
     import org.apache.spark.sql.sources._
     val schema = StructType(Array(StructField("a", DecimalType(3, 2))))
