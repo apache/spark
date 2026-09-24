@@ -236,9 +236,9 @@ class PythonUDFSuite extends SharedSparkSession {
     }
 
     executePythonUDF()
-    Thread.sleep(1000L)
 
     eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      Thread.sleep(1000L)
       val pythonExec = executePythonUDF()
       val bootTime = pythonExec.metrics("pythonBootTime").value
       val initTime = pythonExec.metrics("pythonInitTime").value
