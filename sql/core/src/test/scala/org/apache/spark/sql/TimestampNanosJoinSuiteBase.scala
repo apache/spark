@@ -397,6 +397,62 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
       }
     }
   }
+
+  // ==========================================================================================
+  // RIGHT / FULL / LEFT SEMI / LEFT ANTI on the sort-merge path (supports all four).
+  // ==========================================================================================
+  private val smjConf: Seq[(String, String)] = joinStrategies.find(_._1 == "SortMergeJoin").get._3
+
+  // select(lid, rid). RIGHT keeps all right rows; only 500 == 500 matches.
+  private val expectedRightOuter: Seq[Row] =
+    Seq(Row(1, 10), Row(null, 20), Row(null, 30), Row(null, 40))
+  // FULL keeps all rows from both sides.
+  private val expectedFullOuter: Seq[Row] = Seq(
+    Row(1, 10), Row(2, null), Row(3, null), Row(4, null),
+    Row(null, 20), Row(null, 30), Row(null, 40))
+  // LEFT SEMI keeps left rows with a match; LEFT ANTI keeps the rest (incl. the NULL key).
+  private val expectedLeftSemi: Seq[Row] = Seq(Row(1))
+  private val expectedLeftAnti: Seq[Row] = Seq(Row(2), Row(3), Row(4))
+
+  for { cgConf <- codegenModes } {
+    test(s"NTZ nanos right/full/semi/anti join distinguishes the sub-micro key (SMJ) - " +
+      s"${cgLabel(cgConf)}") {
+      withSQLConf((smjConf ++ cgConf): _*) {
+        Seq(7, 8, 9).foreach { p =>
+          val left = ntzLeft(p)
+          val right = ntzRight(p)
+          def j(t: String): DataFrame = left.join(right, left("k") === right("k"), t)
+          val ro = j("right_outer").select(left("lid"), right("rid"))
+          assertJoinUsed(ro, classOf[SortMergeJoinExec]); checkAnswer(ro, expectedRightOuter)
+          val fo = j("full_outer").select(left("lid"), right("rid"))
+          assertJoinUsed(fo, classOf[SortMergeJoinExec]); checkAnswer(fo, expectedFullOuter)
+          val ls = j("left_semi").select(left("lid"))
+          assertJoinUsed(ls, classOf[SortMergeJoinExec]); checkAnswer(ls, expectedLeftSemi)
+          val la = j("left_anti").select(left("lid"))
+          assertJoinUsed(la, classOf[SortMergeJoinExec]); checkAnswer(la, expectedLeftAnti)
+        }
+      }
+    }
+
+    test(s"LTZ nanos right/full/semi/anti join distinguishes the sub-micro key (SMJ) - " +
+      s"${cgLabel(cgConf)}") {
+      withSQLConf((smjConf ++ cgConf): _*) {
+        Seq(7, 8, 9).foreach { p =>
+          val left = ltzLeft(p)
+          val right = ltzRight(p)
+          def j(t: String): DataFrame = left.join(right, left("k") === right("k"), t)
+          val ro = j("right_outer").select(left("lid"), right("rid"))
+          assertJoinUsed(ro, classOf[SortMergeJoinExec]); checkAnswer(ro, expectedRightOuter)
+          val fo = j("full_outer").select(left("lid"), right("rid"))
+          assertJoinUsed(fo, classOf[SortMergeJoinExec]); checkAnswer(fo, expectedFullOuter)
+          val ls = j("left_semi").select(left("lid"))
+          assertJoinUsed(ls, classOf[SortMergeJoinExec]); checkAnswer(ls, expectedLeftSemi)
+          val la = j("left_anti").select(left("lid"))
+          assertJoinUsed(la, classOf[SortMergeJoinExec]); checkAnswer(la, expectedLeftAnti)
+        }
+      }
+    }
+  }
 }
 
 // Runs the nanosecond timestamp join tests with ANSI mode enabled explicitly.
