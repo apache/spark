@@ -568,8 +568,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * The maximum number of allowed keys index.
    *
    * The value of allowed keys index is in the range of [0, maxNumKeysIndex - 1].
+   * If the pointer-array allocation in a previous {@link #reset()} failed, this method retries
+   * that allocation before returning.
+   *
+   * @throws SparkOutOfMemoryError if the pointer array still cannot be allocated
    */
   public int maxNumKeysIndex() {
+    restoreArrayAfterFailedReset();
     return (int) (longArray.size() / 2);
   }
 
@@ -602,19 +607,30 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Restores the hash array after a {@link #reset()} freed it but its eager reallocation failed
    * with an OOM, leaving {@code longArray == null}. A reset() empties the map, so re-allocating at
-   * {@code initialCapacity} here is correct. Without this, a subsequent lookup dereferences the
-   * null array in {@code safeLookup} (or an assertion error with -ea). If memory is still
-   * unavailable this throws a SparkOutOfMemoryError instead.
+   * {@code initialCapacity} here is correct. If memory is still unavailable this throws a
+   * SparkOutOfMemoryError instead of exposing the null array.
    */
   private void restoreArrayAfterFailedReset() {
-    if (!freed && longArrayRecoveryRequired) {
+    if (freed) {
+      throw new IllegalStateException("BytesToBytesMap has already been freed");
+    }
+    if (longArrayRecoveryRequired) {
       // Only the failed-reset state is recoverable here: the map is empty, so a fresh
       // initial-capacity array is correct. `destructiveIterator != null` means destructive
-      // iteration has begun, after which map operations are illegal. Do not re-allocate the
-      // array in that terminal state; leave the illegal lookup to fail loudly.
+      // iteration has begun, after which map operations are illegal.
+      //
+      // allocate() acquires the TaskMemoryManager monitor while this monitor is held. The memory
+      // manager may call spill() while holding its monitor, so spill() and anything reachable
+      // from it must not acquire this monitor.
       synchronized (this) {
-        if (!freed && longArray == null && destructiveIterator == null &&
-            longArrayRecoveryRequired) {
+        if (freed) {
+          throw new IllegalStateException("BytesToBytesMap has already been freed");
+        }
+        if (destructiveIterator != null) {
+          throw new IllegalStateException(
+            "BytesToBytesMap cannot be used after destructiveIterator() has been called");
+        }
+        if (longArray == null && longArrayRecoveryRequired) {
           allocate(initialCapacity);
           longArrayRecoveryRequired = false;
         }
@@ -627,7 +643,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This is a thread-safe version of `lookup`, provided that each thread supplies its own
    * {@link Location}. This guarantee excludes probe statistics, which may be inaccurate under
-   * concurrent lookup. The map must not be modified concurrently.
+   * concurrent lookup. Concurrent calls may also safely retry a pointer-array allocation that
+   * failed during {@link #reset()}; the map must not otherwise be modified concurrently.
+   *
+   * @throws SparkOutOfMemoryError if a pointer-array allocation retried after reset still fails
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc) {
     if (keyOperationsFactory == null) {
@@ -648,7 +667,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * The provided hash is ignored when this map has configured key operations. Each thread must
    * supply its own {@link Location}. Probe statistics may be inaccurate under concurrent lookup,
-   * and the map must not be modified concurrently.
+   * and the map must not otherwise be modified concurrently. Concurrent calls may safely retry a
+   * pointer-array allocation that failed during {@link #reset()}.
+   *
+   * @throws SparkOutOfMemoryError if a pointer-array allocation retried after reset still fails
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     restoreArrayAfterFailedReset();
@@ -1149,16 +1171,24 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Returns the underline long[] of longArray.
+   * Returns the underlying long array. If the pointer-array allocation in a previous
+   * {@link #reset()} failed, this method retries that allocation before returning.
+   *
+   * @throws SparkOutOfMemoryError if the pointer array still cannot be allocated
    */
   public LongArray getArray() {
+    restoreArrayAfterFailedReset();
     assert(longArray != null);
     return longArray;
   }
 
   /**
    * Reset this map to initialized state. If {@link #free()} has been called, the map cannot be
-   * reinitialized and this method is a no-op.
+   * reinitialized and this method is a no-op. If the replacement pointer array cannot be
+   * allocated, the map remains empty and the next lookup, {@link #getArray()}, or
+   * {@link #maxNumKeysIndex()} retries the allocation.
+   *
+   * @throws SparkOutOfMemoryError if the replacement pointer array cannot be allocated
    */
   public synchronized void reset() {
     if (freed) {

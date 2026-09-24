@@ -896,9 +896,49 @@ public abstract class AbstractBytesToBytesMapSuite {
       assertEquals(0L, taskMemoryManager.getMemoryConsumptionForThisTask());
 
       assertThrows(
-        AssertionError.class,
+        IllegalStateException.class,
         () -> map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8));
       assertEquals(0L, taskMemoryManager.getMemoryConsumptionForThisTask());
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void lookupAfterDestructiveIterationDoesNotRestoreArray() {
+    memoryManager.limit(5000);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
+    final long[] key = new long[]{1L};
+    try {
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+      map.destructiveIterator();
+      memoryManager.limit(PAGE_SIZE_BYTES);
+
+      assertThrows(
+        IllegalStateException.class,
+        () -> map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8));
+      assertEquals(0L, taskMemoryManager.getMemoryConsumptionForThisTask());
+    } finally {
+      map.free();
+    }
+  }
+
+  @Test
+  public void arrayAccessorsRecoverAfterFailedReset() {
+    memoryManager.limit(5000);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
+    try {
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+      memoryManager.limit(PAGE_SIZE_BYTES);
+      assertEquals(512L, map.getArray().size());
+
+      memoryManager.markExecutionAsOutOfMemoryOnce();
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
+      assertEquals(256, map.maxNumKeysIndex());
     } finally {
       map.free();
     }
