@@ -38,6 +38,7 @@ from pyspark.sql.types import (
     DataType,
     StructType,
     VarcharType,
+    _has_char_varchar_in_udt,
     _has_physical_type,
     _parse_datatype_string,
 )
@@ -358,6 +359,12 @@ class UserDefinedTableFunction:
         deterministic: bool = False,
     ):
         _validate_udtf_handler(func, returnType)
+        if (
+            isinstance(returnType, DataType)
+            and evalType != PythonEvalType.SQL_ARROW_UDTF
+            and _has_char_varchar_in_udt(returnType)
+        ):
+            _check_udtf_return_type(returnType)
 
         self.func = func
         self._returnType = returnType

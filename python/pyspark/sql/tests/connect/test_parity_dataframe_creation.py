@@ -15,9 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark.errors import PySparkNotImplementedError
 from pyspark.sql.tests.test_dataframe_creation import DataFrameCreationTestsMixin
-from pyspark.sql.types import ArrayType, CharType, StructField, StructType, UserDefinedType
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
@@ -25,44 +23,7 @@ class DataFrameCreationParityTests(
     DataFrameCreationTestsMixin,
     ReusedConnectTestCase,
 ):
-    def test_char_varchar_schema_is_unsupported(self):
-        class CharStorageUDT(UserDefinedType):
-            @classmethod
-            def sqlType(cls):
-                return CharType(3)
-
-            @classmethod
-            def module(cls):
-                return __name__
-
-            @classmethod
-            def scalaUDT(cls):
-                return ""
-
-            def serialize(self, obj):
-                return obj
-
-            def deserialize(self, datum):
-                return datum
-
-        class CharValue:
-            __UDT__ = CharStorageUDT()
-
-            def __init__(self, value):
-                self.value = value
-
-        data_and_schemas = [
-            ([(["a"],)], StructType([StructField("value", ArrayType(CharType(3)))])),
-            ([("a",)], StructType([StructField("value", CharStorageUDT())])),
-            ([(CharValue("a"),)], None),
-        ]
-        for data, schema in data_and_schemas:
-            with self.subTest(schema=schema):
-                with self.assertRaisesRegex(
-                    PySparkNotImplementedError,
-                    "CHAR/VARCHAR in Spark Connect createDataFrame schema",
-                ):
-                    self.spark.createDataFrame(data, schema)
+    pass
 
 
 if __name__ == "__main__":

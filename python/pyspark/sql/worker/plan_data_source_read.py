@@ -18,7 +18,7 @@
 import functools
 import json
 from itertools import chain, islice
-from typing import Any, IO, Iterable, Iterator, List, Tuple, Union
+from typing import IO, Any, Iterable, Iterator, List, Tuple, Union
 
 import pyarrow as pa
 

@@ -91,7 +91,6 @@ from pyspark.sql.session import classproperty
 from pyspark.sql.types import (
     ArrayType,
     AtomicType,
-    CharType,
     DataType,
     DayTimeIntervalType,
     MapType,
@@ -100,9 +99,7 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     TimestampType,
-    VarcharType,
     _has_nulltype,
-    _has_physical_type,
     _infer_schema,
     _merge_type,
 )
@@ -776,15 +773,6 @@ class SparkSession:
                     raise PySparkValueError(
                         errorClass="CANNOT_DETERMINE_TYPE", messageParameters={}
                     )
-
-            if _has_physical_type(_schema, (CharType, VarcharType)):
-                raise PySparkNotImplementedError(
-                    errorClass="NOT_IMPLEMENTED",
-                    messageParameters={
-                        "feature": "CHAR/VARCHAR in Spark Connect createDataFrame schema: "
-                        f"{_schema}"
-                    },
-                )
 
             from pyspark.sql.conversion import (
                 LocalDataToArrowConversion,
