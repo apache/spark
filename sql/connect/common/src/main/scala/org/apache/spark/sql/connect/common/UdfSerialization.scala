@@ -33,12 +33,12 @@ import java.lang.reflect.Modifier
  * Spark version with an `InvalidClassException`.
  *
  * A stream descriptor flags custom `writeObject` data, but its numeric SUID does not reveal
- * whether the producer declared or computed that SUID. Tolerance is therefore limited to the exact
- * transitions in [[auditedTransitions]]. A class descriptor is rebound to the local class only
- * when its (class, stream SUID, local SUID) triple is audited, the local class uses default field
- * serialization with a computed SUID, and the complete persistent field layout of the stream and
- * local descriptors is identical. Anything else keeps the stream descriptor, so the standard
- * `serialVersionUID` check applies.
+ * whether the producer declared or computed that SUID. Tolerance is therefore limited to the
+ * exact transitions in [[auditedTransitions]]. A class descriptor is rebound to the local class
+ * only when its (class, stream SUID, local SUID) triple is audited, the local class uses default
+ * field serialization with a computed SUID, and the complete persistent field layout of the
+ * stream and local descriptors is identical. Anything else keeps the stream descriptor, so the
+ * standard `serialVersionUID` check applies.
  */
 private[spark] object UdfSerialization {
 
