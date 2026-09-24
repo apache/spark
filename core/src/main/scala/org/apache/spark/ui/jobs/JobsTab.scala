@@ -32,7 +32,7 @@ private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
   val sc = parent.sc
   val conf = parent.conf
   val killEnabled = parent.killEnabled
-  val killViaGetEnabled = parent.killViaGetEnabled
+  val actionsViaGetEnabled = parent.actionsViaGetEnabled
   val csrfToken = parent.csrfToken
 
   // Show pool information for only live UI.

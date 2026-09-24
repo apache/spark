@@ -204,14 +204,14 @@ private[spark] object JettyUtils extends Logging {
    * True when the request identifies itself as a prefetch rather than a deliberate user
    * navigation: Chrome and derivatives send "Sec-Purpose: prefetch" (or the older
    * "Purpose: prefetch", and compound values such as "prefetch;prerender"), and Firefox
-   * sends "X-Moz: prefetch". State-changing endpoints reject these so that a link
-   * prefetcher cannot trigger the action: a prefetch of a kill link must not kill.
+   * sends "X-Moz: prefetch". State-changing endpoints reject these so that a prefetcher
+   * cannot trigger the action: in GET mode (spark.ui.actionsViaGetEnabled) the token
+   * rides in a URL the browser has seen, and a prefetch of that URL must not kill.
    */
   private[spark] def isPrefetchRequest(request: HttpServletRequest): Boolean = {
-    val purpose = Option(request.getHeader("Sec-Purpose"))
-      .orElse(Option(request.getHeader("Purpose")))
-    purpose.exists(_.toLowerCase(Locale.ROOT).contains("prefetch")) ||
-      request.getHeader("X-Moz") != null
+    Seq("Sec-Purpose", "Purpose", "X-Moz")
+      .flatMap(h => Option(request.getHeader(h)))
+      .exists(_.toLowerCase(Locale.ROOT).contains("prefetch"))
   }
 
   /**
@@ -226,9 +226,9 @@ private[spark] object JettyUtils extends Logging {
 
   /**
    * Synchronizer-token check for state-changing endpoints: the request must carry the
-   * per-UI random token (embedded in the links and forms the UI renders) as the
+   * per-UI random token (embedded in the forms the UI renders) as the
    * "csrfToken" parameter. A cross-site page cannot read the token out of the UI's pages
-   * (same-origin policy) and cannot guess it, so forged kill/hold requests fail here
+   * (same-origin policy) and cannot guess it, so forged kill requests fail here
    * regardless of which headers the browser sends or suppresses. Constant-time
    * comparison, though the token is not exactly timing-sensitive at 128 bits.
    */
