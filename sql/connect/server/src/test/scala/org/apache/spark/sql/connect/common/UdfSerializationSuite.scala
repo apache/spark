@@ -21,19 +21,24 @@ import java.io.{ObjectInputStream, ObjectOutputStream, ObjectStreamClass, Object
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
+import scala.collection.mutable
+
 import com.google.protobuf.ByteString
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveIntEncoder
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.UdfSerialization.SuidTransition
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.planner.{SparkConnectPlanner, StreamingForeachBatchHelper}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{SuidCompatV1, SuidCompatV2, SuidCustomV1, SuidCustomV2}
-import org.apache.spark.sql.types.{SuidExplicitV1, SuidExplicitV2, SuidLayoutV1, SuidLayoutV2}
+import org.apache.spark.sql.types.{SuidExplicitV1, SuidExplicitV2, SuidExternalV1, SuidExternalV2}
+import org.apache.spark.sql.types.{SuidLayoutV1, SuidLayoutV2}
 import org.apache.spark.sql.types.{SuidProducerCustomV1, SuidProducerCustomV2}
 import org.apache.spark.sql.types.{SuidProducerExplicitV1, SuidProducerExplicitV2}
+import org.apache.spark.sql.types.{SuidWriteObjectV1, SuidWriteObjectV2}
 import org.apache.spark.util.Utils
 
 /**
@@ -124,6 +129,20 @@ class UdfSerializationSuite extends SparkFunSuite with SharedSparkSession {
       UdfSerialization.deserialize[AnyRef](stream, loader, audited))
   }
 
+  test("rejects an audited change when the consumer has a custom writeObject") {
+    val stream = drifted(SuidWriteObjectV1(1, "x"), classOf[SuidWriteObjectV2])
+    val audited = Set(transition(classOf[SuidWriteObjectV1], classOf[SuidWriteObjectV2]))
+    intercept[InvalidClassException](
+      UdfSerialization.deserialize[AnyRef](stream, loader, audited))
+  }
+
+  test("rejects an audited change when the consumer is Externalizable") {
+    val stream = drifted(new SuidExternalV1(1), classOf[SuidExternalV2])
+    val audited = Set(transition(classOf[SuidExternalV1], classOf[SuidExternalV2]))
+    intercept[InvalidClassException](
+      UdfSerialization.deserialize[AnyRef](stream, loader, audited))
+  }
+
   test("rejects an unaudited change from a producer with a custom writeObject") {
     val stream = drifted(SuidProducerCustomV1(1, "x"), classOf[SuidProducerCustomV2])
     intercept[InvalidClassException](UdfSerialization.deserialize[AnyRef](stream, loader))
@@ -156,6 +175,54 @@ class UdfSerializationSuite extends SparkFunSuite with SharedSparkSession {
     }
   }
 
+  // Streams written by released builds: each resource serializes the Class objects of audited
+  // classes as loaded from the published spark-sql-api_2.13 jar of that release, so it carries
+  // that release's class descriptors (serialVersionUID, flags, fields and superclasses).
+  private val releasedDescriptorResources =
+    Seq("4.0.0", "4.0.4", "4.1.3", "4.2.0").map(v =>
+      s"udf-serialization/sql-types-classes-$v.bin")
+
+  private def resourceBytes(name: String): Array[Byte] = {
+    val in = getClass.getClassLoader.getResourceAsStream(name)
+    assert(in != null, s"missing test resource $name")
+    try in.readAllBytes()
+    finally in.close()
+  }
+
+  /**
+   * The (class name, serialVersionUID) of every class descriptor in a stream of Class objects.
+   */
+  private def descriptorsIn(bytes: Array[Byte]): Set[(String, Long)] = {
+    val seen = mutable.Set[(String, Long)]()
+    val ois = new ObjectInputStream(new ByteArrayInputStream(bytes)) {
+      // A stream of Class objects has no instance data, so substituting the local descriptor
+      // cannot misread it; this only walks the stream to collect the producer descriptors.
+      override def readClassDescriptor(): ObjectStreamClass = {
+        val desc = super.readClassDescriptor()
+        seen += ((desc.getName, desc.getSerialVersionUID))
+        Option(ObjectStreamClass.lookup(resolveClass(desc))).getOrElse(desc)
+      }
+    }
+    try ois.readObject()
+    finally ois.close()
+    seen.toSet
+  }
+
+  test("audited transitions are backed by released producer descriptors") {
+    val released = releasedDescriptorResources.map(name => name -> resourceBytes(name))
+    val producerDescriptors = released.flatMap { case (_, bytes) => descriptorsIn(bytes) }.toSet
+    UdfSerialization.auditedTransitions.foreach { t =>
+      assert(
+        producerDescriptors.contains((t.className, t.streamSuid)),
+        s"no released descriptor backs $t")
+    }
+    released.foreach { case (name, bytes) =>
+      intercept[InvalidClassException](plainDeserialize(bytes))
+      val classes = UdfSerialization.deserialize[Array[AnyRef]](bytes, loader)
+      assert(classes.nonEmpty && classes.forall(_.isInstanceOf[Class[_]]), name)
+    }
+  }
+
   // An audited production transition of a Scala object. The object is serialized through its
   // ModuleSerializationProxy, whose Class field writes the object's class descriptor, and hence
   // its serialVersionUID, into the stream.
@@ -165,10 +232,11 @@ class UdfSerializationSuite extends SparkFunSuite with SharedSparkSession {
       .find(_.className.endsWith("$"))
       .getOrElse(fail("expected an audited transition of a Scala object"))
 
-  /** A UdfPacket referencing `t`'s object, as produced by a build with `t.streamSuid`. */
-  private def driftedUdfPacket(t: SuidTransition): (AnyRef, Array[Byte]) = {
-    val obj = Utils.classForName(t.className).getField("MODULE$").get(null)
-    val bytes = UdfPacket(obj, Seq.empty, PrimitiveIntEncoder).toByteString.toByteArray
+  private def objectOf(t: SuidTransition): AnyRef =
+    Utils.classForName(t.className).getField("MODULE$").get(null)
+
+  /** Rewrite `t.className`'s serialVersionUID in `bytes` from `t.localSuid` to `t.streamSuid`. */
+  private def asProducedBy(bytes: Array[Byte], t: SuidTransition): Array[Byte] = {
     val name = t.className.getBytes(StandardCharsets.UTF_8)
     val header =
       Array(ObjectStreamConstants.TC_CLASSDESC, (name.length >> 8).toByte, name.length.toByte) ++
@@ -179,7 +247,14 @@ class UdfSerializationSuite extends SparkFunSuite with SharedSparkSession {
     val suidOffset = idx + header.length
     assert(patched.getLong(suidOffset) == t.localSuid)
     patched.putLong(suidOffset, t.streamSuid)
-    (obj, patched.array())
+    patched.array()
+  }
+
+  /** A UdfPacket referencing `t`'s object, as produced by a build with `t.streamSuid`. */
+  private def driftedUdfPacket(t: SuidTransition): (AnyRef, Array[Byte]) = {
+    val obj = objectOf(t)
+    val bytes = UdfPacket(obj, Seq.empty, PrimitiveIntEncoder).toByteString.toByteArray
+    (obj, asProducedBy(bytes, t))
   }
 
   test("UdfPacket.apply accepts an audited serialVersionUID change") {
@@ -194,5 +269,16 @@ class UdfSerializationSuite extends SparkFunSuite with SharedSparkSession {
       new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(spark))
     val udf = proto.ScalarScalaUDF.newBuilder().setPayload(ByteString.copyFrom(bytes)).build()
     assert(planner.unpackScalaUDF[UdfPacket](udf).function eq obj)
+  }
+
+  test("StreamingForeachBatchHelper.scalaForeachBatchWrapper accepts an audited change") {
+    val obj = objectOf(objectTransition)
+    val fn: (Dataset[Any], Long) => Unit = (_, _) => obj.hashCode()
+    val bytes =
+      asProducedBy(serialize(ForeachWriterPacket(fn, PrimitiveIntEncoder)), objectTransition)
+    intercept[InvalidClassException](plainDeserialize(bytes))
+    StreamingForeachBatchHelper.scalaForeachBatchWrapper(
+      bytes,
+      SparkConnectTestUtils.createDummySessionHolder(spark))
   }
 }

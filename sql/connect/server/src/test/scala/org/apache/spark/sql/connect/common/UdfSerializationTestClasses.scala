@@ -41,6 +41,26 @@ package org.apache.spark.sql.types {
     private def readObject(in: java.io.ObjectInputStream): Unit = in.defaultReadObject()
   }
 
+  // The consumer has a custom writeObject.
+  case class SuidWriteObjectV1(a: Int, b: String) {
+    private def writeObject(out: java.io.ObjectOutputStream): Unit = out.defaultWriteObject()
+  }
+  case class SuidWriteObjectV2(a: Int, b: String) {
+    private def writeObject(out: java.io.ObjectOutputStream): Unit = out.defaultWriteObject()
+  }
+
+  // The consumer is Externalizable.
+  class SuidExternalV1(var a: Int) extends java.io.Externalizable {
+    def this() = this(0)
+    override def writeExternal(out: java.io.ObjectOutput): Unit = out.writeInt(a)
+    override def readExternal(in: java.io.ObjectInput): Unit = a = in.readInt()
+  }
+  class SuidExternalV2(var a: Int) extends java.io.Externalizable {
+    def this() = this(0)
+    override def writeExternal(out: java.io.ObjectOutput): Unit = out.writeInt(a)
+    override def readExternal(in: java.io.ObjectInput): Unit = a = in.readInt()
+  }
+
   // Only the producer writes custom class data; the consumer uses default serialization.
   case class SuidProducerCustomV1(a: Int, b: String) {
     private def writeObject(out: java.io.ObjectOutputStream): Unit = {

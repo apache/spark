@@ -56,8 +56,8 @@ case class UdfPacket(
 }
 
 object UdfPacket {
-  // Uses the SUID-tolerant reader so a UdfPacket stays deserializable across Spark versions even
-  // when a sql.types class's auto-computed serialVersionUID drifts; see UdfSerialization.
+  // Uses UdfSerialization, which accepts a sql.types serialVersionUID change only for the exact
+  // (class, stream SUID, local SUID) transitions it audits; any other mismatch still fails.
   def apply(in: InputStream): UdfPacket = {
     UdfSerialization.deserialize[UdfPacket](in)
   }
