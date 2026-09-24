@@ -128,10 +128,10 @@ SELECT * FROM trades t LEFT SEMI ASOF JOIN quotes q
 -- FVT-ASOF-1-017: missing MATCH_CONDITION
 SELECT * FROM trades t ASOF JOIN quotes q ON t.symbol = q.symbol;
 
+-- FVT-ASOF-1-020: missing MATCH_CONDITION with no left alias is rejected, not a plain join
+SELECT * FROM trades ASOF JOIN quotes USING (symbol);
+
 -- FVT-ASOF-1-018: multiple comparisons in MATCH_CONDITION
 SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (t.trade_time >= q.quote_time AND t.symbol = q.symbol)
   ON t.symbol = q.symbol;
-
--- FVT-ASOF-1-020: missing MATCH_CONDITION with no left alias is rejected, not a plain join
-SELECT * FROM trades ASOF JOIN quotes q ON trades.symbol = q.symbol;

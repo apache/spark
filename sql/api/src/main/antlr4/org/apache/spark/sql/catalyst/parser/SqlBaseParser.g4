@@ -2156,7 +2156,6 @@ ansiNonReserved
     | ARRAY
     | ASC
     | ASENSITIVE
-    | ASOF
     | AT
     | ATOMIC
     | AUTO

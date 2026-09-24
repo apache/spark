@@ -24,7 +24,7 @@ ARRAY	false
 AS	true
 ASC	false
 ASENSITIVE	false
-ASOF	false
+ASOF	true
 AT	false
 ATOMIC	false
 AUTHORIZATION	true
@@ -473,6 +473,7 @@ ALL
 AND
 ANY
 AS
+ASOF
 AUTHORIZATION
 BOTH
 CALL

@@ -305,6 +305,22 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+SELECT * FROM trades ASOF JOIN quotes USING (symbol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'USING'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
 SELECT * FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (t.trade_time >= q.quote_time AND t.symbol = q.symbol)
   ON t.symbol = q.symbol
@@ -325,20 +341,4 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "stopIndex" : 139,
     "fragment" : "ASOF JOIN quotes q\n  MATCH_CONDITION (t.trade_time >= q.quote_time AND t.symbol = q.symbol)\n  ON t.symbol = q.symbol"
   } ]
-}
-
-
--- !query
-SELECT * FROM trades ASOF JOIN quotes q ON trades.symbol = q.symbol
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'ASOF'",
-    "hint" : ""
-  }
 }

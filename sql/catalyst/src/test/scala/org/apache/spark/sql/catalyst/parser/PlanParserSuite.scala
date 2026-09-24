@@ -1377,22 +1377,39 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("asof join - missing MATCH_CONDITION is rejected, not parsed as a plain join") {
-    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
-      // ASOF is strict-non-reserved, so `from t asof` cannot read `asof` as t's alias. Without
-      // that, this unaliased query parses as a plain INNER join and the missing MATCH_CONDITION
-      // goes unreported. It must fail to parse instead.
+    // A missing MATCH_CONDITION must fail to parse. If `asof` were read as t's alias, the first
+    // query would parse as a plain INNER join instead. Check both keyword modes.
+    Seq("false", "true").foreach { enforceReservedKeywords =>
+      withSQLConf(
+        SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true",
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> enforceReservedKeywords) {
+        Seq(
+          "select * from t asof join u on t.a = u.a",
+          "select * from t x asof join u on t.a = u.a").foreach { query =>
+          checkError(
+            exception = parseException(query),
+            condition = "PARSE_SYNTAX_ERROR",
+            parameters = Map("error" -> "'on'", "hint" -> ""))
+        }
+        // A back-quoted `asof` is still a valid alias.
+        assertEqual(
+          "select * from t `asof` join u on t.a = u.a",
+          table("t").as("asof").join(table("u"), Inner, Option($"t.a" === $"u.a"))
+            .select(star()))
+      }
+    }
+  }
+
+  test("asof is strict-non-reserved in the default keyword mode") {
+    // Usable as a column and a table name, but not as an unquoted table alias.
+    assertEqual("select asof from t", table("t").select($"asof"))
+    assertEqual("select * from asof", table("asof").select(star()))
+    Seq("select * from t asof", "select * from t as asof").foreach { query =>
       checkError(
-        exception = parseException("select * from t asof join u on t.a = u.a"),
+        exception = parseException(query),
         condition = "PARSE_SYNTAX_ERROR",
-        parameters = Map("error" -> "'asof'", "hint" -> ""))
-      // The aliased form already failed before this change; keep it pinned.
-      checkError(
-        exception = parseException("select * from t x asof join u on t.a = u.a"),
-        condition = "PARSE_SYNTAX_ERROR",
-        parameters = Map("error" -> "'on'", "hint" -> ""))
-      // ASOF stays usable as an identifier (column and table name); only the alias slot rejects it.
-      parsePlan("select asof from t")
-      parsePlan("select * from asof")
+        parameters = Map("error" -> "end of input", "hint" -> ""))
     }
   }
 
@@ -1404,7 +1421,7 @@ class PlanParserSuite extends AnalysisTest {
       // As a table identifier in the FROM clause.
       parsePlan(s"select * from $kw")
     }
-    // All six together in a single SELECT list.
+    // All five together in a single SELECT list.
     parsePlan("select approx, distance, exact, nearest, similarity from t")
   }
 
