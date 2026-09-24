@@ -269,15 +269,7 @@ object DataSourceUtils extends PredicateHelper {
     QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
   }
 
-  /**
-   * Whether `ignoreCorruptFiles` may swallow this failure and skip the rest of its file.
-   *
-   * [[UnsupportedFileReadException]] is excluded because it does not report a corrupt file: it says
-   * the file cannot support a read the plan depends on. Skipping the rest of such a file would drop
-   * rows that are perfectly readable, and would do it silently.
-   */
   def shouldIgnoreCorruptFileException(e: Throwable): Boolean = e match {
-    case _: UnsupportedFileReadException => false
     case _: RuntimeException | _: IOException | _: InternalError => true
     case _ => false
   }

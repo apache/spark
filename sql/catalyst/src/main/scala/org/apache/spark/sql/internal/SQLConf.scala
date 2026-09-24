@@ -1885,42 +1885,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED =
-    buildConf("spark.sql.parquet.storageFilterPushdown.enabled")
-      .doc("If true, allows the vectorized Parquet reader to evaluate runtime storage filters " +
-        "(e.g. bloom filters from join runtime filtering) at the scan level using late " +
-        "materialization: read key columns first, evaluate the filter per row, then read data " +
-        "columns restricted to surviving rows. This is a planning-time decision only: when " +
-        "false, no storage filter is attached to a scan in the first place and the filter is " +
-        "applied as an ordinary post-scan filter instead. Note that the surviving key values of " +
-        "a whole row group are buffered before the first batch of that row group is produced, " +
-        "so a task holds up to one extra copy of the key columns for one row group. Note also " +
-        "that reading only the surviving rows of a row group needs a Parquet offset index. A " +
-        "scan of a file written without a page index fails as soon as its filter rejects part " +
-        "of a row group, so set this to false to read such a file.")
-      .version("5.0.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .booleanConf
-      .createWithDefault(false)
-
-  val PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES =
-    buildConf("spark.sql.parquet.storageFilterPushdown.maxSplicedRowGroupBytes")
-      .internal()
-      .doc("Largest key-column buffer, in bytes, that the vectorized Parquet reader will hold to " +
-        "splice surviving key values into its output batches. Splicing buffers one key value per " +
-        "surviving row of a row group, so the reader counts what it has buffered and gives that " +
-        "row group up once the count passes this, reading every projected column of the " +
-        "surviving rows in one go instead, which costs one extra read of the key columns. What " +
-        "is counted is the buffered values and their per-row overhead, not the backing arrays, " +
-        "which a column vector may grow beyond that. The count is examined whenever a batch " +
-        "worth of survivors per key column has been buffered, so a row group whose survivors fit " +
-        "in a single batch is never given up: it holds no more than the plain read path does.")
-      .version("5.0.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .bytesConf(ByteUnit.BYTE)
-      .checkValue(_ > 0, "must be positive")
-      .createWithDefaultString("64MB")
-
   val PARQUET_FILTER_PUSHDOWN_DATE_ENABLED = buildConf("spark.sql.parquet.filterPushdown.date")
     .doc("If true, enables Parquet filter push-down optimization for Date. " +
       s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
@@ -1982,6 +1946,49 @@ object SQLConf {
       .intConf
       .checkValue(threshold => threshold >= 0, "The threshold must not be negative.")
       .createWithDefault(10)
+
+  val PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.parquet.storageFilterPushdown.enabled")
+      .doc("If true, allows the vectorized Parquet reader to evaluate runtime storage filters " +
+        "(e.g. bloom filters from join runtime filtering) at the scan level using late " +
+        "materialization: read key columns first, evaluate the filter per row, then read data " +
+        "columns restricted to surviving rows. This is a planning-time decision only: when " +
+        "false, no storage filter is attached to a scan in the first place and the filter is " +
+        "applied as an ordinary post-scan filter alone. A pushed filter stays in the post-scan " +
+        "filter as well, the way a pushed data filter does, so honoring it is optional: a reader " +
+        "that meets a file it cannot prune, one written without a Parquet page index say, reads " +
+        "it the way a plain scan would. That costs the filter's own evaluation, plus one " +
+        "key-column read of the first row group the reader tries it on, since a missing page " +
+        "index is only reported by attempting the read. Note that the surviving key values of a " +
+        "whole row group are buffered before the " +
+        "first batch of that row group is produced, so a task holds up to one extra copy of the " +
+        "key columns for one row group.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES =
+    buildConf("spark.sql.parquet.storageFilterPushdown.maxSplicedRowGroupBytes")
+      .internal()
+      .doc("Largest key-column buffer, in bytes, that the vectorized Parquet reader will hold to " +
+        "splice surviving key values into its output batches. Splicing buffers one key value per " +
+        "surviving row of a row group, so the reader counts what it has buffered and gives that " +
+        "row group up once the count passes this, reading every projected column of the " +
+        "surviving rows in one go instead, which costs one extra read of the key columns. What " +
+        "is counted is the buffered values and their per-row overhead, not the backing arrays, " +
+        "which a column vector may grow beyond that. The count is examined whenever a batch " +
+        "worth of survivors per key column has been buffered, so a row group whose survivors fit " +
+        "in a single batch is never weighed at all: it holds no more than the plain read path " +
+        "does. The same limit covers the row ranges the surviving rows fall into, which every " +
+        "column reader of the second phase holds a copy of, so the two share one budget. A row " +
+        "group whose ranges alone pass it is read without the filter applied at all, which is " +
+        "correct but as slow as not pushing the filter.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "must be positive")
+      .createWithDefaultString("64MB")
 
   val PARQUET_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.aggregatePushdown")
     .doc("If true, aggregates will be pushed down to Parquet for optimization. Support MIN, MAX " +
@@ -9142,12 +9149,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
-  def parquetStorageFilterPushdownEnabled: Boolean =
-    getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED)
-
-  def parquetStorageFilterPushdownMaxSplicedRowGroupBytes: Long =
-    getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES)
-
   def parquetFilterPushDownDate: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DATE_ENABLED)
 
   def parquetFilterPushDownTimestamp: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED)
@@ -9159,6 +9160,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parquetFilterPushDownInFilterThreshold: Int =
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
+
+  def parquetStorageFilterPushdownEnabled: Boolean =
+    getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED)
+
+  def parquetStorageFilterPushdownMaxSplicedRowGroupBytes: Long =
+    getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES)
 
   def parquetAggregatePushDown: Boolean = getConf(PARQUET_AGGREGATE_PUSHDOWN_ENABLED)
 

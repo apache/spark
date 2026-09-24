@@ -179,4 +179,11 @@ final class ParquetReadState {
    */
   private record RowRange(long start, long end) {
   }
+
+  /**
+   * What one {@link RowRange} costs on the heap, for a caller that has to budget for the list this
+   * class builds: two longs, their object header, and the slot in the list holding them. It lives
+   * here because {@link RowRange} is private, so a caller cannot measure it.
+   */
+  static final int ESTIMATED_ROW_RANGE_BYTES = 40;
 }

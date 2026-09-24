@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util.concurrent.ConcurrentHashMap
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression, Literal, Predicate}
+import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression, ExprUtils, Literal, Predicate, XxHash64}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, YearMonthIntervalType}
 
@@ -70,6 +72,14 @@ class ParquetStorageFilter private (
   // construction to first use on the executor.
   @transient private lazy val predicate: BasePredicate = Predicate.create(boundExpression)
 
+  // Rewrites are cached for the task, because `rewriteForMissingKeys` rebuilds the expression with
+  // `transform`, and a rebuilt `BloomFilterMightContain` has to deserialize its filter again, up to
+  // megabytes per file otherwise. The missing positions are the whole key: the values a caller
+  // substitutes for them are the ones the scan's schema defines, so every file of that scan passes
+  // the same ones.
+  @transient private lazy val rewrites =
+    new ConcurrentHashMap[Seq[Int], ParquetStorageFilter]()
+
   def test(keyRow: InternalRow): Boolean = predicate.eval(keyRow)
 
   /**
@@ -80,7 +90,9 @@ class ParquetStorageFilter private (
    * their original relative order, and SQL metrics are shared with `this`.
    *
    * `missingKeyValues(i)` must be the internal-format value the reader produces for a missing
-   * column: its existence DEFAULT when it has one, else null. `ParquetColumnVector` writes that
+   * column: its existence DEFAULT when it has one, else null. The result is cached per set of
+   * missing positions, so those values have to be a function of the positions, which they are: they
+   * come from the scan's schema. `ParquetColumnVector` writes that
    * default into the output vector, so substituting null instead would filter on a value the scan
    * never returns and could drop matching rows.
    *
@@ -96,6 +108,13 @@ class ParquetStorageFilter private (
       missingKeyValues: Array[Any]): ParquetStorageFilter = {
     require(missingKeyLocalPositions.length == missingKeyValues.length,
       "missingKeyLocalPositions and missingKeyValues must have the same length")
+    rewrites.computeIfAbsent(missingKeyLocalPositions.toSeq,
+      _ => rewrite(missingKeyLocalPositions, missingKeyValues))
+  }
+
+  private def rewrite(
+      missingKeyLocalPositions: Array[Int],
+      missingKeyValues: Array[Any]): ParquetStorageFilter = {
     val substitution = missingKeyLocalPositions.zip(missingKeyValues).toMap
     val presentPositions = keyColumnIndices.indices.filterNot(substitution.contains)
     val newPosOf = presentPositions.zipWithIndex.toMap
@@ -128,11 +147,9 @@ object ParquetStorageFilter {
    * `[0, requestedSchema.length)`). Multiple filters are combined with logical AND, so a row must
    * satisfy all of them to survive.
    *
-   * Every condition below is a hard precondition rather than a soft rejection. By the time this is
-   * called, `FileSourceStrategy.extractStorageFilters` has removed these conjuncts from the
-   * post-scan `Filter`, so nothing left in the plan would apply them; returning a "no filter"
-   * result would silently return rows the filter rejects. `extractStorageFilters` pre-checks all of
-   * it, so a violation here is a planner bug and failing is the only safe response.
+   * Every condition below is asserted rather than handled: `extractStorageFilters` pre-checks all
+   * of them, so a violation here is a planner bug. A reader giving a filter up at read time is a
+   * different matter. These conditions are about the filter being well formed at all.
    *
    * Callers that have no storage filters must not call this at all.
    */
@@ -153,11 +170,14 @@ object ParquetStorageFilter {
     // not go through the remapping: it pairs the k-th key slot of the output batch with key-row
     // position k, which is the identity only while this list is ascending.
     val originalOrdinals = expr.collect { case b: BoundReference => b.ordinal }.distinct.sorted
+    // These messages name the expression by its node rather than printing it: a prepared bloom
+    // holds its filter as a binary literal, which renders as megabytes of hex.
     require(originalOrdinals.nonEmpty,
-      s"storage filter $expr has no bound reference to a key column")
+      s"storage filter ${expr.prettyName} has no bound reference to a key column")
     require(originalOrdinals.forall(i => i >= 0 && i < requestedSchema.length),
-      s"storage filter $expr references ordinals ${originalOrdinals.mkString("[", ", ", "]")} " +
-        s"outside the ${requestedSchema.length} fields of ${requestedSchema.catalogString}")
+      s"storage filter ${expr.prettyName} references ordinals " +
+        s"${originalOrdinals.mkString("[", ", ", "]")} outside the ${requestedSchema.length} " +
+        s"fields of ${requestedSchema.catalogString}")
     val unsupported = originalOrdinals.map(requestedSchema.fields(_))
       .filterNot(field => isSupportedKeyType(field.dataType))
     require(unsupported.isEmpty,
@@ -183,11 +203,11 @@ object ParquetStorageFilter {
    *
    * Narrower than `AtomicType`, for two different reasons:
    *  - `VariantType` cannot be supported: its Parquet representation is a group, not a primitive
-   *    leaf, so phase 1 has nothing flat to read it into. (It is unreachable anyway --
+   *    leaf, so phase 1 has nothing flat to read it into. (It is unreachable anyway, since
    *    `HashExpression.checkInputDataTypes` rejects variant, so no bloom can be built on one.)
-   *  - `GeometryType` and `GeographyType` could be supported -- both map to a primitive Parquet
+   *  - `GeometryType` and `GeographyType` could be supported. Both map to a primitive Parquet
    *    BINARY and both are handled by `WritableColumnVector.isArray`, so the existing byte-array
-   *    copier would work -- but no bloom can currently reference them: `HashExpression`'s codegen
+   *    copier would work. But no bloom can currently reference them: `HashExpression`'s codegen
    *    type dispatch has no case for either, so hashing one fails at codegen. They are left out
    *    until something can actually produce such a filter.
    */
@@ -211,7 +231,29 @@ object ParquetStorageFilter {
       // NOT: the reader evaluates the expression it is given and treats a false as "drop this row".
       // Every reference is checked, not just the ones on the value side, because [[create]] binds
       // and type-checks all of them.
-      bloom.references.forall(a => isSupportedKeyType(a.dataType))
+      bloom.references.forall(a => isSupportedKeyType(a.dataType)) && canEvaluateOnEveryRow(bloom)
     case _ => false
   }
+
+  /**
+   * Whether the reader may evaluate `bloom`'s value side on any row of the files it reads.
+   *
+   * It has to ask, because the reader evaluates the predicate on every row the pushed data filter
+   * left, while in the plan the conjunct ran after the ones ahead of it and was skipped for the
+   * rows they rejected. A `CAST(s AS BIGINT)` key, which `InjectRuntimeFilter` builds for a
+   * string-to-long join, then throws in ANSI mode on a row an earlier conjunct would have dropped,
+   * a query that succeeds without this feature.
+   *
+   * So the value side must be a hash of expressions that cannot fail on any input, which
+   * [[ExprUtils.canEvaluateUnconditionally]] decides. `XxHash64` and the membership test itself are
+   * total for every type they accept at analysis time.
+   *
+   * This is a question about the conjunct as the planner holds it, with attribute references for
+   * leaves. It is not one to ask of a bound expression, which that whitelist does not admit.
+   */
+  private def canEvaluateOnEveryRow(bloom: BloomFilterMightContain): Boolean =
+    bloom.valueExpression match {
+      case hash: XxHash64 => hash.children.forall(ExprUtils.canEvaluateUnconditionally)
+      case _ => false
+    }
 }
