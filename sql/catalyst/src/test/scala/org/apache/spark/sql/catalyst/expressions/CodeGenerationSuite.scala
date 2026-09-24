@@ -573,13 +573,55 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       val actual = proj(null)
       assert(actual.getInt(0) == x)
     }
-    // A warning, so it is seen at the shells' default level, and it names the remedy.
-    assert(appender.loggingEvents.exists { event =>
-      val message = event.getMessage().getFormattedMessage
-      event.getLevel == Level.WARN && message.contains("Generated method too long") &&
-        message.contains(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key)
-    })
+    // A projection is not a whole-stage codegen stage, where the remedy applies, so its huge
+    // method is reported at INFO, as before.
+    val lines = appender.loggingEvents
+      .filter(_.getMessage().getFormattedMessage.contains("Generated method too long"))
+    assert(lines.nonEmpty && lines.forall(_.getLevel == Level.INFO))
   }
+
+  private def hotSpotSkipsHugeMethods: Boolean = try {
+    java.lang.management.ManagementFactory
+      .getPlatformMXBean(classOf[com.sun.management.HotSpotDiagnosticMXBean])
+      .getVMOption("DontCompileHugeMethods").getValue.toBoolean
+  } catch {
+    case scala.util.control.NonFatal(_) => false
+  }
+
+  test("SPARK-59774: a huge whole-stage method warns once, with the remedy, where it applies") {
+    assume(hotSpotSkipsHugeMethods, "the JVM compiles huge methods, so nothing is interpreted")
+    val stage = "org.apache.spark.sql.catalyst.expressions.GeneratedClass$" +
+      "GeneratedIteratorForCodegenStage1"
+    def logged(className: String, method: String, size: Int): Seq[(Level, String)] = {
+      val appender = new LogAppender("huge method")
+      withLogAppender(appender, loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
+          Some(Level.INFO)) {
+        CodeCompiler.logHugeMethod(className, method, size)
+      }
+      appender.loggingEvents.toSeq.map(e => (e.getLevel, e.getMessage.getFormattedMessage))
+    }
+    CodeCompiler.resetHugeMethodWarning()
+    // With the setting at the JIT limit the stage falls back, so the method never runs: INFO.
+    withSQLConf(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key ->
+        CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT.toString) {
+      assert(logged(stage, "processNext", 9513).map(_._1) == Seq(Level.INFO))
+    }
+    // A method that runs once per class or partition costs little interpreted: INFO.
+    assert(logged(stage, "init", 9513).map(_._1) == Seq(Level.INFO))
+    assert(logged(stage, "<init>", 9513).map(_._1) == Seq(Level.INFO))
+    // Outside whole-stage codegen the setting does not apply: INFO.
+    assert(logged("org.apache.spark.sql.catalyst.expressions.GeneratedClass$" +
+      "SpecificUnsafeProjection", "apply", 9513).map(_._1) == Seq(Level.INFO))
+    // The per-row method of a stage that keeps whole-stage codegen: a warning naming the
+    // setting and the value, the first time in the JVM...
+    val warned = logged(stage, "processNext", 9513)
+    assert(warned.size == 1 && warned.head._1 == Level.WARN)
+    assert(warned.head._2.contains(s"${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key} to " +
+      s"${CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT}"))
+    // ...and INFO after that, so executors and recompiles do not repeat it.
+    assert(logged(stage, "processNext", 9600).map(_._1) == Seq(Level.INFO))
+  }
+
 
   test("SPARK-51527: spark.sql.codegen.logLevel") {
     withSQLConf(SQLConf.CODEGEN_LOG_LEVEL.key -> "INFO") {
