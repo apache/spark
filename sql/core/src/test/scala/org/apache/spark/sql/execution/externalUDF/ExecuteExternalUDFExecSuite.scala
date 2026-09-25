@@ -30,6 +30,7 @@ import org.apache.arrow.vector.ipc.message.MessageSerializer
 import org.apache.arrow.vector.types.pojo.Schema
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
+import org.mockito.Mockito.mock
 
 import org.apache.spark.{BarrierTaskContext, SparkException, SparkUnsupportedOperationException,
   TaskContext, TaskContextImpl}
@@ -386,20 +387,8 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
   }
 
   test("scalar external UDF rejects barrier task contexts before worker creation") {
-    val context = new TaskContextImpl(
-      stageId = 0,
-      stageAttemptNumber = 0,
-      partitionId = 0,
-      taskAttemptId = 0L,
-      attemptNumber = 0,
-      numPartitions = 1,
-      taskMemoryManager = null,
-      localProperties = new Properties,
-      metricsSystem = null)
-    val barrierContext = new BarrierTaskContext(context)
-
     val error = intercept[SparkUnsupportedOperationException] {
-      ExecuteExternalUDFExec.ensureTaskContextSupported(barrierContext)
+      ExecuteExternalUDFExec.ensureTaskContextSupported(mock(classOf[BarrierTaskContext]))
     }
     checkError(
       exception = error,
