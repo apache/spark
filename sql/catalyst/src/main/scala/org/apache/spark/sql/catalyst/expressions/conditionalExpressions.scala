@@ -361,9 +361,12 @@ case class CaseWhen(
     //     } while (false);
     //     return caseWhenResultState;
     //   }
+    // Under whole stage codegen the methods take the input variables the branches read in place
+    // of the row `i`, which is why the branches are passed as `sources`.
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = allConditions,
       funcName = "caseWhen",
+      sources = children,
       returnType = CodeGenerator.JAVA_BYTE,
       makeSplitFunction = func =>
         s"""

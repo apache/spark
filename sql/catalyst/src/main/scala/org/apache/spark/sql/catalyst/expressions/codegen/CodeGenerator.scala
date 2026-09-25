@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
 import org.apache.spark.sql.catalyst.trees.TreePattern.WITH_EXPRESSION
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
@@ -1156,8 +1157,12 @@ class CodegenContext extends Logging {
    *
    * Note that different from `splitExpressions`, we will extract the current inputs of this
    * context and pass them to the generated functions. The input is `INPUT_ROW` for normal codegen
-   * path, and `currentVars` for whole stage codegen path. Whole stage codegen path is not
-   * supported yet.
+   * path, and `currentVars` for whole stage codegen path.
+   *
+   * Under whole stage codegen the inputs are local variables of the operator's method, and which
+   * of them the code reads is known only from the expressions the code was generated for, so the
+   * code is split only when the caller passes those as `sources` and every local they read can be
+   * passed to a function (see `wholeStageSplitArguments`). Otherwise it stays in one piece.
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
@@ -1166,6 +1171,8 @@ class CodegenContext extends Logging {
    * @param returnType the return type of the split function.
    * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
    * @param foldFunctions folds the split function calls.
+   * @param sources the expressions whose generated code `expressions` is, which under whole
+   *                stage codegen decide the arguments of the split functions.
    */
   def splitExpressionsWithCurrentInputs(
       expressions: Seq[String],
@@ -1173,18 +1180,111 @@ class CodegenContext extends Logging {
       extraArguments: Seq[(String, String)] = Nil,
       returnType: String = "void",
       makeSplitFunction: String => String = identity,
-      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
-    // TODO: support whole stage codegen
-    if (INPUT_ROW == null || currentVars != null) {
-      expressions.mkString("\n")
+      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";"),
+      sources: Seq[Expression] = Nil): String = {
+    val inputs = if (currentVars != null) {
+      if (SQLConf.get.wholeStageSplitExpressions) wholeStageSplitArguments(sources) else None
     } else {
-      splitExpressions(
-        expressions,
-        funcName,
-        ("InternalRow", INPUT_ROW) +: extraArguments,
-        returnType,
-        makeSplitFunction,
-        foldFunctions)
+      Option(INPUT_ROW).map(row => Seq("InternalRow" -> row))
+    }
+    inputs match {
+      case Some(arguments) =>
+        splitExpressions(
+          expressions,
+          funcName,
+          arguments ++ extraArguments,
+          returnType,
+          makeSplitFunction,
+          foldFunctions)
+      case None =>
+        expressions.mkString("\n")
+    }
+  }
+
+  /**
+   * The arguments of a function split out of whole stage generated code so that the code generated
+   * for `sources` compiles inside it: the local variables that code reads from the operator's
+   * method. None where the code cannot be split, because a local it reads cannot be told from
+   * `sources` or cannot be passed.
+   *
+   * The code reads its inputs from `currentVars`, from the states of subexpression elimination
+   * and, where the operator sets one, from `INPUT_ROW`; a field or a literal among them is read as
+   * it stands and needs no argument. A state is taken as its own variables without looking below
+   * it, the way `CodeGenerator.getLocalInputVariableValues` takes it, so that the arguments are
+   * among those of the functions an aggregate or `ExpandExec` splits out of its own code, which is
+   * where these calls then sit. A `CommonExpressionRef` computes its definition where it is
+   * reached, so what the definition reads is read here too.
+   *
+   * It refuses, as `CommonExprSlots.methodArgs` does and for the reasons it gives:
+   *  - an input the operator has not evaluated yet, whose code was generated into this code and
+   *    names locals of the operator producing the row;
+   *  - a value no parameter can carry: a `SimpleExprValue`, or a variable naming a slot of a
+   *    compacted mutable state array;
+   *  - more parameter slots than a method can take.
+   * And two it has of its own:
+   *  - a state for a node whose `genCode` generates its child instead of reading the state
+   *    (`Alias`, `Collate`, an identity `Cast`), so that what the code reads below it is not in
+   *    the state;
+   *  - a `LambdaVariable`, whose value is a local declared by the loop of an object expression.
+   */
+  private def wholeStageSplitArguments(sources: Seq[Expression]): Option[Seq[(String, String)]] = {
+    val args = mutable.LinkedHashMap.empty[String, VariableValue]
+    def canPass(v: ExprValue): Boolean = v match {
+      case local: VariableValue =>
+        val name = local.variableName
+        val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
+          name.forall(Character.isJavaIdentifierPart)
+        // A field needs no argument, and passing one is refused by `splitExpressions`.
+        if (isName && !mutableStateNames.contains(name)) {
+          args.getOrElseUpdate(name, local)
+        }
+        isName
+      case _: GlobalValue | _: LiteralValue => true
+      case _ => false
+    }
+    def readsSubExprState(e: Expression): Boolean = e match {
+      case _: Alias | _: Collate => false
+      case c: Cast => !DataType.equalsStructurally(c.child.dataType, c.dataType)
+      case _ => true
+    }
+    var possible = sources.nonEmpty &&
+      (INPUT_ROW == null || canPass(JavaCode.variable(INPUT_ROW, classOf[InternalRow])))
+    val visited = mutable.HashSet.empty[Long]
+    // The definitions of a `With` in the trees walked here, which are in `currentCommonExprs`
+    // only while that `With` is generated.
+    val nestedDefs = mutable.HashMap.empty[Long, Expression]
+    val toVisit = mutable.Stack[Expression](sources: _*)
+    while (possible && toVisit.nonEmpty) {
+      val next = toVisit.pop()
+      subExprEliminationExprs.get(ExpressionEquals(next)) match {
+        case Some(state) =>
+          possible = readsSubExprState(next) &&
+            canPass(state.eval.value) && canPass(state.eval.isNull)
+        case None =>
+          next match {
+            case ref: BoundReference if currentVars(ref.ordinal) != null =>
+              val input = currentVars(ref.ordinal)
+              possible = input.code == EmptyBlock && canPass(input.value) && canPass(input.isNull)
+            case _: LambdaVariable =>
+              possible = false
+            case w: With =>
+              w.defs.foreach(d => nestedDefs.put(d.id.id, d.child))
+              toVisit.push(w.child)
+            case ref: CommonExpressionRef =>
+              if (visited.add(ref.id.id)) {
+                nestedDefs.get(ref.id.id)
+                  .orElse(currentCommonExprs.get(ref.id.id).map(_.definition))
+                  .foreach(toVisit.push)
+              }
+            case e =>
+              toVisit.pushAll(e.children)
+          }
+      }
+    }
+    val params = args.values.toSeq
+    Option.when(
+      possible && isValidParamLength(calculateParamLengthFromExprValues(params))) {
+      params.map(v => typeName(v.javaType) -> v.variableName)
     }
   }
 
