@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import java.{util => ju}
 import java.lang.{Long => JLong}
-import java.net.URLDecoder
+import java.net.{URI, URISyntaxException, URLDecoder}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, TimeZone}
@@ -683,8 +683,22 @@ private[spark] object UIUtils extends Logging {
     if (proxy) {
       val proxyPrefix = sys.props.getOrElse("spark.ui.proxyBase", "")
       proxyPrefix + "/proxy/" + id
-    } else {
+    } else if (isSafeHref(origHref)) {
       origHref
+    } else {
+      // The href may come from an external registrant (e.g. an application's appUiUrl or
+      // a worker's webUiAddress); render anything unrecognized as a dead link.
+      "#"
+    }
+  }
+
+  /** Returns true if the given href is relative or uses the http(s) scheme. */
+  private def isSafeHref(href: String): Boolean = href != null && {
+    try {
+      val scheme = new URI(href).getScheme
+      scheme == null || scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https")
+    } catch {
+      case _: URISyntaxException => false
     }
   }
 
