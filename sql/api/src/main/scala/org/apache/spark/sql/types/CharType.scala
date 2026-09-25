@@ -23,6 +23,10 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 /**
  * A data type representing fixed-length character strings with a specified length.
  *
+ * A standalone collated `CharType` writes its collation inline in JSON and therefore requires a
+ * current reader. Within a [[StructField]], schema JSON stores the collation in field metadata
+ * and emits an uncollated `char(n)` type so older readers can still read the schema.
+ *
  * @param length
  *   The fixed length of the char string (must be non-negative)
  * @param collation

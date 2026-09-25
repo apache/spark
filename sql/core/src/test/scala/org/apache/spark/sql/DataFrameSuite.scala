@@ -636,6 +636,18 @@ class DataFrameSuite extends SharedSparkSession
     assert(df.schema.map(_.name) === Seq("key", "value", "newCol1", "newCol2"))
   }
 
+  test("withColumns: internal method with dependent columns") {
+    val df = testData.toDF().withColumns(
+      Seq("newCol1", "newCol2"),
+      Seq(col("key") + 1, col("newCol1") + 1))
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1, key + 2)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("key", "value", "newCol1", "newCol2"))
+  }
+
   test("withColumns: internal method") {
     val df = testData.toDF().withColumns(Seq("newCol1", "newCol2"),
       Seq(col("key") + 1, col("key") + 2))
@@ -2822,5 +2834,3 @@ case class OutputListAwareConstraintsTestPlan(
 
   override def newInstance(): LogicalPlan = copy(outputList = outputList.map(_.newInstance()))
 }
-
-

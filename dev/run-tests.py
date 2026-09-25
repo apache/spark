@@ -18,23 +18,23 @@
 #
 
 import itertools
-from argparse import ArgumentParser
 import os
 import re
-import sys
 import subprocess
+import sys
 import tempfile
+from argparse import ArgumentParser
 from contextlib import contextmanager
 
+import sparktestsupport.modules as modules
 from sparktestsupport import SPARK_HOME, USER_HOME
-from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
+from sparktestsupport.shellutils import exit_from_command_with_retcode, rm_r, run_cmd, which
 from sparktestsupport.utils import (
     determine_dangling_python_tests,
     determine_modules_for_files,
     determine_modules_to_test,
     identify_changed_files_from_git_commits,
 )
-import sparktestsupport.modules as modules
 
 
 def setup_test_environ(environ):
@@ -665,6 +665,7 @@ def main():
 
 def _test():
     import doctest
+
     import sparktestsupport.modules
     import sparktestsupport.utils
 

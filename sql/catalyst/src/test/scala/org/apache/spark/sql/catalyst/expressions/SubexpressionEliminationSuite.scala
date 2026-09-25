@@ -147,7 +147,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val equivalence = new EquivalentExpressions
     equivalence.addExprTree(add)
     // the `two` inside `fallback` should not be added
-    assert(equivalence.getAllExprStates(1).size == 0)
+    assert(equivalence.getAllExprStates(1).isEmpty)
     assert(equivalence.getAllExprStates().count(_.useCount == 1) == 3) // add, two, explode
   }
 
@@ -544,6 +544,146 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val equivalence1 = new EquivalentExpressions
     equivalence1.addExprTree(caseWhenExpr1)
     assert(equivalence1.getCommonSubexpressions.size == 1)
+  }
+
+  test("SPARK-58902: no candidate below a With, with or without the short-circuit peel") {
+    // A `CommonExpressionRef` can only be evaluated inside the `With` that binds it: the codegen
+    // slots exist only while that `With` is being generated, and `getCommonExpr` throws otherwise.
+    // Subexpression elimination generates its candidates outside every `With` scope, so a candidate
+    // holding a reference would fail the query. `childrenToRecurse` therefore stops at a `With`,
+    // including after `skipForShortcut` has peeled an `And`/`Or` down to one.
+    val a = AttributeReference("a", IntegerType)()
+    val memoized = With(Add(a, a)) { case Seq(ref) =>
+      And(GreaterThan(ref, Literal(0)), LessThan(ref, Literal(10)))
+    }
+    // The bare `With`; one behind an `And`, which is where the peel lands on it; and one in every
+    // branch of a `CaseWhen`, which reaches the map through `commonChildrenToRecurse` instead.
+    val shapes = Seq[Expression](
+      memoized,
+      And(memoized, GreaterThan(a, Literal(0))),
+      CaseWhen(Seq((GreaterThan(a, Literal(0)), memoized)), memoized))
+    Seq(false, true).foreach { peel =>
+      shapes.foreach { expr =>
+        val equivalence = new EquivalentExpressions(skipForShortcutEnable = peel)
+        equivalence.addExprTree(expr)
+        val states = equivalence.getAllExprStates()
+        // Without this, an implementation that recorded nothing at all would satisfy every
+        // assertion below by iterating over an empty list.
+        assert(states.nonEmpty, s"nothing was recorded for $expr (peel = $peel)")
+        // The `With` itself stays a candidate wherever it is reached: deduplicating it as a whole
+        // is safe, since it carries its own definitions and brings their slots into scope wherever
+        // it is generated. The exception is an `And` root with the peel on, where the peel lands on
+        // the `With` and the guard drops it along with its subtree -- no opportunity is lost there,
+        // because the peel never hands back the node it lands on, only that node's children.
+        if (!(peel && expr.isInstanceOf[And])) {
+          assert(states.exists(_.expr.isInstanceOf[With]),
+            s"the With itself stopped being a candidate for $expr (peel = $peel)")
+        }
+        states.foreach { state =>
+          // A candidate may hold a reference only if it also holds the `With` that binds it -- the
+          // whole `With`, or something above it, is a legal candidate; anything below it is not.
+          // The ids are collected over the whole candidate rather than per reference, so a
+          // reference sitting beside its binder rather than under it would pass; `With.apply`
+          // cannot build that shape.
+          val refIds = state.expr.collect { case r: CommonExpressionRef => r.id }.toSet
+          val boundIds =
+            state.expr.collect { case inScope: With => inScope.defs.map(_.id) }.flatten.toSet
+          assert(refIds.subsetOf(boundIds),
+            s"a candidate below the With was added for $expr (peel = $peel): ${state.expr}")
+          assert(!state.expr.isInstanceOf[CommonExpressionDef],
+            s"an unevaluable definition was added for $expr (peel = $peel): ${state.expr}")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59579: the short-circuit peel keeps the guards of the operand it lands on") {
+    // `skipForShortcut` peels the leading `And`/`Or` operands down to the one operand that is
+    // always evaluated. That operand can be an expression whose children must not be recursed
+    // into, and `And`/`Or` are not `ConditionalExpression`s, so the peel walks right past the
+    // cases that stop the descent. What may be recursed into has to be asked about the operand
+    // the peel lands on, not about the `And`/`Or` chain it started from.
+    val a = AttributeReference("a", IntegerType)()
+    val add = Add(a, Literal(1))
+    // `add` occurs twice in one branch body and nowhere else, so no group of branches shares it:
+    // `branchGroups` intersects the branches of a group, so a body that shares nothing with the
+    // other branches contributes nothing. That is what makes the assertions below hold for the
+    // right reason rather than because nothing was recorded at all.
+    val body = GreaterThan(Multiply(add, add), Literal(0))
+    val otherBody = GreaterThan(a, Literal(1))
+    val lambdaVar = NamedLambdaVariable("x", IntegerType, nullable = false)
+    val lambdaAdd = Add(lambdaVar, Literal(1))
+    val guarded = Seq[Expression](
+      If(GreaterThan(a, Literal(0)), body, otherBody),
+      CaseWhen(Seq((GreaterThan(a, Literal(0)), body)), otherBody),
+      // Two branches, so that the conditions group is not empty either.
+      CaseWhen(
+        Seq((GreaterThan(a, Literal(0)), body), (LessThan(a, Literal(0)), otherBody)),
+        otherBody),
+      CodegenFallbackExpression(body),
+      // A candidate from a lambda body is a worse outcome than one evaluated too eagerly:
+      // generating it outside the lambda leaves `getLambdaVar` with no variable to bind, which
+      // throws. Nothing else stops it -- `supportedExpression` looks for the `LAMBDA_VARIABLE`
+      // pattern, which `NamedLambdaVariable` does not carry.
+      ArrayExists(
+        CreateArray(Seq(a)),
+        LambdaFunction(
+          GreaterThan(Multiply(lambdaAdd, lambdaAdd), Literal(0)),
+          Seq(lambdaVar)),
+        followThreeValuedLogic = true))
+
+    def statesOf(expr: Expression): Seq[ExpressionStats] = {
+      val equivalence = new EquivalentExpressions(skipForShortcutEnable = true)
+      equivalence.addExprTree(expr)
+      equivalence.getAllExprStates()
+    }
+
+    def assertNoneEliminated(expr: Expression, hint: String): Unit = {
+      val states = statesOf(expr)
+      // Guards the next assert against passing vacuously: `supportedExpression` would refuse the
+      // whole tree if `NamedLambdaVariable` ever carried the `LAMBDA_VARIABLE` pattern, and then
+      // nothing at all would be recorded.
+      assert(states.nonEmpty, s"nothing was recorded, $hint: $expr")
+      assert(states.forall(_.useCount == 1),
+        s"eliminated ${states.filter(_.useCount > 1).map(_.expr)}, $hint: $expr")
+    }
+
+    guarded.foreach { expr =>
+      // Met directly, the guards are the ones that were already there: `skipForShortcut` returns a
+      // node that is not an `And`/`Or` unchanged, so this line behaves as it did before. It is here
+      // so that a future change to the guards has to keep both cases in step.
+      assertNoneEliminated(expr, "met directly")
+      // Behind one, behind a chain of, and behind a mix of short-circuit operands is where the peel
+      // used to walk past the guards.
+      assertNoneEliminated(And(expr, otherBody), "behind an And")
+      assertNoneEliminated(Or(Or(expr, otherBody), otherBody), "behind an Or chain")
+      assertNoneEliminated(And(Or(expr, otherBody), otherBody), "behind a mixed chain")
+    }
+
+    def eliminated(expr: Expression): Seq[ExpressionStats] =
+      statesOf(expr).filter(_.useCount > 1)
+
+    // The operand the peel lands on is not treated as opaque: it still contributes its own
+    // duplicates when nothing guards it.
+    assert(eliminated(And(body, otherBody)).map(_.expr) == Seq(add))
+    // A duplicate shared by every branch of a group is still eliminated, one evaluation standing
+    // for whichever branch runs, as long as it occurs once more outside the group -- here in the
+    // condition, which is always evaluated. The use count is what pins this down: asking
+    // `branchGroups` about the `And` instead of about the operand the peel lands on leaves 1 and
+    // no elimination, and recursing into every branch as if it always ran gives 3. The `If` shape
+    // is here because `branchGroups` groups its two values, where `CaseWhen` groups conditions and
+    // values separately.
+    val shared = CaseWhen(
+      Seq((GreaterThan(add, Literal(0)), GreaterThan(add, Literal(1)))),
+      GreaterThan(add, Literal(2)))
+    val sharedIf =
+      If(GreaterThan(add, Literal(0)), GreaterThan(add, Literal(1)), GreaterThan(add, Literal(2)))
+    Seq[Expression](shared, And(shared, otherBody), sharedIf, And(sharedIf, otherBody))
+        .foreach { expr =>
+      val states = eliminated(expr)
+      assert(states.map(_.expr) == Seq(add), s"$expr")
+      assert(states.head.useCount == 2, s"$expr")
+    }
   }
 }
 

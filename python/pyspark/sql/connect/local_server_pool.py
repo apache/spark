@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 
-"""Filesystem-backed state model for local Spark Connect server pools.
+"""Filesystem-backed state and lifecycle model for local Spark Connect server pools.
 
-This internal foundation owns member identity, directory locking, state-file access, and
-claiming. Process lifecycle and server acquisition are layered on top in follow-up changes.
+This internal foundation owns member identity, directory locking, state-file access, claiming,
+reaping, and retirement. Server acquisition is layered on top in a follow-up change.
 """
 
 import contextlib
@@ -27,11 +27,22 @@ import json
 import math
 import os
 import shutil
+import signal
+import subprocess
 import sys
+import tempfile
+import time
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from pyspark.errors import PySparkValueError
-
+from pyspark.sql.connect.local_server import (
+    Discovery,
+    _is_local_connect_server,
+    _pid_alive,
+    _port_open,
+    runtime_dir,
+)
 
 # Environment variables that shape the JVM the launcher boots through
 # sbin/start-connect-server.sh -> spark-daemon.sh -> load-spark-env.sh / spark-submit.
@@ -102,19 +113,95 @@ def pool_fingerprint(master: str, seed_conf: Dict[str, Any]) -> str:
     return hashlib.sha256(json.dumps(identity).encode("utf-8")).hexdigest()
 
 
-# The end of year 9999 UTC, as a Unix timestamp. ``created`` is a wall-clock ``time.time()``
-# reading, so no real clock reaches this for millennia; rejecting values beyond it keeps a
-# corrupt far-future timestamp from looking perpetually fresh to age-based reaping in the
-# layers above, which measure a member's age as ``time.time() - created``.
-_MAX_CREATED = 253402300799
+class _PoolStateRecord:
+    """Validation shared by JSON-backed pool state records."""
+
+    # The end of year 9999 UTC, as a Unix timestamp. Pool timestamps are wall-clock
+    # ``time.time()`` readings, so rejecting larger values keeps corrupt far-future records
+    # from looking perpetually fresh to age-based reaping.
+    _MAX_TIMESTAMP = 253402300799
+
+    @staticmethod
+    def _positive_pid(value: Any) -> Optional[int]:
+        """A positive integer process id, or ``None`` for malformed persisted data."""
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            return None
+        return value
+
+    @classmethod
+    def _timestamp(cls, value: Any) -> Optional[float]:
+        """A finite persisted wall-clock timestamp, or ``None`` when malformed."""
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        try:
+            timestamp = float(value)
+        except OverflowError:
+            return None
+        if not math.isfinite(timestamp) or not 0 <= timestamp <= cls._MAX_TIMESTAMP:
+            return None
+        return timestamp
 
 
-class PoolMember:
+@dataclass(frozen=True)
+class RetiredState(_PoolStateRecord):
+    """Validated fields of a ``retired-<uid>.json`` shutdown record."""
+
+    pid: int
+    process_start_id: str
+    retired: float
+    signalled: bool = False
+
+    @classmethod
+    def pid_from_data(cls, data: Optional[Dict[str, Any]]) -> Optional[int]:
+        """Recover a valid server pid even when the retirement time is malformed."""
+        return cls._positive_pid(data.get("pid")) if data is not None else None
+
+    @staticmethod
+    def process_start_id_from_data(data: Optional[Dict[str, Any]]) -> Optional[str]:
+        """Recover a process generation identifier from a malformed state record."""
+        value = data.get("process_start_id") if data is not None else None
+        return value if isinstance(value, str) and value else None
+
+    @classmethod
+    def retired_from_data(cls, data: Optional[Dict[str, Any]]) -> Optional[float]:
+        """Recover a valid retirement timestamp from a malformed state record."""
+        return cls._timestamp(data.get("retired")) if data is not None else None
+
+    @staticmethod
+    def signalled_from_data(data: Optional[Dict[str, Any]]) -> Optional[bool]:
+        """Recover SIGTERM delivery state, defaulting legacy records to unsignalled."""
+        if data is None:
+            return None
+        value = data.get("signalled", False)
+        return value if isinstance(value, bool) else None
+
+    @classmethod
+    def from_data(cls, data: Optional[Dict[str, Any]]) -> Optional["RetiredState"]:
+        if data is None:
+            return None
+        pid = cls.pid_from_data(data)
+        process_start_id = cls.process_start_id_from_data(data)
+        retired = cls.retired_from_data(data)
+        signalled = cls.signalled_from_data(data)
+        if pid is None or process_start_id is None or retired is None or signalled is None:
+            return None
+        return cls(pid, process_start_id, retired, signalled)
+
+    def as_data(self) -> Dict[str, Any]:
+        return {
+            "pid": self.pid,
+            "process_start_id": self.process_start_id,
+            "retired": self.retired,
+            "signalled": self.signalled,
+        }
+
+
+class PoolMember(_PoolStateRecord):
     """One published pool server, wrapping its ``server-<uid>.json`` record."""
 
     def __init__(self, data: Dict[str, Any]):
         record = dict(data)
-        for key in ("host", "token", "spark_version", "fingerprint"):
+        for key in ("host", "token", "spark_version", "fingerprint", "process_start_id"):
             if not isinstance(record[key], str) or not record[key]:
                 raise PySparkValueError(f"{key} must be a nonempty string")
         for key in ("port", "pid"):
@@ -129,14 +216,17 @@ class PoolMember:
             raise PySparkValueError("port is out of range")
         if record["pid"] <= 0:
             raise PySparkValueError("pid must be positive")
-        if not math.isfinite(created) or not 0 <= created <= _MAX_CREATED:
-            raise PySparkValueError(f"created must be a finite timestamp in [0, {_MAX_CREATED}]")
+        if not math.isfinite(created) or not 0 <= created <= self._MAX_TIMESTAMP:
+            raise PySparkValueError(
+                f"created must be a finite timestamp in [0, {self._MAX_TIMESTAMP}]"
+            )
         self.host: str = record["host"]
         self.port: int = record["port"]
         self.token: str = record["token"]
         self.pid: int = record["pid"]
         self.spark_version: str = record["spark_version"]
         self.fingerprint: str = record["fingerprint"]
+        self.process_start_id: str = record["process_start_id"]
         self.created: float = created
         # Set when this process claims the member; the path of its claimed-<pid>-<uid>.json.
         self.claim_path: Optional[str] = None
@@ -149,6 +239,23 @@ class PoolMember:
         except (KeyError, TypeError, ValueError, OverflowError):
             return None
 
+    @classmethod
+    def pid_from_data(cls, data: Optional[Dict[str, Any]]) -> Optional[int]:
+        """Recover a valid server pid even when another member field is malformed."""
+        return cls._positive_pid(data.get("pid")) if data is not None else None
+
+    @staticmethod
+    def process_start_id_from_data(data: Optional[Dict[str, Any]]) -> Optional[str]:
+        """Recover a process generation identifier from a malformed member record."""
+        value = data.get("process_start_id") if data is not None else None
+        return value if isinstance(value, str) and value else None
+
+    @staticmethod
+    def client_process_start_id_from_data(data: Optional[Dict[str, Any]]) -> Optional[str]:
+        """Recover the claiming client's process generation from a claimed record."""
+        value = data.get("client_process_start_id") if data is not None else None
+        return value if isinstance(value, str) and value else None
+
     @property
     def url(self) -> str:
         return f"sc://{self.host}:{self.port}"
@@ -158,9 +265,12 @@ class PoolMember:
         the same liveness and reachability probes as the reuse path (see ``local_server``), so
         the pool and reuse discovery agree on when a recorded server is still good."""
         from pyspark.version import __version__
-        from pyspark.sql.connect.local_server import _pid_alive, _port_open
 
-        if self.spark_version != __version__ or not _pid_alive(self.pid):
+        if (
+            self.spark_version != __version__
+            or not _pid_alive(self.pid)
+            or ServerPool._process_start_id(self.pid) != self.process_start_id
+        ):
             return False
         return _port_open(self.host, self.port)
 
@@ -186,12 +296,12 @@ class PoolDirectory:
     to release the lock between polling attempts so other processes can update the directory.
     """
 
+    _STATE_TEMP_PREFIX = ".pool-state-"
+
     def __init__(self, path: Optional[str] = None):
         if path is None:
             path = os.environ.get("SPARK_LOCAL_CONNECT_POOL_DIR")
         if path is None:
-            from pyspark.sql.connect.local_server import runtime_dir
-
             path = os.path.join(runtime_dir(), "pool")
         self.path = os.path.abspath(path)
         self._lock_fd: Optional[int] = None
@@ -214,6 +324,18 @@ class PoolDirectory:
             os.close(lock_fd)
             raise
         self._lock_fd = lock_fd
+        try:
+            # A process killed between writing and replacing an atomic state-file update can
+            # leave its private temporary file behind. No writer can still be active once this
+            # lock is acquired, so these leftovers are always safe to discard.
+            for name in self._entries():
+                if name.startswith(self._STATE_TEMP_PREFIX):
+                    with contextlib.suppress(OSError):
+                        os.remove(os.path.join(self.path, name))
+        except BaseException:
+            os.close(lock_fd)
+            self._lock_fd = None
+            raise
         return self
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
@@ -333,27 +455,49 @@ class PoolDirectory:
     def _entries(self) -> List[str]:
         try:
             return sorted(os.listdir(self.path))
-        except OSError:
+        except FileNotFoundError:
             return []
 
     def read_json(self, path: str) -> Optional[Dict[str, Any]]:
-        """``None`` for files that are missing or unreadable -- callers treat both like the
-        state not existing, and the reaping rules remove unreadable leftovers."""
+        """``None`` for files that are missing or malformed.
+
+        Other I/O failures propagate so lifecycle callers retry instead of mistaking temporarily
+        unavailable state for a completed transition.
+        """
         self._assert_locked()
         try:
             with open(path, "r") as f:
                 data = json.load(f)
-        except (OSError, ValueError):
+        except (FileNotFoundError, IsADirectoryError, NotADirectoryError, ValueError):
             return None
         return data if isinstance(data, dict) else None
 
     def write_json(self, path: str, data: Dict[str, Any]) -> None:
+        """Atomically replace ``path`` with private JSON state.
+
+        ``path`` must be on the same filesystem as this directory. The replacement is atomic
+        against process failure; durability across power loss is not promised.
+        """
         self._assert_locked()
-        # 0600 like the reuse discovery file: server entries hold the auth token.
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            os.fchmod(fd, 0o600)
-            f.write(json.dumps(data))
+        # Write through a temporary file so a process dying during a state transition leaves
+        # either the old record or the complete new one. Server entries hold an auth token, so
+        # the temporary and final files both remain private.
+        fd, temp_path = tempfile.mkstemp(prefix=self._STATE_TEMP_PREFIX, dir=self.path)
+        try:
+            try:
+                state_file = os.fdopen(fd, "w")
+            except BaseException:
+                # fdopen only takes ownership after it returns successfully.
+                os.close(fd)
+                raise
+            with state_file as f:
+                os.fchmod(fd, 0o600)
+                f.write(json.dumps(data))
+            os.replace(temp_path, path)
+        except BaseException:
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(temp_path)
+            raise
 
     def rename(self, src: str, dst: str) -> None:
         self._assert_locked()
@@ -370,10 +514,112 @@ class PoolDirectory:
 
 
 class ServerPool:
-    """Claims members from one pool directory; lifecycle operations are added later."""
+    """Claims, reaps, and retires members of one pool directory."""
+
+    # A retired server still alive after the grace period is hard-killed. With a process handle,
+    # tracking is removed only once it is gone, replaced, or successfully signalled. PID-less
+    # malformed state uses the give-up age as its bounded recovery window.
+    _RETIRE_KILL_AFTER_SECONDS = 30
+    _RETIRE_GIVE_UP_AFTER_SECONDS = 600
+    _DEFAULT_IDLE_TIMEOUT_SECONDS = 1800
+    _PROCESS_INSPECTION_TIMEOUT_SECONDS = 5
+    _PROC_STAT_START_TIME_INDEX = 19
 
     def __init__(self, directory: Optional[PoolDirectory] = None):
         self._directory = directory or PoolDirectory()
+
+    @classmethod
+    def _process_start_id(cls, pid: int) -> Optional[str]:
+        """An identifier for this generation of ``pid``, or ``None`` if it cannot be read.
+
+        Linux exposes a boot id and a process start tick, which together survive PID reuse and
+        distinguish records left across a reboot. Other POSIX systems use ``ps``'s absolute
+        start time. The fallback has one-second precision but still closes the long-lived
+        stale-record window; signalling performs this check immediately before acting.
+        """
+        if pid <= 0:
+            return None
+        if sys.platform.startswith("linux"):
+            try:
+                with open("/proc/sys/kernel/random/boot_id", encoding="ascii") as boot_id_file:
+                    boot_id = boot_id_file.read().strip()
+                with open(f"/proc/{pid}/stat", encoding="utf-8") as stat_file:
+                    stat = stat_file.read()
+            except (OSError, UnicodeError):
+                return None
+            _, separator, fields_text = stat.rpartition(") ")
+            fields = fields_text.split()
+            if not boot_id or not separator or len(fields) <= cls._PROC_STAT_START_TIME_INDEX:
+                return None
+            start_tick = fields[cls._PROC_STAT_START_TIME_INDEX]
+            if not (start_tick.isascii() and start_tick.isdigit()):
+                return None
+            return f"linux:{boot_id}:{start_tick}"
+
+        env = dict(os.environ)
+        env["LC_ALL"] = "C"
+        try:
+            result = subprocess.run(
+                ["ps", "-ww", "-p", str(pid), "-o", "lstart="],
+                capture_output=True,
+                text=True,
+                timeout=cls._PROCESS_INSPECTION_TIMEOUT_SECONDS,
+                env=env,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        started = " ".join(result.stdout.split())
+        return f"ps:{started}" if result.returncode == 0 and started else None
+
+    @classmethod
+    def _same_process_generation(
+        cls, pid: Optional[int], process_start_id: Optional[str]
+    ) -> Optional[bool]:
+        """Whether ``pid`` is alive and still has its recorded process generation."""
+        if pid is None or not _pid_alive(pid):
+            return False
+        if process_start_id is None:
+            return None
+        current_start_id = cls._process_start_id(pid)
+        if current_start_id is None:
+            return None
+        return current_start_id == process_start_id
+
+    @classmethod
+    def _same_server_instance(cls, pid: int, process_start_id: str) -> Optional[bool]:
+        """Whether ``pid`` is still the recorded Connect server process generation."""
+        same_generation = cls._same_process_generation(pid, process_start_id)
+        if same_generation is not True:
+            return same_generation
+        return _is_local_connect_server(pid)
+
+    @staticmethod
+    def _signal(pid: int, sig: int) -> bool:
+        """Best-effort signal; ``False`` when the process is already gone or not ours."""
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, sig)
+            return True
+        except (OSError, OverflowError):
+            return False
+
+    @classmethod
+    def _signal_server(cls, pid: int, process_start_id: str, sig: int) -> bool:
+        """Signal only the recorded generation of the managed Connect server."""
+        return cls._same_server_instance(pid, process_start_id) is True and cls._signal(pid, sig)
+
+    @classmethod
+    def _idle_timeout(cls) -> int:
+        """Seconds an unclaimed member may sit before it is retired.
+
+        Zero or a negative value disables idle retirement. Read the environment on each pass so
+        every reaper uses the same source of truth.
+        """
+        try:
+            return int(os.environ["SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT"])
+        except (KeyError, ValueError):
+            return cls._DEFAULT_IDLE_TIMEOUT_SECONDS
 
     def claim(self, fingerprint: str) -> Optional[PoolMember]:
         """Claim the oldest usable member with this fingerprint, or ``None``. The rename to
@@ -387,8 +633,8 @@ class ServerPool:
         Ties break by the stable ``sorted()`` over the sorted directory listing, so the order is
         well defined but only approximately FIFO, not guaranteed.
 
-        ``is_usable`` runs under the held lock and does blocking network I/O -- up to a 0.5s
-        connect for each candidate that is live but not accepting connections. The candidate
+        ``is_usable`` runs under the held lock and does blocking process inspection and network
+        I/O -- potentially one ``ps`` and up to a 0.5s connect for each candidate. The candidate
         count is bounded by ``spark.local.connect.pool.size``, which is user-tunable, so a large
         pool widens the window the lock is held; the reaping rules keep stale members from
         accumulating without bound."""
@@ -397,13 +643,249 @@ class ServerPool:
             data = self._directory.read_json(path)
             member = PoolMember.from_data(data) if data is not None else None
             if member is not None and member.fingerprint == fingerprint:
-                candidates.append((member, uid, path))
+                assert data is not None
+                candidates.append((member, uid, path, data))
         candidates.sort(key=lambda c: c[0].created)
-        for member, uid, path in candidates:
+        for member, uid, path, data in candidates:
             if not member.is_usable():
                 continue  # left for the reaping rules to retire
+            client_process_start_id = self._process_start_id(os.getpid())
+            if client_process_start_id is not None:
+                claimed_data = dict(data)
+                claimed_data["client_process_start_id"] = client_process_start_id
+                # Persist ownership before the atomic rename. If this process dies between the
+                # write and rename, the extra field is harmless on the still-unclaimed record.
+                self._directory.write_json(path, claimed_data)
             claim_path = self._directory.claimed_path(os.getpid(), uid)
             self._directory.rename(path, claim_path)
             member.claim_path = claim_path
             return member
         return None
+
+    def janitor(self) -> None:
+        """Reap unusable or orphaned pool members. Every rule is idempotent, so successive
+        passes from any process are safe."""
+        for uid in self._directory.uids():
+            self.reap(uid)
+
+    def reap(self, uid: str) -> bool:
+        """Apply the reaping rules to one member; ``True`` when nothing of it remains."""
+        states = self._directory.states(uid)
+        had_retired = "retired" in states
+        if "server" in states:
+            self._reap_server(uid, states["server"])
+        states = self._directory.states(uid)
+        if "claimed" in states:
+            self._reap_claimed(uid, states["claimed"])
+        states = self._directory.states(uid)
+        if had_retired and "retired" in states:
+            self._reap_retired(uid, states["retired"])
+        return not self._directory.states(uid)
+
+    def _reap_server(self, uid: str, path: str) -> None:
+        """A ready member that is unusable (dead, unreachable, version-mismatched after an
+        upgrade, or an unreadable record) or has sat unclaimed past the idle timeout: retire
+        it."""
+        data = self._directory.read_json(path)
+        member = PoolMember.from_data(data) if data is not None else None
+        server_pid, process_start_id = self._recover_server_handle(uid, data)
+        idle = self._idle_timeout()
+        expired = member is not None and idle > 0 and time.time() - member.created > idle
+        if member is None or expired or not member.is_usable():
+            self._retire(path, server_pid, process_start_id)
+
+    def _reap_claimed(self, uid: str, path: str) -> None:
+        """A claimed member whose client died without releasing it (e.g. SIGKILL), or whose
+        server died under its client: retire it. Claims of this live process are its own."""
+        data = self._directory.read_json(path)
+        server_pid, process_start_id = self._recover_server_handle(uid, data)
+        client_pid = self._directory.claiming_pid(path)
+        client_process_start_id = PoolMember.client_process_start_id_from_data(data)
+        if client_process_start_id is None:
+            # Records written by older clients have no process generation. Preserve their
+            # liveness-only behavior rather than risking retirement of a live claim.
+            client_alive = client_pid == os.getpid() or _pid_alive(client_pid)
+        else:
+            client_alive = (
+                self._same_process_generation(client_pid, client_process_start_id) is not False
+            )
+        if not client_alive or self._same_process_generation(server_pid, process_start_id) is False:
+            self._retire(path, server_pid, process_start_id)
+
+    def _reap_retired(self, uid: str, path: str) -> None:
+        """A retiring member: drop it once its server is gone, hard-kill the server if it
+        hangs in shutdown, and stop tracking a record whose process generation was reused."""
+        data = self._directory.read_json(path)
+        record_pid = RetiredState.pid_from_data(data)
+        record_process_start_id = RetiredState.process_start_id_from_data(data)
+        retired = RetiredState.retired_from_data(data)
+        signalled = RetiredState.signalled_from_data(data)
+        server_pid = self._recover_server_pid(uid, record_pid)
+        # A generation id is meaningful only with the pid from the same record. The daemon pid
+        # file has no companion generation id, so never pair a recovered daemon pid with
+        # unrelated record data.
+        process_start_id = record_process_start_id if record_pid is not None else None
+        now = time.time()
+        if server_pid is None:
+            # A daemon pid may appear after a partial publication, so retain the state for one
+            # recovery window. After that there is no process handle left to act on or observe.
+            if retired is None or retired > now:
+                self._directory.write_json(
+                    path,
+                    {
+                        "retired": now,
+                        "signalled": False,
+                    },
+                )
+            elif now - retired > self._RETIRE_GIVE_UP_AFTER_SECONDS:
+                self._remove_retired(uid, path)
+            return
+        if not _pid_alive(server_pid):
+            self._remove_retired(uid, path)
+            return
+        if process_start_id is None:
+            # A pid without its persisted generation cannot safely be adopted: the pid may have
+            # been recycled to an unrelated local Connect server. Retain the handle until it dies
+            # rather than synthesizing authority to signal its current owner.
+            return
+        current_start_id = self._process_start_id(server_pid)
+        if current_start_id is None:
+            return
+        if current_start_id != process_start_id:
+            # The original server is gone and its PID now belongs to another process. Forget the
+            # stale record without signalling the new owner.
+            self._remove_retired(uid, path)
+            return
+        if retired is None or retired > now:
+            # A crash while _retire rewrites the atomically renamed state can leave its old
+            # payload. Restore a shutdown clock while preserving its process identity.
+            self._directory.write_json(
+                path,
+                RetiredState(
+                    server_pid,
+                    process_start_id,
+                    now,
+                    signalled=signalled is True,
+                ).as_data(),
+            )
+            return
+        age = now - retired
+        if age > self._RETIRE_GIVE_UP_AFTER_SECONDS:
+            # Drop tracking only after proving the process was replaced or successfully issuing
+            # the hard kill. Transient inspection or signalling failures remain retryable.
+            is_server = self._same_server_instance(server_pid, process_start_id)
+            if is_server is None or (is_server and not self._signal(server_pid, signal.SIGKILL)):
+                return
+            self._remove_retired(uid, path)
+        elif age > self._RETIRE_KILL_AFTER_SECONDS:
+            is_server = self._same_server_instance(server_pid, process_start_id)
+            if is_server is False:
+                self._remove_retired(uid, path)
+            elif is_server is True:
+                self._signal(server_pid, signal.SIGKILL)
+        elif signalled is not True:
+            # Retry a SIGTERM that was not confirmed during retirement. Persist success without
+            # refreshing the retirement clock so repeated passes remain free and escalation is
+            # still measured from the original transition.
+            if self._signal_server(server_pid, process_start_id, signal.SIGTERM):
+                self._directory.write_json(
+                    path,
+                    RetiredState(
+                        server_pid,
+                        process_start_id,
+                        retired,
+                        signalled=True,
+                    ).as_data(),
+                )
+
+    def _remove_retired(self, uid: str, path: str) -> None:
+        self._directory.remove(path)
+        self._directory.remove_member_dir(uid)
+
+    def _retire(
+        self,
+        state_path: str,
+        server_pid: Optional[int],
+        process_start_id: Optional[str],
+    ) -> None:
+        """Move a member into the retired state: signal its server and track the shutdown so
+        :meth:`_reap_retired` can escalate if the JVM hangs."""
+        _, uid = self._directory.parse_entry(os.path.basename(state_path))
+        assert uid is not None
+        signalled = False
+        if server_pid is not None and process_start_id is not None:
+            signalled = self._signal_server(server_pid, process_start_id, signal.SIGTERM)
+        retired_path = self._directory.retired_path(uid)
+        # Rename instead of removing the old state so a crash cannot leave a live server with
+        # no state. If rewriting is interrupted, _reap_retired preserves the recoverable pid.
+        self._directory.rename(state_path, retired_path)
+        retired_data: Dict[str, Any] = {
+            "retired": time.time(),
+            "signalled": signalled,
+        }
+        if server_pid is not None:
+            retired_data["pid"] = server_pid
+        if process_start_id is not None:
+            retired_data["process_start_id"] = process_start_id
+        self._directory.write_json(retired_path, retired_data)
+
+    def _recover_server_handle(
+        self, uid: str, data: Optional[Dict[str, Any]]
+    ) -> Tuple[Optional[int], Optional[str]]:
+        """Recover a pid and only the process identity paired with that pid's record."""
+        record_pid = PoolMember.pid_from_data(data)
+        if record_pid is None:
+            return self._recorded_daemon_pid(uid), None
+        return record_pid, PoolMember.process_start_id_from_data(data)
+
+    def _recover_server_pid(self, uid: str, record_pid: Optional[int]) -> Optional[int]:
+        """Use a record pid when present, otherwise fall back to the daemon pid file.
+
+        Full member validation intentionally rejects corrupt records, including out-of-range
+        timestamps. Its independently valid pid remains paired with the record's generation id;
+        a daemon pid has no generation id and is used only to retain state while it remains live.
+        """
+        return record_pid if record_pid is not None else self._recorded_daemon_pid(uid)
+
+    def _recorded_daemon_pid(self, uid: str) -> Optional[int]:
+        """The positive server pid recorded by spark-daemon.sh, if readable."""
+        discovery = Discovery(os.path.join(self._directory.member_dir(uid), "connect-local.json"))
+        return _PoolStateRecord._positive_pid(discovery.daemon_pid())
+
+    def release(self, member: PoolMember) -> None:
+        """Retire this process's claimed member; the shutdown completes in the background,
+        ready for a later janitor pass to finish.
+
+        This method acquires the pool-directory lock and must not be called while the same pool
+        directory is already locked, including through a different ``PoolDirectory`` instance.
+        """
+        assert member.claim_path is not None
+        kind, uid = self._directory.parse_entry(os.path.basename(member.claim_path))
+        assert kind == "claimed" and uid is not None
+        if self._directory.claiming_pid(member.claim_path) != os.getpid():
+            # A forked child inherits module globals and atexit handlers, but it must not retire
+            # the server still claimed by its parent process.
+            return
+        with self._directory:
+            # A janitor or concurrent purge may already have moved or removed the claim.
+            # Release is idempotent with respect to that completed lifecycle transition.
+            if self._directory.states(uid).get("claimed") == member.claim_path:
+                self._retire(member.claim_path, member.pid, member.process_start_id)
+
+
+# The member this client process has claimed, if any. A later acquisition layer populates it;
+# keeping the idempotent release path here makes lifecycle ownership explicit.
+_claimed_member: Optional[PoolMember] = None
+
+
+def release_pooled_local_connect_server() -> None:
+    """Retire this process's claimed pooled server; safe to call when there is none. The
+    server winds down in the background while this client moves on."""
+    global _claimed_member
+    member = _claimed_member
+    if member is not None:
+        assert member.claim_path is not None
+        directory = PoolDirectory(os.path.dirname(member.claim_path))
+        ServerPool(directory).release(member)
+        if _claimed_member is member:
+            _claimed_member = None

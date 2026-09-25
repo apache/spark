@@ -36,7 +36,8 @@ class CommandBuilderUtils {
   static final String ENV_SPARK_HOME = "SPARK_HOME";
   // This should be consistent with org.apache.spark.internal.config.SECRET_REDACTION_PATTERN
   // We maintain this copy to avoid depending on `core` module.
-  static final String SECRET_REDACTION_PATTERN = "(?i)secret|password|token|access[.]?key";
+  static final String SECRET_REDACTION_PATTERN =
+    "(?i)secret|password|token|access[.]?key|credential";
   static final Pattern redactPattern = Pattern.compile(SECRET_REDACTION_PATTERN);
   static final Pattern keyValuePattern = Pattern.compile("-D(.+?)=(.+)");
 

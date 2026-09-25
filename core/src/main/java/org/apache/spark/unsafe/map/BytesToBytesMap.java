@@ -20,6 +20,8 @@ package org.apache.spark.unsafe.map;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Iterator;
 import java.util.LinkedList;
 
@@ -68,6 +70,34 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
  */
 public final class BytesToBytesMap extends MemoryConsumer {
 
+  /**
+   * Hashes and compares keys whose semantics cannot be determined from their raw bytes.
+   * Implementations must assign the same hash code to equal keys, and byte-identical keys must
+   * compare equal.
+   */
+  public interface KeyOperations {
+    int hash(Object base, long offset, int length);
+
+    boolean equals(
+      Object leftBase,
+      long leftOffset,
+      int leftLength,
+      Object rightBase,
+      long rightOffset,
+      int rightLength);
+  }
+
+  /**
+   * Creates independent key operations for a single {@link Location}, allowing each instance to
+   * reuse mutable state. All instances must implement the same key semantics. Maps configured
+   * with this factory must use the key-operations lookup methods exclusively. Callers may invoke
+   * {@link #create()} concurrently, so factory implementations must be thread-safe.
+   */
+  @FunctionalInterface
+  public interface KeyOperationsFactory {
+    KeyOperations create();
+  }
+
   private static final SparkLogger logger = SparkLoggerFactory.getLogger(BytesToBytesMap.class);
 
   private static final HashMapGrowthStrategy growthStrategy = HashMapGrowthStrategy.DOUBLING;
@@ -75,9 +105,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private final TaskMemoryManager taskMemoryManager;
 
   /**
-   * A linked list for tracking all allocated data pages so that we can free all of our memory.
+   * A deque for tracking all allocated data pages so that we can free all of our memory.
    */
-  private final LinkedList<MemoryBlock> dataPages = new LinkedList<>();
+  private final Deque<MemoryBlock> dataPages = new ArrayDeque<>();
 
   /**
    * The data page that will be used to store keys and values for new hashtable entries. When this
@@ -126,6 +156,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private boolean canGrowArray = true;
 
   private final double loadFactor;
+
+  @Nullable private final KeyOperationsFactory keyOperationsFactory;
 
   /**
    * The size of the data pages that hold key and value data. Map entries cannot span multiple
@@ -180,11 +212,30 @@ public final class BytesToBytesMap extends MemoryConsumer {
       int initialCapacity,
       double loadFactor,
       long pageSizeBytes) {
+    this(
+      taskMemoryManager,
+      blockManager,
+      serializerManager,
+      initialCapacity,
+      loadFactor,
+      pageSizeBytes,
+      null);
+  }
+
+  public BytesToBytesMap(
+      TaskMemoryManager taskMemoryManager,
+      BlockManager blockManager,
+      SerializerManager serializerManager,
+      int initialCapacity,
+      double loadFactor,
+      long pageSizeBytes,
+      @Nullable KeyOperationsFactory keyOperationsFactory) {
     super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
     this.serializerManager = serializerManager;
     this.loadFactor = loadFactor;
+    this.keyOperationsFactory = keyOperationsFactory;
     this.loc = new Location();
     this.pageSizeBytes = pageSizeBytes;
     if (initialCapacity <= 0) {
@@ -206,6 +257,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
       TaskMemoryManager taskMemoryManager,
       int initialCapacity,
       long pageSizeBytes) {
+    this(taskMemoryManager, initialCapacity, pageSizeBytes, null);
+  }
+
+  public BytesToBytesMap(
+      TaskMemoryManager taskMemoryManager,
+      int initialCapacity,
+      long pageSizeBytes,
+      @Nullable KeyOperationsFactory keyOperationsFactory) {
     this(
       taskMemoryManager,
       SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
@@ -213,7 +272,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       initialCapacity,
       // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
       0.5,
-      pageSizeBytes);
+      pageSizeBytes,
+      keyOperationsFactory);
   }
 
   /**
@@ -241,6 +301,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private boolean destructive = false;
     private UnsafeSorterSpillReader reader = null;
 
+    // Used only for non-destructive iteration to walk the data pages in order (a deque has no
+    // random access). The destructive path instead consumes pages from the head of `dataPages`.
+    private Iterator<MemoryBlock> pageIterator = null;
+
     private MapIterator(int numRecords, Location loc, boolean destructive) {
       this.numRecords = numRecords;
       this.loc = loc;
@@ -252,6 +316,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
           freeArray(longArray);
           longArray = null;
         }
+      } else {
+        pageIterator = dataPages.iterator();
       }
     }
 
@@ -265,14 +331,19 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
       try {
         synchronized (this) {
-          int nextIdx = dataPages.indexOf(currentPage) + 1;
-          if (destructive && currentPage != null) {
-            dataPages.remove(currentPage);
-            pageToFree = currentPage;
-            nextIdx--;
+          final MemoryBlock nextPage;
+          if (destructive) {
+            if (currentPage != null) {
+              assert(dataPages.peekFirst() == currentPage);
+              dataPages.removeFirst();
+              pageToFree = currentPage;
+            }
+            nextPage = dataPages.peekFirst();
+          } else {
+            nextPage = pageIterator.hasNext() ? pageIterator.next() : null;
           }
-          if (dataPages.size() > nextIdx) {
-            currentPage = dataPages.get(nextIdx);
+          if (nextPage != null) {
+            currentPage = nextPage;
             pageBaseObject = currentPage.getBaseObject();
             offsetInPage = currentPage.getBaseOffset();
             recordsInPage = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
@@ -355,7 +426,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
       long released = 0L;
       while (dataPages.size() > 0) {
-        MemoryBlock block = dataPages.getLast();
+        MemoryBlock block = dataPages.peekLast();
         // The currentPage is used, cannot be released
         if (block == currentPage) {
           break;
@@ -377,7 +448,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         writer.close();
         spillWriters.add(writer);
 
-        dataPages.removeLast();
+        dataPages.pollLast();
         released += block.size();
         freePage(block);
 
@@ -498,14 +569,15 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * This function is not thread-safe.
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength) {
-    safeLookup(keyBase, keyOffset, keyLength, loc,
-      Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
+    safeLookup(keyBase, keyOffset, keyLength, loc);
     return loc;
   }
 
   /**
    * Looks up a key, and return a {@link Location} handle that can be used to test existence
    * and read/write values.
+   *
+   * The provided hash is ignored when this map has configured key operations.
    *
    * This function always returns the same {@link Location} instance to avoid object allocation.
    * This function is not thread-safe.
@@ -516,12 +588,38 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Looks up a key, and saves the result in provided `loc`.
+   * Looks up a key and saves the result in the provided `loc`.
    *
-   * This is a thread-safe version of `lookup`, could be used by multiple threads.
+   * This is a thread-safe version of `lookup`, provided that each thread supplies its own
+   * {@link Location}. This guarantee excludes probe statistics, which may be inaccurate under
+   * concurrent lookup. The map must not be modified concurrently.
+   */
+  public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc) {
+    if (keyOperationsFactory == null) {
+      safeLookup(
+        keyBase,
+        keyOffset,
+        keyLength,
+        loc,
+        Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
+    } else {
+      safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
+    }
+  }
+
+  /**
+   * Looks up a key with a precomputed hash and saves the result in the provided `loc`.
+   *
+   * The provided hash is ignored when this map has configured key operations. Each thread must
+   * supply its own {@link Location}. Probe statistics may be inaccurate under concurrent lookup,
+   * and the map must not be modified concurrently.
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     assert(longArray != null);
+    if (keyOperationsFactory != null) {
+      safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
+      return;
+    }
 
     numKeyLookups++;
 
@@ -557,19 +655,62 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
   }
 
-  /**
-   * Handle returned by {@link BytesToBytesMap#lookup(Object, long, int)} function.
-   */
+  private void safeLookupWithKeyOperations(
+      Object keyBase, long keyOffset, int keyLength, Location loc) {
+    assert(longArray != null);
+    assert(keyOperationsFactory != null);
+
+    final KeyOperations keyOperations = loc.getKeyOperations();
+    assert(keyOperations != null);
+    final int hash = keyOperations.hash(keyBase, keyOffset, keyLength);
+
+    numKeyLookups++;
+
+    int pos = hash & mask;
+    int step = 1;
+    while (true) {
+      numProbes++;
+      if (longArray.get(pos * 2) == 0) {
+        // This is a new key.
+        loc.with(pos, hash, false);
+        return;
+      } else {
+        long stored = longArray.get(pos * 2 + 1);
+        if ((int) (stored) == hash) {
+          // Full hash code matches. Let's compare the keys for equality.
+          loc.with(pos, hash, true);
+          if (loc.getKeyLength() == keyLength &&
+              ByteArrayMethods.arrayEquals(
+                keyBase,
+                keyOffset,
+                loc.getKeyBase(),
+                loc.getKeyOffset(),
+                keyLength)) {
+            return;
+          }
+          if (keyOperations.equals(
+              keyBase,
+              keyOffset,
+              keyLength,
+              loc.getKeyBase(),
+              loc.getKeyOffset(),
+              loc.getKeyLength())) {
+            return;
+          }
+        }
+      }
+      pos = (pos + step) & mask;
+      step++;
+    }
+  }
+
+  /** Handle returned by this map's lookup methods. */
   public final class Location {
     /** An index into the hash map's Long array */
     private int pos;
     /** True if this location points to a position where a key is defined, false otherwise */
     private boolean isDefined;
-    /**
-     * The hashcode of the most recent key passed to
-     * {@link BytesToBytesMap#lookup(Object, long, int, int)}. Caching this hashcode here allows us
-     * to avoid re-hashing the key when storing a value for that key.
-     */
+    /** The hash code used by the most recent lookup. */
     private int keyHashcode;
     private Object baseObject;  // the base object for key and value
     private long keyOffset;
@@ -577,10 +718,20 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private long valueOffset;
     private int valueLength;
 
+    @Nullable private KeyOperations keyOperations;
+
     /**
      * Memory page containing the record. Only set if created by {@link BytesToBytesMap#iterator()}.
      */
     @Nullable private MemoryBlock memoryPage;
+
+    @Nullable
+    private KeyOperations getKeyOperations() {
+      if (keyOperations == null && keyOperationsFactory != null) {
+        keyOperations = keyOperationsFactory.create();
+      }
+      return keyOperations;
+    }
 
     private void updateAddressesAndSizes(long fullKeyAddress) {
       updateAddressesAndSizes(
@@ -723,10 +874,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
     /**
      * Append a new value for the key. This method could be called multiple times for a given key.
-     * The return value indicates whether the put succeeded or whether it failed because additional
-     * memory could not be acquired.
+     * The return value indicates whether the put succeeded or whether it failed because the map
+     * reached its capacity or additional memory could not be acquired.
      * <p>
-     * It is only valid to call this method immediately after calling `lookup()` using the same key.
+     * It is only valid to call this method immediately after looking up the same key.
      * </p>
      * <p>
      * The key and value must be word-aligned (that is, their sizes must be a multiple of 8).
@@ -750,8 +901,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
      * Unspecified behavior if the key is not defined.
      * </p>
      *
-     * @return true if the put() was successful and false if the put() failed because memory could
-     *         not be acquired.
+     * @return true if the put() was successful and false if the map reached its capacity or memory
+     *         could not be acquired.
      */
     public boolean append(Object kbase, long koff, int klen, Object vbase, long voff, int vlen) {
       assert (klen % 8 == 0);
@@ -892,10 +1043,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       freeArray(longArray);
       longArray = null;
     }
-    Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
-    while (dataPagesIterator.hasNext()) {
-      MemoryBlock dataPage = dataPagesIterator.next();
-      dataPagesIterator.remove();
+    while (!dataPages.isEmpty()) {
+      MemoryBlock dataPage = dataPages.removeFirst();
       freePage(dataPage);
     }
     assert(dataPages.isEmpty());
@@ -947,6 +1096,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   /**
    * Returns the average number of probes per key lookup.
+   *
+   * This statistic may be inaccurate if lookups are performed concurrently.
    */
   public double getAvgHashProbesPerKey() {
     return (1.0 * numProbes) / numKeyLookups;

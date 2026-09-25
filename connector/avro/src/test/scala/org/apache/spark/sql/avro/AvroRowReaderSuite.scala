@@ -75,7 +75,8 @@ class AvroRowReaderSuite extends SharedSparkSession {
           new NoopFilters,
           false,
           "",
-          -1)
+          -1,
+          dataSchema = None)
         override val stopPosition = fileSize
 
         override def hasNext: Boolean = hasNextRow

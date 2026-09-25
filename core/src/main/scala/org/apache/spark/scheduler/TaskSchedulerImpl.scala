@@ -1059,8 +1059,11 @@ private[spark] class TaskSchedulerImpl(
         executorsPendingDecommission(executorId) =
           ExecutorDecommissionState(clock.getTimeMillis(), decommissionInfo.workerHost)
       }
+      // This reaches TaskSetManager.recomputeLocality(), and TaskSetManagers are not thread
+      // safe, so it must be called while holding the lock, like rootPool.executorLost() is.
+      rootPool.executorDecommission(executorId)
     }
-    rootPool.executorDecommission(executorId)
+    // Call backend.reviveOffers() without holding the lock on this to prevent deadlock
     backend.reviveOffers()
   }
 

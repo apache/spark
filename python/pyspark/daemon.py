@@ -14,25 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import uuid
+import faulthandler
+import gc
 import os
-import signal
 import select
+import signal
 import socket
 import sys
-import traceback
 import time
-import gc
-import faulthandler
-from errno import EINTR, EAGAIN
+import traceback
+import uuid
+from errno import EAGAIN, EINTR
+from signal import SIG_DFL, SIG_IGN, SIGCHLD, SIGHUP, SIGINT, SIGTERM
 from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
-from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 from types import FrameType
 from typing import Any, Optional
 
-from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
-from pyspark.util import enable_faulthandler
 from pyspark.errors import PySparkRuntimeError
+from pyspark.serializers import UTF8Deserializer, read_int, write_int, write_with_length
+from pyspark.util import enable_faulthandler
 
 
 def compute_real_exit_code(exit_code: Any) -> int:

@@ -50,15 +50,17 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
           val partitioning = sequenceToOption(
             kgp.keys().map(V2ExpressionUtils.toCatalystOpt(_, relation, relation.funCatalog))
               .toImmutableArraySeq)
-          if (partitioning.isEmpty) {
-            None
-          } else {
-            if (partitioning.get.forall(p => p.references.subsetOf(d.outputSet))) {
-              partitioning
-            } else {
-              None
-            }
-          }
+          // Keep the partitioning when at least one of its keys is still in the scan output: the
+          // scan projects the pruned key positions away when reporting its physical output
+          // partitioning (see DataSourceV2ScanExecBase.outputPartitioning). When no key survives,
+          // and likewise when the source reported no key at all, there is nothing to report.
+          // Grouping a projection that collapsed distinct keys onto the same key stays gated on
+          // allowKeysSubsetOfPartitionKeys one layer down, in KeyedPartitioning.mayGroupToSatisfy.
+          //
+          // A kept pruned key leaves a dangling attribute on the relation. What keeps that off
+          // `missingInput`, and so past the optimizer's plan-change validation, is the
+          // `DataSourceV2ScanRelation.references` override; see the comment there.
+          partitioning.filter(_.exists(_.references.subsetOf(d.outputSet)))
         case _: UnknownPartitioning => None
         case p =>
           logWarning(

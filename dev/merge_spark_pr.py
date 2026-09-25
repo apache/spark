@@ -37,16 +37,16 @@
 # have added remotes corresponding to both (i) the github apache Spark
 # mirror and (ii) the apache git repo.
 
+import argparse
 import json
 import os
 import re
 import subprocess
 import sys
 import traceback
-from typing import List
-from urllib.request import urlopen
-from urllib.request import Request
+from typing import List, Optional
 from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 # Shared with dev/pr_merge_status.py so the two committer tools agree on where a PR landed.
 # Importable because Python puts this script's own directory first on sys.path.
@@ -83,6 +83,16 @@ JIRA_CONNECT_TIMEOUT = float(os.environ.get("JIRA_CONNECT_TIMEOUT", "3.05"))
 # exceeding your IP's unauthenticated request rate limit. You can create an OAuth key at
 # https://github.com/settings/tokens. This script only requires the "public_repo" scope.
 GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
+# Setting the DRY_RUN env var to any non-empty value makes the --dry-run/-n flag default to on
+# (see build_arg_parser); the flag is the primary interface and can also turn it on explicitly.
+# Consistent with the SKIP_VERSION_CHECK env toggle above. In a dry run every read-only step and
+# local git op still runs -- fetching the PR, JIRA lookup, project_versions, JIRA/GitHub token
+# validation, and the local squash-merge and cherry-picks on the throwaway PR_TOOL_* branches so
+# conflicts and the computed merge hash stay realistic -- but every outbound effect is routed
+# through a DryRun* client (see Git/GitHub/Jira below) that logs a "DRY-RUN: would ..." line
+# instead of executing it: the git push to PUSH_REMOTE_NAME, the GitHub PR close/comment, and all
+# JIRA writes (component and fixVersion updates, assignment, and the resolve transition).
+DRY_RUN_ENV = bool(os.environ.get("DRY_RUN"))
 
 
 GITHUB_BASE = "https://github.com/apache/spark/pull"
@@ -127,6 +137,25 @@ def semver_branch_rank(name):
     return (-1, -1)
 
 
+def parse_version(name: str) -> Optional[tuple[int, int, int]]:
+    """Parse a dotted ``x.y.z`` version name into an ``(int, int, int)`` tuple.
+
+    Returns None for anything that is not a plain three-part numeric version, so the
+    result can be compared directly and non-version names are skipped by callers.
+
+    >>> parse_version("4.4.0")
+    (4, 4, 0)
+    >>> parse_version("4.10.2")
+    (4, 10, 2)
+    >>> parse_version("branch-4.x") is None
+    True
+    >>> parse_version("4.4") is None
+    True
+    """
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)$", name)
+    return tuple(int(g) for g in m.groups()) if m else None
+
+
 def _semver_max_version(names):
     """
     Highest dotted version by numeric semver (SPARK Fix Version naming).
@@ -136,9 +165,10 @@ def _semver_max_version(names):
     >>> _semver_max_version(["5.0.0", "6.0.0"])
     '6.0.0'
     """
-    if not names:
+    parsed = [(parse_version(n), n) for n in names]
+    parsed = [(t, n) for t, n in parsed if t is not None]
+    if not parsed:
         return None
-    parsed = [(tuple(int(p) for p in n.split(".")), n) for n in names]
     return max(parsed)[1]
 
 
@@ -180,7 +210,7 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
     contain the commit, leveraging the Upstream-First backporting policy (cherry-picks flow
     master -> branch-M.x -> branch-M.N):
       - master contributes the greatest unreleased N.0.0;
-      - branch-M.x with master contributes that major's greatest unreleased minor.0;
+      - branch-M.x contributes that major's greatest unreleased minor.0;
       - branch-M.N contributes its greatest unreleased M.N.patch.
     Redundant entries are then suppressed: master's N.0.0 is dropped when any branch-M.x is in
     the merge set (a cherry-pick to branch-M.x has already landed on master); branch-M.x's
@@ -217,7 +247,7 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
     ([], 1, True)
 
     >>> compute_merge_default_fix_versions(["branch-4.x"], ["4.3.0"])
-    ([], [])
+    (['4.3.0'], [])
 
     >>> d, w = compute_merge_default_fix_versions(["branch-4.99"], ["4.3.0"])
     >>> d == [] and len(w) == 1 and "branch-4.99" in w[0]
@@ -277,8 +307,6 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
             continue
         line_major = _integration_major_from_branch(b)
         if line_major is not None:
-            if "master" not in merge_branches:
-                continue
             line_versions = [n for n in names if re.match(r"^%s\.\d+\.\d+$" % line_major, n)]
             chosen = _semver_max_version(line_versions)
             if chosen:
@@ -286,7 +314,7 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
             else:
                 warnings.append(
                     "Could not infer an unreleased Spark %s (minor.maintenance) fix version "
-                    "for branch-%s.x + master merge; enter version(s) manually when prompted."
+                    "for branch-%s.x merge; enter version(s) manually when prompted."
                     % (line_major, line_major)
                 )
             continue
@@ -340,6 +368,127 @@ def additional_fix_versions(inferred_versions, existing_versions):
     """
     existing = set(existing_versions)
     return [version for version in inferred_versions if version not in existing]
+
+
+def fix_version_additions(inferred_versions, existing_versions):
+    """Return (additions, all_inferred_present).
+
+    An empty ``additions`` list is ambiguous on its own: either the issue already carries
+    every inferred version, or nothing was inferred. Only the first means there is nothing
+    to do; the second still needs the committer prompted.
+
+    >>> fix_version_additions(["4.3.0"], ["5.0.0"])
+    (['4.3.0'], False)
+    >>> fix_version_additions(["5.0.0"], ["5.0.0"])
+    ([], True)
+    >>> fix_version_additions([], ["5.0.0"])
+    ([], False)
+    """
+    additions = additional_fix_versions(inferred_versions, existing_versions)
+    return additions, bool(inferred_versions) and not additions
+
+
+def parse_version_list(raw: str) -> list[str]:
+    """Split a comma-separated version string into trimmed, de-duplicated names.
+
+    Surrounding whitespace on each entry is stripped and empty entries are dropped, so a
+    blank or all-separator string yields no names. Input order is preserved. Shared by the
+    Fix Version and Affects Version prompts so both parse committer input the same way.
+
+    >>> parse_version_list("5.0.0, 4.3.0")
+    ['5.0.0', '4.3.0']
+    >>> parse_version_list(" 4.4.0 , , 4.4.0 ")
+    ['4.4.0']
+    >>> parse_version_list("   ")
+    []
+    """
+    names = [segment.strip() for segment in raw.split(",")]
+    return list(dict.fromkeys(n for n in names if n))
+
+
+def fix_versions_from_input(raw_input, default_fix_versions):
+    """Resolve the Fix Version prompt's raw input into a list of version names.
+
+    Blank falls back to the inferred default. With no default to fall back on, blank means
+    skip: the empty list, not [""], which no known version can match.
+
+    >>> fix_versions_from_input("4.2.2", "")
+    ['4.2.2']
+    >>> fix_versions_from_input("", "5.0.0")
+    ['5.0.0']
+    >>> fix_versions_from_input("5.0.0, 4.3.0", "")
+    ['5.0.0', '4.3.0']
+    >>> fix_versions_from_input("", "")
+    []
+    >>> fix_versions_from_input("   ", "")
+    []
+    """
+    if raw_input == "":
+        raw_input = default_fix_versions
+    return parse_version_list(raw_input)
+
+
+def fix_precedes_affects(fix_version_names: list[str], affects_version_names: list[str]) -> bool:
+    """Whether the earliest fix version is below the earliest recorded Affects Version.
+
+    True means the affected floor sits above a fixed release, so the ticket omits a
+    version the fix reaches -- either too-high on a fresh resolve (fixed 4.4.0, affects
+    only 5.0.0) or a backport to an earlier line (affects 4.4.0, backport adds fix 4.3.x).
+    Non-``x.y.z`` names and empty lists compare as absent, so they never trigger a prompt.
+
+    >>> fix_precedes_affects(["4.4.0"], ["5.0.0"])
+    True
+    >>> fix_precedes_affects(["4.4.0"], ["4.3.0"])
+    False
+    >>> fix_precedes_affects(["4.4.0"], ["4.4.0"])
+    False
+    >>> fix_precedes_affects(["4.4.0", "4.3.1"], ["4.4.0"])
+    True
+    >>> fix_precedes_affects(["4.4.0"], ["4.10.0"])
+    True
+    >>> fix_precedes_affects([], ["5.0.0"])
+    False
+    """
+    fix = [t for t in map(parse_version, fix_version_names) if t is not None]
+    affects = [t for t in map(parse_version, affects_version_names) if t is not None]
+    if not fix or not affects:
+        return False
+    return min(fix) < min(affects)
+
+
+def suggest_affects_version(
+    fix_version_names: list[str], unreleased_version_names: list[str]
+) -> str:
+    """Suggest the earliest fix version only if it is an unreleased major or minor release.
+
+    An unreleased x.y.0 can identify affected development builds. A patch fix version
+    does not identify the earlier release affected by the bug.
+
+    >>> unreleased = ["5.0.0", "4.4.0", "4.2.1"]
+    >>> suggest_affects_version(["4.4.0"], unreleased)
+    '4.4.0'
+    >>> suggest_affects_version(["5.0.0"], unreleased)
+    '5.0.0'
+    >>> suggest_affects_version(["5.0.0", "4.4.0"], unreleased)
+    '4.4.0'
+    >>> suggest_affects_version(["4.2.1"], unreleased)
+    ''
+    >>> suggest_affects_version(["4.4.0", "4.2.1"], unreleased)
+    ''
+    >>> suggest_affects_version(["4.3.0", "4.4.0"], unreleased)
+    ''
+    >>> suggest_affects_version(["4.10.0", "4.9.0"], ["4.10.0", "4.9.0"])
+    '4.9.0'
+    >>> suggest_affects_version([], unreleased)
+    ''
+    >>> suggest_affects_version(["unknown", "4.4.0"], unreleased)
+    ''
+    """
+    versions = [(parse_version(name), name) for name in fix_version_names]
+    if not versions or any(version is None for version, _ in versions):
+        return ""
+    version, name = min(versions)
+    return name if version[2] == 0 and name in unreleased_version_names else ""
 
 
 def red(text):
@@ -486,34 +635,61 @@ def find_merge_commit(pr_num, pr_events):
     return None, None
 
 
-def close_pr(pr_num):
-    url = "%s/pulls/%s" % (GITHUB_API_BASE, pr_num)
-    data = json.dumps({"state": "closed"}).encode("utf-8")
-    request = Request(url, data=data, method="PATCH")
-    request.add_header("Content-Type", "application/json")
-    request.add_header("Accept", "application/vnd.github+json")
-    if GITHUB_OAUTH_KEY:
+class GitHub:
+    """GitHub REST writes used by the merge script -- the single seam for PR mutations.
+
+    Reads go through the module-level get_json(); only the two mutations (closing the PR and
+    posting a comment) live here, so DryRunGitHub can override them without touching any read
+    path. main() constructs GitHub() normally and DryRunGitHub() for a dry run.
+    """
+
+    def close_pr(self, pr_num):
+        url = "%s/pulls/%s" % (GITHUB_API_BASE, pr_num)
+        data = json.dumps({"state": "closed"}).encode("utf-8")
+        request = Request(url, data=data, method="PATCH")
+        request.add_header("Content-Type", "application/json")
+        request.add_header("Accept", "application/vnd.github+json")
+        if GITHUB_OAUTH_KEY:
+            request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+        try:
+            return json.load(urlopen(request))
+        except HTTPError as e:
+            print_error("Failed to close PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
+            return None
+
+    def comment(self, pr_num, body):
+        # Posting a comment is a write and needs auth; without a token, skip rather than 401.
+        if not GITHUB_OAUTH_KEY:
+            print_error("GITHUB_OAUTH_KEY is not set; skipping the comment.")
+            return None
+        url = "%s/issues/%s/comments" % (GITHUB_API_BASE, pr_num)
+        data = json.dumps({"body": body}).encode("utf-8")
+        request = Request(url, data=data, method="POST")
+        request.add_header("Content-Type", "application/json")
+        request.add_header("Accept", "application/vnd.github+json")
         request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
-    try:
-        return json.load(urlopen(request))
-    except HTTPError as e:
-        print_error("Failed to close PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
+        try:
+            return json.load(urlopen(request))
+        except HTTPError as e:
+            print_error("Failed to comment on PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
+            return None
+
+
+class DryRunGitHub(GitHub):
+    """Logs the intended PR close/comment instead of calling the GitHub API."""
+
+    def close_pr(self, pr_num):
+        print("DRY-RUN: would close PR #%s via the GitHub API." % pr_num)
+        return None
+
+    def comment(self, pr_num, body):
+        print("DRY-RUN: would post the following comment on PR #%s:\n%s" % (pr_num, body))
         return None
 
 
-def comment_pr(pr_num, body):
-    url = "%s/issues/%s/comments" % (GITHUB_API_BASE, pr_num)
-    data = json.dumps({"body": body}).encode("utf-8")
-    request = Request(url, data=data, method="POST")
-    request.add_header("Content-Type", "application/json")
-    request.add_header("Accept", "application/vnd.github+json")
-    if GITHUB_OAUTH_KEY:
-        request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
-    try:
-        return json.load(urlopen(request))
-    except HTTPError as e:
-        print_error("Failed to comment on PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
-        return None
+# Set in main(): GitHub() normally, DryRunGitHub() for a dry run. Module-level default so the
+# top-level except handler and any early failure path have a usable client.
+github = GitHub()
 
 
 def post_merge_comment(pr_num, merged_commits):
@@ -536,10 +712,7 @@ def post_merge_comment(pr_num, merged_commits):
         "\n%s\n\n%s\n%s"
         % (bold("Posting merge comment on PR #%s:" % pr_num), bold(summary), attribution)
     )
-    if not GITHUB_OAUTH_KEY:
-        print_error("GITHUB_OAUTH_KEY is not set; skipping the merge comment.")
-        return
-    comment_pr(pr_num, body)
+    github.comment(pr_num, body)
 
 
 def fail(msg):
@@ -548,12 +721,41 @@ def fail(msg):
     sys.exit(-1)
 
 
-def run_cmd(cmd):
-    print(cmd)
-    if isinstance(cmd, list):
-        return subprocess.check_output(cmd).decode("utf-8")
-    else:
-        return subprocess.check_output(cmd.split(" ")).decode("utf-8")
+class Git:
+    """Runs the merge-flow git commands for the merge script.
+
+    This is the seam for the merge/backport flow, not every git invocation:
+    check_script_up_to_date() shells out to git merge-base directly. ``run`` executes read-only
+    and local commands (fetch, checkout, merge, commit, cherry-pick, rev-parse, config, branch
+    bookkeeping); those are safe even in a dry run because the merge and cherry-picks happen on
+    the throwaway PR_TOOL_* branches that clean_up removes. ``push`` is the only command that
+    mutates the shared repo at PUSH_REMOTE_NAME, so it is the one method DryRunGit overrides;
+    everything else it inherits and runs for real, keeping conflict detection and the computed
+    merge hash realistic. main() constructs Git() normally and DryRunGit() for a dry run.
+    """
+
+    def run(self, cmd):
+        print(cmd)
+        if isinstance(cmd, list):
+            return subprocess.check_output(cmd).decode("utf-8")
+        else:
+            return subprocess.check_output(cmd.split(" ")).decode("utf-8")
+
+    def push(self, remote, local_ref, remote_ref):
+        return self.run("git push %s %s:%s" % (remote, local_ref, remote_ref))
+
+
+class DryRunGit(Git):
+    """Logs the intended push instead of updating the remote; all other git runs for real."""
+
+    def push(self, remote, local_ref, remote_ref):
+        print("DRY-RUN: would push %s to %s:%s" % (local_ref, remote, remote_ref))
+        return ""
+
+
+# Set in main(): Git() normally, DryRunGit() for a dry run. Module-level default so clean_up and
+# the top-level except handler have a usable client even if main() fails early.
+git = Git()
 
 
 class SkipCherryPick(Exception):
@@ -570,7 +772,7 @@ def continue_maybe(prompt, cherry=False):
     if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
         if cherry:
             try:
-                run_cmd("git cherry-pick --abort")
+                git.run("git cherry-pick --abort")
             except Exception:
                 print_error("Unable to abort and get back to the state before cherry-pick")
             print("Skipping this cherry-pick; the merge continues.")
@@ -582,26 +784,26 @@ def continue_maybe(prompt, cherry=False):
 def clean_up():
     if "original_head" in globals():
         print("Restoring head pointer to %s" % original_head)
-        run_cmd("git checkout %s" % original_head)
+        git.run("git checkout %s" % original_head)
 
-        branches = run_cmd("git branch").replace(" ", "").split("\n")
+        branches = git.run("git branch").replace(" ", "").split("\n")
 
         for branch in list(filter(lambda x: x.startswith(BRANCH_PREFIX), branches)):
             print("Deleting local branch %s" % branch)
-            run_cmd("git branch -D %s" % branch)
+            git.run("git branch -D %s" % branch)
 
 
 # merge the requested PR and return the merge hash
 def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
     target_branch_name = "%s_MERGE_PR_%s_%s" % (BRANCH_PREFIX, pr_num, target_ref.upper())
-    run_cmd("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
-    run_cmd("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, target_ref, target_branch_name))
-    run_cmd("git checkout %s" % target_branch_name)
+    git.run("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
+    git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, target_ref, target_branch_name))
+    git.run("git checkout %s" % target_branch_name)
 
     had_conflicts = False
     try:
-        run_cmd(["git", "merge", pr_branch_name, "--squash"])
+        git.run(["git", "merge", pr_branch_name, "--squash"])
     except Exception as e:
         msg = "Error merging: %s\nWould you like to manually fix-up this merge?" % e
         continue_maybe(msg)
@@ -624,8 +826,8 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
         # to people every time someone creates a public fork of Spark.
         merge_message_flags += ["-m", body.replace("@", "")]
 
-    committer_name = run_cmd("git config --get user.name").strip()
-    committer_email = run_cmd("git config --get user.email").strip()
+    committer_name = git.run("git config --get user.name").strip()
+    committer_email = git.run("git config --get user.email").strip()
 
     if had_conflicts:
         message = "This patch had conflicts when merged, resolved by\nCommitter: %s <%s>" % (
@@ -645,19 +847,19 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
 
     merge_message_flags += ["-m", authors]
 
-    run_cmd(["git", "commit", '--author="%s"' % primary_author] + merge_message_flags)
+    git.run(["git", "commit", '--author="%s"' % primary_author] + merge_message_flags)
 
     continue_maybe(
         "Merge complete (local ref %s). Push to %s?" % (target_branch_name, PUSH_REMOTE_NAME)
     )
 
     try:
-        run_cmd("git push %s %s:%s" % (PUSH_REMOTE_NAME, target_branch_name, target_ref))
+        git.push(PUSH_REMOTE_NAME, target_branch_name, target_ref)
     except Exception as e:
         clean_up()
         print_error("Exception while pushing: %s" % e)
 
-    merge_hash = run_cmd("git rev-parse %s" % target_branch_name).strip()
+    merge_hash = git.run("git rev-parse %s" % target_branch_name).strip()
     clean_up()
     print("Pull request #%s merged!" % pr_num)
     print("Merge hash: %s" % merge_hash)
@@ -673,27 +875,52 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     """
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
-    run_cmd("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
-    run_cmd("git checkout %s" % pick_branch_name)
+    git.run("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
+    git.run("git checkout %s" % pick_branch_name)
+    pick_head = git.run("git rev-parse HEAD").strip()
 
     try:
-        run_cmd("git cherry-pick -sx %s" % merge_hash)
+        git.run(
+            [
+                "git",
+                "-c",
+                "commit.cleanup=scissors",
+                "cherry-pick",
+                "-sx",
+                merge_hash,
+            ]
+        )
     except Exception as e:
         msg = "Error cherry-picking: %s\nWould you like to manually fix-up this merge?" % e
         continue_maybe(msg, True)
-        msg = "Okay, please fix any conflicts and finish the cherry-pick. Finished?"
+        msg = "Okay, please fix any conflicts and 'git add' conflicting files... Finished?"
         continue_maybe(msg, True)
+        if git.run("git rev-parse HEAD").strip() == pick_head:
+            # Important to use `scissors` and `--edit` otherwise git will strip lines starting
+            # with `#` when calling `--continue`. See: https://github.com/apache/spark/pull/58214
+            git.run(
+                [
+                    "git",
+                    "-c",
+                    "commit.cleanup=scissors",
+                    "cherry-pick",
+                    "--continue",
+                    "--edit",
+                ]
+            )
+        else:
+            print("Cherry-pick already completed manually; continuing with the backport.")
 
     continue_maybe(
         "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)
     )
 
     try:
-        run_cmd("git push %s %s:%s" % (PUSH_REMOTE_NAME, pick_branch_name, pick_ref))
+        git.push(PUSH_REMOTE_NAME, pick_branch_name, pick_ref)
     except Exception as e:
         fail("Exception while pushing: %s" % e)
 
-    pick_hash = run_cmd("git rev-parse %s" % pick_branch_name).strip()
+    pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
     clean_up()
 
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
@@ -712,7 +939,7 @@ def branches_with_merge_footer(pr_num, branch_names):
     """
     try:
         landed = _branches_with_merge_footer(
-            pr_num, PUSH_REMOTE_NAME, lambda args: run_cmd(["git"] + args)
+            pr_num, PUSH_REMOTE_NAME, lambda args: git.run(["git"] + args)
         )
     except Exception as e:
         print_error("Could not scan for existing backports of #%s (%s)." % (pr_num, e))
@@ -920,7 +1147,15 @@ def title_similarity(pr_title, summary):
 
 
 def format_jira_verification(
-    pr_num, pr_title, jira_id, summary, status, issuetype, use_color=False, is_followup=False
+    pr_num,
+    pr_title,
+    jira_id,
+    summary,
+    status,
+    issuetype,
+    resolution=None,
+    use_color=False,
+    is_followup=False,
 ):
     """Render the JIRA-vs-PR match block shown before merging.
 
@@ -987,6 +1222,7 @@ def format_jira_verification(
       Match:   0.00   (FOLLOWUP: title intentionally differs, not checked)
     """
     status_warning = ""
+    resolution_suffix = " (%s)" % resolution if resolution else ""
     if status in ("Resolved", "Closed"):
         status_warning = "   <-- WARNING: already Resolved/Closed"
         if use_color:
@@ -1007,7 +1243,7 @@ def format_jira_verification(
             "=== Verify JIRA matches PR #%s ===" % pr_num,
             "PR title:  %s" % pr_title,
             "JIRA %s: %s" % (jira_id, summary),
-            "  Status:  %s%s" % (status, status_warning),
+            "  Status:  %s%s%s" % (status, resolution_suffix, status_warning),
             "  Type:    %s" % issuetype,
             "  Match:   %.2f%s" % (score, match_suffix),
         ]
@@ -1021,6 +1257,9 @@ def print_jira_issue_summary(issue):
         assignee = assignee.displayName
     assignee = "Assignee\t%s\n" % assignee
     status = "Status\t\t%s\n" % issue.fields.status.name
+    resolution = ""
+    if issue.fields.resolution is not None:
+        resolution = "Resolution\t%s\n" % issue.fields.resolution.name
     components = "Components\t%s\n" % [x.name for x in issue.fields.components]
     url = "Url\t\t%s/%s\n" % (JIRA_BASE, issue.key)
     target_versions = "Affected\t%s\n" % [x.name for x in issue.fields.versions]
@@ -1029,8 +1268,8 @@ def print_jira_issue_summary(issue):
         fix_versions = "Fixed\t\t%s\n" % [x.name for x in issue.fields.fixVersions]
     print("=== JIRA %s ===" % issue.key)
     print(
-        "%s%s%s%s%s%s%s"
-        % (summary, assignee, status, components, url, target_versions, fix_versions)
+        "%s%s%s%s%s%s%s%s"
+        % (summary, assignee, status, resolution, components, url, target_versions, fix_versions)
     )
 
 
@@ -1103,14 +1342,84 @@ def reconcile_jira_components(issue, title_components):
         # Append the PR title's components, keeping the existing ones first.
         new_names = list(dict.fromkeys(current + title_jira_components))
 
-    try:
-        issue.update(fields={"components": [{"name": n} for n in new_names]})
-        print("Updated JIRA %s components to: %s" % (issue.key, ", ".join(new_names)))
-    except Exception as e:
-        print_error("Failed to update components on JIRA %s: %s" % (issue.key, e))
+    jira_ops.update_components(issue, new_names)
 
 
-def get_jira_issue(prompt, default_jira_id="", allow_resolved=False):
+def reconcile_jira_affects_versions(
+    issue,
+    fix_version_names: list[str],
+    affects_available: set[str],
+    unreleased_version_names: list[str],
+) -> None:
+    """Prompt the committer to correct Affects Version/s newer than the earliest fix.
+
+    Blank input accepts the suggested version, or skips when none is available. Versions
+    are validated against ``affects_available`` before the committer chooses to append
+    (default), overwrite, or keep. Entering 'skip' or [k]eep leaves the field untouched.
+    Writes go through ``jira_ops`` so a dry run only logs them.
+    """
+    current_names = [v.name for v in issue.fields.versions]
+    default_affects_version = suggest_affects_version(fix_version_names, unreleased_version_names)
+    if default_affects_version:
+        prompt_suffix = f"[{default_affects_version}] (or 'skip')"
+        skip_hint = "enter 'skip'"
+    else:
+        prompt_suffix = "(blank to skip)"
+        skip_hint = "leave blank to skip"
+    print()
+    print("=" * 80)
+    print(
+        f"JIRA {issue.key} Affects Version/s {current_names if current_names else '(none)'} "
+        f"vs Fix Version/s {fix_version_names}: at least one Affects Version must be at or before "
+        f"the earliest Fix Version, so the recorded affected version is likely wrong."
+    )
+    print("=" * 80)
+    while True:
+        try:
+            raw = bold_input(f"Enter comma-separated affects version(s) {prompt_suffix}: ").strip()
+            if raw.lower() == "skip" or (not raw and not default_affects_version):
+                print(f"Affects Version/s left unchanged; update {issue.key} manually.")
+                return
+            new_names = parse_version_list(raw or default_affects_version)
+            if new_names and set(new_names).issubset(affects_available):
+                break
+            print(
+                f"Specified version(s) [{', '.join(new_names)}] not found in the available "
+                f"versions, try again (or {skip_hint})."
+            )
+        except KeyboardInterrupt:
+            raise
+        except BaseException:
+            traceback.print_exc()
+            print(f"Error setting affects version(s), try again (or {skip_hint}).")
+
+    if current_names:
+        choice = get_input(
+            f"[a]ppend to / [o]verwrite existing {current_names} / [k]eep as is "
+            "(default: append): ",
+            {"a": ["a", "append", ""], "o": ["o", "overwrite"], "k": ["k", "keep"]},
+        )
+        if choice == "k":
+            print(f"Keeping JIRA {issue.key} Affects Version/s unchanged.")
+            return
+        if choice == "a":
+            # Keep the existing versions first, then add the entered ones.
+            new_names = list(dict.fromkeys(current_names + new_names))
+
+    jira_ops.update_affects_versions(issue, new_names)
+
+
+def maybe_reconcile_jira_affects_versions(
+    issue, fix_version_names, affects_available, unreleased_version_names
+):
+    """Reconcile the Affects Version/s only when they fail to precede the fix version(s)."""
+    if fix_precedes_affects(fix_version_names, [v.name for v in issue.fields.versions]):
+        reconcile_jira_affects_versions(
+            issue, fix_version_names, affects_available, unreleased_version_names
+        )
+
+
+def get_jira_issue(prompt, default_jira_id=""):
     jira_id = bold_input("%s [%s]: " % (prompt, default_jira_id))
     if jira_id == "":
         jira_id = default_jira_id
@@ -1122,21 +1431,24 @@ def get_jira_issue(prompt, default_jira_id="", allow_resolved=False):
         print_jira_issue_summary(issue)
         status = issue.fields.status.name
         if status == "Resolved" or status == "Closed":
-            print("JIRA issue %s already has status '%s'" % (jira_id, status))
-            if not allow_resolved:
+            resolution = issue.fields.resolution
+            resolution_name = resolution.name if resolution is not None else None
+            print("JIRA issue %s already has status '%s' (%s)" % (jira_id, status, resolution_name))
+            # Only a ticket an earlier merge resolved as Fixed can legitimately gain
+            # another Fix Version. Duplicate / Won't Fix / Invalid tickets must not be
+            # touched.
+            if resolution_name != "Fixed":
                 return None
         if get_input("Check if the JIRA information is as expected (y/N): ", ["y", "n", ""]) == "y":
             return issue
         else:
             return get_jira_issue(
                 "Enter the revised JIRA ID again or leave blank to skip",
-                allow_resolved=allow_resolved,
             )
     except Exception as e:
         print_error("ASF JIRA could not find %s: %s" % (jira_id, e))
         return get_jira_issue(
             "Enter the revised JIRA ID again or leave blank to skip",
-            allow_resolved=allow_resolved,
         )
 
 
@@ -1145,9 +1457,8 @@ def resolve_jira_issue(
     comment,
     default_jira_id="",
     title_components=(),
-    allow_resolved=False,
 ):
-    issue = get_jira_issue("Enter a JIRA id", default_jira_id, allow_resolved)
+    issue = get_jira_issue("Enter a JIRA id", default_jira_id)
     if issue is None:
         return
 
@@ -1160,14 +1471,19 @@ def resolve_jira_issue(
 
         reconcile_jira_components(issue, title_components)
 
-    versions = asf_jira.project_versions("SPARK")
+    all_versions = asf_jira.project_versions("SPARK")
     # Consider only x.y.z, unreleased, unarchived versions
     versions = [
         x
-        for x in versions
-        if not x.raw["released"] and not x.raw["archived"] and re.match(r"\d+\.\d+\.\d+", x.name)
+        for x in all_versions
+        if not x.raw["released"] and not x.raw["archived"] and parse_version(x.name) is not None
     ]
     versions = sorted(versions, key=lambda x: x.name, reverse=True)
+    # Affects Version/s may name an already-released version, so validate the affects prompt
+    # against all unarchived x.y.z versions, not just the unreleased fix candidates.
+    affects_available = {
+        x.name for x in all_versions if not x.raw["archived"] and parse_version(x.name) is not None
+    }
 
     unreleased_names = [v.name for v in versions]
     default_fix_list, infer_warnings = compute_merge_default_fix_versions(
@@ -1181,13 +1497,37 @@ def resolve_jira_issue(
     if is_resolved:
         # A later backport run must preserve the versions recorded by the original merge and
         # only add versions inferred from the newly discovered branches.
-        default_fix_list = additional_fix_versions(default_fix_list, existing_fix_version_names)
-        if not default_fix_list:
+        default_fix_list, all_inferred_present = fix_version_additions(
+            default_fix_list, existing_fix_version_names
+        )
+        if all_inferred_present:
             print(
-                "JIRA issue %s already contains all inferred fix versions; no update needed."
-                % issue.key
+                "JIRA issue %s already contains all inferred fix versions; no fix version "
+                "update needed." % issue.key
+            )
+            # A re-run may still have Affects Version/s sitting above the unchanged fix set.
+            maybe_reconcile_jira_affects_versions(
+                issue, existing_fix_version_names, affects_available, unreleased_names
             )
             return
+        if default_fix_list:
+            print(
+                "JIRA issue %s has fix version(s) %s; inferred addition(s): %s"
+                % (issue.key, existing_fix_version_names, default_fix_list)
+            )
+            if get_input("Add these fix version(s)? (y/N): ", ["y", "n", ""]) != "y":
+                # Declining the addition still leaves any Affects Version/s that sit above
+                # the already-recorded fix version(s) to reconcile.
+                maybe_reconcile_jira_affects_versions(
+                    issue, existing_fix_version_names, affects_available, unreleased_names
+                )
+                return
+        else:
+            # Nothing inferred, so there is nothing to confirm; fall through to the prompt.
+            print(
+                "JIRA issue %s has fix version(s) %s; no additional fix version could be "
+                "inferred." % (issue.key, existing_fix_version_names)
+            )
     default_fix_versions = ",".join(default_fix_list)
 
     available_versions = set(list(map(lambda v: v.name, versions)))
@@ -1196,10 +1536,12 @@ def resolve_jira_issue(
             prompt = "Enter comma-separated fix version(s) [%s]: "
             if is_resolved:
                 prompt = "Enter comma-separated additional fix version(s) [%s]: "
-            fix_versions = bold_input(prompt % default_fix_versions)
-            if fix_versions == "":
-                fix_versions = default_fix_versions
-            fix_versions = fix_versions.replace(" ", "").split(",")
+            fix_versions = fix_versions_from_input(
+                bold_input(prompt % default_fix_versions), default_fix_versions
+            )
+            if not fix_versions:
+                print("No fix version entered; update %s manually." % issue.key)
+                return
             if set(fix_versions).issubset(available_versions):
                 break
             else:
@@ -1213,6 +1555,13 @@ def resolve_jira_issue(
             traceback.print_exc()
             print("Error setting fix version(s), try again (or leave blank and fix manually)")
 
+    # On a fresh resolve, offer to update the Affects Version/s when they sit above the fix
+    # version(s) just chosen; the already-resolved paths handle their own cases.
+    if not is_resolved:
+        maybe_reconcile_jira_affects_versions(
+            issue, fix_versions, affects_available, unreleased_names
+        )
+
     def get_version_json(version_str):
         return list(filter(lambda v: v.name == version_str, versions))[0].raw
 
@@ -1223,37 +1572,26 @@ def resolve_jira_issue(
         jira_fix_versions = [v for v in jira_fix_versions if v["name"] not in existing_names]
         if not jira_fix_versions:
             print("No new fix versions selected for JIRA issue %s; no update needed." % issue.key)
+            maybe_reconcile_jira_affects_versions(
+                issue, existing_fix_version_names, affects_available, unreleased_names
+            )
             return
-        issue.update(
-            fields={"fixVersions": [v.raw for v in existing_fix_versions] + jira_fix_versions}
+        # A backport adds an earlier fix line, which usually means that line is affected too;
+        # offer to extend the Affects Version/s down when they miss the full fix set.
+        full_fix_names = existing_fix_version_names + [v["name"] for v in jira_fix_versions]
+        maybe_reconcile_jira_affects_versions(
+            issue, full_fix_names, affects_available, unreleased_names
         )
-        try:
-            print_jira_issue_summary(asf_jira.issue(issue.key))
-        except Exception:
-            print("Unable to fetch JIRA issue %s after updating fix versions" % issue.key)
-        print(
-            "Successfully updated %s with additional fixVersions=%s!"
-            % (issue.key, [v["name"] for v in jira_fix_versions])
-        )
+        jira_ops.add_fix_versions(issue, existing_fix_versions, jira_fix_versions)
         return
 
     resolve = list(filter(lambda a: a["name"] == "Resolve Issue", asf_jira.transitions(issue.key)))[
         0
     ]
     resolution = list(filter(lambda r: r.raw["name"] == "Fixed", asf_jira.resolutions()))[0]
-    asf_jira.transition_issue(
-        issue.key,
-        resolve["id"],
-        fixVersions=jira_fix_versions,
-        comment=comment,
-        resolution={"id": resolution.raw["id"]},
+    jira_ops.resolve_issue(
+        issue, resolve["id"], jira_fix_versions, comment, resolution.raw["id"], fix_versions
     )
-
-    try:
-        print_jira_issue_summary(asf_jira.issue(issue.key))
-    except Exception:
-        print("Unable to fetch JIRA issue %s after resolving" % issue.key)
-    print("Successfully resolved %s with fixVersions=%s!" % (issue.key, fix_versions))
 
 
 def choose_jira_assignee(issue):
@@ -1289,7 +1627,7 @@ def choose_jira_assignee(issue):
                     # assume it's a user id, and try to assign (might fail, we just prompt again)
                     assignee = asf_jira.user(raw_assignee)
                 try:
-                    assign_issue(issue.key, assignee.name)
+                    jira_ops.assign(issue.key, assignee.name)
                 except Exception as e:
                     if (
                         e.__class__.__name__ == "JIRAError"
@@ -1300,8 +1638,8 @@ def choose_jira_assignee(issue):
                             "User '%s' cannot be assigned, add to contributors role and try again?"
                             % assignee.name
                         )
-                        grant_contributor_role(assignee.name)
-                        assign_issue(issue.key, assignee.name)
+                        jira_ops.grant_contributor(assignee.name)
+                        jira_ops.assign(issue.key, assignee.name)
                     else:
                         raise e
                 return assignee
@@ -1312,26 +1650,114 @@ def choose_jira_assignee(issue):
             print("Error assigning JIRA, try again (or leave blank and fix manually)")
 
 
-def grant_contributor_role(user: str):
-    role = asf_jira.project_role("SPARK", 10010)
-    role.add_user(user)
-    print("Successfully added user '%s' to contributors role" % user)
+class Jira:
+    """ASF JIRA writes used by the merge script -- the single seam for JIRA mutations.
 
-
-def assign_issue(issue: int, assignee: str) -> bool:
+    The pre-write JIRA lookups stay on the module-level asf_jira client; the writes (components,
+    fix versions, the resolve transition, assignment, and the contributor-role grant) go through
+    here, so DryRunJira can log them. Two Production writes (add_fix_versions, resolve_issue) also
+    read the issue back afterward to print the updated summary; DryRunJira skips the write and that
+    read-back alike. main() builds Jira(asf_jira) normally and DryRunJira(asf_jira) for a dry run,
+    after initialize_jira() sets asf_jira.
     """
-    Assign an issue to a user, which is a shorthand for jira.client.JIRA.assign_issue.
-    The original one has an issue that it will search users again and only choose the assignee
-    from 20 candidates. If it's unmatched, it picks the head blindly. In our case, the assignee
-    is already resolved.
-    """
-    url = getattr(asf_jira, "_get_latest_url")(f"issue/{issue}/assignee")
-    payload = {"name": assignee}
-    getattr(asf_jira, "_session").put(url, data=json.dumps(payload))
-    return True
+
+    def __init__(self, client):
+        self._client = client
+
+    def update_components(self, issue, new_names):
+        try:
+            issue.update(fields={"components": [{"name": n} for n in new_names]})
+            print("Updated JIRA %s components to: %s" % (issue.key, ", ".join(new_names)))
+        except Exception as e:
+            print_error("Failed to update components on JIRA %s: %s" % (issue.key, e))
+
+    def update_affects_versions(self, issue, new_names: list[str]) -> None:
+        try:
+            issue.update(fields={"versions": [{"name": n} for n in new_names]})
+            print(f"Updated JIRA {issue.key} Affects Version/s to: {', '.join(new_names)}")
+        except Exception as e:
+            print_error(f"Failed to update Affects Version/s on JIRA {issue.key}: {e}")
+
+    def add_fix_versions(self, issue, existing_fix_versions, new_version_jsons):
+        issue.update(
+            fields={"fixVersions": [v.raw for v in existing_fix_versions] + new_version_jsons}
+        )
+        try:
+            print_jira_issue_summary(self._client.issue(issue.key))
+        except Exception:
+            print("Unable to fetch JIRA issue %s after updating fix versions" % issue.key)
+        print(
+            "Successfully updated %s with additional fixVersions=%s!"
+            % (issue.key, [v["name"] for v in new_version_jsons])
+        )
+
+    def resolve_issue(
+        self, issue, resolve_id, fix_version_jsons, comment, resolution_id, fix_version_names
+    ):
+        self._client.transition_issue(
+            issue.key,
+            resolve_id,
+            fixVersions=fix_version_jsons,
+            comment=comment,
+            resolution={"id": resolution_id},
+        )
+        try:
+            print_jira_issue_summary(self._client.issue(issue.key))
+        except Exception:
+            print("Unable to fetch JIRA issue %s after resolving" % issue.key)
+        print("Successfully resolved %s with fixVersions=%s!" % (issue.key, fix_version_names))
+
+    def assign(self, issue_key, assignee):
+        # Shorthand for jira.client.JIRA.assign_issue. The library's own assign_issue re-searches
+        # users and blindly picks the first of 20 candidates when unmatched; here the assignee is
+        # already resolved, so PUT it directly.
+        url = getattr(self._client, "_get_latest_url")(f"issue/{issue_key}/assignee")
+        getattr(self._client, "_session").put(url, data=json.dumps({"name": assignee}))
+        return True
+
+    def grant_contributor(self, user):
+        role = self._client.project_role("SPARK", 10010)
+        role.add_user(user)
+        print("Successfully added user '%s' to contributors role" % user)
 
 
-def resolve_jira_issues(title, merge_branches, comment, title_components=(), allow_resolved=False):
+class DryRunJira(Jira):
+    """Logs the intended JIRA writes instead of calling the API; reads still go through."""
+
+    def update_components(self, issue, new_names):
+        print("DRY-RUN: would set JIRA %s components to: %s" % (issue.key, ", ".join(new_names)))
+
+    def update_affects_versions(self, issue, new_names: list[str]) -> None:
+        print(f"DRY-RUN: would set JIRA {issue.key} Affects Version/s to: {', '.join(new_names)}")
+
+    def add_fix_versions(self, issue, existing_fix_versions, new_version_jsons):
+        print(
+            "DRY-RUN: would add fixVersions=%s to JIRA %s."
+            % ([v["name"] for v in new_version_jsons], issue.key)
+        )
+
+    def resolve_issue(
+        self, issue, resolve_id, fix_version_jsons, comment, resolution_id, fix_version_names
+    ):
+        print(
+            "DRY-RUN: would resolve JIRA %s as Fixed with fixVersions=%s and add comment:\n%s"
+            % (issue.key, fix_version_names, comment)
+        )
+
+    def assign(self, issue_key, assignee):
+        print("DRY-RUN: would assign JIRA %s to '%s'." % (issue_key, assignee))
+        return True
+
+    def grant_contributor(self, user):
+        print("DRY-RUN: would add user '%s' to the SPARK contributors role." % user)
+
+
+# Set in main() after initialize_jira(): Jira(asf_jira) normally, DryRunJira(asf_jira) for a dry
+# run. None until then; only the JIRA-write flow, well after construction, uses it.
+jira_ops = None
+
+
+def resolve_jira_issues(title, merge_branches, comment, title_components=()):
     jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
 
     if len(jira_ids) == 0:
@@ -1339,7 +1765,6 @@ def resolve_jira_issues(title, merge_branches, comment, title_components=(), all
             merge_branches,
             comment,
             title_components=title_components,
-            allow_resolved=allow_resolved,
         )
     for jira_id in jira_ids:
         resolve_jira_issue(
@@ -1347,11 +1772,27 @@ def resolve_jira_issues(title, merge_branches, comment, title_components=(), all
             comment,
             jira_id,
             title_components=title_components,
-            allow_resolved=allow_resolved,
         )
 
 
-def update_jira_for_pr(pr_num, title, merge_branches, title_components, allow_resolved=False):
+def update_jira_for_pr(pr_num, title, merge_branches, title_components):
+    skip_jira_title_tags = ("MINOR", "TRIVIAL", "FOLLOWUP")
+    tags = set(title_components)
+    try:
+        parsed = Title.parse(title)
+        tags.update(parsed.leading)
+        tags.update(parsed.components)
+    except ValueError:
+        pass
+    skipped = [tag for tag in skip_jira_title_tags if tag in tags]
+    if skipped:
+        print()
+        print_error(
+            "Skipping JIRA operations for PR #%s because title has %s."
+            % (pr_num, ", ".join("[%s]" % tag for tag in skipped))
+        )
+        return
+
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
     print()
     continue_maybe("Would you like to update an associated JIRA?")
@@ -1365,7 +1806,6 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components, allow_re
         merge_branches,
         jira_comment,
         title_components,
-        allow_resolved=allow_resolved,
     )
 
 
@@ -1640,10 +2080,10 @@ def prompt_for_components():
 
 
 def get_current_ref():
-    ref = run_cmd("git rev-parse --abbrev-ref HEAD").strip()
+    ref = git.run("git rev-parse --abbrev-ref HEAD").strip()
     if ref == "HEAD":
         # The current ref is a detached HEAD, so grab its SHA.
-        return run_cmd("git rev-parse HEAD").strip()
+        return git.run("git rev-parse HEAD").strip()
     else:
         return ref
 
@@ -1747,10 +2187,49 @@ def check_script_up_to_date():
     )
 
 
+def build_arg_parser():
+    """CLI parser: an optional PR number plus the --dry-run/-n flag.
+
+    --dry-run defaults to on when the DRY_RUN env var is set to any non-empty value (see the
+    DRY_RUN_ENV note near the top of this file), so either the flag or the env var enables a
+    dry run; passing the flag forces it on regardless.
+    """
+    parser = argparse.ArgumentParser(description="Merge a Spark pull request.")
+    parser.add_argument(
+        "pr_num",
+        nargs="?",
+        help="Pull request number to merge; prompted for interactively if omitted.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        "-n",
+        action="store_true",
+        default=DRY_RUN_ENV,
+        help="Run every read-only step for real but suppress all outbound effects (git push, "
+        "GitHub PR close/comment, JIRA writes), logging each as a 'DRY-RUN: would ...' line. "
+        "Also enabled by setting the DRY_RUN environment variable.",
+    )
+    return parser
+
+
 def main():
+    global git, github, jira_ops, original_head
+    args = build_arg_parser().parse_args()
+    if args.dry_run:
+        # Swap the outbound clients for their logging-only variants; everything else is unchanged.
+        git = DryRunGit()
+        github = DryRunGitHub()
+        print(
+            bold(
+                "=== DRY-RUN: read-only steps run for real, but the git push to %s, the GitHub "
+                "PR close/comment, and all JIRA writes are suppressed and only logged. ==="
+                % PUSH_REMOTE_NAME
+            )
+        )
+
     check_script_up_to_date()
     initialize_jira()
-    global original_head
+    jira_ops = DryRunJira(asf_jira) if args.dry_run else Jira(asf_jira)
 
     os.chdir(SPARK_HOME)
     original_head = get_current_ref()
@@ -1759,10 +2238,10 @@ def main():
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     branch_names = sorted(branch_names, key=semver_branch_rank, reverse=True)
 
-    if len(sys.argv) == 1:
+    if args.pr_num is None:
         pr_num = get_input("Which pull request would you like to merge? (e.g. 34): ", r"^\d+$")
     else:
-        pr_num = sys.argv[1]
+        pr_num = args.pr_num
         print("Start to merge pull request #%s" % (pr_num))
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
     pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
@@ -1782,7 +2261,6 @@ def main():
     # Normalized PR-title component tags, used later to reconcile JIRA components. Empty for
     # Revert/Reapply PRs, whose titles are kept verbatim and not parsed for components.
     title_components: List[str] = []
-    is_minor = False
 
     # Revert and Reapply PRs keep their title verbatim.
     if not (is_revert_pr or is_reapply_pr):
@@ -1791,7 +2269,6 @@ def main():
             parsed = Title.parse(title)
         except ValueError as e:
             fail("Malformed PR title: %s" % e)
-        is_minor = "MINOR" in parsed.leading
 
         # Normalize component tags via the registry and track primary.
         components = []
@@ -1898,7 +2375,7 @@ def main():
     if merge_hash is not None:
         print("Pull request %s has already been merged, assuming you want to backport" % pr_num)
         commit_is_downloaded = (
-            run_cmd(["git", "rev-parse", "--quiet", "--verify", "%s^{commit}" % merge_hash]).strip()
+            git.run(["git", "rev-parse", "--quiet", "--verify", "%s^{commit}" % merge_hash]).strip()
             != ""
         )
         if not commit_is_downloaded:
@@ -1942,10 +2419,7 @@ def main():
                 post_merge_comment(pr_num, picked_commits)
             # Backport mode may be the first chance to resolve a JIRA after an interrupted
             # original merge. If it was already resolved, add any newly inferred fix versions.
-            if not is_minor:
-                update_jira_for_pr(
-                    pr_num, title, picked_refs, title_components, allow_resolved=True
-                )
+            update_jira_for_pr(pr_num, title, picked_refs, title_components)
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -2001,6 +2475,9 @@ def main():
                 issue.fields.summary,
                 issue.fields.status.name,
                 issue.fields.issuetype.name,
+                resolution=(
+                    issue.fields.resolution.name if issue.fields.resolution is not None else None
+                ),
                 use_color=True,
                 is_followup=is_followup,
             )
@@ -2056,13 +2533,51 @@ def main():
             if pr_state != "closed":
                 close_message = "PR #%s is still open after push; closing it explicitly." % pr_num
                 print("\n%s\n" % bold(close_message))
-                close_pr(pr_num)
+                github.close_pr(pr_num)
             # Record every branch that successfully received the change on the PR.
             post_merge_comment(pr_num, merged_commits)
         # This is deliberately in the finally block: once the target branch has been pushed,
-        # cancelling a later cherry-pick must not bypass the mandatory JIRA update.
-        if not is_minor:
-            update_jira_for_pr(pr_num, title, merged_refs, title_components)
+        # cancelling a later cherry-pick must not bypass the JIRA update decision.
+        update_jira_for_pr(pr_num, title, merged_refs, title_components)
+
+
+__test__ = {
+    "reconcile_jira_affects_versions": """
+    Blank input accepts the suggested version and appends it to the existing versions:
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from types import SimpleNamespace
+    >>> from unittest.mock import Mock, patch
+    >>> issue = SimpleNamespace(
+    ...     key="SPARK-1", fields=SimpleNamespace(versions=[SimpleNamespace(name="5.0.0")]))
+    >>> available = {"5.0.0", "4.4.0"}
+    >>> writer = Mock(spec=Jira)
+    >>> with (
+    ...     patch.dict(reconcile_jira_affects_versions.__globals__, jira_ops=writer),
+    ...     patch("builtins.input", side_effect=["", "", KeyboardInterrupt]) as user_input,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     reconcile_jira_affects_versions(issue, ["4.4.0"], available, ["4.4.0"])
+    >>> writer.update_affects_versions.assert_called_once_with(issue, ["5.0.0", "4.4.0"])
+    >>> user_input.call_count
+    2
+
+    Explicitly skipping an eligible suggestion leaves the JIRA writer untouched:
+
+    >>> writer.reset_mock()
+    >>> with (
+    ...     patch.dict(reconcile_jira_affects_versions.__globals__, jira_ops=writer),
+    ...     patch("builtins.input", side_effect=["skip", KeyboardInterrupt]) as user_input,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     reconcile_jira_affects_versions(issue, ["4.4.0"], available, ["4.4.0"])
+    >>> writer.mock_calls
+    []
+    >>> user_input.call_count
+    1
+    """,
+}
 
 
 if __name__ == "__main__":

@@ -340,7 +340,9 @@ SELECT
 
 They are merged into one aggregate that computes `min` and `max` together, so `store_sales` is read once. In `EXPLAIN` output a merged subplan shows up as a subquery whose single output column is named `mergedValue`, and the sites that share it as `ReusedSubquery`.
 
-Two subplans are merged when their plans match node by node: `Project` lists are unioned, `Aggregate`s must have the same grouping and use the same aggregation implementation (so a `min` is not merged with a `collect_list`), `Filter`s must have the same condition, `Join`s must have the same type, condition and hints, and the leaves must read the same input. Subplans that differ only in their `WHERE` conditions can be merged as well, by turning each side's condition into a boolean column and giving each side's aggregate expressions a `FILTER (WHERE ...)` clause. That is controlled by the configurations below. Queries that still contain a `WITH` clause when this rule runs (one that was not inlined) are skipped.
+Two subplans are merged when their plans match node by node: `Project` lists are unioned, `Aggregate`s must have the same grouping and use the same aggregation implementation (so a `min` is not merged with a `collect_list`), `Filter`s must have the same condition, `Join`s must have the same type, condition and hints, and the leaves must read the same input. A V1 file relation whose rows depend on which columns the read asked for is merged only when both subplans read the same columns of it: `csv`, `json` and `xml`, whose parsers decide what counts as a malformed record from the required schema, and any file relation read with `spark.sql.files.ignoreCorruptFiles` enabled, as a read option or through the configuration, where a failure in a column only one side reads is swallowed together with the rest of that file's rows. `spark.sql.files.ignoreMissingFiles` counts too, not for that reason but because one predicate answers for both. Subplans that differ only in their `WHERE` conditions can be merged as well, by turning each side's condition into a boolean column and giving each side's aggregate expressions a `FILTER (WHERE ...)` clause. That is controlled by the configurations below. Queries that still contain a `WITH` clause when this rule runs (one that was not inlined) are skipped.
+
+On the DataSource V2 read path the requirement that the leaves read the same input is relaxed for a source that declares the `SCAN_MERGING` table capability: two leaves that differ only in their projected columns merge into a single scan reading the union of those columns. Among the built-in file formats Parquet, ORC, text and Avro declare it; a format reaches its V2 read path only when it is removed from `spark.sql.sources.useV1SourceList`. A file table withholds the capability when `spark.sql.files.ignoreCorruptFiles` is true, because a read failure in a column that only the other subplan projects would then be swallowed along with the rest of that file's rows, and when `spark.sql.files.ignoreMissingFiles` is true, to match the strictness predicate the file reader uses.
 
 When only one of the two subplans has a filter, merging is always beneficial, because the unfiltered side reads all the data anyway. This case is on by default, unless the filter has to cross a `Join` to reach the aggregate, which needs the through-join configuration below. When both sides have a filter (the symmetric case), the merged scan filter becomes `OR(f1, f2)`, which is less selective than either original filter and can therefore read more data - for example when the filters prune partitions or Parquet row groups. That is why the symmetric case is disabled by default.
 
@@ -384,7 +386,7 @@ In TPC-DS benchmark runs, enabling symmetric filter propagation made `q9` and `q
     <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.dsv2SymmetricFilterPropagation.enabled</code></td>
     <td>false</td>
     <td>
-      When true, two DataSource V2 scans that pushed the same strictly enforced filters but carry different best-effort (post-scan) filters can be merged even when <code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code> is false. In this case widening cannot change the set of rows the scan is required to return, as the strict filters are re-pushed unchanged and the enclosing <code>Filter</code> re-checks the rest above the scan. This applies only to V2 sources that opt in to scan merging with the <code>SCAN_MERGING</code> table capability; no built-in source does.
+      When true, two DataSource V2 scans that pushed the same strictly enforced filters but carry different best-effort (post-scan) filters can be merged even when <code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code> is false. In this case widening cannot change the set of rows the scan is required to return, as the strict filters are re-pushed unchanged and the enclosing <code>Filter</code> re-checks the rest above the scan. This applies only to V2 sources that opt in to scan merging with the <code>SCAN_MERGING</code> table capability. For a file source the strictly enforced filters are the partition filters, so this configuration is what lets two scans over the same partitions but with different data filters merge.
     </td>
     <td>4.3.0</td>
   </tr>
@@ -666,7 +668,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code></td>
       <td>false</td>
       <td>
-        When enabled, try to avoid shuffle if join or MERGE condition does not include all partition columns. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true.
+        When enabled, try to avoid shuffle if join or MERGE condition does not include all partition columns. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
       </td>
       <td>4.0.0</td>
     </tr>
@@ -674,7 +676,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.sources.v2.bucketing.allowCompatibleTransforms.enabled</code></td>
       <td>false</td>
       <td>
-        When enabled, try to avoid shuffle if partition transforms are compatible but not identical. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true.
+        When enabled, try to avoid shuffle if partition transforms are compatible but not identical. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true, and <code>spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled</code> to be false.
       </td>
       <td>4.0.0</td>
     </tr>
@@ -685,6 +687,46 @@ The following SQL properties enable Storage Partition Join in different join que
         When enabled, try to avoid shuffle on one side of the join, by recognizing the partitioning reported by a V2 data source on the other side.
       </td>
       <td>4.0.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.partition.filter.enabled</code></td>
+      <td>true</td>
+      <td>
+        When enabled, key groups that cannot produce output for the join type may be skipped, instead of being filled with empty partitions on the side that does not hold them. For example, an inner join may scan only the key groups present on both sides. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true, together with either <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> or <code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code>.
+      </td>
+      <td>4.0.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.sorting.enabled</code></td>
+      <td>false</td>
+      <td>
+        When enabled, Spark satisfies a sort on the partition key expressions from the partitioning reported by a V2 data source, so no shuffle is added for that sort. The parallelism of the sorted output is then whatever the data source's partition layout provides, and there is no shuffle stage left for adaptive partition coalescing or skew splitting to balance. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+      </td>
+      <td>4.0.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled</code></td>
+      <td>true</td>
+      <td>
+        When enabled, Spark derives the output ordering of a V2 scan from its partition key expressions, if the source reports a keyed partitioning but no explicit ordering. All rows of such a partition share one key value, so the partition is trivially sorted by those expressions, and a sort Spark would otherwise add becomes unnecessary. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+      </td>
+      <td>4.2.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.preserveKeyOrderingOnCoalesce.enabled</code></td>
+      <td>true</td>
+      <td>
+        When enabled, <code>GroupPartitionsExec</code> reports sort orders over partition key expressions after coalescing several input partitions into one. The merged partitions share the same partition key value, so these orders still hold, while orders over other columns are lost by the concatenation. No order is reported when the join reduced the partition keys onto a common key space (see <code>spark.sql.sources.v2.bucketing.allowCompatibleTransforms.enabled</code>), because the merged partitions then share only the reduced key. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+      </td>
+      <td>4.2.0</td>
+    </tr>
+    <tr>
+      <td><code>spark.sql.sources.v2.bucketing.preserveOrderingOnCoalesce.enabled</code></td>
+      <td>false</td>
+      <td>
+        When enabled, <code>GroupPartitionsExec</code> may preserve the child's full ordering through a sorted merge instead of concatenation, rather than only the orderings over partition key expressions that <code>spark.sql.sources.v2.bucketing.preserveKeyOrderingOnCoalesce.enabled</code> preserves. The sorted merge is selected only where a downstream ordering is otherwise unsatisfied and the merge is feasible, that is, the node coalesces partitions sharing a key, the child reports a non-empty ordering, and every operator below it is one Spark can drive from several partitions at once; otherwise the node concatenates. Where it applies, it removes a downstream sort when data is both partitioned and sorted, but a sorted merge costs more than concatenation, especially when merging many partitions, and it gives up columnar execution for the merged plan. This config requires <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+      </td>
+      <td>4.2.0</td>
     </tr>
   </table>
 
@@ -722,7 +764,6 @@ ON t.dep = s.dep AND t.id = s.id
 SET 'spark.sql.sources.v2.bucketing.enabled' 'true'
 SET 'spark.sql.iceberg.planning.preserve-data-grouping' 'true'
 SET 'spark.sql.sources.v2.bucketing.pushPartValues.enabled' 'true'
-SET 'spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled' 'true'
 
 -- Plan with Storage Partition Join
 == Physical Plan ==
@@ -737,3 +778,8 @@ SET 'spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled' 'tru
          +- * ColumnarToRow (6)
             +- BatchScan (5)
 ```
+
+For skewed joins, consider enabling
+`spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled` and measuring its
+effect on your workload. This option replicates partitions from one side of the join and may
+increase the amount of data read; the example above leaves it at its default of `false`.

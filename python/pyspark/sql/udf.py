@@ -22,11 +22,12 @@ import functools
 import inspect
 import sys
 import warnings
-from typing import Callable, Any, TYPE_CHECKING, Optional, cast, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
 
-
-from pyspark.util import PythonEvalType
+from pyspark.errors import PySparkNotImplementedError, PySparkRuntimeError, PySparkTypeError
 from pyspark.sql.column import Column
+from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import (
     DataType,
     StringType,
@@ -34,14 +35,13 @@ from pyspark.sql.types import (
     _parse_datatype_string,
 )
 from pyspark.sql.utils import get_active_spark_context
-from pyspark.sql.pandas.types import to_arrow_type
-from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.errors import PySparkTypeError, PySparkNotImplementedError, PySparkRuntimeError
+from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
     from pyspark.core.context import SparkContext
-    from pyspark.sql._typing import DataTypeOrString, ColumnOrName, UserDefinedFunctionLike
+    from pyspark.sql._typing import ColumnOrName, DataTypeOrString, UserDefinedFunctionLike
     from pyspark.sql.session import SparkSession
 
 __all__ = ["UDFRegistration"]
@@ -222,6 +222,10 @@ class UserDefinedFunction:
         # Extract Python UDF details if transpilation is enabled.
         self.transpiled: list = []
         self._transpiled_param_names: list[str] = []
+        # The subset of the names above that Python forbids calling by keyword.
+        # The kwargs rewrite in ``__call__`` must leave these alone rather than
+        # silently coerce them to positional -- see the note there.
+        self._positional_only_param_names: frozenset = frozenset()
         # Per-option input-type categories ("numeric"/"string" per public param),
         # parallel to ``self.transpiled``; the JVM picks the option matching the
         # actual column types or falls back to interpreted Python.
@@ -296,7 +300,9 @@ class UserDefinedFunction:
                     errors,
                     self._transpiled_param_names,
                     self._transpiled_input_categories,
+                    positional_only,
                 ) = _transpile_func(session, func, self.returnType)
+                self._positional_only_param_names = frozenset(positional_only)
                 if not self.transpiled:
                     detail = f": {errors}" if errors else ""
                     warnings.warn(f"Unable to transpile UDF {func}{detail}")
@@ -311,6 +317,7 @@ class UserDefinedFunction:
             self.transpiled = []
             self._transpiled_param_names = []
             self._transpiled_input_categories = []
+            self._positional_only_param_names = frozenset()
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
@@ -565,12 +572,19 @@ class UserDefinedFunction:
         # rejects named arguments). Resolve kwargs to positional here
         # using the parameter list captured at transpilation time so the
         # rewritten expression sees plain column refs in declared order.
+        #
+        # A positional-only param is never resolved here -- Python itself
+        # rejects calling one by keyword, and rewriting would paper over that.
+        # Left unresolved, its kwarg reaches the JVM as a
+        # ``NamedArgumentExpression``, which drops the transpiled expression and
+        # falls back to interpreted Python, so the worker's own keyword call
+        # raises the same ``TypeError`` Python would.
         if kwargs and self.transpiled and self._transpiled_param_names:
             params = self._transpiled_param_names
             ordered: list = list(args)
             remaining_kwargs = dict(kwargs)
             for pname in params[len(args) :]:
-                if pname in remaining_kwargs:
+                if pname in remaining_kwargs and pname not in self._positional_only_param_names:
                     ordered.append(remaining_kwargs.pop(pname))
                 else:
                     # Caller didn't supply this param positionally or by
@@ -737,6 +751,7 @@ class UserDefinedFunction:
         self.transpiled = []
         self._transpiled_param_names = []
         self._transpiled_input_categories = []
+        self._positional_only_param_names = frozenset()
         return self
 
 
@@ -994,8 +1009,9 @@ class UDFRegistration:
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.udf
+    from pyspark.sql import SparkSession
     from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.udf.__dict__.copy()

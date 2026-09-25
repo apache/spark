@@ -15,9 +15,10 @@
 # limitations under the License.
 #
 
-from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.feature import FeatureHasher
+from pyspark.sql import SparkSession
+
 # $example off$
 
 if __name__ == "__main__":

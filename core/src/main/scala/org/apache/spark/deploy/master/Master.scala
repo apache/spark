@@ -23,7 +23,7 @@ import java.util.{Date, Locale}
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.util.Random
+import scala.util.{Failure, Random, Success}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState, SparkSubmit}
@@ -392,6 +392,19 @@ private[deploy] class Master(
       logInfo(log"Received unregister request from application" +
         log" ${MDC(LogKeys.APP_ID, applicationId)}")
       idToApp.get(applicationId).foreach(finishApplication)
+
+    case ApplicationHoldUpdated(appId, supported, held) =>
+      idToApp.get(appId) match {
+        case Some(app) =>
+          app.holdSupported = supported
+          app.held = held
+        case None =>
+          logWarning(log"Got hold status for unknown application " +
+            log"${MDC(LogKeys.APP_ID, appId)}")
+      }
+
+    case RequestApplicationHold(appId, hold) =>
+      handleApplicationHold(appId, hold)
 
     case CheckForWorkerTimeOut =>
       timeOutDeadWorkers()
@@ -1218,6 +1231,42 @@ private[deploy] class Master(
           log"${MDC(LogKeys.APP_ID, appId)} requested executors:" +
           log" ${MDC(LogKeys.RESOURCE_PROFILE_TO_TOTAL_EXECS, resourceProfileToTotalExecs)}.")
         false
+    }
+  }
+
+  /**
+   * Handle a hold or resume request made from the Master UI by forwarding it to the driver,
+   * which owns the hold: see `SparkContext.holdExecutors()`.
+   *
+   * The driver drains its executors before answering, so the ask is not waited on here -- that
+   * would block the dispatcher. The resulting state arrives separately as
+   * [[ApplicationHoldUpdated]] and the UI renders that; like the kill links, the request itself
+   * gets no UI feedback, so the outcome is only logged.
+   */
+  private def handleApplicationHold(appId: String, hold: Boolean): Unit = {
+    val action = if (hold) "hold" else "resume"
+    idToApp.get(appId) match {
+      case Some(app) if !app.desc.holdEnabled =>
+        // The UI offers no control for such an application, so this is a stale or hand-crafted
+        // request. The driver would reject it too; answer here without the round trip.
+        logWarning(log"Ignoring the ${MDC(LogKeys.OPERATION, action)} request for application " +
+          log"${MDC(LogKeys.APP_ID, appId)}, which disabled holding.")
+      case Some(app) if !app.isFinished =>
+        logInfo(log"Requesting application ${MDC(LogKeys.APP_ID, appId)} to " +
+          log"${MDC(LogKeys.OPERATION, action)}.")
+        app.driver.ask[Boolean](SetApplicationHold(hold)).onComplete {
+          case Success(acknowledged) =>
+            if (!acknowledged) {
+              logWarning(log"The ${MDC(LogKeys.OPERATION, action)} request for application " +
+                log"${MDC(LogKeys.APP_ID, appId)} did not take effect, see the driver logs.")
+            }
+          case Failure(t) =>
+            logWarning(log"Failed to ${MDC(LogKeys.OPERATION, action)} application " +
+              log"${MDC(LogKeys.APP_ID, appId)}", t)
+        }(ThreadUtils.sameThread)
+      case _ =>
+        logWarning(log"Ignoring the ${MDC(LogKeys.OPERATION, action)} request for unknown or " +
+          log"finished application ${MDC(LogKeys.APP_ID, appId)}.")
     }
   }
 

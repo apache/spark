@@ -496,7 +496,7 @@ class SparkConnectServiceSuite
                 assert(chunk.getArrowBatch.getRowCount == rowCount)
                 assert(chunk.getArrowBatch.getStartOffset == rowStartOffset)
                 assert(chunk.getArrowBatch.getData != null)
-                assert(chunk.getArrowBatch.getData.size() > 0)
+                assert(!chunk.getArrowBatch.getData.isEmpty)
                 assert(
                   chunk.getArrowBatch.getData.size() <= preferredChunkSizeOption.getOrElse(
                     maxChunkSizeOption.get))
@@ -878,6 +878,42 @@ class SparkConnectServiceSuite
       // assert that table was not dropped
       val tableExists = spark.catalog.tableExists("test")
       assert(tableExists, "Table test should still exist after analyze request of DROP TABLE")
+    }
+  }
+
+  test("SPARK-59689: AnalyzePlanRequest does not execute an EXECUTE IMMEDIATE command payload") {
+    withTable("ei_analyze") {
+      spark.sql("CREATE TABLE ei_analyze (col1 INT, col2 STRING)")
+      // The command payload is deferred to the execution level, so analyzing the EXECUTE IMMEDIATE
+      // via the Connect analyze path (CommandExecutionMode.SKIP) must not run the DROP.
+      val sqlString = "EXECUTE IMMEDIATE 'DROP TABLE ei_analyze'"
+      val plan = proto.Plan
+        .newBuilder()
+        .setRoot(
+          proto.Relation
+            .newBuilder()
+            .setCommon(proto.RelationCommon.newBuilder().setPlanId(1))
+            .setSql(proto.SQL.newBuilder().setQuery(sqlString).build())
+            .build())
+        .build()
+
+      val handler = new SparkConnectAnalyzeHandler(null)
+
+      val request = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setExplain(
+          proto.AnalyzePlanRequest.Explain
+            .newBuilder()
+            .setPlan(plan)
+            .setExplainMode(proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED)
+            .build())
+        .build()
+
+      handler.process(request, sparkSessionHolder)
+
+      assert(
+        spark.catalog.tableExists("ei_analyze"),
+        "EXECUTE IMMEDIATE command payload must not run during a Connect analyze request")
     }
   }
 

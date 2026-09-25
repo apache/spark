@@ -124,7 +124,7 @@ object ParserUtils extends SparkParserUtils {
           case term: TerminalNodeImpl =>
             val termText = term.getText
             val tt = term.getSymbol.getType
-            val current = if ((SqlBaseParser.ADD <= tt && tt <= SqlBaseParser.ZONE) ||
+            val current = if ((SqlBaseParser.ABSENT <= tt && tt <= SqlBaseParser.ZONE) ||
               (SqlBaseParser.BIGINT_LITERAL <= tt && tt <= SqlBaseParser.BIGDECIMAL_LITERAL)) {
               termText.toUpperCase(Locale.ROOT)
             } else {

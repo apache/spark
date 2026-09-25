@@ -21,6 +21,13 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import scala.Tuple2$;
 
@@ -128,6 +135,129 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   protected abstract boolean useOffHeapMemoryAllocator();
 
+  @Test
+  public void supportsSemanticKeyOperations() throws Exception {
+    AtomicInteger operationsCreated = new AtomicInteger();
+    BytesToBytesMap.KeyOperationsFactory caseInsensitiveWithConstantHash = () -> {
+      operationsCreated.incrementAndGet();
+      return new BytesToBytesMap.KeyOperations() {
+        private final AtomicReference<Thread> owner = new AtomicReference<>();
+
+        private void assertThreadOwnership() {
+          final Thread currentThread = Thread.currentThread();
+          owner.compareAndSet(null, currentThread);
+          assertSame(currentThread, owner.get());
+        }
+
+        @Override
+        public int hash(Object base, long offset, int length) {
+          assertThreadOwnership();
+          return 0;
+        }
+
+        @Override
+        public boolean equals(
+            Object leftBase,
+            long leftOffset,
+            int leftLength,
+            Object rightBase,
+            long rightOffset,
+            int rightLength) {
+          assertThreadOwnership();
+          return Character.toLowerCase(Platform.getByte(leftBase, leftOffset)) ==
+            Character.toLowerCase(Platform.getByte(rightBase, rightOffset));
+        }
+      };
+    };
+    BytesToBytesMap map = new BytesToBytesMap(
+      taskMemoryManager, 64, PAGE_SIZE_BYTES, caseInsensitiveWithConstantHash);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+
+    byte[] firstStoredKey = new byte[8];
+    firstStoredKey[0] = 'A';
+    byte[] firstEquivalentKey = new byte[16];
+    firstEquivalentKey[0] = 'a';
+    byte[] firstValue = new byte[8];
+    Platform.putLong(firstValue, Platform.BYTE_ARRAY_OFFSET, 1L);
+    byte[] secondStoredKey = new byte[8];
+    secondStoredKey[0] = 'B';
+    byte[] secondEquivalentKey = new byte[16];
+    secondEquivalentKey[0] = 'b';
+    byte[] secondValue = new byte[8];
+    Platform.putLong(secondValue, Platform.BYTE_ARRAY_OFFSET, 2L);
+
+    try {
+      BytesToBytesMap.Location location = map.lookup(
+        firstStoredKey, Platform.BYTE_ARRAY_OFFSET, firstStoredKey.length);
+      assertFalse(location.isDefined());
+      assertTrue(location.append(
+        firstStoredKey,
+        Platform.BYTE_ARRAY_OFFSET,
+        firstStoredKey.length,
+        firstValue,
+        Platform.BYTE_ARRAY_OFFSET,
+        firstValue.length));
+
+      location = map.lookup(
+        secondStoredKey, Platform.BYTE_ARRAY_OFFSET, secondStoredKey.length);
+      assertFalse(location.isDefined());
+      assertTrue(location.append(
+        secondStoredKey,
+        Platform.BYTE_ARRAY_OFFSET,
+        secondStoredKey.length,
+        secondValue,
+        Platform.BYTE_ARRAY_OFFSET,
+        secondValue.length));
+
+      location = map.lookup(
+        firstEquivalentKey, Platform.BYTE_ARRAY_OFFSET, firstEquivalentKey.length);
+      assertTrue(location.isDefined());
+      assertEquals(firstStoredKey.length, location.getKeyLength());
+      assertEquals(1L, Platform.getLong(location.getValueBase(), location.getValueOffset()));
+
+      location = map.lookup(
+        secondEquivalentKey, Platform.BYTE_ARRAY_OFFSET, secondEquivalentKey.length);
+      assertTrue(location.isDefined());
+      assertEquals(secondStoredKey.length, location.getKeyLength());
+      assertEquals(2L, Platform.getLong(location.getValueBase(), location.getValueOffset()));
+
+      location = map.lookup(
+        firstEquivalentKey,
+        Platform.BYTE_ARRAY_OFFSET,
+        firstEquivalentKey.length,
+        Integer.MAX_VALUE);
+      assertTrue(location.isDefined());
+      assertEquals(2, map.numKeys());
+
+      CountDownLatch ready = new CountDownLatch(2);
+      CountDownLatch start = new CountDownLatch(1);
+      Callable<Void> concurrentLookup = () -> {
+        BytesToBytesMap.Location threadLocation = map.new Location();
+        ready.countDown();
+        start.await();
+        for (int i = 0; i < 100; i++) {
+          map.safeLookup(
+            firstEquivalentKey,
+            Platform.BYTE_ARRAY_OFFSET,
+            firstEquivalentKey.length,
+            threadLocation);
+          assertTrue(threadLocation.isDefined());
+        }
+        return null;
+      };
+      Future<Void> firstLookup = executor.submit(concurrentLookup);
+      Future<Void> secondLookup = executor.submit(concurrentLookup);
+      ready.await();
+      start.countDown();
+      firstLookup.get();
+      secondLookup.get();
+      assertEquals(3, operationsCreated.get());
+    } finally {
+      executor.shutdownNow();
+      map.free();
+    }
+  }
+
   private static byte[] getByteArray(Object base, long offset, int size) {
     final byte[] arr = new byte[size];
     Platform.copyMemory(base, offset, arr, Platform.BYTE_ARRAY_OFFSET, size);
@@ -220,9 +350,10 @@ public abstract class AbstractBytesToBytesMapSuite {
     }
   }
 
-  private void iteratorTestBase(boolean destructive, boolean isWithKeyIndex) throws Exception {
+  private int iteratorTestBase(boolean destructive, boolean isWithKeyIndex, long pageSizeBytes)
+      throws Exception {
     final int size = 4096;
-    BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, size / 2, PAGE_SIZE_BYTES);
+    BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, size / 2, pageSizeBytes);
     Assertions.assertEquals(size / 2, map.maxNumKeysIndex());
     try {
       for (long i = 0; i < size; i++) {
@@ -260,7 +391,8 @@ public abstract class AbstractBytesToBytesMapSuite {
       } else {
         iter = map.iterator();
       }
-      int numPages = map.getNumDataPages();
+      final int totalPages = map.getNumDataPages();
+      int numPages = totalPages;
       int countFreedPages = 0;
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
@@ -273,6 +405,8 @@ public abstract class AbstractBytesToBytesMapSuite {
           final long key = Platform.getLong(loc.getKeyBase(), loc.getKeyOffset());
           Assertions.assertEquals(value, key);
         }
+        Assertions.assertFalse(valuesSeen.get((int) value),
+          "value " + value + " was seen more than once");
         valuesSeen.set((int) value);
         if (destructive) {
           // The iterator moves onto next page and frees previous page
@@ -289,10 +423,12 @@ public abstract class AbstractBytesToBytesMapSuite {
         }
       }
       if (destructive) {
-        // Latest page is not freed by iterator but by map itself
-        Assertions.assertEquals(countFreedPages, numPages - 1);
+        // The iterator frees each page as it advances except the last, which map.free() releases.
+        Assertions.assertEquals(totalPages - 1, countFreedPages);
+        Assertions.assertEquals(1, map.getNumDataPages());
       }
       Assertions.assertEquals(size, valuesSeen.cardinality());
+      return totalPages;
     } finally {
       map.free();
     }
@@ -300,17 +436,26 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void iteratorTest() throws Exception {
-    iteratorTestBase(false, false);
+    iteratorTestBase(false, false, PAGE_SIZE_BYTES);
   }
 
   @Test
   public void destructiveIteratorTest() throws Exception {
-    iteratorTestBase(true, false);
+    iteratorTestBase(true, false, PAGE_SIZE_BYTES);
+  }
+
+  @Test
+  public void destructiveIteratorManyPagesTest() throws Exception {
+    // A small page size makes records span many data pages, so the destructive iterator
+    // repeatedly removes the head page. The 64 MiB default fits everything in one page.
+    final int totalPages = iteratorTestBase(true, false, 4096);
+    Assertions.assertTrue(totalPages > 1,
+      "expected the records to span multiple data pages, but got " + totalPages);
   }
 
   @Test
   public void iteratorWithKeyIndexTest() throws Exception {
-    iteratorTestBase(false, true);
+    iteratorTestBase(false, true, PAGE_SIZE_BYTES);
   }
 
   @Test

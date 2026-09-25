@@ -20,21 +20,29 @@ package org.apache.spark.sql.hive
 import java.util
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
-import org.apache.hadoop.hive.serde2.io.DoubleWritable
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory, PrimitiveObjectInspector, StructObjectInspector}
+import org.apache.hadoop.hive.serde2.io.{DoubleWritable, HiveCharWritable, HiveVarcharWritable}
+import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory, PrimitiveObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo
-import org.apache.hadoop.io.LongWritable
+import org.apache.hadoop.hive.serde2.typeinfo.{CharTypeInfo, DecimalTypeInfo, VarcharTypeInfo}
+import org.apache.hadoop.io.{LongWritable, Text}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row, TestUserClassUDT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
+
+  private def withFirstClassCharVarchar(enabled: Boolean)(f: => Unit): Unit = {
+    val conf = new SQLConf
+    conf.setConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS, enabled)
+    SQLConf.withExistingConf(conf)(f)
+  }
 
   def unwrap(data: Any, oi: ObjectInspector): Any = {
     val unwrapper = unwrapperFor(oi)
@@ -290,6 +298,283 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     val typeInfo2 = oi2.getTypeInfo.asInstanceOf[DecimalTypeInfo]
     assert(typeInfo2.precision() === 18)
     assert(typeInfo2.scale() === 10)
+  }
+
+  test("SPARK-59277: Hive object inspectors preserve CHAR/VARCHAR type information") {
+    withFirstClassCharVarchar(enabled = true) {
+      Seq[DataType](CharType(5), VarcharType(7)).foreach { dataType =>
+        val inspector = toInspector(dataType).asInstanceOf[PrimitiveObjectInspector]
+        assert(inspectorToDataType(inspector) === dataType)
+        dataType match {
+          case c: CharType =>
+            assert(inspector.getTypeInfo.asInstanceOf[CharTypeInfo].getLength === c.length)
+          case v: VarcharType =>
+            assert(inspector.getTypeInfo.asInstanceOf[VarcharTypeInfo].getLength === v.length)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59277: Hive object inspectors accept collated CHAR/VARCHAR values") {
+    withFirstClassCharVarchar(enabled = true) {
+      Seq[DataType](
+        CharType(5, "UTF8_LCASE"),
+        VarcharType(7, "UNICODE_CI")).foreach { dataType =>
+        val inspector = toInspector(dataType)
+        val value = UTF8String.fromString(dataType match {
+          case _: CharType => "ab"
+          case _: VarcharType => "abc"
+        })
+        val expectedValue = dataType match {
+          case _: CharType => UTF8String.fromString("ab   ")
+          case _: VarcharType => value
+        }
+        val expectedType = dataType match {
+          case c: CharType => CharType(c.length)
+          case v: VarcharType => VarcharType(v.length)
+        }
+        assert(inspectorToDataType(inspector) === expectedType)
+        assert(unwrap(wrap(value, inspector, dataType), inspector) === expectedValue)
+      }
+    }
+  }
+
+  test("SPARK-59277: writable CHAR/VARCHAR inspectors round-trip values and nulls") {
+    withFirstClassCharVarchar(enabled = true) {
+      val charType = CharType(5)
+      val charInspector = PrimitiveObjectInspectorFactory.getPrimitiveWritableObjectInspector(
+        new CharTypeInfo(charType.length))
+      val charValue = UTF8String.fromString("abc")
+      val wrappedChar = wrap(charValue, charInspector, charType)
+      assert(wrappedChar.isInstanceOf[HiveCharWritable])
+      assert(wrappedChar.asInstanceOf[HiveCharWritable].getHiveChar.getPaddedValue === "abc  ")
+      assert(unwrapperFor(charInspector, charType)(wrappedChar) ===
+        UTF8String.fromString("abc  "))
+      assert(wrap(null, charInspector, charType) === null)
+      assert(unwrapperFor(charInspector, charType)(null) === null)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          wrap(UTF8String.fromString("abcdef"), charInspector, charType)
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5"))
+
+      val varcharType = VarcharType(7)
+      val varcharInspector = PrimitiveObjectInspectorFactory.getPrimitiveWritableObjectInspector(
+        new VarcharTypeInfo(varcharType.length))
+      val varcharValue = UTF8String.fromString("abc")
+      val wrappedVarchar = wrap(varcharValue, varcharInspector, varcharType)
+      assert(wrappedVarchar.isInstanceOf[HiveVarcharWritable])
+      assert(wrappedVarchar.asInstanceOf[HiveVarcharWritable].getHiveVarchar.getValue === "abc")
+      assert(unwrapperFor(varcharInspector, varcharType)(wrappedVarchar) === varcharValue)
+      assert(wrap(null, varcharInspector, varcharType) === null)
+      assert(unwrapperFor(varcharInspector, varcharType)(null) === null)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          wrap(UTF8String.fromString("abcdefgh"), varcharInspector, varcharType)
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "7"))
+    }
+  }
+
+  test("SPARK-59277: Hive object inspectors support nested CHAR/VARCHAR") {
+    withFirstClassCharVarchar(enabled = true) {
+      val dataType = StructType(Seq(
+        StructField("chars", ArrayType(CharType(4))),
+        StructField("varchars", MapType(IntegerType, VarcharType(8)))))
+      val inspector = toInspector(dataType)
+      assert(inspectorToDataType(inspector) === dataType)
+
+      val input = InternalRow(
+        new GenericArrayData(Array[Any](UTF8String.fromString("a"))),
+        ArrayBasedMapData(
+          Array[Any](1),
+          Array[Any](UTF8String.fromString("value"))))
+      val result = unwrapperFor(inspector, dataType)(
+        wrap(input, inspector, dataType)).asInstanceOf[InternalRow]
+      assert(result.getArray(0).getUTF8String(0) === UTF8String.fromString("a   "))
+      assert(result.getMap(1).valueArray().getUTF8String(0) === UTF8String.fromString("value"))
+    }
+  }
+
+  test("SPARK-59277: Hive constant inspectors preserve CHAR/VARCHAR type information") {
+    withFirstClassCharVarchar(enabled = true) {
+      Seq[DataType](CharType(5), VarcharType(7)).foreach { dataType =>
+        val value = UTF8String.fromString("abc")
+        val inspector = toInspector(Literal.create(value, dataType))
+        assert(inspector.isInstanceOf[ConstantObjectInspector])
+        assert(inspectorToDataType(inspector) === dataType)
+        val expected = dataType match {
+          case _: CharType => UTF8String.fromString("abc  ")
+          case _: VarcharType => value
+        }
+        assert(unwrapperFor(inspector, dataType)(
+          inspector.asInstanceOf[ConstantObjectInspector].getWritableConstantValue) === expected)
+
+        val nullInspector = toInspector(Literal.create(null, dataType))
+        assert(nullInspector.isInstanceOf[ConstantObjectInspector])
+        assert(inspectorToDataType(nullInspector) === dataType)
+        assert(unwrapperFor(nullInspector, dataType)(
+          nullInspector.asInstanceOf[ConstantObjectInspector].getWritableConstantValue) === null)
+      }
+    }
+  }
+
+  test("SPARK-59277: Hive CHAR/VARCHAR inspectors remain STRING under legacy semantics") {
+    withFirstClassCharVarchar(enabled = false) {
+      Seq[DataType](CharType(5), VarcharType(7)).foreach { dataType =>
+        val inspector = toInspector(dataType)
+        assert(inspectorToDataType(inspector) === StringType)
+        assert(inspectorToDataType(inspector, preserveCharVarchar = true) === dataType)
+      }
+    }
+  }
+
+  test("SPARK-59277: Hive return type compatibility allows only STRING boundary drift") {
+    checkCompatibleHiveReturnType(StringType, CharType(5))
+    checkCompatibleHiveReturnType(CharType(5), StringType)
+    checkCompatibleHiveReturnType(ArrayType(StringType), ArrayType(VarcharType(7)))
+    checkCompatibleHiveReturnType(CharType(5), CharType(5))
+    checkCompatibleHiveReturnType(VarcharType(3), VarcharType(3))
+    checkCompatibleHiveReturnType(
+      MapType(StringType, VarcharType(3)),
+      MapType(CharType(5), StringType))
+    checkCompatibleHiveReturnType(
+      StructType.fromDDL("c STRING, v VARCHAR(3)"),
+      StructType.fromDDL("c CHAR(5), v STRING"))
+
+    Seq[(DataType, DataType)](
+      VarcharType(3) -> CharType(5),
+      CharType(4) -> CharType(5),
+      VarcharType(4) -> VarcharType(5),
+      IntegerType -> CharType(5),
+      MapType(CharType(4), StringType) -> MapType(CharType(5), StringType),
+      StructType.fromDDL("c STRING") -> StructType.fromDDL("c STRING, v STRING"),
+      StructType.fromDDL("c CHAR(4)") -> StructType.fromDDL("c CHAR(5)"),
+      StructType.fromDDL("a INT, b INT") -> StructType.fromDDL("b INT, a INT")).foreach {
+      case (runtimeType, expectedType) =>
+        intercept[SparkException] {
+          checkCompatibleHiveReturnType(runtimeType, expectedType)
+        }
+    }
+  }
+
+  test("SPARK-59277: Hive CHAR/VARCHAR boundaries enforce Spark length semantics") {
+    withFirstClassCharVarchar(enabled = true) {
+      val varchar = VarcharType(3)
+      val varcharInspector = toInspector(varchar)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          wrap(UTF8String.fromString("abcd"), varcharInspector, varchar)
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+
+      val char = CharType(5)
+      val charInspector = toInspector(char)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          wrap(UTF8String.fromString("abcdef"), charInspector, char)
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5"))
+
+      val varcharUnwrapper =
+        unwrapperFor(PrimitiveObjectInspectorFactory.javaStringObjectInspector, varchar)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          varcharUnwrapper("abcd")
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+
+      val charUnwrapper =
+        unwrapperFor(PrimitiveObjectInspectorFactory.javaStringObjectInspector, char)
+      assert(charUnwrapper("ab") === UTF8String.fromString("ab   "))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          charUnwrapper("abcdef")
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5"))
+    }
+  }
+
+  test("SPARK-59277: Hive map unwrapper validates CHAR-padded key collisions") {
+    withFirstClassCharVarchar(enabled = true) {
+      val targetType = MapType(CharType(2), StringType)
+
+      // Two distinct keys that both pad to the same CHAR(2). Use plain-string
+      // inspectors so the Java HashMap preserves both entries (HiveChar
+      // equality would deduplicate them before our code runs).
+      val javaKeyOI = PrimitiveObjectInspectorFactory.javaStringObjectInspector
+      val javaValueOI = PrimitiveObjectInspectorFactory.javaStringObjectInspector
+      val javaMapOI = ObjectInspectorFactory
+        .getStandardMapObjectInspector(javaKeyOI, javaValueOI)
+      val javaMap = new java.util.LinkedHashMap[Any, Any]()
+      javaMap.put("a", "v1")
+      javaMap.put("a ", "v2")
+
+      val writableKeyOI =
+        PrimitiveObjectInspectorFactory.writableStringObjectInspector
+      val writableValueOI =
+        PrimitiveObjectInspectorFactory.writableStringObjectInspector
+      val writableMapOI = ObjectInspectorFactory
+        .getStandardMapObjectInspector(writableKeyOI, writableValueOI)
+      val writableMap = new java.util.LinkedHashMap[Any, Any]()
+      writableMap.put(new Text("a"), new Text("w1"))
+      writableMap.put(new Text("a "), new Text("w2"))
+
+      Seq(
+        ("java", javaMapOI, javaMap, "v2"),
+        ("writable", writableMapOI, writableMap, "w2")
+      ).foreach { case (label, mapOI, map, lastValue) =>
+        // EXCEPTION policy: duplicate padded keys must throw.
+        val exConf = new SQLConf
+        exConf.setConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS, true)
+        exConf.setConfString(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key, "EXCEPTION")
+        SQLConf.withExistingConf(exConf) {
+          val unwrapper = unwrapperFor(mapOI, targetType)
+          intercept[SparkRuntimeException] { unwrapper(map) }
+        }
+
+        // LAST_WIN policy: last inserted value wins.
+        val lwConf = new SQLConf
+        lwConf.setConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS, true)
+        lwConf.setConfString(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key, "LAST_WIN")
+        SQLConf.withExistingConf(lwConf) {
+          val unwrapper = unwrapperFor(mapOI, targetType)
+          val result = unwrapper(map).asInstanceOf[MapData]
+          assert(result.numElements() === 1,
+            s"$label: expected 1 entry after dedup")
+          assert(result.keyArray().getUTF8String(0) ===
+            UTF8String.fromString("a "))
+          assert(result.valueArray().getUTF8String(0) ===
+            UTF8String.fromString(lastValue),
+            s"$label: last-win value")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59277: Hive object inspectors reject unsupported CHAR/VARCHAR lengths") {
+    withFirstClassCharVarchar(enabled = true) {
+      Seq[DataType](
+        CharType(0), CharType(256), VarcharType(0), VarcharType(65536)).foreach { dataType =>
+        val expectedParams = Map("typeName" -> s"\"${dataType.sql}\"")
+        checkError(
+          exception = intercept[AnalysisException](toInspector(dataType)),
+          condition = "UNSUPPORTED_DATATYPE",
+          parameters = expectedParams)
+        checkError(
+          exception = intercept[AnalysisException](dataType.toTypeInfo),
+          condition = "UNSUPPORTED_DATATYPE",
+          parameters = expectedParams)
+      }
+    }
   }
 
   test("SPARK-57556: TIME type is unsupported in Hive object inspectors") {

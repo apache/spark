@@ -332,6 +332,8 @@ public class UTF8StringSuite {
     assertEquals(-1, fromString("hello").indexOf(fromString("o"), 6, 1));
     assertEquals(0, fromString("hello").indexOf(fromString("h"), -5, 1));
     assertEquals(-1, fromString("hello").indexOf(fromString("h"), -6, 1));
+    assertEquals(-1, fromString("abcabc").indexOf(fromString("abc"), Integer.MIN_VALUE, 1));
+    assertEquals(-1, fromString("abcabc").indexOf(fromString("abc"), Integer.MIN_VALUE + 1, 1));
 
     // Target larger than string
     assertEquals(-1, fromString("ab").indexOf(fromString("abc"), 1, 1));
@@ -381,6 +383,10 @@ public class UTF8StringSuite {
     // overlapped delim
     assertEquals(fromString("||"), fromString("||||||").subStringIndex(fromString("|||"), 3));
     assertEquals(fromString("|||"), fromString("||||||").subStringIndex(fromString("|||"), -4));
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), Integer.MIN_VALUE));
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), Integer.MIN_VALUE + 1));
   }
 
   @Test
@@ -420,6 +426,7 @@ public class UTF8StringSuite {
     assertEquals(fromString("数d数d数d数d数d"), fromString("数d").repeat(5));
     assertEquals(fromString("数d"), fromString("数d").repeat(1));
     assertEquals(EMPTY_UTF8, fromString("数d").repeat(-1));
+    assertEquals(fromString("aaaaa"), fromString("a").repeat(5)); // single-byte Arrays.fill path
   }
 
   @Test
@@ -467,6 +474,30 @@ public class UTF8StringSuite {
     assertEquals(fromString("数据砖头"), fromString("数据砖头").rpad(5, EMPTY_UTF8));
     assertEquals(fromString("数据砖"), fromString("数据砖头").rpad(3, EMPTY_UTF8));
     assertEquals(EMPTY_UTF8, EMPTY_UTF8.rpad(3, EMPTY_UTF8));
+
+    // SPARK-58708: `len - numChars()` wraps for len == Integer.MIN_VALUE, which used to send
+    // a non-positive length down the padding branch and fail with an ArithmeticException.
+    for (int len : new int[]{0, -1, -100, Integer.MIN_VALUE}) {
+      assertEquals(EMPTY_UTF8, fromString("hello").lpad(len, fromString("??")));
+      assertEquals(EMPTY_UTF8, fromString("hello").rpad(len, fromString("??")));
+      assertEquals(EMPTY_UTF8, fromString("hello").lpad(len, EMPTY_UTF8));
+      assertEquals(EMPTY_UTF8, fromString("hello").rpad(len, EMPTY_UTF8));
+    }
+  }
+
+  @Test
+  public void padExponentialDoubling() {
+    // Exercise the doubling fill with counts that trigger multiple doubling steps and the
+    // toCopy clamp (counts 3, 4 and 5), plus a multi-byte pad.
+    assertEquals(fromString("abababax"), fromString("x").lpad(8, fromString("ab")));
+    assertEquals(fromString("xabababa"), fromString("x").rpad(8, fromString("ab")));
+    assertEquals(fromString("abababababx"), fromString("x").lpad(11, fromString("ab")));
+    assertEquals(fromString("Zababababab"), fromString("Z").rpad(11, fromString("ab")));
+    assertEquals(fromString("数数数数x"), fromString("x").lpad(5, fromString("数")));
+    assertEquals(fromString("x数数数数"), fromString("x").rpad(5, fromString("数")));
+    // Single-byte pad takes the Arrays.fill fast path.
+    assertEquals(fromString("-----x"), fromString("x").lpad(6, fromString("-")));
+    assertEquals(fromString("x-----"), fromString("x").rpad(6, fromString("-")));
   }
 
   @Test

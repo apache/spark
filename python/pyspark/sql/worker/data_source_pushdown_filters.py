@@ -24,7 +24,7 @@ from typing import IO, Type, Union
 from pyspark.errors import PySparkAssertionError, PySparkValueError
 from pyspark.errors.exceptions.base import PySparkNotImplementedError
 from pyspark.logger.worker_io import capture_outputs
-from pyspark.serializers import UTF8Deserializer, read_int, read_bool, write_int
+from pyspark.serializers import UTF8Deserializer, read_bool, read_int, write_int
 from pyspark.sql.datasource import (
     DataSource,
     DataSourceReader,

@@ -163,8 +163,7 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
    * Strip CHAR/VARCHAR length constraints, preserving collation.
    *
    * Used by transforming string expressions (upper, substr, concat, ...) so their result type is
-   * plain STRING even when inputs are CharType/VarcharType (SQL standard CHAR/VARCHAR R1), when
-   * standard semantics are on.
+   * plain STRING even when inputs are CharType/VarcharType, when standard semantics are on.
    */
   def plainStringType(dt: DataType): DataType = dt match {
     case c: CharType => c.toStringType
@@ -176,19 +175,6 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
     case c: CharType => c.toStringType
     case v: VarcharType => v.toStringType
     case other => other
-  }
-
-  /**
-   * Result type for transforming string expressions. Under
-   * spark.sql.charVarchar.standardSemantics.enabled, always plain STRING (R1). Under
-   * preserveCharVarcharTypeInfo alone, keep child type (legacy leaky path).
-   */
-  def transformingStringResultType(dt: DataType): DataType = {
-    if (SqlApiConf.get.charVarcharStandardSemantics) {
-      plainStringType(dt)
-    } else {
-      dt
-    }
   }
 
   def isMoreConstrained(a: StringType, b: StringType): Boolean =

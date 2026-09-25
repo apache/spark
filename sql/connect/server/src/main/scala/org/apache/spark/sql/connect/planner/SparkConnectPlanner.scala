@@ -1027,7 +1027,7 @@ class SparkConnectPlanner(
         sortOrder: Seq[SortOrder]): UntypedKeyValueGroupedDataset = {
       val analyzed = session.sessionState.executePlan(logicalPlan).analyzed
 
-      assertPlan(groupingExprs.size() >= 1)
+      assertPlan(!groupingExprs.isEmpty)
       val dummyFunc = TypedScalaUdf(groupingExprs.get(0), None)
       val groupExprs = groupingExprs.asScala.toSeq.drop(1).map(expr => transformExpression(expr))
 
@@ -1517,7 +1517,10 @@ class SparkConnectPlanner(
       if (schema == null) {
         throw InvalidInputErrors.schemaRequiredForLocalRelation()
       }
-      LocalRelation(schema)
+      val physicalSchema = DataType
+        .replaceCharVarcharWithCollationPreservingString(normalizeLocalRelationType(schema))
+        .asInstanceOf[StructType]
+      buildLocalRelationFromRows(Iterator.empty, physicalSchema, Some(schema))
     }
   }
 
@@ -1597,6 +1600,59 @@ class SparkConnectPlanner(
     case d => StructType(Seq(StructField("value", d)))
   }
 
+  private def normalizeLocalRelationType(dt: DataType): DataType = dt match {
+    case udt: UserDefinedType[_] => normalizeLocalRelationType(udt.sqlType)
+    case StructType(fields) =>
+      val newFields = fields.zipWithIndex.map {
+        case (StructField(_, dataType, nullable, metadata), i) =>
+          StructField(s"col_$i", normalizeLocalRelationType(dataType), nullable, metadata)
+      }
+      StructType(newFields)
+    case ArrayType(elementType, containsNull) =>
+      ArrayType(normalizeLocalRelationType(elementType), containsNull)
+    case MapType(keyType, valueType, valueContainsNull) =>
+      MapType(
+        normalizeLocalRelationType(keyType),
+        normalizeLocalRelationType(valueType),
+        valueContainsNull)
+    case _ => dt
+  }
+
+  /**
+   * Restores requested logical wrappers that remain compatible after local-data reconciliation.
+   *
+   * For example, `createDataFrame(rows, schemaWithChar)` produces CHAR under standard semantics,
+   * STRING under legacy-as-string, and is rejected by the default policy. Existing UDT wrappers
+   * are retained without extending CHAR/VARCHAR reconciliation into their storage types.
+   */
+  private def restoreRequestedLogicalType(actual: DataType, requested: DataType): DataType =
+    (actual, requested) match {
+      case (_, requestedUdt: UserDefinedType[_]) => requestedUdt
+      case (actualString: StringType, requestedString: StringType)
+          if !actualString.isInstanceOf[CharType] &&
+            !actualString.isInstanceOf[VarcharType] &&
+            !requestedString.isInstanceOf[CharType] &&
+            !requestedString.isInstanceOf[VarcharType] &&
+            DataType.equalsIgnoreCompatibleCollation(actualString, requestedString) =>
+        requestedString
+      case (StructType(actualFields), StructType(requestedFields)) =>
+        StructType(actualFields.zip(requestedFields).map { case (actualField, requestedField) =>
+          actualField.copy(
+            name = requestedField.name,
+            dataType = restoreRequestedLogicalType(actualField.dataType, requestedField.dataType))
+        })
+      case (ArrayType(actualElement, containsNull), ArrayType(requestedElement, _)) =>
+        ArrayType(restoreRequestedLogicalType(actualElement, requestedElement), containsNull)
+      case (
+            MapType(actualKey, actualValue, valueContainsNull),
+            MapType(requestedKey, requestedValue, _)) =>
+        MapType(
+          restoreRequestedLogicalType(actualKey, requestedKey),
+          restoreRequestedLogicalType(actualValue, requestedValue),
+          valueContainsNull)
+      case _ => actual
+    }
+
   private def buildLocalRelationFromRows(
       rows: Iterator[InternalRow],
       structType: StructType,
@@ -1613,37 +1669,28 @@ class SparkConnectPlanner(
       case None =>
         logical.LocalRelation(attributes, data.map(_.copy()).toArray.toImmutableArraySeq)
       case Some(schema) =>
-        def normalize(dt: DataType): DataType = dt match {
-          case udt: UserDefinedType[_] => normalize(udt.sqlType)
-          case StructType(fields) =>
-            val newFields = fields.zipWithIndex.map {
-              case (StructField(_, dataType, nullable, metadata), i) =>
-                StructField(s"col_$i", normalize(dataType), nullable, metadata)
-            }
-            StructType(newFields)
-          case ArrayType(elementType, containsNull) =>
-            ArrayType(normalize(elementType), containsNull)
-          case MapType(keyType, valueType, valueContainsNull) =>
-            MapType(normalize(keyType), normalize(valueType), valueContainsNull)
-          case _ => dt
-        }
-
-        val normalized = normalize(schema).asInstanceOf[StructType]
+        val normalized = normalizeLocalRelationType(schema).asInstanceOf[StructType]
 
         import org.apache.spark.util.ArrayImplicits._
         val project = Dataset
           .ofRows(
             session,
-            logicalPlan = logical.LocalRelation(normalize(structType).asInstanceOf[StructType]))
+            logicalPlan = logical.LocalRelation(
+              normalizeLocalRelationType(structType).asInstanceOf[StructType]))
           .toDF(normalized.names.toImmutableArraySeq: _*)
           .to(normalized)
           .logicalPlan
           .asInstanceOf[Project]
 
         val proj = UnsafeProjection.create(project.projectList, project.child.output)
-        logical.LocalRelation(
-          DataTypeUtils.toAttributes(schema),
-          data.map(proj).map(_.copy()).toSeq)
+        val output = project.output.zip(schema.fields).map { case (attribute, field) =>
+          AttributeReference(
+            field.name,
+            restoreRequestedLogicalType(attribute.dataType, field.dataType),
+            attribute.nullable,
+            field.metadata)()
+        }
+        logical.LocalRelation(output, data.map(proj).map(_.copy()).toSeq)
     }
   }
 
@@ -2670,7 +2717,7 @@ class SparkConnectPlanner(
           // This relies on the assumption that a KVGDS always requires the head to be a Typed UDF.
           // This is the case for datasets created via groupByKey,
           // and also via RelationalGroupedDS#as, as the first is a dummy UDF currently.
-          if rel.getGroupingExpressionsList.size() >= 1 &&
+          if !rel.getGroupingExpressionsList.isEmpty &&
             isTypedScalaUdfExpr(rel.getGroupingExpressionsList.get(0)) =>
         transformKeyValueGroupedAggregate(rel)
       case _ =>
@@ -3957,13 +4004,16 @@ class SparkConnectPlanner(
       name -> new TaskResourceRequest(res.getResourceName, res.getAmount)
     }.toMap
 
-    // Create ResourceProfile add add it to ResourceProfileManager
-    val profile = if (ereqs.isEmpty) {
+    // Create the ResourceProfile and register it, reusing an already-registered profile with
+    // equal resources if one exists so that equivalent profiles share a single id (and thus
+    // can reuse the same executors instead of triggering new allocations).
+    val newProfile = if (ereqs.isEmpty) {
       new TaskResourceProfile(treqs)
     } else {
       new ResourceProfile(ereqs, treqs)
     }
-    session.sparkContext.resourceProfileManager.addResourceProfile(profile)
+    val profile =
+      session.sparkContext.resourceProfileManager.getOrAddEquivalentProfile(newProfile)
 
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(

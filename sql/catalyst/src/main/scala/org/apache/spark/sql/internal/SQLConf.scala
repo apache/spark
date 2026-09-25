@@ -1269,6 +1269,23 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LOCAL_PIPELINED_SHUFFLE_ENABLED = buildConf("spark.sql.shuffle.localPipelined.enabled")
+    .internal()
+    .doc("When true in local mode, eligible shuffle exchanges use the in-process channel " +
+      "manager configured by spark.shuffle.manager.incremental. Producer and consumer stages " +
+      "run concurrently. Plans whose estimated group width exceeds the local task capacity, " +
+      "or whose width cannot be determined, retain regular shuffles. In particular, ordinary " +
+      "non-bucketed file scans report unknown widths and stay regular. Runtime admission still " +
+      "checks available slots and can reject a group when other work occupies them. " +
+      "Pipelined exchanges do not receive AQE coalescing. Dataset.rdd, toLocalIterator, cache " +
+      "construction, cached inputs and mixed AQE plans use regular shuffles. Concurrent " +
+      "actions sharing a pipelined exchange remain unsupported. Other multi-job consumers " +
+      "can recompute pipelined producers for each job. Experimental.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
   val ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING =
     buildConf("spark.sql.adaptive.streaming.stateless.enabled")
       .internal()
@@ -1920,8 +1937,8 @@ object SQLConf {
     buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
       .doc("For IN predicate, Parquet filter will push-down a set of OR clauses if its " +
         "number of values not exceeds this threshold. Otherwise, Parquet filter will push-down " +
-        "a value greater than or equal to its minimum value and less than or equal to " +
-        "its maximum value. By setting this value to 0 this feature can be disabled. " +
+        "a single native Parquet IN predicate over these values. By setting this value to 0 " +
+        "this feature can be disabled. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled.")
       .version("2.4.0")
@@ -2081,6 +2098,19 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
+
+  val PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ =
+    buildConf("spark.sql.parquet.timeType.allowIsAdjustedToUtcRead")
+      .doc("When true, Spark infers Parquet TIME columns with isAdjustedToUTC=true as TimeType " +
+        "during schema inference, for compatibility with writers such as Apache Arrow. " +
+        "When false (default), schema inference rejects such columns with an error. This only " +
+        "affects schema inference: a read with an explicit user-specified TimeType schema " +
+        "succeeds regardless of this flag, since Spark's zone-less TimeType decodes the same " +
+        "time-of-day either way.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
@@ -2357,7 +2387,7 @@ object SQLConf {
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val DATA_SOURCE_DONT_ASSERT_ON_PREDICATE =
     buildConf("spark.sql.dataSource.skipAssertOnPredicatePushdown")
@@ -2512,10 +2542,14 @@ object SQLConf {
       .withAlternative("spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled")
       .doc("Whether to allow storage-partitioned operations (joins, aggregates, and windows) in " +
         "the case where the operation's keys are a subset of the partition keys of the source " +
-        "tables. At  planning time, Spark will group the partitions by only those keys that are " +
-        "in the operation's keys. " +
-        s"This is currently enabled only if ${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key} " +
-        "is false."
+        "tables. At planning time, Spark will group the partitions by only those keys that are " +
+        "in the operation's keys. That is currently enabled only if " +
+        s"${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key} is false. This config also gates " +
+        "grouping a partitioning whose keys collapsed, that is, where a projection or a " +
+        "reduction mapped keys that were distinct in the source onto the same key, so that " +
+        "grouping them would produce a partition larger than any the source declared. That " +
+        s"applies regardless of ${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key}. It does not " +
+        "apply to duplicate keys the source itself reported, which are grouped without this config."
       )
       .version("4.0.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -2538,12 +2572,13 @@ object SQLConf {
     buildConf("spark.sql.sources.v2.bucketing.partition.filter.enabled")
       .doc(s"Whether to filter partitions when running storage-partition join. " +
         s"When enabled, partitions without matches on the other side can be omitted for " +
-        s"scanning, if allowed by the join type. This config requires both " +
-        s"${V2_BUCKETING_ENABLED.key} and ${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be " +
-        s"enabled.")
+        s"scanning, if allowed by the join type. This config requires " +
+        s"${V2_BUCKETING_ENABLED.key} to be enabled, together with either " +
+        s"${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} or " +
+        s"${V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key}.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_SORTING_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.sorting.enabled")
@@ -2565,7 +2600,7 @@ object SQLConf {
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.preserveKeyOrderingOnCoalesce.enabled")
@@ -2579,7 +2614,7 @@ object SQLConf {
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.preserveOrderingOnCoalesce.enabled")
@@ -2644,6 +2679,18 @@ object SQLConf {
     .version("4.0.0")
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
+
+  val DATAFRAME_CACHE_PLAN_ID_NAME_ENABLED =
+    buildConf("spark.sql.dataframeCache.planIdName.enabled")
+      .internal()
+      .doc("When true and the cached table has no name, use the physical plan id, e.g. " +
+        "'CachedRDD (plan_id=42)', as the cached name instead of the abbreviated plan tree " +
+        "string. Rendering the plan tree string can be expensive for large plans. The name " +
+        "is resolved when the cache is first materialized.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   val DROP_TABLE_VIEW_ENABLED =
     buildConf("spark.sql.dropTableOnView.enabled")
@@ -3683,6 +3730,18 @@ object SQLConf {
         "the .name() API. This enables streaming source evolution, allowing sources to be " +
         "added, removed, or reordered without losing state.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val ALLOW_EXCEPT_ON_STREAMING_DATAFRAME =
+    buildConf("spark.sql.streaming.allowExceptOnStreamingDataFrame")
+      .internal()
+      .doc("When true, allows EXCEPT operations with a streaming DataFrame on the left and a " +
+        "batch DataFrame on the right. " +
+        "Such operations may produce incorrect results and are retained only for compatibility " +
+        "with existing streaming queries.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -5371,6 +5430,33 @@ object SQLConf {
       .version("4.0.0")
       .fallbackConf(BUFFER_SIZE)
 
+  val PYTHON_UDF_ARROW_WORKER_OUTPUT_BATCH_MAX_BYTES =
+    buildConf("spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes")
+      .internal()
+      .doc("Best-effort byte-size target for a single Arrow RecordBatch produced by an " +
+        "Arrow-based Python UDF worker, applied on the worker before the batch is sent to " +
+        "the JVM. applyInPandas hands each group to the UDF as one batch, so a large group " +
+        "produces one large output batch; when set, the worker splits a batch estimated " +
+        "larger than this into ceil(nbytes / value) row-balanced, zero-copy pieces so the " +
+        "JVM receives several smaller batches instead of one large one. The estimate " +
+        "assumes roughly uniform row size and is not measured per slice, so a skewed, " +
+        "variable-width batch may still exceed the target. It does not prevent " +
+        "conversion-time offset overflow: PandasToArrowConversion builds the full batch " +
+        "before it is split, so a column whose data exceeds Arrow's 32-bit offset range " +
+        "overflows during conversion, ahead of this split. It complements " +
+        "spark.sql.execution.arrow.maxBytesPerOutputBatch, which slices JVM-side after the " +
+        "batch is read back; this one pre-splits on the worker so the JVM need not receive " +
+        "and allocate one giant batch first. Currently only applyInPandas " +
+        "(SQL_GROUPED_MAP_PANDAS_UDF) honors this; other Arrow-based Python UDFs ship the " +
+        "value but ignore it. -1 (the default) means no limit.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(x => x == -1 || (x > 0 && x <= Int.MaxValue),
+        "The value of spark.sql.execution.pythonUDF.arrow.workerOutputBatchMaxBytes should " +
+          "be -1 (no limit) or greater than zero and less than or equal to INT_MAX.")
+      .createWithDefault(-1)
+
   val PANDAS_UDF_BUFFER_SIZE =
     buildConf("spark.sql.execution.pandas.udf.buffer.size")
       .doc(
@@ -5435,17 +5521,6 @@ object SQLConf {
         "When true, validate the schema of Arrow batches returned by mapInArrow, mapInPandas " +
         "and DataSource against the expected schema to ensure that they are compatible.")
       .version("4.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  val UNIFIED_UDF_EXECUTION_ENABLED =
-    buildConf("spark.sql.execution.udf.unified.execution.enabled")
-      .doc("When true, UDFs that support the language-agnostic " +
-        "UDF worker protocol are executed via the unified, " +
-        "external UDF worker framework instead of the " +
-        "language-specific runners. Experimental.")
-      .version("4.2.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -5541,6 +5616,17 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  val PYTHON_UDF_MAP_IN_BATCH_LEGACY_ACCEPT_ANY_ITERABLE_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled")
+      .internal()
+      .doc("When true, mapInPandas and mapInArrow UDFs may return any iterable (e.g. a list) " +
+        "rather than a strict iterator, matching the behavior before 4.3.0. When false, the " +
+        "returned value must be an iterator, matching the declared Iterator[...] signatures.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
 
   val PYTHON_PLANNER_EXEC_MEMORY =
     buildConf("spark.sql.planner.pythonExecution.memory")
@@ -6654,14 +6740,15 @@ object SQLConf {
     .createWithDefault(false)
 
   val UI_EXPLAIN_MODE = buildConf("spark.sql.ui.explainMode")
-    .doc("Configures the query explain mode used in the Spark SQL UI. The value can be 'simple', " +
-      "'extended', 'codegen', 'cost', or 'formatted'. The default value is 'formatted'.")
+    .doc("Configures the query explain mode used in the Spark SQL UI. The value can be 'none', " +
+      "'simple', 'extended', 'codegen', 'cost', or 'formatted'. The default value is 'formatted'.")
     .version("3.1.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
-    .checkValue(mode => Set("SIMPLE", "EXTENDED", "CODEGEN", "COST", "FORMATTED").contains(mode),
-      "Invalid value for 'spark.sql.ui.explainMode'. Valid values are 'simple', 'extended', " +
-      "'codegen', 'cost' and 'formatted'.")
+    .checkValue(mode =>
+      Set("NONE", "SIMPLE", "EXTENDED", "CODEGEN", "COST", "FORMATTED").contains(mode),
+      "Invalid value for 'spark.sql.ui.explainMode'. Valid values are 'none', 'simple', " +
+      "'extended', 'codegen', 'cost' and 'formatted'.")
     .createWithDefault("formatted")
 
   val SOURCES_BINARY_FILE_MAX_LENGTH = buildConf("spark.sql.sources.binaryFile.maxLength")
@@ -6898,6 +6985,41 @@ object SQLConf {
       .doc("When true, TimestampType maps to TIMESTAMP in Oracle; otherwise, " +
         "TIMESTAMP WITH LOCAL TIME ZONE.")
       .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.oracle.timestampNTZMapping.enabled")
+      .internal()
+      .doc("When true, Oracle TIMESTAMP (and Oracle DATE when the driver default " +
+        "oracle.jdbc.mapDateToTimestamp surfaces it as TIMESTAMP) is read per the JDBC read " +
+        "option preferTimestampNTZ (TimestampType by default), preserving pre-Spark-4.4 " +
+        "behavior. When false (default), it is read as TimestampNTZType, which faithfully " +
+        "represents these zoneless Oracle types. The same flag governs the write path: when " +
+        "false a TimestampNTZType column is written to Oracle zoneless via setObject, and when " +
+        "true via a JVM-default-zone java.sql.Timestamp; these can differ for wall-clocks in a " +
+        "DST gap. The flag is read at schema-resolution and write time, so a JDBC relation " +
+        "whose schema was already resolved (e.g. a cached or metastore-registered table) must " +
+        "be re-resolved for a change to take effect. Oracle DATE read as JDBC DATE " +
+        "(oracle.jdbc.mapDateToTimestamp=false, mapped to DateType), TIMESTAMP WITH TIME ZONE, " +
+        "and TIMESTAMP WITH LOCAL TIME ZONE are unaffected.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_ORACLE_NUMBER_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.oracle.numberMapping.enabled")
+      .internal()
+      .doc("When true, Oracle bare NUMBER columns (no explicit precision/scale) are mapped " +
+        "to DecimalType(38, 10), preserving the pre-Spark-4.4 behavior. When false (default), " +
+        "they are mapped to DecimalType(38, 18) using DecimalType.DEFAULT_SCALE. The new " +
+        "default preserves more fractional digits (18 vs 10) but reduces the integer range " +
+        "from 28 to 20 digits; bare NUMBER values with more than 20 integer digits that " +
+        "previously read correctly will raise NUMERIC_VALUE_OUT_OF_RANGE. Set to true to " +
+        "restore the old mapping.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -7329,14 +7451,33 @@ object SQLConf {
   val OPTIMIZE_NULL_AWARE_ANTI_JOIN =
     buildConf("spark.sql.optimizeNullAwareAntiJoin")
       .internal()
-      .doc("When true, NULL-aware anti join execution will be planed into " +
+      .doc("When true, NULL-aware anti join execution can be planned as " +
         "BroadcastHashJoinExec with flag isNullAwareAntiJoin enabled, " +
         "optimized from O(M*N) calculation into O(M) calculation " +
         "using Hash lookup instead of Looping lookup. " +
-        "Only support for singleColumn NAAJ for now.")
+        "Only support for singleColumn NAAJ for now. The optimization is also controlled by " +
+        "spark.sql.optimizeNullAwareAntiJoin.broadcastThreshold.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD =
+    buildConf("spark.sql.optimizeNullAwareAntiJoin.broadcastThreshold")
+      .internal()
+      .doc("Configures the maximum estimated size in bytes of the right side of a " +
+        "single-column null-aware anti join for which Spark uses the broadcast hash join " +
+        "optimization. This configuration takes effect only when " +
+        "spark.sql.optimizeNullAwareAntiJoin is enabled. A negative value allows the " +
+        "optimization regardless of the estimated size, while zero disables it. If the " +
+        "estimated size exceeds a positive value, Spark falls back to regular join planning. " +
+        "The fallback may still broadcast the right side with a nested-loop representation " +
+        "that uses more memory and runs in O(M * N) time. Join hints do not override this " +
+        "configuration when the broadcast hash optimization is selected. This configuration " +
+        "also controls whether a null-aware anti join can be pushed below an aggregate.")
+      .version("4.2.1")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(-1)
 
   val LEGACY_DUPLICATE_BETWEEN_INPUT =
     buildConf("spark.sql.legacy.duplicateBetweenInput")
@@ -8889,6 +9030,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
+  def localPipelinedShuffleEnabled: Boolean = getConf(LOCAL_PIPELINED_SHUFFLE_ENABLED)
+
   def adaptiveExecutionEnabledInStatelessStreaming: Boolean =
     getConf(ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING)
 
@@ -9093,6 +9236,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyOracleTimestampMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
 
+  def legacyOracleTimestampNTZMappingEnabled: Boolean =
+    getConf(LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED)
+
+  def legacyOracleNumberMappingEnabled: Boolean =
+    getConf(LEGACY_ORACLE_NUMBER_MAPPING_ENABLED)
+
   def legacyDB2numericMappingEnabled: Boolean =
     getConf(LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED)
 
@@ -9196,6 +9345,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parquetOutputTimestampType: ParquetOutputTimestampType.Value =
     getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE)
+
+  def parquetTimeTypeAllowIsAdjustedToUtcRead: Boolean =
+    getConf(PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ)
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
@@ -9323,6 +9475,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def dropTableOnView: Boolean = getConf(DROP_TABLE_VIEW_ENABLED)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
+
+  def restrictedModeEnabled: Boolean = getConf(StaticSQLConf.RESTRICTED_MODE_ENABLED)
 
   override def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
@@ -9529,6 +9683,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyPandasConversionUDF: Boolean = getConf(PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
 
+  def legacyMapInBatchAcceptAnyIterable: Boolean =
+    getConf(PYTHON_UDF_MAP_IN_BATCH_LEGACY_ACCEPT_ANY_ITERABLE_ENABLED)
+
   def pythonPlannerExecMemory: Option[Long] = getConf(PYTHON_PLANNER_EXEC_MEMORY)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
@@ -9697,6 +9854,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
+
+  def nullAwareAntiJoinBroadcastThreshold: Long =
+    getConf(SQLConf.NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD)
 
   def legacyDuplicateBetweenInput: Boolean =
     getConf(SQLConf.LEGACY_DUPLICATE_BETWEEN_INPUT)
