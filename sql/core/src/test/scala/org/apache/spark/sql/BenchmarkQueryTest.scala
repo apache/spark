@@ -22,10 +22,15 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFor
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, DisableAdaptiveExecutionSuite}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-abstract class BenchmarkQueryTest extends SharedSparkSession {
+// Disable AQE because these suites only plan their queries, and the whole-stage codegen subtrees
+// of an AdaptiveSparkPlanExec are created only when the query runs, so `checkGeneratedCode`
+// would find none to check.
+abstract class BenchmarkQueryTest
+  extends QueryTest with SharedSparkSession with DisableAdaptiveExecutionSuite {
 
   // When Utils.isTesting is true, the RuleExecutor will issue an exception when hitting
   // the max iteration of analyzer/optimizer batches.
@@ -68,12 +73,17 @@ abstract class BenchmarkQueryTest extends SharedSparkSession {
       plan foreach {
         case s: WholeStageCodegenExec =>
           codegenSubtrees += s
+        case a: AdaptiveSparkPlanExec =>
+          fail("the plan to check has an AdaptiveSparkPlanExec, whose whole-stage codegen " +
+            s"subtrees are not created until the query runs:\n${a.treeString}")
         case s =>
           s.subqueries.foreach(findSubtrees)
       }
     }
 
     findSubtrees(plan)
+    assert(codegenSubtrees.nonEmpty,
+      s"no WholeStageCodegenExec subtree found to check in the plan:\n${plan.treeString}")
     codegenSubtrees.toSeq.foreach { subtree =>
       val code = subtree.doCodeGen()._2
       val (_, ByteCodeStats(maxMethodCodeSize, _, _)) = try {
