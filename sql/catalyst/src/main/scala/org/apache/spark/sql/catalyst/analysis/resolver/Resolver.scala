@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Attribute,
+  AttributeSeq,
   AttributeSet,
   Expression,
   ExprId,
@@ -359,7 +360,11 @@ class Resolver(
   private def resolvePipeSetInput(unresolvedPipeSetInput: PipeSetInput): LogicalPlan = {
     val resolvedPipeSetInput =
       unresolvedPipeSetInput.copy(child = resolve(unresolvedPipeSetInput.child))
-    scopes.overwriteCurrent(hiddenOutput = Some(resolvedPipeSetInput.metadataOutput))
+    val hiddenOutput = AttributeSeq.mergeHiddenAndVisibleOutput(
+      scopes.current.hiddenOutput,
+      resolvedPipeSetInput.metadataOutput
+    )
+    scopes.overwriteCurrent(hiddenOutput = Some(hiddenOutput))
     resolvedPipeSetInput
   }
 

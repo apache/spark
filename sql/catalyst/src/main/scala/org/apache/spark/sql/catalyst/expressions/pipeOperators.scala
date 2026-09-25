@@ -65,15 +65,18 @@ case class PipeSetInput(child: LogicalPlan) extends UnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(PIPE_OPERATOR)
 
   override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
 
   override def metadataOutput: Seq[Attribute] = {
+    val childMetadataOutput = child.metadataOutput
     val retainedQualifiedOutput = AttributeSeq
       .mergeHiddenAndVisibleOutput(
-        child.metadataOutput.filter(_.qualifiedAccessOnly), child.output)
+        childMetadataOutput.filter(_.qualifiedAccessOnly), child.output)
       .filter(_.qualifier.nonEmpty)
-      .map(_.markAsQualifiedAccessOnly())
+      .map(_.markAsQualifiedAccessOnly().markAsPipeSetRetained())
     val retainedQualifiedOutputIds = retainedQualifiedOutput.iterator.map(_.exprId).toSet
-    retainedQualifiedOutput ++ child.metadataOutput.filterNot { attribute =>
+    retainedQualifiedOutput ++ childMetadataOutput.filterNot { attribute =>
       attribute.qualifiedAccessOnly || retainedQualifiedOutputIds.contains(attribute.exprId)
     }
   }

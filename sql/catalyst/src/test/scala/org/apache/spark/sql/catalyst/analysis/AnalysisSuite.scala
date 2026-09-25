@@ -1924,6 +1924,59 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assert(metadataOutput.map(_.exprId) === Seq(a.exprId, metadata.exprId))
     assert(metadataOutput.forall(_.qualifiedAccessOnly))
   }
+
+  test("SPARK-59146: pipe SET input forwards cardinality bounds") {
+    case class CardinalityLeaf(override val output: Seq[Attribute]) extends LeafNode {
+      override def maxRows: Option[Long] = Some(2L)
+      override def maxRowsPerPartition: Option[Long] = Some(1L)
+    }
+
+    val child = CardinalityLeaf(testRelation.output)
+    val setInput = PipeSetInput(child)
+
+    assert(setInput.maxRows === child.maxRows)
+    assert(setInput.maxRowsPerPartition === child.maxRowsPerPartition)
+  }
+
+  test("SPARK-59146: pipe SET metadata lookup is linear in assignment count") {
+    case class CountingMetadataLeaf(override val output: Seq[Attribute]) extends LeafNode {
+      var metadataOutputCalls: Int = 0
+
+      override def metadataOutput: Seq[Attribute] = {
+        metadataOutputCalls += 1
+        Nil
+      }
+    }
+
+    val attribute = AttributeReference("a", IntegerType)().withQualifier(Seq("t"))
+    val leaf = CountingMetadataLeaf(Seq(attribute))
+    val assignments = (1 to 10).foldLeft[LogicalPlan](leaf) { case (child, _) =>
+      val setInput = PipeSetInput(child)
+      Project(setInput.output, setInput)
+    }
+
+    assignments.metadataOutput
+    assert(leaf.metadataOutputCalls === 1)
+  }
+
+  test("SPARK-59146: distinct-like operators discard pipe SET retained metadata") {
+    case class MetadataLeaf(
+        override val output: Seq[Attribute],
+        override val metadataOutput: Seq[Attribute]) extends LeafNode
+
+    val attribute = AttributeReference("a", IntegerType)().withQualifier(Seq("t"))
+    val metadata = MetadataAttribute("_metadata", StringType)
+    val setInput = PipeSetInput(MetadataLeaf(Seq(attribute), Seq(metadata)))
+    val plans = Seq[LogicalPlan](
+      Distinct(setInput),
+      Deduplicate(setInput.output, setInput),
+      DeduplicateWithinWatermark(setInput.output, setInput)
+    )
+
+    plans.foreach { plan =>
+      assert(plan.metadataOutput.map(_.exprId) === Seq(metadata.exprId), plan.toString)
+    }
+  }
 }
 
 /**

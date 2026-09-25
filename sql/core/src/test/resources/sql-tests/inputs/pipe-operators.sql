@@ -410,6 +410,25 @@ values (1, 10) as t(a, b)
 |> where t.a = 1
 |> select a, t.a;
 
+-- Qualified source values do not cross a DISTINCT boundary.
+values (1), (2) as t(a)
+|> set a = 0
+|> select distinct a
+|> select t.a;
+
+-- An explicitly selected source value becomes part of the DISTINCT key.
+values (1), (2) as t(a)
+|> set a = 0
+|> select distinct a, t.a
+|> select t.a
+|> order by t.a;
+
+-- A one-row SET input remains eligible for a nondeterministic lateral subquery.
+values (0) as t(x)
+|> set x = x + 1
+|> join lateral (select x + rand(0) as y)
+|> select x, y >= x as y_at_least_x;
+
 -- Both sides of a USING join retain qualified access to an assigned key.
 values (1, 10) as lhs(k, l)
 |> inner join values (1, 20) as rhs(k, r) using (k)

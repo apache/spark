@@ -1004,6 +1004,56 @@ struct<a:int,a:int>
 
 
 -- !query
+values (1), (2) as t(a)
+|> set a = 0
+|> select distinct a
+|> select t.a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`t`.`a`",
+    "proposal" : "`a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 69,
+    "stopIndex" : 71,
+    "fragment" : "t.a"
+  } ]
+}
+
+
+-- !query
+values (1), (2) as t(a)
+|> set a = 0
+|> select distinct a, t.a
+|> select t.a
+|> order by t.a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+
+
+-- !query
+values (0) as t(x)
+|> set x = x + 1
+|> join lateral (select x + rand(0) as y)
+|> select x, y >= x as y_at_least_x
+-- !query schema
+struct<x:int,y_at_least_x:boolean>
+-- !query output
+1	true
+
+
+-- !query
 values (1, 10) as lhs(k, l)
 |> inner join values (1, 20) as rhs(k, r) using (k)
 |> set k = k + 1

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   ExplicitlyUnsupportedResolverFeature,
@@ -125,6 +125,30 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
       assert(sql(aliasQuery).schema.fieldNames === Array("a", "b"))
     }
+  }
+
+  test("SPARK-59146: missing attributes cross pipe SET input in dual-run analysis") {
+    withSQLConf(
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
+      val dataFrame = sql(
+        "SELECT x FROM VALUES (1, 2), (3, 0) AS t(x, y) |> SET x = x + 1")
+      assert(dataFrame.orderBy("y").collect().map(_.getInt(0)) === Array(4, 2))
+    }
+  }
+
+  test("SPARK-59146: dropDuplicates discards hidden pipe SET values") {
+    val dataFrame = sql("VALUES (1), (2) AS t(a) |> SET a = 0")
+    val error = intercept[SparkThrowable] {
+      dataFrame.dropDuplicates().select("t.a").queryExecution.analyzed
+    }
+    assert(error.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+
+    val selectedSource = sql(
+      "VALUES (1), (2) AS t(a) |> SET a = 0 |> SELECT a, t.a AS source_a")
+    assert(selectedSource.dropDuplicates().select("source_a").collect().map(_.getInt(0)).sorted ===
+      Array(1, 2))
   }
 
   test("Binary arithmetic") {

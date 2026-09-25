@@ -25,8 +25,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{
   ExprId,
   NamedExpression,
-  PipeOperator,
-  PipeSetInput
+  PipeOperator
 }
 import org.apache.spark.sql.catalyst.plans.logical.{
   Aggregate,
@@ -351,7 +350,7 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
       unaryNode: UnaryNode,
       missingExpressions: Seq[NamedExpression]): Boolean = {
     val isOperatorExtendable = unaryNode match {
-      case _ @(_: PipeOperator | _: PipeSetInput | _: Distinct | _: SubqueryAlias) => false
+      case _ @(_: PipeOperator | _: Distinct | _: SubqueryAlias) => false
       case _ => true
     }
     isOperatorExtendable && missingExpressions.nonEmpty
