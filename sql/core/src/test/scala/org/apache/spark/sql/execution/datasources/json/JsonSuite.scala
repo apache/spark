@@ -1464,7 +1464,7 @@ abstract class JsonSuite
           } else if (mode == "PERMISSIVE") {
             // The whole document is the record, so this keeps only the rows the eager array had
             // accumulated when it failed, each stamped with the document. Only a partial object
-            // accumulates any: the other two shapes abandon the array where they fail.
+            // accumulates any: the other three shapes abandon the array where they fail.
             if (element == "partial object") {
               Seq(Row(1, document), Row(null, document), Row(2, document))
             } else {
