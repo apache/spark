@@ -193,7 +193,7 @@ public class SessionManager extends CompositeService {
           try {
             timeoutCheckerLock.wait(interval);
           } catch (InterruptedException e) {
-            // Ignore, and break.
+            Thread.currentThread().interrupt();
           }
         }
       }
@@ -222,6 +222,7 @@ public class SessionManager extends CompositeService {
         LOG.warn("HIVE_SERVER2_ASYNC_EXEC_SHUTDOWN_TIMEOUT = {} ms has been exceeded. " +
           "RUNNING background operations will be shut down", e,
           MDC.of(LogKeys.TIMEOUT, timeout * 1000));
+        Thread.currentThread().interrupt();
       }
       backgroundOperationPool = null;
     }
