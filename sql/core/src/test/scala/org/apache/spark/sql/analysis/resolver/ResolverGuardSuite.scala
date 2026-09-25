@@ -18,6 +18,7 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   ExplicitlyUnsupportedResolverFeature,
@@ -117,6 +118,24 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     checkResolverGuard(
       "SELECT 1 AS x, NAMED_STRUCT('x', 2) AS col " +
         "|> AS col |> SET x = x + 1 |> SELECT x, col.x")
+
+    withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      // Dataset collection analyzes a DeserializeToObject, which is not supported by the
+      // single-pass resolver, so execute the already-resolved physical plan directly.
+      val qualifiedColumnRows = sql(
+        "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> SELECT a, t.a, t.b"
+      ).queryExecution.executedPlan.executeCollectPublic()
+      assert(qualifiedColumnRows.toSeq === Seq(Row(2, 1, 10)))
+
+      val qualifiedStarRows = sql(
+        "VALUES (1, 2, 3) AS t(a, b, c) |> SET b = 20 |> SELECT t.*"
+      ).queryExecution.executedPlan.executeCollectPublic()
+      assert(qualifiedStarRows.toSeq === Seq(Row(1, 2, 3)))
+    }
+
     val aliasQuery = "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> AS u"
     checkResolverGuard(aliasQuery)
     withSQLConf(
