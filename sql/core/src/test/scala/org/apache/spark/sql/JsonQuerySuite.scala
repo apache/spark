@@ -293,6 +293,28 @@ class JsonQuerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql(s"SELECT $rendered"), Row("""{"city":"NYC"}"""))
   }
 
+  test("SPARK-59685: explicit-clause canonical SQL round-trips, suppressing the ownership clause") {
+    // The default clause-free render appends `RETURNING STRING` for ownership; an explicit clause
+    // must suppress it (a spurious `RETURNING STRING` next to a clause would be invalid SQL). These
+    // cases reparse each mode's rendered `sql` to catch a renderer regression that the parse-only
+    // ExpressionParserSuite cannot -- e.g. a wrong keyword or a duplicated/conflicting clause.
+    Seq(
+      s"json_query('$doc', '$$.tags' WITH UNCONDITIONAL ARRAY WRAPPER)" -> Row("""[["x","y"]]"""),
+      s"json_query('$doc', '$$.id' WITH CONDITIONAL ARRAY WRAPPER)" -> Row("[7]"),
+      s"json_query('$doc', '$$.name' OMIT QUOTES)" -> Row("Ada"),
+      s"json_query('$doc', '$$.missing' EMPTY ARRAY ON EMPTY)" -> Row("[]"),
+      s"json_query('$doc', '$$.missing' EMPTY OBJECT ON EMPTY)" -> Row("{}"),
+      "json_query('not json', '$.a' EMPTY ARRAY ON ERROR)" -> Row("[]")
+    ).foreach { case (query, expected) =>
+      val jsonQuery = sql(s"SELECT $query").queryExecution.analyzed.expressions
+        .flatMap(_.collect { case jq: JsonQuery => jq }).head
+      val rendered = jsonQuery.sql
+      assert(!rendered.contains("RETURNING STRING"),
+        s"explicit-clause render leaked the ownership clause: $rendered")
+      checkAnswer(sql(s"SELECT $rendered"), expected)
+    }
+  }
+
   test("works over a column of JSON documents") {
     val df = Seq(
       """{"a":{"x":1}}""",
