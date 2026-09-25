@@ -482,12 +482,13 @@ class StaxXmlParser(
       attributes: Array[Attribute]): MapData = {
     val kvPairs = ArrayBuffer.empty[(UTF8String, UTF8String, Option[Any])]
     var badMapException: Option[Throwable] = None
-    def mapKey(raw: String): UTF8String = {
-      CharVarcharUtils.applyTextParseSemantics(UTF8String.fromString(raw), keyType)
+    def mapKey(raw: UTF8String): UTF8String = {
+      CharVarcharUtils.applyTextParseSemantics(raw, keyType)
     }
     def appendPair(rawKey: String, value: Option[Any]): Unit = {
       try {
-        kvPairs += ((UTF8String.fromString(rawKey), mapKey(rawKey), value))
+        val rawKeyUtf8 = UTF8String.fromString(rawKey)
+        kvPairs += ((rawKeyUtf8, mapKey(rawKeyUtf8), value))
       } catch {
         case NonFatal(e) => badMapException = badMapException.orElse(Some(e))
       }
@@ -541,7 +542,7 @@ class StaxXmlParser(
       }
     }
     val mapData = DuplicateMapKeyUtils.buildConstrainedMap(
-      kvPairs.toSeq, keyType, valueType)
+      kvPairs, keyType, valueType)
     badMapException.foreach(throw _)
     mapData
   }
@@ -607,6 +608,19 @@ class StaxXmlParser(
     }
   }
 
+  private def convertNestedStruct(
+      parser: XMLEventReader,
+      schema: StructType,
+      startElementName: String,
+      attributes: Array[Attribute]): InternalRow = {
+    val elementParser = new ElementBoundedEventReader(parser)
+    try {
+      convertObjectWithAttributes(elementParser, schema, startElementName, attributes)
+    } finally {
+      elementParser.drain()
+    }
+  }
+
   /**
    * Parse an object from the event stream into a new InternalRow representing the schema.
    * Fields in the xml that are not defined in the requested schema will be dropped.
@@ -637,7 +651,7 @@ class StaxXmlParser(
           getFieldIndex(schema, field) match {
             case Some(index) => schema(index).dataType match {
               case st: StructType =>
-                row(index) = convertObjectWithAttributes(parser, st, field, attributes)
+                row(index) = convertNestedStruct(parser, st, field, attributes)
 
               case ArrayType(dt: DataType, _) =>
                 val values = Option(row(index))
@@ -645,7 +659,7 @@ class StaxXmlParser(
                   .getOrElse(ArrayBuffer.empty[Any])
                 val newValue = dt match {
                   case st: StructType =>
-                    convertObjectWithAttributes(parser, st, field, attributes)
+                    convertNestedStruct(parser, st, field, attributes)
                   case VariantType =>
                     StaxXmlParser.convertVariant(parser, attributes, options)
                   case dt: DataType =>

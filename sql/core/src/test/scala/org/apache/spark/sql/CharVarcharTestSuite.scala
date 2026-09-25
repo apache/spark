@@ -2489,7 +2489,7 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assert(jsonVarcharType.head.dataType === VarcharType(5))
       checkAnswer(jsonVarchar, Row(Row("ab")))
 
-      // Default PERMISSIVE mode turns length failures into a null record.
+      // Default PERMISSIVE mode returns a parsed struct whose failed field is null.
       Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
         checkAnswer(
           sql(s"""SELECT from_json('{"a": "abcdef"}', 'a $dataType')"""),
@@ -2788,6 +2788,28 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           checkAnswer(sql(query), Row(Row(null, 9)))
         }
       }
+    }
+  }
+
+  test("SPARK-59274: nested XML attribute failures preserve parser position") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("STRUCT<c CHAR(2), v INT>", "ARRAY<STRUCT<c VARCHAR(2), v INT>>")
+        .foreach { nestedType =>
+          val xml = "<ROW><nested c=\"abc\"><v>1</v></nested><tail>9</tail></ROW>"
+          val schema = s"nested $nestedType, tail INT"
+          val permissiveQuery =
+            s"""SELECT from_xml(
+               |  '$xml',
+               |  '$schema',
+               |  map('attributePrefix', ''))""".stripMargin
+          checkAnswer(sql(permissiveQuery), Row(Row(null, 9)))
+          assertParseExceedLimit(
+            s"""SELECT from_xml(
+               |  '$xml',
+               |  '$schema',
+               |  map('attributePrefix', '', 'mode', 'FAILFAST'))""".stripMargin,
+            expectedLimit = "2")
+        }
     }
   }
 

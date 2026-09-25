@@ -49,7 +49,7 @@ private[sql] object DuplicateMapKeyUtils {
    * Repeated XML keys after namespace handling use last-wins behavior regardless of policy.
    */
   def buildConstrainedMap(
-      entries: Seq[(UTF8String, UTF8String, Option[Any])],
+      entries: Iterable[(UTF8String, UTF8String, Option[Any])],
       keyType: DataType,
       valueType: DataType): MapData = {
     val lastEntries =
