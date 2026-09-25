@@ -7463,16 +7463,20 @@ object SQLConf {
   val NULL_AWARE_ANTI_JOIN_BROADCAST_THRESHOLD =
     buildConf("spark.sql.optimizeNullAwareAntiJoin.broadcastThreshold")
       .internal()
-      .doc("Configures the maximum estimated size in bytes of the right side of a " +
-        "single-column null-aware anti join for which Spark uses the broadcast hash join " +
-        "optimization. This configuration takes effect only when " +
-        "spark.sql.optimizeNullAwareAntiJoin is enabled. A negative value allows the " +
-        "optimization regardless of the estimated size, while zero disables it. If the " +
-        "estimated size exceeds a positive value, Spark falls back to regular join planning. " +
-        "The fallback may still broadcast the right side with a nested-loop representation " +
-        "that uses more memory and runs in O(M * N) time. Join hints do not override this " +
-        "configuration when the broadcast hash optimization is selected. This configuration " +
-        "also controls whether a null-aware anti join can be pushed below an aggregate.")
+      .doc(s"Configures a dedicated broadcast threshold for the right side of a single-column " +
+        "null-aware anti join. This configuration takes effect only when " +
+        s"${OPTIMIZE_NULL_AWARE_ANTI_JOIN.key} is enabled. A negative value allows the " +
+        "broadcast hash join optimization regardless of the estimated size. For a nonnegative " +
+        "value, the applicable automatic broadcast threshold acts as a floor: " +
+        s"${ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key} is used for runtime statistics when set, " +
+        s"and ${AUTO_BROADCASTJOIN_THRESHOLD.key} is used otherwise. Once either threshold " +
+        "admits the right side, the optimization takes precedence over join hints. The same " +
+        "eligibility decision controls aggregate pushdown, which runs before adaptive execution " +
+        "and uses estimated statistics; join selection may reevaluate it with runtime " +
+        "statistics. A lower adaptive threshold can leave a pushed-down join using a " +
+        s"nested-loop plan. Thus, zero alone does not disable the optimization. Set " +
+        s"${OPTIMIZE_NULL_AWARE_ANTI_JOIN.key} to false to disable it without changing automatic " +
+        "broadcast thresholds.")
       .version("4.2.1")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
