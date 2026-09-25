@@ -55,7 +55,7 @@ class HintResolutionRunner(hintResolutionRules: Seq[Rule[LogicalPlan]])
     extends ResolverMetricTracker
     with SQLConfHelper {
 
-  private val hintResolver = new RuleExecutor[LogicalPlan] {
+  private lazy val hintResolver = new RuleExecutor[LogicalPlan] {
     override def batches: Seq[Batch] =
       Seq(
         Batch("Disable Hints", Once, new ResolveHints.DisableHints),
@@ -74,9 +74,10 @@ class HintResolutionRunner(hintResolutionRules: Seq[Rule[LogicalPlan]])
   /**
    * Applies the hint resolution rules by first recursing into the CTE definitions and the
    * subqueries and then applying the rules on the entire plan. No rules are injected by default,
-   * in which case the plan is returned as is, without constructing a [[RuleExecutor]]. That also
-   * skips the "Disable Hints" batch, which only matters for plans that still carry an
-   * [[UnresolvedHint]] - a shape the single-pass Resolver does not support in the first place.
+   * in which case the plan is returned as is and the [[RuleExecutor]] is never constructed
+   * (`hintResolver` is lazy). That also skips the "Disable Hints" batch, which only matters for
+   * plans that still carry an [[UnresolvedHint]] - a shape the single-pass Resolver does not
+   * support in the first place.
    *
    * The recursion needs [[AnalysisHelper.allowInvokingTransformsInAnalyzer]] to rewrite the inner
    * plans, so the rules are invoked within its scope, like the rewrite rules in [[PlanRewriter]].
