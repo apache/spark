@@ -675,7 +675,7 @@ class DataFrame:
 
         This is equivalent to ``explain(mode="codegen")`` and supports Spark Connect.
 
-        .. versionadded:: 5.0.0
+        .. versionadded:: 4.4.0
 
         Examples
         --------
